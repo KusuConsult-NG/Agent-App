@@ -1647,3 +1647,223 @@ describe('An unreachable vehicle authority is not an unregistered vehicle', () =
     assert.equal(response.body.attempted, response.body.accepted + response.body.stillFailing);
   });
 });
+
+describe('An unreachable TIN service never invents or duplicates a TIN', () => {
+  /**
+   * Registration is agent work — no government role holds `taxpayer:create`,
+   * because an agent approaches the citizen. So these go through the agent, on
+   * a fresh token: earlier suites revoked this one's device and suspended them.
+   */
+  let agentToken = '';
+
+  before(async () => {
+    agentToken = (await loginAs(ctx.agentPhone, 'FieldAgent2026', ctx.deviceId)).accessToken;
+  });
+
+  it('refuses to confirm an existing TIN it could not check', async () => {
+    // The mock's outage rule: a TIN ending in 8. The old code would have said
+    // "not found — register them as a new applicant", which mints a second TIN
+    // for someone who already has one.
+    const response = await post(
+      '/taxpayers',
+      {
+        taxpayerType: 'INDIVIDUAL',
+        firstName: 'Existing',
+        lastName: 'Taxpayer',
+        phone: '+2347044555001',
+        address: 'Kabong, Jos',
+        lgaId: ctx.lgaId,
+        existingTin: '123456788',
+        consentGiven: true,
+        declarationAccepted: true,
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error.code, 'TIN_SERVICE_UNAVAILABLE');
+    assert.match(response.body.error.nextStep, /do not register this taxpayer as a new/i);
+
+    const created = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM taxpayers WHERE phone = '+2347044555001'`,
+    );
+    assert.equal(created!.count, '0', 'nothing is registered when the TIN cannot be confirmed');
+  });
+
+  it('still registers a new taxpayer when the TIN service is down', async () => {
+    // Blocking registration would stop field work entirely during an outage,
+    // and the taxpayer record is a fact this platform owns. An assessment does
+    // not require a TIN, so they can be served today.
+    const response = await post(
+      '/taxpayers',
+      {
+        taxpayerType: 'INDIVIDUAL',
+        firstName: 'Nanle',
+        lastName: 'Gyang',
+        phone: '+2347044555008',
+        address: 'Bukuru, Jos South',
+        lgaId: ctx.lgaId,
+        consentGiven: true,
+        declarationAccepted: true,
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.tin, null);
+
+    const taxpayer = await queryOne<{ tin_status: string; tin_reason: string | null }>(
+      pool,
+      `SELECT tin_status, tin_reason FROM taxpayers WHERE phone = '+2347044555008'`,
+    );
+    // REQUESTED, not FAILED: FAILED means the service considered them and said
+    // no, which is a dead end nothing retries.
+    assert.equal(taxpayer!.tin_status, 'REQUESTED');
+    assert.match(taxpayer!.tin_reason ?? '', /could not be reached/i);
+  });
+
+  it('records a genuine rejection as a rejection', async () => {
+    const response = await post(
+      '/taxpayers',
+      {
+        taxpayerType: 'INDIVIDUAL',
+        firstName: 'Rejected',
+        lastName: 'Applicant',
+        phone: '+2347044555009',
+        address: 'Vom, Jos South',
+        lgaId: ctx.lgaId,
+        consentGiven: true,
+        declarationAccepted: true,
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 201);
+    const taxpayer = await queryOne<{ tin_status: string }>(
+      pool,
+      `SELECT tin_status FROM taxpayers WHERE phone = '+2347044555009'`,
+    );
+    assert.equal(taxpayer!.tin_status, 'FAILED');
+  });
+
+  it('lists everyone still waiting, and chases them', async () => {
+    const outstanding = await get('/taxpayers/tin-outstanding', { token: ctx.officerToken });
+    assert.equal(outstanding.status, 200);
+
+    const waiting = outstanding.body.taxpayers as { phone: string; tin_status: string }[];
+    const phones = waiting.map((row) => row.phone);
+    assert.ok(phones.includes('+2347044555008'), 'the outage case is queued');
+    assert.ok(phones.includes('+2347044555009'), 'the rejection is visible too, for correction');
+
+    const retry = await post('/taxpayers/tin-retry', {}, { token: ctx.officerToken });
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.attempted, retry.body.assigned + retry.body.stillOutstanding);
+  });
+
+  it('keeps the TIN catch-up away from field agents', async () => {
+    const listing = await get('/taxpayers/tin-outstanding', {
+      token: agentToken,
+      deviceId: ctx.deviceId,
+    });
+    assert.equal(listing.status, 403);
+
+    const retry = await post(
+      '/taxpayers/tin-retry',
+      {},
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+    assert.equal(retry.status, 403);
+  });
+});
+
+describe('An unreachable bank is not an account belonging to someone else', () => {
+  async function applyWithAccount(params: {
+    phone: string;
+    fullName: string;
+    accountNumber: string;
+  }) {
+    const application = await post('/agents/apply', {
+      fullName: params.fullName,
+      phone: params.phone,
+      password: 'FieldAgent2026',
+      dateOfBirth: '1990-01-01',
+      gender: 'MALE',
+      address: '2 Yakubu Gowon Way, Jos',
+      lgaId: ctx.lgaId,
+      occupation: 'Trader',
+      bankName: 'Access Bank',
+      bankCode: '044',
+      accountName: params.fullName,
+      accountNumber: params.accountNumber,
+    });
+    assert.equal(application.status, 201, JSON.stringify(application.body));
+    return {
+      agentId: application.body.agentId as string,
+      token: (await loginAs(params.phone, 'FieldAgent2026')).accessToken,
+    };
+  }
+
+  it('leaves the account PENDING, not FAILED, when the bank is down', async () => {
+    const applicant = await applyWithAccount({
+      phone: '+2347044666008',
+      fullName: 'Bala Chuwang',
+      accountNumber: '0123456788', // mock outage rule
+    });
+
+    const response = await post('/agents/me/bank/verify', {}, { token: applicant.token });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.verified, false);
+    assert.equal(response.body.outcome, 'UNAVAILABLE');
+
+    const account = await queryOne<{
+      verification_status: string;
+      verification_reason: string | null;
+    }>(
+      pool,
+      `SELECT b.verification_status, b.verification_reason
+         FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id WHERE a.id = $1`,
+      [applicant.agentId],
+    );
+    // FAILED here would read on the applicant's record exactly like an account
+    // that belongs to someone else.
+    assert.equal(account!.verification_status, 'PENDING');
+    assert.match(account!.verification_reason ?? '', /could not be reached/i);
+  });
+
+  it('fails an account that belongs to someone else, and names them', async () => {
+    const applicant = await applyWithAccount({
+      phone: '+2347044666009',
+      fullName: 'Talatu Dalyop',
+      accountNumber: '0123456789', // mock mismatch rule
+    });
+
+    const response = await post('/agents/me/bank/verify', {}, { token: applicant.token });
+    assert.equal(response.body.outcome, 'MISMATCH');
+    assert.match(response.body.failureReason, /CHINEDU OKAFOR/);
+
+    const account = await queryOne<{
+      verification_status: string;
+      verification_resolved_name: string | null;
+    }>(
+      pool,
+      `SELECT b.verification_status, b.verification_resolved_name
+         FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id WHERE a.id = $1`,
+      [applicant.agentId],
+    );
+    assert.equal(account!.verification_status, 'FAILED');
+    assert.equal(account!.verification_resolved_name, 'CHINEDU OKAFOR');
+  });
+
+  it('never marks an unverified account as verified', async () => {
+    // The clearance flag is derived from the account record, so an outage or a
+    // mismatch must both leave the agent unable to be activated.
+    const stuck = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count
+         FROM bank_accounts
+        WHERE verification_status <> 'VERIFIED' AND verified_at IS NOT NULL`,
+    );
+    assert.equal(stuck!.count, '0');
+  });
+});

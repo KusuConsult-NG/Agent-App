@@ -139,6 +139,23 @@ returns **503 `KYC_PROVIDER_UNAVAILABLE`** when the provider could not be
 reached. That is not a failed identity check — nothing is recorded against the
 applicant and their application is unchanged. It is safe and correct to retry.
 
+`POST /agents/me/bank/verify` returns `outcome` — `VERIFIED`, `MISMATCH`,
+`NOT_FOUND` or `UNAVAILABLE`. Only the middle two are the agent's to correct;
+`UNAVAILABLE` leaves the account `PENDING` rather than `FAILED` and should be
+retried.
+
+`POST /taxpayers` returns **503 `TIN_SERVICE_UNAVAILABLE`** when an
+`existingTin` could not be confirmed, and registers nothing. Do **not** retry it
+as a new TIN application — that mints a second TIN for someone who already has
+one. Registration *without* an `existingTin` still succeeds during a TIN outage:
+the taxpayer is recorded with `tinStatus: "REQUESTED"` and can be assessed and
+pay while the number is chased.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/taxpayers/tin-outstanding` | `taxpayer:tin_sync` — who is still without a TIN, and why |
+| `POST` | `/taxpayers/tin-retry` | `taxpayer:tin_sync` — re-ask the TIN service for all of them |
+
 There is deliberately **no** endpoint that sets a payment status.
 
 ## Government

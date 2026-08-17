@@ -9,7 +9,10 @@ that implements it and the test that proves it. Test names are from
 | Criterion | Implementation | Test |
 |---|---|---|
 | New taxpayer can be registered without TIN | `services/taxpayers.ts` `registerTaxpayer` | *registers a taxpayer and obtains a TIN from the TIN service* |
-| System obtains TIN through approved integration | `integrations/index.ts` `TinService` | same |
+| System obtains TIN through approved integration | `integrations/tin/` — contract, HTTP adapter, mock | same |
+| An unreachable TIN service never yields a duplicate | lookup UNAVAILABLE refuses the registration outright | *An unreachable TIN service never invents or duplicates a TIN* |
+| A TIN is never invented | `assignedTin` — "success" with no usable number is PENDING, never ASSIGNED | *a TIN is never invented* |
+| Outstanding TINs are chased | `retryOutstandingTins`, `GET /taxpayers/tin-outstanding` | *lists everyone still waiting, and chases them* |
 | Duplicate taxpayer detection works | `findPotentialDuplicates`, scored with reasons | *blocks a decisive duplicate outright*; *warns on a weaker match and records the agent's decision* |
 | Existing taxpayer can be found | `searchTaxpayers` (TIN, phone, name, vehicle, receipt, transaction) | *registers…* / portal + PWA search screens |
 | Taxpayer can view revenue obligations | `getObligations`, `GET /revenue/taxpayers/:id/obligations` — read by the agent serving them, who tells them what is owed | covered by profile endpoint |
@@ -98,7 +101,9 @@ that implements it and the test that proves it. Test names are from
 | Cannot collect revenue while KYC uncleared | `requireActiveAgent` | *refuses revenue collection to an uncleared applicant* |
 | Cannot collect while approval pending | same | same |
 | Cannot collect before training completed | `activationBlockers` | *refuses activation while clearance items remain outstanding* |
-| Bank account can be verified | `verifyBankAccount` | *approves the application and completes the remaining requirements* |
+| Bank account can be verified | `verifyBankAccount` via `integrations/banks/` | *approves the application and completes the remaining requirements* |
+| An unreachable bank is not a wrong account | UNAVAILABLE leaves the account PENDING, never FAILED | *An unreachable bank is not an account belonging to someone else* |
+| Commission cannot be paid to someone else | `matchesAccountName` — containment over name parts, ≥2 matching | *Bank account name matching* |
 | Device can be registered | `registerDevice` | same |
 | Government can approve/reject | `reviewApplication` | *requires a reason on every government decision* |
 | Government can suspend | `suspend` | *suspends an agent…* |

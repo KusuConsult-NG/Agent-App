@@ -131,6 +131,49 @@ taxpayerRouter.post(
   }),
 );
 
+/**
+ * Taxpayers registered without a TIN, and why (PRD §11, §82).
+ *
+ * Declared before the parametrised routes so "tin-outstanding" is not read as
+ * a taxpayer id.
+ */
+taxpayerRouter.get(
+  '/tin-outstanding',
+  requirePermission('taxpayer:tin_sync'),
+  asyncHandler(async (_req, res) => {
+    res.json({ taxpayers: await taxpayers.taxpayersAwaitingTin(pool) });
+  }),
+);
+
+/**
+ * Re-ask the TIN service for everyone still waiting.
+ *
+ * The counterpart to letting the TIN service say it could not be reached:
+ * without this, "we will ask again later" is a promise nothing keeps.
+ */
+taxpayerRouter.post(
+  '/tin-retry',
+  requirePermission('taxpayer:tin_sync'),
+  validateBody(
+    z.object({ limit: z.number().int().min(1).max(500).optional() }),
+    async (req, res, data) => {
+      const result = await taxpayers.retryOutstandingTins({
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        limit: data.limit,
+      });
+      res.json({
+        ...result,
+        message:
+          result.stillOutstanding === 0
+            ? `${result.assigned} TIN(s) assigned.`
+            : `${result.assigned} assigned; ${result.stillOutstanding} still outstanding. ` +
+              'Those taxpayers remain registered and can still be assessed and pay.',
+      });
+    },
+  ),
+);
+
 taxpayerRouter.get(
   '/search',
   requirePermission('taxpayer:read:assigned', 'taxpayer:read:all'),
