@@ -33,9 +33,30 @@ export const emailProvider: MessageProvider = select(
   config.notifications.http.emailUrl || config.notifications.http.url,
 );
 
-/** Route a message to the provider that owns its channel. */
+/**
+ * Route a message to the provider that owns its channel.
+ *
+ * PUSH is refused rather than defaulted. No push template is seeded, so nothing
+ * queues one today — but falling back to the SMS gateway would mean that the
+ * day someone adds a push template, a browser push subscription gets posted to
+ * an SMS provider as though it were a phone number. It would fail obscurely at
+ * the vendor, or worse, be accepted and billed.
+ *
+ * Web push needs its own adapter (VAPID keys, per-device subscriptions, an
+ * entirely different payload). Until that exists, this says so.
+ */
 export function providerFor(channel: DeliveryRequest['channel']): MessageProvider {
-  return channel === 'EMAIL' ? emailProvider : smsProvider;
+  switch (channel) {
+    case 'EMAIL':
+      return emailProvider;
+    case 'SMS':
+      return smsProvider;
+    case 'PUSH':
+      throw new Error(
+        'Web push delivery is not implemented. A PUSH notification was queued, which no ' +
+          'template should currently produce — add a push adapter before seeding one.',
+      );
+  }
 }
 
 export type { DeliveryRequest, DeliveryResult };

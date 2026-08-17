@@ -593,7 +593,8 @@ export async function listVehicles(db: Db, params: { taxpayerId?: string; q?: st
  * the same document number as the same renewal.
  */
 export async function retryAuthorityNotifications(params: {
-  actorId: string;
+  /** Null when a scheduled sweep runs it rather than a person. */
+  actorId: string | null;
   actorRole: string;
   limit?: number;
 }): Promise<{ attempted: number; accepted: number; stillFailing: number }> {

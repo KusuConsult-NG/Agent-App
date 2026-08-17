@@ -275,7 +275,7 @@ draftRouter.post(
           z.object({
             clientReference: z.string().min(6).max(120),
             draftType: z.enum(DRAFT_TYPES),
-            payload: z.record(z.unknown()),
+            payload: z.record(z.string(), z.unknown()),
             capturedAt: z.string().datetime(),
           }),
         )
