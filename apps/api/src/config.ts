@@ -284,13 +284,53 @@ export const config = {
     emailProvider: process.env.EMAIL_PROVIDER ?? 'mock',
     fromEmail: process.env.FROM_EMAIL ?? 'no-reply@psirs.pl.gov.ng',
     smsSenderId: process.env.SMS_SENDER_ID ?? 'PSIRS',
+
+    /**
+     * Message delivery over HTTP.
+     *
+     * The Nigerian SMS gateways — Termii, Africa's Talking, Infobip, Twilio —
+     * disagree about exactly three field names, so those three are settings and
+     * the rest of the contract is fixed. `emailUrl` is separate because PSIRS
+     * may contract SMS and transactional email from different vendors; left
+     * empty, email goes to the same endpoint.
+     */
+    http: {
+      url: process.env.SMS_PROVIDER_URL ?? '',
+      emailUrl: process.env.EMAIL_PROVIDER_URL ?? '',
+      apiKey: process.env.MESSAGE_PROVIDER_API_KEY ?? '',
+      timeoutMs: int('MESSAGE_PROVIDER_TIMEOUT_MS', 15_000),
+      recipientField: process.env.MESSAGE_RECIPIENT_FIELD ?? 'to',
+      senderField: process.env.MESSAGE_SENDER_FIELD ?? 'from',
+      messageField: process.env.MESSAGE_BODY_FIELD ?? 'message',
+      referencePath: process.env.MESSAGE_REFERENCE_PATH ?? 'message_id',
+      errorPath: process.env.MESSAGE_ERROR_PATH ?? 'message',
+    },
   },
 
   storage: {
+    /** `s3` for any S3-compatible store; `local` is development only. */
     driver: process.env.STORAGE_DRIVER ?? 'local',
     localPath: process.env.STORAGE_PATH ?? './storage',
     bucket: process.env.STORAGE_BUCKET ?? '',
     signedUrlTtlSeconds: int('SIGNED_URL_TTL_SECONDS', 900),
+
+    /**
+     * S3-compatible object storage.
+     *
+     * Path-style addressing by default, because a state government deployment
+     * may be on MinIO or another self-hosted store rather than AWS, and those
+     * generally do not offer virtual-hosted style. `STORAGE_ENDPOINT` carries
+     * the scheme and host — `https://s3.eu-west-1.amazonaws.com`, or the
+     * address of whatever store PSIRS runs.
+     */
+    s3: {
+      endpoint: process.env.STORAGE_ENDPOINT ?? '',
+      region: process.env.STORAGE_REGION ?? 'us-east-1',
+      accessKeyId: process.env.STORAGE_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY ?? '',
+      forcePathStyle: bool('STORAGE_FORCE_PATH_STYLE', true),
+      timeoutMs: int('STORAGE_TIMEOUT_MS', 30_000),
+    },
   },
 
   commission: {
@@ -352,6 +392,28 @@ if (isProduction) {
   }
   if (config.integrations.bankVerification === 'mock') {
     problems.push('BANK_VERIFICATION is still "mock"');
+  }
+
+  // A citizen holds no account here, so an SMS is the only copy of their
+  // receipt they ever get. A mock provider in production means every taxpayer
+  // pays and is told nothing.
+  if (config.notifications.smsProvider === 'mock') problems.push('SMS_PROVIDER is still "mock"');
+  if (config.notifications.emailProvider === 'mock') {
+    problems.push('EMAIL_PROVIDER is still "mock"');
+  }
+  if (config.notifications.smsProvider !== 'mock' && !config.notifications.http.url) {
+    problems.push(
+      `SMS_PROVIDER is "${config.notifications.smsProvider}" but SMS_PROVIDER_URL is not set`,
+    );
+  }
+
+  // The local driver keeps receipts on a container's disk, where the next
+  // deploy destroys them while the document records still point at them.
+  if (config.storage.driver === 's3') {
+    if (!config.storage.s3.endpoint) problems.push('STORAGE_ENDPOINT is not set');
+    if (!config.storage.bucket) problems.push('STORAGE_BUCKET is not set');
+    if (!config.storage.s3.accessKeyId) problems.push('STORAGE_ACCESS_KEY_ID is not set');
+    if (!config.storage.s3.secretAccessKey) problems.push('STORAGE_SECRET_ACCESS_KEY is not set');
   }
 
   // A named provider with no URL cannot be asked anything. Every verification
