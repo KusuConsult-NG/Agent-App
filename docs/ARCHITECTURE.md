@@ -100,6 +100,27 @@ a financial risk on this platform.
 006_mock_gateway development-only gateway ledger (see below)
 ```
 
+### Gateway adapters
+
+One gateway is active per deployment, selected by `PAYMENT_GATEWAY`:
+
+| Adapter | Signs callbacks | Settlement statement | Use |
+|---|---|---|---|
+| `gateways/remita.ts` | no — notifies with an RRR, expects a status query | not yet wired (see below) | PSIRS collections |
+| `gateways/mock.ts` | yes (HMAC-SHA512) | from the development ledger | development, tests |
+
+The revenue code imports `gateway` and never names a provider. Webhook
+authentication is part of the adapter rather than the handler, because gateways
+genuinely differ: the mock refuses an unsigned delivery, while Remita accepts
+one — safely, because in this architecture a callback only ever prompts the
+platform to go and ask the gateway what happened.
+
+Remita's settlement reporting depends on how PSIRS's merchant account is
+configured, so `fetchStatement` returns nothing rather than guessing. The
+consequence is explicit and is the correct failure mode for money: verified
+payments appear as `MISSING_PAYMENT` exceptions in the finance queue, so finance
+is told to look, instead of transactions being silently marked reconciled.
+
 ### The mock gateway is deliberately a separate table
 
 `mock_gateway_transactions` stands in for the payment processor's own books.

@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 129 tests: unit, full-lifecycle integration, agent scope containment
+npm test        # 152 tests: unit, integration, agent scope, Remita adapter
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 129 tests, including every database-level integrity control |
+| `npm test` | All 152 tests, including every database-level integrity control |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -299,6 +299,39 @@ If the browser closes mid-payment, reopening the app and reading the transaction
 recovers the authoritative state from the server, including the receipt.
 
 ---
+
+## The payment gateway
+
+PSIRS collects through **Remita**, the channel most Nigerian government revenue
+runs on. `apps/api/src/integrations/gateways/remita.ts` implements the gateway
+contract; the revenue code imports `gateway` and never names a provider, so the
+choice is configuration plus one adapter.
+
+Remita's model shapes the adapter in three ways:
+
+- **The RRR is the artefact.** Initiating a payment generates a Remita Retrieval
+  Reference, payable afterwards at any bank, ATM, POS, USSD or online channel —
+  possibly days later, with no browser involved. "Initiate" means an obligation
+  now has a payable reference, not that a payer is sitting at a checkout.
+- **Amounts are Naira decimals**, and this platform is integer kobo throughout.
+  Every crossing converts explicitly, in one place each way, with tests — a
+  silent hundred-fold error here would be the most expensive bug in the codebase.
+- **Callbacks are not signed.** Remita notifies with an RRR and expects a status
+  query. That is already this platform's model: a webhook is a prompt to go and
+  ask, never an instruction to believe. A forged notification can do no more than
+  make the platform ask Remita about a reference and act on Remita's answer.
+
+Two behaviours are deliberately conservative, because they concern money:
+
+| Situation | Result | Why |
+|---|---|---|
+| Status code not in the configured success **or** failure list | `PENDING` | An unmapped code can then neither invent revenue nor close a transaction the taxpayer did pay. It surfaces in reconciliation instead of being guessed at. |
+| Remita reports success with no usable amount | `UNKNOWN` | A receipt is issued against a verified amount; a zero would be a fabricated figure. |
+
+Before go-live, `REMITA_SERVICE_TYPE_ID` and the full status-code list must be
+confirmed against PSIRS's own Remita sandbox — both vary by merchant
+configuration. `config.ts` refuses to start in production with Remita selected
+but unconfigured, or still pointing at the demo host.
 
 ## Source of truth
 

@@ -35,13 +35,21 @@ export const paymentRouter = Router();
 
 export const webhookRouter = Router();
 
+// Remita does not sign callbacks, so this endpoint accepts deliveries it cannot
+// cryptographically attribute. That is safe — a delivery only prompts a status
+// query — but it should not be an unmetered way to make the platform call out.
 webhookRouter.post(
   '/payments',
+  rateLimit({ max: 240, windowMs: 60_000, keyPrefix: 'webhook' }),
   asyncHandler(async (req, res) => {
     const result = await payments.handleWebhook({
-      // The RAW body, exactly as received: the signature covers these bytes.
+      // The RAW body, exactly as received: a signature covers these bytes.
       rawBody: req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {})),
-      signature: req.header('x-psirs-signature') ?? req.header('x-paystack-signature'),
+      signature: req.header('x-psirs-signature') ?? req.header('x-remita-signature'),
+      // The active gateway decides what authenticates a delivery, so it gets
+      // the headers and source address rather than one pre-chosen header.
+      headers: req.headers as Record<string, string | undefined>,
+      sourceIp: req.clientIp,
       parsedBody: req.body,
     });
 
