@@ -1,0 +1,152 @@
+# PRD traceability
+
+Every acceptance criterion from PRD §84 and Addendum §47, mapped to the code
+that implements it and the test that proves it. Test names are from
+`apps/api/src/tests/`.
+
+## PRD §84 — Taxpayer
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| New taxpayer can be registered without TIN | `services/taxpayers.ts` `registerTaxpayer` | *registers a taxpayer and obtains a TIN from the TIN service* |
+| System obtains TIN through approved integration | `integrations/index.ts` `TinService` | same |
+| Duplicate taxpayer detection works | `findPotentialDuplicates`, scored with reasons | *blocks a decisive duplicate outright*; *warns on a weaker match and records the agent's decision* |
+| Existing taxpayer can be found | `searchTaxpayers` (TIN, phone, name, vehicle, receipt, transaction) | *registers…* / portal + PWA search screens |
+| Taxpayer can view revenue obligations | `getObligations`, `GET /revenue/taxpayers/:id/obligations` | covered by profile endpoint |
+
+## PRD §84 — Revenue
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| Revenue categories configurable | `revenue_categories`, seeded from the PSIRS catalogue | seed asserts 9 categories, 37 items |
+| Revenue items configurable | `POST /revenue/items` | — |
+| Rates changed with effective dates | `POST /revenue/items/:id/rates` — closes old version, inserts new | *keeps historical assessments at their original rate after a rate change* |
+| Assessment can be generated | `createAssessment` | *creates assessment, invoice and transaction as one obligation* |
+| Invoice can be generated | same transaction | same |
+| Payment can be initiated | `initiatePayment` | *initiates a payment without asserting any success* |
+| Payment can be confirmed | `confirmPayment` | *verifies through a signed webhook and issues the receipt automatically* |
+| Receipt automatically generated | `issueReceipt`, called from the verified branch only | same |
+| Receipt downloadable as PDF | `renderReceiptPdf`, signed URL | *produces a downloadable PDF receipt with a QR verification code* |
+| Receipt independently verifiable | `verifyPublicly` + checksum recomputation | *verifies the receipt publicly without exposing taxpayer data* |
+
+## PRD §84 — Payments
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| Successful payment creates one transaction | partial unique index on `payments`; idempotency middleware | *replays the same response for a repeated idempotency key* |
+| Duplicate webhook cannot create duplicate payment | `UNIQUE (gateway, event_id)`; duplicate acknowledged with 200 | *treats a redelivered webhook as a duplicate and creates nothing new* |
+| Failed payment does not generate a valid receipt | `receipts_require_verified_payment` trigger | *refuses at database level to issue a receipt for an unverified payment* |
+| Reversed payment updates all relevant records | `executeReversal` — transaction, receipt, invoice, commission in one transaction | *reverses transaction, receipt and commission together under approval* |
+| Reconciliation works | `runReconciliation` three-way | *reports verified-but-unsettled money as pending settlement*; *marks the payment fully matched once government settlement is recorded* |
+
+## PRD §84 — Agents
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| Agent can be approved | `reviewApplication` — reason mandatory | *approves the application and completes the remaining requirements* |
+| Agent can be assigned territory | `POST /agents/:id/territory`; historical attribution preserved | *activates the agent only once every requirement is met* |
+| Agent can onboard taxpayer | `requireActiveAgent` gate | *refuses revenue collection to an uncleared applicant* |
+| Agent can facilitate payment | `POST /payments/initiate` | *initiates a payment…* |
+| Agent can initiate vehicle renewal | `services/vehicles.ts` `initiateRenewal` | vehicle routes |
+| Agent can view transaction history | `GET /agents/me/transactions` | PWA transactions screen |
+| Commission automatically calculated | `accrueCommission` from the verified revenue figure | *computes 1.5% of government revenue without touching the taxpayer amount* |
+| No commission on failed/reversed | `enforce_commission_requires_verified_revenue`; reversal cascade | *refuses to accrue commission before revenue is verified*; *reverses transaction, receipt and commission together* |
+
+## PRD §84 — Vehicle
+
+| Criterion | Implementation |
+|---|---|
+| Vehicle can be searched | `lookupVehicle` — platform, then authoritative registry |
+| Owner verified where integration permits | ownership check in `initiateRenewal`; `owner_verified` flag |
+| Renewal fee calculated | catalogue formula item `VEH-RENEW-*` |
+| Payment processed | same payment path as any other revenue |
+| Renewal document generated | `completeRenewal` + `renewals_require_payment` trigger |
+| Document downloadable as PDF | `renderVehicleDocumentPdf`, signed URL |
+| Document verifiable | shared `verifyPublicly` path |
+
+## PRD §84 — Government
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| See all transactions | `GET /government/transactions` | *exports transactions as CSV* |
+| Collections by agent | `agentPerformance`, dashboard | *reports collections by category, LGA, agent and MDA* |
+| Collections by LGA | `revenueByLga`, `geographicIntelligence` | same; *drills down State → LGA → Ward* |
+| Collections by revenue type | `revenueByCategory` | same |
+| Reconcile payments | reconciliation module | reconciliation suite |
+| Investigate exceptions | `exceptionQueue`, `resolveException` | — |
+| View audit logs | `GET /government/audit` (+ CSV) | *verifies the audit hash chain end to end* |
+| Suspend agents | `suspend` — sessions and devices cut immediately | *suspends an agent and stops them collecting immediately* |
+| Configure revenue items | catalogue endpoints | *keeps historical assessments…* |
+| Configure commission rates | `commission_policies`, versioned | *computes 1.5%…* |
+
+## Addendum §47 — Clearance
+
+| Criterion | Implementation | Test |
+|---|---|---|
+| Agent can submit an application | `POST /agents/apply` | *accepts an application and starts the applicant at stage 1* |
+| Agent can complete KYC | `submitKyc` via provider | *clears identity KYC through the verification provider* |
+| KYC status tracked | `kyc_status` axis + `agent_kyc` history | same |
+| Agent can nominate a referee | `nominateReferee` | *sends a tokenised referee invitation needing no account* |
+| Referee receives secure invitation | token hashed at rest, expiring | same |
+| Referee can verify identity | `submitRefereeResponse` | *lets the referee open and complete verification without signing in* |
+| Referee can confirm relationship | four mandatory declarations | same (partial declarations rejected) |
+| Referee clearance status tracked | `referee_status` axis + per-referee status | *moves to READY_FOR_REVIEW once identity and referee are both cleared* |
+| Agent cannot become active while referee uncleared | CHECK constraint + `activationBlockers` | *will not let the database hold an active agent without clearance* |
+| Cannot collect revenue while KYC uncleared | `requireActiveAgent` | *refuses revenue collection to an uncleared applicant* |
+| Cannot collect while approval pending | same | same |
+| Cannot collect before training completed | `activationBlockers` | *refuses activation while clearance items remain outstanding* |
+| Bank account can be verified | `verifyBankAccount` | *approves the application and completes the remaining requirements* |
+| Device can be registered | `registerDevice` | same |
+| Government can approve/reject | `reviewApplication` | *requires a reason on every government decision* |
+| Government can suspend | `suspend` | *suspends an agent…* |
+| Government can revoke devices | `revokeDevice` | *revokes a device and ends its sessions immediately* |
+| Every clearance decision audited | `agent_clearance_events` + audit chain | *verifies the audit hash chain* |
+| Referee replacement supported | `replacesRefereeId`; original marked `REPLACED`, never overwritten | referee section of the PWA |
+| KYC failure triggers corrective action | resubmission supersedes; notification queued | *clears identity KYC…* (failure path in `MockKycProvider`) |
+| PWA works on mobile browsers | responsive, 48px targets, tested in Chromium | visual verification |
+| PWA can be installed | manifest + service worker | — |
+| PWA detects network status | `detectConnectionState` — ONLINE / LIMITED / OFFLINE | — |
+| PWA supports offline workflows | IndexedDB draft queue | *accepts a draft registration and assigns server-generated ids on sync* |
+| Offline cannot falsely mark payments successful | no payment draft type; SW never caches financial endpoints | *offers no offline path that can mark a payment as received* |
+| Payment status recoverable after browser closure | `GET /payments/transactions/:reference/status` | *recovers the transaction status after the browser is closed* |
+| PWA version enforcement | `requireSupportedAppVersion` | *blocks transactions from an unsupported app version* |
+
+## PRD §36 — Access matrix containment
+
+The §36 matrix is expressed as code in `packages/shared/src/rbac.ts` and
+asserted endpoint by endpoint in `agent-scope.test.ts`.
+
+| Matrix row | Implementation | Test |
+|---|---|---|
+| Agent → Taxpayer: *Assigned*, not All | `getTaxpayerProfile` returns `scope: AGENT_LIMITED`, filtered to the agent's own facilitated work | *does not expose another agent's collection history on the taxpayer profile* |
+| Agent → Reports: *Limited* | agent holds `report:read:own` only; no LGA, ward or state-wide revenue | *refuses state and LGA revenue intelligence*; *reports own collections on the home screen, not the territory's* |
+| Agent → Configuration: *No* | `catalogue:configure` withheld; rate history needs `audit:read` or `catalogue:configure` | *refuses to configure a revenue rate*; *refuses rate change history* |
+| Agent → Agent: *Own* | `agent:read:own` only | *refuses to read another agent's clearance record* |
+| Agent → Commission: *Own* | `commission:read:own`; wallet scoped by agent id | *reports only its own commission* |
+| Incentives → taxpayer, never agent | agent holds no `incentive:*` permission | *holds no incentive permission — incentives belong to the taxpayer*; *refuses the taxpayer incentive record entirely* |
+| Admin/officer → full view retained | unchanged permissions | *shows administration every agent's collections and every LGA* |
+
+## PRD §88 — Definition of done
+
+Items 1–31 are covered by the tables above. The remainder are deployment and
+organisational tasks outside this repository:
+
+| # | Item | Status |
+|---|---|---|
+| 32 | Database backups and disaster recovery | Deployment task; RPO ≤15 min / RTO ≤2 h to be agreed with government IT |
+| 33 | Production monitoring | Deployment task; health endpoint and structured logging in place |
+| 34 | Payment reconciliation tested | Tested end to end against the development gateway |
+| 35 | Security testing completed | Independent testing not performed |
+| 36 | User acceptance testing | Requires PSIRS officers |
+| 37 | Financial test transactions reconciled end to end | Done in the integration suite |
+| 38 | Government officers trained | Organisational |
+| 39 | Agents completed onboarding/training | Training module implemented; delivery is organisational |
+| 40 | Production support procedures documented | Organisational |
+
+## Explicitly out of scope (PRD §86)
+
+AI chatbot, predictive analytics, ML fraud detection, gamification, citizen
+super-app, cryptocurrency, blockchain, GIS heat maps, loyalty marketplace — all
+correctly absent. The fraud engine is deterministic rules with stated
+thresholds, which is auditable and explainable to a suspended agent in a way a
+model is not.
