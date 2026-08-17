@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 329 tests: API (300) + agent PWA offline and session (29)
+npm test        # 340 tests: API (311) + agent PWA offline and session (29)
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 329 tests — every database-level integrity control, and the PWA offline capture queue |
+| `npm test` | All 340 tests — every database-level integrity control, and the PWA offline capture queue |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
