@@ -113,6 +113,22 @@ against a real PostgreSQL 16 service container. In order:
 Because the platform's guarantees are database triggers, CI without a database
 would be theatre. The service container is the point of the pipeline.
 
+### Dependency updates
+
+`.github/dependabot.yml` raises weekly updates for npm and for the GitHub
+Actions themselves. Minor and patch updates are grouped — a stream of individual
+PRs for routine bumps gets rubber-stamped, and rubber-stamping is how a
+compromised transitive dependency reaches production.
+
+Major updates are deliberately *not* grouped. The runtime dependencies here are
+the database driver, the HTTP layer, session signing, password hashing, request
+validation and government document rendering; a breaking change in any of them
+gets its own PR with the full suite attached, rather than a line in a batch.
+
+Every such PR runs the CI workflow above. That works on Dependabot's restricted
+token specifically because the workflow needs no repository secrets — its test
+credentials are inline throwaway values.
+
 ---
 
 ## The end-to-end flow, as implemented
