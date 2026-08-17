@@ -22,7 +22,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const ROUTES_DIR = join(import.meta.dirname, '..', 'routes');
+// __dirname, not import.meta: this workspace compiles to CommonJS, so
+// import.meta is unavailable — and tsx strips types without checking them, so
+// nothing catches that except `tsc -p tsconfig.test.json`.
+const ROUTES_DIR = join(__dirname, '..', 'routes');
 
 /** Every route path literal declared in the API, with where it came from. */
 function declaredRoutePaths(): { file: string; path: string }[] {
