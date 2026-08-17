@@ -17,6 +17,7 @@ import { pool, queryOne, withTransaction, closePool } from './pool';
 import { config } from '../config';
 import { hashPassword } from '../lib/crypto';
 import { runMigrations } from './migrate';
+import { seedDemoAgent } from './seed-agent';
 
 /** Representative wards per LGA. A full ward register is loaded from the
  *  official gazette during deployment; these support development and reporting. */
@@ -586,6 +587,11 @@ async function main(): Promise<void> {
   await seedReferenceData();
   if (demo) await seedDemoUsers();
 
+  // The agent has to be walked through the clearance pipeline rather than
+  // inserted, so it is opt-in: it makes several service calls and its failure
+  // would otherwise obscure an ordinary reference-data seed.
+  const agent = demo && process.argv.includes('--demo-agent') ? await seedDemoAgent() : null;
+
   const summary = await queryOne<Record<string, string>>(
     pool,
     `SELECT
@@ -601,7 +607,20 @@ async function main(): Promise<void> {
   console.log(`  ${summary?.lgas} LGAs, ${summary?.wards} wards`);
   console.log(`  ${summary?.categories} revenue categories, ${summary?.items} revenue items`);
   console.log(`  ${summary?.training_modules} training modules, ${summary?.templates} notification templates`);
-  if (!demo) console.log('\n  Re-run with --demo to add demonstration government users.');
+  if (agent) {
+    console.log('\n  Demonstration agent (development only) — cleared and ACTIVE:');
+    console.log(`    agent            ${agent.phone}  password: ${agent.password}`);
+    console.log(`    device id        ${agent.deviceIdentifier}`);
+    console.log('    The agent PWA generates its own device id, so the first sign-in from');
+    console.log('    a browser registers that device instead — approve it in the portal');
+    console.log('    under Agents → Devices, or sign in and register it from the app.');
+  }
+
+  if (!demo) {
+    console.log('\n  Re-run with --demo to add demonstration government users.');
+  } else if (!agent) {
+    console.log('\n  Add --demo-agent to also create a cleared, active field agent.');
+  }
 }
 
 if (require.main === module) {
@@ -617,3 +636,4 @@ if (require.main === module) {
 }
 
 export { seedReferenceData, seedDemoUsers };
+export { seedDemoAgent } from './seed-agent';

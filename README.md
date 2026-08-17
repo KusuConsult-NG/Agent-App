@@ -71,15 +71,27 @@ createdb psirs                       # or: psql -c 'CREATE DATABASE psirs;'
 export DATABASE_URL='postgres://postgres:postgres@localhost:5432/psirs'
 npm run migrate                      # applies migrations in order, with checksums
 npm run seed -- --demo               # Plateau geography, PSIRS catalogue, demo officers
+npm run seed -- --demo --demo-agent  # …and one cleared, active field agent
 
 npm run dev:api                      # http://localhost:4000
 npm run dev:agent                    # http://localhost:5173  (agent PWA)
 npm run dev:portal                   # http://localhost:5174  (government portal)
 ```
 
-The seed prints demonstration sign-in details for each government role. Agents
-are not seeded — they come into existence only by going through the clearance
-pipeline, which is the point.
+The seed prints sign-in details. The five government roles go to the **portal**
+on :5174; the agent goes to the **PWA** on :5173. Signing into the agent app
+with a government account answers "An agent profile for this account could not
+be found", because those users have no agent record — that is the two
+applications being genuinely separate, not a bug.
+
+`--demo-agent` does not insert an agent. It cannot: the
+`agent_activation_requires_clearance` constraint refuses an active agent that
+has not cleared, and that rule is the point of the platform. Instead it walks an
+applicant through the real pipeline using the same service calls the HTTP routes
+make — application, KYC, referee nomination and response, government approval,
+training, bank verification, agreement, device, activation — so the agent it
+produces is active because it earned it. If a clearance step ever breaks, the
+seed fails rather than handing you an agent that could not exist in production.
 
 ### Tests
 
