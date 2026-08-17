@@ -102,6 +102,40 @@ export const config = {
      * its signature is valid.
      */
     webhookToleranceSeconds: int('WEBHOOK_TOLERANCE_SECONDS', 300),
+
+    /**
+     * Remita — the collection channel for PSIRS revenue.
+     *
+     * `serviceTypeId` is issued to PSIRS per revenue stream and must come from
+     * their own merchant configuration. The status-code lists are configurable
+     * because the exact code set varies by merchant setup: only codes listed in
+     * `successStatusCodes` can ever mark money as received, and any code in
+     * neither list is treated as still pending rather than guessed at.
+     */
+    remita: {
+      baseUrl: process.env.REMITA_BASE_URL ?? 'https://remitademo.net',
+      merchantId: process.env.REMITA_MERCHANT_ID ?? '',
+      apiKey: process.env.REMITA_API_KEY ?? '',
+      serviceTypeId: process.env.REMITA_SERVICE_TYPE_ID ?? '',
+      successStatusCodes: (process.env.REMITA_SUCCESS_STATUS_CODES ?? '00')
+        .split(',')
+        .map((code) => code.trim())
+        .filter(Boolean),
+      // Empty by default: an unmapped code stays PENDING, so a mis-specified
+      // list can never wrongly close a transaction the taxpayer did pay.
+      failureStatusCodes: (process.env.REMITA_FAILURE_STATUS_CODES ?? '')
+        .split(',')
+        .map((code) => code.trim())
+        .filter(Boolean),
+      /** Optional shared secret on the notification endpoint. */
+      notificationSecret: process.env.REMITA_NOTIFICATION_SECRET ?? '',
+      /** Optional source-address allowlist for notifications. */
+      notificationIpAllowlist: (process.env.REMITA_NOTIFICATION_IP_ALLOWLIST ?? '')
+        .split(',')
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+      requestTimeoutMs: int('REMITA_TIMEOUT_MS', 20_000),
+    },
   },
 
   integrations: {
@@ -174,6 +208,21 @@ if (isProduction) {
   if (config.payments.gateway === 'mock') problems.push('PAYMENT_GATEWAY is still "mock"');
   if (config.integrations.tinService === 'mock') problems.push('TIN_SERVICE is still "mock"');
   if (config.storage.driver === 'local') problems.push('STORAGE_DRIVER is still "local"');
+
+  // A half-configured Remita is worse than none: every status query would fail,
+  // every payment would sit unconfirmed, and agents would be told to wait on
+  // money that was never going to be confirmable.
+  if (config.payments.gateway === 'remita') {
+    if (!config.payments.remita.merchantId) problems.push('REMITA_MERCHANT_ID is not set');
+    if (!config.payments.remita.apiKey) problems.push('REMITA_API_KEY is not set');
+    if (!config.payments.remita.serviceTypeId) problems.push('REMITA_SERVICE_TYPE_ID is not set');
+    if (config.payments.remita.baseUrl.includes('remitademo.net')) {
+      problems.push('REMITA_BASE_URL still points at the Remita demo environment');
+    }
+    if (config.payments.remita.successStatusCodes.length === 0) {
+      problems.push('REMITA_SUCCESS_STATUS_CODES is empty — no payment could ever be confirmed');
+    }
+  }
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production with development integrations: ${problems.join('; ')}`,

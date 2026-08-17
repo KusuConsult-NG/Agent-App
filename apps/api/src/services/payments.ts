@@ -12,9 +12,10 @@
  *   * `confirmPayment` is the ONLY function that can mark a payment VERIFIED,
  *     and it does so only after asking the gateway and getting SUCCESS with a
  *     matching amount. It takes no "status" argument from any caller.
- *   * `handleWebhook` records the delivery, checks the signature, then routes
- *     through `confirmPayment` — a webhook is a prompt to go and verify, not
- *     an instruction to be trusted.
+ *   * `handleWebhook` authenticates the delivery through the active gateway,
+ *     records it, then routes through `confirmPayment` — a webhook is a prompt
+ *     to go and verify, never an instruction to be trusted. Gateways differ in
+ *     whether they sign callbacks; none of them get to assert an outcome.
  *   * Receipt issue and commission accrual happen inside the same database
  *     transaction as verification, so evidence and incentive can never drift
  *     apart from the money.
@@ -32,7 +33,6 @@ import { advisoryLock, LOCK_NAMESPACE, queryOne, query, withTransaction } from '
 import type { Db } from '../db/pool';
 import { config } from '../config';
 import { gateway } from '../integrations/gateway';
-import { verifyWebhookSignature } from '../lib/crypto';
 import {
   AppError,
   conflict,
@@ -627,11 +627,23 @@ export interface WebhookResult {
 export async function handleWebhook(params: {
   rawBody: Buffer;
   signature: string | undefined;
+  headers?: Record<string, string | undefined>;
+  sourceIp?: string | null;
   parsedBody: unknown;
 }): Promise<WebhookResult> {
-  const signatureValid = params.signature
-    ? verifyWebhookSignature(params.rawBody, params.signature)
-    : false;
+  // Authentication is gateway-specific. A gateway that signs its callbacks has
+  // an unsigned delivery refused outright; one that does not sign them (Remita
+  // notifies with a reference and expects a status query) has the delivery
+  // accepted as a prompt only. Either way the delivery conveys no authority
+  // over payment state — `confirmPayment` re-verifies against the gateway.
+  const auth = gateway.authenticateWebhook({
+    rawBody: params.rawBody,
+    headers: params.headers ?? {
+      'x-psirs-signature': params.signature,
+    },
+    parsedBody: params.parsedBody,
+    sourceIp: params.sourceIp ?? null,
+  });
 
   const event = gateway.parseWebhook(params.parsedBody);
 
@@ -648,7 +660,7 @@ export async function handleWebhook(params: {
           `unparseable-${Date.now()}`,
           JSON.stringify(params.parsedBody ?? {}),
           params.signature ?? null,
-          signatureValid,
+          auth.authenticated,
           'Payload could not be parsed into a known event shape',
         ],
       ),
@@ -656,9 +668,9 @@ export async function handleWebhook(params: {
     return { acknowledged: false, duplicate: false, note: 'Webhook payload could not be parsed.' };
   }
 
-  if (!signatureValid) {
-    // Recorded, then refused. An unsigned or wrongly signed delivery is never
-    // allowed to influence payment state (PRD §54 webhook signature validation).
+  if (!auth.accepted) {
+    // Recorded, then refused. A delivery the active gateway will not vouch for
+    // is never allowed to influence payment state (PRD §54).
     await withTransaction((client) =>
       client.query(
         `INSERT INTO payment_webhook_events
@@ -673,14 +685,14 @@ export async function handleWebhook(params: {
           event.gatewayReference,
           JSON.stringify(event.raw),
           params.signature ?? null,
-          'Signature missing or invalid',
+          auth.reason ?? 'Delivery could not be authenticated',
         ],
       ),
     );
     throw new AppError({
       statusCode: 401,
       code: 'INVALID_WEBHOOK_SIGNATURE',
-      message: 'Webhook signature could not be verified.',
+      message: auth.reason ?? 'Webhook delivery could not be authenticated.',
       expose: false,
     });
   }
@@ -691,7 +703,7 @@ export async function handleWebhook(params: {
       `INSERT INTO payment_webhook_events
          (gateway, event_id, event_type, gateway_reference, payload, signature,
           signature_valid, processing_status)
-       VALUES ($1,$2,$3,$4,$5,$6,true,'RECEIVED')
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'RECEIVED')
        ON CONFLICT (gateway, event_id) DO NOTHING
        RETURNING id`,
       [
@@ -701,6 +713,7 @@ export async function handleWebhook(params: {
         event.gatewayReference,
         JSON.stringify(event.raw),
         params.signature ?? null,
+        auth.authenticated,
       ],
     );
     return row;
