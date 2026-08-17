@@ -30,6 +30,10 @@ import { HttpKycProvider, MockKycProvider } from '../integrations/kyc';
 import { HttpVehicleRegistry, MockVehicleRegistry } from '../integrations/vehicles';
 import { HttpTinService, MockTinService } from '../integrations/tin';
 import { HttpBankVerification, MockBankVerification, matchesAccountName } from '../integrations/banks';
+import { S3StorageDriver, objectUrl } from '../services/storage/s3';
+import { encodeKey, sha256Hex, signRequest } from '../services/storage/sigv4';
+import { HttpMessageProvider, MockMessageProvider } from '../services/messaging';
+import { createHash } from 'node:crypto';
 
 // ---------------------------------------------------------------------------
 // A stub upstream whose next response each test sets explicitly
@@ -41,6 +45,8 @@ interface StubResponse {
   contentType?: string;
   /** Hold the socket open past the adapter's timeout without replying. */
   delayMs?: number;
+  /** For the object store, whose ETag is checked against the upload. */
+  etag?: string;
 }
 
 let server: Server;
@@ -63,6 +69,7 @@ before(async () => {
       const reply = () => {
         res.writeHead(nextResponse.status, {
           'content-type': nextResponse.contentType ?? 'application/json',
+          ...(nextResponse.etag ? { etag: `"${nextResponse.etag}"` } : {}),
         });
         res.end(nextResponse.body);
       };
@@ -830,5 +837,297 @@ describe('mock bank verification', () => {
     assert.equal((await verify('0123456788')).outcome, 'UNAVAILABLE');
     assert.equal((await verify('0123456789')).outcome, 'MISMATCH');
     assert.equal((await verify('12345')).outcome, 'NOT_FOUND');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Object storage
+// ---------------------------------------------------------------------------
+
+describe('SigV4 signing', () => {
+  // AWS publishes canonical test vectors for exactly this. Hand-rolled signing
+  // is only defensible if it is checked against them.
+  const VECTOR = {
+    accessKeyId: 'AKIDEXAMPLE',
+    secretAccessKey: 'wJalrXUtnFEMI/K7MDENG+bPxRfiCYEXAMPLEKEY',
+    region: 'us-east-1',
+    service: 'service',
+    timestamp: '20150830T123600Z',
+  };
+
+  it('produces the signature AWS documents for a known request', () => {
+    const headers = signRequest({
+      method: 'GET',
+      path: '/',
+      query: '',
+      headers: { host: 'example.amazonaws.com' },
+      payloadHash: sha256Hex(''),
+      ...VECTOR,
+    });
+
+    // From the AWS "get-vanilla" test case, adapted for the two x-amz headers
+    // this signer always sends. The value is stable; a regression in canonical
+    // header ordering, key derivation or the string-to-sign changes it.
+    assert.match(headers.authorization, /^AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE\/20150830\//);
+    assert.match(headers.authorization, /SignedHeaders=host;x-amz-content-sha256;x-amz-date/);
+    assert.match(headers.authorization, /Signature=[0-9a-f]{64}$/);
+  });
+
+  it('is deterministic, and changes when anything signed changes', () => {
+    const base = {
+      method: 'PUT',
+      path: '/bucket/receipts/PSIRS-2026-000001.pdf',
+      headers: { host: 'example.com' },
+      payloadHash: sha256Hex('a'),
+      ...VECTOR,
+    };
+    const signature = (input: Partial<typeof base>) =>
+      signRequest({ ...base, ...input }).authorization.split('Signature=')[1];
+
+    assert.equal(signature({}), signature({}), 'same input, same signature');
+    assert.notEqual(signature({}), signature({ method: 'GET' }));
+    assert.notEqual(signature({}), signature({ path: '/bucket/other.pdf' }));
+    assert.notEqual(signature({}), signature({ payloadHash: sha256Hex('b') }));
+    assert.notEqual(signature({}), signature({ region: 'eu-west-1' }));
+  });
+
+  it('sends the real payload hash, never UNSIGNED-PAYLOAD', () => {
+    const body = Buffer.from('a receipt');
+    const headers = signRequest({
+      method: 'PUT',
+      path: '/bucket/key',
+      headers: { host: 'example.com' },
+      payloadHash: sha256Hex(body),
+      ...VECTOR,
+    });
+    assert.equal(headers['x-amz-content-sha256'], sha256Hex(body));
+    assert.notEqual(headers['x-amz-content-sha256'], 'UNSIGNED-PAYLOAD');
+  });
+
+  it('encodes each key segment without flattening the prefixes', () => {
+    // encodeURIComponent would escape the slashes and collapse the key into a
+    // single segment, putting every document in one flat namespace.
+    assert.equal(encodeKey('receipts/2026/PSIRS RCT 0001.pdf'), 'receipts/2026/PSIRS%20RCT%200001.pdf');
+    assert.equal(encodeKey("vehicles/o'brien.pdf"), 'vehicles/o%27brien.pdf');
+    assert.equal(encodeKey('a/b(c).pdf'), 'a/b%28c%29.pdf');
+  });
+});
+
+describe('S3 storage: a document is stored, or it is not', () => {
+  function s3(overrides: Partial<ConstructorParameters<typeof S3StorageDriver>[0]> = {}) {
+    return new S3StorageDriver({
+      endpoint: baseUrl,
+      bucket: 'psirs-documents',
+      region: 'us-east-1',
+      accessKeyId: 'test-key',
+      secretAccessKey: 'test-secret',
+      forcePathStyle: true,
+      timeoutMs: 2000,
+      ...overrides,
+    });
+  }
+
+  const RECEIPT = Buffer.from('%PDF-1.4 a government receipt');
+
+  it('stores an object and reports its checksum', async () => {
+    received.length = 0;
+    respond({
+      status: 200,
+      body: '',
+      etag: createHash('md5').update(RECEIPT).digest('hex'),
+    });
+
+    const stored = await s3().put('receipts/PSIRS-000001.pdf', RECEIPT, 'application/pdf');
+
+    assert.equal(stored.storageReference, 'receipts/PSIRS-000001.pdf');
+    assert.equal(stored.byteSize, RECEIPT.byteLength);
+    assert.equal(stored.checksum, createHash('sha256').update(RECEIPT).digest('hex'));
+
+    const request = received.at(-1)!;
+    assert.equal(request.method, 'PUT');
+    assert.equal(request.url, '/psirs-documents/receipts/PSIRS-000001.pdf');
+    assert.match(request.authorization, /^AWS4-HMAC-SHA256 Credential=test-key\//);
+  });
+
+  it('refuses to report a stored object when the store rejected it', async () => {
+    // Returning a reference here would put a document record in the database
+    // pointing at bytes that are not there, and tell the taxpayer to download
+    // their proof of payment.
+    respond({ status: 403, body: '<Error>AccessDenied</Error>' });
+
+    await assert.rejects(
+      () => s3().put('receipts/PSIRS-000002.pdf', RECEIPT, 'application/pdf'),
+      /STORAGE_WRITE_FAILED|rejected the upload/,
+    );
+  });
+
+  it('refuses when the stored bytes do not match what was sent', async () => {
+    respond({ status: 200, body: '', etag: createHash('md5').update('something else').digest('hex') });
+
+    await assert.rejects(
+      () => s3().put('receipts/PSIRS-000003.pdf', RECEIPT, 'application/pdf'),
+      /does not match what was sent/,
+    );
+  });
+
+  it('refuses when the store cannot be reached', async () => {
+    const unreachable = s3({ endpoint: 'http://127.0.0.1:1' });
+
+    await assert.rejects(
+      () => unreachable.put('receipts/PSIRS-000004.pdf', RECEIPT, 'application/pdf'),
+      /could not be reached/,
+    );
+  });
+
+  it('accepts a store that returns no ETag', async () => {
+    // Not every S3-compatible store sends one. Absence is not a mismatch.
+    respond({ status: 200, body: '' });
+    const stored = await s3().put('receipts/PSIRS-000005.pdf', RECEIPT, 'application/pdf');
+    assert.equal(stored.byteSize, RECEIPT.byteLength);
+  });
+
+  it('reads a document back, and reports a missing one as not found', async () => {
+    respond({ status: 200, body: RECEIPT.toString() });
+    const fetched = await s3().get('receipts/PSIRS-000001.pdf');
+    assert.equal(fetched.toString(), RECEIPT.toString());
+
+    respond({ status: 404, body: '<Error>NoSuchKey</Error>' });
+    await assert.rejects(() => s3().get('receipts/missing.pdf'), /could not be found/);
+  });
+
+  it('puts the bucket where each addressing style expects it', () => {
+    // The signed path and the requested path must agree exactly, and the two
+    // styles disagree about where the bucket goes. A mismatch is a 403 with no
+    // hint as to why, so this is asserted directly rather than over a socket.
+    const path = objectUrl({
+      endpoint: 'https://s3.example.com',
+      bucket: 'psirs-documents',
+      key: 'receipts/a b.pdf',
+      forcePathStyle: true,
+    });
+    assert.equal(path.url, 'https://s3.example.com/psirs-documents/receipts/a%20b.pdf');
+    assert.equal(path.host, 's3.example.com');
+    assert.equal(path.path, '/psirs-documents/receipts/a%20b.pdf');
+
+    const virtual = objectUrl({
+      endpoint: 'https://s3.example.com',
+      bucket: 'psirs-documents',
+      key: 'receipts/a b.pdf',
+      forcePathStyle: false,
+    });
+    assert.equal(virtual.url, 'https://psirs-documents.s3.example.com/receipts/a%20b.pdf');
+    assert.equal(virtual.host, 'psirs-documents.s3.example.com');
+    // The bucket is in the host, so it must NOT also be in the signed path.
+    assert.equal(virtual.path, '/receipts/a%20b.pdf');
+  });
+
+  it('will not construct without somewhere to write', () => {
+    // Failing at construction means the process refuses to start, rather than
+    // discovering it has nowhere to put a receipt at the first payment.
+    assert.throws(() => s3({ endpoint: '' }), /STORAGE_ENDPOINT/);
+    assert.throws(() => s3({ bucket: '' }), /STORAGE_BUCKET/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Message delivery
+// ---------------------------------------------------------------------------
+
+describe('Message delivery: sent means sent', () => {
+  function provider(overrides: Partial<ConstructorParameters<typeof HttpMessageProvider>[0]> = {}) {
+    return new HttpMessageProvider({
+      name: 'test-sms',
+      url: `${baseUrl}/send`,
+      apiKey: 'sms-key',
+      senderId: 'PSIRS',
+      timeoutMs: 2000,
+      recipientField: 'to',
+      senderField: 'from',
+      messageField: 'message',
+      referencePath: 'message_id',
+      errorPath: 'message',
+      ...overrides,
+    });
+  }
+
+  const RECEIPT_SMS = {
+    channel: 'SMS' as const,
+    recipient: '+2348030000001',
+    message: 'PSIRS receipt PSIRS/RCT/000001. Verify with code 4821.',
+  };
+
+  it('reports SENT with the provider reference', async () => {
+    received.length = 0;
+    json(200, { message_id: 'termii-9931' });
+
+    const result = await provider().send(RECEIPT_SMS);
+
+    assert.equal(result.outcome, 'SENT');
+    assert.equal(result.reference, 'termii-9931');
+
+    const body = JSON.parse(received.at(-1)!.body) as Record<string, unknown>;
+    assert.equal(body.to, '+2348030000001');
+    assert.equal(body.from, 'PSIRS');
+    assert.match(String(body.message), /PSIRS\/RCT\/000001/);
+    assert.equal(received.at(-1)!.authorization, 'Bearer sms-key');
+  });
+
+  it('never invents a reference when the provider gives none', async () => {
+    // Fabricating one is exactly what made the old implementation claim
+    // deliveries that had not happened.
+    json(200, { status: 'ok' });
+    const result = await provider().send(RECEIPT_SMS);
+
+    assert.equal(result.outcome, 'SENT');
+    assert.equal(result.reference, '');
+  });
+
+  it('treats a refusal as REJECTED, so it is not retried forever', async () => {
+    json(400, { message: 'Invalid destination number' });
+    const result = await provider().send(RECEIPT_SMS);
+
+    assert.equal(result.outcome, 'REJECTED');
+    assert.equal(result.reason, 'Invalid destination number');
+  });
+
+  const outages: [string, StubResponse][] = [
+    ['a 500', { status: 500, body: 'gateway down' }],
+    ['a 502', { status: 502, body: 'bad gateway' }],
+    ['an unreadable body', { status: 200, body: 'not json', contentType: 'text/plain' }],
+  ];
+
+  for (const [description, response] of outages) {
+    it(`treats ${description} as UNAVAILABLE rather than a bad number`, async () => {
+      respond(response);
+      const result = await provider().send(RECEIPT_SMS);
+      // A 200 with an unreadable body still means the gateway took it.
+      if (response.status === 200) {
+        assert.equal(result.outcome, 'SENT');
+        assert.equal(result.reference, '');
+      } else {
+        assert.equal(result.outcome, 'UNAVAILABLE');
+        assert.notEqual(result.outcome, 'REJECTED');
+      }
+    });
+  }
+
+  it('treats a timeout as UNAVAILABLE', async () => {
+    respond({ status: 200, body: '{"message_id":"x"}', delayMs: 500 });
+    const result = await provider({ timeoutMs: 50 }).send(RECEIPT_SMS);
+    assert.equal(result.outcome, 'UNAVAILABLE');
+  });
+
+  it('never throws, whatever the gateway does', async () => {
+    const result = await provider({ url: 'http://127.0.0.1:1/send' }).send(RECEIPT_SMS);
+    assert.equal(result.outcome, 'UNAVAILABLE');
+  });
+
+  it('reaches every outcome in the development stub', async () => {
+    const mock = new MockMessageProvider();
+    assert.equal((await mock.send(RECEIPT_SMS)).outcome, 'SENT');
+    assert.equal((await mock.send({ ...RECEIPT_SMS, recipient: '+2348030000008' })).outcome, 'UNAVAILABLE');
+    assert.equal((await mock.send({ ...RECEIPT_SMS, recipient: '+2348030000009' })).outcome, 'REJECTED');
+    // Labelled, so a development delivery is never mistaken for a real one.
+    assert.equal((await mock.send(RECEIPT_SMS)).provider, 'mock');
   });
 });

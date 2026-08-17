@@ -14,7 +14,7 @@ import type { PoolClient } from 'pg';
 import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
-import { config } from '../config';
+import { providerFor } from './messaging';
 
 export type NotificationEvent =
   | 'TIN_CREATED'
@@ -148,16 +148,35 @@ export async function queueNotification(
 }
 
 /**
- * Deliver queued notifications.
+ * Deliver queued notifications (PRD §44, §66, §79).
  *
- * The development providers log rather than send. Failures are recorded and
- * retried up to a bound — a notification that cannot be delivered must be
- * visible in monitoring (PRD §66), not silently dropped.
+ * This is the last step between a confirmed government payment and the citizen
+ * knowing about it. They hold no account here, so the SMS carrying their
+ * receipt number and verification code is the only copy they get.
+ *
+ * What this function used to do is worth stating, because it is the reason it
+ * now looks the way it does: it logged the message when the provider was
+ * `mock`, and then marked every notification SENT with `provider_reference =
+ * mock-<id>` regardless of which provider was configured. Nothing was ever
+ * delivered, and the `notifications` table said otherwise. That is the same
+ * failure this platform exists to prevent — a record claiming something
+ * happened that did not — applied to the one artefact a citizen actually
+ * receives.
+ *
+ * So a notification is only SENT when a provider accepted it, and the three
+ * outcomes are kept apart:
+ *
+ *   SENT         the provider took it; its reference is recorded as given
+ *   REJECTED     the provider refused it. FAILED immediately — retrying a
+ *                malformed number four more times only delays telling someone
+ *   UNAVAILABLE  the provider could not be reached. Stays QUEUED, and does NOT
+ *                consume an attempt, because the citizen is still owed this
+ *                message and an outage is not their fault
  */
 export async function dispatchQueued(db: Db, options: { limit?: number } = {}): Promise<number> {
   const pending = await query<{
     id: string;
-    channel: string;
+    channel: 'SMS' | 'EMAIL' | 'PUSH';
     recipient: string;
     subject: string | null;
     message: string;
@@ -174,33 +193,69 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
   let sent = 0;
 
   for (const notification of pending) {
-    try {
-      if (config.notifications.smsProvider === 'mock' || config.notifications.emailProvider === 'mock') {
-        console.log(
-          `[notify:${notification.channel}] -> ${notification.recipient}: ${notification.message}`,
-        );
-      }
+    const result = await providerFor(notification.channel).send({
+      channel: notification.channel,
+      recipient: notification.recipient,
+      subject: notification.subject,
+      message: notification.message,
+    });
+
+    if (result.outcome === 'SENT') {
       await query(
         db,
         `UPDATE notifications
             SET status = 'SENT', sent_at = now(), attempts = attempts + 1,
-                provider_reference = $2
+                provider = $3, provider_reference = $2, failure_reason = NULL
           WHERE id = $1`,
-        [notification.id, `mock-${notification.id}`],
+        [notification.id, result.reference || null, result.provider],
       );
       sent += 1;
-    } catch (error) {
+      continue;
+    }
+
+    if (result.outcome === 'REJECTED') {
       await query(
         db,
         `UPDATE notifications
-            SET attempts = attempts + 1,
-                failure_reason = $2,
-                status = CASE WHEN attempts + 1 >= 5 THEN 'FAILED' ELSE 'QUEUED' END
+            SET status = 'FAILED', attempts = attempts + 1,
+                provider = $3, failure_reason = $2
           WHERE id = $1`,
-        [notification.id, error instanceof Error ? error.message : 'Unknown error'],
+        [notification.id, result.reason ?? 'The provider refused the message', result.provider],
       );
+      continue;
     }
+
+    // UNAVAILABLE. The attempt counter is deliberately not incremented: an
+    // outage would otherwise exhaust the budget in five sweeps and permanently
+    // fail a message the provider never even saw.
+    await query(
+      db,
+      `UPDATE notifications
+          SET failure_reason = $2, provider = $3
+        WHERE id = $1`,
+      [notification.id, result.reason ?? 'The provider could not be reached', result.provider],
+    );
   }
 
   return sent;
+}
+
+/**
+ * Notifications that were never delivered (PRD §66).
+ *
+ * A citizen who did not get their receipt has no other way to learn their
+ * verification code, so this is a queue somebody has to work — not a metric.
+ */
+export async function undeliveredNotifications(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT id, event, channel, recipient, status, attempts, failure_reason,
+            provider, created_at
+       FROM notifications
+      WHERE status = 'FAILED'
+         OR (status = 'QUEUED' AND created_at < now() - INTERVAL '1 hour')
+      ORDER BY created_at
+      LIMIT $1`,
+    [limit],
+  );
 }

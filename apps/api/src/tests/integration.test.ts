@@ -25,6 +25,7 @@ import {
   territoryForLga,
 } from './helpers';
 import { seedDemoUsers, seedReferenceData } from '../db/seed';
+import * as notifications from '../services/notifications';
 import { queryOne, query } from '../db/pool';
 
 /** Shared state, built up across the ordered lifecycle suites. */
@@ -2140,5 +2141,93 @@ describe('A session chain ends on a fixed date', () => {
 
     assert.equal(response.status, 401);
     assert.match(response.body.error.message, /sign in with your password/i);
+  });
+});
+
+describe('A notification is only recorded as sent if it was sent', () => {
+  // The citizen holds no account, so the SMS carrying their receipt number and
+  // verification code is the only copy of their proof of payment they get.
+  // Until recently every notification was marked SENT with a fabricated
+  // reference whether or not anything left the building.
+
+  it('records the provider that accepted the message', async () => {
+    const dispatched = await notifications.dispatchQueued(pool, { limit: 50 });
+    assert.ok(dispatched >= 0);
+
+    const sent = await query<{ provider: string | null; provider_reference: string | null }>(
+      pool,
+      `SELECT provider, provider_reference FROM notifications WHERE status = 'SENT' LIMIT 20`,
+    );
+    assert.ok(sent.length > 0, 'the lifecycle above queued and delivered something');
+
+    for (const row of sent) {
+      // A row may only claim SENT alongside the service that accepted it.
+      assert.ok(row.provider, 'every sent notification names its provider');
+    }
+  });
+
+  it('never marks a message sent when the provider could not be reached', async () => {
+    // The mock gateway is unreachable for recipients ending in 8.
+    const queued = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO notifications (recipient, event, channel, message)
+       VALUES ('+2347099000008', 'RECEIPT_GENERATED', 'SMS', 'Your receipt is ready')
+       RETURNING id`,
+    );
+
+    await notifications.dispatchQueued(pool, { limit: 50 });
+
+    const row = await queryOne<{
+      status: string;
+      attempts: number;
+      sent_at: Date | null;
+      failure_reason: string | null;
+    }>(pool, 'SELECT status, attempts, sent_at, failure_reason FROM notifications WHERE id = $1', [
+      queued!.id,
+    ]);
+
+    assert.equal(row!.status, 'QUEUED', 'still owed to the citizen');
+    assert.equal(row!.sent_at, null);
+    // An outage must not burn the retry budget: five sweeps during a gateway
+    // outage would permanently fail a message the provider never saw.
+    assert.equal(row!.attempts, 0);
+    assert.match(row!.failure_reason ?? '', /could not be reached/i);
+  });
+
+  it('fails a refused message immediately rather than retrying it', async () => {
+    // The mock gateway refuses recipients ending in 9. A malformed number does
+    // not become deliverable by being tried four more times.
+    const queued = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO notifications (recipient, event, channel, message)
+       VALUES ('+2347099000009', 'RECEIPT_GENERATED', 'SMS', 'Your receipt is ready')
+       RETURNING id`,
+    );
+
+    await notifications.dispatchQueued(pool, { limit: 50 });
+
+    const row = await queryOne<{ status: string; failure_reason: string | null }>(
+      pool,
+      'SELECT status, failure_reason FROM notifications WHERE id = $1',
+      [queued!.id],
+    );
+
+    assert.equal(row!.status, 'FAILED');
+    assert.match(row!.failure_reason ?? '', /refused/i);
+  });
+
+  it('surfaces everything the citizen never received', async () => {
+    const undelivered = await notifications.undeliveredNotifications(pool);
+    const recipients = (undelivered as { recipient: string }[]).map((row) => row.recipient);
+    assert.ok(recipients.includes('+2347099000009'), 'a refused message is a queue to work');
+  });
+
+  it('leaves no notification claiming delivery without a provider', async () => {
+    const fabricated = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM notifications
+        WHERE status = 'SENT' AND provider IS NULL`,
+    );
+    assert.equal(fabricated!.count, '0');
   });
 });

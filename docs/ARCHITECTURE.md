@@ -67,6 +67,8 @@ psql prompt. The same reasoning produces:
 | Payments | `services/payments.ts` | Intent, independent verification, idempotent webhooks |
 | Receipts | `services/receipts.ts` | Issue (gated), public verification |
 | Documents | `services/documents.ts` | PDF rendering, QR, checksum registration |
+| Storage | `services/storage/` | Driver selection, S3-compatible object store with SigV4, signed URLs |
+| Messaging | `services/messaging/` | SMS and email delivery — the citizen's only channel |
 | Commission | `services/commission.ts` | Accrual, lifecycle, wallet, payouts, reversal cascade |
 | Reconciliation | `services/reconciliation.ts` | Three-way matching, exception queue, settlement, reversal execution |
 | Agents | `services/agents.ts` | Clearance pipeline, review, activation, devices |
@@ -107,6 +109,12 @@ a financial risk on this platform.
 009_unanswered_questions
                  why a taxpayer has no TIN yet and why a bank account is not
                  verified — an outage recorded as an outage, not as a refusal
+010_session_absolute_expiry
+                 a session chain that ends on a fixed date, however often it is
+                 refreshed
+011_notification_delivery
+                 which service accepted a message; a row can no longer claim
+                 SENT without naming one
 ```
 
 ### Gateway adapters

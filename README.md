@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 303 tests: API (274) + agent PWA offline and session (29)
+npm test        # 329 tests: API (300) + agent PWA offline and session (29)
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 303 tests — every database-level integrity control, and the PWA offline capture queue |
+| `npm test` | All 329 tests — every database-level integrity control, and the PWA offline capture queue |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -477,6 +477,58 @@ Neither permission is held by any agent. Renewals are told to the vehicle
 authority after payment, and a renewal it never acknowledged stays `COMPLETED` —
 the taxpayer paid and holds a valid document — while remaining outstanding for
 the government to chase.
+
+## Documents and the message a citizen actually receives
+
+Two things stood between this and a deployment that boots, and both were
+unwritten code rather than configuration.
+
+**Receipts now go to object storage.** `services/storage/` selects on
+`STORAGE_DRIVER`; there is an S3-compatible driver alongside the development
+local one. SigV4 is signed here rather than pulled in — every other outbound
+integration in this codebase speaks plain `fetch`, the AWS SDK would be by far
+the largest dependency in the tree for one PUT, one GET and one HEAD, and
+signing by hand keeps the driver genuinely provider-neutral: MinIO, Backblaze
+and DigitalOcean Spaces all accept SigV4, and a state deployment may not be on
+AWS.
+
+The driver will not report an object as stored unless the store confirmed it —
+status *and* the returned ETag against the MD5 of what was sent. A returned
+reference is a promise: the caller writes it against a receipt and tells the
+taxpayer they can download their proof of payment, so a reference for an object
+that is not there turns a successful payment into a citizen who cannot show they
+paid.
+
+**SMS and email are now actually sent.** This is the more serious of the two.
+`dispatchQueued` used to log the message when the provider was `mock`, then mark
+every notification `SENT` with `provider_reference = mock-<id>` *regardless of
+what was configured*. Nothing was ever delivered and the `notifications` table
+said otherwise — the same failure this platform exists to prevent, applied to
+the one artefact a citizen holds.
+
+It matters because the citizen has no account here. An agent approaches them;
+there is no portal to log into and no inbox to fall back on. The SMS carrying
+their receipt number and verification code is their only proof of payment and
+their only route to checking it against government records.
+
+So the three outcomes are kept apart, and a notification is `SENT` only when a
+provider accepted it:
+
+| Outcome | Recorded as | Why |
+|---|---|---|
+| Provider accepted | `SENT` with its real reference — never a fabricated one | |
+| Provider refused | `FAILED` immediately | A malformed number does not become deliverable by being tried four more times |
+| Provider unreachable | stays `QUEUED`, **and does not consume an attempt** | Five sweeps during a gateway outage would permanently fail a message the provider never saw |
+
+Migration 011 adds `notifications.provider`, so a row can only claim `SENT`
+alongside the service that accepted it — and it marks the existing fabricated
+rows `FAILED` with the reason, because an operator seeing which citizens were
+never told beats one of them asking for a receipt nobody sent.
+`undeliveredNotifications` is the queue that follows from that.
+
+Both providers are configurable HTTP adapters, and both are named in the
+production boot guard: `SMS_PROVIDER=mock` or `STORAGE_DRIVER=local` in
+production stops the process rather than quietly running.
 
 ## Source of truth
 
