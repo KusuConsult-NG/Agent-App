@@ -82,6 +82,19 @@ export const config = {
     jwtSecret: secret('JWT_SECRET'),
     accessTokenTtlSeconds: int('ACCESS_TOKEN_TTL_SECONDS', 900), // 15 minutes
     refreshTokenTtlSeconds: int('REFRESH_TOKEN_TTL_SECONDS', 60 * 60 * 24 * 14),
+    /**
+     * How long a session may live in total, however often it is refreshed.
+     *
+     * The refresh TTL above rolls forward on every rotation, which is what
+     * keeps a working agent signed in. This one does not move, so a refresh
+     * token — now persisted on the device so agents survive an app restart in
+     * the field — cannot become a permanent credential on a lost phone.
+     *
+     * Thirty days means an agent signs in with their password about monthly.
+     * They need connectivity to sync anyway, so it costs them nothing they were
+     * not already doing.
+     */
+    sessionAbsoluteTtlSeconds: int('SESSION_ABSOLUTE_TTL_SECONDS', 60 * 60 * 24 * 30),
     otpTtlSeconds: int('OTP_TTL_SECONDS', 300),
     otpLength: int('OTP_LENGTH', 6),
     stepUpTtlSeconds: int('STEP_UP_TTL_SECONDS', 600),
@@ -290,6 +303,15 @@ export const config = {
     rateLimitWindowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax: int('RATE_LIMIT_MAX', 120),
     authRateLimitMax: int('AUTH_RATE_LIMIT_MAX', 10),
+    /**
+     * Agent applications per hour, per source address (Addendum §2).
+     *
+     * Deliberately tight: an application starts a clearance pipeline and
+     * consumes government review time, so a script should not be able to flood
+     * it. Configurable only so the test suite can create its fixtures — the
+     * production default is unchanged.
+     */
+    agentApplyRateLimitMax: int('AGENT_APPLY_RATE_LIMIT_MAX', 5),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())

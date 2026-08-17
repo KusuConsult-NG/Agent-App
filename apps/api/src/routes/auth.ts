@@ -49,6 +49,9 @@ authRouter.post(
     const tokens = await auth.refresh({
       refreshToken: data.refreshToken,
       ipAddress: req.clientIp,
+      // The device the token is being presented from. A session bound to a
+      // device only refreshes on that device.
+      deviceIdentifier: req.deviceIdentifier,
     });
     res.json(tokens);
   }),

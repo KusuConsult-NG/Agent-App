@@ -47,23 +47,36 @@ async function createSession(params: {
   deviceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
+  /**
+   * Carried through from the session being rotated. Absent means this is a
+   * fresh password sign-in, which is the only thing that may start a new
+   * absolute clock — otherwise refreshing would reset the bound it exists to
+   * impose.
+   */
+  absoluteExpiresAt?: Date | null;
 }): Promise<SessionTokens> {
   const refreshToken = generateToken(48);
   const expiresAt = new Date(Date.now() + config.auth.refreshTokenTtlSeconds * 1000);
+  const absoluteExpiresAt =
+    params.absoluteExpiresAt ??
+    new Date(Date.now() + config.auth.sessionAbsoluteTtlSeconds * 1000);
 
   const session = await withTransaction(async (client) => {
     const row = await queryOne<{ id: string }>(
       client,
       `INSERT INTO sessions
-         (user_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+         (user_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at,
+          absolute_expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
       [
         params.userId,
         sha256(refreshToken),
         params.deviceId ?? null,
         params.ipAddress ?? null,
         params.userAgent ?? null,
-        expiresAt,
+        // The rolling expiry can never outlast the absolute one.
+        expiresAt < absoluteExpiresAt ? expiresAt : absoluteExpiresAt,
+        absoluteExpiresAt,
       ],
     );
     await client.query(
@@ -220,10 +233,32 @@ export async function login(params: {
   return tokens;
 }
 
-/** Rotate a refresh token; reuse of an old one is refused. */
+/**
+ * Rotate a refresh token; reuse of an old one is refused.
+ *
+ * Three things must hold before a new token is issued, and two of them exist
+ * because the agent PWA now keeps its refresh token in `localStorage` so field
+ * agents stay signed in across app restarts with no connectivity. That is the
+ * right trade for the field — an agent whose phone restarts in a village must
+ * be able to keep collecting — but it means a lost handset carries a real
+ * credential, so the credential is bounded in the two ways that matter.
+ *
+ *   1. The token is unused and unexpired.       (as before)
+ *   2. It is presented by the device it was     — a token lifted off a phone is
+ *      issued to.                                 useless anywhere else.
+ *   3. The session chain has not outlived its   — no amount of refreshing makes
+ *      absolute expiry.                            possession permanent.
+ *
+ * A device mismatch revokes the session rather than merely refusing it. A
+ * refresh token appearing on a different device is not a mistake a legitimate
+ * agent makes — their device identifier is stable in the same storage as the
+ * token — so it is treated as evidence that the token has been copied.
+ */
 export async function refresh(params: {
   refreshToken: string;
   ipAddress?: string | null;
+  /** From `x-device-id`; the identifier the caller is presenting. */
+  deviceIdentifier?: string | null;
 }): Promise<SessionTokens> {
   const { pool } = await import('../db/pool');
 
@@ -231,7 +266,9 @@ export async function refresh(params: {
     id: string;
     user_id: string;
     device_id: string | null;
+    device_identifier: string | null;
     expires_at: Date;
+    absolute_expires_at: Date | null;
     revoked_at: Date | null;
     full_name: string;
     phone: string;
@@ -240,9 +277,12 @@ export async function refresh(params: {
     status: string;
   }>(
     pool,
-    `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.revoked_at,
+    `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
+            d.device_identifier,
             u.full_name, u.phone, u.email, u.role, u.status
-       FROM sessions s JOIN users u ON u.id = s.user_id
+       FROM sessions s
+       JOIN users u ON u.id = s.user_id
+       LEFT JOIN agent_devices d ON d.id = s.device_id
       WHERE s.refresh_token_hash = $1`,
     [sha256(params.refreshToken)],
   );
@@ -250,6 +290,47 @@ export async function refresh(params: {
   if (!session || session.revoked_at || session.expires_at.getTime() < Date.now()) {
     throw unauthorised('Your session has expired. Sign in again.');
   }
+
+  if (
+    session.absolute_expires_at &&
+    session.absolute_expires_at.getTime() < Date.now()
+  ) {
+    await pool.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Absolute session lifetime reached'
+        WHERE id = $1`,
+      [session.id],
+    );
+    throw unauthorised('For security, please sign in with your password again.');
+  }
+
+  // Only sessions that were bound to a device are checked against one. A
+  // government user signing in from a browser has no device to bind to, and
+  // requiring one would lock them out rather than protect anything.
+  if (session.device_identifier) {
+    if (session.device_identifier !== params.deviceIdentifier) {
+      await withTransaction(async (client) => {
+        await client.query(
+          `UPDATE sessions SET revoked_at = now(),
+                  revoked_reason = 'Refresh token presented from a different device'
+            WHERE id = $1`,
+          [session.id],
+        );
+        await recordAudit(client, {
+          actorId: session.user_id,
+          actorRole: session.role,
+          action: 'auth.refresh_device_mismatch',
+          entityType: 'session',
+          entityId: session.id,
+          result: 'FAILURE',
+          ipAddress: params.ipAddress ?? null,
+          // The presented identifier is recorded; the token itself never is.
+          newValue: { presentedDevice: params.deviceIdentifier ?? null },
+        });
+      });
+      throw unauthorised('Your session has ended. Sign in again on this device.');
+    }
+  }
+
   if (session.status !== 'ACTIVE') {
     throw forbidden('Your account is not active.');
   }
@@ -275,6 +356,8 @@ export async function refresh(params: {
     agentId: agent?.id ?? null,
     deviceId: session.device_id,
     ipAddress: params.ipAddress ?? null,
+    // Carried, never recomputed: this is what stops rotation from resetting it.
+    absoluteExpiresAt: session.absolute_expires_at,
   });
 }
 
