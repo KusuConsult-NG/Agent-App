@@ -9,6 +9,13 @@
 
 import { randomBytes } from 'node:crypto';
 
+// Must come before anything below reads process.env. Imports are evaluated
+// ahead of the module body, so a `.env` is in place by the time the first
+// setting is resolved.
+import { envFileLoaded } from './env';
+
+export { envFileLoaded };
+
 const isProduction = process.env.NODE_ENV === 'production';
 const isTest = process.env.NODE_ENV === 'test';
 

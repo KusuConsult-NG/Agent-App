@@ -68,7 +68,7 @@ developed against and what CI verifies; earlier versions are untested.)
 npm install
 createdb psirs                       # or: psql -c 'CREATE DATABASE psirs;'
 
-export DATABASE_URL='postgres://postgres:postgres@localhost:5432/psirs'
+cp .env.example .env                 # then set DATABASE_URL and the three secrets
 npm run migrate                      # applies migrations in order, with checksums
 npm run seed -- --demo               # Plateau geography, PSIRS catalogue, demo officers
 npm run seed -- --demo --demo-agent  # …and one cleared, active field agent
@@ -77,6 +77,16 @@ npm run dev:api                      # http://localhost:4000
 npm run dev:agent                    # http://localhost:5173  (agent PWA)
 npm run dev:portal                   # http://localhost:5174  (government portal)
 ```
+
+The `.env` at the repository root is read by the API, the migration runner and
+the seed alike. Anything already set in your shell wins over the file, so
+exporting a variable for one command still works and a deployment that injects
+its own secrets is never overridden by a file that happens to be present.
+
+Each of those commands prints the database it is about to write to, without the
+password. Worth a glance before seeding: `migrate` and `seed` are the two that
+change a database, and the whole point of naming it is that migrating the wrong
+one used to look exactly like migrating the right one.
 
 The seed prints sign-in details. The five government roles go to the **portal**
 on :5174; the agent goes to the **PWA** on :5173. Signing into the agent app
@@ -97,13 +107,15 @@ seed fails rather than handing you an agent that could not exist in production.
 
 ```bash
 createdb psirs_test
-npm test        # 340 tests: API (311) + agent PWA offline and session (29)
+npm test        # 353 tests: API (318) + agent PWA offline, session and refresh (35)
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
 surface. They do not mock the repository layer, because the guarantees under
 test live in database triggers and constraints — a test with a mocked database
-would verify nothing that matters.
+would verify nothing that matters. The suite ignores any `.env` for the same
+reason it truncates between cases: it must never be pointed at a database
+someone is working in.
 
 ### Continuous integration
 

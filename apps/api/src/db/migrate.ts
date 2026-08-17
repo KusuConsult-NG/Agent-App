@@ -11,6 +11,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { config } from '../config';
+import { describeDatabase } from '../env';
 import { pool, query, withTransaction, closePool } from './pool';
 
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
@@ -87,7 +89,10 @@ export async function runMigrations(options: { silent?: boolean } = {}): Promise
 }
 
 if (require.main === module) {
-  console.log('Running migrations...');
+  // Name the target before touching it. Without this the runner was silent
+  // about which database it had picked, so a `.env` that was never read looked
+  // exactly like one that was.
+  console.log(`Running migrations against ${describeDatabase(config.database.url)}...`);
   runMigrations()
     .then(async (count) => {
       console.log(`Done. ${count} migration(s) applied.`);

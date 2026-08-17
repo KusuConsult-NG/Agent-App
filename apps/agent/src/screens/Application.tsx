@@ -110,8 +110,15 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
 
         <ol className="steps">
           {STAGE_LABELS.map(([key, label], index) => {
-            const done = reachedIndex >= 0 && index < reachedIndex;
-            const current = index === reachedIndex;
+            // The stage that has been reached is only "current" while there is
+            // something after it. Reaching the last one is not a step in
+            // progress — it is the end of the list, and leaving it unticked
+            // showed an active agent a checklist with an outstanding item
+            // directly beneath "You are cleared to collect revenue".
+            const isFinalStage = index === STAGE_LABELS.length - 1;
+            const done =
+              reachedIndex >= 0 && (index < reachedIndex || (index === reachedIndex && isFinalStage));
+            const current = index === reachedIndex && !isFinalStage;
             return (
               <li
                 key={key}

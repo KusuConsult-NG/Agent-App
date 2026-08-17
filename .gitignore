@@ -6,11 +6,20 @@ build/
 *.log
 coverage/
 
-# The local document store (STORAGE_PATH), anchored to the repository root.
-# Unanchored, this pattern also matched apps/api/src/services/storage/ and
-# silently excluded that module's source from every commit — the files existed
-# locally, so everything passed here and only CI saw the missing module.
+# The local document store (STORAGE_PATH). Both paths are anchored, and both
+# are needed: STORAGE_PATH defaults to ./storage, so the store lands beside
+# whichever directory the process was started from — the repository root for
+# `npm run dev:api`, and apps/api when the workspace is run directly. Only the
+# root one was listed, so running the API from its own directory left issued
+# receipt PDFs sitting in the tree as untracked files, one `git add -A` away
+# from being published.
+#
+# Anchoring is not decoration. Written as a bare `storage/` this also matched
+# apps/api/src/services/storage/ and silently excluded that module's source
+# from every commit — the files existed locally, so everything passed here and
+# only CI saw the missing module.
 /storage/
+/apps/api/storage/
 
 .DS_Store
 *.tsbuildinfo
