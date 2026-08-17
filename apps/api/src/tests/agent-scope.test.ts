@@ -14,7 +14,7 @@
 
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { permissionsForRole } from '@psirs/shared';
+import { permissionsForRole, ROLES } from '@psirs/shared';
 import {
   firstLgaId,
   get,
@@ -273,8 +273,14 @@ describe('The agent role holds no administrative permission', () => {
       false,
       'incentives are administered for taxpayers, not agents',
     );
-    // Taxpayers and officers do hold them.
-    assert.ok(permissionsForRole('taxpayer').includes('incentive:read:own'));
+    // Incentives are administered by government on the taxpayer's behalf.
+    // Citizens hold no account at all — an agent approaches them — so there is
+    // no taxpayer role for the permission to belong to.
+    assert.equal(
+      (ROLES as readonly string[]).includes('taxpayer'),
+      false,
+      'citizens are served by agents and never sign in',
+    );
     assert.ok(permissionsForRole('revenue_officer').includes('incentive:read:all'));
   });
 });

@@ -187,7 +187,7 @@ export interface CreateAssessmentParams {
   deviceId?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  channel?: 'AGENT_PWA' | 'TAXPAYER_PORTAL' | 'OFFICER' | 'API';
+  channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
   invoiceValidityDays?: number;
   ipAddress?: string | null;
 }

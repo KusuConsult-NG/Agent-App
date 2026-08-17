@@ -91,7 +91,7 @@ taxpayerRouter.post(
       actorId: req.auth!.userId,
       actorRole: req.auth!.role,
       agentId: req.agent?.agentId ?? null,
-      source: req.auth!.role === 'agent' ? 'AGENT' : 'SELF_SERVICE',
+      source: 'AGENT',
       acknowledgeDuplicates: data.acknowledgeDuplicates,
       ipAddress: req.clientIp,
       deviceId: req.agent?.deviceId ?? null,
@@ -156,13 +156,8 @@ taxpayerRouter.get(
 
 taxpayerRouter.get(
   '/:id',
-  requirePermission('taxpayer:read:own', 'taxpayer:read:assigned', 'taxpayer:read:all'),
+  requirePermission('taxpayer:read:assigned', 'taxpayer:read:all'),
   asyncHandler(async (req, res) => {
-    // A taxpayer may only read their own record.
-    if (req.auth!.role === 'taxpayer' && req.auth!.taxpayerId !== req.params.id) {
-      throw forbidden('You can only view your own taxpayer record.');
-    }
-
     // The agent's own record is resolved server-side; an agent cannot widen
     // their view by naming a different agent id.
     const agentId =
@@ -185,11 +180,8 @@ taxpayerRouter.get(
 
 taxpayerRouter.get(
   '/:id/incentives',
-  requirePermission('incentive:read:own', 'incentive:read:all'),
+  requirePermission('incentive:read:all'),
   asyncHandler(async (req, res) => {
-    if (req.auth!.role === 'taxpayer' && req.auth!.taxpayerId !== req.params.id) {
-      throw forbidden('You can only view your own incentives.');
-    }
     res.json(await getTaxpayerIncentives(pool, req.params.id));
   }),
 );

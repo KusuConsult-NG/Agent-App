@@ -177,7 +177,7 @@ export async function registerTaxpayer(params: {
   actorId: string;
   actorRole: string;
   agentId?: string | null;
-  source?: 'AGENT' | 'SELF_SERVICE';
+  source?: 'AGENT';
   acknowledgeDuplicates?: boolean;
   ipAddress?: string | null;
   deviceId?: string | null;

@@ -17,7 +17,7 @@ vehicleRouter.use(authenticate);
 
 vehicleRouter.get(
   '/lookup/:registrationNumber',
-  requirePermission('vehicle:read:all', 'vehicle:read:own'),
+  requirePermission('vehicle:read:all'),
   asyncHandler(async (req, res) => {
     res.json(await vehicles.lookupVehicle(pool, req.params.registrationNumber));
   }),
@@ -25,7 +25,7 @@ vehicleRouter.get(
 
 vehicleRouter.get(
   '/',
-  requirePermission('vehicle:read:all', 'vehicle:read:own'),
+  requirePermission('vehicle:read:all'),
   validateQuery(
     z.object({
       taxpayerId: uuidSchema.optional(),
@@ -134,7 +134,7 @@ vehicleRouter.post(
 
 vehicleRouter.get(
   '/renewals/:renewalId',
-  requirePermission('vehicle:read:all', 'vehicle:read:own'),
+  requirePermission('vehicle:read:all'),
   asyncHandler(async (req, res) => {
     const renewal = await queryOne<{ document_id: string | null }>(
       pool,

@@ -52,12 +52,16 @@ JSON number — `JSON.parse` silently rounds large integers.
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/auth/login` | Phone + password; binds device when `X-Device-Id` present |
-| `POST` | `/auth/register` | Self-service taxpayer account |
 | `POST` | `/auth/refresh` | Rotates the refresh token |
 | `POST` | `/auth/logout` · `/auth/logout-all` | Revoke this session / all sessions |
 | `POST` | `/auth/otp/request` · `/auth/otp/verify` | One-time codes |
 | `POST` | `/auth/step-up` | Grant for one high-risk action, consumed on use |
 | `GET` | `/auth/me` | Current identity and permissions |
+
+There is no self-registration endpoint. Citizens hold no account: an authorised
+agent approaches them to onboard them or to help them remit. Agents enter through
+`POST /agents/apply`, which begins the clearance pipeline rather than issuing a
+usable login; government users are provisioned by an administrator.
 
 ## Agents
 

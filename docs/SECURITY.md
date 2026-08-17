@@ -124,6 +124,36 @@ genuinely cleared, active agent for 27 administrative endpoints plus the
 own-figures and taxpayer-profile cases, so a permission change that widens the
 agent's view fails in the test suite rather than in the field.
 
+## 8. Attack surface that exists for a workflow the product does not have
+
+The platform originally carried a self-service citizen surface, built from PRD
+§42's taxpayer portal: a public, unauthenticated `POST /auth/register` that
+minted a `taxpayer` account, and a `taxpayer` role holding `assessment:create`,
+`invoice:create`, `payment:initiate` and `vehicle:renew`.
+
+The service does not work that way. Citizens are approached by an authorised
+agent who onboards them or helps them remit; no citizen ever signs in. That made
+the registration route reachable, unauthenticated surface for a workflow nobody
+uses — the kind of thing that survives precisely because it is never exercised
+and therefore never reviewed.
+
+It is now removed at every layer, so no single mistake reinstates it:
+
+* the route is gone, and `registerTaxpayerUser` with it;
+* the `taxpayer` role is gone from `ROLES`, along with the three permissions no
+  remaining role held;
+* `users.role` no longer admits `'taxpayer'` (migration 007), so a citizen login
+  cannot exist even if inserted directly at a psql prompt;
+* `transactions.channel` no longer admits `'TAXPAYER_PORTAL'` and
+  `taxpayers.source` no longer admits `'SELF_SERVICE'`.
+
+Migration 007 refuses to run if any affected row exists, reporting the count,
+rather than failing on a constraint violation nobody can interpret.
+
+The citizen keeps what actually protects them: a receipt by SMS, and public
+verification at `/verify/:code` that needs no account and re-checks the stored
+document's checksum. Removing the portal removed a way in, not a right.
+
 ## Authentication and sessions
 
 - bcrypt password hashing; uniform failure message so the endpoint cannot

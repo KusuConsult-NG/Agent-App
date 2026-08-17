@@ -6,6 +6,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ROLES,
   applyBasisPoints,
   assertTransactionTransition,
   canTransactionTransition,
@@ -18,6 +19,7 @@ import {
   MoneyError,
   nairaToKobo,
   parseKobo,
+  permissionsForRole,
   roleHasPermission,
   type AgentStatusAxes,
 } from '@psirs/shared';
@@ -382,5 +384,31 @@ describe('agent lifecycle derivation', () => {
     });
     assert.equal(deriveApplicationState(suspended), 'SUSPENDED');
     assert.equal(activationBlockers(suspended.flags).length, 0);
+  });
+});
+
+describe('citizens are served by agents, not by a portal', () => {
+  it('has no taxpayer role to sign in as', () => {
+    // An authorised agent approaches the citizen to onboard them or help them
+    // remit. A citizen holds no account, so there is no credential to phish and
+    // no session whose compromise could raise an assessment.
+    assert.equal((ROLES as readonly string[]).includes('taxpayer'), false);
+    assert.deepEqual(
+      [...ROLES],
+      ['agent', 'supervisor', 'revenue_officer', 'finance_officer', 'auditor', 'admin'],
+    );
+  });
+
+  it('grants no permission that only a citizen could have held', () => {
+    // These existed solely for the self-service portal. Leaving them in the
+    // union would let a route guard name them and silently deny everyone.
+    const granted = new Set(ROLES.flatMap((role) => [...permissionsForRole(role)]));
+    for (const orphan of ['taxpayer:read:own', 'vehicle:read:own', 'incentive:read:own']) {
+      assert.equal(
+        [...granted].includes(orphan as never),
+        false,
+        `${orphan} should not exist once the citizen portal is removed`,
+      );
+    }
   });
 });

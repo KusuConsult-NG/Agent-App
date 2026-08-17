@@ -12,7 +12,7 @@ that implements it and the test that proves it. Test names are from
 | System obtains TIN through approved integration | `integrations/index.ts` `TinService` | same |
 | Duplicate taxpayer detection works | `findPotentialDuplicates`, scored with reasons | *blocks a decisive duplicate outright*; *warns on a weaker match and records the agent's decision* |
 | Existing taxpayer can be found | `searchTaxpayers` (TIN, phone, name, vehicle, receipt, transaction) | *registers…* / portal + PWA search screens |
-| Taxpayer can view revenue obligations | `getObligations`, `GET /revenue/taxpayers/:id/obligations` | covered by profile endpoint |
+| Taxpayer can view revenue obligations | `getObligations`, `GET /revenue/taxpayers/:id/obligations` — read by the agent serving them, who tells them what is owed | covered by profile endpoint |
 
 ## PRD §84 — Revenue
 
@@ -150,3 +150,27 @@ super-app, cryptocurrency, blockchain, GIS heat maps, loyalty marketplace — al
 correctly absent. The fraud engine is deterministic rules with stated
 thresholds, which is auditable and explainable to a suspended agent in a way a
 model is not.
+
+## PRD §42 / §85 — taxpayer portal: superseded
+
+The PRD asks for a taxpayer-facing portal (§42) and marks it SHOULD in the §85
+matrix. The service does not work that way: citizens are approached by an
+authorised agent who onboards them or helps them remit, so a citizen holds no
+account.
+
+That deliberate departure is implemented rather than merely documented:
+
+| Was | Now |
+|---|---|
+| `POST /auth/register` — public, unauthenticated | removed |
+| `taxpayer` role with 15 permissions incl. `payment:initiate` | removed from `ROLES` |
+| `taxpayer:read:own`, `vehicle:read:own`, `incentive:read:own` | removed — no role held them |
+| `channel = 'TAXPAYER_PORTAL'` | removed from the CHECK constraint |
+| `source = 'SELF_SERVICE'` | removed from the CHECK constraint |
+| `users.role` admitting `'taxpayer'` | removed from the CHECK constraint |
+
+Migration `007_agent_mediated_only.sql` performs the narrowing and refuses to
+run if any affected row exists, naming the count rather than failing opaquely.
+
+What §43 asks for is unaffected and remains the citizen's channel: public
+receipt verification, requiring no account.
