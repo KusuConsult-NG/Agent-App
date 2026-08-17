@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 203 tests: unit, integration, agent scope, adapters
+npm test        # 265 tests: unit, integration, agent scope, adapters
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 203 tests, including every database-level integrity control |
+| `npm test` | All 265 tests, including every database-level integrity control |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -333,58 +333,94 @@ confirmed against PSIRS's own Remita sandbox — both vary by merchant
 configuration. `config.ts` refuses to start in production with Remita selected
 but unconfigured, or still pointing at the demo host.
 
-## Identity verification and the vehicle registry
+## The integrations, and the answer none of them may invent
 
-Two integrations answer questions about the world outside the platform: is this
-applicant who they say they are, and does the state hold a record of this
-vehicle. Both are configurable HTTP adapters
-(`apps/api/src/integrations/kyc/`, `apps/api/src/integrations/vehicles/`), and
-both are built around one distinction.
+Four integrations answer questions about the world outside the platform: is this
+applicant who they say they are, does this taxpayer already hold a TIN, does the
+state hold a record of this vehicle, and does this bank account belong to this
+agent. Each is a contract, a configurable HTTP adapter and a labelled
+development mock under `apps/api/src/integrations/`.
 
-**"We could not ask" is not an answer.** Each contract carries an outcome that
-describes the provider rather than the subject:
+**"We could not ask" is not an answer.** Every contract carries an outcome that
+describes the provider rather than the subject, because collapsing the two is
+what turns an upstream outage into a permanent, wrong fact in a government
+register:
 
-| Outcome | Means | Never means |
+| `UNAVAILABLE` from | Means | Must never mean |
 |---|---|---|
-| `UNAVAILABLE` (KYC) | the verification service could not be reached | this applicant failed identity verification |
-| `UNAVAILABLE` (registry) | the vehicle authority could not be reached | this vehicle is not registered |
+| identity verification | the KYC service could not be reached | this applicant failed identity verification |
+| the TIN service | PSIRS's TIN service could not be reached | this taxpayer has no TIN — the answer that mints a duplicate |
+| the vehicle authority | the registry could not be reached | this vehicle is not registered |
+| the bank | name enquiry could not be reached | this account belongs to someone else |
 
-Collapsing either into a verdict is not a cosmetic bug. A KYC outage mapped to
-`FAILED` rejects legitimate applicants and leaves rejections indistinguishable
-from genuine identity mismatches. A registry outage mapped to "not found" makes
-every vehicle in Plateau State look unregistered, and each one gets captured
-manually as an unverified record that looks exactly like a real one.
+None of those is a cosmetic distinction. A KYC outage mapped to `FAILED` rejects
+legitimate applicants and leaves rejections indistinguishable from genuine
+identity mismatches. A TIN lookup that reports "not found" during an outage
+leads the agent to register a *second* TIN for someone who already has one — in
+a UNIQUE column, on a row that cannot be deleted, permanently. A registry outage
+makes every vehicle in Plateau State look unregistered. A bank outage puts a
+clearance blocker on an agent's record that reads like the account is somebody
+else's.
 
-So the platform acts on the distinction rather than merely recording it:
+So the platform acts on the distinction rather than merely recording it. Each
+caller does something different, because what has already happened differs:
 
-- **`submitKyc` writes nothing at all on `UNAVAILABLE`.** It raises
-  `KYC_PROVIDER_UNAVAILABLE` (503) and the surrounding transaction rolls back,
-  so the applicant's existing submission survives, no attempt is consumed, and
-  their status is untouched. They are told it was not about their details.
-- **A referee's `UNAVAILABLE` goes to `UNDER_REVIEW`, not `FAILED`** — and is
-  *not* rolled back, because the referee has already spent their invitation.
-  A government officer clears it, and the reason on the record says the check
-  never ran.
+- **`submitKyc` writes nothing at all.** It raises `KYC_PROVIDER_UNAVAILABLE`
+  (503) and the transaction rolls back *including the supersede*, so no attempt
+  is consumed and the applicant's existing submission survives. They are told it
+  was not about their details.
+- **A referee's `UNAVAILABLE` is deliberately *not* rolled back** — they have
+  already spent their single-use invitation. It goes to `UNDER_REVIEW`, and the
+  recorded reason says the check never ran.
+- **A TIN lookup stops the registration entirely**, with a next step that says,
+  in those words, *do not* register this taxpayer as a new applicant.
+- **A TIN registration still registers the taxpayer.** Blocking would halt field
+  work during an outage, the taxpayer record is a fact this platform owns, and an
+  assessment needs no TIN — so they are served today and the number is chased
+  later. It lands in `REQUESTED`, never `FAILED`.
 - **`UNAVAILABLE` can never set `authority_verified_at`.** The vehicle is
-  captured with `authority_lookup_outcome = 'UNAVAILABLE'`, which keeps "never
+  captured with `authority_lookup_outcome = 'UNAVAILABLE'`, keeping "never
   checked" apart from "checked, not registered" — both are `MANUAL_ENTRY`, so
   `source` alone cannot tell them apart.
-- **The agent sees the difference.** "The vehicle authority could not be
-  reached, so we cannot say whether this vehicle is registered" is a different
-  screen, with a retry button, from "no record of this vehicle".
+- **A bank account goes to `PENDING`, not `FAILED`**, with the reason recorded.
+- **The agent sees the difference.** "The vehicle authority could not be reached,
+  so we cannot say whether this vehicle is registered" is a different screen,
+  with a retry button, from "no record of this vehicle".
 
-Both adapters map the provider's vocabulary through configuration, because
-vendors disagree about words and field names. What configuration cannot do is
-weaken the guarantees: an unmapped KYC status becomes `UNDER_REVIEW` (a human
-decides, never an automatic clearance), and any registry response that is not an
-explicit "no such vehicle" becomes `UNAVAILABLE` rather than being read as one.
+Every adapter maps its vendor's vocabulary and field names through
+configuration, because vendors disagree about both and a procurement decision
+should not need a code change. What configuration cannot do is weaken the
+guarantees:
 
-Renewals are told to the authority after payment, and that notification is now
-recorded rather than fired and forgotten. A renewal the authority never
-acknowledged stays `COMPLETED` — the taxpayer paid and holds a valid document —
-but appears at `GET /vehicles/renewals/authority-outstanding` and is re-sent by
-`POST /vehicles/renewals/authority-retry`, both behind `vehicle:authority_sync`,
-which no agent holds.
+- an unmapped KYC status becomes `UNDER_REVIEW` — a human decides, never an
+  automatic clearance;
+- a TIN reply of "success" carrying a blank, null or malformed number is
+  `PENDING`, never `ASSIGNED`;
+- any registry response that is not an explicit "no such vehicle" is
+  `UNAVAILABLE` rather than being read as one;
+- whether a bank's resolved name is the agent's is decided by one tested rule,
+  `matchesAccountName`, not by each vendor.
+
+That last one is worth reading. It has to tolerate how Nigerian banks actually
+return names — "MUSA DANLADI" for Danladi Musa, middle names appearing and
+disappearing, "Ngo'ale" stored as NGOALE — without ever accepting a different
+person, because it decides where an agent's commission is paid. The rule is
+order-independent containment with at least two matching name parts, so a single
+shared surname is never enough.
+
+### Catching up once the service is back
+
+An unanswered question is only worth recording if something acts on it later:
+
+| Queue | Retry | Permission |
+|---|---|---|
+| `GET /taxpayers/tin-outstanding` | `POST /taxpayers/tin-retry` | `taxpayer:tin_sync` |
+| `GET /vehicles/renewals/authority-outstanding` | `POST /vehicles/renewals/authority-retry` | `vehicle:authority_sync` |
+
+Neither permission is held by any agent. Renewals are told to the vehicle
+authority after payment, and a renewal it never acknowledged stays `COMPLETED` —
+the taxpayer paid and holds a valid document — while remaining outstanding for
+the government to chase.
 
 ## Source of truth
 
@@ -421,17 +457,15 @@ Every acceptance criterion in PRD §84 and Addendum §47 is implemented and
 covered by a test. What remains before a production deployment is integration
 and operations work, not feature work:
 
-- point the payment gateway, identity verification and vehicle registry adapters
-  at PSIRS's approved providers — each is configuration (`PAYMENT_GATEWAY`,
-  `KYC_PROVIDER`, `VEHICLE_REGISTRY` plus the settings in `.env.example`), not a
-  code change, though the vendors' field names and status vocabularies must be
-  confirmed against their sandboxes first;
-- **build the TIN and bank verification adapters**, which are still mocks. Both
-  need a signed interface specification — from PSIRS for TIN assignment, and
-  from the banks' verification provider for account name matching — and guessing
-  at either would be worse than being honest that it is not built. `config.ts`
-  names both in its production guard, so a deployment cannot quietly go live on
-  them;
+- point all five adapters at PSIRS's approved providers. Each is configuration —
+  `PAYMENT_GATEWAY`, `TIN_SERVICE`, `KYC_PROVIDER`, `VEHICLE_REGISTRY`,
+  `BANK_VERIFICATION` plus the settings in `.env.example` — not a code change.
+  **What must still come from PSIRS and the vendors is the mapping**: each
+  service's field names, its status vocabulary, the Remita service type ID and
+  status codes, and the PSIRS TIN format. Every one of those has a documented
+  setting and a fail-closed default, but they need confirming against each
+  sandbox before go-live, because a wrong mapping is the one thing configuration
+  can still get wrong;
 - provision secrets, object storage, backups and monitoring;
 - complete security testing and user acceptance testing with PSIRS;
 - agree final RPO/RTO targets with government IT.

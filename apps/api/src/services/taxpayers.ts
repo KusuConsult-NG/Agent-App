@@ -14,7 +14,7 @@ import type { TaxpayerType } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
 
@@ -239,18 +239,39 @@ export async function registerTaxpayer(params: {
     let tin: string | null = null;
     let tinStatus = 'NOT_REQUESTED';
     let tinReference: string | null = null;
+    let tinReason: string | null = null;
 
     if (input.existingTin) {
       // An agent supplying an existing TIN does not get to assert it: it is
       // checked against the authoritative service first (PRD §11, §82).
       const lookup = await tinService.lookup(input.existingTin);
-      if (!lookup.found) {
+
+      if (lookup.outcome === 'UNAVAILABLE') {
+        // The old message told the agent to "register the taxpayer as a new TIN
+        // applicant" — advice that mints a duplicate TIN for someone who
+        // already has one. During an outage that would happen to every existing
+        // taxpayer an agent touched, and a duplicate in a UNIQUE column on an
+        // undeletable row is permanent. So this stops instead.
+        throw new AppError({
+          statusCode: 503,
+          code: 'TIN_SERVICE_UNAVAILABLE',
+          message:
+            'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. ' +
+            'Nothing has been registered.',
+          nextStep:
+            'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — ' +
+            'that would create a second TIN for someone who already has one.',
+        });
+      }
+
+      if (lookup.outcome === 'NOT_FOUND') {
         throw badRequest(
           `TIN ${input.existingTin} could not be found in the PSIRS TIN service. ` +
             'Check the number, or register the taxpayer as a new TIN applicant.',
           [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
         );
       }
+
       tin = lookup.tin ?? null;
       tinStatus = 'EXISTING';
     } else {
@@ -273,14 +294,28 @@ export async function registerTaxpayer(params: {
         identityNumber: input.identityNumber ?? null,
       });
 
-      tinReference = registration.reference;
-      if (registration.status === 'ASSIGNED') {
-        tin = registration.tin ?? null;
-        tinStatus = 'ASSIGNED';
-      } else if (registration.status === 'PENDING') {
-        tinStatus = 'REQUESTED';
-      } else {
-        tinStatus = 'FAILED';
+      tinReference = registration.reference || null;
+      tinReason = registration.message;
+
+      // The registration itself is not blocked by an unreachable TIN service.
+      // The taxpayer is real, the agent is standing in front of them, and the
+      // taxpayer record is a fact this platform owns — unlike the TIN. An
+      // assessment does not require a TIN, so they can be served today and the
+      // number chased afterwards by `retryOutstandingTins`.
+      //
+      // What matters is that an outage lands in REQUESTED and not FAILED:
+      // FAILED means the service considered this applicant and declined, which
+      // is a dead end nothing retries.
+      switch (registration.outcome) {
+        case 'ASSIGNED':
+          tin = registration.tin ?? null;
+          tinStatus = tin ? 'ASSIGNED' : 'REQUESTED';
+          break;
+        case 'REJECTED':
+          tinStatus = 'FAILED';
+          break;
+        default:
+          tinStatus = 'REQUESTED';
       }
     }
 
@@ -293,7 +328,7 @@ export async function registerTaxpayer(params: {
          phone, alternate_phone, email, address, lga_id, ward_id, community,
          occupation, business_activity, identity_type, identity_hash, identity_masked,
          consent_given, consent_at, declaration_accepted,
-         registered_by_agent_id, source
+         registered_by_agent_id, source, tin_reason, tin_attempts
        ) VALUES (
          $1,$2,$3, now(), $4, $5,
          $6,$7,$8,$9,$10,
@@ -301,7 +336,7 @@ export async function registerTaxpayer(params: {
          $15,$16,$17,$18,$19,$20,$21,
          $22,$23,$24,$25,$26,
          $27, now(), $28,
-         $29,$30
+         $29,$30,$31,$32
        ) RETURNING id`,
       [
         input.taxpayerType,
@@ -334,6 +369,8 @@ export async function registerTaxpayer(params: {
         input.declarationAccepted,
         params.agentId ?? null,
         params.source ?? 'AGENT',
+        tinReason,
+        tinStatus === 'NOT_REQUESTED' || tinStatus === 'EXISTING' ? 0 : 1,
       ],
     );
 
@@ -462,22 +499,31 @@ export async function requestTin(params: {
       lgaName: taxpayer.lga_name,
     });
 
+    // Only a REJECTED registration is a dead end. An unreachable service — and
+    // an "assigned" reply carrying no usable number — stay REQUESTED, so
+    // `retryOutstandingTins` picks them up instead of stranding the taxpayer.
+    const assigned = registration.outcome === 'ASSIGNED' ? (registration.tin ?? null) : null;
     const status =
-      registration.status === 'ASSIGNED'
-        ? 'ASSIGNED'
-        : registration.status === 'PENDING'
-          ? 'REQUESTED'
-          : 'FAILED';
+      assigned !== null ? 'ASSIGNED' : registration.outcome === 'REJECTED' ? 'FAILED' : 'REQUESTED';
 
     await client.query(
       `UPDATE taxpayers
-          SET tin = COALESCE($2, tin), tin_status = $3, tin_reference = $4,
+          SET tin = COALESCE($2, tin), tin_status = $3,
+              tin_reference = COALESCE($4, tin_reference),
+              tin_reason = $5,
+              tin_attempts = tin_attempts + 1,
               tin_assigned_at = CASE WHEN $2 IS NOT NULL THEN now() ELSE tin_assigned_at END
         WHERE id = $1`,
-      [params.taxpayerId, registration.tin ?? null, status, registration.reference],
+      [
+        params.taxpayerId,
+        assigned,
+        status,
+        registration.reference || null,
+        registration.message,
+      ],
     );
 
-    if (registration.tin) {
+    if (assigned !== null) {
       await client.query(
         `UPDATE taxpayer_compliance SET has_valid_tin = true WHERE taxpayer_id = $1`,
         [params.taxpayerId],
@@ -490,11 +536,77 @@ export async function requestTin(params: {
       action: 'taxpayer.tin_requested',
       entityType: 'taxpayer',
       entityId: params.taxpayerId,
-      newValue: { tinStatus: status, reference: registration.reference },
+      newValue: {
+        tinStatus: status,
+        outcome: registration.outcome,
+        reference: registration.reference || null,
+        provider: registration.provider,
+      },
     });
 
-    return { tin: registration.tin ?? null, tinStatus: status };
+    return { tin: assigned, tinStatus: status };
   });
+}
+
+/**
+ * Chase every taxpayer still waiting for a TIN (PRD §11, §82).
+ *
+ * This is the counterpart to the TIN service being allowed to say it could not
+ * be reached. Without it, "we will ask again later" is a promise nothing keeps,
+ * and a taxpayer registered during an outage would sit without a TIN for good.
+ *
+ * Safe to run repeatedly: a taxpayer who already holds a TIN is not selected,
+ * and `requestTin` returns early for one who acquires it in between.
+ */
+export async function retryOutstandingTins(params: {
+  actorId: string;
+  actorRole: string;
+  limit?: number;
+}): Promise<{ attempted: number; assigned: number; stillOutstanding: number }> {
+  const waiting = await query<{ id: string }>(
+    pool,
+    `SELECT id FROM taxpayers
+      WHERE tin IS NULL
+        AND tin_status IN ('REQUESTED', 'FAILED')
+        AND status IN ('ACTIVE', 'DRAFT')
+      ORDER BY created_at
+      LIMIT $1`,
+    [params.limit ?? 100],
+  );
+
+  let assigned = 0;
+
+  for (const taxpayer of waiting) {
+    const result = await requestTin({
+      taxpayerId: taxpayer.id,
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+    });
+    if (result.tin) assigned += 1;
+  }
+
+  return {
+    attempted: waiting.length,
+    assigned,
+    stillOutstanding: waiting.length - assigned,
+  };
+}
+
+/** Taxpayers registered without a TIN, and why. */
+export async function taxpayersAwaitingTin(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT id, tin_status, tin_reason, tin_reference, tin_attempts, created_at,
+            COALESCE(business_name, trim(concat_ws(' ', first_name, last_name))) AS display_name,
+            phone
+       FROM taxpayers
+      WHERE tin IS NULL
+        AND tin_status IN ('REQUESTED', 'FAILED')
+        AND status IN ('ACTIVE', 'DRAFT')
+      ORDER BY created_at
+      LIMIT $1`,
+    [limit],
+  );
 }
 
 export interface TaxpayerSearchParams {

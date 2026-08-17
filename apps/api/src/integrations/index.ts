@@ -5,27 +5,31 @@
  * which fact — "The grassroots platform should not silently become an
  * alternative source of truth."
  *
- * Each integration is a contract plus at least one adapter, selected by an
- * environment variable. Development mocks label every response they produce
- * (`provider: 'mock'`) and `config.ts` refuses to start in production while any
- * of them is still selected.
+ * Every integration is a contract, a configurable HTTP adapter, and a labelled
+ * development mock, selected by one environment variable. Mocks mark every
+ * response they produce (`provider: 'mock'`) and `config.ts` refuses to start
+ * in production while any of them is still selected.
  *
- * The two integrations that speak to a live external service live in their own
- * directories, because each has a contract worth reading on its own:
+ *   ./tin       TIN assignment and lookup   — PSIRS TIN service
+ *   ./kyc       identity verification       — government identity service
+ *   ./vehicles  vehicle records             — vehicle registration authority
+ *   ./banks     commission account names    — bank name enquiry
+ *   ./gateways  payment collection          — see ../integrations/gateway.ts
  *
- *   ./kyc       identity verification — five outcomes, one of which
- *               (UNAVAILABLE) is about the provider rather than the applicant
- *   ./vehicles  the vehicle registration authority — three outcomes, likewise
- *   ./gateways  payment collection (see ../integrations/gateway.ts)
+ * All four share one design decision, and it is the reason each has its own
+ * directory rather than an interface inline here: every contract carries an
+ * outcome that describes the *provider* rather than the subject.
  *
- * TIN assignment and bank account verification remain mocks: both need a
- * signed interface specification from PSIRS and the banks' verification
- * provider respectively, and guessing at one would be worse than being honest
- * that it is not built. The production guard in `config.ts` names both, so a
- * deployment cannot quietly go live on them.
+ *   "we could not ask"  is not  "the answer is no"
+ *
+ * Collapsing the two is what turns an upstream outage into a permanent, wrong
+ * fact in a government register — a rejected applicant, a duplicated TIN, a
+ * vehicle recorded as unregistered, an agent's account marked as someone
+ * else's. Adapters therefore never throw for an upstream failure; they return
+ * the unavailable outcome, and each caller decides what to do with a question
+ * that was never answered.
  */
 
-import { randomUUID, createHash } from 'node:crypto';
 import { config } from '../config';
 
 export const SOURCE_OF_TRUTH = {
@@ -35,11 +39,24 @@ export const SOURCE_OF_TRUTH = {
   RECEIPT: 'This platform (government revenue platform)',
   VEHICLE_RECORD: 'Authorised vehicle registration authority',
   IDENTITY: 'Government identity service',
+  BANK_ACCOUNT_NAME: 'The agent’s bank, through account name enquiry',
 } as const;
 
-// ---------------------------------------------------------------------------
-// Identity verification (Addendum §4, §7) and the vehicle registry (PRD §21)
-// ---------------------------------------------------------------------------
+export {
+  tinService,
+  tinUnavailable,
+  tinRegistrationUnavailable,
+  assignedTin,
+  HttpTinService,
+  MockTinService,
+  type TaxpayerKind,
+  type TinLookupOutcome,
+  type TinLookupResult,
+  type TinRegistrationOutcome,
+  type TinRegistrationRequest,
+  type TinRegistrationResult,
+  type TinService,
+} from './tin';
 
 export {
   kycProvider,
@@ -66,132 +83,17 @@ export {
   type VehicleRegistry,
 } from './vehicles';
 
-// ---------------------------------------------------------------------------
-// TIN service (PRD §11)
-// ---------------------------------------------------------------------------
-
-export interface TinLookupResult {
-  found: boolean;
-  tin?: string;
-  fullName?: string;
-  taxpayerType?: 'INDIVIDUAL' | 'BUSINESS';
-  provider: string;
-}
-
-export interface TinRegistrationRequest {
-  taxpayerType: 'INDIVIDUAL' | 'BUSINESS';
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
-  phone: string;
-  email?: string | null;
-  dateOfBirth?: string | null;
-  address: string;
-  lgaName: string;
-  identityType?: string | null;
-  identityNumber?: string | null;
-}
-
-export interface TinRegistrationResult {
-  status: 'ASSIGNED' | 'PENDING' | 'FAILED';
-  tin?: string;
-  reference: string;
-  message: string;
-  provider: string;
-}
-
-export interface TinService {
-  lookup(tin: string): Promise<TinLookupResult>;
-  register(request: TinRegistrationRequest): Promise<TinRegistrationResult>;
-}
-
-/**
- * Development stand-in for the authoritative PSIRS TIN service.
- *
- * It derives a deterministic TIN from the applicant's details so repeated
- * registrations of the same person in a demo return the same number, mirroring
- * the real service's de-duplication rather than handing out a fresh TIN each
- * call.
- */
-class MockTinService implements TinService {
-  async lookup(tin: string): Promise<TinLookupResult> {
-    if (!/^\d{8,12}$/.test(tin)) {
-      return { found: false, provider: 'mock' };
-    }
-    return { found: true, tin, fullName: 'Existing Taxpayer', taxpayerType: 'INDIVIDUAL', provider: 'mock' };
-  }
-
-  async register(request: TinRegistrationRequest): Promise<TinRegistrationResult> {
-    const seed = [
-      request.taxpayerType,
-      request.businessName ?? `${request.firstName}${request.lastName}`,
-      request.phone,
-    ]
-      .join('|')
-      .toLowerCase();
-    const digest = createHash('sha256').update(seed).digest('hex');
-    const numeric = BigInt(`0x${digest.slice(0, 12)}`) % 900_000_000n;
-    const tin = `${(numeric + 100_000_000n).toString()}`;
-
-    return {
-      status: 'ASSIGNED',
-      tin,
-      reference: `MOCK-TIN-${randomUUID().slice(0, 8).toUpperCase()}`,
-      message: 'TIN assigned by mock TIN service (development only).',
-      provider: 'mock',
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Bank account verification (Addendum §16 — commission accounts only)
-// ---------------------------------------------------------------------------
-
-export interface BankVerificationResult {
-  verified: boolean;
-  accountName?: string;
-  reference: string;
-  failureReason?: string;
-  provider: string;
-}
-
-export interface BankVerificationService {
-  verify(params: {
-    bankCode: string;
-    accountNumber: string;
-    expectedName: string;
-  }): Promise<BankVerificationResult>;
-}
-
-class MockBankVerification implements BankVerificationService {
-  async verify(params: {
-    bankCode: string;
-    accountNumber: string;
-    expectedName: string;
-  }): Promise<BankVerificationResult> {
-    if (!/^\d{10}$/.test(params.accountNumber)) {
-      return {
-        verified: false,
-        reference: `MOCK-BNK-${randomUUID().slice(0, 8)}`,
-        failureReason: 'Nigerian account numbers are 10 digits.',
-        provider: 'mock',
-      };
-    }
-    return {
-      verified: true,
-      accountName: params.expectedName.toUpperCase(),
-      reference: `MOCK-BNK-${randomUUID().slice(0, 8).toUpperCase()}`,
-      provider: 'mock',
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Resolution
-// ---------------------------------------------------------------------------
-
-export const tinService: TinService = new MockTinService();
-export const bankVerification: BankVerificationService = new MockBankVerification();
+export {
+  bankVerification,
+  bankUnavailable,
+  matchesAccountName,
+  HttpBankVerification,
+  MockBankVerification,
+  type BankVerificationOutcome,
+  type BankVerificationRequest,
+  type BankVerificationResult,
+  type BankVerificationService,
+} from './banks';
 
 export function integrationStatus() {
   return {

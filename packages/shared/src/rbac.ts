@@ -35,6 +35,12 @@ export const PERMISSIONS = [
   'taxpayer:create',
   'taxpayer:update',
   'taxpayer:manage',
+  /**
+   * Chase TINs the PSIRS TIN service has not issued yet, and see who is still
+   * waiting. Back-office data-quality work: an agent registers taxpayers, but
+   * deciding to re-ask the TIN service in bulk is not field work.
+   */
+  'taxpayer:tin_sync',
 
   // Revenue catalogue
   'catalogue:read',
@@ -174,6 +180,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   revenue_officer: [
     'taxpayer:read:all',
+    'taxpayer:tin_sync',
     'taxpayer:update',
     'catalogue:read',
     'catalogue:configure',
@@ -244,6 +251,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   admin: [
     'taxpayer:read:all',
+    'taxpayer:tin_sync',
     'taxpayer:manage',
     'catalogue:read',
     'catalogue:configure',

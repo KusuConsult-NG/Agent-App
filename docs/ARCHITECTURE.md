@@ -71,7 +71,7 @@ psql prompt. The same reasoning produces:
 | Reconciliation | `services/reconciliation.ts` | Three-way matching, exception queue, settlement, reversal execution |
 | Agents | `services/agents.ts` | Clearance pipeline, review, activation, devices |
 | Referees | `services/referees.ts` | Nomination, tokenised invitation, response, clearance |
-| Taxpayers | `services/taxpayers.ts` | Registration, duplicate control, TIN, search |
+| Taxpayers | `services/taxpayers.ts` | Registration, duplicate control, TIN, TIN catch-up, search |
 | Vehicles | `services/vehicles.ts` | Registry lookup, renewal, document issue, authority catch-up |
 | Fraud | `services/fraud.ts` | Signal detection, leakage dashboard |
 | Incentives | `services/incentives.ts` | Compliance scoring, programme eligibility |
@@ -104,6 +104,9 @@ a financial risk on this platform.
 008_authority_notification
                  whether the vehicle authority was told about a renewal, and
                  whether a captured vehicle was ever actually checked
+009_unanswered_questions
+                 why a taxpayer has no TIN yet and why a bank account is not
+                 verified — an outage recorded as an outage, not as a refusal
 ```
 
 ### Gateway adapters
@@ -127,19 +130,22 @@ consequence is explicit and is the correct failure mode for money: verified
 payments appear as `MISSING_PAYMENT` exceptions in the finance queue, so finance
 is told to look, instead of transactions being silently marked reconciled.
 
-### Identity and vehicle adapters
+### The other four adapters
 
-`integrations/kyc/` and `integrations/vehicles/` follow the same shape as the
-gateway — a contract, a configurable HTTP adapter, a labelled development mock —
-with one addition that shapes every caller.
+`integrations/tin/`, `kyc/`, `vehicles/` and `banks/` follow the same shape as
+the gateway — a contract, a configurable HTTP adapter, a labelled development
+mock — with one addition that shapes every caller.
 
-Both contracts carry an outcome that is about the *provider*, not the subject:
+Every contract carries an outcome that is about the *provider*, not the subject:
 
 ```
+TIN       lookup    FOUND | NOT_FOUND | UNAVAILABLE
+          register  ASSIGNED | PENDING | REJECTED | UNAVAILABLE
 KYC       CLEARED | FAILED | UNDER_REVIEW | VERIFICATION_REQUIRED | UNAVAILABLE
-                                                                   ^ not a verdict
 registry  FOUND | NOT_FOUND | UNAVAILABLE
-                              ^ not an answer
+bank      VERIFIED | MISMATCH | NOT_FOUND | UNAVAILABLE
+
+                              UNAVAILABLE is never a verdict
 ```
 
 Adapters never throw on an upstream failure; they return the unavailable
@@ -152,14 +158,29 @@ into a verdict. Throwing is reserved for programming errors.
 | KYC cleared but liveness failed | `UNDER_REVIEW` | A clearance resting on a check the provider says failed is not a clearance |
 | Registry 200 whose shape we cannot read | `UNAVAILABLE` | A misconfigured record path stops vehicle capture loudly; the alternative silently records every vehicle in the state as unregistered |
 | Registry 404, or a mapped not-found status | `NOT_FOUND` | These are the only two things that are actually the authority saying "no such vehicle" |
+| TIN "success" carrying a blank, null or malformed number | `PENDING` | `taxpayers.tin` is UNIQUE on an undeletable row: a junk value is permanent *and* blocks the real number from ever landing |
+| TIN status unmapped | `PENDING` | An unread vocabulary leaves the registration in flight to be chased, never declares an applicant refused |
+| Bank resolved no account name | `UNAVAILABLE` | With no name there is nothing to compare, and an unverified account must not pass as verified |
 
 The callers then differ, deliberately, because what has already happened
 differs. An agent's own KYC rolls the whole transaction back on `UNAVAILABLE`
 and records nothing — no attempt, no status change. A referee's does not: they
 have already spent their single-use invitation, so the response is kept and
-routed to an officer with a reason saying the check never ran.
+routed to an officer with a reason saying the check never ran. A TIN *lookup*
+refuses the whole registration, because the alternative advice — "register them
+as a new applicant" — mints a duplicate; a TIN *registration* lets the taxpayer
+through, because they are real, the platform owns that record, and an assessment
+needs no TIN.
 
-`vehicles.authority_lookup_outcome` exists for the same reason. A vehicle
+Where the bank is concerned, note what the adapter does *not* decide. It
+resolves the account and returns the name the bank holds; whether that is the
+same person is `matchesAccountName` in `integrations/banks/types.ts` — one
+tested rule rather than one per vendor, because it decides where an agent's
+commission is paid. It is order-independent containment over normalised name
+parts, requiring at least two to match, so a shared surname alone never passes.
+
+`taxpayers.tin_reason`, `bank_accounts.verification_reason` and
+`vehicles.authority_lookup_outcome` exist for the same reason. A vehicle
 captured during an outage and a vehicle the authority confirmed it has no record
 of are both `source = 'MANUAL_ENTRY'`, and only the first should ever be
 re-checked. `vehicle_renewals.authority_notification_status` is its counterpart

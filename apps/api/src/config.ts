@@ -161,6 +161,57 @@ export const config = {
     bankVerification: process.env.BANK_VERIFICATION ?? 'mock',
 
     /**
+     * PSIRS TIN service over HTTP.
+     *
+     * `tinPattern` is off by default because the PSIRS TIN format is theirs to
+     * state. Set it and a response carrying a malformed number is treated as
+     * still pending rather than written to `taxpayers.tin` — a UNIQUE column on
+     * a row that cannot be deleted, where a junk value is permanent and blocks
+     * the real number from ever being recorded.
+     */
+    tinHttp: {
+      apiKey: process.env.TIN_SERVICE_API_KEY ?? '',
+      timeoutMs: int('TIN_SERVICE_TIMEOUT_MS', 20_000),
+      lookupPath: process.env.TIN_LOOKUP_PATH ?? '/tins/{tin}',
+      registerPath: process.env.TIN_REGISTER_PATH ?? '/tins',
+      tinPath: process.env.TIN_NUMBER_PATH ?? 'tin',
+      namePath: process.env.TIN_NAME_PATH ?? 'fullName',
+      typePath: process.env.TIN_TYPE_PATH ?? 'taxpayerType',
+      statusPath: process.env.TIN_STATUS_PATH ?? 'status',
+      referencePath: process.env.TIN_REFERENCE_PATH ?? 'reference',
+      messagePath: process.env.TIN_MESSAGE_PATH ?? 'message',
+      notFoundValues: list('TIN_NOT_FOUND_VALUES', 'not_found,notfound,no_record,none'),
+      assignedValues: list('TIN_ASSIGNED_VALUES', 'assigned,issued,success,successful,completed'),
+      pendingValues: list('TIN_PENDING_VALUES', 'pending,processing,accepted,queued,in_progress'),
+      // Empty by default: an unmapped status leaves the registration in flight
+      // to be chased, rather than declaring an applicant refused.
+      rejectedValues: list('TIN_REJECTED_VALUES', ''),
+      tinPattern: process.env.TIN_FORMAT_PATTERN ?? '',
+    },
+
+    /**
+     * Bank account verification over HTTP (Addendum §16 — commission accounts
+     * only; government revenue never passes through an agent's account).
+     *
+     * The adapter resolves the account and returns the name the bank holds.
+     * Whether that name is the agent's is decided by `matchesAccountName` in
+     * `integrations/banks/types.ts`, so the rule governing where commission is
+     * paid lives in one tested place rather than once per vendor.
+     */
+    bankHttp: {
+      url: process.env.BANK_VERIFICATION_URL ?? '',
+      apiKey: process.env.BANK_VERIFICATION_API_KEY ?? '',
+      timeoutMs: int('BANK_VERIFICATION_TIMEOUT_MS', 20_000),
+      resolvePath:
+        process.env.BANK_RESOLVE_PATH ??
+        '/resolve?account_number={accountNumber}&bank_code={bankCode}',
+      accountNamePath: process.env.BANK_ACCOUNT_NAME_PATH ?? 'account_name',
+      referencePath: process.env.BANK_REFERENCE_PATH ?? 'reference',
+      statusPath: process.env.BANK_STATUS_PATH ?? 'status',
+      notFoundValues: list('BANK_NOT_FOUND_VALUES', 'not_found,notfound,invalid_account,no_record'),
+    },
+
+    /**
      * Identity verification over HTTP.
      *
      * Which KYC vendor PSIRS contracts is a procurement decision, and vendors
@@ -294,6 +345,17 @@ if (isProduction) {
   }
   if (config.integrations.kycHttp.clearedValues.length === 0) {
     problems.push('KYC_CLEARED_VALUES is empty — no applicant could ever be cleared');
+  }
+  if (config.integrations.tinService !== 'mock' && !config.integrations.tinServiceUrl) {
+    problems.push(`TIN_SERVICE is "${config.integrations.tinService}" but TIN_SERVICE_URL is not set`);
+  }
+  if (config.integrations.bankVerification !== 'mock' && !config.integrations.bankHttp.url) {
+    problems.push(
+      `BANK_VERIFICATION is "${config.integrations.bankVerification}" but BANK_VERIFICATION_URL is not set`,
+    );
+  }
+  if (config.integrations.tinHttp.assignedValues.length === 0) {
+    problems.push('TIN_ASSIGNED_VALUES is empty — no TIN could ever be recorded as issued');
   }
 
   // A half-configured Remita is worse than none: every status query would fail,

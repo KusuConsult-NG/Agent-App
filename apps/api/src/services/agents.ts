@@ -30,7 +30,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
-import { bankVerification, kycProvider } from '../integrations';
+import { bankVerification, kycProvider, type BankVerificationOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { queueNotification } from './notifications';
 
@@ -711,10 +711,32 @@ export async function acceptAgreement(params: {
   });
 }
 
+/**
+ * Verify an agent's commission account against the bank (Addendum §16).
+ *
+ * Government revenue never passes through this account — it settles to the
+ * government account directly (PRD §6, §16). What is at stake is the agent's
+ * own earnings reaching the right person, so the outcomes are kept apart:
+ *
+ *   VERIFIED     the bank resolved the account and the name matches
+ *   MISMATCH     it exists but is held by someone else — FAILED, and the agent
+ *   NOT_FOUND    the bank holds no such number — FAILED, and the agent
+ *                is told exactly what to correct
+ *   UNAVAILABLE  the bank could not be asked — PENDING, never FAILED
+ *
+ * That last distinction is the point. A FAILED bank account is a clearance
+ * blocker that reads like the account belongs to someone else; an applicant
+ * whose bank happened to be down must not carry that on their record.
+ */
 export async function verifyBankAccount(params: {
   agentId: string;
   actorId: string;
-}): Promise<{ verified: boolean; accountName?: string; failureReason?: string }> {
+}): Promise<{
+  verified: boolean;
+  outcome: BankVerificationOutcome;
+  accountName?: string;
+  failureReason?: string;
+}> {
   return withTransaction(async (client) => {
     const account = await queryOne<{
       id: string;
@@ -730,34 +752,75 @@ export async function verifyBankAccount(params: {
     );
     if (!account) throw notFound('A bank account for this agent');
 
+    if (!account.bank_code) {
+      // Our own data is incomplete; there is nothing to ask the bank yet. Say
+      // so before making a call that could only fail confusingly.
+      throw badRequest(
+        'This account has no bank code recorded, so it cannot be verified. ' +
+          'Select the bank on the application and try again.',
+        [{ field: 'bankCode', issue: 'Required to verify an account' }],
+      );
+    }
+
     const result = await bankVerification.verify({
-      bankCode: account.bank_code ?? '',
+      bankCode: account.bank_code,
       accountNumber: account.account_number,
       expectedName: account.account_name,
     });
 
+    const verified = result.outcome === 'VERIFIED';
+    const status = verified ? 'VERIFIED' : result.outcome === 'UNAVAILABLE' ? 'PENDING' : 'FAILED';
+
     await client.query(
       `UPDATE bank_accounts
-          SET verification_status = $2, verification_reference = $3,
+          SET verification_status = $2,
+              verification_reference = COALESCE($3, verification_reference),
+              verification_reason = $4,
+              verification_resolved_name = COALESCE($5, verification_resolved_name),
+              verification_attempts = verification_attempts + 1,
               verified_at = CASE WHEN $2 = 'VERIFIED' THEN now() ELSE NULL END,
-              verified_by = $4
+              verified_by = CASE WHEN $2 = 'VERIFIED' THEN $6 ELSE verified_by END
         WHERE id = $1`,
-      [account.id, result.verified ? 'VERIFIED' : 'FAILED', result.reference, params.actorId],
+      [
+        account.id,
+        status,
+        result.reference || null,
+        result.failureReason ?? null,
+        result.accountName ?? null,
+        params.actorId,
+      ],
     );
 
     await refreshClearance(client, params.agentId);
 
-    if (result.verified) {
+    if (verified) {
       await journal(client, {
         agentId: params.agentId,
         eventType: 'BANK_VERIFIED',
         actorId: params.actorId,
-        metadata: { reference: result.reference },
+        metadata: { reference: result.reference, provider: result.provider },
       });
     }
 
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: 'agent',
+      action: 'agent.bank_verification_attempted',
+      entityType: 'bank_account',
+      entityId: account.id,
+      newValue: {
+        outcome: result.outcome,
+        status,
+        provider: result.provider,
+        // The account number is not written to the audit log; the resolved name
+        // is, because it is the evidence for a mismatch decision.
+        resolvedName: result.accountName ?? null,
+      },
+    });
+
     return {
-      verified: result.verified,
+      verified,
+      outcome: result.outcome,
       accountName: result.accountName,
       failureReason: result.failureReason,
     };
