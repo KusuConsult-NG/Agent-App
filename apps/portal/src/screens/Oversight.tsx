@@ -4,6 +4,62 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 
+/**
+ * The evidence behind a signal, in a form an officer can act on.
+ *
+ * This was `JSON.stringify(detail)`, so the reason an "out of territory" flag
+ * had been raised arrived as a pair of UUIDs — the reviewer could see that two
+ * territories differed but not which, which is the entire content of the
+ * signal. Every flag here is raised for a person to judge before anything
+ * happens to a transaction, and evidence they have to query the database to
+ * read is evidence that does not get read.
+ *
+ * Identifiers are still shown, last and dimmed: they are what an officer quotes
+ * when escalating, but they are not what they reason with.
+ */
+function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
+  if (!detail || typeof detail !== 'object') return <span>—</span>;
+
+  const entries = Object.entries(detail);
+  if (entries.length === 0) return <span>—</span>;
+
+  const readable = entries.filter(([key]) => !key.endsWith('Id'));
+  const identifiers = entries.filter(([key]) => key.endsWith('Id'));
+
+  return (
+    <div className="signal-detail">
+      {(readable.length > 0 ? readable : identifiers).map(([key, value]) => (
+        <div key={key}>
+          <span className="signal-detail__key">{humanise(key)}</span>{' '}
+          <span className="signal-detail__value">{formatValue(value)}</span>
+        </div>
+      ))}
+      {readable.length > 0 && identifiers.length > 0 && (
+        <details className="signal-detail__ids">
+          <summary>identifiers</summary>
+          {identifiers.map(([key, value]) => (
+            <div key={key} className="mono">
+              {humanise(key)} {formatValue(value)}
+            </div>
+          ))}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** `agentAssignedTo` → `Agent assigned to`. */
+function humanise(key: string): string {
+  const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
+}
+
 export function FraudScreen() {
   const [leakage, setLeakage] = useState<any | null>(null);
   const [flags, setFlags] = useState<any[] | null>(null);
@@ -144,7 +200,7 @@ export function FraudScreen() {
               {
                 key: 'detail',
                 label: 'Detail',
-                render: (row) => <span className="mono">{JSON.stringify(row.detail)}</span>,
+                render: (row) => <SignalDetail detail={row.detail} />,
               },
               { key: 'created_at', label: 'Raised', render: (row) => formatDateTime(row.created_at) },
               {

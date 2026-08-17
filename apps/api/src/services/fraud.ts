@@ -85,13 +85,23 @@ export async function evaluateTransactionRisk(
     territory_id: string | null;
     created_at: Date;
     agent_territory_lga: string | null;
+    // Names as well as ids. A signal is raised for a person to review, and
+    // "out of territory" is a claim about which two territories — answering it
+    // with a pair of UUIDs makes the reviewer query the database to learn the
+    // one fact the flag exists to convey.
+    lga_name: string | null;
+    agent_territory_lga_name: string | null;
   }>(
     client,
     `SELECT t.id, t.agent_id, t.device_id, t.lga_id, t.taxpayer_id, t.territory_id, t.created_at,
-            ter.lga_id AS agent_territory_lga
+            ter.lga_id AS agent_territory_lga,
+            tl.name    AS lga_name,
+            al.name    AS agent_territory_lga_name
        FROM transactions t
        LEFT JOIN agents a ON a.id = t.agent_id
        LEFT JOIN territories ter ON ter.id = a.territory_id
+       LEFT JOIN lgas tl ON tl.id = t.lga_id
+       LEFT JOIN lgas al ON al.id = ter.lga_id
       WHERE t.id = $1`,
     [params.transactionId],
   );
@@ -108,6 +118,9 @@ export async function evaluateTransactionRisk(
       agentId: transaction.agent_id,
       transactionId: transaction.id,
       detail: {
+        // Named first so the reviewer reads the fact before the identifiers.
+        collectedIn: transaction.lga_name,
+        agentAssignedTo: transaction.agent_territory_lga_name,
         transactionLgaId: transaction.lga_id,
         agentTerritoryLgaId: transaction.agent_territory_lga,
       },

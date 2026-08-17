@@ -47,7 +47,13 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: 'Finance',
     items: [
-      { path: '/reconciliation', label: 'Reconciliation', permission: 'payment:read:all' },
+      // report:financial, not payment:read:all. The screen is the settlement
+      // dashboard, and GET /government/settlements requires report:financial or
+      // payment:reconcile — neither of which an admin holds, because settlement
+      // figures are a finance and audit responsibility rather than an
+      // administrative one. Gating on the wider permission put the item in the
+      // admin's menu and then answered a 403 when they opened it.
+      { path: '/reconciliation', label: 'Reconciliation', permission: 'report:financial' },
       { path: '/commissions', label: 'Commissions', permission: 'commission:read:all' },
       { path: '/approvals', label: 'Approvals', permission: 'approval:review' },
     ],

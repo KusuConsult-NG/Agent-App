@@ -10,6 +10,17 @@ export function ReconciliationScreen() {
   const [settlements, setSettlements] = useState<any | null>(null);
   const [exceptions, setExceptions] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /**
+   * A panel that could not be loaded, kept apart from `error`.
+   *
+   * Both used to share one alert rendered beneath the action buttons, so a
+   * refusal to *read* the settlement figures appeared directly under "Recover
+   * missed confirmations" and read as though that action had been refused. The
+   * two say different things — one means "this is not yours to see", the other
+   * "what you just did did not happen" — and on a reconciliation screen that is
+   * not a distinction to blur.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState({
@@ -20,9 +31,12 @@ export function ReconciliationScreen() {
   const load = useCallback(() => {
     api
       .get('/government/settlements')
-      .then(setSettlements)
+      .then((loaded) => {
+        setSettlements(loaded);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
       });
     api
       .get<any[]>('/government/reconciliation/exceptions')
@@ -139,6 +153,12 @@ export function ReconciliationScreen() {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+
+      {loadError && (
+        <Alert kind="info" title="Settlement figures are not available to your role">
+          <p style={{ margin: 0 }}>{loadError.message}</p>
+        </Alert>
+      )}
 
       {settlements && (
         <div className="stat-grid">
