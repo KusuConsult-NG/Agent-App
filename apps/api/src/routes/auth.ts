@@ -34,26 +34,14 @@ authRouter.post(
   ),
 );
 
-authRouter.post(
-  '/register',
-  validateBody(
-    z.object({
-      fullName: z.string().min(2, 'Enter your full name'),
-      phone: phoneSchema,
-      email: emailSchema.optional(),
-      password: z
-        .string()
-        .min(8, 'Your password must be at least 8 characters')
-        .regex(/[0-9]/, 'Include at least one number')
-        .regex(/[a-zA-Z]/, 'Include at least one letter'),
-      taxpayerId: z.string().uuid().optional(),
-    }),
-    async (_req, res, data) => {
-      const result = await auth.registerTaxpayerUser(data);
-      res.status(201).json(result);
-    },
-  ),
-);
+// There is deliberately no public self-registration endpoint.
+//
+// Citizens do not hold accounts on this platform: an authorised agent
+// approaches them to onboard them or to help them remit a tax or levy. Agents
+// apply through POST /agents/apply, which starts the clearance pipeline rather
+// than creating a usable login; government users are provisioned by an
+// administrator. An open registration route would have been unused surface
+// through which anyone could mint an account able to raise assessments.
 
 authRouter.post(
   '/refresh',
@@ -148,7 +136,6 @@ authRouter.get(
       role: req.auth!.role,
       permissions: req.auth!.permissions,
       agentId: req.auth!.agentId ?? null,
-      taxpayerId: req.auth!.taxpayerId ?? null,
     });
   }),
 );

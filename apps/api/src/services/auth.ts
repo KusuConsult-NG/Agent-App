@@ -34,7 +34,6 @@ export interface SessionTokens {
     role: Role;
     permissions: readonly string[];
     agentId?: string;
-    taxpayerId?: string;
   };
 }
 
@@ -45,7 +44,6 @@ async function createSession(params: {
   phone: string;
   email: string | null;
   agentId?: string | null;
-  taxpayerId?: string | null;
   deviceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
@@ -80,7 +78,6 @@ async function createSession(params: {
     role: params.role,
     sid: session.id,
     agentId: params.agentId ?? undefined,
-    taxpayerId: params.taxpayerId ?? undefined,
     deviceId: params.deviceId ?? undefined,
   });
 
@@ -96,7 +93,6 @@ async function createSession(params: {
       role: params.role,
       permissions: permissionsForRole(params.role),
       agentId: params.agentId ?? undefined,
-      taxpayerId: params.taxpayerId ?? undefined,
     },
   };
 }
@@ -184,15 +180,6 @@ export async function login(params: {
         )
       : null;
 
-  const taxpayer =
-    user.role === 'taxpayer'
-      ? await queryOne<{ id: string }>(
-          (await import('../db/pool')).pool,
-          'SELECT id FROM taxpayers WHERE user_id = $1',
-          [user.id],
-        )
-      : null;
-
   let deviceId: string | null = null;
   if (agent && params.deviceIdentifier) {
     const device = await queryOne<{ id: string; status: string }>(
@@ -213,7 +200,6 @@ export async function login(params: {
     phone: user.phone,
     email: user.email,
     agentId: agent?.id ?? null,
-    taxpayerId: taxpayer?.id ?? null,
     deviceId,
     ipAddress: params.ipAddress ?? null,
     userAgent: params.userAgent ?? null,
@@ -279,12 +265,6 @@ export async function refresh(params: {
           session.user_id,
         ])
       : null;
-  const taxpayer =
-    session.role === 'taxpayer'
-      ? await queryOne<{ id: string }>(pool, 'SELECT id FROM taxpayers WHERE user_id = $1', [
-          session.user_id,
-        ])
-      : null;
 
   return createSession({
     userId: session.user_id,
@@ -293,7 +273,6 @@ export async function refresh(params: {
     phone: session.phone,
     email: session.email,
     agentId: agent?.id ?? null,
-    taxpayerId: taxpayer?.id ?? null,
     deviceId: session.device_id,
     ipAddress: params.ipAddress ?? null,
   });
@@ -437,46 +416,4 @@ export async function grantStepUp(params: {
   });
 
   return { expiresAt };
-}
-
-/** Self-service taxpayer account creation for the citizen portal (PRD §42). */
-export async function registerTaxpayerUser(params: {
-  fullName: string;
-  phone: string;
-  email?: string | null;
-  password: string;
-  taxpayerId?: string | null;
-}): Promise<{ userId: string }> {
-  return withTransaction(async (client) => {
-    const existing = await queryOne<{ id: string }>(client, 'SELECT id FROM users WHERE phone = $1', [
-      params.phone,
-    ]);
-    if (existing) {
-      throw conflict('PHONE_ALREADY_REGISTERED', 'An account already exists with this phone number.');
-    }
-
-    const user = await queryOne<{ id: string }>(
-      client,
-      `INSERT INTO users (full_name, phone, email, password_hash, role, status)
-       VALUES ($1,$2,$3,$4,'taxpayer','ACTIVE') RETURNING id`,
-      [params.fullName, params.phone, params.email ?? null, await hashPassword(params.password)],
-    );
-
-    if (params.taxpayerId) {
-      await client.query('UPDATE taxpayers SET user_id = $2 WHERE id = $1 AND user_id IS NULL', [
-        params.taxpayerId,
-        user!.id,
-      ]);
-    }
-
-    await recordAudit(client, {
-      actorId: user!.id,
-      actorRole: 'taxpayer',
-      action: 'auth.taxpayer_registered',
-      entityType: 'user',
-      entityId: user!.id,
-    });
-
-    return { userId: user!.id };
-  });
 }

@@ -5,10 +5,19 @@
  * a route that needs authorisation names a permission, never a role. That
  * keeps §36's access matrix a single source of truth instead of a table in
  * a document that drifts from the code.
+ *
+ * There is no `taxpayer` role, and that is a product decision rather than an
+ * omission. Revenue services reach the citizen through an authorised agent who
+ * approaches them — to onboard them, or to help them remit a tax or levy. A
+ * citizen never signs in, so there is no credential to phish, no self-service
+ * session to hijack, and no account whose compromise could raise an assessment.
+ *
+ * The citizen is not left without recourse: they receive their receipt by SMS,
+ * and they can verify it against government records at any time through the
+ * public verification page, which requires no account at all (PRD §43).
  */
 
 export const ROLES = [
-  'taxpayer',
   'agent',
   'supervisor',
   'revenue_officer',
@@ -21,7 +30,6 @@ export type Role = (typeof ROLES)[number];
 
 export const PERMISSIONS = [
   // Taxpayers
-  'taxpayer:read:own',
   'taxpayer:read:assigned',
   'taxpayer:read:all',
   'taxpayer:create',
@@ -55,7 +63,6 @@ export const PERMISSIONS = [
   'document:read:all',
 
   // Vehicles
-  'vehicle:read:own',
   'vehicle:read:all',
   'vehicle:renew',
 
@@ -92,7 +99,6 @@ export const PERMISSIONS = [
   'support:manage',
 
   // Incentives
-  'incentive:read:own',
   'incentive:read:all',
   'incentive:configure',
 
@@ -117,23 +123,6 @@ export type Permission = (typeof PERMISSIONS)[number];
  * success originates only from verified gateway confirmation (PRD §95).
  */
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
-  taxpayer: [
-    'taxpayer:read:own',
-    'catalogue:read',
-    'assessment:create',
-    'assessment:read:own',
-    'invoice:create',
-    'invoice:read:own',
-    'payment:initiate',
-    'payment:read:own',
-    'receipt:read:own',
-    'document:read:own',
-    'vehicle:read:own',
-    'vehicle:renew',
-    'report:read:own',
-    'incentive:read:own',
-    'support:read:own',
-  ],
   agent: [
     'taxpayer:read:assigned',
     'taxpayer:create',

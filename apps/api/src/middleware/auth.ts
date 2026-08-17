@@ -33,7 +33,6 @@ interface AccessTokenPayload {
   role: Role;
   sid: string;
   agentId?: string;
-  taxpayerId?: string;
   deviceId?: string;
 }
 
@@ -111,7 +110,6 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       sessionId: payload.sid,
       permissions: permissionsForRole(role),
       agentId: payload.agentId,
-      taxpayerId: payload.taxpayerId,
       deviceId: payload.deviceId,
     };
 

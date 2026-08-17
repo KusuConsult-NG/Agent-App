@@ -1387,3 +1387,45 @@ describe('Government reporting (PRD §37, §38, §39)', () => {
     assert.equal(premises?.amount_kobo, '500000');
   });
 });
+
+describe('Citizens are served by agents, not by a portal', () => {
+  it('exposes no self-registration endpoint', async () => {
+    // The route is gone, not merely guarded — nothing can mint a citizen
+    // account able to raise its own assessment.
+    const response = await post('/auth/register', {
+      fullName: 'Walk In Citizen',
+      phone: '+2347099000001',
+      password: 'CitizenPass2026',
+    });
+    assert.equal(response.status, 404);
+    assert.equal(response.body.error.code, 'ROUTE_NOT_FOUND');
+  });
+
+  it('will not let the database hold a citizen login', async () => {
+    // Migration 007 narrowed users.role, so this holds for any caller —
+    // including one at a psql prompt.
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO users (full_name, phone, password_hash, role)
+         VALUES ('Citizen', '+2347099000002', 'x', 'taxpayer')`,
+      ),
+      /users_role_check/,
+    );
+  });
+
+  it('will not let a transaction claim it came from a citizen portal', async () => {
+    await assert.rejects(
+      pool.query(`UPDATE transactions SET channel = 'TAXPAYER_PORTAL' WHERE id = $1`, [
+        ctx.transactionId,
+      ]),
+      /transactions_channel_check|immutable/,
+    );
+  });
+
+  it('still lets the citizen verify their receipt without an account', async () => {
+    // Removing the portal removed a way in, not the citizen's right to proof.
+    const response = await get(`/verify/${ctx.receiptCode}`);
+    assert.equal(response.status, 200);
+    assert.ok(['VALID', 'REVERSED'].includes(response.body.status));
+  });
+});

@@ -15,7 +15,6 @@ export interface AuthContext {
   permissions: readonly Permission[];
   agentId?: string;
   deviceId?: string;
-  taxpayerId?: string;
 }
 
 declare global {

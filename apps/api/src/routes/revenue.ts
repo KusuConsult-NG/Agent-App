@@ -287,7 +287,7 @@ revenueRouter.post(
         agentId: req.agent?.agentId ?? null,
         territoryId: req.agent?.territoryId ?? null,
         deviceId: req.agent?.deviceId ?? null,
-        channel: req.auth!.role === 'agent' ? 'AGENT_PWA' : req.auth!.role === 'taxpayer' ? 'TAXPAYER_PORTAL' : 'OFFICER',
+        channel: req.auth!.role === 'agent' ? 'AGENT_PWA' : 'OFFICER',
         ipAddress: req.clientIp,
       });
 

@@ -228,6 +228,28 @@ twice. Every error carries an explicit money status:
 
 ---
 
+## How a citizen reaches the service
+
+Through an agent. There is no citizen portal, and that is the operating model
+rather than a gap: an authorised agent approaches the citizen — to onboard them,
+or to help them remit a tax or levy — and does the work on their behalf.
+
+A citizen therefore holds **no account**. There is no self-registration
+endpoint, no `taxpayer` role, and `users.role` will not accept one; migration
+007 narrowed the constraint so a citizen login is unrepresentable rather than
+merely unused. Nothing can be phished, hijacked or compromised into raising an
+assessment, because there is nothing to sign in to.
+
+What the citizen does get is evidence and a way to check it:
+
+- their **receipt by SMS** the moment payment is confirmed, and
+- **public verification** at `/verify/:code` — no account, no login — which
+  confirms the receipt against government records and re-checks the stored
+  PDF's checksum (PRD §43).
+
+So the citizen can always prove what they paid and confirm a receipt is genuine.
+They just never log in to do it.
+
 ## Who sees what
 
 The agent application is a field tool, not a window into government. The two
