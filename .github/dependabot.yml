@@ -1,0 +1,87 @@
+version: 2
+
+# Dependency updates for a platform that moves public money.
+#
+# The grouping below is deliberate. Minor and patch updates are batched, because
+# a stream of individual PRs for routine bumps gets rubber-stamped, and
+# rubber-stamping is how a compromised transitive dependency reaches production.
+#
+# Major updates are NOT grouped — they arrive one per PR, on purpose. The
+# runtime dependencies here are `pg`, `express`, `jsonwebtoken`, `bcryptjs`,
+# `zod`, `pdfkit` and `qrcode`: the database driver, the HTTP layer, session
+# signing, password hashing, request validation and government document
+# rendering. A breaking change in any of those deserves its own review with the
+# full test suite attached to it, not a line in a batch of fourteen.
+#
+# Every one of these PRs runs the CI workflow, which exercises the financial
+# integrity controls against a real PostgreSQL. That works on Dependabot PRs
+# specifically because the workflow needs no repository secrets — its test
+# credentials are inline throwaway values — so the restricted token Dependabot
+# runs under is sufficient.
+
+updates:
+  # ---------------------------------------------------------------------------
+  # npm — one entry covers the whole monorepo: the lockfile is at the root and
+  # workspaces resolve from it.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      # Updates land at the start of the working week in the jurisdiction this
+      # platform serves, not overnight in another timezone.
+      timezone: Africa/Lagos
+    open-pull-requests-limit: 10
+    labels:
+      - dependencies
+    commit-message:
+      prefix: deps
+      prefix-development: deps-dev
+      include: scope
+    groups:
+      # Build and test tooling: TypeScript, tsx, Vite, React types. A batch here
+      # is low risk and keeps the queue short.
+      dev-dependencies:
+        patterns:
+          - '*'
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+      # Runtime dependencies, minor and patch only. Majors fall through to
+      # individual PRs by design.
+      runtime-minor-and-patch:
+        patterns:
+          - '*'
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+
+  # ---------------------------------------------------------------------------
+  # GitHub Actions — actions are code that runs with repository access, and a
+  # stale or unpinned action is a supply-chain risk of its own.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Africa/Lagos
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - '*'
+        update-types:
+          - minor
+          - patch
