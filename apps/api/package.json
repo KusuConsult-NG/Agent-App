@@ -16,7 +16,7 @@
   "dependencies": {
     "@psirs/shared": "*",
     "bcryptjs": "^3.0.3",
-    "express": "^4.22.2",
+    "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
     "pdfkit": "^0.19.1",
     "pg": "^8.13.1",
@@ -25,7 +25,7 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/express": "^4.17.25",
+    "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^26.2.0",
     "@types/pdfkit": "^0.13.5",
