@@ -615,6 +615,9 @@ export function RegisterTaxpayerScreen({
 // ---------------------------------------------------------------------------
 
 interface Profile {
+  /** AGENT_LIMITED for a field agent; FULL for government users. */
+  scope: 'AGENT_LIMITED' | 'FULL';
+  note?: string;
   taxpayer: Record<string, string | null>;
   transactions: {
     id: string;
@@ -625,7 +628,6 @@ interface Profile {
   }[];
   receipts: { id: string; receipt_number: string; amount_kobo: string; status: string }[];
   vehicles: { id: string; registration_number: string; current_expiry_date: string | null }[];
-  compliance: { score: number } | null;
 }
 
 export function TaxpayerScreen({
@@ -665,7 +667,6 @@ export function TaxpayerScreen({
             ['Phone', taxpayer.phone],
             ['LGA', taxpayer.lga_name],
             ['Address', taxpayer.address],
-            ['Compliance score', profile.compliance ? `${profile.compliance.score}/100` : '—'],
           ]}
         />
         <button type="button" onClick={() => navigate(`/collect?taxpayerId=${taxpayerId}`)}>
@@ -673,10 +674,10 @@ export function TaxpayerScreen({
         </button>
       </div>
 
-      <p className="section-title">Transactions</p>
+      <p className="section-title">Transactions you facilitated</p>
       <div className="card card--flush">
         {profile.transactions.length === 0 ? (
-          <p className="empty">No transactions yet.</p>
+          <p className="empty">You have not processed any transaction for this taxpayer.</p>
         ) : (
           <ul className="list">
             {profile.transactions.map((transaction) => (
@@ -699,6 +700,12 @@ export function TaxpayerScreen({
           </ul>
         )}
       </div>
+
+      {profile.note && (
+        <Alert kind="info" title="What you can see here">
+          <p style={{ margin: 0 }}>{profile.note}</p>
+        </Alert>
+      )}
 
       {profile.vehicles.length > 0 && (
         <>

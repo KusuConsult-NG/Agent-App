@@ -111,6 +111,21 @@ that implements it and the test that proves it. Test names are from
 | Payment status recoverable after browser closure | `GET /payments/transactions/:reference/status` | *recovers the transaction status after the browser is closed* |
 | PWA version enforcement | `requireSupportedAppVersion` | *blocks transactions from an unsupported app version* |
 
+## PRD §36 — Access matrix containment
+
+The §36 matrix is expressed as code in `packages/shared/src/rbac.ts` and
+asserted endpoint by endpoint in `agent-scope.test.ts`.
+
+| Matrix row | Implementation | Test |
+|---|---|---|
+| Agent → Taxpayer: *Assigned*, not All | `getTaxpayerProfile` returns `scope: AGENT_LIMITED`, filtered to the agent's own facilitated work | *does not expose another agent's collection history on the taxpayer profile* |
+| Agent → Reports: *Limited* | agent holds `report:read:own` only; no LGA, ward or state-wide revenue | *refuses state and LGA revenue intelligence*; *reports own collections on the home screen, not the territory's* |
+| Agent → Configuration: *No* | `catalogue:configure` withheld; rate history needs `audit:read` or `catalogue:configure` | *refuses to configure a revenue rate*; *refuses rate change history* |
+| Agent → Agent: *Own* | `agent:read:own` only | *refuses to read another agent's clearance record* |
+| Agent → Commission: *Own* | `commission:read:own`; wallet scoped by agent id | *reports only its own commission* |
+| Incentives → taxpayer, never agent | agent holds no `incentive:*` permission | *holds no incentive permission — incentives belong to the taxpayer*; *refuses the taxpayer incentive record entirely* |
+| Admin/officer → full view retained | unchanged permissions | *shows administration every agent's collections and every LGA* |
+
 ## PRD §88 — Definition of done
 
 Items 1–31 are covered by the tables above. The remainder are deployment and

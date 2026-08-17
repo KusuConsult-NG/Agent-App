@@ -553,7 +553,10 @@ export function TransactionScreen({
             {confirming ? 'Checking with the payment system…' : 'Check payment status'}
           </button>
 
-          {transaction.gateway_reference && (
+          {/* Development only. The API refuses simulation outside the mock
+              gateway, but the control should not be visible to a field agent
+              in a production build either. */}
+          {import.meta.env.DEV && transaction.gateway_reference && (
             <div className="card" style={{ marginTop: 14 }}>
               <h2 className="card__title">Development gateway</h2>
               <p className="card__hint">

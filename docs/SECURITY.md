@@ -92,6 +92,38 @@ clearance record and the audit log permanently.
 Referee risk controls flag one referee vouching for many applicants, a referee
 sharing the applicant's phone number, and reused identification.
 
+## 7. An agent seeing more of government than their job needs
+
+The agent application is a field tool. An agent who could read LGA-wide
+collections, other agents' figures, or a taxpayer's full payment history would
+hold information that is useful for social engineering, for judging which
+taxpayers are worth approaching off-book, and for gauging whether their own
+irregularities are likely to be noticed.
+
+The agent role therefore holds no permission that reads across agents, areas or
+the platform: no `report:read:all`, no `report:read:territory`, no
+`payment:read:all`, no `audit:read`, no `fraud:read`, no `catalogue:configure`,
+no `agent:read:all`, and no `incentive:*` at all.
+
+Two specific narrowings were made after an endpoint-by-endpoint audit:
+
+* **Rate-change history** (`/government/audit/queries/rate-changes`) previously
+  accepted `catalogue:read`, which every agent holds in order to price a charge.
+  It now requires `audit:read` or `catalogue:configure`. Reading the catalogue
+  and reading the history of who changed a government rate are different acts.
+
+* **Taxpayer profiles** previously returned the taxpayer's whole financial life
+  to any agent who searched for them. An agent now receives
+  `scope: "AGENT_LIMITED"`: identity, outstanding obligations, vehicles, and
+  only the transactions and receipts that agent facilitated. Compliance scoring
+  and programme eligibility — taxpayer incentive data — are withheld entirely.
+  Officers receive `scope: "FULL"`.
+
+`apps/api/src/tests/agent-scope.test.ts` asserts this containment against a
+genuinely cleared, active agent for 27 administrative endpoints plus the
+own-figures and taxpayer-profile cases, so a permission change that widens the
+agent's view fails in the test suite rather than in the field.
+
 ## Authentication and sessions
 
 - bcrypt password hashing; uniform failure message so the endpoint cannot

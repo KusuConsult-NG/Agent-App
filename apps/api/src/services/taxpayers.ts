@@ -568,8 +568,25 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
   );
 }
 
-/** Full taxpayer profile (PRD §12). */
-export async function getTaxpayerProfile(db: Db, taxpayerId: string) {
+/**
+ * Taxpayer profile (PRD §12), scoped to who is asking (PRD §36).
+ *
+ * The §36 access matrix gives an agent "Assigned" access to taxpayers, not
+ * "All". An agent legitimately needs to find a taxpayer and see what they owe —
+ * that is the job. What they do not need is the taxpayer's whole financial life:
+ * payments other agents collected, receipts from other transactions, and the
+ * compliance score that drives incentive eligibility.
+ *
+ * So an agent sees the taxpayer's identity, their outstanding obligations, their
+ * vehicles (needed for renewals) and the work that agent facilitated. A revenue
+ * officer or auditor sees everything. The response says which view was served,
+ * so a client can never mistake a partial history for a complete one.
+ */
+export async function getTaxpayerProfile(
+  db: Db,
+  taxpayerId: string,
+  viewer: { role: string; agentId?: string | null } = { role: 'revenue_officer' },
+) {
   const taxpayer = await queryOne(
     db,
     `SELECT t.*, l.name AS lga_name, w.name AS ward_name
@@ -581,6 +598,12 @@ export async function getTaxpayerProfile(db: Db, taxpayerId: string) {
   );
   if (!taxpayer) throw notFound('That taxpayer');
 
+  // An agent's financial view is filtered to their own facilitated work; every
+  // other role sees the full record. Passing NULL for agentId disables the
+  // filter, so the same query serves both without a second code path.
+  const agentFilter = viewer.role === 'agent' ? (viewer.agentId ?? null) : null;
+  const limitedView = viewer.role === 'agent';
+
   const [assessments, transactions, receipts, vehicles, compliance, programmes] = await Promise.all([
     query(
       db,
@@ -589,8 +612,10 @@ export async function getTaxpayerProfile(db: Db, taxpayerId: string) {
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
-        WHERE a.taxpayer_id = $1 ORDER BY a.created_at DESC LIMIT 50`,
-      [taxpayerId],
+        WHERE a.taxpayer_id = $1
+          AND ($2::boolean IS FALSE OR a.agent_id IS NOT DISTINCT FROM $3::uuid)
+        ORDER BY a.created_at DESC LIMIT 50`,
+      [taxpayerId, limitedView, agentFilter],
     ),
     query(
       db,
@@ -598,16 +623,22 @@ export async function getTaxpayerProfile(db: Db, taxpayerId: string) {
               ri.name AS revenue_item
          FROM transactions tr
          JOIN revenue_items ri ON ri.id = tr.revenue_item_id
-        WHERE tr.taxpayer_id = $1 ORDER BY tr.created_at DESC LIMIT 50`,
-      [taxpayerId],
+        WHERE tr.taxpayer_id = $1
+          AND ($2::boolean IS FALSE OR tr.agent_id IS NOT DISTINCT FROM $3::uuid)
+        ORDER BY tr.created_at DESC LIMIT 50`,
+      [taxpayerId, limitedView, agentFilter],
     ),
     query(
       db,
       `SELECT r.id, r.receipt_number, r.amount_kobo, r.status, r.issued_at, r.verification_code,
               d.id AS document_id
-         FROM receipts r LEFT JOIN documents d ON d.id = r.document_id
-        WHERE r.taxpayer_id = $1 ORDER BY r.issued_at DESC LIMIT 50`,
-      [taxpayerId],
+         FROM receipts r
+         JOIN transactions tr ON tr.id = r.transaction_id
+         LEFT JOIN documents d ON d.id = r.document_id
+        WHERE r.taxpayer_id = $1
+          AND ($2::boolean IS FALSE OR tr.agent_id IS NOT DISTINCT FROM $3::uuid)
+        ORDER BY r.issued_at DESC LIMIT 50`,
+      [taxpayerId, limitedView, agentFilter],
     ),
     query(
       db,
@@ -615,16 +646,39 @@ export async function getTaxpayerProfile(db: Db, taxpayerId: string) {
          FROM vehicles WHERE taxpayer_id = $1 ORDER BY created_at DESC`,
       [taxpayerId],
     ),
-    queryOne(db, 'SELECT * FROM taxpayer_compliance WHERE taxpayer_id = $1', [taxpayerId]),
-    query(
-      db,
-      `SELECT p.id, p.name, p.benefit_type, p.benefit_description, e.eligible, e.reasons
-         FROM programme_eligibility e
-         JOIN incentive_programmes p ON p.id = e.programme_id
-        WHERE e.taxpayer_id = $1 AND p.status = 'ACTIVE'`,
-      [taxpayerId],
-    ),
+    // Compliance scoring and programme eligibility are taxpayer incentive data.
+    // They belong to the taxpayer, government and the citizen portal — not to
+    // the agent collecting a levy.
+    limitedView
+      ? Promise.resolve(null)
+      : queryOne(db, 'SELECT * FROM taxpayer_compliance WHERE taxpayer_id = $1', [taxpayerId]),
+    limitedView
+      ? Promise.resolve([])
+      : query(
+          db,
+          `SELECT p.id, p.name, p.benefit_type, p.benefit_description, e.eligible, e.reasons
+             FROM programme_eligibility e
+             JOIN incentive_programmes p ON p.id = e.programme_id
+            WHERE e.taxpayer_id = $1 AND p.status = 'ACTIVE'`,
+          [taxpayerId],
+        ),
   ]);
 
-  return { taxpayer, assessments, transactions, receipts, vehicles, compliance, programmes };
+  return {
+    scope: limitedView ? 'AGENT_LIMITED' : 'FULL',
+    taxpayer,
+    assessments,
+    transactions,
+    receipts,
+    vehicles,
+    compliance,
+    programmes,
+    ...(limitedView
+      ? {
+          note:
+            'You are shown this taxpayer’s details, what they owe, and the transactions you ' +
+            'facilitated. Their full payment history is held by PSIRS.',
+        }
+      : {}),
+  };
 }

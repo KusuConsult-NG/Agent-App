@@ -719,9 +719,12 @@ governmentRouter.get(
   ),
 );
 
+// `catalogue:configure`, not `catalogue:read`: reading the catalogue is
+// something every agent does to price a charge, but the history of who changed
+// a government rate, when and why is administrative information.
 governmentRouter.get(
   '/audit/queries/rate-changes',
-  requirePermission('audit:read', 'catalogue:read'),
+  requirePermission('audit:read', 'catalogue:configure'),
   validateQuery(z.object({ revenueItemId: uuidSchema.optional() }), async (_req, res, data) => {
     res.json(await reports.rateChangeHistory(pool, data));
   }),

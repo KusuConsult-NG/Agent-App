@@ -162,7 +162,24 @@ taxpayerRouter.get(
     if (req.auth!.role === 'taxpayer' && req.auth!.taxpayerId !== req.params.id) {
       throw forbidden('You can only view your own taxpayer record.');
     }
-    res.json(await taxpayers.getTaxpayerProfile(pool, req.params.id));
+
+    // The agent's own record is resolved server-side; an agent cannot widen
+    // their view by naming a different agent id.
+    const agentId =
+      req.auth!.role === 'agent'
+        ? ((
+            await queryOne<{ id: string }>(pool, 'SELECT id FROM agents WHERE user_id = $1', [
+              req.auth!.userId,
+            ])
+          )?.id ?? null)
+        : null;
+
+    res.json(
+      await taxpayers.getTaxpayerProfile(pool, req.params.id, {
+        role: req.auth!.role,
+        agentId,
+      }),
+    );
   }),
 );
 

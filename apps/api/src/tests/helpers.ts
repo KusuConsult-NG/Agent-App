@@ -102,6 +102,11 @@ export async function stopTestServer(): Promise<void> {
  * TRUNCATE rather than DELETE: the append-only triggers block DELETE by design
  * (that is the point of them), and TRUNCATE does not fire row-level triggers.
  * Reference data is preserved and reseeded separately.
+ *
+ * Every integration file calls this, and they share one database — so the test
+ * script runs with `--test-concurrency=1`. Node's runner parallelises files by
+ * default, and two suites resetting the same database mid-run destroy each
+ * other's fixtures.
  */
 export async function resetDatabase(): Promise<void> {
   await pool.query(`TRUNCATE ${TRANSACTIONAL_TABLES.join(', ')} RESTART IDENTITY CASCADE`);

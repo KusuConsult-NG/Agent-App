@@ -82,11 +82,11 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test                             # 87 tests: unit + full-lifecycle integration
+npm test        # 129 tests: unit, full-lifecycle integration, agent scope containment
 ```
 
-The integration suite runs against a real PostgreSQL database and the real HTTP
-surface. It does not mock the repository layer, because the guarantees under
+The integration suites run against a real PostgreSQL database and the real HTTP
+surface. They do not mock the repository layer, because the guarantees under
 test live in database triggers and constraints — a test with a mocked database
 would verify nothing that matters.
 
@@ -188,6 +188,36 @@ twice. Every error carries an explicit money status:
 `NOT_APPLICABLE`, and both front-ends render it as its own line.
 
 ---
+
+## Who sees what
+
+The agent application is a field tool, not a window into government. The two
+audiences are separated by permission, and the separation is asserted endpoint
+by endpoint in `apps/api/src/tests/agent-scope.test.ts`.
+
+| | Agent | Government |
+|---|---|---|
+| Own collections, own commission, own taxpayers onboarded | ✓ | ✓ |
+| Onboarding: KYC, referee, training, device, agreement | ✓ (own) | ✓ (all) |
+| Find a taxpayer and see what they owe | ✓ | ✓ |
+| Transactions and receipts **another agent** facilitated | ✗ | ✓ |
+| LGA, ward or state-wide revenue | ✗ | ✓ |
+| Other agents' figures, performance league table | ✗ | ✓ |
+| Reconciliation, settlements, approvals, payouts | ✗ | ✓ |
+| Audit log, rate-change history, fraud flags | ✗ | ✓ |
+| Revenue rate configuration | ✗ | ✓ (with step-up) |
+| Taxpayer compliance score and incentive programmes | ✗ | ✓ |
+
+**Incentives are mapped to the taxpayer, not the agent.** The compliance score
+and social programme eligibility belong to the taxpayer, and are visible to the
+taxpayer, to revenue officers and to auditors. The agent role holds no
+`incentive:*` permission at all. What an agent earns is *commission* — a
+separate ledger, computed from verified revenue, in its own wallet.
+
+A taxpayer profile fetched by an agent returns `scope: "AGENT_LIMITED"` and
+carries only the work that agent facilitated; the same profile fetched by an
+officer returns `scope: "FULL"`. The client is told which view it received, so a
+partial history can never be mistaken for a complete one.
 
 ## The agent PWA
 
