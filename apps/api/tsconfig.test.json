@@ -1,0 +1,17 @@
+{
+  // The main tsconfig excludes *.test.ts because they must not be emitted into
+  // dist. But `tsx` strips types without checking them, so without this config
+  // a type error in a test file would be caught by nothing at all.
+  //
+  // This config typechecks the tests only — no emit, no build output.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "incremental": false
+  },
+  "include": ["src/**/*"],
+  "exclude": []
+}
