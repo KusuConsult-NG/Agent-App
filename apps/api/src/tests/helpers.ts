@@ -13,8 +13,9 @@ import './env';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../app';
-import { pool, closePool } from '../db/pool';
+import { pool, closePool, queryOne } from '../db/pool';
 import { runMigrations } from '../db/migrate';
+import { hashPassword } from '../lib/crypto';
 import { seedReferenceData } from '../db/seed';
 
 let server: Server | null = null;
@@ -188,8 +189,6 @@ export async function createGovernmentUser(params: {
   phone: string;
   role: string;
 }): Promise<string> {
-  const { hashPassword } = await import('../lib/crypto');
-  const { queryOne } = await import('../db/pool');
   const row = await queryOne<{ id: string }>(
     pool,
     `INSERT INTO users (full_name, phone, email, password_hash, role, status)
@@ -223,13 +222,11 @@ export async function grantStepUp(token: string, phone: string, action: string):
 }
 
 export async function firstLgaId(): Promise<string> {
-  const { queryOne } = await import('../db/pool');
   const row = await queryOne<{ id: string }>(pool, `SELECT id FROM lgas ORDER BY name LIMIT 1`);
   return row!.id;
 }
 
 export async function territoryForLga(lgaId: string): Promise<string> {
-  const { queryOne } = await import('../db/pool');
   const row = await queryOne<{ id: string }>(pool, `SELECT id FROM territories WHERE lga_id = $1 LIMIT 1`, [
     lgaId,
   ]);
@@ -237,7 +234,6 @@ export async function territoryForLga(lgaId: string): Promise<string> {
 }
 
 export async function revenueItemByCode(code: string): Promise<string> {
-  const { queryOne } = await import('../db/pool');
   const row = await queryOne<{ id: string }>(pool, `SELECT id FROM revenue_items WHERE code = $1`, [code]);
   if (!row) throw new Error(`Revenue item ${code} not seeded`);
   return row.id;

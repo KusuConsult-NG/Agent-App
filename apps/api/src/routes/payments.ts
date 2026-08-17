@@ -10,6 +10,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne } from '../db/pool';
+import { signWebhookPayload } from '../lib/crypto';
 import { config } from '../config';
 import {
   authenticate,
@@ -214,7 +215,6 @@ paymentRouter.post(
       if (data.deliverWebhook) {
         // Build and sign a webhook exactly as the gateway would, then feed it
         // through the real handler — the simulation gets no shortcut.
-        const { signWebhookPayload } = await import('../lib/crypto');
         const eventType =
           data.outcome === 'SUCCESS'
             ? 'charge.success'
