@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
+    />
+    <meta name="theme-color" content="#0b6b3a" />
+    <meta name="description" content="Plateau State Revenue Agent — official government revenue collection" />
+    <!--
+      Content Security Policy (Addendum §22). The PWA loads no third-party
+      script, style, frame or font: everything it needs is bundled, which keeps
+      a compromised CDN from reaching a screen that handles government money.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:4000; object-src 'none'; base-uri 'none'; form-action 'self'"
+    />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <title>PSIRS Revenue Agent</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>
+      This application needs JavaScript. Please enable it, or visit a PSIRS
+      office for assistance.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

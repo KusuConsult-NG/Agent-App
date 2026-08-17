@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="PSIRS Revenue Agent">
+  <rect width="192" height="192" rx="42" fill="#0b6b3a"/>
+  <path d="M96 34 42 58v38c0 33 23 58 54 66 31-8 54-33 54-66V58L96 34Z" fill="#ffffff" opacity="0.95"/>
+  <path d="M96 48 56 66v30c0 26 18 46 40 53 22-7 40-27 40-53V66L96 48Z" fill="#0b6b3a"/>
+  <path d="M78 98l13 13 26-27" stroke="#ffffff" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

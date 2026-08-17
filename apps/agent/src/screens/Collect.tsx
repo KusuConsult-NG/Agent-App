@@ -1,0 +1,598 @@
+/**
+ * Revenue collection and payment (PRD §14-§19, §58, §60; Addendum §23, §44).
+ *
+ * The confirmation screen shows the taxpayer, the revenue item, the exact
+ * amount and how it was calculated before anything is charged (PRD §15, §58).
+ * The agent never types an amount — it comes from the catalogue.
+ *
+ * After payment, the app asks the server whether the gateway confirmed it. The
+ * client never decides that a payment succeeded, and a pending answer is shown
+ * as pending, in the language of PRD §60.
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import type { ConnectionState } from '../lib/device';
+import { queryParams, useRoute } from '../router';
+import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+
+interface RevenueItem {
+  id: string;
+  code: string;
+  name: string;
+  category_name: string;
+  rate_type: string | null;
+  frequency: string;
+  self_assessable: boolean;
+}
+
+interface Quote {
+  revenueItemName: string;
+  categoryName: string;
+  amountKobo: string;
+  serviceChargeKobo: string;
+  totalKobo: string;
+  trace: { step: string; detail: string; amount?: string }[];
+}
+
+interface TaxpayerSummary {
+  id: string;
+  taxpayer_type: string;
+  tin: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  business_name: string | null;
+  phone: string;
+  lga_name: string;
+}
+
+function taxpayerName(taxpayer: TaxpayerSummary): string {
+  return taxpayer.business_name ?? `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim();
+}
+
+export function CollectScreen({
+  navigate,
+  connection,
+}: {
+  navigate: (path: string) => void;
+  connection: ConnectionState;
+}) {
+  const [route] = useRoute();
+  const initialTaxpayerId = queryParams(route).get('taxpayerId');
+
+  const [taxpayer, setTaxpayer] = useState<TaxpayerSummary | null>(null);
+  const [search, setSearch] = useState('');
+  const [results, setResults] = useState<TaxpayerSummary[]>([]);
+  const [items, setItems] = useState<RevenueItem[]>([]);
+  const [selectedItem, setSelectedItem] = useState<RevenueItem | null>(null);
+  const [baseAmount, setBaseAmount] = useState('');
+  const [quote, setQuote] = useState<Quote | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    if (!initialTaxpayerId) return;
+    api
+      .get<{ taxpayer: TaxpayerSummary }>(`/taxpayers/${initialTaxpayerId}`)
+      .then((profile) => setTaxpayer(profile.taxpayer))
+      .catch(() => undefined);
+  }, [initialTaxpayerId]);
+
+  useEffect(() => {
+    if (!taxpayer) return;
+    api
+      .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
+      .then(setItems)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, [taxpayer]);
+
+  const needsBaseAmount =
+    selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
+
+  const getQuote = useCallback(async () => {
+    if (!selectedItem) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const inputs: Record<string, string> = {};
+      if (needsBaseAmount) {
+        // Entered in naira for the agent's convenience; converted to kobo here
+        // so no decimal ever reaches the financial path.
+        const naira = Number.parseFloat(baseAmount.replace(/,/g, ''));
+        if (!Number.isFinite(naira) || naira <= 0) {
+          setError({
+            code: 'INVALID_INPUT',
+            message: 'Enter the amount the assessment is based on, in naira.',
+            moneyStatus: 'NOT_APPLICABLE',
+          });
+          setBusy(false);
+          return;
+        }
+        inputs.baseAmountKobo = String(Math.round(naira * 100));
+      }
+      setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs }));
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }, [selectedItem, needsBaseAmount, baseAmount]);
+
+  async function createAndPay() {
+    if (!taxpayer || !selectedItem) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const inputs: Record<string, string> = {};
+      if (needsBaseAmount) {
+        inputs.baseAmountKobo = String(Math.round(Number.parseFloat(baseAmount.replace(/,/g, '')) * 100));
+      }
+
+      const assessment = await api.post<{ transactionId: string; transactionReference: string }>(
+        '/revenue/assessments',
+        { taxpayerId: taxpayer.id, revenueItemId: selectedItem.id, inputs },
+        newIdempotencyKey('assessment'),
+      );
+
+      await api.post<{ authorisationUrl: string }>(
+        '/payments/initiate',
+        { transactionId: assessment.transactionId },
+        newIdempotencyKey('payment'),
+      );
+
+      navigate(`/transactions/${assessment.transactionReference}`);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (connection === 'OFFLINE') {
+    return (
+      <Alert kind="error" title="You are offline">
+        <p style={{ margin: 0 }}>
+          Revenue cannot be collected without a connection. Government payments must be confirmed by
+          the payment system before a receipt can be issued — nothing can be marked as paid on this
+          device.
+        </p>
+      </Alert>
+    );
+  }
+
+  if (!taxpayer) {
+    return (
+      <>
+        <div className="card">
+          <h2 className="card__title">Who is paying?</h2>
+          <p className="card__hint">Find the taxpayer first. Every payment must be attributed.</p>
+          <Field label="Search taxpayer">
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Name, phone or TIN"
+            />
+          </Field>
+          <button
+            type="button"
+            disabled={busy || search.trim().length < 2}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                setResults(
+                  await api.get<TaxpayerSummary[]>(
+                    `/taxpayers/search?q=${encodeURIComponent(search.trim())}`,
+                  ),
+                );
+              } catch (caught) {
+                if (caught instanceof ApiRequestError) setError(caught.error);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            {busy ? <Spinner /> : null}
+            Search
+          </button>
+        </div>
+
+        <ErrorAlert error={error} />
+
+        {results.length > 0 && (
+          <div className="card card--flush">
+            <ul className="list">
+              {results.map((result) => (
+                <li key={result.id}>
+                  <button type="button" className="list__item" onClick={() => setTaxpayer(result)}>
+                    <div className="list__body">
+                      <p className="list__title">{taxpayerName(result)}</p>
+                      <p className="list__meta">
+                        {result.tin ? `TIN ${result.tin}` : 'No TIN'} · {result.phone}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <button type="button" className="secondary" onClick={() => navigate('/taxpayers/new')}>
+          Register a new taxpayer
+        </button>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div className="card">
+        <h2 className="card__title">{taxpayerName(taxpayer)}</h2>
+        <p className="card__hint">
+          {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone} · {taxpayer.lga_name}
+        </p>
+        <button
+          type="button"
+          className="ghost"
+          onClick={() => {
+            setTaxpayer(null);
+            setSelectedItem(null);
+            setQuote(null);
+          }}
+        >
+          Change taxpayer
+        </button>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      {!quote && (
+        <div className="card">
+          <h2 className="card__title">What are they paying?</h2>
+          <Field label="Revenue item" required>
+            <select
+              value={selectedItem?.id ?? ''}
+              onChange={(event) => {
+                setSelectedItem(items.find((item) => item.id === event.target.value) ?? null);
+                setQuote(null);
+              }}
+            >
+              <option value="">Select a revenue item</option>
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.category_name} — {item.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {needsBaseAmount && (
+            <Field
+              label="Amount the charge is calculated on (₦)"
+              hint="For example turnover, income or contract value. The charge itself is set by government."
+              required
+            >
+              <input
+                inputMode="decimal"
+                value={baseAmount}
+                onChange={(event) => setBaseAmount(event.target.value)}
+                placeholder="0.00"
+              />
+            </Field>
+          )}
+
+          <button type="button" disabled={busy || !selectedItem} onClick={getQuote}>
+            {busy ? <Spinner /> : null}
+            Calculate amount
+          </button>
+        </div>
+      )}
+
+      {quote && (
+        <>
+          <div className="amount-confirm">
+            <p className="amount-confirm__label">You are about to collect</p>
+            <p className="amount-confirm__value">
+              <Money kobo={quote.totalKobo} />
+            </p>
+            <p className="amount-confirm__label">{quote.revenueItemName}</p>
+          </div>
+
+          <div className="card">
+            <KeyValue
+              items={[
+                ['Taxpayer', taxpayerName(taxpayer)],
+                ['TIN', taxpayer.tin ?? 'Not yet assigned'],
+                ['Revenue', `${quote.categoryName} — ${quote.revenueItemName}`],
+                ['Government revenue', <Money key="a" kobo={quote.amountKobo} />],
+                ...(BigInt(quote.serviceChargeKobo) > 0n
+                  ? ([['Approved service charge', <Money key="s" kobo={quote.serviceChargeKobo} />]] as [
+                      string,
+                      React.ReactNode,
+                    ][])
+                  : []),
+                ['Total payable', <Money key="t" kobo={quote.totalKobo} />],
+              ]}
+            />
+          </div>
+
+          <div className="card">
+            <h2 className="card__title">How this amount was calculated</h2>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem', color: 'var(--muted)' }}>
+              {quote.trace.map((step, index) => (
+                <li key={index} style={{ marginBottom: 4 }}>
+                  <strong style={{ color: 'var(--ink)' }}>{step.step}:</strong> {step.detail}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <Alert kind="warning" title="Never collect cash">
+            <p style={{ margin: 0 }}>
+              The taxpayer must pay through the approved payment channel. Confirm the amount with
+              them before you continue.
+            </p>
+          </Alert>
+
+          <div className="button-row">
+            <button type="button" className="secondary" onClick={() => setQuote(null)}>
+              Change
+            </button>
+            <button type="button" disabled={busy} onClick={createAndPay}>
+              {busy ? <Spinner /> : null}
+              Confirm and proceed to payment
+            </button>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Transaction status and payment confirmation
+// ---------------------------------------------------------------------------
+
+interface TransactionStatus {
+  transaction: {
+    id: string;
+    transaction_reference: string;
+    status: string;
+    amount_kobo: string;
+    total_amount_kobo: string;
+    invoice_number: string;
+    revenue_item: string;
+    revenue_category: string;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string | null;
+    tin: string | null;
+    payment_id: string | null;
+    payment_status: string | null;
+    payment_reference: string | null;
+    gateway_reference: string | null;
+    failure_reason: string | null;
+    receipt_id: string | null;
+    receipt_number: string | null;
+    receipt_code: string | null;
+    document_id: string | null;
+  };
+  events: { to_status: string; reason: string | null; created_at: string }[];
+}
+
+/**
+ * Transaction detail.
+ *
+ * This screen is the answer to Addendum §44: whatever happened to the browser,
+ * the agent can reopen the app and read the authoritative state from the
+ * server, including the receipt if one was issued.
+ */
+export function TransactionScreen({
+  reference,
+  navigate,
+}: {
+  reference: string;
+  navigate: (path: string) => void;
+}) {
+  const [data, setData] = useState<TransactionStatus | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.get<TransactionStatus>(`/payments/transactions/${reference}/status`));
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setLoading(false);
+    }
+  }, [reference]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function confirmPayment() {
+    if (!data?.transaction.payment_id) return;
+    setConfirming(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await api.post<{ status: string; message: string; receiptNumber?: string }>(
+        `/payments/${data.transaction.payment_id}/confirm`,
+      );
+      setNotice(result.message);
+      await load();
+    } catch (caught) {
+      // A pending gateway answer arrives here as PAYMENT_UNCONFIRMED, and the
+      // wording tells the agent explicitly not to collect again.
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  /** Development helper: drive the mock gateway so the flow can be demonstrated. */
+  async function simulate(outcome: 'SUCCESS' | 'FAILED') {
+    if (!data?.transaction.gateway_reference) return;
+    setConfirming(true);
+    try {
+      await api.post('/payments/simulate', {
+        gatewayReference: data.transaction.gateway_reference,
+        outcome,
+        deliverWebhook: true,
+      });
+      await load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setConfirming(false);
+    }
+  }
+
+  if (loading) return <Loading rows={5} />;
+  if (error && !data) return <ErrorAlert error={error} />;
+  if (!data) return null;
+
+  const transaction = data.transaction;
+  const paid = transaction.receipt_number !== null;
+  const failed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(transaction.status);
+  const name =
+    transaction.business_name ??
+    `${transaction.first_name ?? ''} ${transaction.last_name ?? ''}`.trim();
+
+  return (
+    <>
+      {paid ? (
+        <div className="amount-confirm">
+          <p className="amount-confirm__label">Payment successful</p>
+          <p className="amount-confirm__value">
+            <Money kobo={transaction.amount_kobo} />
+          </p>
+          <p className="amount-confirm__label">Receipt {transaction.receipt_number}</p>
+        </div>
+      ) : failed ? (
+        <Alert kind="error" title="Payment did not go through">
+          <p style={{ margin: 0 }}>
+            {transaction.failure_reason ?? 'The payment was not completed.'} No money has been taken
+            from the taxpayer. You can start the payment again.
+          </p>
+        </Alert>
+      ) : (
+        <Alert kind="warning" title="Payment not yet confirmed">
+          <p style={{ margin: 0 }}>
+            This payment has <strong>not</strong> been marked as received. Do not ask the taxpayer to
+            pay again — check again in a moment.
+          </p>
+        </Alert>
+      )}
+
+      <ErrorAlert error={error} />
+      {notice && !error && <Alert kind="success">{notice}</Alert>}
+
+      <div className="card">
+        <KeyValue
+          items={[
+            ['Taxpayer', name],
+            ['TIN', transaction.tin ?? 'Not yet assigned'],
+            ['Revenue', `${transaction.revenue_category} — ${transaction.revenue_item}`],
+            ['Amount', <Money key="a" kobo={transaction.total_amount_kobo} />],
+            ['Invoice', transaction.invoice_number],
+            ['Transaction', transaction.transaction_reference],
+            ['Status', <Badge key="s" status={transaction.status} />],
+            ['Payment status', transaction.payment_status ? <Badge key="p" status={transaction.payment_status} /> : '—'],
+            ['Gateway reference', transaction.gateway_reference ?? '—'],
+          ]}
+        />
+      </div>
+
+      {paid && transaction.document_id && (
+        <div className="button-row">
+          <a
+            className="button"
+            href={`/api/v1/receipts/${transaction.receipt_id}`}
+            onClick={async (event) => {
+              event.preventDefault();
+              const receipt = await api.get<{ downloadUrl: string }>(
+                `/receipts/${transaction.receipt_id}`,
+              );
+              window.open(receipt.downloadUrl, '_blank', 'noopener');
+            }}
+          >
+            Download receipt
+          </a>
+          <button
+            type="button"
+            className="secondary"
+            onClick={async () => {
+              const text =
+                `PSIRS receipt ${transaction.receipt_number} for ${name}. ` +
+                `Verify with code ${transaction.receipt_code}.`;
+              if (navigator.share) {
+                await navigator.share({ title: 'PSIRS receipt', text }).catch(() => undefined);
+              } else {
+                await navigator.clipboard.writeText(text).catch(() => undefined);
+                setNotice('Receipt details copied. You can paste them into a message.');
+              }
+            }}
+          >
+            Share receipt
+          </button>
+        </div>
+      )}
+
+      {!paid && !failed && (
+        <>
+          <button type="button" disabled={confirming} onClick={confirmPayment}>
+            {confirming ? <Spinner /> : null}
+            {confirming ? 'Checking with the payment system…' : 'Check payment status'}
+          </button>
+
+          {transaction.gateway_reference && (
+            <div className="card" style={{ marginTop: 14 }}>
+              <h2 className="card__title">Development gateway</h2>
+              <p className="card__hint">
+                This platform is running against a test payment gateway. Use these controls to
+                simulate what a real gateway would report.
+              </p>
+              <div className="button-row">
+                <button type="button" className="secondary" disabled={confirming} onClick={() => simulate('SUCCESS')}>
+                  Simulate success
+                </button>
+                <button type="button" className="secondary" disabled={confirming} onClick={() => simulate('FAILED')}>
+                  Simulate failure
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="section-title">History</p>
+      <div className="card card--flush">
+        <ul className="list">
+          {data.events.map((event, index) => (
+            <li key={index} className="list__item">
+              <div className="list__body">
+                <p className="list__title">{event.to_status.replace(/_/g, ' ')}</p>
+                <p className="list__meta">
+                  {new Date(event.created_at).toLocaleString('en-NG')}
+                  {event.reason ? ` · ${event.reason}` : ''}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <button type="button" className="secondary" onClick={() => navigate('/')}>
+        Back to home
+      </button>
+    </>
+  );
+}

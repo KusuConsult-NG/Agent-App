@@ -1,0 +1,20 @@
+{
+  /*
+   * ESM build, consumed by the two Vite front-ends.
+   *
+   * The API is CommonJS and keeps using the dist/cjs output; shipping both from
+   * one source avoids the alternative of duplicating money handling and the
+   * RBAC matrix into the browser bundles, where they would inevitably drift.
+   */
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "outDir": "dist/esm",
+    "composite": false,
+    "declaration": true,
+    "declarationMap": false,
+    "tsBuildInfoFile": null
+  },
+  "include": ["src/**/*"]
+}

@@ -1,0 +1,101 @@
+/**
+ * Migration runner.
+ *
+ * Migrations are plain SQL applied in filename order, each in its own
+ * transaction, recorded with a checksum. If a file that has already been
+ * applied is edited, the checksum no longer matches and the runner refuses to
+ * continue: on a platform where the schema *is* the financial control, an
+ * unnoticed divergence between environments is a real risk.
+ */
+
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { pool, query, withTransaction, closePool } from './pool';
+
+const MIGRATIONS_DIR = join(__dirname, 'migrations');
+
+interface AppliedMigration {
+  filename: string;
+  checksum: string;
+}
+
+async function ensureMigrationsTable(): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      id          SERIAL PRIMARY KEY,
+      filename    TEXT NOT NULL UNIQUE,
+      checksum    TEXT NOT NULL,
+      applied_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      duration_ms INTEGER NOT NULL
+    )
+  `);
+}
+
+function checksumOf(contents: string): string {
+  return createHash('sha256').update(contents).digest('hex');
+}
+
+export async function runMigrations(options: { silent?: boolean } = {}): Promise<number> {
+  const log = options.silent ? () => {} : (message: string) => console.log(message);
+
+  await ensureMigrationsTable();
+
+  const applied = await query<AppliedMigration>(
+    pool,
+    'SELECT filename, checksum FROM schema_migrations',
+  );
+  const appliedByName = new Map(applied.map((row) => [row.filename, row.checksum]));
+
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((name) => name.endsWith('.sql'))
+    .sort();
+
+  let count = 0;
+
+  for (const filename of files) {
+    const contents = readFileSync(join(MIGRATIONS_DIR, filename), 'utf8');
+    const checksum = checksumOf(contents);
+    const previous = appliedByName.get(filename);
+
+    if (previous !== undefined) {
+      if (previous !== checksum) {
+        throw new Error(
+          `Migration ${filename} has changed since it was applied ` +
+            `(recorded ${previous.slice(0, 12)}, found ${checksum.slice(0, 12)}). ` +
+            'Applied migrations are immutable — add a new migration instead.',
+        );
+      }
+      continue;
+    }
+
+    const startedAt = Date.now();
+    await withTransaction(async (client) => {
+      await client.query(contents);
+      await client.query(
+        'INSERT INTO schema_migrations (filename, checksum, duration_ms) VALUES ($1, $2, $3)',
+        [filename, checksum, Date.now() - startedAt],
+      );
+    });
+
+    log(`  applied ${filename} (${Date.now() - startedAt}ms)`);
+    count += 1;
+  }
+
+  if (count === 0) log('  schema is up to date');
+  return count;
+}
+
+if (require.main === module) {
+  console.log('Running migrations...');
+  runMigrations()
+    .then(async (count) => {
+      console.log(`Done. ${count} migration(s) applied.`);
+      await closePool();
+    })
+    .catch(async (error) => {
+      console.error('Migration failed:', error instanceof Error ? error.message : error);
+      await closePool();
+      process.exit(1);
+    });
+}

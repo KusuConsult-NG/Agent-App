@@ -1,0 +1,28 @@
+{
+  "name": "plateau-revenue-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plateau State Digital Grassroots Revenue & Taxpayer Services Platform",
+  "license": "UNLICENSED",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @psirs/shared && npm run build --workspace @psirs/api && npm run build --workspace @psirs/agent && npm run build --workspace @psirs/portal",
+    "build:api": "npm run build --workspace @psirs/shared && npm run build --workspace @psirs/api",
+    "migrate": "npm run migrate --workspace @psirs/api",
+    "seed": "npm run seed --workspace @psirs/api",
+    "dev:api": "npm run dev --workspace @psirs/api",
+    "dev:agent": "npm run dev --workspace @psirs/agent",
+    "dev:portal": "npm run dev --workspace @psirs/portal",
+    "test": "npm run test --workspace @psirs/api",
+    "typecheck": "tsc -b packages/shared apps/api"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

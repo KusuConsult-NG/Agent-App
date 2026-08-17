@@ -1,0 +1,255 @@
+# Plateau State Digital Grassroots Revenue & Taxpayer Services Platform
+
+An implementation of the PSIRS grassroots revenue collection PRD and its Agent
+KYC / Referee Clearance / PWA addendum.
+
+The platform lets authorised agents deliver government revenue services in the
+field — taxpayer registration, TIN onboarding, assessment, payment, receipts and
+vehicle renewals — while giving government real-time visibility and control over
+every naira.
+
+---
+
+## The rule everything else follows
+
+> **No person, including an agent, can make a government revenue transaction
+> appear successful unless the underlying payment has been independently
+> confirmed by the payment infrastructure.** (PRD §95)
+
+That is not a convention here. It is enforced in four independent places, so
+defeating any one of them is not enough:
+
+| Layer | Control |
+|---|---|
+| Database trigger | `receipts_require_verified_payment` refuses to insert a receipt unless the linked payment is `VERIFIED`, belongs to the same transaction and matches the amount — for *any* caller, including a DBA at a psql prompt |
+| State machine | `RECEIPT_GENERATED` is reachable only from `PAYMENT_VERIFIED`; no edge exists from `FAILED` or `PAYMENT_PENDING` |
+| Service layer | `confirmPayment()` is the only function that can mark a payment verified, and it takes no status argument from any caller — it asks the gateway |
+| API surface | There is no endpoint that sets a payment status. "Confirm" asks the server to go and verify |
+
+The same shape applies to the addendum's four rules:
+
+```
+No KYC + No Referee Clearance  →  No Agent Activation
+No Agent Activation            →  No Access to Revenue Collection
+No Verified Payment            →  No Government Receipt
+No Government Receipt          →  No Commission
+```
+
+Each is enforced by a database constraint *and* a service check *and* a
+middleware gate. The integration test suite proves each one by attempting the
+violation directly against the database.
+
+---
+
+## What is in the repository
+
+```
+apps/
+  api/          Node.js + TypeScript + Express + PostgreSQL — the revenue engine
+  agent/        Agent PWA (React + Vite), mobile-first, installable, offline-aware
+  portal/       Government administration portal (React + Vite)
+                — also hosts the public receipt verification and referee portals
+packages/
+  shared/       Money, state machines, RBAC matrix, agent lifecycle — one source
+                of truth for the API and both front-ends
+docs/           Architecture, security model, API reference, PRD traceability
+```
+
+---
+
+## Running it
+
+Requires Node.js 20+ and PostgreSQL 14+.
+
+```bash
+npm install
+createdb psirs                       # or: psql -c 'CREATE DATABASE psirs;'
+
+export DATABASE_URL='postgres://postgres:postgres@localhost:5432/psirs'
+npm run migrate                      # applies migrations in order, with checksums
+npm run seed -- --demo               # Plateau geography, PSIRS catalogue, demo officers
+
+npm run dev:api                      # http://localhost:4000
+npm run dev:agent                    # http://localhost:5173  (agent PWA)
+npm run dev:portal                   # http://localhost:5174  (government portal)
+```
+
+The seed prints demonstration sign-in details for each government role. Agents
+are not seeded — they come into existence only by going through the clearance
+pipeline, which is the point.
+
+### Tests
+
+```bash
+createdb psirs_test
+npm test                             # 87 tests: unit + full-lifecycle integration
+```
+
+The integration suite runs against a real PostgreSQL database and the real HTTP
+surface. It does not mock the repository layer, because the guarantees under
+test live in database triggers and constraints — a test with a mocked database
+would verify nothing that matters.
+
+---
+
+## The end-to-end flow, as implemented
+
+```
+Agent applies
+   ↓  identity KYC through the verification provider
+   ↓  referee nominated → tokenised link → referee verifies (no account needed)
+   ↓  government review (reason required)
+   ↓  training · bank verification · agreement · device registration
+   ↓  ACTIVATION — refused while any item is outstanding
+Agent registers taxpayer  → duplicate detection → TIN from the PSIRS TIN service
+   ↓
+Assessment  → amount computed from the catalogue rate version, with a trace
+   ↓
+Invoice     → unique number, QR verification code, shown to the taxpayer first
+   ↓
+Payment     → gateway; the platform records an intent, never a success
+   ↓
+Gateway confirms  → signed webhook, or server-side verification poll
+   ↓
+Payment VERIFIED  → receipt issued automatically, PDF rendered, QR generated
+   ↓
+Commission accrued at 1.5% of government revenue (never deducted from it)
+   ↓
+Reconciliation: platform ↔ gateway ↔ government settlement
+   ↓
+Settlement confirmed → transaction SETTLED → commission becomes eligible
+   ↓
+Payout requested (step-up auth) → approved by a different officer → paid
+```
+
+Every step writes a hash-chained audit entry. Any step can be reversed under
+maker-checker approval, and a reversal cascades to the receipt, the invoice and
+the commission in one transaction.
+
+---
+
+## Financial integrity, concretely
+
+**Money is never a floating-point number.** Every amount is an integer of kobo,
+carried as `bigint` in the domain and `BIGINT` in PostgreSQL, and crossing the
+wire as a decimal *string* — because `JSON.parse` silently rounds large numbers.
+`packages/shared/src/money.ts` is the only place money arithmetic happens.
+
+**Financial records are append-only.** `prevent_delete()` is attached to every
+table carrying money or evidence of money. Corrections are made by reversal or
+by a superseding row, never by erasing history. `prevent_column_mutation()`
+freezes amounts, references and attribution at creation.
+
+**Rates are versioned, never overwritten.** Changing a rate closes the current
+version with an `effective_to` and inserts a new one. An assessment stores the
+id of the exact rate version it used, so a ₦10,000 transaction stays a ₦10,000
+transaction after the rate rises to ₦15,000 — and an auditor can re-run the
+arithmetic years later from the stored inputs and trace.
+
+**The audit log is a hash chain.** Each entry's digest covers its own content
+plus the previous entry's digest. Editing or deleting any historical row breaks
+every link after it, and `GET /government/audit/verify` replays the chain so
+government can check this for itself rather than taking it on trust. (The
+digest is computed over canonicalised JSON, because PostgreSQL's JSONB does not
+preserve key order.)
+
+**Idempotency is enforced at the backend.** A repeated `Idempotency-Key`
+replays the original response verbatim; a duplicate webhook is detected by a
+unique `(gateway, event_id)` and acknowledged without creating anything. Two
+concurrent confirmations of one payment are serialised by an advisory lock
+inside a `SERIALIZABLE` transaction.
+
+**Government revenue and agent commission never touch.** They are separate
+columns in separate tables. There is no code path that subtracts commission from
+a taxpayer's payment, because commission is computed *from* the revenue figure
+and written to its own ledger.
+
+---
+
+## Errors that a field agent can act on
+
+PRD §60 forbids vague failures, and on a payment platform an ambiguous error is
+a financial hazard: an agent who cannot tell whether money moved will collect
+twice. Every error carries an explicit money status:
+
+```json
+{
+  "error": {
+    "code": "PAYMENT_UNCONFIRMED",
+    "message": "Payment could not be confirmed yet. The money has NOT been marked as received. Do not ask the taxpayer to pay again — check this transaction again in a few minutes.",
+    "moneyStatus": "UNCONFIRMED",
+    "reference": "TXN-2026-000123",
+    "nextStep": "Open the transaction from your history to see its current status."
+  }
+}
+```
+
+`moneyStatus` is one of `NOT_DEBITED`, `UNCONFIRMED`, `RECEIVED` or
+`NOT_APPLICABLE`, and both front-ends render it as its own line.
+
+---
+
+## The agent PWA
+
+Installable, mobile-first, and honest about connectivity. It distinguishes
+**Online**, **Poor connection** and **Offline** — the middle state matters
+because on a weak rural link `navigator.onLine` still reports `true`, and an
+agent who believes they are fully online will start a payment that hangs.
+
+Offline, an agent can capture taxpayer registrations, which queue in IndexedDB
+under a client-generated reference that doubles as the server's idempotency key.
+There is no offline draft type for a payment — the surest way to honour
+"offline mode must never authorize government revenue payment" is to give the
+offline path no way to express one. The service worker refuses to serve any
+financial endpoint from cache; offline, those fail loudly with `moneyStatus:
+NOT_DEBITED`.
+
+If the browser closes mid-payment, reopening the app and reading the transaction
+recovers the authoritative state from the server, including the receipt.
+
+---
+
+## Source of truth
+
+PRD §82 requires the architecture to state which system owns which fact. The
+platform integrates rather than duplicating, and refuses to boot in production
+while any integration is still a development mock:
+
+| Fact | Authoritative source |
+|---|---|
+| TIN | PSIRS TIN service |
+| Revenue rates | Government configuration in this platform, under approval workflow |
+| Payment status | Payment gateway, confirmed by reconciliation |
+| Receipt | This platform |
+| Vehicle record | Authorised vehicle registration authority |
+| Identity | Government identity service |
+
+`GET /government/platform/integrations` returns this map and the currently
+configured adapters.
+
+---
+
+## Documentation
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — modules, data model, state machines, integration boundaries
+- [`docs/SECURITY.md`](docs/SECURITY.md) — threat model, anti-leakage controls, data protection
+- [`docs/API.md`](docs/API.md) — endpoint reference
+- [`docs/PRD-TRACEABILITY.md`](docs/PRD-TRACEABILITY.md) — every PRD and addendum acceptance criterion, mapped to the code and test that satisfies it
+
+---
+
+## Status
+
+Every acceptance criterion in PRD §84 and Addendum §47 is implemented and
+covered by a test. What remains before a production deployment is integration
+and operations work, not feature work:
+
+- replace the mock TIN, KYC, vehicle registry, bank verification and payment
+  gateway adapters with the approved providers (each is one interface);
+- provision secrets, object storage, backups and monitoring;
+- complete security testing and user acceptance testing with PSIRS;
+- agree final RPO/RTO targets with government IT.
+
+`apps/api/src/config.ts` refuses to start in production while any adapter is
+still `mock`, so a half-configured deployment fails loudly at boot rather than
+quietly accepting payments nobody ever made.
