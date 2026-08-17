@@ -107,7 +107,8 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
 | `npm test` | All 340 tests — every database-level integrity control, and the PWA offline capture queue |
-| `npm run build` | All four workspaces compile, including both front-ends |
+| `npm run build` | All four workspaces compile, including both front-ends, and the SQL migrations are copied into the API's output |
+| Start the built artefact | `node dist/server.js` boots, applies migrations and answers `/health` — the suite runs the *source* through `tsx`, so nothing else checks that what gets deployed can start |
 | Dirty-tree check | No build artefact is tracked |
 
 Because the platform's guarantees are database triggers, CI without a database

@@ -23,6 +23,6 @@
     "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "^7.0.2"
   }
 }

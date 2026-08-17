@@ -17,6 +17,7 @@ import QRCode from 'qrcode';
 import type { PoolClient } from 'pg';
 import { formatNaira, type Kobo } from '@psirs/shared';
 import { config } from '../config';
+import { createHash } from 'node:crypto';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
 import { nextDocumentNumber } from '../lib/references';
@@ -447,7 +448,6 @@ export async function verifyDocumentIntegrity(
   storageReference: string,
   expectedChecksum: string,
 ): Promise<boolean> {
-  const { createHash } = await import('node:crypto');
   try {
     const bytes = await storage.get(storageReference);
     return createHash('sha256').update(bytes).digest('hex') === expectedChecksum;

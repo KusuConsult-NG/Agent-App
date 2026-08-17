@@ -3,7 +3,8 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { REFEREE_CATEGORIES, serialiseKobo } from '@psirs/shared';
-import { pool, query, queryOne } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { recordAudit } from '../services/audit';
 import { config } from '../config';
 import {
   authenticate,
@@ -515,8 +516,6 @@ agentRouter.post(
     async (req, res, data) => {
       // PRD §74: reassigning a territory never rewrites historical attribution;
       // transactions keep the territory they were collected under.
-      const { withTransaction } = await import('../db/pool');
-      const { recordAudit } = await import('../services/audit');
 
       await withTransaction(async (client) => {
         const previous = await queryOne<{ territory_id: string | null }>(

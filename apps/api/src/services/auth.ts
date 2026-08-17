@@ -8,7 +8,7 @@
 
 import type { Role } from '@psirs/shared';
 import { permissionsForRole } from '@psirs/shared';
-import { queryOne, withTransaction } from '../db/pool';
+import { pool, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import {
   generateOtp,
@@ -128,7 +128,7 @@ export async function login(params: {
     failed_login_count: number;
     locked_until: Date | null;
   }>(
-    (await import('../db/pool')).pool,
+    pool,
     `SELECT id, full_name, phone, email, password_hash, role, status,
             failed_login_count, locked_until
        FROM users WHERE phone = $1`,
@@ -187,7 +187,7 @@ export async function login(params: {
   const agent =
     user.role === 'agent'
       ? await queryOne<{ id: string }>(
-          (await import('../db/pool')).pool,
+          pool,
           'SELECT id FROM agents WHERE user_id = $1',
           [user.id],
         )
@@ -196,7 +196,7 @@ export async function login(params: {
   let deviceId: string | null = null;
   if (agent && params.deviceIdentifier) {
     const device = await queryOne<{ id: string; status: string }>(
-      (await import('../db/pool')).pool,
+      pool,
       'SELECT id, status FROM agent_devices WHERE agent_id = $1 AND device_identifier = $2',
       [agent.id, params.deviceIdentifier],
     );
@@ -260,7 +260,6 @@ export async function refresh(params: {
   /** From `x-device-id`; the identifier the caller is presenting. */
   deviceIdentifier?: string | null;
 }): Promise<SessionTokens> {
-  const { pool } = await import('../db/pool');
 
   const session = await queryOne<{
     id: string;
@@ -379,7 +378,6 @@ export async function logout(params: { sessionId: string; userId: string }): Pro
 
 /** Revoke every session for a user — used on suspension and by "sign out everywhere". */
 export async function revokeAllSessions(userId: string, reason: string): Promise<number> {
-  const { pool } = await import('../db/pool');
   const result = await pool.query(
     `UPDATE sessions SET revoked_at = now(), revoked_reason = $2
       WHERE user_id = $1 AND revoked_at IS NULL`,

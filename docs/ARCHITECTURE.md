@@ -206,6 +206,22 @@ would be marking its own homework, and PRD §95's "independently confirmed" woul
 be untrue by construction. Keeping the development gateway behind the same
 adapter boundary means the production swap changes one file and nothing else.
 
+## The build has to produce something that starts
+
+`tsc` compiles TypeScript and nothing else, so `dist/db/migrations` was empty
+and `node dist/server.js` died at boot on a directory that was not there. The
+suite never saw it: tests run the TypeScript source through `tsx`, where the
+`.sql` files sit next to their module. Only the deployed artefact was broken.
+
+`apps/api/scripts/copy-migrations.mjs` now copies them as part of the build, and
+refuses a partial copy — a build that starts and applies half a schema is worse
+than one that will not start. The migrations are checksum-verified on apply, so
+the deployed copy has to be byte-identical to source control; copying rather
+than regenerating is the point.
+
+CI now starts the built artefact and calls `/health` and a parameterised route.
+Everything else in the pipeline exercises the source.
+
 ## Route parameters and the one narrowing
 
 Express 5 types a route parameter as `string | string[]`, because its router can

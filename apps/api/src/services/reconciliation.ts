@@ -14,7 +14,7 @@
 import { randomUUID } from 'node:crypto';
 import { parseKobo, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { gateway } from '../integrations/gateway';
 import { conflict, notFound } from '../lib/errors';
 import { nextRefundReference, nextSettlementReference } from '../lib/references';
@@ -255,7 +255,7 @@ export async function recoverUnverifiedPayments(params: {
 }): Promise<{ attempted: number; verified: number; failures: string[] }> {
   const candidates = await query<{ id: string }>(
     // Uses the pool directly: each confirmation opens its own transaction.
-    (await import('../db/pool')).pool,
+    pool,
     `SELECT p.id
        FROM payments p
       WHERE p.status IN ('PENDING','SUCCESSFUL')

@@ -10,6 +10,7 @@ import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
 import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { nextTicketNumber } from '../lib/references';
 import { recordAudit, verifyAuditChain } from '../services/audit';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
@@ -887,7 +888,6 @@ supportRouter.post(
       priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
     }),
     async (req, res, data) => {
-      const { nextTicketNumber } = await import('../lib/references');
 
       const ticket = await withTransaction(async (client) => {
         let transactionId: string | null = null;
