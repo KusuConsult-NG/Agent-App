@@ -490,3 +490,23 @@ button.link:hover { background: none; color: var(--green-500); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Fraud signal evidence. The named facts carry the review; the identifiers are
+   there to be quoted when escalating, so they are tucked behind a disclosure
+   rather than competing with the thing the officer is judging. */
+.signal-detail { font-size: 0.82rem; line-height: 1.5; }
+
+.signal-detail__key { color: var(--muted); }
+
+.signal-detail__value { font-weight: 600; }
+
+.signal-detail__ids {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.signal-detail__ids summary {
+  cursor: pointer;
+  user-select: none;
+}
