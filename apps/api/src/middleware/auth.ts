@@ -314,7 +314,11 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
             code: 'DEVICE_NOT_REGISTERED',
             message:
               'This device is not registered to your agent account. Register it before collecting revenue.',
-            nextStep: 'Open Profile > Devices to register this device.',
+            // The route an agent can actually follow. There is no "Devices"
+            // page under Profile; device registration lives on the clearance
+            // screen, and a next step that names a screen the app does not
+            // have leaves the agent stuck with no way forward.
+            nextStep: 'Open Profile, then "View my application and clearance", to register it.',
           });
         }
 

@@ -1,6 +1,7 @@
 /** Shared presentation components and icons for the agent PWA. */
 
-import type { ReactNode } from 'react';
+import type { ReactElement, ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, useId } from 'react';
 import { formatNaira } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 
@@ -67,6 +68,22 @@ export function Alert({
   );
 }
 
+/**
+ * A labelled form control.
+ *
+ * The label is tied to its input with `htmlFor`, and the hint with
+ * `aria-describedby`. Neither used to be: the label sat beside the input as a
+ * plain sibling with nothing connecting them, so a screen reader announced
+ * every field on the registration wizard as an unlabelled edit box — no name,
+ * no indication of what was being asked. Tapping a label did not focus its
+ * input either, which on a phone is the difference between a form that is
+ * usable one-handed and one that is not.
+ *
+ * The id is attached by cloning rather than by asking every caller to pass one,
+ * so the association cannot be forgotten at a call site. A `Field` given
+ * anything other than a single element is left alone — the label keeps its
+ * text, and nothing is silently mislabelled.
+ */
 export function Field({
   label,
   hint,
@@ -78,14 +95,33 @@ export function Field({
   children: ReactNode;
   required?: boolean;
 }) {
+  const generatedId = useId();
+  const hintId = `${generatedId}-hint`;
+
+  const items = Children.toArray(children);
+  const only = items.length === 1 && isValidElement(items[0]) ? items[0] : null;
+  const existingId = only ? (only.props as { id?: string }).id : undefined;
+  const controlId = only ? (existingId ?? generatedId) : undefined;
+
+  const control = only
+    ? cloneElement(only as ReactElement<Record<string, unknown>>, {
+        id: controlId,
+        ...(hint ? { 'aria-describedby': hintId } : {}),
+      })
+    : children;
+
   return (
     <div className="field">
-      <label>
+      <label htmlFor={controlId}>
         {label}
         {required && <span aria-hidden="true" style={{ color: 'var(--danger)' }}> *</span>}
       </label>
-      {children}
-      {hint && <p className="field__hint">{hint}</p>}
+      {control}
+      {hint && (
+        <p className="field__hint" id={hintId}>
+          {hint}
+        </p>
+      )}
     </div>
   );
 }
