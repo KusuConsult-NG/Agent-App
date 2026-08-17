@@ -8,7 +8,8 @@
  */
 
 import { createApp } from './app';
-import { config } from './config';
+import { config, envFileLoaded } from './config';
+import { describeDatabase } from './env';
 import { closePool, pool } from './db/pool';
 import { runMigrations } from './db/migrate';
 import { promoteEligibleCommissions } from './services/commission';
@@ -52,6 +53,8 @@ const SYSTEM_ACTOR = { actorId: null as string | null, actorRole: 'system' };
 
 async function main(): Promise<void> {
   console.log(`[boot] Plateau State Revenue Platform API (${config.env})`);
+  console.log(`[boot] configuration: ${envFileLoaded ?? 'environment only (no .env found)'}`);
+  console.log(`[boot] database: ${describeDatabase(config.database.url)}`);
 
   const applied = await runMigrations({ silent: true });
   if (applied > 0) console.log(`[boot] applied ${applied} migration(s)`);

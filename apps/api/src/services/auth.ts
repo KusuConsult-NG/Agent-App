@@ -6,6 +6,7 @@
  * refresh rotates its token so a stolen one is usable at most once.
  */
 
+import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
 import { permissionsForRole } from '@psirs/shared';
 import { pool, queryOne, withTransaction } from '../db/pool';
@@ -54,14 +55,25 @@ async function createSession(params: {
    * impose.
    */
   absoluteExpiresAt?: Date | null;
-}): Promise<SessionTokens> {
+  /**
+   * Run inside the caller's transaction instead of opening one.
+   *
+   * Rotation has to revoke the old session and insert the new one atomically:
+   * with two transactions, two refreshes presenting the same token could both
+   * read it as live and both mint a session.
+   */
+  client?: PoolClient;
+  // The session id is returned alongside the tokens rather than added to them:
+  // `SessionTokens` is the response body, and rotation is the only caller that
+  // needs the id.
+}): Promise<{ sessionId: string; tokens: SessionTokens }> {
   const refreshToken = generateToken(48);
   const expiresAt = new Date(Date.now() + config.auth.refreshTokenTtlSeconds * 1000);
   const absoluteExpiresAt =
     params.absoluteExpiresAt ??
     new Date(Date.now() + config.auth.sessionAbsoluteTtlSeconds * 1000);
 
-  const session = await withTransaction(async (client) => {
+  const insert = async (client: PoolClient) => {
     const row = await queryOne<{ id: string }>(
       client,
       `INSERT INTO sessions
@@ -84,7 +96,11 @@ async function createSession(params: {
       [params.userId],
     );
     return row!;
-  });
+  };
+
+  const session = params.client
+    ? await insert(params.client)
+    : await withTransaction(insert);
 
   const accessToken = issueAccessToken({
     sub: params.userId,
@@ -95,17 +111,20 @@ async function createSession(params: {
   });
 
   return {
-    accessToken,
-    refreshToken,
-    expiresIn: config.auth.accessTokenTtlSeconds,
-    user: {
-      id: params.userId,
-      fullName: params.fullName,
-      phone: params.phone,
-      email: params.email,
-      role: params.role,
-      permissions: permissionsForRole(params.role),
-      agentId: params.agentId ?? undefined,
+    sessionId: session.id,
+    tokens: {
+      accessToken,
+      refreshToken,
+      expiresIn: config.auth.accessTokenTtlSeconds,
+      user: {
+        id: params.userId,
+        fullName: params.fullName,
+        phone: params.phone,
+        email: params.email,
+        role: params.role,
+        permissions: permissionsForRole(params.role),
+        agentId: params.agentId ?? undefined,
+      },
     },
   };
 }
@@ -206,7 +225,7 @@ export async function login(params: {
     deviceId = device?.id ?? null;
   }
 
-  const tokens = await createSession({
+  const { tokens } = await createSession({
     userId: user.id,
     role: user.role,
     fullName: user.full_name,
@@ -253,6 +272,15 @@ export async function login(params: {
  * refresh token appearing on a different device is not a mistake a legitimate
  * agent makes — their device identifier is stable in the same storage as the
  * token — so it is treated as evidence that the token has been copied.
+ *
+ * "Unused" is enforced by locking the session row for the whole rotation. It
+ * was previously read, checked and revoked in three separate statements, so
+ * refreshes arriving together all read the token as live and all minted a
+ * session: three concurrent requests reliably produced three usable sessions
+ * from one token. Rotation is the control that makes a stolen refresh token
+ * usable at most once, and without the lock it enforced nothing — every
+ * concurrent copy of a token worked, and revoking one session left its siblings
+ * collecting revenue.
  */
 export async function refresh(params: {
   refreshToken: string;
@@ -260,66 +288,158 @@ export async function refresh(params: {
   /** From `x-device-id`; the identifier the caller is presenting. */
   deviceIdentifier?: string | null;
 }): Promise<SessionTokens> {
+  const tokenHash = sha256(params.refreshToken);
 
-  const session = await queryOne<{
-    id: string;
-    user_id: string;
-    device_id: string | null;
-    device_identifier: string | null;
-    expires_at: Date;
-    absolute_expires_at: Date | null;
-    revoked_at: Date | null;
-    full_name: string;
-    phone: string;
-    email: string | null;
-    role: Role;
-    status: string;
-  }>(
-    pool,
-    `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
-            d.device_identifier,
-            u.full_name, u.phone, u.email, u.role, u.status
-       FROM sessions s
-       JOIN users u ON u.id = s.user_id
-       LEFT JOIN agent_devices d ON d.id = s.device_id
-      WHERE s.refresh_token_hash = $1`,
-    [sha256(params.refreshToken)],
-  );
-
-  if (!session || session.revoked_at || session.expires_at.getTime() < Date.now()) {
-    throw unauthorised('Your session has expired. Sign in again.');
-  }
-
-  if (
-    session.absolute_expires_at &&
-    session.absolute_expires_at.getTime() < Date.now()
-  ) {
-    await pool.query(
-      `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Absolute session lifetime reached'
-        WHERE id = $1`,
-      [session.id],
+  // Refusing is not a no-op: a device mismatch revokes the session, a reused
+  // token revokes what descended from it, and both leave an audit record. None
+  // of that can happen inside the rotation transaction, because refusing means
+  // throwing and throwing rolls the transaction back — the revocation and the
+  // record would vanish with it. So the transaction decides, and the caller
+  // acts on the decision once it has committed.
+  const outcome = await withTransaction(async (client): Promise<RefreshOutcome> => {
+    // FOR UPDATE OF s: a second refresh presenting the same token blocks here
+    // until this one commits, and then sees the revoked row rather than the
+    // live one it would have seen a moment earlier. The lock is taken on the
+    // session alone — locking the joined users row would serialise every
+    // refresh by the same person against unrelated writes.
+    const session = await queryOne<{
+      id: string;
+      user_id: string;
+      device_id: string | null;
+      device_identifier: string | null;
+      expires_at: Date;
+      absolute_expires_at: Date | null;
+      revoked_at: Date | null;
+      revoked_reason: string | null;
+      rotated_to_session_id: string | null;
+      full_name: string;
+      phone: string;
+      email: string | null;
+      role: Role;
+      status: string;
+    }>(
+      client,
+      `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
+              s.revoked_reason, s.rotated_to_session_id,
+              d.device_identifier,
+              u.full_name, u.phone, u.email, u.role, u.status
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+         LEFT JOIN agent_devices d ON d.id = s.device_id
+        WHERE s.refresh_token_hash = $1
+          FOR UPDATE OF s`,
+      [tokenHash],
     );
-    throw unauthorised('For security, please sign in with your password again.');
-  }
 
-  // Only sessions that were bound to a device are checked against one. A
-  // government user signing in from a browser has no device to bind to, and
-  // requiring one would lock them out rather than protect anything.
-  if (session.device_identifier) {
-    if (session.device_identifier !== params.deviceIdentifier) {
+    if (!session) return { kind: 'EXPIRED' };
+
+    // An already-rotated token is not an expired one. Either a client retried a
+    // refresh whose response it never received, or a copy of the token is in
+    // someone else's hands — and the second case has to end the session that
+    // was minted from it, because the legitimate holder never saw it.
+    if (session.revoked_at && session.revoked_reason === REASON_ROTATED) {
+      return {
+        kind: 'REUSED',
+        session: {
+          id: session.id,
+          user_id: session.user_id,
+          role: session.role,
+          revoked_at: session.revoked_at,
+          rotated_to_session_id: session.rotated_to_session_id,
+        },
+      };
+    }
+
+    if (session.revoked_at || session.expires_at.getTime() < Date.now()) {
+      return { kind: 'EXPIRED' };
+    }
+
+    if (
+      session.absolute_expires_at &&
+      session.absolute_expires_at.getTime() < Date.now()
+    ) {
+      return { kind: 'ABSOLUTE_EXPIRY', sessionId: session.id };
+    }
+
+    // Only sessions that were bound to a device are checked against one. A
+    // government user signing in from a browser has no device to bind to, and
+    // requiring one would lock them out rather than protect anything.
+    if (session.device_identifier && session.device_identifier !== params.deviceIdentifier) {
+      return {
+        kind: 'DEVICE_MISMATCH',
+        session: { id: session.id, user_id: session.user_id, role: session.role },
+      };
+    }
+
+    if (session.status !== 'ACTIVE') return { kind: 'INACTIVE' };
+
+    await client.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = $2 WHERE id = $1`,
+      [session.id, REASON_ROTATED],
+    );
+
+    const agent =
+      session.role === 'agent'
+        ? await queryOne<{ id: string }>(client, 'SELECT id FROM agents WHERE user_id = $1', [
+            session.user_id,
+          ])
+        : null;
+
+    const { sessionId, tokens } = await createSession({
+      userId: session.user_id,
+      role: session.role,
+      fullName: session.full_name,
+      phone: session.phone,
+      email: session.email,
+      agentId: agent?.id ?? null,
+      deviceId: session.device_id,
+      ipAddress: params.ipAddress ?? null,
+      // Carried, never recomputed: this is what stops rotation from resetting it.
+      absoluteExpiresAt: session.absolute_expires_at,
+      client,
+    });
+
+    // Recorded so a later presentation of this token can find what it became.
+    await client.query('UPDATE sessions SET rotated_to_session_id = $2 WHERE id = $1', [
+      session.id,
+      sessionId,
+    ]);
+
+    return { kind: 'ROTATED', tokens };
+  });
+
+  switch (outcome.kind) {
+    case 'ROTATED':
+      return outcome.tokens;
+
+    case 'EXPIRED':
+      throw unauthorised('Your session has expired. Sign in again.');
+
+    case 'INACTIVE':
+      throw forbidden('Your account is not active.');
+
+    case 'ABSOLUTE_EXPIRY':
+      await pool.query(
+        `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Absolute session lifetime reached'
+          WHERE id = $1 AND revoked_at IS NULL`,
+        [outcome.sessionId],
+      );
+      throw unauthorised('For security, please sign in with your password again.');
+
+    case 'DEVICE_MISMATCH':
       await withTransaction(async (client) => {
         await client.query(
           `UPDATE sessions SET revoked_at = now(),
                   revoked_reason = 'Refresh token presented from a different device'
-            WHERE id = $1`,
-          [session.id],
+            WHERE id = $1 AND revoked_at IS NULL`,
+          [outcome.session.id],
         );
         await recordAudit(client, {
-          actorId: session.user_id,
-          actorRole: session.role,
+          actorId: outcome.session.user_id,
+          actorRole: outcome.session.role,
           action: 'auth.refresh_device_mismatch',
           entityType: 'session',
-          entityId: session.id,
+          entityId: outcome.session.id,
           result: 'FAILURE',
           ipAddress: params.ipAddress ?? null,
           // The presented identifier is recorded; the token itself never is.
@@ -327,36 +447,94 @@ export async function refresh(params: {
         });
       });
       throw unauthorised('Your session has ended. Sign in again on this device.');
+
+    case 'REUSED':
+      await withTransaction((client) => handleReuse(client, outcome.session, params));
+      throw unauthorised('Your session has ended. Sign in again.');
+  }
+}
+
+/** What the locked rotation decided, acted on once the transaction has committed. */
+type RefreshOutcome =
+  | { kind: 'ROTATED'; tokens: SessionTokens }
+  | { kind: 'EXPIRED' }
+  | { kind: 'INACTIVE' }
+  | { kind: 'ABSOLUTE_EXPIRY'; sessionId: string }
+  | { kind: 'DEVICE_MISMATCH'; session: { id: string; user_id: string; role: Role } }
+  | { kind: 'REUSED'; session: ReusedSession };
+
+interface ReusedSession {
+  id: string;
+  user_id: string;
+  role: Role;
+  revoked_at: Date | null;
+  rotated_to_session_id: string | null;
+}
+
+/** Exactly the string rotation writes, and the one reuse detection matches on. */
+const REASON_ROTATED = 'Rotated on refresh';
+
+/**
+ * How long after a rotation a repeat presentation is treated as a client retry
+ * rather than as a copied token.
+ *
+ * A field agent on a failing connection sends a refresh, the server rotates,
+ * and the reply is lost. The app retries the only token it has. That is the
+ * same request twice, seconds apart — not theft — and ending every session on
+ * the account for it would strand an agent mid-collection. Beyond the window
+ * there is no benign story: the token was exchanged long ago and the holder
+ * kept a copy.
+ */
+const REUSE_GRACE_MS = 60_000;
+
+async function handleReuse(
+  client: PoolClient,
+  session: ReusedSession,
+  params: { ipAddress?: string | null; deviceIdentifier?: string | null },
+): Promise<void> {
+  const rotatedAgoMs = Date.now() - (session.revoked_at?.getTime() ?? 0);
+  const withinGrace = rotatedAgoMs <= REUSE_GRACE_MS;
+
+  // Walk the chain forward. Each rotation links to its successor, so the live
+  // session is at the end however many refreshes happened in between.
+  const descendants: string[] = [];
+  if (!withinGrace) {
+    let next = session.rotated_to_session_id;
+    while (next && !descendants.includes(next)) {
+      descendants.push(next);
+      const row = await queryOne<{ rotated_to_session_id: string | null }>(
+        client,
+        'SELECT rotated_to_session_id FROM sessions WHERE id = $1',
+        [next],
+      );
+      next = row?.rotated_to_session_id ?? null;
+    }
+    if (descendants.length > 0) {
+      await client.query(
+        `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Refresh token reuse detected'
+          WHERE id = ANY($1::uuid[]) AND revoked_at IS NULL`,
+        [descendants],
+      );
     }
   }
 
-  if (session.status !== 'ACTIVE') {
-    throw forbidden('Your account is not active.');
-  }
-
-  await pool.query(
-    `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Rotated on refresh' WHERE id = $1`,
-    [session.id],
-  );
-
-  const agent =
-    session.role === 'agent'
-      ? await queryOne<{ id: string }>(pool, 'SELECT id FROM agents WHERE user_id = $1', [
-          session.user_id,
-        ])
-      : null;
-
-  return createSession({
-    userId: session.user_id,
-    role: session.role,
-    fullName: session.full_name,
-    phone: session.phone,
-    email: session.email,
-    agentId: agent?.id ?? null,
-    deviceId: session.device_id,
+  await recordAudit(client, {
+    actorId: session.user_id,
+    actorRole: session.role,
+    action: 'auth.refresh_token_reuse',
+    entityType: 'session',
+    entityId: session.id,
+    result: 'FAILURE',
     ipAddress: params.ipAddress ?? null,
-    // Carried, never recomputed: this is what stops rotation from resetting it.
-    absoluteExpiresAt: session.absolute_expires_at,
+    newValue: {
+      presentedDevice: params.deviceIdentifier ?? null,
+      rotatedSecondsAgo: Math.round(rotatedAgoMs / 1000),
+      // Within the grace window nothing is revoked, so the record has to say
+      // so — an audit trail that reports a revocation that did not happen is
+      // worse than none.
+      treatedAs: withinGrace ? 'CLIENT_RETRY' : 'TOKEN_COMPROMISE',
+      sessionsRevoked: descendants.length,
+    },
   });
 }
 

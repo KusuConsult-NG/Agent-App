@@ -15,6 +15,7 @@
 import { PLATEAU_LGAS, TRAINING_MODULES, nairaToKobo } from '@psirs/shared';
 import { pool, queryOne, withTransaction, closePool } from './pool';
 import { config } from '../config';
+import { describeDatabase } from '../env';
 import { hashPassword } from '../lib/crypto';
 import { runMigrations } from './migrate';
 import { seedDemoAgent } from './seed-agent';
@@ -583,6 +584,7 @@ async function main(): Promise<void> {
   const demo = process.argv.includes('--demo');
 
   console.log('Seeding Plateau State Revenue Platform...');
+  console.log(`  target: ${describeDatabase(config.database.url)}`);
   await runMigrations({ silent: true });
   await seedReferenceData();
   if (demo) await seedDemoUsers();

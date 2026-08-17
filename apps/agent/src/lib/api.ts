@@ -224,6 +224,44 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   return payload as T;
 }
 
+/** Thrown when there is nothing to refresh with, so the original 401 stands. */
+const NO_REFRESH_TOKEN = Symbol('no refresh token');
+
+/**
+ * The refresh in progress, shared by everything waiting on one.
+ *
+ * A refresh token is exchanged for a new one, so it may be spent exactly once.
+ * Without this, every request that met a 401 at the same moment read the same
+ * token from storage and sent its own refresh: opening the app fires several
+ * calls at once, so an ordinary cold start raced itself. One exchange won, the
+ * rest presented a token that had just been spent, and the agent was signed
+ * out — mid-form, with the taxpayer in front of them.
+ *
+ * The server no longer lets those extra exchanges mint sessions. This stops
+ * them being sent at all, which is what keeps the agent signed in.
+ */
+let refreshInFlight: Promise<void> | null = null;
+
+function refreshOnce(): Promise<void> {
+  if (refreshInFlight) return refreshInFlight;
+
+  refreshInFlight = (async () => {
+    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    if (!refreshToken) throw NO_REFRESH_TOKEN;
+
+    const refreshed = await rawRequest<Session>('/auth/refresh', {
+      method: 'POST',
+      body: { refreshToken },
+      authenticated: false,
+    });
+    setSession(refreshed);
+  })().finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
+}
+
 /**
  * Perform a request, transparently refreshing an expired access token once.
  *
@@ -242,18 +280,11 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
     if (!isExpired || options.authenticated === false) throw error;
 
-    const refreshToken = localStorage.getItem(REFRESH_KEY);
-    if (!refreshToken) throw error;
-
     try {
-      const refreshed = await rawRequest<Session>('/auth/refresh', {
-        method: 'POST',
-        body: { refreshToken },
-        authenticated: false,
-      });
-      setSession(refreshed);
+      await refreshOnce();
       return await rawRequest<T>(path, options);
     } catch (refreshError) {
+      if (refreshError === NO_REFRESH_TOKEN) throw error;
       // Only a refusal ends the session. If the refresh could not reach PSIRS
       // we know nothing about whether the session is still good, and throwing
       // the agent out on a guess would strand them: signing back in needs the
@@ -300,14 +331,22 @@ export async function restoreSession(): Promise<Session | null> {
   const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
-    const session = await rawRequest<Session>('/auth/refresh', {
-      method: 'POST',
-      body: { refreshToken },
-      authenticated: false,
-    });
-    setSession(session);
-    return session;
+    // Through the same single-flight gate as every other refresh. Restoring the
+    // session is what happens on app start, at the same moment the first
+    // screens fire their requests — the one place the exchanges were most
+    // certain to collide.
+    await refreshOnce();
+    const user = getUser();
+    if (!user) return null;
+    // Rotation replaced both tokens; read back what refreshOnce stored rather
+    // than returning the spent one.
+    return {
+      accessToken: accessToken ?? '',
+      refreshToken: localStorage.getItem(REFRESH_KEY) ?? '',
+      user,
+    };
   } catch (error) {
+    if (error === NO_REFRESH_TOKEN) return null;
     if (isConnectivityFailure(error)) {
       // Unreachable, not rejected. Keep whoever was signed in on this device.
       const user = getUser();
