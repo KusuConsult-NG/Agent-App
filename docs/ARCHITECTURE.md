@@ -206,6 +206,28 @@ would be marking its own homework, and PRD §95's "independently confirmed" woul
 be untrue by construction. Keeping the development gateway behind the same
 adapter boundary means the production swap changes one file and nothing else.
 
+## Route parameters and the one narrowing
+
+Express 5 types a route parameter as `string | string[]`, because its router can
+produce an array for a repeated or wildcard segment. This API declares no such
+route — every parameter is a plain `:name`, and a repeated id, token or code
+would be meaningless.
+
+Rather than assert that at sixty call sites, `middleware/validate.ts` narrows it
+once, at the boundary where `asyncHandler`, `validateBody` and `validateQuery`
+hand a request to a route. Every route goes through one of those three, so one
+cast covers all of them.
+
+A cast justified by a comment is a cast nobody re-checks, so `routes.test.ts`
+scans every declared route path and fails if one uses wildcard, repeated,
+optional or embedded-pattern syntax. If someone adds a wildcard route, the
+narrowing stops being true and that test says so — rather than the type quietly
+becoming a lie.
+
+It catches a second thing the compiler cannot: Express 5 removed the `:name?`
+optional-parameter form. Such a path still compiles, because it is only a
+string, and then fails to match at runtime.
+
 ## Offline capture
 
 The agent PWA collects data with no connection, because Plateau's grassroots

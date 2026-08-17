@@ -10,14 +10,42 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { z, ZodError, type ZodTypeAny } from 'zod';
 import { validationFailed } from '../lib/errors';
 
+/**
+ * A request whose route parameters are single strings.
+ *
+ * Express 5 types a parameter as `string | string[]`, because its router can
+ * produce an array for a repeated or wildcard segment (`:id+`, `*path`). This
+ * API declares no such route — every parameter is a plain `:name`, and a
+ * repeated one would be meaningless here: an id, a token or a code is exactly
+ * one value.
+ *
+ * Declaring it once on the wrappers below is what keeps that out of sixty call
+ * sites. It is a claim about the routes rather than a convenience, so
+ * `routes.test.ts` asserts it by scanning every route path for wildcard syntax
+ * — if someone adds one, that test fails rather than this type quietly
+ * becoming a lie.
+ */
+export type RouteRequest = Request<Record<string, string>>;
+
+/**
+ * The single place that assertion is made.
+ *
+ * One cast, here, guarded by the route-path test — rather than sixty casts
+ * spread through the route files, each of which would have to be re-justified
+ * if a wildcard route were ever added.
+ */
+function asRouteRequest(req: Request): RouteRequest {
+  return req as unknown as RouteRequest;
+}
+
 export function validateBody<T extends ZodTypeAny>(
   schema: T,
-  handler: (req: Request, res: Response, data: z.infer<T>) => Promise<void> | void,
+  handler: (req: RouteRequest, res: Response, data: z.infer<T>) => Promise<void> | void,
 ): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = schema.parse(req.body ?? {});
-      await handler(req, res, parsed);
+      await handler(asRouteRequest(req), res, parsed);
     } catch (error) {
       if (error instanceof ZodError) {
         return next(
@@ -36,12 +64,12 @@ export function validateBody<T extends ZodTypeAny>(
 
 export function validateQuery<T extends ZodTypeAny>(
   schema: T,
-  handler: (req: Request, res: Response, data: z.infer<T>) => Promise<void> | void,
+  handler: (req: RouteRequest, res: Response, data: z.infer<T>) => Promise<void> | void,
 ): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
       const parsed = schema.parse(req.query ?? {});
-      await handler(req, res, parsed);
+      await handler(asRouteRequest(req), res, parsed);
     } catch (error) {
       if (error instanceof ZodError) {
         return next(
@@ -60,10 +88,10 @@ export function validateQuery<T extends ZodTypeAny>(
 
 /** Wrap an async handler so rejections reach the error middleware. */
 export function asyncHandler(
-  handler: (req: Request, res: Response, next: NextFunction) => Promise<void>,
+  handler: (req: RouteRequest, res: Response, next: NextFunction) => Promise<void>,
 ): RequestHandler {
   return (req, res, next) => {
-    handler(req, res, next).catch(next);
+    handler(asRouteRequest(req), res, next).catch(next);
   };
 }
 
