@@ -375,7 +375,12 @@ export async function initiateRenewal(params: {
  */
 export async function completeRenewal(params: {
   renewalId: string;
-  actorId: string;
+  /**
+   * Null when a webhook drove the confirmation, which is the ordinary case: the
+   * gateway told us the money arrived and no person was involved. The audit
+   * entry then records the system rather than naming someone who did nothing.
+   */
+  actorId: string | null;
   actorRole: string;
 }): Promise<{ documentId: string; documentNumber: string; verificationCode: string; expiryDate: Date }> {
   return withTransaction(async (client) => {

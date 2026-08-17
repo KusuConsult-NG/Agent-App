@@ -113,19 +113,37 @@ export function idempotent(scope: string, options: { required?: boolean } = {}) 
       }
 
       // Capture the handler's response so retries replay it exactly.
+      //
+      // The record is written BEFORE the response is sent, and that ordering is
+      // the whole point. This used to fire the UPDATE without waiting and send
+      // the response immediately, which left a window in which the key was
+      // still IN_PROGRESS while the caller already had its answer. A client
+      // that retried in that window — which is exactly what a phone on a bad
+      // connection does — was told 409 REQUEST_IN_PROGRESS with moneyStatus
+      // UNCONFIRMED, instead of being replayed the success that had already
+      // happened. On `payment.initiate` that is the worst possible answer: the
+      // agent is told the money state is unknown when the request had in fact
+      // succeeded.
+      //
+      // Sending a few milliseconds later is the right trade for a retry that
+      // can never observe a state the server has not finished recording.
       const originalJson = res.json.bind(res);
-      res.json = (body: unknown) => {
+      res.json = ((body: unknown) => {
         const status = res.statusCode;
-        void pool
+        pool
           .query(
             `UPDATE idempotency_keys
                 SET status = $1, response_code = $2, response_body = $3, completed_at = now()
               WHERE scope = $4 AND idempotency_key = $5`,
             [status >= 500 ? 'FAILED' : 'COMPLETED', status, JSON.stringify(body), scope, key],
           )
-          .catch((error) => console.error('[idempotency] failed to persist response', error));
-        return originalJson(body);
-      };
+          .catch((error) => console.error('[idempotency] failed to persist response', error))
+          // finally, not then: a failed write must not also cost the caller
+          // their response. It leaves the key IN_PROGRESS, which is the old
+          // behaviour for that case and no worse.
+          .finally(() => originalJson(body));
+        return res;
+      }) as typeof res.json;
 
       next();
     } catch (error) {

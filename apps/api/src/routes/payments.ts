@@ -26,7 +26,6 @@ import * as payments from '../services/payments';
 import * as receipts from '../services/receipts';
 import { storage, signDocumentUrl, verifyDocumentSignature } from '../services/storage';
 import { developmentGatewayControls, isMockGateway } from '../integrations/gateway';
-import { completeRenewal } from '../services/vehicles';
 
 export const paymentRouter = Router();
 
@@ -117,22 +116,18 @@ paymentRouter.post(
       actorRole: req.auth!.role,
     });
 
-    // A vehicle renewal issues its document as soon as its payment verifies.
-    if (result.status === 'VERIFIED') {
-      const renewal = await queryOne<{ id: string }>(
-        pool,
-        `SELECT id FROM vehicle_renewals WHERE transaction_id = $1 AND document_id IS NULL`,
-        [result.transactionId],
-      );
-      if (renewal) {
-        const document = await completeRenewal({
-          renewalId: renewal.id,
-          actorId: req.auth!.userId,
-          actorRole: req.auth!.role,
-        });
-        res.json({ ...result, vehicleDocument: { ...document, downloadUrl: signDocumentUrl(document.documentId) } });
-        return;
-      }
+    // The renewal itself is issued by confirmPayment, so it happens whichever
+    // way the payment was confirmed rather than only when an agent's app asks.
+    // All that is left here is the download link, which is a transport concern.
+    if (result.vehicleDocument) {
+      res.json({
+        ...result,
+        vehicleDocument: {
+          ...result.vehicleDocument,
+          downloadUrl: signDocumentUrl(result.vehicleDocument.documentId),
+        },
+      });
+      return;
     }
 
     res.json(result);

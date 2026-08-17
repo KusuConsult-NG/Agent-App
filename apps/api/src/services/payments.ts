@@ -29,7 +29,7 @@ import {
   type PaymentMethod,
   type PaymentState,
 } from '@psirs/shared';
-import { advisoryLock, LOCK_NAMESPACE, queryOne, query, withTransaction } from '../db/pool';
+import { advisoryLock, LOCK_NAMESPACE, pool, queryOne, query, withTransaction } from '../db/pool';
 import type { Db } from '../db/pool';
 import { config } from '../config';
 import { gateway } from '../integrations/gateway';
@@ -44,6 +44,7 @@ import { nextPaymentReference } from '../lib/references';
 import { recordAudit } from './audit';
 import { accrueCommission } from './commission';
 import { issueReceipt } from './receipts';
+import { completeRenewal } from './vehicles';
 import { transitionTransaction } from './revenue';
 import { evaluateTransactionRisk } from './fraud';
 import { queueNotification } from './notifications';
@@ -295,6 +296,13 @@ export interface ConfirmationResult {
   documentId?: string;
   commissionKobo?: string;
   message: string;
+  /** Present when this payment was for a vehicle renewal, which it then issues. */
+  vehicleDocument?: {
+    documentId: string;
+    documentNumber: string;
+    verificationCode: string;
+    expiryDate: Date;
+  };
 }
 
 /**
@@ -307,6 +315,68 @@ export interface ConfirmationResult {
  * up making the same independent verification call.
  */
 export async function confirmPayment(params: {
+  paymentId: string;
+  source: 'WEBHOOK' | 'POLL' | 'RECONCILIATION';
+  actorId?: string | null;
+  actorRole?: string | null;
+}): Promise<ConfirmationResult> {
+  const result = await verifyAndRecord(params);
+
+  // What the citizen actually bought. Issuing it lived in the route the agent's
+  // app calls when it taps "check payment status", so a renewal confirmed by
+  // webhook — the ordinary path, and the one this platform treats as
+  // authoritative — took the money, issued the receipt, and never issued the
+  // renewal or told the vehicle authority. The taxpayer was left holding a
+  // government receipt for a renewal that had not happened.
+  //
+  // It belongs here, where the docstring above already says every confirmation
+  // route converges. Outside the transaction because it calls the vehicle
+  // authority over the network, and that must not be done holding a
+  // SERIALIZABLE transaction open.
+  if (result.status === 'VERIFIED') {
+    await issueRenewalFor(result, params);
+  }
+
+  return result;
+}
+
+/**
+ * Complete any vehicle renewal waiting on this payment.
+ *
+ * Guarded on `document_id IS NULL`, so a redelivered webhook or a later poll
+ * issues nothing twice — and a renewal stranded by an earlier failure is
+ * repaired by the next confirmation to arrive rather than staying stuck.
+ *
+ * A failure here must not turn a confirmed payment into an error: the money is
+ * verified and the receipt exists whatever the vehicle authority does. It is
+ * recorded and left for the retry job, which is what that job is for.
+ */
+async function issueRenewalFor(
+  result: ConfirmationResult,
+  params: { actorId?: string | null; actorRole?: string | null },
+): Promise<void> {
+  const renewal = await queryOne<{ id: string }>(
+    pool,
+    'SELECT id FROM vehicle_renewals WHERE transaction_id = $1 AND document_id IS NULL',
+    [result.transactionId],
+  );
+  if (!renewal) return;
+
+  try {
+    result.vehicleDocument = await completeRenewal({
+      renewalId: renewal.id,
+      actorId: params.actorId ?? null,
+      actorRole: params.actorRole ?? 'system',
+    });
+  } catch (error) {
+    console.error(
+      `[payments] payment ${result.paymentId} verified but its vehicle renewal could not be issued`,
+      error,
+    );
+  }
+}
+
+async function verifyAndRecord(params: {
   paymentId: string;
   source: 'WEBHOOK' | 'POLL' | 'RECONCILIATION';
   actorId?: string | null;
