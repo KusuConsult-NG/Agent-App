@@ -5,7 +5,13 @@ build/
 .env.local
 *.log
 coverage/
-storage/
+
+# The local document store (STORAGE_PATH), anchored to the repository root.
+# Unanchored, this pattern also matched apps/api/src/services/storage/ and
+# silently excluded that module's source from every commit — the files existed
+# locally, so everything passed here and only CI saw the missing module.
+/storage/
+
 .DS_Store
 *.tsbuildinfo
 .vite/
