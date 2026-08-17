@@ -65,6 +65,13 @@ export const PERMISSIONS = [
   // Vehicles
   'vehicle:read:all',
   'vehicle:renew',
+  /**
+   * Re-send renewals the vehicle authority never acknowledged, and see which
+   * vehicles were captured while it was unreachable. Back-office work, not
+   * field work: an agent must not be able to decide the authority has been
+   * told.
+   */
+  'vehicle:authority_sync',
 
   // Agents
   'agent:read:own',
@@ -177,6 +184,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'receipt:read:all',
     'document:read:all',
     'vehicle:read:all',
+    'vehicle:authority_sync',
     'agent:read:all',
     'agent:suspend',
     'commission:read:all',
@@ -202,6 +210,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'payment:reverse:approve',
     'receipt:read:all',
     'document:read:all',
+    'vehicle:read:all',
+    'vehicle:authority_sync',
     'agent:read:all',
     'commission:read:all',
     'commission:manage',
@@ -243,6 +253,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'receipt:read:all',
     'document:read:all',
     'vehicle:read:all',
+    'vehicle:authority_sync',
     'agent:read:all',
     'agent:manage',
     'agent:approve',

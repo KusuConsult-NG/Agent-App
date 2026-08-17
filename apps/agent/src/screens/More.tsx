@@ -9,7 +9,13 @@ import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } fr
 // ---------------------------------------------------------------- vehicles
 
 interface VehicleLookup {
-  source: 'PLATFORM' | 'AUTHORITY' | 'NOT_FOUND';
+  /**
+   * `REGISTRY_UNAVAILABLE` is not `NOT_FOUND`. The first means the authority
+   * could not be asked; the second means it answered and holds no record. An
+   * agent shown the wrong one of these captures a registered vehicle as
+   * unregistered, so the screen keeps them apart.
+   */
+  source: 'PLATFORM' | 'AUTHORITY' | 'NOT_FOUND' | 'REGISTRY_UNAVAILABLE';
   vehicle: Record<string, string | null> | null;
   authorityConfirmed: boolean;
   message: string;
@@ -111,9 +117,26 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
       {lookup && (
         <div className="card">
-          <Alert kind={lookup.source === 'NOT_FOUND' ? 'warning' : lookup.authorityConfirmed ? 'success' : 'info'}>
+          <Alert
+            kind={
+              lookup.source === 'REGISTRY_UNAVAILABLE'
+                ? 'error'
+                : lookup.source === 'NOT_FOUND'
+                  ? 'warning'
+                  : lookup.authorityConfirmed
+                    ? 'success'
+                    : 'info'
+            }
+          >
             {lookup.message}
           </Alert>
+
+          {lookup.source === 'REGISTRY_UNAVAILABLE' && (
+            <button type="button" disabled={busy} onClick={find}>
+              {busy ? <Spinner /> : null}
+              Try the vehicle authority again
+            </button>
+          )}
 
           {lookup.vehicle && (
             <>

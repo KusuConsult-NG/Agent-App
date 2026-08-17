@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 152 tests: unit, integration, agent scope, Remita adapter
+npm test        # 203 tests: unit, integration, agent scope, adapters
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 152 tests, including every database-level integrity control |
+| `npm test` | All 203 tests, including every database-level integrity control |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -333,6 +333,59 @@ confirmed against PSIRS's own Remita sandbox — both vary by merchant
 configuration. `config.ts` refuses to start in production with Remita selected
 but unconfigured, or still pointing at the demo host.
 
+## Identity verification and the vehicle registry
+
+Two integrations answer questions about the world outside the platform: is this
+applicant who they say they are, and does the state hold a record of this
+vehicle. Both are configurable HTTP adapters
+(`apps/api/src/integrations/kyc/`, `apps/api/src/integrations/vehicles/`), and
+both are built around one distinction.
+
+**"We could not ask" is not an answer.** Each contract carries an outcome that
+describes the provider rather than the subject:
+
+| Outcome | Means | Never means |
+|---|---|---|
+| `UNAVAILABLE` (KYC) | the verification service could not be reached | this applicant failed identity verification |
+| `UNAVAILABLE` (registry) | the vehicle authority could not be reached | this vehicle is not registered |
+
+Collapsing either into a verdict is not a cosmetic bug. A KYC outage mapped to
+`FAILED` rejects legitimate applicants and leaves rejections indistinguishable
+from genuine identity mismatches. A registry outage mapped to "not found" makes
+every vehicle in Plateau State look unregistered, and each one gets captured
+manually as an unverified record that looks exactly like a real one.
+
+So the platform acts on the distinction rather than merely recording it:
+
+- **`submitKyc` writes nothing at all on `UNAVAILABLE`.** It raises
+  `KYC_PROVIDER_UNAVAILABLE` (503) and the surrounding transaction rolls back,
+  so the applicant's existing submission survives, no attempt is consumed, and
+  their status is untouched. They are told it was not about their details.
+- **A referee's `UNAVAILABLE` goes to `UNDER_REVIEW`, not `FAILED`** — and is
+  *not* rolled back, because the referee has already spent their invitation.
+  A government officer clears it, and the reason on the record says the check
+  never ran.
+- **`UNAVAILABLE` can never set `authority_verified_at`.** The vehicle is
+  captured with `authority_lookup_outcome = 'UNAVAILABLE'`, which keeps "never
+  checked" apart from "checked, not registered" — both are `MANUAL_ENTRY`, so
+  `source` alone cannot tell them apart.
+- **The agent sees the difference.** "The vehicle authority could not be
+  reached, so we cannot say whether this vehicle is registered" is a different
+  screen, with a retry button, from "no record of this vehicle".
+
+Both adapters map the provider's vocabulary through configuration, because
+vendors disagree about words and field names. What configuration cannot do is
+weaken the guarantees: an unmapped KYC status becomes `UNDER_REVIEW` (a human
+decides, never an automatic clearance), and any registry response that is not an
+explicit "no such vehicle" becomes `UNAVAILABLE` rather than being read as one.
+
+Renewals are told to the authority after payment, and that notification is now
+recorded rather than fired and forgotten. A renewal the authority never
+acknowledged stays `COMPLETED` — the taxpayer paid and holds a valid document —
+but appears at `GET /vehicles/renewals/authority-outstanding` and is re-sent by
+`POST /vehicles/renewals/authority-retry`, both behind `vehicle:authority_sync`,
+which no agent holds.
+
 ## Source of truth
 
 PRD §82 requires the architecture to state which system owns which fact. The
@@ -368,8 +421,17 @@ Every acceptance criterion in PRD §84 and Addendum §47 is implemented and
 covered by a test. What remains before a production deployment is integration
 and operations work, not feature work:
 
-- replace the mock TIN, KYC, vehicle registry, bank verification and payment
-  gateway adapters with the approved providers (each is one interface);
+- point the payment gateway, identity verification and vehicle registry adapters
+  at PSIRS's approved providers — each is configuration (`PAYMENT_GATEWAY`,
+  `KYC_PROVIDER`, `VEHICLE_REGISTRY` plus the settings in `.env.example`), not a
+  code change, though the vendors' field names and status vocabularies must be
+  confirmed against their sandboxes first;
+- **build the TIN and bank verification adapters**, which are still mocks. Both
+  need a signed interface specification — from PSIRS for TIN assignment, and
+  from the banks' verification provider for account name matching — and guessing
+  at either would be worse than being honest that it is not built. `config.ts`
+  names both in its production guard, so a deployment cannot quietly go live on
+  them;
 - provision secrets, object storage, backups and monitoring;
 - complete security testing and user acceptance testing with PSIRS;
 - agree final RPO/RTO targets with government IT.

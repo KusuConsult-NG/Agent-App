@@ -123,9 +123,21 @@ usable login; government users are provisioned by an administrator.
 | `POST` | `/payments/simulate` | development gateway only |
 | `GET` | `/receipts` · `/receipts/lookup?number=` · `/receipts/:id` | receipt numbers contain `/`, so lookup by number uses a query parameter |
 | `GET` | `/documents/:id` | metadata plus a signed download URL |
-| `GET` | `/vehicles/lookup/:registrationNumber` | platform, then authority |
-| `POST` | `/vehicles` · `/vehicles/:id/renew` | `vehicle:renew` |
+| `GET` | `/vehicles/lookup/:registrationNumber` | platform, then authority; `source` is `PLATFORM`, `AUTHORITY`, `NOT_FOUND` or `REGISTRY_UNAVAILABLE` |
+| `POST` | `/vehicles` · `/vehicles/:id/renew` | `vehicle:renew`; capture returns `authorityOutcome` (`FOUND` / `NOT_FOUND` / `UNAVAILABLE`) |
 | `POST` | `/vehicles/renewals/:id/document` | issue or re-fetch the renewal PDF |
+| `GET` | `/vehicles/renewals/authority-outstanding` | `vehicle:authority_sync` — renewals the authority never acknowledged, and vehicles captured while it was unreachable |
+| `POST` | `/vehicles/renewals/authority-retry` | `vehicle:authority_sync` — re-send those notifications; changes no financial record |
+
+`REGISTRY_UNAVAILABLE` is not `NOT_FOUND`. The first says the vehicle authority
+could not be asked; the second says it answered and holds no such vehicle. A
+client that renders them the same way will tell an agent that a registered
+vehicle is unregistered whenever the authority has an outage.
+
+Identity verification carries the same distinction: `POST /agents/me/kyc`
+returns **503 `KYC_PROVIDER_UNAVAILABLE`** when the provider could not be
+reached. That is not a failed identity check — nothing is recorded against the
+applicant and their application is unchanged. It is safe and correct to retry.
 
 There is deliberately **no** endpoint that sets a payment status.
 

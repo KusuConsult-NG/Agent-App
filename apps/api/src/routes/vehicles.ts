@@ -63,12 +63,9 @@ vehicleRouter.post(
         actorId: req.auth!.userId,
         actorRole: req.auth!.role,
       });
-      res.status(201).json({
-        ...result,
-        message: result.authorityConfirmed
-          ? 'Vehicle recorded and confirmed against the vehicle authority.'
-          : 'Vehicle recorded from manual entry. It is marked as unconfirmed by the vehicle authority.',
-      });
+      // The message comes from the service, which is the only place that knows
+      // whether the authority said "no such vehicle" or could not be asked.
+      res.status(201).json(result);
     },
   ),
 );
@@ -130,6 +127,54 @@ vehicleRouter.post(
     });
     res.json({ ...result, downloadUrl: signDocumentUrl(result.documentId) });
   }),
+);
+
+/**
+ * Renewals the vehicle authority has not acknowledged, and vehicles captured
+ * while it could not be reached (PRD §82).
+ *
+ * Declared before `/renewals/:renewalId` so Express matches the literal path
+ * rather than treating "authority-outstanding" as a renewal id.
+ */
+vehicleRouter.get(
+  '/renewals/authority-outstanding',
+  requirePermission('vehicle:authority_sync'),
+  asyncHandler(async (_req, res) => {
+    res.json({
+      renewals: await vehicles.outstandingAuthorityNotifications(pool),
+      vehiclesAwaitingAuthority: await vehicles.vehiclesAwaitingAuthority(pool),
+    });
+  }),
+);
+
+/**
+ * Re-send outstanding renewal notifications.
+ *
+ * Changes no financial record: the taxpayer has already paid and holds their
+ * document. This only retries telling the authority, and reports honestly how
+ * many are still not through.
+ */
+vehicleRouter.post(
+  '/renewals/authority-retry',
+  requirePermission('vehicle:authority_sync'),
+  validateBody(
+    z.object({ limit: z.number().int().min(1).max(500).optional() }),
+    async (req, res, data) => {
+      const result = await vehicles.retryAuthorityNotifications({
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        limit: data.limit,
+      });
+      res.json({
+        ...result,
+        message:
+          result.stillFailing === 0
+            ? `${result.accepted} renewal(s) acknowledged by the vehicle authority.`
+            : `${result.accepted} acknowledged; ${result.stillFailing} still could not be sent. ` +
+              'The renewals themselves remain valid — retry again later.',
+      });
+    },
+  ),
 );
 
 vehicleRouter.get(

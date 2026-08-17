@@ -149,7 +149,7 @@ before(async () => {
     lgaId: ctx.lgaId,
     territoryId: ctx.territoryId,
     adminToken: ctx.adminToken,
-    identityNumber: '55566677788',
+    identityNumber: '55566677781',
     refereePhone: '+2347066000001',
   });
   ctx.agentId = agent.agentId;
@@ -246,6 +246,9 @@ describe('The agent role holds no administrative permission', () => {
       'agent:approve',
       'agent:suspend',
       'catalogue:configure',
+      // An agent renews vehicles; deciding the vehicle authority has been told
+      // about those renewals is back-office work.
+      'vehicle:authority_sync',
       'audit:read',
       'fraud:read',
       'fraud:manage',

@@ -28,7 +28,7 @@ import {
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
-import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
 import { bankVerification, kycProvider } from '../integrations';
 import { recordAudit } from './audit';
@@ -432,6 +432,22 @@ export async function submitApplication(params: {
 // KYC (Addendum §4-§7)
 // ---------------------------------------------------------------------------
 
+/**
+ * Submit an applicant's identity for verification.
+ *
+ * The provider returns one of five outcomes, and four of them are verdicts
+ * about this person: they are recorded, they move the application, and the
+ * applicant is told where they stand.
+ *
+ * The fifth, UNAVAILABLE, is not about this person at all — it says the
+ * provider could not be asked. Recording it would be recording a verdict nobody
+ * reached: the `agent_kyc` row would take up the applicant's one live
+ * submission slot, the previous attempt would already have been superseded, and
+ * an outage would look in the clearance record exactly like a failed identity
+ * check. So nothing is written. The exception below leaves the transaction to
+ * roll back — including the supersede — and the applicant is asked to try again
+ * rather than being turned away by an outage they had no part in.
+ */
 export async function submitKyc(params: {
   agentId: string;
   actorId: string;
@@ -492,6 +508,21 @@ export async function submitKyc(params: {
       phone: agent.phone,
       selfieChecksum,
     });
+
+    if (verification.status === 'UNAVAILABLE') {
+      // Nothing is recorded and nothing is decided. Throwing here rolls the
+      // supersede back with it, so the applicant's existing submission — if
+      // they had one — survives untouched.
+      throw new AppError({
+        statusCode: 503,
+        code: 'KYC_PROVIDER_UNAVAILABLE',
+        message:
+          'Your identity could not be checked because the verification service could not be ' +
+          'reached. This is not a problem with your details and nothing has been recorded ' +
+          'against your application.',
+        nextStep: 'Try again in a few minutes. Your application is unchanged.',
+      });
+    }
 
     await client.query(
       `INSERT INTO agent_kyc

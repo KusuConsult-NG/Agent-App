@@ -402,10 +402,28 @@ export async function submitRefereeResponse(params: {
         phone: invitation.referee_phone,
       });
 
-      verificationStatus =
-        result.status === 'CLEARED' ? 'CLEARED' : result.status === 'FAILED' ? 'FAILED' : 'UNDER_REVIEW';
-      failureReason = result.failureReason ?? null;
-      reference = result.reference;
+      // An UNAVAILABLE provider goes to UNDER_REVIEW, not FAILED. Unlike an
+      // agent's own KYC, this is not rolled back: the referee has filled the
+      // form and their invitation is now spent, so throwing would lose a
+      // response they cannot easily give again. A government officer clears it
+      // instead, and the reason below tells them the check never actually ran —
+      // so it reads nothing like a referee whose identity did not match.
+      switch (result.status) {
+        case 'CLEARED':
+          verificationStatus = 'CLEARED';
+          break;
+        case 'FAILED':
+          verificationStatus = 'FAILED';
+          break;
+        default:
+          verificationStatus = 'UNDER_REVIEW';
+      }
+
+      failureReason =
+        result.status === 'UNAVAILABLE'
+          ? `Identity check could not be carried out: ${result.failureReason ?? 'the verification service could not be reached'}. Manual verification required.`
+          : (result.failureReason ?? null);
+      reference = result.reference || null;
 
       await client.query(
         `INSERT INTO referee_kyc
@@ -418,8 +436,10 @@ export async function submitRefereeResponse(params: {
           input.identityType,
           hashIdentityNumber(input.identityNumber),
           maskIdentityNumber(input.identityNumber),
-          result.provider,
-          result.reference,
+          // Only name a provider that actually answered; an outage attributes
+          // nothing to anyone.
+          result.status === 'UNAVAILABLE' ? null : result.provider,
+          reference,
           verificationStatus,
           verificationStatus === 'CLEARED' ? new Date() : null,
           failureReason,
