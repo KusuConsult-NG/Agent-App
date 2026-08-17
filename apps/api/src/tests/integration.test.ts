@@ -2222,6 +2222,41 @@ describe('A notification is only recorded as sent if it was sent', () => {
     assert.ok(recipients.includes('+2347099000009'), 'a refused message is a queue to work');
   });
 
+  it('does not let one unroutable message stall everyone else\'s receipt', async () => {
+    // No push adapter exists, so a PUSH row cannot be delivered. It must fail
+    // on its own and let the sweep continue — an exception here would stop
+    // every queued receipt behind it.
+    const unroutable = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO notifications (recipient, event, channel, message)
+       VALUES ('push-subscription-token', 'RECEIPT_GENERATED', 'PUSH', 'Your receipt is ready')
+       RETURNING id`,
+    );
+    const behindIt = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO notifications (recipient, event, channel, message)
+       VALUES ('+2347099000011', 'RECEIPT_GENERATED', 'SMS', 'Your receipt is ready')
+       RETURNING id`,
+    );
+
+    await notifications.dispatchQueued(pool, { limit: 50 });
+
+    const blocked = await queryOne<{ status: string; failure_reason: string | null }>(
+      pool,
+      'SELECT status, failure_reason FROM notifications WHERE id = $1',
+      [unroutable!.id],
+    );
+    assert.equal(blocked!.status, 'FAILED');
+    assert.match(blocked!.failure_reason ?? '', /push/i);
+
+    const delivered = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM notifications WHERE id = $1',
+      [behindIt!.id],
+    );
+    assert.equal(delivered!.status, 'SENT', 'the queue kept moving');
+  });
+
   it('leaves no notification claiming delivery without a provider', async () => {
     const fabricated = await queryOne<{ count: string }>(
       pool,

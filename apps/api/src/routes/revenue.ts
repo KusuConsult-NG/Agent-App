@@ -248,7 +248,7 @@ revenueRouter.post(
   validateBody(
     z.object({
       revenueItemId: uuidSchema,
-      inputs: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+      inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
     }),
     async (_req, res, data) => {
       const result = await revenue.quote(pool, data);
@@ -271,7 +271,7 @@ revenueRouter.post(
     z.object({
       taxpayerId: uuidSchema,
       revenueItemId: uuidSchema,
-      inputs: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+      inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
       periodStart: z.string().date().optional(),
       periodEnd: z.string().date().optional(),
       periodLabel: z.string().max(100).optional(),

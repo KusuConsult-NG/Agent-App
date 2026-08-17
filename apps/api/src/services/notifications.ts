@@ -14,7 +14,7 @@ import type { PoolClient } from 'pg';
 import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
-import { providerFor } from './messaging';
+import { providerFor, type DeliveryResult } from './messaging';
 
 export type NotificationEvent =
   | 'TIN_CREATED'
@@ -193,12 +193,27 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
   let sent = 0;
 
   for (const notification of pending) {
-    const result = await providerFor(notification.channel).send({
-      channel: notification.channel,
-      recipient: notification.recipient,
-      subject: notification.subject,
-      message: notification.message,
-    });
+    let result: DeliveryResult;
+    try {
+      result = await providerFor(notification.channel).send({
+        channel: notification.channel,
+        recipient: notification.recipient,
+        subject: notification.subject,
+        message: notification.message,
+      });
+    } catch (error) {
+      // No provider owns this channel, or one threw despite the contract. Fail
+      // this row and keep going: one unroutable message must never stall the
+      // queue that carries every other citizen's receipt.
+      await query(
+        db,
+        `UPDATE notifications
+            SET status = 'FAILED', attempts = attempts + 1, failure_reason = $2
+          WHERE id = $1`,
+        [notification.id, error instanceof Error ? error.message : 'Unknown delivery error'],
+      );
+      continue;
+    }
 
     if (result.outcome === 'SENT') {
       await query(

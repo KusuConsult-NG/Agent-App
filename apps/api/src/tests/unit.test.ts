@@ -24,6 +24,7 @@ import {
   type AgentStatusAxes,
 } from '@psirs/shared';
 import { computeAmount, evaluateFormula, type RateVersion } from '../services/rate-engine';
+import { hashPassword, verifyPassword } from '../lib/crypto';
 
 describe('money', () => {
   it('parses kobo from strings and rejects floats', () => {
@@ -410,5 +411,42 @@ describe('citizens are served by agents, not by a portal', () => {
         `${orphan} should not exist once the citizen portal is removed`,
       );
     }
+  });
+});
+
+describe('Password hashing survives a bcrypt upgrade', () => {
+  // Every agent and government officer already holds a hash produced by an
+  // earlier bcryptjs. If a major upgrade stopped verifying those, the whole
+  // platform would be locked out at deploy — and the failure would look exactly
+  // like everyone forgetting their password at once.
+  // The $2a$ entries are the canonical bcrypt vectors from the OpenBSD and
+  // py-bcrypt suites — fixed values that predate any version in this tree, so
+  // they check compatibility with the format rather than with ourselves.
+  const LEGACY_HASHES: [string, string][] = [
+    ['', '$2a$06$DCq7YPn5Rq63x1Lad4cll.TV4S6ytwfsfvkgY8jIucDrjc8deX1s.'],
+    ['a', '$2a$06$m0CrhHm10qJ3lXRY.5zDGO3rS2KdeeWLuGmsfGlMfOxih58VYVfxe'],
+    ['abc', '$2a$06$If6bvum7DFjUnE9p2uDeDu0YHzrHM6tf.iqN8.yx.jNN1ILEf7h0i'],
+    // A $2b$ hash, the prefix in circulation for accounts created here.
+    ['FieldAgent2026', '$2b$04$uo8Y0Bjp2P86E2/b7saylOJ80oX.V9j.QEQItPdmCWzyVXHaVUeC.'],
+  ];
+
+  for (const [password, hash] of LEGACY_HASHES) {
+    it(`verifies the existing ${hash.slice(0, 4)} hash of ${JSON.stringify(password)}`, async () => {
+      assert.equal(await verifyPassword(password, hash), true);
+      assert.equal(await verifyPassword('the wrong password', hash), false);
+    });
+  }
+
+  it('still round-trips a freshly hashed password', async () => {
+    const hash = await hashPassword('FieldAgent2026');
+    assert.equal(await verifyPassword('FieldAgent2026', hash), true);
+    assert.equal(await verifyPassword('FieldAgent2027', hash), false);
+  });
+
+  it('produces a different hash each time, so the salt is real', async () => {
+    const [first, second] = await Promise.all([hashPassword('same'), hashPassword('same')]);
+    assert.notEqual(first, second);
+    assert.equal(await verifyPassword('same', first), true);
+    assert.equal(await verifyPassword('same', second), true);
   });
 });

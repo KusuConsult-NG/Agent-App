@@ -456,7 +456,8 @@ async function recordDuplicateCheck(
  */
 export async function requestTin(params: {
   taxpayerId: string;
-  actorId: string;
+  /** Null when a scheduled sweep runs it rather than a person. */
+  actorId: string | null;
   actorRole: string;
 }): Promise<{ tin: string | null; tinStatus: string }> {
   return withTransaction(async (client) => {
@@ -559,7 +560,8 @@ export async function requestTin(params: {
  * and `requestTin` returns early for one who acquires it in between.
  */
 export async function retryOutstandingTins(params: {
-  actorId: string;
+  /** Null when a scheduled sweep runs it rather than a person. */
+  actorId: string | null;
   actorRole: string;
   limit?: number;
 }): Promise<{ attempted: number; assigned: number; stillOutstanding: number }> {

@@ -289,7 +289,7 @@ governmentRouter.post(
       ]),
       entityType: z.string().min(2).max(60),
       entityId: z.string().min(1).max(80),
-      payload: z.record(z.unknown()).default({}),
+      payload: z.record(z.string(), z.unknown()).default({}),
       reason: z.string().min(10, 'Explain what is being requested and why'),
     }),
     async (req, res, data) => {
