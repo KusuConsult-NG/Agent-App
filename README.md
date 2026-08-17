@@ -1,5 +1,7 @@
 # Plateau State Digital Grassroots Revenue & Taxpayer Services Platform
 
+[![CI](https://github.com/KusuConsult-NG/Agent-App/actions/workflows/ci.yml/badge.svg)](https://github.com/KusuConsult-NG/Agent-App/actions/workflows/ci.yml)
+
 An implementation of the PSIRS grassroots revenue collection PRD and its Agent
 KYC / Referee Clearance / PWA addendum.
 
@@ -59,7 +61,8 @@ docs/           Architecture, security model, API reference, PRD traceability
 
 ## Running it
 
-Requires Node.js 20+ and PostgreSQL 14+.
+Requires Node.js 22 and PostgreSQL 14+. (Node 22 is what the platform is
+developed against and what CI verifies; earlier versions are untested.)
 
 ```bash
 npm install
@@ -89,6 +92,26 @@ The integration suites run against a real PostgreSQL database and the real HTTP
 surface. They do not mock the repository layer, because the guarantees under
 test live in database triggers and constraints — a test with a mocked database
 would verify nothing that matters.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`,
+against a real PostgreSQL 16 service container. In order:
+
+| Step | What it protects |
+|---|---|
+| `npm ci` | The lockfile resolves and installs cleanly |
+| Build shared package | `apps/api` can resolve `@psirs/shared` |
+| `npm run typecheck` | Source *and tests* typecheck — `tsx` strips types without checking them, so test files are covered by `tsconfig.test.json` and nothing else |
+| `npm run migrate` | Migrations apply to an empty database |
+| `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
+| `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
+| `npm test` | All 129 tests, including every database-level integrity control |
+| `npm run build` | All four workspaces compile, including both front-ends |
+| Dirty-tree check | No build artefact is tracked |
+
+Because the platform's guarantees are database triggers, CI without a database
+would be theatre. The service container is the point of the pipeline.
 
 ---
 
