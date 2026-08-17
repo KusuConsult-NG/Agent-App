@@ -57,6 +57,8 @@ that implements it and the test that proves it. Test names are from
 | Criterion | Implementation |
 |---|---|
 | Vehicle can be searched | `lookupVehicle` — platform, then authoritative registry |
+| An unreachable registry is not read as "unregistered" | `VehicleLookupOutcome.UNAVAILABLE`; `authority_lookup_outcome` keeps it apart from a real NOT_FOUND |
+| The authority is told about a renewal | `recordRenewal`; the outcome is recorded on `vehicle_renewals` and retried by `retryAuthorityNotifications` |
 | Owner verified where integration permits | ownership check in `initiateRenewal`; `owner_verified` flag |
 | Renewal fee calculated | catalogue formula item `VEH-RENEW-*` |
 | Payment processed | same payment path as any other revenue |
@@ -85,6 +87,7 @@ that implements it and the test that proves it. Test names are from
 |---|---|---|
 | Agent can submit an application | `POST /agents/apply` | *accepts an application and starts the applicant at stage 1* |
 | Agent can complete KYC | `submitKyc` via provider | *clears identity KYC through the verification provider* |
+| An unreachable provider is not read as a failed check | `KycOutcome.UNAVAILABLE`; `submitKyc` records nothing and raises 503 | *An unreachable identity provider is not a failed identity check* |
 | KYC status tracked | `kyc_status` axis + `agent_kyc` history | same |
 | Agent can nominate a referee | `nominateReferee` | *sends a tokenised referee invitation needing no account* |
 | Referee receives secure invitation | token hashed at rest, expiring | same |

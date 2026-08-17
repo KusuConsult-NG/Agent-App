@@ -48,6 +48,14 @@ function int(name: string, fallback: number): number {
   return parsed;
 }
 
+/** Comma-separated environment list, trimmed and emptied of blanks. */
+function list(name: string, fallback: string): string[] {
+  return (process.env[name] ?? fallback)
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function bool(name: string, fallback: boolean): boolean {
   const raw = process.env[name];
   if (raw === undefined || raw === '') return fallback;
@@ -151,6 +159,60 @@ export const config = {
     kycProvider: process.env.KYC_PROVIDER ?? 'mock',
     kycProviderUrl: process.env.KYC_PROVIDER_URL ?? '',
     bankVerification: process.env.BANK_VERIFICATION ?? 'mock',
+
+    /**
+     * Identity verification over HTTP.
+     *
+     * Which KYC vendor PSIRS contracts is a procurement decision, and vendors
+     * disagree about both field names and status vocabulary. Both are therefore
+     * configuration: the adapter reads the response through these paths and
+     * maps the vendor's words onto the platform's.
+     *
+     * Anything the mapping does not recognise becomes UNDER_REVIEW — a human
+     * decides. No configuration value can make an unrecognised status clear an
+     * applicant for revenue collection.
+     */
+    kycHttp: {
+      apiKey: process.env.KYC_PROVIDER_API_KEY ?? '',
+      timeoutMs: int('KYC_PROVIDER_TIMEOUT_MS', 20_000),
+      statusPath: process.env.KYC_STATUS_PATH ?? 'status',
+      referencePath: process.env.KYC_REFERENCE_PATH ?? 'reference',
+      livenessPath: process.env.KYC_LIVENESS_PATH ?? 'liveness',
+      reasonPath: process.env.KYC_REASON_PATH ?? 'reason',
+      clearedValues: list('KYC_CLEARED_VALUES', 'verified,cleared,success,successful,match,found,true'),
+      failedValues: list('KYC_FAILED_VALUES', 'failed,rejected,no_match,not_found,mismatch,false'),
+      moreInfoValues: list(
+        'KYC_MORE_INFO_VALUES',
+        'incomplete,more_info,more_information_required,additional_information_required,pending_documents',
+      ),
+    },
+
+    /**
+     * Vehicle registry over HTTP.
+     *
+     * `{registration}` in either path template is replaced with the URL-encoded
+     * registration number, so a path-parameter registry and a query-parameter
+     * one are both configuration.
+     *
+     * `notFoundValues` is short on purpose. Only an explicit "no such vehicle"
+     * from the authority — a 404, or one of these status values — means the
+     * vehicle is not registered. Every other unreadable answer is treated as
+     * "we could not ask", because recording a registered vehicle as
+     * unregistered is the more expensive mistake.
+     */
+    vehicleRegistryHttp: {
+      apiKey: process.env.VEHICLE_REGISTRY_API_KEY ?? '',
+      timeoutMs: int('VEHICLE_REGISTRY_TIMEOUT_MS', 20_000),
+      lookupPath: process.env.VEHICLE_REGISTRY_LOOKUP_PATH ?? '/vehicles/{registration}',
+      renewalPath: process.env.VEHICLE_REGISTRY_RENEWAL_PATH ?? '/vehicles/{registration}/renewals',
+      /** Where the vehicle object sits in the response; empty means the root. */
+      recordPath: process.env.VEHICLE_REGISTRY_RECORD_PATH ?? '',
+      statusPath: process.env.VEHICLE_REGISTRY_STATUS_PATH ?? 'status',
+      notFoundValues: list(
+        'VEHICLE_REGISTRY_NOT_FOUND_VALUES',
+        'not_found,notfound,no_record,none,unregistered',
+      ),
+    },
   },
 
   notifications: {
@@ -208,6 +270,31 @@ if (isProduction) {
   if (config.payments.gateway === 'mock') problems.push('PAYMENT_GATEWAY is still "mock"');
   if (config.integrations.tinService === 'mock') problems.push('TIN_SERVICE is still "mock"');
   if (config.storage.driver === 'local') problems.push('STORAGE_DRIVER is still "local"');
+
+  // The mock providers hand out deterministic verdicts. In production they
+  // would clear agents nobody checked and confirm vehicles nobody looked up.
+  if (config.integrations.kycProvider === 'mock') problems.push('KYC_PROVIDER is still "mock"');
+  if (config.integrations.vehicleRegistry === 'mock') {
+    problems.push('VEHICLE_REGISTRY is still "mock"');
+  }
+  if (config.integrations.bankVerification === 'mock') {
+    problems.push('BANK_VERIFICATION is still "mock"');
+  }
+
+  // A named provider with no URL cannot be asked anything. Every verification
+  // would come back UNAVAILABLE and no agent could ever be cleared, so this
+  // fails at boot rather than at the first applicant.
+  if (config.integrations.kycProvider !== 'mock' && !config.integrations.kycProviderUrl) {
+    problems.push(`KYC_PROVIDER is "${config.integrations.kycProvider}" but KYC_PROVIDER_URL is not set`);
+  }
+  if (config.integrations.vehicleRegistry !== 'mock' && !config.integrations.vehicleRegistryUrl) {
+    problems.push(
+      `VEHICLE_REGISTRY is "${config.integrations.vehicleRegistry}" but VEHICLE_REGISTRY_URL is not set`,
+    );
+  }
+  if (config.integrations.kycHttp.clearedValues.length === 0) {
+    problems.push('KYC_CLEARED_VALUES is empty — no applicant could ever be cleared');
+  }
 
   // A half-configured Remita is worse than none: every status query would fail,
   // every payment would sit unconfirmed, and agents would be told to wait on

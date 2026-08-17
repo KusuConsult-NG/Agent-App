@@ -72,7 +72,7 @@ psql prompt. The same reasoning produces:
 | Agents | `services/agents.ts` | Clearance pipeline, review, activation, devices |
 | Referees | `services/referees.ts` | Nomination, tokenised invitation, response, clearance |
 | Taxpayers | `services/taxpayers.ts` | Registration, duplicate control, TIN, search |
-| Vehicles | `services/vehicles.ts` | Registry lookup, renewal, document issue |
+| Vehicles | `services/vehicles.ts` | Registry lookup, renewal, document issue, authority catch-up |
 | Fraud | `services/fraud.ts` | Signal detection, leakage dashboard |
 | Incentives | `services/incentives.ts` | Compliance scoring, programme eligibility |
 | Reports | `services/reports.ts` | Dashboards, intelligence, §67 audit queries |
@@ -98,6 +98,12 @@ a financial risk on this platform.
                  reconciliation, refunds, fraud flags, compliance, programmes,
                  notifications, support, offline drafts, verification attempts
 006_mock_gateway development-only gateway ledger (see below)
+007_agent_mediated_only
+                 narrows users.role, transactions.channel and taxpayers.source —
+                 a citizen account becomes unrepresentable, not merely unused
+008_authority_notification
+                 whether the vehicle authority was told about a renewal, and
+                 whether a captured vehicle was ever actually checked
 ```
 
 ### Gateway adapters
@@ -120,6 +126,45 @@ configured, so `fetchStatement` returns nothing rather than guessing. The
 consequence is explicit and is the correct failure mode for money: verified
 payments appear as `MISSING_PAYMENT` exceptions in the finance queue, so finance
 is told to look, instead of transactions being silently marked reconciled.
+
+### Identity and vehicle adapters
+
+`integrations/kyc/` and `integrations/vehicles/` follow the same shape as the
+gateway — a contract, a configurable HTTP adapter, a labelled development mock —
+with one addition that shapes every caller.
+
+Both contracts carry an outcome that is about the *provider*, not the subject:
+
+```
+KYC       CLEARED | FAILED | UNDER_REVIEW | VERIFICATION_REQUIRED | UNAVAILABLE
+                                                                   ^ not a verdict
+registry  FOUND | NOT_FOUND | UNAVAILABLE
+                              ^ not an answer
+```
+
+Adapters never throw on an upstream failure; they return the unavailable
+outcome, so a caller cannot accidentally turn an outage into a 500 or, worse,
+into a verdict. Throwing is reserved for programming errors.
+
+| Boundary | Fails towards | Because |
+|---|---|---|
+| KYC status not in any configured list | `UNDER_REVIEW` | An unread vocabulary must put a human in the loop, never admit someone to collecting government revenue |
+| KYC cleared but liveness failed | `UNDER_REVIEW` | A clearance resting on a check the provider says failed is not a clearance |
+| Registry 200 whose shape we cannot read | `UNAVAILABLE` | A misconfigured record path stops vehicle capture loudly; the alternative silently records every vehicle in the state as unregistered |
+| Registry 404, or a mapped not-found status | `NOT_FOUND` | These are the only two things that are actually the authority saying "no such vehicle" |
+
+The callers then differ, deliberately, because what has already happened
+differs. An agent's own KYC rolls the whole transaction back on `UNAVAILABLE`
+and records nothing — no attempt, no status change. A referee's does not: they
+have already spent their single-use invitation, so the response is kept and
+routed to an officer with a reason saying the check never ran.
+
+`vehicles.authority_lookup_outcome` exists for the same reason. A vehicle
+captured during an outage and a vehicle the authority confirmed it has no record
+of are both `source = 'MANUAL_ENTRY'`, and only the first should ever be
+re-checked. `vehicle_renewals.authority_notification_status` is its counterpart
+on the way out: a renewal the authority was never told about stays valid for the
+taxpayer and outstanding for the government.
 
 ### The mock gateway is deliberately a separate table
 

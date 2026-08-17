@@ -1429,3 +1429,221 @@ describe('Citizens are served by agents, not by a portal', () => {
     assert.ok(['VALID', 'REVERSED'].includes(response.body.status));
   });
 });
+
+// ===========================================================================
+// "We could not ask" is not an answer
+// ===========================================================================
+//
+// Both the identity provider and the vehicle authority can now say they could
+// not be reached, and the whole value of that is what the platform does next.
+// The mock adapters make the outage reachable deterministically: an identity
+// number ending in 8, and the reserved ZZZ plate prefix.
+
+describe('An unreachable identity provider is not a failed identity check', () => {
+  const applicantPhone = '+2347011000009';
+  let token = '';
+  let agentId = '';
+
+  before(async () => {
+    const application = await post('/agents/apply', {
+      fullName: 'Rifkatu Bala',
+      phone: applicantPhone,
+      email: 'rifkatu.bala@example.test',
+      password: 'FieldAgent2026',
+      dateOfBirth: '1994-08-02',
+      gender: 'FEMALE',
+      address: '9 Ahmadu Bello Way, Jos',
+      lgaId: ctx.lgaId,
+      occupation: 'Trader',
+      bankName: 'Access Bank',
+      bankCode: '044',
+      accountName: 'Rifkatu Bala',
+      accountNumber: '0123456788',
+    });
+    assert.equal(application.status, 201);
+    agentId = application.body.agentId;
+    token = (await loginAs(applicantPhone, 'FieldAgent2026')).accessToken;
+  });
+
+  it('tells the applicant the service was unreachable, not that they failed', async () => {
+    const response = await post(
+      '/agents/me/kyc',
+      { identityType: 'NIN', identityNumber: '12345678908' },
+      { token },
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(response.body.error.code, 'KYC_PROVIDER_UNAVAILABLE');
+    assert.match(response.body.error.message, /not a problem with your details/i);
+  });
+
+  it('records nothing at all — no attempt, no verdict, no status change', async () => {
+    // A recorded UNAVAILABLE would look like a failed check in the clearance
+    // record and would consume the applicant's one live submission slot.
+    const attempts = await queryOne<{ count: string }>(
+      pool,
+      'SELECT count(*)::text AS count FROM agent_kyc WHERE agent_id = $1',
+      [agentId],
+    );
+    assert.equal(attempts!.count, '0');
+
+    const agent = await queryOne<{ kyc_status: string }>(
+      pool,
+      'SELECT kyc_status FROM agents WHERE id = $1',
+      [agentId],
+    );
+    assert.equal(agent!.kyc_status, 'NOT_STARTED');
+  });
+
+  it('lets the same applicant through once the provider answers', async () => {
+    const response = await post(
+      '/agents/me/kyc',
+      { identityType: 'NIN', identityNumber: '12345678901' },
+      { token },
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.status, 'CLEARED');
+
+    // Still the first attempt: the outage cost them nothing.
+    const kyc = await queryOne<{ attempt_number: number }>(
+      pool,
+      'SELECT attempt_number FROM agent_kyc WHERE agent_id = $1 AND superseded_at IS NULL',
+      [agentId],
+    );
+    assert.equal(kyc!.attempt_number, 1);
+  });
+});
+
+describe('An unreachable vehicle authority is not an unregistered vehicle', () => {
+  /**
+   * Its own token: earlier suites revoke this agent's device and suspend them,
+   * so the shared `ctx.agentToken` is long dead by the time this runs.
+   */
+  let agentToken = '';
+
+  before(async () => {
+    agentToken = (await loginAs(ctx.agentPhone, 'FieldAgent2026', ctx.deviceId)).accessToken;
+  });
+
+  it('says the authority could not be reached, in those words', async () => {
+    const response = await get('/vehicles/lookup/ZZZ111AA', { token: ctx.adminToken });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.source, 'REGISTRY_UNAVAILABLE');
+    assert.equal(response.body.authorityConfirmed, false);
+    assert.match(response.body.message, /could not be reached/i);
+    assert.doesNotMatch(response.body.message, /no record of this vehicle was found/i);
+  });
+
+  it('says something different when the authority answers "no such vehicle"', async () => {
+    const response = await get('/vehicles/lookup/XYZ111AA', { token: ctx.adminToken });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.source, 'NOT_FOUND');
+    assert.match(response.body.message, /no record of this vehicle/i);
+  });
+
+  it('captures the vehicle but refuses to mark it authority-confirmed', async () => {
+    const response = await post(
+      '/vehicles',
+      {
+        registrationNumber: 'ZZZ111AA',
+        vehicleType: 'PRIVATE',
+        ownerName: 'Yakubu Choji',
+        ownerPhone: '+2347011777777',
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 201);
+    assert.equal(response.body.authorityConfirmed, false);
+    assert.equal(response.body.authorityOutcome, 'UNAVAILABLE');
+    assert.match(response.body.message, /could not be reached/i);
+
+    const vehicle = await queryOne<{
+      authority_verified_at: Date | null;
+      authority_lookup_outcome: string;
+      source: string;
+    }>(
+      pool,
+      `SELECT authority_verified_at, authority_lookup_outcome, source
+         FROM vehicles WHERE registration_number = 'ZZZ111AA'`,
+    );
+    assert.equal(vehicle!.authority_verified_at, null);
+    assert.equal(vehicle!.authority_lookup_outcome, 'UNAVAILABLE');
+    assert.equal(vehicle!.source, 'MANUAL_ENTRY');
+  });
+
+  it('keeps "never checked" apart from "checked, not registered"', async () => {
+    const notRegistered = await post(
+      '/vehicles',
+      {
+        registrationNumber: 'XYZ111AA',
+        vehicleType: 'PRIVATE',
+        ownerName: 'Naomi Pwajok',
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+    assert.equal(notRegistered.body.authorityOutcome, 'NOT_FOUND');
+
+    // Both are MANUAL_ENTRY, so `source` alone cannot tell them apart — which
+    // is exactly why `authority_lookup_outcome` exists.
+    const outstanding = await get('/vehicles/renewals/authority-outstanding', {
+      token: ctx.adminToken,
+    });
+    assert.equal(outstanding.status, 200);
+
+    const awaiting = outstanding.body.vehiclesAwaitingAuthority as { registration_number: string }[];
+    const plates = awaiting.map((row) => row.registration_number);
+    assert.ok(plates.includes('ZZZ111AA'), 'the unchecked vehicle is queued for checking');
+    assert.ok(!plates.includes('XYZ111AA'), 'the checked one is not — the authority answered');
+  });
+
+  it('confirms a vehicle the authority does hold', async () => {
+    const response = await post(
+      '/vehicles',
+      {
+        registrationNumber: 'JOS404AB',
+        vehicleType: 'PRIVATE',
+        ownerName: 'Ignored In Favour Of The Authority',
+      },
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.body.authorityOutcome, 'FOUND');
+    assert.equal(response.body.authorityConfirmed, true);
+
+    const vehicle = await queryOne<{ owner_name: string; authority_verified_at: Date | null }>(
+      pool,
+      `SELECT owner_name, authority_verified_at FROM vehicles WHERE registration_number = 'JOS404AB'`,
+    );
+    // PRD §21: registry data wins over manually entered data.
+    assert.equal(vehicle!.owner_name, 'Registered Owner');
+    assert.notEqual(vehicle!.authority_verified_at, null);
+  });
+
+  it('keeps the authority catch-up queue away from field agents', async () => {
+    // An agent must not be able to decide the authority has been told.
+    const response = await get('/vehicles/renewals/authority-outstanding', {
+      token: agentToken,
+      deviceId: ctx.deviceId,
+    });
+    assert.equal(response.status, 403);
+
+    const retry = await post(
+      '/vehicles/renewals/authority-retry',
+      {},
+      { token: agentToken, deviceId: ctx.deviceId },
+    );
+    assert.equal(retry.status, 403);
+  });
+
+  it('lets the back office retry telling the authority', async () => {
+    const response = await post('/vehicles/renewals/authority-retry', {}, { token: ctx.adminToken });
+
+    assert.equal(response.status, 200);
+    assert.equal(typeof response.body.attempted, 'number');
+    assert.equal(response.body.attempted, response.body.accepted + response.body.stillFailing);
+  });
+});

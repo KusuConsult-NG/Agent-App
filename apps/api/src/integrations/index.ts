@@ -5,11 +5,24 @@
  * which fact — "The grassroots platform should not silently become an
  * alternative source of truth."
  *
- * Each adapter below is an interface plus a development mock. The mock is
- * clearly labelled in every response it produces (`provider: 'mock'`), and
- * config.ts refuses to start in production while any of them is still selected.
- * Replacing a mock with the real PSIRS, VIO or NIMC integration is an
- * implementation of the interface; no calling code changes.
+ * Each integration is a contract plus at least one adapter, selected by an
+ * environment variable. Development mocks label every response they produce
+ * (`provider: 'mock'`) and `config.ts` refuses to start in production while any
+ * of them is still selected.
+ *
+ * The two integrations that speak to a live external service live in their own
+ * directories, because each has a contract worth reading on its own:
+ *
+ *   ./kyc       identity verification — five outcomes, one of which
+ *               (UNAVAILABLE) is about the provider rather than the applicant
+ *   ./vehicles  the vehicle registration authority — three outcomes, likewise
+ *   ./gateways  payment collection (see ../integrations/gateway.ts)
+ *
+ * TIN assignment and bank account verification remain mocks: both need a
+ * signed interface specification from PSIRS and the banks' verification
+ * provider respectively, and guessing at one would be worse than being honest
+ * that it is not built. The production guard in `config.ts` names both, so a
+ * deployment cannot quietly go live on them.
  */
 
 import { randomUUID, createHash } from 'node:crypto';
@@ -23,6 +36,35 @@ export const SOURCE_OF_TRUTH = {
   VEHICLE_RECORD: 'Authorised vehicle registration authority',
   IDENTITY: 'Government identity service',
 } as const;
+
+// ---------------------------------------------------------------------------
+// Identity verification (Addendum §4, §7) and the vehicle registry (PRD §21)
+// ---------------------------------------------------------------------------
+
+export {
+  kycProvider,
+  kycUnavailable,
+  HttpKycProvider,
+  MockKycProvider,
+  type KycOutcome,
+  type KycProvider,
+  type KycVerificationRequest,
+  type KycVerificationResult,
+  type LivenessResult,
+} from './kyc';
+
+export {
+  vehicleRegistry,
+  registryUnavailable,
+  HttpVehicleRegistry,
+  MockVehicleRegistry,
+  type RenewalNotification,
+  type RenewalNotificationResult,
+  type VehicleLookupOutcome,
+  type VehicleLookupResult,
+  type VehicleRecord,
+  type VehicleRegistry,
+} from './vehicles';
 
 // ---------------------------------------------------------------------------
 // TIN service (PRD §11)
@@ -102,136 +144,6 @@ class MockTinService implements TinService {
 }
 
 // ---------------------------------------------------------------------------
-// Identity/KYC provider (Addendum §4, §7)
-// ---------------------------------------------------------------------------
-
-export interface KycVerificationRequest {
-  identityType: string;
-  identityNumber: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth?: string | null;
-  phone: string;
-  selfieChecksum?: string | null;
-}
-
-export interface KycVerificationResult {
-  status: 'CLEARED' | 'FAILED' | 'UNDER_REVIEW' | 'VERIFICATION_REQUIRED';
-  reference: string;
-  livenessResult: 'PASSED' | 'FAILED' | 'MANUAL_REVIEW' | 'NOT_PERFORMED';
-  livenessScore?: number;
-  failureReason?: string;
-  provider: string;
-}
-
-export interface KycProvider {
-  verify(request: KycVerificationRequest): Promise<KycVerificationResult>;
-}
-
-class MockKycProvider implements KycProvider {
-  async verify(request: KycVerificationRequest): Promise<KycVerificationResult> {
-    // Deterministic outcome so demo and test runs are reproducible: identity
-    // numbers ending in 0 are routed to manual review, in 9 to failure.
-    const last = request.identityNumber.trim().slice(-1);
-    const reference = `MOCK-KYC-${randomUUID().slice(0, 8).toUpperCase()}`;
-
-    if (last === '9') {
-      return {
-        status: 'FAILED',
-        reference,
-        livenessResult: 'FAILED',
-        failureReason: 'Identity number could not be matched to the national record.',
-        provider: 'mock',
-      };
-    }
-    if (last === '0') {
-      return {
-        status: 'UNDER_REVIEW',
-        reference,
-        livenessResult: 'MANUAL_REVIEW',
-        livenessScore: 62,
-        provider: 'mock',
-      };
-    }
-    return {
-      status: 'CLEARED',
-      reference,
-      livenessResult: request.selfieChecksum ? 'PASSED' : 'NOT_PERFORMED',
-      livenessScore: request.selfieChecksum ? 94 : undefined,
-      provider: 'mock',
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Vehicle registry (PRD §21)
-// ---------------------------------------------------------------------------
-
-export interface VehicleLookupResult {
-  found: boolean;
-  registrationNumber?: string;
-  chassisNumber?: string;
-  engineNumber?: string;
-  make?: string;
-  model?: string;
-  vehicleType?: string;
-  vehicleClass?: string;
-  colour?: string;
-  ownerName?: string;
-  ownerPhone?: string;
-  currentExpiryDate?: string;
-  authorityReference?: string;
-  provider: string;
-}
-
-export interface VehicleRegistry {
-  lookup(registrationNumber: string): Promise<VehicleLookupResult>;
-  recordRenewal(params: {
-    registrationNumber: string;
-    expiryDate: string;
-    documentNumber: string;
-  }): Promise<{ accepted: boolean; reference: string; provider: string }>;
-}
-
-class MockVehicleRegistry implements VehicleRegistry {
-  async lookup(registrationNumber: string): Promise<VehicleLookupResult> {
-    const normalised = registrationNumber.trim().toUpperCase().replace(/\s+/g, '');
-    // Plateau plate prefixes; anything else is treated as unknown to the
-    // registry so the "not found" path is exercised in development.
-    if (!/^(JOS|PLT|BKL|MNG|PKN|SHD|LNG|WSE|BSA|BKS|KNM|KNK|RYM|QNP|MKG|JSE|JSS)/.test(normalised)) {
-      return { found: false, provider: 'mock' };
-    }
-    return {
-      found: true,
-      registrationNumber: normalised,
-      chassisNumber: `CHS${createHash('sha1').update(normalised).digest('hex').slice(0, 14).toUpperCase()}`,
-      engineNumber: `ENG${createHash('sha1').update(`e${normalised}`).digest('hex').slice(0, 12).toUpperCase()}`,
-      make: 'Toyota',
-      model: 'Hilux',
-      vehicleType: 'PRIVATE',
-      vehicleClass: 'SALOON',
-      colour: 'White',
-      ownerName: 'Registered Owner',
-      currentExpiryDate: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
-      authorityReference: `MOCK-VEH-${normalised}`,
-      provider: 'mock',
-    };
-  }
-
-  async recordRenewal(params: {
-    registrationNumber: string;
-    expiryDate: string;
-    documentNumber: string;
-  }): Promise<{ accepted: boolean; reference: string; provider: string }> {
-    return {
-      accepted: true,
-      reference: `MOCK-RNW-${params.documentNumber}`,
-      provider: 'mock',
-    };
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Bank account verification (Addendum §16 — commission accounts only)
 // ---------------------------------------------------------------------------
 
@@ -279,8 +191,6 @@ class MockBankVerification implements BankVerificationService {
 // ---------------------------------------------------------------------------
 
 export const tinService: TinService = new MockTinService();
-export const kycProvider: KycProvider = new MockKycProvider();
-export const vehicleRegistry: VehicleRegistry = new MockVehicleRegistry();
 export const bankVerification: BankVerificationService = new MockBankVerification();
 
 export function integrationStatus() {

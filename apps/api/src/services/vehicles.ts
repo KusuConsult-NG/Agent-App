@@ -13,17 +13,22 @@
 
 import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
-import { vehicleRegistry } from '../integrations';
+import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
 import { queueNotification } from './notifications';
 
 export interface VehicleLookup {
-  source: 'PLATFORM' | 'AUTHORITY' | 'NOT_FOUND';
+  /**
+   * Where the answer came from. `REGISTRY_UNAVAILABLE` is not an answer: the
+   * authority could not be asked, and the agent is told that in those words
+   * rather than "no such vehicle".
+   */
+  source: 'PLATFORM' | 'AUTHORITY' | 'NOT_FOUND' | 'REGISTRY_UNAVAILABLE';
   vehicle: Record<string, unknown> | null;
   authorityConfirmed: boolean;
   message: string;
@@ -54,7 +59,23 @@ export async function lookupVehicle(db: Db, registrationNumber: string): Promise
   }
 
   const authority = await vehicleRegistry.lookup(normalised);
-  if (!authority.found) {
+
+  if (authority.outcome === 'UNAVAILABLE') {
+    // Saying "not found" here would be a lie with consequences: the agent would
+    // capture the vehicle manually and the platform would hold an unverified
+    // record indistinguishable from one for a genuinely unregistered vehicle.
+    return {
+      source: 'REGISTRY_UNAVAILABLE',
+      vehicle: null,
+      authorityConfirmed: false,
+      message:
+        'The vehicle authority could not be reached, so we cannot say whether this vehicle ' +
+        'is registered. Try again shortly. If the renewal cannot wait, capture the details ' +
+        'manually — the record will be flagged for checking once the authority is back.',
+    };
+  }
+
+  if (authority.outcome === 'NOT_FOUND') {
     return {
       source: 'NOT_FOUND',
       vehicle: null,
@@ -67,7 +88,7 @@ export async function lookupVehicle(db: Db, registrationNumber: string): Promise
 
   return {
     source: 'AUTHORITY',
-    vehicle: authority as unknown as Record<string, unknown>,
+    vehicle: authority.vehicle as unknown as Record<string, unknown>,
     authorityConfirmed: true,
     message: 'Vehicle found at the vehicle authority. Confirm the owner before proceeding.',
   };
@@ -88,15 +109,41 @@ export interface VehicleCaptureInput {
   taxpayerId?: string;
 }
 
+export interface VehicleCaptureResult {
+  vehicleId: string;
+  source: string;
+  authorityConfirmed: boolean;
+  /** What the authority actually said — or that it could not be asked. */
+  authorityOutcome: VehicleLookupOutcome;
+  message: string;
+}
+
+/**
+ * Capture or update a vehicle, consulting the authority first (PRD §21).
+ *
+ * Three outcomes, and only one of them may set `authority_verified_at`:
+ *
+ *   FOUND        registry data wins over agent-typed data; record confirmed
+ *   NOT_FOUND    the authority says it holds no such vehicle; manual entry
+ *   UNAVAILABLE  we could not ask; manual entry, flagged for re-checking
+ *
+ * The last two both produce a MANUAL_ENTRY record, but they are not the same
+ * fact and `authority_lookup_outcome` keeps them apart, so a record captured
+ * during an outage can be found again and re-verified.
+ */
 export async function upsertVehicle(params: {
   input: VehicleCaptureInput;
   actorId: string;
   actorRole: string;
-}): Promise<{ vehicleId: string; source: string; authorityConfirmed: boolean }> {
+}): Promise<VehicleCaptureResult> {
   const normalised = params.input.registrationNumber.trim().toUpperCase().replace(/\s+/g, '');
 
   return withTransaction(async (client) => {
     const authority = await vehicleRegistry.lookup(normalised);
+    const found = authority.outcome === 'FOUND';
+    const record = authority.vehicle;
+    const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';
+    const message = captureMessage(authority.outcome);
 
     const existing = await queryOne<{ id: string; source: string }>(
       client,
@@ -111,21 +158,29 @@ export async function upsertVehicle(params: {
                 owner_phone = COALESCE($3, owner_phone),
                 authority_reference = COALESCE($4, authority_reference),
                 authority_verified_at = CASE WHEN $5 THEN now() ELSE authority_verified_at END,
-                current_expiry_date = COALESCE($6, current_expiry_date)
+                current_expiry_date = COALESCE($6, current_expiry_date),
+                -- An outage must not downgrade a record the authority has
+                -- already confirmed: only a real answer overwrites one.
+                authority_lookup_outcome = CASE WHEN $7 = 'UNAVAILABLE'
+                                                 AND authority_lookup_outcome = 'FOUND'
+                                                THEN authority_lookup_outcome ELSE $7 END
           WHERE id = $1`,
         [
           existing.id,
           params.input.taxpayerId ?? null,
           params.input.ownerPhone ?? null,
-          authority.authorityReference ?? null,
-          authority.found,
-          authority.currentExpiryDate ?? null,
+          record?.authorityReference ?? null,
+          found,
+          record?.currentExpiryDate ?? null,
+          authority.outcome,
         ],
       );
       return {
         vehicleId: existing.id,
         source: existing.source,
-        authorityConfirmed: authority.found,
+        authorityConfirmed: found,
+        authorityOutcome: authority.outcome,
+        message,
       };
     }
 
@@ -135,26 +190,28 @@ export async function upsertVehicle(params: {
       `INSERT INTO vehicles
          (taxpayer_id, registration_number, chassis_number, engine_number, make, model,
           year_of_manufacture, vehicle_type, vehicle_class, colour, owner_name, owner_phone,
-          source, authority_reference, authority_verified_at, current_expiry_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          source, authority_reference, authority_verified_at, current_expiry_date,
+          authority_lookup_outcome)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        RETURNING id`,
       [
         params.input.taxpayerId ?? null,
         normalised,
-        authority.chassisNumber ?? params.input.chassisNumber ?? null,
-        authority.engineNumber ?? params.input.engineNumber ?? null,
-        authority.make ?? params.input.make ?? null,
-        authority.model ?? params.input.model ?? null,
+        record?.chassisNumber ?? params.input.chassisNumber ?? null,
+        record?.engineNumber ?? params.input.engineNumber ?? null,
+        record?.make ?? params.input.make ?? null,
+        record?.model ?? params.input.model ?? null,
         params.input.yearOfManufacture ?? null,
-        authority.vehicleType ?? params.input.vehicleType,
-        authority.vehicleClass ?? params.input.vehicleClass ?? null,
-        authority.colour ?? params.input.colour ?? null,
-        authority.ownerName ?? params.input.ownerName,
-        params.input.ownerPhone ?? authority.ownerPhone ?? null,
-        authority.found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY',
-        authority.authorityReference ?? null,
-        authority.found ? new Date() : null,
-        authority.currentExpiryDate ?? null,
+        record?.vehicleType ?? params.input.vehicleType,
+        record?.vehicleClass ?? params.input.vehicleClass ?? null,
+        record?.colour ?? params.input.colour ?? null,
+        record?.ownerName ?? params.input.ownerName,
+        params.input.ownerPhone ?? record?.ownerPhone ?? null,
+        source,
+        record?.authorityReference ?? null,
+        found ? new Date() : null,
+        record?.currentExpiryDate ?? null,
+        authority.outcome,
       ],
     );
 
@@ -166,17 +223,37 @@ export async function upsertVehicle(params: {
       entityId: vehicle!.id,
       newValue: {
         registrationNumber: normalised,
-        source: authority.found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY',
-        authorityConfirmed: authority.found,
+        source,
+        authorityConfirmed: found,
+        authorityOutcome: authority.outcome,
+        // Recorded so the audit trail says why a vehicle went in unverified.
+        authorityReason: authority.reason ?? null,
+        registryProvider: authority.provider,
       },
     });
 
     return {
       vehicleId: vehicle!.id,
-      source: authority.found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY',
-      authorityConfirmed: authority.found,
+      source,
+      authorityConfirmed: found,
+      authorityOutcome: authority.outcome,
+      message,
     };
   });
+}
+
+function captureMessage(outcome: VehicleLookupOutcome): string {
+  switch (outcome) {
+    case 'FOUND':
+      return 'Vehicle recorded and confirmed against the vehicle authority.';
+    case 'NOT_FOUND':
+      return 'Vehicle recorded from manual entry. The vehicle authority holds no record of it.';
+    case 'UNAVAILABLE':
+      return (
+        'Vehicle recorded from manual entry. The vehicle authority could not be reached, ' +
+        'so this record has NOT been confirmed and is flagged for checking.'
+      );
+  }
 }
 
 /**
@@ -410,11 +487,32 @@ export async function completeRenewal(params: {
 
     // Tell the authoritative registry the renewal happened — the platform
     // records the service, the authority remains the source of truth (§82).
-    await vehicleRegistry.recordRenewal({
+    //
+    // The taxpayer has paid and is entitled to the document either way, so a
+    // failure here does not fail the renewal. It is written down instead:
+    // an unacknowledged renewal is a fact the government has to chase, and
+    // `retryAuthorityNotifications` below is how it gets chased.
+    const notification = await vehicleRegistry.recordRenewal({
       registrationNumber: renewal.registration_number,
       expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
       documentNumber: document.documentNumber,
     });
+
+    await client.query(
+      `UPDATE vehicle_renewals
+          SET authority_notification_status = $2,
+              authority_notification_reference = $3,
+              authority_notification_reason = $4,
+              authority_notification_attempts = authority_notification_attempts + 1,
+              authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
+        WHERE id = $1`,
+      [
+        renewal.id,
+        notification.accepted ? 'ACCEPTED' : 'FAILED',
+        notification.reference || null,
+        notification.reason ?? null,
+      ],
+    );
 
     await recordAudit(client, {
       actorId: params.actorId,
@@ -426,6 +524,8 @@ export async function completeRenewal(params: {
         documentNumber: document.documentNumber,
         expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
         registrationNumber: renewal.registration_number,
+        authorityNotified: notification.accepted,
+        authorityNotificationReason: notification.reason ?? null,
       },
     });
 
@@ -474,6 +574,129 @@ export async function listVehicles(db: Db, params: { taxpayerId?: string; q?: st
         AND ($2::text IS NULL OR v.registration_number ILIKE '%' || upper($2) || '%')
       ORDER BY v.created_at DESC LIMIT $3`,
     [params.taxpayerId ?? null, params.q ?? null, params.limit ?? 50],
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Catching up with the authority after an outage
+// ---------------------------------------------------------------------------
+//
+// Both of the functions below exist because the registry adapter can now say
+// "I could not reach the authority" instead of guessing. That honesty is only
+// worth having if something acts on it later, so these are the something.
+
+/**
+ * Re-send renewals the vehicle authority has not acknowledged (PRD §82).
+ *
+ * Safe to run repeatedly: a renewal that has already been ACCEPTED is not
+ * selected, and the authority is expected to treat a repeated notification for
+ * the same document number as the same renewal.
+ */
+export async function retryAuthorityNotifications(params: {
+  actorId: string;
+  actorRole: string;
+  limit?: number;
+}): Promise<{ attempted: number; accepted: number; stillFailing: number }> {
+  const outstanding = await query<{
+    id: string;
+    registration_number: string;
+    expiry_date: Date;
+    document_number: string;
+  }>(
+    pool,
+    `SELECT r.id, v.registration_number, r.expiry_date, r.document_number
+       FROM vehicle_renewals r JOIN vehicles v ON v.id = r.vehicle_id
+      WHERE r.authority_notification_status <> 'ACCEPTED'
+        AND r.status = 'COMPLETED'
+        AND r.document_number IS NOT NULL
+      ORDER BY r.created_at
+      LIMIT $1`,
+    [params.limit ?? 100],
+  );
+
+  let accepted = 0;
+
+  for (const renewal of outstanding) {
+    const notification = await vehicleRegistry.recordRenewal({
+      registrationNumber: renewal.registration_number,
+      expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
+      documentNumber: renewal.document_number,
+    });
+    if (notification.accepted) accepted += 1;
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE vehicle_renewals
+            SET authority_notification_status = $2,
+                authority_notification_reference = COALESCE($3, authority_notification_reference),
+                authority_notification_reason = $4,
+                authority_notification_attempts = authority_notification_attempts + 1,
+                authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
+          WHERE id = $1`,
+        [
+          renewal.id,
+          notification.accepted ? 'ACCEPTED' : 'FAILED',
+          notification.reference || null,
+          notification.reason ?? null,
+        ],
+      );
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'vehicle.authority_notification_retried',
+        entityType: 'vehicle_renewal',
+        entityId: renewal.id,
+        newValue: {
+          registrationNumber: renewal.registration_number,
+          documentNumber: renewal.document_number,
+          accepted: notification.accepted,
+          reason: notification.reason ?? null,
+        },
+      });
+    });
+  }
+
+  return {
+    attempted: outstanding.length,
+    accepted,
+    stillFailing: outstanding.length - accepted,
+  };
+}
+
+/** Completed renewals the vehicle authority has not acknowledged. */
+export async function outstandingAuthorityNotifications(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT r.id, v.registration_number, r.document_number, r.expiry_date,
+            r.authority_notification_status, r.authority_notification_reason,
+            r.authority_notification_attempts, r.created_at
+       FROM vehicle_renewals r JOIN vehicles v ON v.id = r.vehicle_id
+      WHERE r.authority_notification_status <> 'ACCEPTED'
+        AND r.status = 'COMPLETED'
+      ORDER BY r.created_at
+      LIMIT $1`,
+    [limit],
+  );
+}
+
+/**
+ * Vehicles captured while the authority was unreachable.
+ *
+ * These are the records that were never actually checked. They are not the same
+ * as vehicles the authority confirmed it holds no record of, and this is the
+ * list that exists so nobody has to remember the difference.
+ */
+export async function vehiclesAwaitingAuthority(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT v.id, v.registration_number, v.owner_name, v.make, v.model,
+            v.created_at, v.source
+       FROM vehicles v
+      WHERE v.authority_lookup_outcome = 'UNAVAILABLE'
+      ORDER BY v.created_at
+      LIMIT $1`,
+    [limit],
   );
 }
 
