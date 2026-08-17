@@ -1337,6 +1337,98 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
 
     assert.equal(response.status, 422);
   });
+
+  it('creates the vehicle, and checks it with the authority, on sync', async () => {
+    // A vehicle captured with no signal is not permanently unverified: the
+    // authority is consulted at sync time, which is when there is a connection.
+    const token = (await loginAs(ctx.agentPhone, 'FieldAgent2026', ctx.deviceId)).accessToken;
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-vehicle-000001',
+            draftType: 'VEHICLE_CAPTURE',
+            capturedAt: new Date(Date.now() - 7_200_000).toISOString(),
+            payload: {
+              registrationNumber: 'JOS777CD',
+              vehicleType: 'COMMERCIAL',
+              ownerName: 'Captured Offline',
+              ownerPhone: '+2347044888888',
+            },
+          },
+        ],
+      },
+      { token, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const result = response.body.results[0];
+    assert.equal(result.status, 'SYNCED');
+    assert.equal(result.entityType, 'vehicle');
+    assert.ok(result.entityId, 'the server assigns the id, not the phone');
+
+    const vehicle = await queryOne<{
+      owner_name: string;
+      authority_lookup_outcome: string;
+      authority_verified_at: Date | null;
+    }>(
+      pool,
+      `SELECT owner_name, authority_lookup_outcome, authority_verified_at
+         FROM vehicles WHERE registration_number = 'JOS777CD'`,
+    );
+    // JOS is a Plateau prefix, so the mock registry holds it — and the
+    // authority's data wins over what the agent typed in the field.
+    assert.equal(vehicle!.authority_lookup_outcome, 'FOUND');
+    assert.equal(vehicle!.owner_name, 'Registered Owner');
+    assert.notEqual(vehicle!.authority_verified_at, null);
+  });
+
+  it('rejects a capture it cannot process instead of storing it silently', async () => {
+    // The old behaviour reported "stored for processing" for any unhandled
+    // type, the phone deleted its copy on the next sync, and nothing ever
+    // processed it. Every draft the server keeps must now reach a real outcome.
+    const token = (await loginAs(ctx.agentPhone, 'FieldAgent2026', ctx.deviceId)).accessToken;
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-vehicle-000002',
+            draftType: 'VEHICLE_CAPTURE',
+            capturedAt: new Date().toISOString(),
+            // No owner name and a registration too short to be one.
+            payload: { registrationNumber: 'X', vehicleType: 'PRIVATE' },
+          },
+        ],
+      },
+      { token, deviceId: ctx.deviceId },
+    );
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.results[0].status, 'REJECTED');
+    assert.match(response.body.results[0].message, /could not be accepted/i);
+
+    const stored = await queryOne<{ status: string; rejection_reason: string | null }>(
+      pool,
+      `SELECT status, rejection_reason FROM offline_drafts
+        WHERE client_reference = 'offline-vehicle-000002'`,
+    );
+    // Kept with its reason, so a lost capture can be traced rather than guessed.
+    assert.equal(stored!.status, 'REJECTED');
+    assert.ok((stored!.rejection_reason ?? '').length > 0);
+  });
+
+  it('leaves no draft in a state nothing will ever process', async () => {
+    const limbo = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM offline_drafts
+        WHERE status NOT IN ('SYNCED', 'REJECTED')`,
+    );
+    assert.equal(limbo!.count, '0');
+  });
 });
 
 describe('Government reporting (PRD §37, §38, §39)', () => {

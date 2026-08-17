@@ -8,6 +8,8 @@ import { idempotent } from '../middleware/idempotency';
 import { asyncHandler, emailSchema, phoneSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import { badRequest, forbidden } from '../lib/errors';
 import * as taxpayers from '../services/taxpayers';
+import * as vehicles from '../services/vehicles';
+import { vehicleCaptureSchema } from './vehicles';
 import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives } from '../services/incentives';
 import { queueNotification } from '../services/notifications';
@@ -244,6 +246,24 @@ draftRouter.use(authenticate);
  * payment member, so an offline device cannot queue a payment at all
  * (Addendum §23 financial rule). Server ids are assigned on sync (PRD §30).
  */
+/**
+ * Accept captures taken without a connection (PRD §30; Addendum §23).
+ *
+ * Two rules govern this endpoint, and both are about what it refuses.
+ *
+ * First, the draft types. Every one is a record of something the agent
+ * observed; none of them moves money. There is no payment draft type, and the
+ * enum is the enforcement — a payment cannot be expressed here at all, so no
+ * amount of client compromise can replay one.
+ *
+ * Second, every draft that is stored must actually be acted on. A draft type
+ * with no handler used to be inserted and reported as "stored for processing",
+ * which was not true: nothing processed it, the phone deleted its copy on the
+ * next sync, and the capture was lost while every message said it had worked.
+ * A type this endpoint cannot complete is now rejected in the agent's face.
+ */
+const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE'] as const;
+
 draftRouter.post(
   '/sync',
   requirePermission('taxpayer:create'),
@@ -254,12 +274,7 @@ draftRouter.post(
         .array(
           z.object({
             clientReference: z.string().min(6).max(120),
-            draftType: z.enum([
-              'TAXPAYER_REGISTRATION',
-              'SERVICE_REQUEST',
-              'VEHICLE_CAPTURE',
-              'DOCUMENT_CAPTURE',
-            ]),
+            draftType: z.enum(DRAFT_TYPES),
             payload: z.record(z.unknown()),
             capturedAt: z.string().datetime(),
           }),
@@ -280,10 +295,16 @@ draftRouter.post(
 
       for (const draft of data.drafts) {
         // The client reference is the idempotency key: replaying a sync after a
-        // dropped connection cannot create the taxpayer twice.
-        const existing = await queryOne<{ id: string; status: string; result_entity_id: string | null }>(
+        // dropped connection cannot create the record twice.
+        const existing = await queryOne<{
+          id: string;
+          status: string;
+          result_entity_type: string | null;
+          result_entity_id: string | null;
+        }>(
           pool,
-          'SELECT id, status, result_entity_id FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2',
+          `SELECT id, status, result_entity_type, result_entity_id
+             FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
           [agentId, draft.clientReference],
         );
 
@@ -291,6 +312,7 @@ draftRouter.post(
           results.push({
             clientReference: draft.clientReference,
             status: 'DUPLICATE',
+            entityType: existing.result_entity_type ?? undefined,
             entityId: existing.result_entity_id ?? undefined,
             message: 'This draft was already synchronised. It has not been duplicated.',
           });
@@ -312,24 +334,43 @@ draftRouter.post(
           ],
         );
 
-        if (draft.draftType === 'TAXPAYER_REGISTRATION') {
-          const parsed = taxpayerInputSchema.safeParse(draft.payload);
-          if (!parsed.success) {
-            await pool.query(
-              `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
-              [stored!.id, parsed.error.issues.map((issue) => issue.message).join('; ')],
-            );
-            results.push({
-              clientReference: draft.clientReference,
-              status: 'REJECTED',
-              message: `Draft could not be accepted: ${parsed.error.issues
-                .map((issue) => issue.message)
-                .join('; ')}`,
-            });
-            continue;
-          }
+        const reject = async (message: string) => {
+          await pool.query(
+            `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
+            [stored!.id, message],
+          );
+          results.push({ clientReference: draft.clientReference, status: 'REJECTED', message });
+        };
 
-          try {
+        const accept = async (entityType: string, entityId: string, message: string) => {
+          await pool.query(
+            `UPDATE offline_drafts
+                SET status = 'SYNCED', synced_at = now(),
+                    result_entity_type = $3, result_entity_id = $2
+              WHERE id = $1`,
+            [stored!.id, entityId, entityType],
+          );
+          results.push({
+            clientReference: draft.clientReference,
+            status: 'SYNCED',
+            entityType,
+            entityId,
+            message,
+          });
+        };
+
+        try {
+          if (draft.draftType === 'TAXPAYER_REGISTRATION') {
+            const parsed = taxpayerInputSchema.safeParse(draft.payload);
+            if (!parsed.success) {
+              await reject(
+                `Draft could not be accepted: ${parsed.error.issues
+                  .map((issue) => issue.message)
+                  .join('; ')}`,
+              );
+              continue;
+            }
+
             const created = await taxpayers.registerTaxpayer({
               input: parsed.data,
               actorId: req.auth!.userId,
@@ -338,37 +379,49 @@ draftRouter.post(
               acknowledgeDuplicates: parsed.data.acknowledgeDuplicates,
               ipAddress: req.clientIp,
             });
-            await pool.query(
-              `UPDATE offline_drafts
-                  SET status = 'SYNCED', synced_at = now(),
-                      result_entity_type = 'taxpayer', result_entity_id = $2
-                WHERE id = $1`,
-              [stored!.id, created.taxpayerId],
-            );
-            results.push({
-              clientReference: draft.clientReference,
-              status: 'SYNCED',
-              entityType: 'taxpayer',
-              entityId: created.taxpayerId,
-              message: created.tin
+            await accept(
+              'taxpayer',
+              created.taxpayerId,
+              created.tin
                 ? `Registered with TIN ${created.tin}.`
                 : 'Registered. TIN assignment is still in progress.',
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            await pool.query(
-              `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
-              [stored!.id, message],
             );
-            results.push({ clientReference: draft.clientReference, status: 'REJECTED', message });
+            continue;
           }
-        } else {
-          results.push({
-            clientReference: draft.clientReference,
-            status: 'PENDING_SYNC',
-            entityId: stored!.id,
-            message: 'Draft stored for processing.',
-          });
+
+          if (draft.draftType === 'VEHICLE_CAPTURE') {
+            const parsed = vehicleCaptureSchema.safeParse(draft.payload);
+            if (!parsed.success) {
+              await reject(
+                `Draft could not be accepted: ${parsed.error.issues
+                  .map((issue) => issue.message)
+                  .join('; ')}`,
+              );
+              continue;
+            }
+
+            // The authority is consulted now, at sync time, because now is when
+            // there is a connection. A vehicle captured in the field therefore
+            // still gets checked — it is not permanently unverified just for
+            // having been recorded offline.
+            const captured = await vehicles.upsertVehicle({
+              input: parsed.data,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+            });
+            await accept('vehicle', captured.vehicleId, captured.message);
+            continue;
+          }
+
+          // Unreachable while every member of DRAFT_TYPES is handled above. If a
+          // type is ever added without a handler, this rejects it loudly instead
+          // of storing it where nothing will ever look.
+          await reject(
+            `This version of the platform cannot process a "${draft.draftType}" capture. ` +
+              'It has not been discarded — quote this reference to support.',
+          );
+        } catch (error) {
+          await reject(error instanceof Error ? error.message : 'Unknown error');
         }
       }
 

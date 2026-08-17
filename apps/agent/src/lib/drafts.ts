@@ -11,11 +11,54 @@
  * to give the offline path no way to express one.
  */
 
-export type DraftType =
-  | 'TAXPAYER_REGISTRATION'
-  | 'SERVICE_REQUEST'
-  | 'VEHICLE_CAPTURE'
-  | 'DOCUMENT_CAPTURE';
+/**
+ * What may be captured without a connection.
+ *
+ * Every type here is a *record of something observed* — who the taxpayer is,
+ * what the vehicle is. None of them moves money, and that is the whole
+ * selection rule. There is no payment draft type, and adding one would break
+ * Addendum §23 no matter how carefully it were handled.
+ */
+export type DraftType = 'TAXPAYER_REGISTRATION' | 'VEHICLE_CAPTURE';
+
+/**
+ * Fields that must never appear in a queued payload.
+ *
+ * A belt-and-braces check on top of the type restriction above. Offline capture
+ * is the one place in the app where data is written by the agent's own device
+ * and replayed later; if a payment-shaped payload ever reached this queue it
+ * would be replayed against the server as though the agent had authorised it.
+ * The type system already forbids it — this refuses it at runtime too.
+ */
+const FINANCIAL_KEYS = [
+  'amount',
+  'amountkobo',
+  'totalkobo',
+  'paymentid',
+  'paymentreference',
+  'paymentstatus',
+  'transactionid',
+  'gatewayreference',
+  'receiptnumber',
+];
+
+export class FinancialDraftRefused extends Error {
+  constructor(key: string) {
+    super(
+      `Refusing to queue a draft containing "${key}". Offline mode must never ` +
+        'authorise a government revenue payment (Addendum §23).',
+    );
+    this.name = 'FinancialDraftRefused';
+  }
+}
+
+function assertNotFinancial(payload: Record<string, unknown>): void {
+  for (const key of Object.keys(payload)) {
+    if (FINANCIAL_KEYS.includes(key.toLowerCase().replace(/[_-]/g, ''))) {
+      throw new FinancialDraftRefused(key);
+    }
+  }
+}
 
 export interface Draft {
   clientReference: string;
@@ -63,6 +106,8 @@ export async function saveDraft(
   draftType: DraftType,
   payload: Record<string, unknown>,
 ): Promise<Draft> {
+  assertNotFinancial(payload);
+
   const draft: Draft = {
     clientReference: `draft-${crypto.randomUUID()}`,
     draftType,
@@ -152,6 +197,38 @@ export async function syncDrafts(
   }
 
   return outcome;
+}
+
+/**
+ * Submit a capture, keeping it on the phone if PSIRS cannot be reached.
+ *
+ * This is what makes offline collection work in the field rather than in
+ * principle. Before it, an agent standing in front of a citizen with no signal
+ * had to know to press "Save for later" *instead* of "Register"; pressing
+ * "Register" produced a network error and the capture was theirs to retype.
+ *
+ * Only a connectivity failure is caught. A rejection — a duplicate, a missing
+ * field, an unconfirmable TIN — is the server answering, and it is rethrown so
+ * the agent sees it and fixes it. Queueing a rejected capture would just defer
+ * the same rejection and lose the chance to correct it while the citizen is
+ * still standing there.
+ */
+export async function submitOrQueue<T>(
+  draftType: DraftType,
+  payload: Record<string, unknown>,
+  send: () => Promise<T>,
+  isConnectivityFailure: (error: unknown) => boolean,
+): Promise<{ sent: true; result: T } | { sent: false; draft: Draft }> {
+  // Refuse a financial payload before either path, so it can neither be sent
+  // as a draft nor silently fall through to the queue on a flaky connection.
+  assertNotFinancial(payload);
+
+  try {
+    return { sent: true, result: await send() };
+  } catch (error) {
+    if (!isConnectivityFailure(error)) throw error;
+    return { sent: false, draft: await saveDraft(draftType, payload) };
+  }
 }
 
 /** Ask the browser to retry the sync when connectivity returns. */

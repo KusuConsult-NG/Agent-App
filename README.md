@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 265 tests: unit, integration, agent scope, adapters
+npm test        # 291 tests: API (268) + agent PWA offline queue (23)
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 265 tests, including every database-level integrity control |
+| `npm test` | All 291 tests — every database-level integrity control, and the PWA offline capture queue |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -287,13 +287,59 @@ Installable, mobile-first, and honest about connectivity. It distinguishes
 because on a weak rural link `navigator.onLine` still reports `true`, and an
 agent who believes they are fully online will start a payment that hangs.
 
-Offline, an agent can capture taxpayer registrations, which queue in IndexedDB
-under a client-generated reference that doubles as the server's idempotency key.
-There is no offline draft type for a payment — the surest way to honour
-"offline mode must never authorize government revenue payment" is to give the
-offline path no way to express one. The service worker refuses to serve any
-financial endpoint from cache; offline, those fail loudly with `moneyStatus:
-NOT_DEBITED`.
+### Collecting without a connection
+
+Plateau's grassroots revenue work happens where the network is worst, so the app
+collects data with no signal at all. Two kinds of capture work offline —
+**taxpayer registration** and **vehicle capture** — and both follow the same
+rule: *the agent should never have to think about the network.*
+
+Pressing **Register** offline does not fail. The capture is written to IndexedDB
+under a client-generated reference that doubles as the server's idempotency key,
+and the agent is told plainly what has and has not happened. It syncs by itself
+when the connection returns, through Background Sync where the browser has it
+and on reconnect where it does not, and the server assigns the real identifiers
+(PRD §30).
+
+What is *not* caught is a rejection. A duplicate, a missing field, a TIN that
+could not be confirmed — those are PSIRS answering, and they are shown to the
+agent immediately, because the moment to correct a capture is while the citizen
+is still standing there. `isConnectivityFailure` draws that line, and it is
+narrow on purpose: a 503 from an *upstream* service (`TIN_SERVICE_UNAVAILABLE`,
+`KYC_PROVIDER_UNAVAILABLE`) is a real reply about a third party, not a lost
+connection.
+
+The forms work offline because the service worker caches what they need — LGAs,
+wards, the revenue catalogue — while refusing to cache any financial endpoint.
+Offline, those fail loudly with `moneyStatus: NOT_DEBITED`, because a cached
+"PAYMENT SUCCESSFUL" screen is worse than no screen.
+
+**Offline mode cannot authorise a payment.** There is no draft type for one, so
+it is inexpressible; and because the queue is the single place where the agent's
+own device writes data the server later replays, there is a runtime guard on top
+of the type system: a payload carrying `amountKobo`, `paymentId`,
+`gatewayReference`, `receiptNumber` or anything of that shape is refused before
+it is either sent or stored. Both halves are tested.
+
+Every stored draft reaches a real outcome. A draft the server cannot process is
+rejected in the agent's face with its reason kept — never stored as "pending"
+where nothing will look at it again, which is a lost capture wearing the costume
+of a successful one.
+
+**Losing signal never signs an agent out.** A refresh that cannot reach PSIRS
+tells us nothing about whether the session is still valid, and throwing the
+agent out on that guess would strand them — signing back in needs the very
+connection that is missing. Only a refusal ends a session.
+
+One limitation worth stating plainly: the refresh token lives in
+`sessionStorage`, so **closing the app ends the session**, and an agent who
+reopens it with no signal cannot sign in and cannot start new captures (queued
+drafts are safe — they are in IndexedDB and sync later). That is a deliberate
+security choice from Addendum §22, not an oversight. Moving the token to
+`localStorage` would let an agent reopen and keep working offline, at the cost
+of a lost phone carrying a usable refresh token; device binding and server-side
+revocation limit but do not eliminate that. It is a government decision, so it
+has not been changed unilaterally.
 
 If the browser closes mid-payment, reopening the app and reading the transaction
 recovers the authoritative state from the server, including the receipt.

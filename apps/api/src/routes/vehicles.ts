@@ -38,25 +38,32 @@ vehicleRouter.get(
   ),
 );
 
+/**
+ * A captured vehicle. Exported because the offline draft queue replays exactly
+ * this shape on sync, and one schema means a capture that is valid in the field
+ * cannot become invalid when it reaches PSIRS hours later.
+ */
+export const vehicleCaptureSchema = z.object({
+  registrationNumber: z.string().min(4).max(20),
+  chassisNumber: z.string().max(40).optional(),
+  engineNumber: z.string().max(40).optional(),
+  make: z.string().max(60).optional(),
+  model: z.string().max(60).optional(),
+  yearOfManufacture: z.number().int().min(1950).max(new Date().getFullYear() + 1).optional(),
+  vehicleType: z.string().min(2).max(40),
+  vehicleClass: z.string().max(40).optional(),
+  colour: z.string().max(40).optional(),
+  ownerName: z.string().min(2).max(150),
+  ownerPhone: z.string().max(20).optional(),
+  taxpayerId: uuidSchema.optional(),
+});
+
 vehicleRouter.post(
   '/',
   requirePermission('vehicle:renew'),
   requireActiveAgent(),
   validateBody(
-    z.object({
-      registrationNumber: z.string().min(4).max(20),
-      chassisNumber: z.string().max(40).optional(),
-      engineNumber: z.string().max(40).optional(),
-      make: z.string().max(60).optional(),
-      model: z.string().max(60).optional(),
-      yearOfManufacture: z.number().int().min(1950).max(new Date().getFullYear() + 1).optional(),
-      vehicleType: z.string().min(2).max(40),
-      vehicleClass: z.string().max(40).optional(),
-      colour: z.string().max(40).optional(),
-      ownerName: z.string().min(2).max(150),
-      ownerPhone: z.string().max(20).optional(),
-      taxpayerId: uuidSchema.optional(),
-    }),
+    vehicleCaptureSchema,
     async (req, res, data) => {
       const result = await vehicles.upsertVehicle({
         input: data,

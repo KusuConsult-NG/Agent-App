@@ -11,9 +11,15 @@
  */
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import {
+  ApiRequestError,
+  api,
+  isConnectivityFailure,
+  newIdempotencyKey,
+  type ApiError,
+} from '../lib/api';
 import type { ConnectionState } from '../lib/device';
-import { saveDraft } from '../lib/drafts';
+import { saveDraft, submitOrQueue } from '../lib/drafts';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface TaxpayerSummary {
@@ -220,12 +226,26 @@ export function RegisterTaxpayerScreen({
     setBusy(true);
     setError(null);
     try {
-      const response = await api.post<{ taxpayerId: string; tin: string | null }>(
-        '/taxpayers',
-        payload(acknowledgeDuplicates),
-        newIdempotencyKey('taxpayer'),
+      // One idempotency key per attempt, reused if this ends up queued: syncing
+      // a draft that in fact reached the server cannot register them twice.
+      const idempotencyKey = newIdempotencyKey('taxpayer');
+      const body = payload(acknowledgeDuplicates);
+
+      const outcome = await submitOrQueue(
+        'TAXPAYER_REGISTRATION',
+        body,
+        () =>
+          api.post<{ taxpayerId: string; tin: string | null }>('/taxpayers', body, idempotencyKey),
+        isConnectivityFailure,
       );
-      setResult(response);
+
+      if (outcome.sent) {
+        setResult(outcome.result);
+      } else {
+        // No signal. The capture stays on the phone rather than being lost, and
+        // the agent is told plainly what has and has not happened.
+        setSavedOffline(true);
+      }
     } catch (caught) {
       if (caught instanceof ApiRequestError) {
         setError(caught.error);
