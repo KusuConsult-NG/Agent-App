@@ -1,9 +1,16 @@
 /** Vehicles, receipts, commission wallet and profile. */
 
 import { useEffect, useState } from 'react';
-import { ApiRequestError, APP_VERSION, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import {
+  ApiRequestError,
+  APP_VERSION,
+  api,
+  isConnectivityFailure,
+  newIdempotencyKey,
+  type ApiError,
+} from '../lib/api';
 import { describeDevice } from '../lib/device';
-import { listDrafts, type Draft } from '../lib/drafts';
+import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 // ---------------------------------------------------------------- vehicles
@@ -30,6 +37,9 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
   const [revenueItemId, setRevenueItemId] = useState('');
   const [months, setMonths] = useState<6 | 12 | 24>(12);
   const [taxpayerId, setTaxpayerId] = useState('');
+  const [capturedOffline, setCapturedOffline] = useState(false);
+  const [offlineCapture, setOfflineCapture] = useState(false);
+  const [manual, setManual] = useState({ ownerName: '', vehicleType: 'PRIVATE', ownerPhone: '' });
 
   useEffect(() => {
     api
@@ -46,6 +56,44 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       setLookup(
         await api.get<VehicleLookup>(`/vehicles/lookup/${encodeURIComponent(registration.trim())}`),
       );
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      // Offline, the lookup cannot happen at all — the authority is only
+      // reachable from the server. The agent captures what they can see on the
+      // vehicle instead, and the authority is consulted when the draft syncs.
+      if (isConnectivityFailure(caught)) setOfflineCapture(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Capture a vehicle with no connection.
+   *
+   * This records only what an agent can read off the vehicle and ask its owner.
+   * It creates no obligation and takes no money: the renewal, its price and its
+   * payment all happen later, online, against a vehicle the authority has by
+   * then been asked about.
+   */
+  async function captureOffline() {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = {
+        registrationNumber: registration.trim().toUpperCase(),
+        vehicleType: manual.vehicleType,
+        ownerName: manual.ownerName.trim(),
+        ownerPhone: manual.ownerPhone.trim() || undefined,
+        taxpayerId: taxpayerId || undefined,
+      };
+      const outcome = await submitOrQueue(
+        'VEHICLE_CAPTURE',
+        body,
+        () => api.post<{ vehicleId: string }>('/vehicles', body),
+        isConnectivityFailure,
+      );
+      setCapturedOffline(true);
+      if (outcome.sent) setOfflineCapture(false);
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -114,6 +162,67 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       </div>
 
       <ErrorAlert error={error} />
+
+      {capturedOffline && (
+        <div className="card">
+          <Alert kind="warning" title="Saved on this phone">
+            <p style={{ margin: 0 }}>
+              This vehicle is stored on your phone and will be sent to PSIRS automatically when you
+              are back online. The vehicle authority has not been checked yet, and no renewal or
+              payment can be started until it is sent.
+            </p>
+          </Alert>
+        </div>
+      )}
+
+      {offlineCapture && !capturedOffline && (
+        <div className="card">
+          <h2 className="card__title">Capture without a connection</h2>
+          <Alert kind="warning" title="The vehicle authority cannot be reached">
+            <p style={{ margin: 0 }}>
+              Record what you can see on the vehicle. It will be sent — and checked against the
+              authority — as soon as you are online. You cannot take a payment for a renewal until
+              then.
+            </p>
+          </Alert>
+
+          <Field label="Owner's name" required>
+            <input
+              value={manual.ownerName}
+              onChange={(event) => setManual({ ...manual, ownerName: event.target.value })}
+              placeholder="As written on the papers"
+            />
+          </Field>
+          <Field label="Owner's phone">
+            <input
+              value={manual.ownerPhone}
+              onChange={(event) => setManual({ ...manual, ownerPhone: event.target.value })}
+              inputMode="tel"
+              placeholder="+234…"
+            />
+          </Field>
+          <Field label="Vehicle type" required>
+            <select
+              value={manual.vehicleType}
+              onChange={(event) => setManual({ ...manual, vehicleType: event.target.value })}
+            >
+              <option value="PRIVATE">Private</option>
+              <option value="COMMERCIAL">Commercial</option>
+              <option value="MOTORCYCLE">Motorcycle / Okada</option>
+              <option value="TRICYCLE">Tricycle / Keke</option>
+            </select>
+          </Field>
+
+          <button
+            type="button"
+            disabled={busy || manual.ownerName.trim().length < 2 || registration.trim().length < 4}
+            onClick={captureOffline}
+          >
+            {busy ? <Spinner /> : null}
+            Save vehicle on this phone
+          </button>
+        </div>
+      )}
 
       {lookup && (
         <div className="card">

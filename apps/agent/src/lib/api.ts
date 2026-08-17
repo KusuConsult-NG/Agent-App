@@ -39,6 +39,28 @@ export class ApiRequestError extends Error {
   }
 }
 
+/**
+ * Did this fail because we could not reach PSIRS, or because PSIRS said no?
+ *
+ * The distinction runs through the whole offline design. A rejection is an
+ * answer and the agent must act on it; a connectivity failure is not an answer
+ * at all, and the right response is to keep the work on the phone and try
+ * again later. Treating the second as the first is how a field agent loses a
+ * capture they have already taken from a citizen — or gets signed out standing
+ * in a village with no signal.
+ *
+ * Both shapes appear here: `fetch` throws a TypeError when the request never
+ * left the device, and the service worker answers 503 OFFLINE when it is
+ * controlling the page.
+ */
+export function isConnectivityFailure(error: unknown): boolean {
+  if (error instanceof ApiRequestError) {
+    return error.status === 503 && error.error.code === 'OFFLINE';
+  }
+  // A request that never reached the network at all.
+  return error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError');
+}
+
 export interface Session {
   accessToken: string;
   refreshToken: string;
@@ -169,8 +191,12 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       });
       setSession(refreshed);
       return await rawRequest<T>(path, options);
-    } catch {
-      setSession(null);
+    } catch (refreshError) {
+      // Only a refusal ends the session. If the refresh could not reach PSIRS
+      // we know nothing about whether the session is still good, and throwing
+      // the agent out on a guess would strand them: signing back in needs the
+      // very connection that is missing.
+      if (!isConnectivityFailure(refreshError)) setSession(null);
       throw error;
     }
   }
@@ -192,6 +218,14 @@ export async function login(phone: string, password: string): Promise<Session> {
   return session;
 }
 
+/**
+ * Restore a session on start-up.
+ *
+ * Opening the app without a connection must not sign the agent out. The stored
+ * identity is kept and the app opens in offline capture mode: drafts can be
+ * taken and are pushed once the connection returns, at which point the refresh
+ * either succeeds or genuinely fails and the agent is asked to sign in.
+ */
 export async function restoreSession(): Promise<Session | null> {
   const refreshToken = sessionStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
@@ -203,7 +237,12 @@ export async function restoreSession(): Promise<Session | null> {
     });
     setSession(session);
     return session;
-  } catch {
+  } catch (error) {
+    if (isConnectivityFailure(error)) {
+      // Unreachable, not rejected. Keep whoever was signed in on this device.
+      const user = getUser();
+      return user ? ({ accessToken: '', refreshToken, user } as Session) : null;
+    }
     setSession(null);
     return null;
   }

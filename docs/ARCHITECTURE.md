@@ -198,6 +198,66 @@ would be marking its own homework, and PRD §95's "independently confirmed" woul
 be untrue by construction. Keeping the development gateway behind the same
 adapter boundary means the production swap changes one file and nothing else.
 
+## Offline capture
+
+The agent PWA collects data with no connection, because Plateau's grassroots
+revenue work happens where the network is worst. The design is one decision
+applied twice.
+
+**Unreachable is not refused.** `isConnectivityFailure` in `lib/api.ts` splits
+the two, and everything else follows from it:
+
+| Failure | Meaning | Response |
+|---|---|---|
+| `fetch` throws `TypeError` | never left the device | queue the capture |
+| 503 `OFFLINE` from the service worker | never left the device | queue the capture |
+| 409, 422, 403, 500 | PSIRS answered | show the agent, do not queue |
+| 503 `TIN_SERVICE_UNAVAILABLE` / `KYC_PROVIDER_UNAVAILABLE` | PSIRS answered, about a third party | show the agent, do not queue |
+
+That last row is the subtle one: those codes are 503 but they are replies, not
+lost connections. Queueing them would defer a correction the agent could make
+while the citizen is still in front of them.
+
+`submitOrQueue` in `lib/drafts.ts` is where the split is applied — try to send,
+keep it on the phone only if it could not be sent. It replaced a "Save for
+later" button that the agent had to press *instead of* Register, which meant
+offline capture only worked for an agent who had correctly predicted the
+network.
+
+The same distinction governs the session. A refresh that cannot reach PSIRS
+leaves the session alone; only a refusal ends it. Signing an agent out because
+the network dropped would strand them, since signing back in needs the
+connection that is missing.
+
+### What may be captured, and what may not
+
+```
+TAXPAYER_REGISTRATION   a record of who someone is
+VEHICLE_CAPTURE         a record of what a vehicle is
+
+                        — and nothing else —
+```
+
+Both are records of something observed; neither moves money. There is no
+payment draft type, so Addendum §23's rule is enforced by the type system rather
+than by care. On top of that, `assertNotFinancial` refuses any payload carrying
+`amountKobo`, `paymentId`, `gatewayReference`, `receiptNumber` and similar,
+before the payload is either sent or stored — the queue is the one place the
+agent's device writes data that the server later replays, so it gets a runtime
+backstop as well as a compile-time one.
+
+### Every draft reaches an outcome
+
+A draft type the server cannot process is `REJECTED` with its reason recorded.
+It used to be stored and reported as "stored for processing", which was untrue:
+nothing processed it, the phone deleted its copy on the next sync, and the
+capture vanished while every message said it had worked. The integration suite
+now asserts that no draft is ever left in a state nothing will process.
+
+A vehicle captured offline is checked against the authority *at sync time*,
+which is when there is a connection — so being recorded in the field does not
+leave it permanently unverified.
+
 ## Agent lifecycle
 
 The addendum warns (§31) against a single generic `status` field. There are six

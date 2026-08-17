@@ -96,7 +96,7 @@ usable login; government users are provisioned by an administrator.
 | `POST` | `/taxpayers/:id/tin` | `taxpayer:create` |
 | `GET` | `/taxpayers/search` | `taxpayer:read:*` |
 | `GET` | `/taxpayers/:id` · `/:id/incentives` | `taxpayer:read:*` |
-| `POST` | `/drafts/sync` · `GET` `/drafts` | offline draft queue |
+| `POST` | `/drafts/sync` · `GET` `/drafts` | offline draft queue — `TAXPAYER_REGISTRATION` and `VEHICLE_CAPTURE` only |
 
 ## Revenue
 
@@ -157,6 +157,28 @@ pay while the number is chased.
 | `POST` | `/taxpayers/tin-retry` | `taxpayer:tin_sync` — re-ask the TIN service for all of them |
 
 There is deliberately **no** endpoint that sets a payment status.
+
+### Offline drafts
+
+`POST /drafts/sync` accepts captures taken without a connection. `draftType` is
+`TAXPAYER_REGISTRATION` or `VEHICLE_CAPTURE`; there is no payment member, so
+Addendum §23's rule that offline mode must never authorise a government revenue
+payment is enforced by the enum rather than by handling. Anything else is a 422.
+
+`clientReference` is the idempotency key. Replaying a sync after a dropped
+connection returns `DUPLICATE` with the original `entityId` rather than creating
+a second record.
+
+Each draft comes back as exactly one of:
+
+| `status` | Meaning |
+|---|---|
+| `SYNCED` | created; `entityType` and `entityId` are the server-assigned identifiers |
+| `DUPLICATE` | already synchronised; nothing was created |
+| `REJECTED` | not accepted, with the reason in `message` — the draft is kept server-side with that reason |
+
+There is no "stored for later" status. A draft the server accepts but cannot
+process would be a lost capture wearing the costume of a successful one.
 
 ## Government
 

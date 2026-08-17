@@ -114,8 +114,12 @@ that implements it and the test that proves it. Test names are from
 | PWA works on mobile browsers | responsive, 48px targets, tested in Chromium | visual verification |
 | PWA can be installed | manifest + service worker | — |
 | PWA detects network status | `detectConnectionState` — ONLINE / LIMITED / OFFLINE | — |
-| PWA supports offline workflows | IndexedDB draft queue | *accepts a draft registration and assigns server-generated ids on sync* |
-| Offline cannot falsely mark payments successful | no payment draft type; SW never caches financial endpoints | *offers no offline path that can mark a payment as received* |
+| PWA supports offline workflows | IndexedDB draft queue; `submitOrQueue` keeps a capture when PSIRS cannot be reached | *accepts a draft registration and assigns server-generated ids on sync*; *a capture is never lost to a missing signal* |
+| Vehicles can be captured offline | `VEHICLE_CAPTURE` draft; the authority is consulted at sync time | *creates the vehicle, and checks it with the authority, on sync* |
+| A rejection is shown, not queued | `isConnectivityFailure` — only an unreachable server queues | *does not mistake a rejection for an outage* |
+| Losing signal does not sign an agent out | `restoreSession` keeps the session on a connectivity failure | *telling "unreachable" apart from "refused"* |
+| No draft is silently dropped | unprocessable types are REJECTED with a reason | *leaves no draft in a state nothing will ever process* |
+| Offline cannot falsely mark payments successful | no payment draft type; `assertNotFinancial` runtime guard; SW never caches financial endpoints | *offers no offline path that can mark a payment as received*; *offline mode cannot authorise a payment* |
 | Payment status recoverable after browser closure | `GET /payments/transactions/:reference/status` | *recovers the transaction status after the browser is closed* |
 | PWA version enforcement | `requireSupportedAppVersion` | *blocks transactions from an unsupported app version* |
 

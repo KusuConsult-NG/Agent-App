@@ -89,7 +89,10 @@ jobs:
         run: npm run seed -- --demo
 
       - name: Run tests
-        # Unit, full-lifecycle integration and agent scope containment.
+        # API: unit, full-lifecycle integration, agent scope containment,
+        # integration adapters. Agent PWA: the offline capture queue, which runs
+        # on a phone with no signal where a silent failure loses a citizen's
+        # registration and nobody finds out.
         run: npm test
 
       - name: Build all workspaces
