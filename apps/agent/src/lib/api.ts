@@ -4,9 +4,9 @@
  * Three responsibilities beyond fetching:
  *   * attach the device identifier and app version to every request, so the
  *     backend can enforce device trust and the minimum build (Addendum §20, §43);
- *   * keep the access token in memory only, with the refresh token in
- *     sessionStorage — Addendum §22 warns against leaving sensitive government
- *     data in persistent browser storage;
+ *   * keep the access token in memory only, with the refresh token persisted so
+ *     an agent stays signed in offline — see the note on storage below, which
+ *     explains what that costs and what pays for it;
  *   * surface the backend's error contract intact, so screens can show the
  *     money-status wording of PRD §60 rather than inventing their own.
  */
@@ -76,30 +76,88 @@ export interface Session {
 }
 
 /**
- * The access token lives in memory only: it is short-lived and never written
- * to disk. The refresh token goes to sessionStorage so a reload inside the
- * same tab survives, but closing the app ends the session.
+ * Session storage, and why it is where it is.
+ *
+ * The access token lives in memory only. It is short-lived, it is the thing
+ * that actually authorises a request, and it is never written anywhere.
+ *
+ * The refresh token is persisted to `localStorage`, so an agent stays signed in
+ * when the app is closed and reopened. Addendum §22 asks that sensitive
+ * government data not linger in browser storage, and this is a deliberate,
+ * bounded exception to it: a field agent whose phone restarts in a village with
+ * no signal must be able to keep collecting, and signing in again needs the
+ * connection that is missing. A session that dies with the app makes offline
+ * capture work only for agents who never close it.
+ *
+ * The exception is paid for on the server, where it can actually be enforced:
+ *
+ *   * a refresh token only works on the device it was issued to, and presenting
+ *     it from another device revokes the session outright;
+ *   * a session chain has an absolute expiry that refreshing does not move, so
+ *     possession of a token is never a permanent credential;
+ *   * every session remains revocable centrally — sign-out, device revocation
+ *     and agent suspension all end it immediately.
+ *
+ * `expiresAt` below is the client's own copy of that absolute bound. It lets a
+ * phone found months later refuse to restore a session without needing to reach
+ * PSIRS first. It is a convenience, not the control: the server is the control.
+ *
+ * No taxpayer data is persisted here. Captured records live in the IndexedDB
+ * draft queue and are deleted from the device the moment the server confirms
+ * them.
  */
 let accessToken: string | null = null;
 let currentUser: Session['user'] | null = null;
 const REFRESH_KEY = 'psirs.refresh';
 const USER_KEY = 'psirs.user';
+const EXPIRY_KEY = 'psirs.session.expires';
+
+/** Mirrors SESSION_ABSOLUTE_TTL_SECONDS; the server holds the real bound. */
+const ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function setSession(session: Session | null): void {
   accessToken = session?.accessToken ?? null;
   currentUser = session?.user ?? null;
+
   if (session) {
-    sessionStorage.setItem(REFRESH_KEY, session.refreshToken);
-    sessionStorage.setItem(USER_KEY, JSON.stringify(session.user));
+    localStorage.setItem(REFRESH_KEY, session.refreshToken);
+    localStorage.setItem(USER_KEY, JSON.stringify(session.user));
+    // Preserved across rotation: refreshing must not extend the bound, exactly
+    // as on the server.
+    if (!localStorage.getItem(EXPIRY_KEY)) {
+      localStorage.setItem(EXPIRY_KEY, String(Date.now() + ABSOLUTE_TTL_MS));
+    }
   } else {
-    sessionStorage.removeItem(REFRESH_KEY);
-    sessionStorage.removeItem(USER_KEY);
+    clearStoredSession();
   }
+}
+
+/**
+ * Remove every trace of the session from this device.
+ *
+ * Works with no connectivity, because signing out on a phone that is about to
+ * change hands must not depend on a network the agent may not have.
+ */
+export function clearStoredSession(): void {
+  accessToken = null;
+  currentUser = null;
+  localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(USER_KEY);
+  localStorage.removeItem(EXPIRY_KEY);
+  // Anything left by an earlier build that used sessionStorage.
+  sessionStorage.removeItem(REFRESH_KEY);
+  sessionStorage.removeItem(USER_KEY);
+}
+
+/** Has the stored session outlived the bound the server will also enforce? */
+export function storedSessionExpired(): boolean {
+  const expiry = Number(localStorage.getItem(EXPIRY_KEY));
+  return Number.isFinite(expiry) && expiry > 0 && expiry < Date.now();
 }
 
 export function getUser(): Session['user'] | null {
   if (currentUser) return currentUser;
-  const stored = sessionStorage.getItem(USER_KEY);
+  const stored = localStorage.getItem(USER_KEY);
   if (stored) {
     try {
       currentUser = JSON.parse(stored) as Session['user'];
@@ -111,7 +169,11 @@ export function getUser(): Session['user'] | null {
 }
 
 export function hasStoredSession(): boolean {
-  return sessionStorage.getItem(REFRESH_KEY) !== null;
+  if (storedSessionExpired()) {
+    clearStoredSession();
+    return false;
+  }
+  return localStorage.getItem(REFRESH_KEY) !== null;
 }
 
 export interface RequestOptions {
@@ -180,7 +242,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
     if (!isExpired || options.authenticated === false) throw error;
 
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    const refreshToken = localStorage.getItem(REFRESH_KEY);
     if (!refreshToken) throw error;
 
     try {
@@ -227,7 +289,15 @@ export async function login(phone: string, password: string): Promise<Session> {
  * either succeeds or genuinely fails and the agent is asked to sign in.
  */
 export async function restoreSession(): Promise<Session | null> {
-  const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+  if (storedSessionExpired()) {
+    // Past the absolute bound. Refuse locally rather than carrying a session
+    // the server is going to reject anyway — a phone found long afterwards has
+    // nothing usable on it even before it reaches a network.
+    clearStoredSession();
+    return null;
+  }
+
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
     const session = await rawRequest<Session>('/auth/refresh', {

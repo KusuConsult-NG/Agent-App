@@ -229,6 +229,38 @@ leaves the session alone; only a refusal ends it. Signing an agent out because
 the network dropped would strand them, since signing back in needs the
 connection that is missing.
 
+### Sessions that survive the app closing
+
+For offline capture to be usable at all, an agent must stay signed in across app
+restarts, so the refresh token is persisted to `localStorage`. The access token
+— the credential that actually authorises a request — stays in memory and is
+never written anywhere.
+
+Persisting a refresh token is a real exposure, so it is bounded on the server
+rather than trusted to the client:
+
+```
+sessions.expires_at           rolling   reset by every refresh   keeps an agent working
+sessions.absolute_expires_at  fixed     set once at sign-in      ends the chain regardless
+```
+
+Before this, rotation reissued a 14-day expiry every time, so a session held by
+whoever possessed the token never expired. The absolute bound is carried through
+`createSession` unchanged on every rotation — recomputing it is the one thing
+that would defeat it — and the rolling expiry is clamped so it can never outlast
+it.
+
+Refresh is also bound to the device. `sessions.device_id` was recorded at login
+but never checked, so a token lifted off a handset worked anywhere. It is now
+compared against the presented `x-device-id`, and a mismatch **revokes the
+session** rather than merely refusing the attempt: the agent's own device
+identifier lives in the same storage as the token, so a mismatch is not
+something a legitimate agent produces.
+
+Government users have no device to bind to, so sessions with no `device_id` are
+not device-checked — requiring one would lock browser users out without
+protecting anything.
+
 ### What may be captured, and what may not
 
 ```

@@ -85,7 +85,7 @@ pipeline, which is the point.
 
 ```bash
 createdb psirs_test
-npm test        # 291 tests: API (268) + agent PWA offline queue (23)
+npm test        # 303 tests: API (274) + agent PWA offline and session (29)
 ```
 
 The integration suites run against a real PostgreSQL database and the real HTTP
@@ -106,7 +106,7 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 291 tests — every database-level integrity control, and the PWA offline capture queue |
+| `npm test` | All 303 tests — every database-level integrity control, and the PWA offline capture queue |
 | `npm run build` | All four workspaces compile, including both front-ends |
 | Dirty-tree check | No build artefact is tracked |
 
@@ -331,15 +331,25 @@ tells us nothing about whether the session is still valid, and throwing the
 agent out on that guess would strand them — signing back in needs the very
 connection that is missing. Only a refusal ends a session.
 
-One limitation worth stating plainly: the refresh token lives in
-`sessionStorage`, so **closing the app ends the session**, and an agent who
-reopens it with no signal cannot sign in and cannot start new captures (queued
-drafts are safe — they are in IndexedDB and sync later). That is a deliberate
-security choice from Addendum §22, not an oversight. Moving the token to
-`localStorage` would let an agent reopen and keep working offline, at the cost
-of a lost phone carrying a usable refresh token; device binding and server-side
-revocation limit but do not eliminate that. It is a government decision, so it
-has not been changed unilaterally.
+**Closing the app does not end the session.** The refresh token is persisted, so
+an agent who shuts the app to save battery and reopens it in a village with no
+signal is still signed in and can keep collecting. The access token — the thing
+that actually authorises a request — stays in memory and is never written down,
+and no taxpayer data is persisted: captures live in the draft queue and are
+deleted the moment the server confirms them.
+
+That persistence is a deliberate, bounded exception to Addendum §22, and it is
+paid for on the server, where a control can actually be enforced:
+
+| Bound | Effect |
+|---|---|
+| A refresh token only works on the device it was issued to | A token lifted off a lost handset is useless elsewhere — and presenting it from another device **revokes the session**, because an agent's own device identifier is stable, so a mismatch is evidence of copying rather than a mistake |
+| A session chain has an absolute expiry | Refreshing rolls the 14-day token forward but never moves the 30-day bound set at password sign-in, so possession is never a permanent credential |
+| Central revocation | Sign-out, device revocation and agent suspension all end it immediately |
+
+The client keeps its own copy of the absolute bound and refuses to restore a
+session past it, so a phone found months later has nothing usable on it even
+before reaching a network. That is a convenience; the server is the control.
 
 If the browser closes mid-payment, reopening the app and reading the transaction
 recovers the authoritative state from the server, including the receipt.

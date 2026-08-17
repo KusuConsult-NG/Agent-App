@@ -118,6 +118,9 @@ that implements it and the test that proves it. Test names are from
 | Vehicles can be captured offline | `VEHICLE_CAPTURE` draft; the authority is consulted at sync time | *creates the vehicle, and checks it with the authority, on sync* |
 | A rejection is shown, not queued | `isConnectivityFailure` — only an unreachable server queues | *does not mistake a rejection for an outage* |
 | Losing signal does not sign an agent out | `restoreSession` keeps the session on a connectivity failure | *telling "unreachable" apart from "refused"* |
+| Agents stay signed in across app restarts | refresh token persisted to `localStorage`; access token stays in memory | *survives the app being closed and reopened* |
+| A stolen token is useless on another device | refresh compares `x-device-id`; a mismatch revokes the session | *A persisted refresh token is bound to its device* |
+| Possession is never permanent | `sessions.absolute_expires_at`, carried unchanged through rotation | *A session chain ends on a fixed date* |
 | No draft is silently dropped | unprocessable types are REJECTED with a reason | *leaves no draft in a state nothing will ever process* |
 | Offline cannot falsely mark payments successful | no payment draft type; `assertNotFinancial` runtime guard; SW never caches financial endpoints | *offers no offline path that can mark a payment as received*; *offline mode cannot authorise a payment* |
 | Payment status recoverable after browser closure | `GET /payments/transactions/:reference/status` | *recovers the transaction status after the browser is closed* |

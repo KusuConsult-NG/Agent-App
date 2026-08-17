@@ -28,7 +28,11 @@ export const agentRouter = Router();
 
 agentRouter.post(
   '/apply',
-  rateLimit({ max: 5, windowMs: 3_600_000, keyPrefix: 'agent-apply' }),
+  rateLimit({
+    max: config.security.agentApplyRateLimitMax,
+    windowMs: 3_600_000,
+    keyPrefix: 'agent-apply',
+  }),
   validateBody(
     z.object({
       fullName: z.string().min(3).max(150),

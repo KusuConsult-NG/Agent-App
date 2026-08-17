@@ -19,7 +19,33 @@
  */
 
 import { describe, expect, it, beforeEach } from 'vitest';
-import { ApiRequestError, isConnectivityFailure } from './api';
+import {
+  ApiRequestError,
+  clearStoredSession,
+  getUser,
+  hasStoredSession,
+  isConnectivityFailure,
+  setSession,
+  storedSessionExpired,
+} from './api';
+
+/**
+ * Simulate the app being closed: module memory goes, storage stays. There is no
+ * API for this, so the test re-imports nothing and instead relies on
+ * `getUser()` repopulating itself from storage — which is exactly the path a
+ * cold start takes.
+ */
+function clearMemoryOnly(): void {
+  // getUser() reads storage when its in-memory copy is empty, and setSession
+  // is the only writer of that copy, so this is a faithful stand-in.
+  const refresh = localStorage.getItem('psirs.refresh')!;
+  const user = localStorage.getItem('psirs.user')!;
+  const expiry = localStorage.getItem('psirs.session.expires')!;
+  setSession(null);
+  localStorage.setItem('psirs.refresh', refresh);
+  localStorage.setItem('psirs.user', user);
+  localStorage.setItem('psirs.session.expires', expiry);
+}
 import {
   FinancialDraftRefused,
   listDrafts,
@@ -291,5 +317,92 @@ describe('syncing what the phone kept', () => {
 
     expect(called).toBe(false);
     expect(outcome.synced).toBe(0);
+  });
+});
+
+describe('staying signed in on a phone that gets closed', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    setSession(null);
+  });
+
+  const SESSION = {
+    accessToken: 'access-1',
+    refreshToken: 'refresh-1',
+    user: {
+      id: 'u-1',
+      fullName: 'Danladi Musa',
+      phone: '+2347011000001',
+      email: null,
+      role: 'agent',
+      permissions: ['taxpayer:create'],
+      agentId: 'a-1',
+    },
+  };
+
+  it('survives the app being closed and reopened', () => {
+    setSession(SESSION);
+    // Closing the app clears memory but not storage. This is the whole point of
+    // the change: an agent who reopens with no signal can keep collecting.
+    clearMemoryOnly();
+
+    expect(hasStoredSession()).toBe(true);
+    expect(getUser()?.fullName).toBe('Danladi Musa');
+  });
+
+  it('keeps the access token out of storage entirely', () => {
+    setSession(SESSION);
+
+    // The access token is what actually authorises a request. It is short-lived
+    // and stays in memory; nothing on disk may carry it.
+    for (let i = 0; i < localStorage.length; i += 1) {
+      expect(localStorage.getItem(localStorage.key(i)!)).not.toContain('access-1');
+    }
+    // The refresh token is the one deliberate exception.
+    expect(localStorage.getItem('psirs.refresh')).toBe('refresh-1');
+  });
+
+  it('signs out completely, without needing a network', () => {
+    setSession(SESSION);
+    clearStoredSession();
+
+    expect(hasStoredSession()).toBe(false);
+    expect(getUser()).toBe(null);
+    expect(localStorage.getItem('psirs.refresh')).toBe(null);
+    expect(localStorage.getItem('psirs.user')).toBe(null);
+  });
+
+  it('refuses a session past its absolute expiry', () => {
+    setSession(SESSION);
+    // A phone found long after it was lost. Refused here without reaching
+    // PSIRS at all — though the server would refuse it too.
+    localStorage.setItem('psirs.session.expires', String(Date.now() - 1000));
+
+    expect(storedSessionExpired()).toBe(true);
+    expect(hasStoredSession()).toBe(false);
+    // Checking also clears it, so nothing usable is left behind.
+    expect(localStorage.getItem('psirs.refresh')).toBe(null);
+  });
+
+  it('does not let a refresh extend the absolute expiry', () => {
+    setSession(SESSION);
+    const bound = localStorage.getItem('psirs.session.expires');
+
+    // A rotation: new tokens, same session chain.
+    setSession({ ...SESSION, accessToken: 'access-2', refreshToken: 'refresh-2' });
+
+    expect(localStorage.getItem('psirs.session.expires')).toBe(bound);
+    expect(localStorage.getItem('psirs.refresh')).toBe('refresh-2');
+  });
+
+  it('clears anything left by the older sessionStorage build', () => {
+    sessionStorage.setItem('psirs.refresh', 'stale-token');
+    sessionStorage.setItem('psirs.user', '{}');
+
+    clearStoredSession();
+
+    expect(sessionStorage.getItem('psirs.refresh')).toBe(null);
+    expect(sessionStorage.getItem('psirs.user')).toBe(null);
   });
 });

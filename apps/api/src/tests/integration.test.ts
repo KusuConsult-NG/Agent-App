@@ -1959,3 +1959,186 @@ describe('An unreachable bank is not an account belonging to someone else', () =
     assert.equal(stuck!.count, '0');
   });
 });
+
+// ===========================================================================
+// What pays for keeping agents signed in offline
+// ===========================================================================
+//
+// The agent PWA persists its refresh token so a field agent stays signed in
+// when the app is closed and reopened — without which offline capture only
+// works for someone who never closes the app. That puts a real credential on
+// the handset, and these are the two bounds that make it acceptable: a token
+// works only on its own device, and a session chain ends on a fixed date no
+// matter how often it is refreshed.
+
+describe('A persisted refresh token is bound to its device', () => {
+  const phone = '+2347011000021';
+  const device = 'session-device-000000000001';
+  let refreshToken = '';
+  let agentId = '';
+
+  before(async () => {
+    const application = await post('/agents/apply', {
+      fullName: 'Session Test Agent',
+      phone,
+      password: 'FieldAgent2026',
+      dateOfBirth: '1991-02-03',
+      gender: 'FEMALE',
+      address: '5 Murtala Mohammed Way, Jos',
+      lgaId: ctx.lgaId,
+      occupation: 'Trader',
+      bankName: 'Access Bank',
+      bankCode: '044',
+      accountName: 'Session Test Agent',
+      accountNumber: '0123456781',
+    });
+    agentId = application.body.agentId;
+
+    // A device must exist and be approved for the session to bind to it.
+    await pool.query(
+      `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
+       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+      [agentId, device],
+    );
+
+    refreshToken = (await loginAs(phone, 'FieldAgent2026', device)).refreshToken;
+  });
+
+  it('refreshes on the device it was issued to', async () => {
+    const response = await post('/auth/refresh', { refreshToken }, { deviceId: device });
+
+    assert.equal(response.status, 200);
+    assert.ok(response.body.refreshToken);
+    // Rotated, so the old token is spent.
+    assert.notEqual(response.body.refreshToken, refreshToken);
+    refreshToken = response.body.refreshToken;
+  });
+
+  it('refuses the same token from a different device', async () => {
+    // A token lifted off a lost handset. Before this check it worked anywhere.
+    const response = await post(
+      '/auth/refresh',
+      { refreshToken },
+      { deviceId: 'thief-device-999999999999' },
+    );
+
+    assert.equal(response.status, 401);
+  });
+
+  it('revokes the session outright, rather than only refusing that attempt', async () => {
+    // The agent's own device identifier is stable in the same storage as the
+    // token, so a mismatch is not a mistake they make — it is evidence the
+    // token has been copied, and the session should not survive it.
+    const rightful = await post('/auth/refresh', { refreshToken }, { deviceId: device });
+    assert.equal(rightful.status, 401, 'the session ended when the token appeared elsewhere');
+
+    const revoked = await queryOne<{ revoked_reason: string }>(
+      pool,
+      `SELECT revoked_reason FROM sessions
+        WHERE user_id = (SELECT id FROM users WHERE phone = $1)
+          AND revoked_reason LIKE '%different device%'
+        ORDER BY issued_at DESC LIMIT 1`,
+      [phone],
+    );
+    assert.ok(revoked, 'the revocation is recorded with its reason');
+  });
+
+  it('writes the attempt to the audit log without recording the token', async () => {
+    const entry = await queryOne<{ new_value: Record<string, unknown> }>(
+      pool,
+      `SELECT new_value FROM audit_logs
+        WHERE action = 'auth.refresh_device_mismatch' ORDER BY created_at DESC LIMIT 1`,
+    );
+    assert.ok(entry, 'a device mismatch is auditable');
+    assert.equal(entry!.new_value.presentedDevice, 'thief-device-999999999999');
+
+    const leaked = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM audit_logs WHERE new_value::text LIKE '%' || $1 || '%'`,
+      [refreshToken.slice(0, 20)],
+    );
+    assert.equal(leaked!.count, '0', 'the refresh token itself is never written down');
+  });
+});
+
+describe('A session chain ends on a fixed date', () => {
+  const phone = '+2347011000022';
+  const device = 'session-device-000000000002';
+
+  it('does not let refreshing extend the absolute expiry', async () => {
+    const application = await post('/agents/apply', {
+      fullName: 'Rotation Test Agent',
+      phone,
+      password: 'FieldAgent2026',
+      dateOfBirth: '1993-06-06',
+      gender: 'MALE',
+      address: '8 Bauchi Road, Jos',
+      lgaId: ctx.lgaId,
+      occupation: 'Trader',
+      bankName: 'Access Bank',
+      bankCode: '044',
+      accountName: 'Rotation Test Agent',
+      accountNumber: '0123456782',
+    });
+    assert.equal(application.status, 201, JSON.stringify(application.body));
+    await pool.query(
+      `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
+       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+      [application.body.agentId, device],
+    );
+
+    let token = (await loginAs(phone, 'FieldAgent2026', device)).refreshToken;
+
+    const original = await queryOne<{ absolute_expires_at: Date }>(
+      pool,
+      `SELECT absolute_expires_at FROM sessions
+        WHERE user_id = (SELECT id FROM users WHERE phone = $1)
+        ORDER BY issued_at DESC LIMIT 1`,
+      [phone],
+    );
+    assert.ok(original!.absolute_expires_at, 'a bound is set at password sign-in');
+
+    // Refresh repeatedly. Each rotation resets the rolling expiry; none of them
+    // may move the absolute one, or possession of a token would be permanent.
+    for (let i = 0; i < 3; i += 1) {
+      const response = await post('/auth/refresh', { refreshToken: token }, { deviceId: device });
+      assert.equal(response.status, 200);
+      token = response.body.refreshToken;
+    }
+
+    const latest = await queryOne<{ absolute_expires_at: Date; expires_at: Date }>(
+      pool,
+      `SELECT absolute_expires_at, expires_at FROM sessions
+        WHERE user_id = (SELECT id FROM users WHERE phone = $1)
+        ORDER BY issued_at DESC LIMIT 1`,
+      [phone],
+    );
+    assert.equal(
+      latest!.absolute_expires_at.getTime(),
+      original!.absolute_expires_at.getTime(),
+      'three refreshes did not move the bound',
+    );
+    // And the rolling expiry can never outlast it.
+    assert.ok(latest!.expires_at.getTime() <= latest!.absolute_expires_at.getTime());
+  });
+
+  it('refuses a refresh once the absolute expiry has passed', async () => {
+    const fresh = await loginAs(phone, 'FieldAgent2026', device);
+
+    // Wind the bound into the past: the same state as a phone found next month.
+    await pool.query(
+      `UPDATE sessions SET absolute_expires_at = now() - INTERVAL '1 minute'
+        WHERE user_id = (SELECT id FROM users WHERE phone = $1) AND revoked_at IS NULL`,
+      [phone],
+    );
+
+    const response = await post(
+      '/auth/refresh',
+      { refreshToken: fresh.refreshToken },
+      { deviceId: device },
+    );
+
+    assert.equal(response.status, 401);
+    assert.match(response.body.error.message, /sign in with your password/i);
+  });
+});
