@@ -6,7 +6,8 @@ import { serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireActiveAgent, requireStepUp } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
-import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery, type RouteRequest } from '../middleware/validate';
+import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
 import { notFound, badRequest } from '../lib/errors';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
@@ -317,34 +318,15 @@ revenueRouter.get(
       [req.params.id],
     );
     if (!assessment) throw notFound('That assessment');
+    assertOwnRecord(
+      req,
+      'assessment:read:all',
+      (assessment as { agent_id?: string | null }).agent_id ?? null,
+      'That assessment',
+    );
     res.json(assessment);
   }),
 );
-
-/**
- * Refuse an invoice that is not this caller's to see.
- *
- * `requirePermission('invoice:read:own', 'invoice:read:all')` admits both an
- * officer who may read every invoice and an agent who may read only their own,
- * and then neither route filtered by anything. So a permission named `:own`
- * enforced nothing: any agent could fetch any invoice by id and read another
- * agent's taxpayer — their name, their TIN, the amounts and the computation
- * trace — or mint a PDF of it.
- *
- * The scope has to be applied where the row is, because the permission name
- * cannot do it. A caller holding `invoice:read:all` passes untouched; anyone
- * else must be the agent the invoice was raised by.
- */
-async function assertMaySeeInvoice(req: RouteRequest, invoiceAgentId: string | null): Promise<void> {
-  if (req.auth!.permissions.includes('invoice:read:all')) return;
-
-  const agentId = req.agent?.agentId ?? req.auth!.agentId ?? null;
-  if (!agentId || invoiceAgentId !== agentId) {
-    // Not found rather than forbidden: whether an invoice exists is itself
-    // something the taxpayer it belongs to is entitled to keep.
-    throw notFound('That invoice');
-  }
-}
 
 revenueRouter.get(
   '/invoices/:id',
@@ -364,7 +346,7 @@ revenueRouter.get(
       [req.params.id],
     );
     if (!invoice) throw notFound('That invoice');
-    await assertMaySeeInvoice(req, (invoice as { agent_id?: string | null }).agent_id ?? null);
+    assertOwnRecord(req, 'invoice:read:all', (invoice as { agent_id?: string | null }).agent_id ?? null, 'That invoice');
     res.json(invoice);
   }),
 );
@@ -395,7 +377,7 @@ revenueRouter.post(
         [req.params.id],
       );
       if (!invoice) throw notFound('That invoice');
-      await assertMaySeeInvoice(req, (invoice.agent_id as string | null) ?? null);
+      assertOwnRecord(req, 'invoice:read:all', (invoice.agent_id as string | null) ?? null, 'That invoice');
 
       const existing = await queryOne<{ id: string; document_number: string }>(
         client,
@@ -446,6 +428,21 @@ revenueRouter.post(
 revenueRouter.get(
   '/taxpayers/:id/obligations',
   requirePermission('invoice:read:own', 'invoice:read:all', 'taxpayer:read:assigned'),
+  /*
+   * Deliberately NOT narrowed to the agent who registered the taxpayer.
+   *
+   * This route looked like the others when the `:own` scoping was swept, and
+   * it is not. `agent-scope.test.ts` states the intent — "serving a walk-up
+   * taxpayer requires finding them and knowing their obligations; that much is
+   * the job" — and a taxpayer who approaches a different agent must still be
+   * servable. Refusing here would push that agent into raising a second
+   * assessment for a debt that already exists.
+   *
+   * What is withheld from another agent is the collection *history*: the
+   * taxpayer profile returns no transactions or receipts they did not
+   * facilitate. Outstanding obligations are what the taxpayer owes government,
+   * and they are in front of the agent asking.
+   */
   asyncHandler(async (req, res) => {
     res.json(await revenue.getObligations(pool, req.params.id));
   }),
