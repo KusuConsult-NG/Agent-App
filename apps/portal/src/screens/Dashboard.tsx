@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { formatNaira } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
-import { Alert, BarList, ErrorAlert, Loading, Money, Sparkline, Stat, Table } from '../ui';
+import { Alert, BarList, ErrorAlert, KeyValue, Loading, Money, Sparkline, Stat, Table } from '../ui';
 
 interface Dashboard {
   collections: {
@@ -176,6 +176,8 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           empty="No MDA collections recorded yet."
         />
       </div>
+
+      <PlatformKpis />
     </>
   );
 }
@@ -284,6 +286,89 @@ export function IntelligenceScreen() {
             empty="No collections recorded for this area."
           />
         )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * The platform's own numbers (PRD §72).
+ *
+ * `GET /government/kpis` computed thirteen of these and nothing had ever asked
+ * for it. Three of them are the ones this whole platform is built around —
+ * how much was verified rather than claimed, how much reconciled, and how many
+ * transactions are still waiting on it — so they are pulled out of the list
+ * and given their own line rather than sitting in alphabetical order among
+ * counts of taxpayers.
+ */
+function PlatformKpis() {
+  const [kpis, setKpis] = useState<Record<string, string> | null>(null);
+
+  useEffect(() => {
+    api
+      .get<Record<string, string>>('/government/kpis')
+      .then(setKpis)
+      .catch(() => setKpis(null));
+  }, []);
+
+  if (!kpis) return null;
+
+  const percent = (value: string | undefined) => `${Number(value ?? 0).toFixed(2)}%`;
+  const seconds = Number(kpis.average_completion_seconds ?? 0);
+  const duration =
+    seconds < 60 ? `${Math.round(seconds)}s` : `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+
+  const unreconciled = Number(kpis.unreconciled_transactions ?? 0);
+
+  return (
+    <>
+      <div className="stat-grid">
+        <Stat
+          label="Payments verified"
+          value={percent(kpis.payment_success_rate_percent)}
+          hint="Of every payment attempted"
+        />
+        <Stat
+          label="Reconciled"
+          value={percent(kpis.reconciliation_rate_percent)}
+          hint="Matched across platform, gateway and settlement"
+        />
+        <Stat
+          label="Awaiting reconciliation"
+          value={unreconciled.toLocaleString()}
+          variant={unreconciled > 0 ? 'alert' : undefined}
+        />
+        <Stat
+          label="Receipts issued"
+          value={percent(kpis.receipt_generation_rate_percent)}
+          hint="Of transactions that counted as revenue"
+        />
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <h2 className="card__title">Platform KPIs</h2>
+          <p className="card__hint">Since the platform began collecting.</p>
+        </div>
+        <KeyValue
+          items={[
+            ['Total collected', <Money key="c" kobo={kpis.total_collection_kobo} />],
+            ['Active agents', Number(kpis.active_agents ?? 0).toLocaleString()],
+            ['Taxpayers with a TIN', Number(kpis.taxpayers_with_tin ?? 0).toLocaleString()],
+            ['New taxpayers this month', Number(kpis.new_taxpayers_this_month ?? 0).toLocaleString()],
+            ['Average time to confirm a payment', duration],
+            ['Reversals and refunds', Number(kpis.reversals ?? 0).toLocaleString()],
+            ['Open fraud flags', Number(kpis.suspicious_transactions ?? 0).toLocaleString()],
+            [
+              'Duplicate registrations overridden',
+              Number(kpis.duplicate_registrations_overridden ?? 0).toLocaleString(),
+            ],
+            [
+              'Failed receipt verifications',
+              Number(kpis.receipt_verification_failures ?? 0).toLocaleString(),
+            ],
+          ]}
+        />
       </div>
     </>
   );

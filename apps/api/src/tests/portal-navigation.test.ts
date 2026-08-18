@@ -34,17 +34,30 @@ const GOVERNMENT_ROUTES = join(REPO_ROOT, 'apps', 'api', 'src', 'routes', 'gover
 interface NavItem {
   path: string;
   label: string;
-  permission: string;
+  /**
+   * Every permission that opens the item. A menu item may name several,
+   * because `requirePermission` grants on any one of the permissions it lists
+   * and the menu has to be able to describe the same thing.
+   */
+  permissions: string[];
 }
 
+/**
+ * Read the menu out of the portal's source.
+ *
+ * Both spellings are parsed. When the array form was introduced this pattern
+ * matched only the single-quoted one, so the new item was skipped in silence
+ * and every assertion below still passed — a test that had stopped checking
+ * one of the things it exists to check, which is worse than one that fails.
+ */
 function navigationItems(): NavItem[] {
   const source = readFileSync(PORTAL_APP, 'utf8');
   const pattern =
-    /\{\s*path:\s*'([^']+)',\s*label:\s*'([^']+)',\s*permission:\s*'([^']+)'\s*\}/g;
+    /\{\s*path:\s*'([^']+)',\s*label:\s*'([^']+)',\s*permission:\s*(\[[^\]]*\]|'[^']+')\s*,?\s*\}/g;
   return [...source.matchAll(pattern)].map((match) => ({
     path: match[1]!,
     label: match[2]!,
-    permission: match[3]!,
+    permissions: [...match[3]!.matchAll(/'([^']+)'/g)].map((entry) => entry[1]!),
   }));
 }
 
@@ -83,6 +96,15 @@ describe('Portal navigation matches what the API will allow', () => {
     const items = navigationItems();
     assert.ok(items.length >= 10, `expected the portal's menu, found ${items.length}`);
     assert.ok(items.some((item) => item.path === '/reconciliation'));
+
+    const performance = items.find((item) => item.path === '/performance');
+    assert.ok(performance, 'the menu should include agent performance');
+    assert.equal(
+      performance!.permissions.length,
+      2,
+      'agent performance names two permissions; if this parser stops seeing both, ' +
+        'the checks below silently stop covering it',
+    );
   });
 
   it('names only permissions that exist', () => {
@@ -90,10 +112,13 @@ describe('Portal navigation matches what the API will allow', () => {
     // item from everyone, because no role holds a string that is not a
     // permission — a failure that looks like an empty sidebar, not an error.
     for (const item of navigationItems()) {
-      assert.ok(
-        (PERMISSIONS as readonly string[]).includes(item.permission),
-        `"${item.label}" is gated on "${item.permission}", which is not a permission`,
-      );
+      assert.ok(item.permissions.length > 0, `"${item.label}" names no permission`);
+      for (const permission of item.permissions) {
+        assert.ok(
+          (PERMISSIONS as readonly string[]).includes(permission),
+          `"${item.label}" is gated on "${permission}", which is not a permission`,
+        );
+      }
     }
   });
 
@@ -108,13 +133,13 @@ describe('Portal navigation matches what the API will allow', () => {
 
       for (const role of ROLES) {
         const held = permissionsForRole(role) as readonly string[];
-        const offered = held.includes(item!.permission);
+        const offered = item!.permissions.some((permission) => held.includes(permission));
         if (!offered) continue;
 
         const allowed = accepted.some((permission) => held.includes(permission));
         assert.ok(
           allowed,
-          `${role} is offered "${item!.label}" (needs ${item!.permission}) but GET ${getRoute} ` +
+          `${role} is offered "${item!.label}" (needs ${item!.permissions.join(' or ')}) but GET ${getRoute} ` +
             `requires one of ${accepted.join(' or ')} — the menu would open onto a 403`,
         );
       }
@@ -129,8 +154,34 @@ describe('Portal navigation matches what the API will allow', () => {
     // The portal's roles. `agent` is in ROLES but never signs in here.
     for (const role of ['admin', 'revenue_officer', 'finance_officer', 'supervisor', 'auditor'] as const) {
       assert.ok(
-        (permissionsForRole(role) as readonly string[]).includes(item.permission),
+        item.permissions.some((permission) =>
+          (permissionsForRole(role) as readonly string[]).includes(permission),
+        ),
         `${role} must be able to see what the platform still owes`,
+      );
+    }
+  });
+
+  it('lands every role on a screen its own menu offers', () => {
+    /*
+     * '/' renders the executive dashboard, which needs dashboard:executive or
+     * report:read:all. A supervisor holds neither, so signing in used to put
+     * them on "Your role (supervisor) is not permitted to perform this action"
+     * — their first impression of the portal, on a screen the menu had already
+     * decided not to offer them.
+     *
+     * The shell now sends them to the first item they may open. This checks the
+     * property that makes that safe: every portal role has at least one.
+     */
+    const items = navigationItems();
+    for (const role of ['admin', 'revenue_officer', 'finance_officer', 'supervisor', 'auditor'] as const) {
+      const held = permissionsForRole(role) as readonly string[];
+      const offered = items.filter((item) =>
+        item.permissions.some((permission) => held.includes(permission)),
+      );
+      assert.ok(
+        offered.length > 0,
+        `${role} is offered no screen at all, so there is nowhere to land them`,
       );
     }
   });
@@ -141,7 +192,9 @@ describe('Portal navigation matches what the API will allow', () => {
     const item = navigationItems().find((entry) => entry.path === '/reconciliation')!;
     for (const role of ['finance_officer', 'auditor'] as const) {
       assert.ok(
-        (permissionsForRole(role) as readonly string[]).includes(item.permission),
+        item.permissions.some((permission) =>
+          (permissionsForRole(role) as readonly string[]).includes(permission),
+        ),
         `${role} must still be offered reconciliation`,
       );
     }

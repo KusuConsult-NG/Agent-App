@@ -16,6 +16,7 @@ import { matchRoute, useRoute } from './router';
 import { LoginScreen } from './screens/Login';
 import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
 import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agents';
+import { PerformanceScreen } from './screens/Performance';
 import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
 import { AuditScreen, FraudScreen } from './screens/Oversight';
@@ -27,7 +28,16 @@ import { RefereePortalScreen, VerifyScreen } from './screens/Public';
 interface NavItem {
   path: string;
   label: string;
-  permission?: string;
+  /**
+   * The permission that opens this item, or any one of several.
+   *
+   * `requirePermission` on the API grants when the role holds *any* of the
+   * permissions it names, and the menu has to model the same thing or it
+   * cannot describe a screen like agent performance — which the API opens to
+   * report:read:all or report:read:territory, and no single one of those is
+   * held by every role that should see it.
+   */
+  permission?: string | string[];
 }
 
 const NAV: { group: string; items: NavItem[] }[] = [
@@ -44,6 +54,15 @@ const NAV: { group: string; items: NavItem[] }[] = [
     items: [
       { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
       { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
+      // Either report permission, matching what GET /agents/performance
+      // accepts. A supervisor holds only report:read:territory and is the
+      // role this screen is most for, so gating on report:read:all alone
+      // would hide it from them.
+      {
+        path: '/performance',
+        label: 'Agent performance',
+        permission: ['report:read:all', 'report:read:territory'],
+      },
     ],
   },
   {
@@ -87,6 +106,17 @@ const NAV: { group: string; items: NavItem[] }[] = [
   },
 ];
 
+/** The nav items this user may open, in menu order. */
+function availableItems(permissions: readonly string[]): NavItem[] {
+  return NAV.flatMap((group) => group.items).filter(
+    (item) =>
+      !item.permission ||
+      (Array.isArray(item.permission) ? item.permission : [item.permission]).some((permission) =>
+        permissions.includes(permission),
+      ),
+  );
+}
+
 export function App() {
   const [route, navigate] = useRoute();
   const [user, setUser] = useState<User | null>(getUser());
@@ -101,6 +131,24 @@ export function App() {
       .then(setUser)
       .finally(() => setRestoring(false));
   }, []);
+
+  /*
+   * Land on a screen this officer can actually open.
+   *
+   * '/' renders the executive dashboard, which needs dashboard:executive or
+   * report:read:all. A supervisor holds neither, so signing in put them on
+   * "Your role (supervisor) is not permitted to perform this action" — their
+   * first and only impression of the portal, on a screen the menu had already
+   * decided not to offer them.
+   *
+   * The menu is the authority on what a role may open, so the landing page is
+   * taken from the same filter rather than assumed to be the dashboard.
+   */
+  useEffect(() => {
+    if (!user || route !== '/') return;
+    const first = availableItems(user.permissions)[0]?.path;
+    if (first && first !== '/') navigate(first);
+  }, [user, route, navigate]);
 
   // Public routes, resolved before authentication.
   const verifyMatch = matchRoute(route, '/verify/:code') ?? matchRoute(route, '/verify');
@@ -123,16 +171,29 @@ export function App() {
 
   if (!user) return <LoginScreen onSignedIn={setUser} />;
 
+  const allowed = new Set(availableItems(user.permissions).map((item) => item.path));
   const groups = NAV.map((group) => ({
     ...group,
-    items: group.items.filter(
-      (item) => !item.permission || user.permissions.includes(item.permission),
-    ),
+    items: group.items.filter((item) => allowed.has(item.path)),
   })).filter((group) => group.items.length > 0);
 
+  const available = groups.flatMap((group) => group.items);
+
   const activeLabel =
-    groups.flatMap((group) => group.items).find((item) => item.path === route)?.label ??
-    'Revenue administration';
+    available.find((item) => item.path === route)?.label ?? 'Revenue administration';
+
+  /*
+   * Land on a screen this officer can actually open.
+   *
+   * '/' renders the executive dashboard, which needs dashboard:executive or
+   * report:read:all. A supervisor holds neither, so signing in put them on
+   * "Your role (supervisor) is not permitted to perform this action" — their
+   * first and only impression of the portal, on a screen the menu had already
+   * decided not to offer them.
+   *
+   * The menu is the authority on what a role may open, so the landing page
+   * comes from the same filter rather than being assumed.
+   */
 
   return (
     <div className="shell">
@@ -211,6 +272,7 @@ function Routes({
   if (matchRoute(route, '/agents')) return <AgentsScreen navigate={navigate} />;
   if (agentMatch) return <AgentDetailScreen agentId={agentMatch.id!} user={user} navigate={navigate} />;
   if (matchRoute(route, '/referees')) return <RefereesScreen />;
+  if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;
   if (matchRoute(route, '/approvals')) return <ApprovalsScreen user={user} />;
