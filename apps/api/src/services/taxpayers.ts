@@ -233,6 +233,36 @@ export async function registerTaxpayer(params: {
   }
 
   return withTransaction(async (client) => {
+    /*
+     * A ward has to be in the LGA it is filed under.
+     *
+     * The column took any ward id the caller sent. A foreign key made it a real
+     * ward, and nothing made it a ward of this taxpayer's LGA — so a stale
+     * selection left over from a changed LGA would file the registration, and
+     * every subsequent collection, in the wrong place on the State → LGA →
+     * Ward drill-down. Revenue attributed confidently to the wrong ward is
+     * worse than the nothing that tier showed before.
+     */
+    if (input.wardId) {
+      const ward = await queryOne<{ lga_id: string; name: string }>(
+        client,
+        'SELECT lga_id, name FROM wards WHERE id = $1',
+        [input.wardId],
+      );
+      if (!ward) {
+        throw badRequest('That ward does not exist.', [
+          { field: 'wardId', issue: 'Unknown ward' },
+        ]);
+      }
+      if (ward.lga_id !== input.lgaId) {
+        throw badRequest(
+          `${ward.name} is not a ward of the selected Local Government Area. ` +
+            'Choose the ward again after changing the LGA.',
+          [{ field: 'wardId', issue: 'Ward belongs to a different LGA' }],
+        );
+      }
+    }
+
     const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
     const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
 

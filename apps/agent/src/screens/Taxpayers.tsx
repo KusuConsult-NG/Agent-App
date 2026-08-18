@@ -158,6 +158,7 @@ export function RegisterTaxpayerScreen({
 }) {
   const [step, setStep] = useState(0);
   const [lgas, setLgas] = useState<Lga[]>([]);
+  const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
@@ -180,6 +181,7 @@ export function RegisterTaxpayerScreen({
     identityNumber: '',
     address: '',
     lgaId: '',
+    wardId: '',
     community: '',
     occupation: '',
     businessActivity: '',
@@ -193,6 +195,36 @@ export function RegisterTaxpayerScreen({
       .then(setLgas)
       .catch(() => setLgas([]));
   }, []);
+
+  /*
+   * Wards for the chosen LGA.
+   *
+   * This list existed, seeded, with an endpoint, and nothing had ever asked
+   * for it. The consequence was not a blank column: the portal's revenue
+   * intelligence screen offers a drill from State to LGA to Ward, and the ward
+   * level LEFT JOINs every ward against transactions, so it reported all 187
+   * wards in the state as having collected nothing. On a screen whose stated
+   * purpose is finding where revenue is and is not being collected, that is a
+   * false answer rather than a missing one.
+   */
+  useEffect(() => {
+    if (!form.lgaId) {
+      setWards([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/v1/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}`)
+      .then((response) => (response.ok ? response.json() : []))
+      .then((list) => {
+        if (!cancelled) setWards(list);
+      })
+      .catch(() => {
+        if (!cancelled) setWards([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.lgaId]);
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -210,6 +242,7 @@ export function RegisterTaxpayerScreen({
       email: form.email || undefined,
       address: form.address,
       lgaId: form.lgaId,
+      wardId: form.wardId || undefined,
       community: form.community || undefined,
       occupation: form.occupation || undefined,
       businessActivity: form.businessActivity || undefined,
@@ -523,11 +556,39 @@ export function RegisterTaxpayerScreen({
               <input value={form.address} onChange={(event) => set('address', event.target.value)} />
             </Field>
             <Field label="Local Government Area" required>
-              <select value={form.lgaId} onChange={(event) => set('lgaId', event.target.value)}>
+              <select
+                value={form.lgaId}
+                onChange={(event) => {
+                  // Drop any ward chosen under the previous LGA. Leaving it
+                  // selected would file this registration in a ward of a
+                  // different LGA; the server refuses that, but the agent
+                  // should not have to be told.
+                  setForm((previous) => ({ ...previous, lgaId: event.target.value, wardId: '' }));
+                }}
+              >
                 <option value="">Select LGA</option>
                 {lgas.map((lga) => (
                   <option key={lga.id} value={lga.id}>
                     {lga.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Ward"
+              hint="Where revenue is reported from. Without it this collection cannot be counted below LGA level."
+            >
+              <select
+                value={form.wardId}
+                disabled={!form.lgaId || wards.length === 0}
+                onChange={(event) => set('wardId', event.target.value)}
+              >
+                <option value="">
+                  {!form.lgaId ? 'Choose an LGA first' : wards.length === 0 ? 'No wards listed' : 'Select ward'}
+                </option>
+                {wards.map((ward) => (
+                  <option key={ward.id} value={ward.id}>
+                    {ward.name}
                   </option>
                 ))}
               </select>
@@ -567,6 +628,7 @@ export function RegisterTaxpayerScreen({
                 ],
                 ['Phone', form.phone],
                 ['LGA', lgas.find((lga) => lga.id === form.lgaId)?.name ?? '—'],
+                ['Ward', wards.find((ward) => ward.id === form.wardId)?.name ?? '—'],
                 ['Address', form.address],
                 ['TIN', form.hasTin ? form.existingTin : 'Will be requested'],
               ]}
