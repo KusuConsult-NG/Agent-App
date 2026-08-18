@@ -1,7 +1,7 @@
 /** Shared presentation components and icons for the agent PWA. */
 
 import type { ReactElement, ReactNode } from 'react';
-import { Children, cloneElement, isValidElement, useId } from 'react';
+import { Children, cloneElement, isValidElement, useId, useState } from 'react';
 import { formatNaira } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 
@@ -265,3 +265,79 @@ export const Icons = {
     </svg>
   ),
 };
+
+/**
+ * A password field that can be shown.
+ *
+ * Typing a password blind is hard on a desk and harder on a phone held one
+ * handed in a market, and it is worst on the application form, where the rule
+ * is at least eight characters with a letter and a number — a rejection an
+ * applicant cannot see the cause of. A reveal control turns "wrong password"
+ * into something a person can check for themselves.
+ *
+ * It is written out here rather than passed through `Field` on purpose. `Field`
+ * attaches the label to its single child by cloning it, so wrapping the input
+ * with a button would put the id on the wrapper and leave the label pointing at
+ * a div — undoing the association that makes these forms usable with a screen
+ * reader at all.
+ *
+ * Hidden by default, always. Revealing is a deliberate act, and the state does
+ * not survive leaving the screen.
+ */
+export function PasswordField({
+  label,
+  hint,
+  value,
+  onChange,
+  autoComplete,
+  required,
+  minLength,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  autoComplete: 'current-password' | 'new-password';
+  required?: boolean;
+  minLength?: number;
+}) {
+  const [shown, setShown] = useState(false);
+  const id = useId();
+  const hintId = `${id}-hint`;
+
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        {label}
+        {required && <span aria-hidden="true" style={{ color: 'var(--danger)' }}> *</span>}
+      </label>
+      <div className="password">
+        <input
+          id={id}
+          className="password__input"
+          type={shown ? 'text' : 'password'}
+          autoComplete={autoComplete}
+          value={value}
+          required={required}
+          minLength={minLength}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <button
+          type="button"
+          className="password__toggle"
+          aria-pressed={shown}
+          aria-label={shown ? 'Hide password' : 'Show password'}
+          onClick={() => setShown((current) => !current)}
+        >
+          {shown ? 'Hide' : 'Show'}
+        </button>
+      </div>
+      {hint && (
+        <p className="field__hint" id={hintId}>
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}

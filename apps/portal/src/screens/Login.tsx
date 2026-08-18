@@ -5,6 +5,7 @@ import { ErrorAlert } from '../ui';
 export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -58,14 +59,26 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
 
         <div className="field">
           <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
+          <div className="password">
+            <input
+              id="password"
+              className="password__input"
+              type={shown ? 'text' : 'password'}
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+            <button
+              type="button"
+              className="password__toggle"
+              aria-pressed={shown}
+              aria-label={shown ? 'Hide password' : 'Show password'}
+              onClick={() => setShown((current) => !current)}
+            >
+              {shown ? 'Hide' : 'Show'}
+            </button>
+          </div>
         </div>
 
         <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
