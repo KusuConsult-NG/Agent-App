@@ -102,6 +102,33 @@ export interface WebhookAuthResult {
   reason?: string;
 }
 
+/**
+ * What a gateway says when asked to return money to a taxpayer.
+ *
+ * `ACCEPTED` means the gateway has taken responsibility for the refund, not
+ * that the money has landed. `UNAVAILABLE` is deliberately distinct from
+ * `REJECTED`: a gateway that could not be reached has not refused, and a
+ * refund the platform failed to ask for must be asked for again rather than
+ * written off. This is the same distinction the KYC, TIN, bank and vehicle
+ * integrations already make — "we could not ask" is never "the answer is no".
+ */
+export interface GatewayRefundResult {
+  outcome: 'ACCEPTED' | 'REJECTED' | 'UNAVAILABLE';
+  /** The gateway's own reference for the refund, when it gave one. */
+  reference?: string;
+  reason?: string;
+  provider: string;
+}
+
+export interface RefundRequest {
+  /** The gateway's reference for the original payment. */
+  gatewayReference: string;
+  amountKobo: bigint;
+  /** The platform's own reference, so the gateway can be reconciled later. */
+  refundReference: string;
+  reason: string;
+}
+
 export interface PaymentGateway {
   readonly name: string;
   /** False when the gateway does not sign callbacks — see WebhookAuthResult. */
@@ -112,4 +139,12 @@ export interface PaymentGateway {
   parseWebhook(payload: unknown): GatewayWebhookEvent | null;
   /** Gateway statement used for three-way reconciliation (PRD §46). */
   fetchStatement(params: { from: Date; to: Date }): Promise<SettlementLine[]>;
+  /**
+   * Ask the gateway to return money to the taxpayer (PRD §71).
+   *
+   * Must not report ACCEPTED unless the gateway actually took the request. A
+   * refund recorded as made when it was not tells a citizen who paid twice
+   * that they have their money back.
+   */
+  refund(request: RefundRequest): Promise<GatewayRefundResult>;
 }

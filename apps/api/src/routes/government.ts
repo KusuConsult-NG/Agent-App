@@ -401,6 +401,34 @@ governmentRouter.post(
   ),
 );
 
+/**
+ * Refunds a taxpayer is still owed.
+ *
+ * A reversal voids the receipt immediately; returning the money depends on the
+ * gateway, and anything it has not confirmed belongs on somebody's desk rather
+ * than in a status nobody reads.
+ */
+governmentRouter.get(
+  '/refunds/outstanding',
+  requirePermission('payment:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json({ refunds: await reconciliation.outstandingRefunds(pool) });
+  }),
+);
+
+governmentRouter.post(
+  '/refunds/retry',
+  requirePermission('payment:reconcile'),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await reconciliation.retryOutstandingRefunds({
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      }),
+    );
+  }),
+);
+
 /** Execute an approved reversal or refund (PRD §71). */
 governmentRouter.post(
   '/approvals/:id/execute-reversal',

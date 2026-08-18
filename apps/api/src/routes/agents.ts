@@ -2,7 +2,7 @@
 
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
-import { REFEREE_CATEGORIES, serialiseKobo } from '@psirs/shared';
+import { REFEREE_CATEGORIES, formatNaira, serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { config } from '../config';
@@ -504,7 +504,15 @@ agentRouter.post(
     res.status(201).json({
       ...result,
       amountKobo: serialiseKobo(result.amountKobo),
-      message: 'Payout requested. It will be paid after finance approval.',
+      clawbackAppliedKobo: serialiseKobo(result.clawbackAppliedKobo),
+      grossKobo: serialiseKobo(result.grossKobo),
+      message:
+        result.clawbackAppliedKobo > 0n
+          ? `Payout requested for ${formatNaira(result.amountKobo)}. ` +
+            `${formatNaira(result.grossKobo)} of commission was eligible and ` +
+            `${formatNaira(result.clawbackAppliedKobo)} was deducted for transactions that were ` +
+            'reversed after their commission had been paid. It will be paid after finance approval.'
+          : 'Payout requested. It will be paid after finance approval.',
     });
   }),
 );

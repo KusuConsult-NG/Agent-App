@@ -17,6 +17,7 @@ import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
+import { retryOutstandingRefunds } from './services/reconciliation';
 import { withTransaction } from './db/pool';
 
 /**
@@ -38,6 +39,8 @@ const WORKER_INTERVALS = {
   tinCatchUp: 30 * 60_000,
   /** Re-send renewals the vehicle authority never acknowledged. */
   authorityCatchUp: 30 * 60_000,
+  /** Ask the gateway again for refunds a taxpayer is still owed. */
+  refundRetry: 10 * 60_000,
 };
 
 /**
@@ -110,6 +113,19 @@ async function main(): Promise<void> {
         })
         .catch((error) => console.error('[worker] authority catch-up failed', error));
     }, WORKER_INTERVALS.authorityCatchUp),
+
+    // A taxpayer owed money must not wait on somebody pressing a button.
+    setInterval(() => {
+      retryOutstandingRefunds({ ...SYSTEM_ACTOR, limit: 50 })
+        .then((result) => {
+          if (result.attempted > 0) {
+            console.log(
+              `[worker] refunds: ${result.completed} returned, ${result.stillOutstanding} still owed`,
+            );
+          }
+        })
+        .catch((error) => console.error('[worker] refund retry failed', error));
+    }, WORKER_INTERVALS.refundRetry),
   ];
 
   const shutdown = (signal: string) => {

@@ -174,6 +174,52 @@ export class MockGateway implements PaymentGateway {
     }));
   }
 
+  async refund(request: {
+    gatewayReference: string;
+    amountKobo: bigint;
+    refundReference: string;
+    reason: string;
+  }): Promise<{ outcome: 'ACCEPTED' | 'REJECTED' | 'UNAVAILABLE'; reference?: string; reason?: string; provider: string }> {
+    const row = await queryOne<MockGatewayRow>(
+      pool,
+      `SELECT gateway_reference, amount_kobo, status FROM mock_gateway_transactions
+        WHERE gateway_reference = $1`,
+      [request.gatewayReference],
+    );
+
+    // A payment this gateway never took cannot be given back, and saying so is
+    // the honest answer rather than pretending the money moved.
+    if (!row) {
+      return { outcome: 'REJECTED', reason: 'No such payment at the gateway.', provider: 'mock' };
+    }
+    if (row.status !== 'SUCCESS') {
+      return {
+        outcome: 'REJECTED',
+        reason: `The original payment is ${row.status}, so there is nothing to return.`,
+        provider: 'mock',
+      };
+    }
+    if (BigInt(row.amount_kobo) < request.amountKobo) {
+      return {
+        outcome: 'REJECTED',
+        reason: 'The refund is larger than the payment.',
+        provider: 'mock',
+      };
+    }
+
+    // Reserved so the unreachable-gateway path can be exercised, exactly as the
+    // ZZZ plate prefix does for the vehicle registry.
+    if (request.gatewayReference.includes('UNREACHABLE')) {
+      return { outcome: 'UNAVAILABLE', reason: 'Gateway could not be reached (development stub).', provider: 'mock' };
+    }
+
+    await pool.query(
+      `UPDATE mock_gateway_transactions SET status = 'REVERSED' WHERE gateway_reference = $1`,
+      [request.gatewayReference],
+    );
+    return { outcome: 'ACCEPTED', reference: `MOCKGW-RFD-${request.refundReference}`, provider: 'mock' };
+  }
+
   // ---- Development-only controls, used by the simulation endpoint and tests --
 
   async simulateOutcome(params: {
