@@ -363,7 +363,9 @@ interface TransactionStatus {
     status: string;
     amount_kobo: string;
     total_amount_kobo: string;
+    invoice_id: string;
     invoice_number: string;
+    expires_at: string | null;
     revenue_item: string;
     revenue_category: string;
     first_name: string | null;
@@ -400,6 +402,7 @@ export function TransactionScreen({
   const [data, setData] = useState<TransactionStatus | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
+  const [invoicing, setInvoicing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -416,6 +419,30 @@ export function TransactionScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Render the invoice and open it.
+   *
+   * The endpoint is idempotent — a second call returns the document already
+   * issued rather than minting another — so an agent who taps twice, or comes
+   * back to a transaction tomorrow, gets the same invoice number rather than a
+   * second document for one obligation.
+   */
+  async function giveInvoice() {
+    setInvoicing(true);
+    setError(null);
+    try {
+      const document = await api.post<{ downloadUrl: string; documentNumber: string }>(
+        `/revenue/invoices/${transaction.invoice_id}/document`,
+      );
+      window.open(document.downloadUrl, '_blank', 'noopener');
+      setNotice(`Invoice ${document.documentNumber} is ready to print or send.`);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setInvoicing(false);
+    }
+  }
 
   async function confirmPayment() {
     if (!data?.transaction.payment_id) return;
@@ -548,6 +575,31 @@ export function TransactionScreen({
 
       {!paid && !failed && (
         <>
+          {/*
+            The artefact a taxpayer pays against later.
+ 
+            Remita's model is that the reference is payable at any bank branch,
+            ATM, POS or USSD channel, possibly days afterwards. The endpoint
+            that renders that invoice as a PDF existed and nothing called it,
+            so an agent whose taxpayer said "I will pay at the bank tomorrow"
+            read a reference aloud and hoped they wrote it down correctly.
+          */}
+          <button type="button" className="secondary" disabled={invoicing} onClick={giveInvoice}>
+            {invoicing ? <Spinner /> : null}
+            {invoicing ? 'Preparing the invoice…' : 'Give the taxpayer an invoice'}
+          </button>
+          <p className="field__hint" style={{ marginTop: 8 }}>
+            A printable demand notice with the invoice number, what it is for and how the amount
+            was worked out
+            {transaction.expires_at
+              ? `, valid until ${new Date(transaction.expires_at).toLocaleDateString('en-NG')}`
+              : ''}
+            .{' '}
+            {transaction.gateway_reference
+              ? `Give them the payment reference ${transaction.gateway_reference} as well — that is what a bank or USSD channel asks for.`
+              : 'Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it.'}
+          </p>
+
           <button type="button" disabled={confirming} onClick={confirmPayment}>
             {confirming ? <Spinner /> : null}
             {confirming ? 'Checking with the payment system…' : 'Check payment status'}
