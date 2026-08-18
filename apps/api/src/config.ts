@@ -163,6 +163,24 @@ export const config = {
         .map((entry) => entry.trim())
         .filter(Boolean),
       requestTimeoutMs: int('REMITA_TIMEOUT_MS', 20_000),
+      /**
+       * Optional bulk transaction-report path, relative to baseUrl.
+       *
+       * Remita exposes merchant reporting under different paths depending on
+       * how a merchant is provisioned, so this is configuration rather than a
+       * guess baked into the adapter. When it is unset the adapter builds the
+       * statement by asking about each RRR the platform issued, which uses the
+       * status API that is already in production use.
+       */
+      statementPath: process.env.REMITA_STATEMENT_PATH ?? '',
+      /**
+       * How many status queries the per-reference statement runs at once.
+       *
+       * Reconciliation is a background sweep, not a user waiting on a page, so
+       * this stays low enough to be a considerate client of a shared
+       * government gateway.
+       */
+      statementConcurrency: int('REMITA_STATEMENT_CONCURRENCY', 4),
     },
   },
 

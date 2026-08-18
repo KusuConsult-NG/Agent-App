@@ -21,7 +21,8 @@ import type {
   InitiatePaymentRequest,
   InitiatePaymentResult,
   PaymentGateway,
-  SettlementLine,
+  StatementRequest,
+  StatementResult,
   WebhookAuthInput,
   WebhookAuthResult,
 } from './types';
@@ -154,7 +155,15 @@ export class MockGateway implements PaymentGateway {
     };
   }
 
-  async fetchStatement(params: { from: Date; to: Date }): Promise<SettlementLine[]> {
+  /**
+   * The development gateway's own ledger for a period.
+   *
+   * A reference containing UNREACHABLE stands in for the gateway being down
+   * for that one row, so the partial-statement path — where most of the
+   * statement arrives but some references could not be checked — can be
+   * exercised without taking the whole adapter offline.
+   */
+  async fetchStatement(params: StatementRequest): Promise<StatementResult> {
     const rows = await query<MockGatewayRow>(
       pool,
       `SELECT gateway_reference, payment_reference, amount_kobo, status, paid_at,
@@ -165,13 +174,29 @@ export class MockGateway implements PaymentGateway {
       [params.from, params.to],
     );
 
-    return rows.map((row) => ({
-      gatewayReference: row.gateway_reference,
-      amountKobo: BigInt(row.amount_kobo),
-      status: row.status,
-      paidAt: row.paid_at,
-      settlementReference: row.settlement_reference,
-    }));
+    const unreachable = rows.filter((row) => row.gateway_reference.includes('UNREACHABLE'));
+
+    return {
+      outcome: 'RETRIEVED',
+      source: 'STATEMENT',
+      provider: 'mock',
+      unavailableReferences: unreachable.map((row) => row.gateway_reference),
+      lines: rows
+        .filter((row) => !row.gateway_reference.includes('UNREACHABLE'))
+        .map((row) => ({
+          gatewayReference: row.gateway_reference,
+          amountKobo: BigInt(row.amount_kobo),
+          status: row.status,
+          paidAt: row.paid_at,
+          settlementReference: row.settlement_reference,
+          raw: {
+            paymentReference: row.payment_reference,
+            paymentMethod: row.payment_method,
+            failureReason: row.failure_reason,
+            provider: 'mock',
+          },
+        })),
+    };
   }
 
   async refund(request: {

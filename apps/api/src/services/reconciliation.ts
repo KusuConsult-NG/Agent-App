@@ -27,12 +27,23 @@ export interface ReconciliationSummary {
   runId: string;
   periodStart: Date;
   periodEnd: Date;
+  /**
+   * ABORTED means the gateway's statement could not be retrieved and nothing
+   * was compared. Callers must not read `exceptions: 0` on an aborted run as
+   * a clean bill of health — nothing was checked.
+   */
+  status: 'COMPLETED' | 'ABORTED';
   matched: number;
   exceptions: number;
-  recoveredPayments: number;
+  /** References the gateway could not be asked about. Not exceptions. */
+  unchecked: number;
   totalPlatformKobo: string;
   totalGatewayKobo: string;
   byStatus: Record<string, number>;
+  /** How the gateway's account was obtained, for the audit trail. */
+  statementSource: string;
+  statementLines: number;
+  abortReason?: string;
 }
 
 /**
@@ -41,22 +52,129 @@ export interface ReconciliationSummary {
  * Deliberately compares in both directions. Comparing only platform->gateway
  * would miss the most serious case: money the gateway holds for a transaction
  * the platform never recorded.
+ *
+ * The run refuses to proceed without the gateway's account of the period, and
+ * that refusal is the most important line in this file. The matching loop
+ * treats a payment absent from the statement as money the gateway has no
+ * record of, so an empty statement caused by an outage does not produce a
+ * quiet no-op — it produces a MISSING_PAYMENT exception against every
+ * successful payment in the window. An exception queue that is wrong about
+ * everything is worse than none, because it teaches the finance officer that
+ * the queue is noise.
  */
 export async function runReconciliation(params: {
   from: Date;
   to: Date;
-  actorId: string;
+  actorId: string | null;
   actorRole: string;
 }): Promise<ReconciliationSummary> {
   const runId = randomUUID();
-  const statement = await gateway.fetchStatement({ from: params.from, to: params.to });
-  const byGatewayReference = new Map(statement.map((line) => [line.gatewayReference, line]));
+
+  // The references the platform issued in this window. A gateway without a
+  // bulk statement endpoint answers by being asked about each one, so it needs
+  // the list; a gateway with one ignores it.
+  const issued = await query<{ gateway_reference: string }>(
+    pool,
+    `SELECT DISTINCT gateway_reference FROM payments
+      WHERE created_at >= $1 AND created_at <= $2 AND gateway_reference IS NOT NULL`,
+    [params.from, params.to],
+  );
+
+  const statement = await gateway.fetchStatement({
+    from: params.from,
+    to: params.to,
+    references: issued.map((row) => row.gateway_reference),
+  });
+
+  if (statement.outcome === 'UNAVAILABLE') {
+    const reason =
+      statement.reason ?? `${gateway.name} did not return a statement for this period.`;
+
+    // Recorded rather than merely thrown. An attempt that could not be made is
+    // an operational fact a finance officer needs to see, and a run row that
+    // says so is how they find out reconciliation has been blind since Tuesday.
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO reconciliation_runs
+           (id, period_start, period_end, gateway, started_by, status,
+            statement_source, abort_reason, completed_at)
+         VALUES ($1,$2,$3,$4,$5,'ABORTED',$6,$7,now())`,
+        [runId, params.from, params.to, gateway.name, params.actorId, statement.source, reason],
+      );
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'reconciliation.aborted',
+        entityType: 'reconciliation_run',
+        entityId: runId,
+        newValue: { reason, gateway: gateway.name },
+      });
+    });
+
+    return {
+      runId,
+      periodStart: params.from,
+      periodEnd: params.to,
+      status: 'ABORTED',
+      matched: 0,
+      exceptions: 0,
+      unchecked: issued.length,
+      totalPlatformKobo: '0',
+      totalGatewayKobo: '0',
+      byStatus: {},
+      statementSource: statement.source,
+      statementLines: 0,
+      abortReason: reason,
+    };
+  }
+
+  const byGatewayReference = new Map(statement.lines.map((line) => [line.gatewayReference, line]));
+  const uncheckedReferences = new Set(statement.unavailableReferences);
+
+  // Keep the gateway's own words. PRD §46 wants a dispute re-argued from the
+  // source rather than from this platform's reading of it, which is what the
+  // table was built for and what nothing had ever written to it.
+  for (const line of statement.lines) {
+    await pool.query(
+      `INSERT INTO gateway_statement_lines
+         (gateway, gateway_reference, amount_kobo, status, paid_at, settlement_reference,
+          raw_line, imported_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       ON CONFLICT (gateway, gateway_reference) DO UPDATE
+         SET amount_kobo = EXCLUDED.amount_kobo,
+             status = EXCLUDED.status,
+             paid_at = EXCLUDED.paid_at,
+             settlement_reference = EXCLUDED.settlement_reference,
+             raw_line = EXCLUDED.raw_line,
+             imported_at = now()`,
+      [
+        gateway.name,
+        line.gatewayReference,
+        line.amountKobo.toString(),
+        line.status,
+        line.paidAt,
+        line.settlementReference,
+        JSON.stringify(line.raw ?? {}),
+        params.actorId,
+      ],
+    );
+  }
 
   return withTransaction(async (client) => {
     await client.query(
-      `INSERT INTO reconciliation_runs (id, period_start, period_end, gateway, started_by)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [runId, params.from, params.to, gateway.name, params.actorId],
+      `INSERT INTO reconciliation_runs
+         (id, period_start, period_end, gateway, started_by, statement_source, statement_line_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [
+        runId,
+        params.from,
+        params.to,
+        gateway.name,
+        params.actorId,
+        statement.source,
+        statement.lines.length,
+      ],
     );
 
     const payments = await query<{
@@ -88,7 +206,7 @@ export async function runReconciliation(params: {
 
     let matched = 0;
     let exceptions = 0;
-    let recovered = 0;
+    let unchecked = 0;
     let totalPlatform = 0n;
     let totalGateway = 0n;
 
@@ -106,7 +224,17 @@ export async function runReconciliation(params: {
       let detail: Record<string, unknown> = {};
       let received = 0n;
 
-      if (!line) {
+      if (payment.gateway_reference && uncheckedReferences.has(payment.gateway_reference)) {
+        // The gateway was not reachable for this particular reference. Falling
+        // through to the branch below would read that silence as "the gateway
+        // has no record of this payment", which is an accusation built out of
+        // our own failure to ask.
+        status = 'UNCHECKED';
+        detail = {
+          note: 'The gateway could not be asked about this reference on this run',
+          platformPaymentStatus: payment.payment_status,
+        };
+      } else if (!line) {
         // The platform believes a payment exists that the gateway has no record
         // of. Only an exception if we thought it succeeded.
         if (['SUCCESSFUL', 'VERIFIED'].includes(payment.payment_status)) {
@@ -176,16 +304,15 @@ export async function runReconciliation(params: {
 
       bump(status);
       if (status === 'MATCHED') matched += 1;
+      else if (status === 'UNCHECKED') unchecked += 1;
       else if (['MISSING_PAYMENT', 'AMOUNT_MISMATCH', 'DUPLICATE_PAYMENT'].includes(status)) {
         exceptions += 1;
       }
-
-      if (detail.recovered === true) recovered += 1;
     }
 
     // Gateway lines with no platform payment at all (PRD §46
     // "Missing platform transaction").
-    for (const line of statement) {
+    for (const line of statement.lines) {
       if (seenGatewayReferences.has(line.gatewayReference) || line.status !== 'SUCCESS') continue;
 
       await client.query(
@@ -211,9 +338,17 @@ export async function runReconciliation(params: {
     await client.query(
       `UPDATE reconciliation_runs
           SET total_platform_kobo = $2, total_gateway_kobo = $3, matched_count = $4,
-              exception_count = $5, status = 'COMPLETED', completed_at = now()
+              exception_count = $5, unchecked_count = $6,
+              status = 'COMPLETED', completed_at = now()
         WHERE id = $1`,
-      [runId, totalPlatform.toString(), totalGateway.toString(), matched, exceptions],
+      [
+        runId,
+        totalPlatform.toString(),
+        totalGateway.toString(),
+        matched,
+        exceptions,
+        unchecked,
+      ],
     );
 
     await recordAudit(client, {
@@ -225,6 +360,9 @@ export async function runReconciliation(params: {
       newValue: {
         matched,
         exceptions,
+        unchecked,
+        statementSource: statement.source,
+        statementLines: statement.lines.length,
         totalPlatformKobo: totalPlatform.toString(),
         totalGatewayKobo: totalGateway.toString(),
       },
@@ -234,12 +372,15 @@ export async function runReconciliation(params: {
       runId,
       periodStart: params.from,
       periodEnd: params.to,
+      status: 'COMPLETED' as const,
       matched,
       exceptions,
-      recoveredPayments: recovered,
+      unchecked,
       totalPlatformKobo: totalPlatform.toString(),
       totalGatewayKobo: totalGateway.toString(),
       byStatus,
+      statementSource: statement.source,
+      statementLines: statement.lines.length,
     };
   });
 }
@@ -597,6 +738,65 @@ export async function outstandingRefunds(db: Db, limit = 100) {
  * A taxpayer owed money must not depend on somebody remembering to press a
  * button, which is what the vehicle authority queue already learned.
  */
+/**
+ * The scheduled reconciliation sweep.
+ *
+ * PRD §46 makes reconciliation mandatory, and until now it happened only when
+ * a finance officer remembered to press a button. A control nobody is rostered
+ * to run is a control that runs on the days somebody happens to think of it,
+ * which is not what "mandatory" means for the mechanism that proves government
+ * received its money.
+ *
+ * The window trails rather than covering only since the last run, because
+ * settlement references arrive days after the payment they belong to: a
+ * transaction that was PENDING_SETTLEMENT on Monday becomes MATCHED on
+ * Wednesday, and only a window that looks back finds that out. Re-running a
+ * period is cheap and safe — each run writes its own rows and asserts nothing
+ * about the last one.
+ *
+ * Recovery runs after a completed sweep, not inside it. Reconciliation's job
+ * is to notice that the gateway confirmed money the platform never verified;
+ * acting on that means confirming payments and issuing receipts, which each
+ * need their own transaction. Doing it here is what makes the missed-webhook
+ * path (PRD §66) self-healing instead of a queue waiting on a human.
+ */
+let sweepInFlight = false;
+
+export async function runScheduledReconciliation(params: {
+  windowHours?: number;
+  actorId?: string | null;
+  actorRole?: string;
+} = {}): Promise<{
+  skipped: boolean;
+  summary?: ReconciliationSummary;
+  recovery?: { attempted: number; verified: number; failures: string[] };
+}> {
+  // A sweep over a long window can outlast its interval. Starting a second one
+  // on top of the first would double every status query to the gateway for no
+  // new information.
+  if (sweepInFlight) return { skipped: true };
+  sweepInFlight = true;
+
+  try {
+    const to = new Date();
+    const from = new Date(to.getTime() - (params.windowHours ?? 48) * 60 * 60_000);
+
+    const summary = await runReconciliation({
+      from,
+      to,
+      actorId: params.actorId ?? null,
+      actorRole: params.actorRole ?? 'system',
+    });
+
+    if (summary.status === 'ABORTED') return { skipped: false, summary };
+
+    const recovery = await recoverUnverifiedPayments({ from, to });
+    return { skipped: false, summary, recovery };
+  } finally {
+    sweepInFlight = false;
+  }
+}
+
 export async function retryOutstandingRefunds(params: {
   actorId: string | null;
   actorRole: string;

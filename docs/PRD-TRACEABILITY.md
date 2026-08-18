@@ -40,7 +40,8 @@ that implements it and the test that proves it. Test names are from
 | Duplicate webhook cannot create duplicate payment | `UNIQUE (gateway, event_id)`; duplicate acknowledged with 200 | *treats a redelivered webhook as a duplicate and creates nothing new* |
 | Failed payment does not generate a valid receipt | `receipts_require_verified_payment` trigger | *refuses at database level to issue a receipt for an unverified payment* |
 | Reversed payment updates all relevant records | `executeReversal` — transaction, receipt, invoice, commission in one transaction | *reverses transaction, receipt and commission together under approval* |
-| Reconciliation works | `runReconciliation` three-way | *reports verified-but-unsettled money as pending settlement*; *marks the payment fully matched once government settlement is recorded* |
+| Reconciliation works | `runReconciliation` three-way; refuses to run without the gateway's statement | *reports verified-but-unsettled money as pending settlement*; *marks the payment fully matched once government settlement is recorded*; *refuses to run, rather than accusing every payment in the window* |
+| Reconciliation happens without being asked | `runScheduledReconciliation`, six-hourly over a trailing window | *sweeps on its own, attributed to the platform rather than a borrowed officer*; *recovers a payment the gateway took and no webhook ever reported* |
 
 ## PRD §84 — Agents
 
@@ -155,7 +156,7 @@ organisational tasks outside this repository:
 |---|---|---|
 | 32 | Database backups and disaster recovery | Deployment task; RPO ≤15 min / RTO ≤2 h to be agreed with government IT |
 | 33 | Production monitoring | Deployment task; health endpoint and structured logging in place |
-| 34 | Payment reconciliation tested | Tested end to end against the development gateway |
+| 34 | Payment reconciliation tested | Tested end to end against the development gateway. Against Remita the statement is built from per-RRR status queries unless `REMITA_STATEMENT_PATH` is configured; either way a statement that cannot be read aborts the run instead of producing exceptions |
 | 35 | Security testing completed | Independent testing not performed |
 | 36 | User acceptance testing | Requires PSIRS officers |
 | 37 | Financial test transactions reconciled end to end | Done in the integration suite |

@@ -35,6 +35,8 @@ const initRequests: { body: Record<string, unknown>; authorization: string }[] =
 let server: Server;
 let baseUrl = '';
 let nextInitResponse: unknown = null;
+/** What the stub's bulk report should answer; undefined = the report is down. */
+let nextStatementResponse: unknown = undefined;
 
 before(async () => {
   server = createServer((req, res) => {
@@ -66,6 +68,17 @@ before(async () => {
         }
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify(body));
+        return;
+      }
+
+      if (url.includes('/merchant/report')) {
+        if (nextStatementResponse === undefined) {
+          res.writeHead(502, { 'content-type': 'text/plain' });
+          res.end('report unavailable');
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(nextStatementResponse));
         return;
       }
 
@@ -317,16 +330,103 @@ describe('Remita notifications carry no authority', () => {
   });
 });
 
-describe('Remita reconciliation posture', () => {
-  it('returns no statement lines rather than inventing them', async () => {
-    // Remita settlement reporting depends on how PSIRS's merchant account is
-    // configured. Returning nothing makes verified payments surface as
-    // reconciliation exceptions for finance to look at — the correct failure
-    // mode — instead of being silently marked reconciled.
-    const lines = await makeGateway().fetchStatement({
-      from: new Date('2026-01-01'),
-      to: new Date('2026-12-31'),
+describe('Remita statement retrieval', () => {
+  // This adapter used to return a bare `[]` here, and the test that guarded it
+  // called the result "the correct failure mode" on the grounds that verified
+  // payments would surface as exceptions for finance to look at.
+  //
+  // They would surface as exceptions. All of them, every day, for every
+  // payment the platform ever verified — each one recorded as "Platform
+  // records a successful payment the gateway has no record of". A queue that
+  // accuses the entire day's takings is not a finance officer's worklist; it
+  // is the reason they stop opening the queue.
+  const PERIOD = { from: new Date('2026-01-01'), to: new Date('2026-12-31') };
+
+  it('asks Remita about every reference, and says which it could not reach', async () => {
+    statusResponses.set('RRR-PAID-1', { status: '00', amount: '5000.00', transactiontime: '2026-03-01 10:00:00' });
+    statusResponses.set('RRR-PAID-2', { status: '00', amount: '250.50', transactiontime: '2026-03-02 11:00:00' });
+    // Absent from the stub, so the status query 500s — a transport failure,
+    // which is "we could not ask", not "Remita has no record".
+    statusResponses.delete('RRR-UNREACHED');
+
+    const result = await makeGateway().fetchStatement({
+      ...PERIOD,
+      references: ['RRR-PAID-1', 'RRR-PAID-2', 'RRR-UNREACHED'],
     });
-    assert.deepEqual(lines, []);
+
+    assert.equal(result.outcome, 'RETRIEVED');
+    assert.equal(result.source, 'PER_REFERENCE');
+    assert.deepEqual(result.unavailableReferences, ['RRR-UNREACHED']);
+
+    const byReference = new Map(result.lines.map((line) => [line.gatewayReference, line]));
+    assert.equal(byReference.get('RRR-PAID-1')?.status, 'SUCCESS');
+    assert.equal(byReference.get('RRR-PAID-1')?.amountKobo, 500_000n);
+    assert.equal(byReference.get('RRR-PAID-2')?.amountKobo, 25_050n);
+    assert.ok(
+      !byReference.has('RRR-UNREACHED'),
+      'a reference we could not ask about must not appear as a statement line',
+    );
+  });
+
+  it('reports UNAVAILABLE when Remita answered for nothing at all', async () => {
+    const result = await makeGateway().fetchStatement({
+      ...PERIOD,
+      references: ['RRR-DOWN-1', 'RRR-DOWN-2'],
+    });
+
+    assert.equal(
+      result.outcome,
+      'UNAVAILABLE',
+      'an outage must not be reported as a statement in which no payment appears',
+    );
+    assert.deepEqual(result.lines, []);
+    assert.match(result.reason ?? '', /could not be reached/i);
+  });
+
+  it('distinguishes a period with nothing in it from a period it could not read', async () => {
+    const result = await makeGateway().fetchStatement({ ...PERIOD, references: [] });
+    assert.equal(result.outcome, 'RETRIEVED');
+    assert.deepEqual(result.lines, []);
+  });
+
+  it('reads a bulk merchant report when the merchant has one', async () => {
+    nextStatementResponse = {
+      data: [
+        { RRR: 'RRR-BULK-1', amount: '1000.00', status: '00', settlementReference: 'STL-9' },
+        { RRR: 'RRR-BULK-2', amount: '25.00', status: '021' },
+      ],
+    };
+
+    const result = await makeGateway({ statementPath: 'merchant/report' }).fetchStatement(PERIOD);
+
+    assert.equal(result.outcome, 'RETRIEVED');
+    assert.equal(result.source, 'STATEMENT');
+    assert.equal(result.lines.length, 2);
+    assert.equal(result.lines[0]?.amountKobo, 100_000n);
+    assert.equal(result.lines[0]?.settlementReference, 'STL-9');
+    // 021 is not in successStatusCodes, so it is not money received. Same
+    // conservatism as verify(): an unmapped code is never read as success.
+    assert.equal(result.lines[1]?.status, 'PENDING');
+  });
+
+  it('treats an unreadable report as unavailable, not as an empty one', async () => {
+    nextStatementResponse = { message: 'no report configured for this merchant' };
+
+    const result = await makeGateway({ statementPath: 'merchant/report' }).fetchStatement(PERIOD);
+
+    assert.equal(result.outcome, 'UNAVAILABLE');
+    assert.deepEqual(result.lines, []);
+  });
+
+  it('treats a failing report endpoint as unavailable', async () => {
+    nextStatementResponse = undefined;
+
+    const result = await makeGateway({ statementPath: 'merchant/report' }).fetchStatement({
+      ...PERIOD,
+      references: ['RRR-X'],
+    });
+
+    assert.equal(result.outcome, 'UNAVAILABLE');
+    assert.deepEqual(result.unavailableReferences, ['RRR-X']);
   });
 });

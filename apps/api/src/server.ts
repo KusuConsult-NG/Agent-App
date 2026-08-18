@@ -17,7 +17,7 @@ import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
-import { retryOutstandingRefunds } from './services/reconciliation';
+import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
 import { withTransaction } from './db/pool';
 
 /**
@@ -41,6 +41,15 @@ const WORKER_INTERVALS = {
   authorityCatchUp: 30 * 60_000,
   /** Ask the gateway again for refunds a taxpayer is still owed. */
   refundRetry: 10 * 60_000,
+  /**
+   * Three-way reconciliation (PRD §46).
+   *
+   * Four times a day over a trailing window, rather than nightly, because a
+   * settlement reference can land at any hour and the sooner an exception is
+   * visible the cheaper it is to chase. The sweep skips itself if the previous
+   * one is still running.
+   */
+  reconciliationSweep: 6 * 60 * 60_000,
 };
 
 /**
@@ -126,6 +135,29 @@ async function main(): Promise<void> {
         })
         .catch((error) => console.error('[worker] refund retry failed', error));
     }, WORKER_INTERVALS.refundRetry),
+
+    // The control that proves government actually received the money. It ran
+    // only when somebody remembered to press a button, which is not a control.
+    setInterval(() => {
+      runScheduledReconciliation({ ...SYSTEM_ACTOR })
+        .then((result) => {
+          if (result.skipped) return;
+          if (result.summary?.status === 'ABORTED') {
+            console.error(
+              `[worker] reconciliation ABORTED: ${result.summary.abortReason} ` +
+                '— nothing was compared, and nothing is claimed about this period',
+            );
+            return;
+          }
+          console.log(
+            `[worker] reconciliation: ${result.summary?.matched} matched, ` +
+              `${result.summary?.exceptions} exception(s), ` +
+              `${result.summary?.unchecked} unchecked, ` +
+              `${result.recovery?.verified ?? 0} payment(s) recovered`,
+          );
+        })
+        .catch((error) => console.error('[worker] reconciliation sweep failed', error));
+    }, WORKER_INTERVALS.reconciliationSweep),
   ];
 
   const shutdown = (signal: string) => {

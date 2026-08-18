@@ -37,6 +37,13 @@
  *      pay. Unmapped codes surface through reconciliation instead of being
  *      guessed at. Add known failure codes to `failureStatusCodes` once
  *      confirmed, to shorten that loop.
+ *
+ *   3. `REMITA_STATEMENT_PATH` — the merchant transaction report, if PSIRS's
+ *      account is provisioned with one. Left unset, reconciliation builds the
+ *      statement by asking Remita about each RRR the platform issued, which
+ *      uses only the status API already in production use. Setting it buys one
+ *      thing the per-reference route cannot do: noticing a collection against
+ *      an RRR this platform has no record of at all.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -50,6 +57,8 @@ import type {
   InitiatePaymentResult,
   PaymentGateway,
   SettlementLine,
+  StatementRequest,
+  StatementResult,
   WebhookAuthInput,
   WebhookAuthResult,
 } from './types';
@@ -132,6 +141,8 @@ export class RemitaGateway implements PaymentGateway {
   private readonly notificationSecret: string;
   private readonly notificationIpAllowlist: string[];
   private readonly requestTimeoutMs: number;
+  private readonly statementPath: string;
+  private readonly statementConcurrency: number;
 
   constructor(options?: {
     baseUrl?: string;
@@ -143,6 +154,8 @@ export class RemitaGateway implements PaymentGateway {
     notificationSecret?: string;
     notificationIpAllowlist?: string[];
     requestTimeoutMs?: number;
+    statementPath?: string;
+    statementConcurrency?: number;
   }) {
     this.baseUrl = (options?.baseUrl ?? config.payments.remita.baseUrl).replace(/\/+$/, '');
     this.merchantId = options?.merchantId ?? config.payments.remita.merchantId;
@@ -159,6 +172,11 @@ export class RemitaGateway implements PaymentGateway {
     this.notificationIpAllowlist =
       options?.notificationIpAllowlist ?? config.payments.remita.notificationIpAllowlist;
     this.requestTimeoutMs = options?.requestTimeoutMs ?? config.payments.remita.requestTimeoutMs;
+    this.statementPath = (options?.statementPath ?? config.payments.remita.statementPath).trim();
+    this.statementConcurrency = Math.max(
+      1,
+      options?.statementConcurrency ?? config.payments.remita.statementConcurrency,
+    );
   }
 
   private async request(
@@ -403,8 +421,199 @@ export class RemitaGateway implements PaymentGateway {
    * the finance queue rather than being silently marked reconciled. Finance is
    * told to look, which is the correct failure mode for money.
    */
-  async fetchStatement(_params: { from: Date; to: Date }): Promise<SettlementLine[]> {
-    return [];
+  /**
+   * Remita's account of a period.
+   *
+   * Two routes, because Remita's reliable, universally-provisioned primitive
+   * is status-by-RRR, not a bulk report:
+   *
+   *   1. **Bulk report** when `REMITA_STATEMENT_PATH` is configured. Genuinely
+   *      independent: it can surface a collection the platform has no record
+   *      of at all.
+   *
+   *   2. **Per-reference** otherwise. The platform asks Remita about each RRR
+   *      it issued in the window, using the same status query that is the only
+   *      thing allowed to mark a payment VERIFIED. Each answer is Remita's own
+   *      word on that reference, so the confirmation is exactly as independent
+   *      — it just cannot discover a payment against an RRR this platform
+   *      never issued. Since every RRR originates from `initiate`, which
+   *      writes a payment row before Remita is called, that gap is narrow.
+   *
+   * What this must never do is return an empty statement when it could not
+   * ask. Reconciliation reads a reference absent from the statement as money
+   * the gateway has no record of, so `[]` on an outage would accuse every
+   * successful payment in the window at once.
+   */
+  async fetchStatement(params: StatementRequest): Promise<StatementResult> {
+    if (this.statementPath) return this.fetchBulkStatement(params);
+    return this.fetchStatementPerReference(params);
+  }
+
+  /** Remita's merchant transaction report, when the merchant has one. */
+  private async fetchBulkStatement(params: StatementRequest): Promise<StatementResult> {
+    const path = this.statementPath.replace(/^\/+/, '');
+    const hash = sha512(`${this.merchantId}${this.apiKey}`);
+    const url =
+      `${this.baseUrl}/${path}` +
+      `?merchantId=${encodeURIComponent(this.merchantId)}` +
+      `&startDate=${params.from.toISOString().slice(0, 10)}` +
+      `&endDate=${params.to.toISOString().slice(0, 10)}`;
+
+    let raw: Record<string, unknown>;
+    try {
+      raw = await this.request(url, {
+        method: 'GET',
+        headers: { Authorization: `remitaConsumerKey=${this.merchantId},remitaConsumerToken=${hash}` },
+      });
+    } catch (error) {
+      return {
+        outcome: 'UNAVAILABLE',
+        lines: [],
+        unavailableReferences: params.references ?? [],
+        source: 'NONE',
+        provider: 'remita',
+        reason: error instanceof Error ? error.message : 'Remita statement request failed',
+      };
+    }
+
+    const rows = Array.isArray(raw.data)
+      ? (raw.data as unknown[])
+      : Array.isArray(raw.transactions)
+        ? (raw.transactions as unknown[])
+        : null;
+
+    if (!rows) {
+      // A report we cannot parse is not a report of nothing.
+      return {
+        outcome: 'UNAVAILABLE',
+        lines: [],
+        unavailableReferences: params.references ?? [],
+        source: 'NONE',
+        provider: 'remita',
+        reason:
+          'Remita returned a statement in an unrecognised shape. Confirm REMITA_STATEMENT_PATH ' +
+          'and the report format against the PSIRS merchant configuration.',
+      };
+    }
+
+    const lines: SettlementLine[] = [];
+    for (const entry of rows) {
+      if (typeof entry !== 'object' || entry === null) continue;
+      const row = entry as Record<string, unknown>;
+      const reference = asString(row.RRR) ?? asString(row.rrr);
+      const amountKobo = remitaAmountToKobo(row.amount);
+      if (!reference || amountKobo === null) continue;
+
+      const code = asString(row.status) ?? '';
+      lines.push({
+        gatewayReference: reference,
+        amountKobo,
+        status: this.mapStatementStatus(code),
+        paidAt: parseRemitaDate(row.transactiontime ?? row.paymentDate),
+        settlementReference: asString(row.settlementReference ?? row.settlementId),
+        raw: { ...row, provider: 'remita' },
+      });
+    }
+
+    return {
+      outcome: 'RETRIEVED',
+      lines,
+      unavailableReferences: [],
+      source: 'STATEMENT',
+      provider: 'remita',
+    };
+  }
+
+  /**
+   * Build the statement by asking Remita about each RRR in turn.
+   *
+   * A reference Remita answers about becomes a line. A reference the query
+   * could not reach becomes an entry in `unavailableReferences`, so
+   * reconciliation records it as unchecked instead of missing — we did not ask
+   * about it, which is not the same as being told there is no record.
+   *
+   * If every reference fails, the network is the problem rather than the
+   * references, and the whole statement is reported UNAVAILABLE.
+   */
+  private async fetchStatementPerReference(params: StatementRequest): Promise<StatementResult> {
+    const references = [...new Set(params.references ?? [])];
+    if (references.length === 0) {
+      return {
+        outcome: 'RETRIEVED',
+        lines: [],
+        unavailableReferences: [],
+        source: 'PER_REFERENCE',
+        provider: 'remita',
+      };
+    }
+
+    const lines: SettlementLine[] = [];
+    const unavailable: string[] = [];
+    let cursor = 0;
+
+    const worker = async (): Promise<void> => {
+      for (;;) {
+        const index = cursor++;
+        if (index >= references.length) return;
+        const reference = references[index]!;
+        const result = await this.verify(reference);
+
+        if (result.status === 'UNKNOWN') {
+          // verify() reports UNKNOWN both for a transport failure and for a
+          // reference Remita does not recognise. Only the first is "could not
+          // ask"; the raw payload carries the distinction.
+          if (result.raw?.error === true) {
+            unavailable.push(reference);
+            continue;
+          }
+        }
+
+        lines.push({
+          gatewayReference: reference,
+          amountKobo: result.amountKobo ?? 0n,
+          status: result.status === 'SUCCESS' ? 'SUCCESS' : result.status,
+          paidAt: result.paidAt,
+          settlementReference: result.settlementReference ?? null,
+          raw: { ...result.raw, provider: 'remita' },
+        });
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(this.statementConcurrency, references.length) }, worker),
+    );
+
+    if (unavailable.length === references.length) {
+      return {
+        outcome: 'UNAVAILABLE',
+        lines: [],
+        unavailableReferences: unavailable,
+        source: 'NONE',
+        provider: 'remita',
+        reason: `Remita could not be reached for any of the ${references.length} reference(s) in this period.`,
+      };
+    }
+
+    return {
+      outcome: 'RETRIEVED',
+      lines,
+      unavailableReferences: unavailable,
+      source: 'PER_REFERENCE',
+      provider: 'remita',
+    };
+  }
+
+  /**
+   * Map a Remita status code for statement purposes.
+   *
+   * Same conservatism as `verify`: only a configured success code counts as
+   * SUCCESS. Anything unmapped stays PENDING, so reconciliation never treats
+   * an unrecognised code as money received.
+   */
+  private mapStatementStatus(code: string): string {
+    if (this.successStatusCodes.has(code)) return 'SUCCESS';
+    if (this.failureStatusCodes.has(code)) return 'FAILED';
+    return 'PENDING';
   }
 
   /**
