@@ -12,6 +12,7 @@ import {
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+import { StepUpPrompt } from '../components/StepUp';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -394,6 +395,8 @@ interface Wallet {
     paidKobo: string;
     reversedKobo: string;
     lifetimeKobo: string;
+    /** Commission paid on a transaction later reversed, owed back. */
+    owedBackKobo: string;
     transactionCount: number;
   };
   entries: {
@@ -413,6 +416,7 @@ export function CommissionScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [authorising, setAuthorising] = useState(false);
 
   const load = () =>
     api
@@ -426,6 +430,15 @@ export function CommissionScreen() {
     void load();
   }, []);
 
+  /**
+   * Spend the grant immediately.
+   *
+   * A step-up grant authorises one action and the API consumes it on use, so
+   * this runs the moment the code is accepted rather than closing the panel
+   * and leaving the agent to press the button again — which would spend the
+   * grant on a request they had already authorised and make the second press
+   * look like a failure.
+   */
   async function requestPayout() {
     setBusy(true);
     setError(null);
@@ -434,10 +447,12 @@ export function CommissionScreen() {
       const result = await api.post<{ payoutReference: string; message: string }>(
         '/agents/me/commission/payout',
       );
+      setAuthorising(false);
       setMessage(`${result.message} Reference ${result.payoutReference}.`);
       await load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
+      setAuthorising(false);
     } finally {
       setBusy(false);
     }
@@ -477,17 +492,56 @@ export function CommissionScreen() {
         <p style={{ margin: 0 }}>{data.note}</p>
       </Alert>
 
+      {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
+        <Alert kind="warning" title="Some commission is owed back">
+          <p style={{ margin: 0 }}>
+            <Money kobo={data.wallet.owedBackKobo} /> was paid on transactions that were later
+            reversed. It is taken off your next payout, so you will receive that much less than the
+            amount above.
+          </p>
+        </Alert>
+      )}
+
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      <button type="button" disabled={busy || BigInt(data.wallet.eligibleKobo) === 0n} onClick={requestPayout}>
-        {busy ? <Spinner /> : null}
-        Request payout
-      </button>
-      <p className="field__hint" style={{ marginTop: 8 }}>
-        Commission becomes available once the transaction has been settled to the government account
-        and the hold period has passed. A one-time code is required to request a payout.
-      </p>
+      {authorising ? (
+        <StepUpPrompt
+          action="commission.payout.request"
+          title="Authorise this payout"
+          confirmLabel="Confirm payout"
+          description={
+            <>
+              <p style={{ margin: '0 0 4px' }}>
+                You are requesting a payout of <Money kobo={data.wallet.eligibleKobo} />.
+              </p>
+              {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
+                <p style={{ margin: 0 }}>
+                  <Money kobo={data.wallet.owedBackKobo} /> owed back will be deducted.
+                </p>
+              )}
+            </>
+          }
+          onAuthorised={requestPayout}
+          onCancel={() => setAuthorising(false)}
+        />
+      ) : (
+        <>
+          <button
+            type="button"
+            disabled={busy || BigInt(data.wallet.eligibleKobo) === 0n}
+            onClick={() => setAuthorising(true)}
+          >
+            {busy ? <Spinner /> : null}
+            Request payout
+          </button>
+          <p className="field__hint" style={{ marginTop: 8 }}>
+            Commission becomes available once the transaction has been settled to the government
+            account and the hold period has passed. You will be sent a one-time code to confirm the
+            request.
+          </p>
+        </>
+      )}
 
       <p className="section-title">Commission history</p>
       <div className="card card--flush">
