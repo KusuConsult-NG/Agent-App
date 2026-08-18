@@ -602,3 +602,5 @@ button.link:hover { background: none; color: var(--green-500); }
 }
 
 .document-viewer__access { margin-top: 12px; }
+
+.danger-text { color: var(--danger); }

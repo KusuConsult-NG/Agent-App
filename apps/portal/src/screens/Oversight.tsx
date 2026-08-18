@@ -240,9 +240,64 @@ export function FraudScreen() {
 
 // ---------------------------------------------------------------------------
 
-const AUDIT_QUERIES = [
-  { key: 'reversed', label: 'Transactions reversed after successful payment', path: '/government/audit/queries/reversed-after-success' },
-  { key: 'rates', label: 'All changes made to revenue rates', path: '/government/audit/queries/rate-changes' },
+/**
+ * The audit questions, and what each needs before it can be asked.
+ *
+ * Three of the five took a parameter and had no caller anywhere, because this
+ * list only modelled the ones that take none: transactions by a named agent,
+ * receipts under a named revenue item, and who has looked at a named
+ * taxpayer's record. The last of those is the question a data-protection
+ * enquiry actually asks, and it was answerable only by querying the database
+ * directly — which is the thing this screen says it exists to avoid.
+ *
+ * Each parameter is chosen from a list rather than typed. An auditor knows the
+ * agent's name and the taxpayer's phone number; nobody knows a UUID.
+ */
+interface AuditQuery {
+  key: string;
+  label: string;
+  path: string;
+  /** What must be picked first. Absent means the question can be asked as it is. */
+  parameter?: {
+    name: string;
+    prompt: string;
+    /** Where the options come from, and how to label them. */
+    source: 'agents' | 'revenueItems' | 'taxpayerSearch';
+  };
+  /** Whether the query also wants a period. */
+  period?: boolean;
+}
+
+const AUDIT_QUERIES: AuditQuery[] = [
+  {
+    key: 'reversed',
+    label: 'Transactions reversed after successful payment',
+    path: '/government/audit/queries/reversed-after-success',
+  },
+  {
+    key: 'rates',
+    label: 'All changes made to revenue rates',
+    path: '/government/audit/queries/rate-changes',
+  },
+  {
+    key: 'agent-transactions',
+    label: 'Everything one agent collected',
+    path: '/government/audit/queries/agent-transactions',
+    parameter: { name: 'agentId', prompt: 'Which agent?', source: 'agents' },
+    period: true,
+  },
+  {
+    key: 'receipts-by-item',
+    label: 'Receipts issued under one revenue item',
+    path: '/government/audit/queries/receipts-by-item',
+    parameter: { name: 'revenueItemCode', prompt: 'Which revenue item?', source: 'revenueItems' },
+  },
+  {
+    key: 'taxpayer-access',
+    label: 'Who has looked at one taxpayer’s record',
+    path: '/government/audit/queries/taxpayer-access',
+    parameter: { name: 'taxpayerId', prompt: 'Which taxpayer?', source: 'taxpayerSearch' },
+  },
 ];
 
 export function AuditScreen() {
@@ -250,6 +305,7 @@ export function AuditScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
   const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
+  const [pending, setPending] = useState<AuditQuery | null>(null);
   const [filters, setFilters] = useState({ action: '', entityType: '' });
 
   useEffect(() => {
@@ -313,8 +369,18 @@ export function AuditScreen() {
               type="button"
               className="secondary"
               onClick={async () => {
-                const rows = await api.get<any[]>(query.path);
-                setQueryResult({ label: query.label, rows });
+                if (query.parameter) {
+                  setPending(query);
+                  setQueryResult(null);
+                  return;
+                }
+                setPending(null);
+                try {
+                  const rows = await api.get<any[]>(query.path);
+                  setQueryResult({ label: query.label, rows });
+                } catch (caught) {
+                  if (caught instanceof ApiRequestError) setError(caught.error);
+                }
               }}
             >
               {query.label}
@@ -322,6 +388,18 @@ export function AuditScreen() {
           ))}
         </div>
       </div>
+
+      {pending && (
+        <AuditQueryParameters
+          query={pending}
+          onCancel={() => setPending(null)}
+          onRan={(rows) => {
+            setQueryResult({ label: pending.label, rows });
+            setPending(null);
+          }}
+          onError={setError}
+        />
+      )}
 
       {queryResult && (
         <div className="card card--flush">
@@ -416,5 +494,192 @@ export function AuditScreen() {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Choose what a query is about, then run it.
+ *
+ * The options are fetched from the lists an auditor already has access to —
+ * every role holding audit:read also holds agent:read:all, catalogue:read and
+ * taxpayer:read:all, so none of these selects can present a choice the query
+ * would then refuse.
+ */
+function AuditQueryParameters({
+  query,
+  onCancel,
+  onRan,
+  onError,
+}: {
+  query: AuditQuery;
+  onCancel: () => void;
+  onRan: (rows: any[]) => void;
+  onError: (error: ApiError) => void;
+}) {
+  const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
+  const [value, setValue] = useState('');
+  const [search, setSearch] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [range, setRange] = useState(() => {
+    const to = new Date();
+    const from = new Date(to.getTime() - 30 * 86_400_000);
+    return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+  });
+
+  const source = query.parameter!.source;
+
+  useEffect(() => {
+    setOptions(null);
+    setValue('');
+    if (source === 'agents') {
+      api
+        .get<{ agents: any[] } | any[]>('/agents?limit=200')
+        .then((data) => {
+          const list = Array.isArray(data) ? data : data.agents;
+          setOptions(
+            list.map((agent: any) => ({
+              value: agent.id,
+              label: `${agent.full_name} (${agent.agent_code})`,
+            })),
+          );
+        })
+        .catch(() => setOptions([]));
+    } else if (source === 'revenueItems') {
+      api
+        .get<any[]>('/revenue/items')
+        .then((list) =>
+          setOptions(
+            (Array.isArray(list) ? list : []).map((item: any) => ({
+              value: item.code,
+              label: `${item.name} (${item.code})`,
+            })),
+          ),
+        )
+        .catch(() => setOptions([]));
+    } else {
+      // Taxpayers are searched rather than listed: there are more of them than
+      // any select should hold, and an auditor arrives knowing a name or number.
+      setOptions([]);
+    }
+  }, [source]);
+
+  async function runSearch() {
+    if (!search.trim()) return;
+    setBusy(true);
+    try {
+      const found = await api.get<any[] | { taxpayers: any[] }>(
+        `/taxpayers/search?q=${encodeURIComponent(search.trim())}&limit=25`,
+      );
+      const list = Array.isArray(found) ? found : found.taxpayers;
+      setOptions(
+        list.map((taxpayer: any) => ({
+          value: taxpayer.id ?? taxpayer.taxpayer_id,
+          label: `${taxpayer.display_name ?? taxpayer.business_name ?? [taxpayer.first_name, taxpayer.last_name].filter(Boolean).join(' ')} · ${taxpayer.phone ?? ''}`,
+        })),
+      );
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) onError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function run() {
+    setBusy(true);
+    try {
+      const params = new URLSearchParams({ [query.parameter!.name]: value });
+      if (query.period) {
+        params.set('from', new Date(`${range.from}T00:00:00`).toISOString());
+        params.set('to', new Date(`${range.to}T23:59:59`).toISOString());
+      }
+      onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) onError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <div className="card__header">
+        <h2 className="card__title">{query.label}</h2>
+        <button type="button" className="small secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+
+      {source === 'taxpayerSearch' && (
+        <div className="filters">
+          <div className="field">
+            <label htmlFor="taxpayer-search">Find the taxpayer</label>
+            <input
+              id="taxpayer-search"
+              value={search}
+              placeholder="Name, phone or TIN"
+              onChange={(event) => setSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void runSearch();
+              }}
+            />
+          </div>
+          <button type="button" className="secondary" disabled={busy} onClick={() => void runSearch()}>
+            Search
+          </button>
+        </div>
+      )}
+
+      <div className="field">
+        <label htmlFor="audit-parameter">{query.parameter!.prompt}</label>
+        <select
+          id="audit-parameter"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          disabled={!options || options.length === 0}
+        >
+          <option value="">
+            {!options
+              ? 'Loading…'
+              : options.length === 0
+                ? source === 'taxpayerSearch'
+                  ? 'Search for a taxpayer first'
+                  : 'Nothing to choose from'
+                : 'Select one'}
+          </option>
+          {(options ?? []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {query.period && (
+        <div className="filters">
+          <div className="field">
+            <label htmlFor="audit-from">From</label>
+            <input
+              id="audit-from"
+              type="date"
+              value={range.from}
+              onChange={(event) => setRange({ ...range, from: event.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="audit-to">To</label>
+            <input
+              id="audit-to"
+              type="date"
+              value={range.to}
+              onChange={(event) => setRange({ ...range, to: event.target.value })}
+            />
+          </div>
+        </div>
+      )}
+
+      <button type="button" disabled={busy || !value} onClick={() => void run()}>
+        {busy ? 'Running…' : 'Run this query'}
+      </button>
+    </div>
   );
 }
