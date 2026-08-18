@@ -19,6 +19,7 @@ import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agent
 import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
 import { AuditScreen, FraudScreen } from './screens/Oversight';
+import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
 import { RefereePortalScreen, VerifyScreen } from './screens/Public';
 
@@ -62,6 +63,11 @@ const NAV: { group: string; items: NavItem[] }[] = [
     group: 'Oversight',
     items: [
       { path: '/fraud', label: 'Fraud & leakage', permission: 'fraud:read' },
+      // support:read:all, not support:manage. An auditor holds the first and
+      // not the second, and reading the support queue is exactly the kind of
+      // thing an auditor is for — the screen hides the reply and status
+      // controls from anyone who cannot use them.
+      { path: '/support', label: 'Support desk', permission: 'support:read:all' },
       { path: '/audit', label: 'Audit log', permission: 'audit:read' },
     ],
   },
@@ -190,6 +196,7 @@ function Routes({
   user: User;
 }) {
   const agentMatch = matchRoute(route, '/agents/:id');
+  const ticketMatch = matchRoute(route, '/support/:id');
 
   if (matchRoute(route, '/')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
@@ -201,6 +208,8 @@ function Routes({
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;
   if (matchRoute(route, '/approvals')) return <ApprovalsScreen user={user} />;
   if (matchRoute(route, '/fraud')) return <FraudScreen />;
+  if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;
+  if (ticketMatch) return <TicketDetailScreen ticketId={ticketMatch.id!} navigate={navigate} />;
   if (matchRoute(route, '/audit')) return <AuditScreen />;
   if (matchRoute(route, '/catalogue')) return <CatalogueScreen user={user} />;
   if (matchRoute(route, '/programmes')) return <ProgrammesScreen />;
