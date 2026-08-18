@@ -74,6 +74,62 @@ export function hasStoredSession(): boolean {
   return sessionStorage.getItem(REFRESH_KEY) !== null;
 }
 
+/**
+ * Fetch a file the API will only release to an authenticated caller.
+ *
+ * An identity document cannot be an `<img src>`: the endpoint wants a bearer
+ * token and the browser will not send one on an image request. So the bytes
+ * come through fetch and become an object URL, which means two obligations the
+ * caller has to keep — revoke the URL when the viewer closes, and never put it
+ * anywhere it outlives the screen. This is somebody's passport photograph.
+ *
+ * The 401 retry mirrors `request()`: a reviewer who has been reading a long
+ * application should not be signed out by the one call that fetches an image.
+ */
+export async function fetchFile(path: string): Promise<Blob> {
+  const send = async (): Promise<Response> =>
+    fetch(`${API_BASE}${path}`, {
+      headers: accessToken ? { authorization: `Bearer ${accessToken}` } : {},
+    });
+
+  let response = await send();
+
+  if (response.status === 401) {
+    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    if (refreshToken) {
+      try {
+        const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(
+          '/auth/refresh',
+          { method: 'POST', body: { refreshToken }, authenticated: false },
+        );
+        setSession(session);
+        response = await send();
+      } catch {
+        setSession(null);
+      }
+    }
+  }
+
+  if (!response.ok) {
+    // The file endpoints answer JSON on failure, so the reviewer is told why
+    // rather than being handed a broken image.
+    let error: ApiError = {
+      code: 'UNKNOWN',
+      message: `The document could not be loaded (${response.status}).`,
+      moneyStatus: 'NOT_APPLICABLE',
+    };
+    try {
+      const payload = (await response.json()) as { error?: ApiError };
+      if (payload.error) error = payload.error;
+    } catch {
+      // Leave the default.
+    }
+    throw new ApiRequestError(response.status, error);
+  }
+
+  return response.blob();
+}
+
 export function can(permission: string): boolean {
   return getUser()?.permissions.includes(permission) ?? false;
 }

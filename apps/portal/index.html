@@ -8,9 +8,17 @@
       name="description"
       content="Plateau State Internal Revenue Service — government revenue administration portal"
     />
+    <!--
+      blob: is in img-src for one reason: an identity document is fetched with
+      the reviewer's bearer token and shown from an object URL, because an
+      authenticated endpoint cannot be a bare <img src>. A data: URL would have
+      worked without this line and cannot be revoked, which is the wrong
+      trade for a photograph of somebody's passport — the blob is released the
+      moment the viewer closes.
+    -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://localhost:4000; object-src 'none'; base-uri 'none'; form-action 'self'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' http://localhost:4000; object-src 'none'; base-uri 'none'; form-action 'self'"
     />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <title>PSIRS Revenue Portal</title>

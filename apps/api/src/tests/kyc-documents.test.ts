@@ -13,6 +13,7 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGovernmentUser,
+  get,
   loginAs,
   pool,
   post,
@@ -225,5 +226,52 @@ describe('Who may see a citizen identity document', () => {
     );
     assert.equal(row?.verification_status, 'REJECTED');
     assert.match(row!.rejection_reason, /too dark/, 'the applicant is told what to fix');
+  });
+});
+
+describe('A rejection is the start of a loop, not a verdict into the void', () => {
+  it('reaches the applicant with its reason, so they can submit another', async () => {
+    // The officer's decision only means something if the person who submitted
+    // the document finds out. The agent app renders verification_status and
+    // rejection_reason against each document and offers a re-capture, so this
+    // pins the half that carries the reason back.
+    const uploaded = await upload(PNG, 'image/png');
+
+    const rejected = await post(
+      `/agents/kyc/documents/${uploaded.body.documentId}/review`,
+      { decision: 'REJECT', reason: 'The photograph is too dark to read the number.' },
+      { token: adminToken },
+    );
+    assert.equal(rejected.status, 200, JSON.stringify(rejected.body));
+    assert.equal(rejected.body.status, 'REJECTED');
+
+    const mine = await get('/agents/me/kyc/documents', { token: agentToken, deviceId: device });
+    assert.equal(mine.status, 200);
+    const doc = mine.body.documents.find((entry: { id: string }) => entry.id === uploaded.body.documentId);
+    assert.equal(doc.verification_status, 'REJECTED');
+    assert.match(
+      doc.rejection_reason,
+      /too dark/,
+      'the applicant is told what was wrong, not only that it was refused',
+    );
+  });
+
+  it('records the review in the access log alongside the reads', async () => {
+    const uploaded = await upload(PNG, 'image/png');
+    await post(
+      `/agents/kyc/documents/${uploaded.body.documentId}/review`,
+      { decision: 'ACCEPT', reason: 'Legible and matches the application.' },
+      { token: adminToken },
+    );
+
+    const log = await query<{ access_type: string }>(
+      pool,
+      'SELECT access_type FROM kyc_document_access_logs WHERE document_id = $1 ORDER BY created_at',
+      [uploaded.body.documentId],
+    );
+    assert.ok(
+      log.some((entry) => entry.access_type === 'REVIEW'),
+      'a decision is an access event too — the log answers "who handled this document"',
+    );
   });
 });
