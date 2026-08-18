@@ -77,6 +77,52 @@ export interface SettlementLine {
   status: string;
   paidAt: Date | null;
   settlementReference: string | null;
+  /** The gateway's own record for this line, kept verbatim for disputes. */
+  raw?: Record<string, unknown>;
+}
+
+/**
+ * The gateway's account of a period, and whether we actually got one.
+ *
+ * The outcome exists because an empty statement is ambiguous in the most
+ * dangerous possible way. Reconciliation treats a payment the statement does
+ * not mention as money the gateway has no record of — a `MISSING_PAYMENT`
+ * exception. So a `[]` returned because the gateway could not be reached is
+ * indistinguishable, to the code that consumes it, from a `[]` returned
+ * because nothing was collected — and it turns every successful payment in
+ * the window into an accusation.
+ *
+ * `UNAVAILABLE` says the question could not be asked. Reconciliation then
+ * declines to run rather than manufacture exceptions, which is the same
+ * distinction the KYC, TIN, bank, vehicle and refund paths already make.
+ *
+ * `unavailableReferences` is the partial case: the statement is real, but
+ * these particular references could not be checked. They are recorded as
+ * unchecked rather than counted as missing, because we did not ask about them.
+ */
+export interface StatementResult {
+  outcome: 'RETRIEVED' | 'UNAVAILABLE';
+  lines: SettlementLine[];
+  /** References the gateway could not be asked about on this attempt. */
+  unavailableReferences: string[];
+  /** How the statement was obtained, recorded on the run for auditors. */
+  source: 'STATEMENT' | 'PER_REFERENCE' | 'NONE';
+  reason?: string;
+  provider: string;
+}
+
+/**
+ * What reconciliation needs from a gateway for one period.
+ *
+ * `references` are the gateway references the platform issued in the window.
+ * A gateway with no bulk statement endpoint can still answer the question by
+ * being asked about each one in turn, which is the same independent
+ * confirmation, obtained one row at a time.
+ */
+export interface StatementRequest {
+  from: Date;
+  to: Date;
+  references?: string[];
 }
 
 export interface WebhookAuthInput {
@@ -137,8 +183,14 @@ export interface PaymentGateway {
   verify(gatewayReference: string): Promise<GatewayVerificationResult>;
   authenticateWebhook(input: WebhookAuthInput): WebhookAuthResult;
   parseWebhook(payload: unknown): GatewayWebhookEvent | null;
-  /** Gateway statement used for three-way reconciliation (PRD §46). */
-  fetchStatement(params: { from: Date; to: Date }): Promise<SettlementLine[]>;
+  /**
+   * Gateway statement used for three-way reconciliation (PRD §46).
+   *
+   * Must report UNAVAILABLE rather than an empty statement when the gateway
+   * could not be asked. See StatementResult for why that distinction is not
+   * cosmetic.
+   */
+  fetchStatement(params: StatementRequest): Promise<StatementResult>;
   /**
    * Ask the gateway to return money to the taxpayer (PRD §71).
    *

@@ -54,18 +54,42 @@ export function ReconciliationScreen() {
     setMessage(null);
     try {
       const result = await api.post<{
+        status: 'COMPLETED' | 'ABORTED';
         matched: number;
         exceptions: number;
+        unchecked: number;
         byStatus: Record<string, number>;
         totalPlatformKobo: string;
         totalGatewayKobo: string;
+        statementSource: string;
+        abortReason?: string;
       }>('/government/reconciliation/run', {
         from: new Date(range.from).toISOString(),
         to: new Date(`${range.to}T23:59:59`).toISOString(),
       });
+
+      if (result.status === 'ABORTED') {
+        // Nothing was compared, so nothing may be reported as agreeing. Saying
+        // "0 exceptions" here would be the most reassuring sentence available
+        // and the least true one.
+        setError({
+          code: 'RECONCILIATION_ABORTED',
+          moneyStatus: 'UNCONFIRMED',
+          nextStep: 'Re-run this period once the gateway is reachable.',
+          message:
+            `Reconciliation did not run: ${result.abortReason ?? 'the gateway statement could not be retrieved.'} ` +
+            'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
+        });
+        load();
+        return;
+      }
+
       setMessage(
-        `Reconciliation complete: ${result.matched} matched, ${result.exceptions} exception(s). ` +
-          `Platform total and gateway total ${
+        `Reconciliation complete: ${result.matched} matched, ${result.exceptions} exception(s)` +
+          (result.unchecked > 0
+            ? `, ${result.unchecked} reference(s) the gateway could not be asked about`
+            : '') +
+          `. Platform total and gateway total ${
             result.totalPlatformKobo === result.totalGatewayKobo ? 'agree' : 'DO NOT agree'
           }.`,
       );
