@@ -654,3 +654,14 @@ button.danger {
   margin-top: 8px;
   cursor: pointer;
 }
+
+/* The camera view while scanning a receipt. Sized generously: this is used at
+   arm's length, holding a piece of paper steady with the other hand. */
+.scanner__view {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #000;
+  margin-bottom: 10px;
+}

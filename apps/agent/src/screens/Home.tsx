@@ -24,6 +24,9 @@ const QUICK_ACTIONS = [
   { href: '#/collect', label: 'Collect revenue', icon: Icons.collect },
   { href: '#/vehicles', label: 'Renew vehicle', icon: Icons.vehicle },
   { href: '#/taxpayers', label: 'Find taxpayer', icon: Icons.search },
+  // Agents are asked "is this receipt real?" in the field constantly; until
+  // now answering meant leaving the application.
+  { href: '#/verify', label: 'Check a receipt', icon: Icons.receipt },
 ];
 
 function greeting(): string {

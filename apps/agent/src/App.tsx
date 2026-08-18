@@ -26,6 +26,7 @@ import { HomeScreen } from './screens/Home';
 import { RegisterTaxpayerScreen, TaxpayerScreen, TaxpayersScreen } from './screens/Taxpayers';
 import { CollectScreen, TransactionScreen } from './screens/Collect';
 import { CommissionScreen, ProfileScreen, ReceiptsScreen, VehiclesScreen } from './screens/More';
+import { VerifyScreen } from './screens/Verify';
 
 interface VersionState {
   supported: boolean;
@@ -232,6 +233,7 @@ function Routes({
   }
   if (matchRoute(route, '/vehicles')) return <VehiclesScreen navigate={navigate} />;
   if (matchRoute(route, '/receipts')) return <ReceiptsScreen />;
+  if (matchRoute(route, '/verify')) return <VerifyScreen connection={connection} />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
 
