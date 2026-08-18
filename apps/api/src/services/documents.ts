@@ -19,6 +19,8 @@ import { formatNaira, type Kobo } from '@psirs/shared';
 import { config } from '../config';
 import { verificationUrl as publicVerificationUrl } from '../lib/public-urls';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
 import { nextDocumentNumber } from '../lib/references';
@@ -32,8 +34,69 @@ const COLOURS = {
   danger: '#9c2a2a',
 } as const;
 
+
+/**
+ * The faces every document is drawn with.
+ *
+ * PDFKit's built-in fonts are the base-14 Type 1 faces. They use WinAnsi
+ * encoding, which has no ₦ (U+20A6), so every amount on every receipt, invoice
+ * and certificate rendered with a broken character where the currency should
+ * be — on documents whose whole purpose is to be trustworthy evidence that a
+ * citizen paid government revenue.
+ *
+ * Liberation Sans is bundled rather than taken from the host, because a
+ * deployed container is not guaranteed to carry it and the failure would be
+ * silent in the same way: a receipt that renders, and is wrong. It is metrically
+ * compatible with Helvetica, so the layouts written against Helvetica's metrics
+ * are unchanged. See assets/fonts/README.md for the licence.
+ */
+/**
+ * Compiled output sits at dist/services and source at src/services, so the
+ * fonts are looked for in both places rather than assuming one layout. The
+ * build copies them into dist; running from source finds them at the package
+ * root. Whichever is found first is used, and finding neither is fatal.
+ */
+function fontDir(): string {
+  const candidates = [
+    join(__dirname, '..', 'assets', 'fonts'), // dist/assets/fonts
+    join(__dirname, '..', '..', 'assets', 'fonts'), // apps/api/assets/fonts
+  ];
+  return candidates.find((path) => existsSync(join(path, 'LiberationSans-Regular.ttf'))) ?? candidates[0]!;
+}
+
+const FONTS = () => {
+  const dir = fontDir();
+  return {
+    regular: join(dir, 'LiberationSans-Regular.ttf'),
+    bold: join(dir, 'LiberationSans-Bold.ttf'),
+  };
+};
+
+/** Names registered on each document; used everywhere Helvetica once was. */
+export const BODY_FONT = 'PSIRS-Sans';
+export const BOLD_FONT = 'PSIRS-Sans-Bold';
+
+function registerFonts(doc: PDFKit.PDFDocument): void {
+  // Fail loudly at the first document rather than emitting a broken one: a
+  // build that did not carry the fonts must not quietly fall back to a face
+  // that cannot spell the currency.
+  const fonts = FONTS();
+  for (const path of Object.values(fonts)) {
+    if (!existsSync(path)) {
+      throw new Error(
+        `Document font missing at ${path}. The build did not include assets/fonts — ` +
+          'refusing to issue a document that cannot render the naira sign.',
+      );
+    }
+  }
+  doc.registerFont(BODY_FONT, fonts.regular);
+  doc.registerFont(BOLD_FONT, fonts.bold);
+  doc.font(BODY_FONT);
+}
+
 async function renderPdf(build: (doc: PDFKit.PDFDocument) => void | Promise<void>): Promise<Buffer> {
   const doc = new PDFDocument({ size: 'A4', margin: 48, info: { Producer: 'PSIRS Revenue Platform' } });
+  registerFonts(doc);
   const chunks: Buffer[] = [];
   doc.on('data', (chunk: Buffer) => chunks.push(chunk));
 
@@ -55,14 +118,14 @@ function header(doc: PDFKit.PDFDocument, title: string, subtitle: string): void 
   doc
     .fillColor(COLOURS.accent)
     .fontSize(16)
-    .font('Helvetica-Bold')
+    .font(BOLD_FONT)
     .text(config.branding.stateName.toUpperCase(), { align: 'center' })
     .fillColor(COLOURS.ink)
     .fontSize(12)
     .text(config.branding.agencyName, { align: 'center' })
     .fillColor(COLOURS.muted)
     .fontSize(8)
-    .font('Helvetica')
+    .font(BODY_FONT)
     .text(config.branding.motto, { align: 'center' });
 
   doc.moveDown(0.8);
@@ -77,10 +140,10 @@ function header(doc: PDFKit.PDFDocument, title: string, subtitle: string): void 
   doc
     .fillColor(COLOURS.ink)
     .fontSize(15)
-    .font('Helvetica-Bold')
+    .font(BOLD_FONT)
     .text(title, { align: 'center' })
     .fontSize(9)
-    .font('Helvetica')
+    .font(BODY_FONT)
     .fillColor(COLOURS.muted)
     .text(subtitle, { align: 'center' });
   doc.moveDown(1);
@@ -95,12 +158,12 @@ function fieldTable(doc: PDFKit.PDFDocument, rows: [string, string][]): void {
     const y = doc.y;
     doc
       .fontSize(9)
-      .font('Helvetica')
+      .font(BODY_FONT)
       .fillColor(COLOURS.muted)
       .text(label, left, y, { width: labelWidth });
     doc
       .fontSize(10)
-      .font('Helvetica-Bold')
+      .font(BOLD_FONT)
       .fillColor(COLOURS.ink)
       .text(value || '—', left + labelWidth, y, { width: width - labelWidth });
     doc.moveDown(0.35);
@@ -117,7 +180,7 @@ function footer(doc: PDFKit.PDFDocument, verificationUrl: string, note: string):
     .stroke();
   doc
     .fontSize(7.5)
-    .font('Helvetica')
+    .font(BODY_FONT)
     .fillColor(COLOURS.muted)
     .text(note, doc.page.margins.left, y + 8, {
       width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
@@ -157,7 +220,7 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
 
     doc
       .fontSize(20)
-      .font('Helvetica-Bold')
+      .font(BOLD_FONT)
       .fillColor(COLOURS.accent)
       .text(data.receiptNumber, { align: 'center' });
     doc.moveDown(0.9);
@@ -181,19 +244,19 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
     doc
       .fillColor(COLOURS.muted)
       .fontSize(9)
-      .font('Helvetica')
+      .font(BODY_FONT)
       .text('AMOUNT PAID TO GOVERNMENT', doc.page.margins.left + 14, boxTop + 10);
     doc
       .fillColor(COLOURS.ink)
       .fontSize(22)
-      .font('Helvetica-Bold')
+      .font(BOLD_FONT)
       .text(formatNaira(data.amountKobo), doc.page.margins.left + 14, boxTop + 23);
     doc.y = boxTop + 66;
 
     if (data.serviceChargeKobo > 0n) {
       doc
         .fontSize(9)
-        .font('Helvetica')
+        .font(BODY_FONT)
         .fillColor(COLOURS.muted)
         .text(
           `Approved service charge (shown separately, not government revenue): ${formatNaira(
@@ -259,12 +322,12 @@ export async function renderVehicleDocumentPdf(data: VehicleDocumentData): Promi
 
     doc
       .fontSize(20)
-      .font('Helvetica-Bold')
+      .font(BOLD_FONT)
       .fillColor(COLOURS.accent)
       .text(data.registrationNumber, { align: 'center' })
       .fontSize(10)
       .fillColor(COLOURS.muted)
-      .font('Helvetica')
+      .font(BODY_FONT)
       .text(`Document number ${data.documentNumber}`, { align: 'center' });
     doc.moveDown(1);
 
@@ -329,7 +392,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 
     doc
       .fontSize(18)
-      .font('Helvetica-Bold')
+      .font(BOLD_FONT)
       .fillColor(COLOURS.accent)
       .text(data.invoiceNumber, { align: 'center' });
     doc.moveDown(0.9);
@@ -349,12 +412,12 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
     ]);
 
     doc.moveDown(0.6);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(COLOURS.ink).text('How this amount was calculated');
+    doc.fontSize(10).font(BOLD_FONT).fillColor(COLOURS.ink).text('How this amount was calculated');
     doc.moveDown(0.3);
     for (const step of data.trace) {
       doc
         .fontSize(8.5)
-        .font('Helvetica')
+        .font(BODY_FONT)
         .fillColor(COLOURS.muted)
         .text(
           `${step.step}: ${step.detail}${step.amount ? `  =  ${formatNaira(BigInt(step.amount))}` : ''}`,

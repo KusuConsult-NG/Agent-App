@@ -1,5 +1,5 @@
 /**
- * Copy the SQL migrations into the build output.
+ * Copy the non-TypeScript files the build needs into the output.
  *
  * `tsc` compiles TypeScript and nothing else, so `dist/db/migrations` was empty
  * and `node dist/server.js` died at boot:
@@ -42,3 +42,33 @@ if (copied.length !== expected.length) {
 }
 
 console.log(`[build] copied ${copied.length} migration(s) into dist/db/migrations`);
+
+// ---------------------------------------------------------------------------
+// Document fonts
+//
+// Every issued PDF states an amount in naira, and PDFKit's built-in faces have
+// no glyph for it, so the fonts are bundled and embedded. A build without them
+// would produce receipts with a broken character where the currency belongs —
+// which renders, and is therefore not noticed. `documents.ts` refuses to issue
+// a document when they are missing; this makes sure they are not.
+// ---------------------------------------------------------------------------
+
+const fontsFrom = join(apiRoot, 'assets', 'fonts');
+const fontsTo = join(apiRoot, 'dist', 'assets', 'fonts');
+
+if (!existsSync(fontsFrom)) {
+  throw new Error(`No fonts directory at ${fontsFrom}. Refusing to produce a build without one.`);
+}
+
+cpSync(fontsFrom, fontsTo, { recursive: true });
+
+const fontsCopied = readdirSync(fontsTo).filter((name) => name.endsWith('.ttf'));
+const fontsExpected = readdirSync(fontsFrom).filter((name) => name.endsWith('.ttf'));
+
+if (fontsCopied.length !== fontsExpected.length || fontsCopied.length === 0) {
+  throw new Error(
+    `Copied ${fontsCopied.length} font(s) but source has ${fontsExpected.length}. Build aborted.`,
+  );
+}
+
+console.log(`[build] copied ${fontsCopied.length} font(s) into dist/assets/fonts`);
