@@ -20,6 +20,7 @@ import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
 import { AuditScreen, FraudScreen } from './screens/Oversight';
 import { SupportScreen, TicketDetailScreen } from './screens/Support';
+import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
 import { RefereePortalScreen, VerifyScreen } from './screens/Public';
 
@@ -68,6 +69,12 @@ const NAV: { group: string; items: NavItem[] }[] = [
       // thing an auditor is for — the screen hides the reply and status
       // controls from anyone who cannot use them.
       { path: '/support', label: 'Support desk', permission: 'support:read:all' },
+      // payment:read:all, which every portal role holds, because the refund
+      // queue is the part of this screen everyone should be able to see. The
+      // TIN and vehicle-authority queues are guarded separately and the screen
+      // shows only the sections the officer may read, rather than the page
+      // answering 403 for whoever holds two of the three permissions.
+      { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
       { path: '/audit', label: 'Audit log', permission: 'audit:read' },
     ],
   },
@@ -208,6 +215,7 @@ function Routes({
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;
   if (matchRoute(route, '/approvals')) return <ApprovalsScreen user={user} />;
   if (matchRoute(route, '/fraud')) return <FraudScreen />;
+  if (matchRoute(route, '/outstanding')) return <OutstandingScreen />;
   if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;
   if (ticketMatch) return <TicketDetailScreen ticketId={ticketMatch.id!} navigate={navigate} />;
   if (matchRoute(route, '/audit')) return <AuditScreen />;
