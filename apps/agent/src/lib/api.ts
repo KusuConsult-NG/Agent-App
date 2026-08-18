@@ -30,12 +30,23 @@ export interface ApiError {
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly error: ApiError;
+  /**
+   * The parsed response body, exactly as PSIRS sent it.
+   *
+   * Not every rejection is a transport failure dressed as an envelope. Receipt
+   * verification answers "no such receipt" with a verdict on a 404, and that
+   * verdict is the answer the caller wants; synthesising "the request failed"
+   * over it turns "this receipt was never issued" into "the check did not
+   * work". Null when the body was absent or not JSON.
+   */
+  readonly body: unknown;
 
-  constructor(status: number, error: ApiError) {
+  constructor(status: number, error: ApiError, body: unknown = null) {
     super(error.message);
     this.name = 'ApiRequestError';
     this.status = status;
     this.error = error;
+    this.body = body;
   }
 }
 
@@ -226,7 +237,7 @@ async function uploadRequest<T>(path: string, file: Blob, filename?: string): Pr
       code: 'UPLOAD_FAILED',
       message: 'The document could not be sent. Try again.',
       moneyStatus: 'NOT_APPLICABLE',
-    });
+    }, payload);
   }
   return payload as T;
 }
@@ -264,7 +275,7 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
       message: `The request failed (${response.status}). Try again, or contact support.`,
       moneyStatus: 'NOT_APPLICABLE' as const,
     };
-    throw new ApiRequestError(response.status, error);
+    throw new ApiRequestError(response.status, error, payload);
   }
 
   return payload as T;

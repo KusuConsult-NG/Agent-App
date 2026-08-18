@@ -43,9 +43,13 @@ export function VerifyScreen({ code }: { code?: string }) {
       );
     } catch (caught) {
       if (caught instanceof ApiRequestError) {
-        // A "not found" answer is a legitimate result, not an error.
-        if (caught.status === 404 && (caught.error as unknown as VerificationResult).status) {
-          setResult(caught.error as unknown as VerificationResult);
+        // A "not found" answer is a legitimate result, not an error — and for
+        // a receipt nobody issued it is *the* answer this page exists to give.
+        // It arrives as the response body on a 404, so read it from there
+        // rather than from the error envelope, which that body does not carry.
+        const verdict = caught.body as VerificationResult | null;
+        if (caught.status === 404 && verdict?.status) {
+          setResult(verdict);
         } else {
           setError(caught.error);
         }
