@@ -604,3 +604,31 @@ button.link:hover { background: none; color: var(--green-500); }
 .document-viewer__access { margin-top: 12px; }
 
 .danger-text { color: var(--danger); }
+
+/* --------------------------------------------------------------- password */
+
+/*
+ * A password field with a reveal control.
+ *
+ * The button sits inside the field's border rather than beside it, so the
+ * input keeps its full tap target on a phone and the control cannot be
+ * mistaken for the submit button underneath.
+ */
+.password { position: relative; display: flex; align-items: center; }
+
+.password__input { width: 100%; padding-right: 68px; }
+
+.password__toggle {
+  position: absolute;
+  right: 6px;
+  min-height: 34px;
+  padding: 4px 10px;
+  border: none;
+  background: none;
+  color: var(--green-500);
+  font-size: 0.82rem;
+  font-weight: 650;
+  width: auto;
+}
+
+.password__toggle:hover:not(:disabled) { background: none; text-decoration: underline; }

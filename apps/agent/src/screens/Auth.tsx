@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, login, type ApiError, type Session } from '../lib/api';
-import { Alert, ErrorAlert, Field, Spinner } from '../ui';
+import { Alert, ErrorAlert, Field, PasswordField, Spinner } from '../ui';
 
 export function LoginScreen({
   onSignedIn,
@@ -64,15 +64,13 @@ export function LoginScreen({
           />
         </Field>
 
-        <Field label="Password" required>
-          <input
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-        </Field>
+        <PasswordField
+          label="Password"
+          autoComplete="current-password"
+          value={password}
+          onChange={setPassword}
+          required
+        />
 
         <button type="submit" disabled={busy}>
           {busy ? <Spinner /> : null}
@@ -210,9 +208,15 @@ export function ApplyScreen({ onDone }: { onDone: () => void }) {
         <Field label="Date of birth">
           <input type="date" value={form.dateOfBirth} onChange={update('dateOfBirth')} />
         </Field>
-        <Field label="Password" hint="At least 8 characters, including a letter and a number" required>
-          <input type="password" autoComplete="new-password" value={form.password} onChange={update('password')} required minLength={8} />
-        </Field>
+        <PasswordField
+          label="Password"
+          hint="At least 8 characters, including a letter and a number"
+          autoComplete="new-password"
+          value={form.password}
+          onChange={(next) => setForm((current) => ({ ...current, password: next }))}
+          required
+          minLength={8}
+        />
 
         <p className="section-title">Where you live</p>
         <Field label="Residential address" required>
