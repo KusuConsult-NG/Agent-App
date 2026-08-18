@@ -427,12 +427,21 @@ governmentRouter.post(
   '/refunds/retry',
   requirePermission('payment:reconcile'),
   asyncHandler(async (req, res) => {
-    res.json(
-      await reconciliation.retryOutstandingRefunds({
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      }),
-    );
+    const result = await reconciliation.retryOutstandingRefunds({
+      actorId: req.auth!.userId,
+      actorRole: req.auth!.role,
+    });
+    res.json({
+      ...result,
+      // The other two catch-up endpoints say what happened in a sentence; this
+      // one returned bare counts, which left the screen to invent the wording
+      // for the case that matters most — money still not returned.
+      message:
+        result.stillOutstanding === 0
+          ? `${result.completed} refund(s) returned to taxpayers.`
+          : `${result.completed} returned; ${result.stillOutstanding} still owed. ` +
+            'Those taxpayers have not had their money back yet.',
+    });
   }),
 );
 

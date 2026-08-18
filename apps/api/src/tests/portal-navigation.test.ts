@@ -71,6 +71,11 @@ function permissionsGuardingGet(path: string): string[] {
  */
 const SCREEN_REQUIREMENTS: { navPath: string; getRoute: string }[] = [
   { navPath: '/reconciliation', getRoute: '/settlements' },
+  // Outstanding work reads three queues behind three different permissions and
+  // renders only the sections the officer may read. What the menu gate has to
+  // guarantee is the one section everybody is shown: the refunds a taxpayer is
+  // still owed.
+  { navPath: '/outstanding', getRoute: '/refunds/outstanding' },
 ];
 
 describe('Portal navigation matches what the API will allow', () => {
@@ -113,6 +118,20 @@ describe('Portal navigation matches what the API will allow', () => {
             `requires one of ${accepted.join(' or ')} — the menu would open onto a 403`,
         );
       }
+    }
+  });
+
+  it('shows outstanding work to every role that can reach the portal', () => {
+    // The refund queue is money a citizen has not had back. It was invisible to
+    // everyone for as long as it had no screen; it should not now be visible to
+    // only the one role that can act on it.
+    const item = navigationItems().find((entry) => entry.path === '/outstanding')!;
+    // The portal's roles. `agent` is in ROLES but never signs in here.
+    for (const role of ['admin', 'revenue_officer', 'finance_officer', 'supervisor', 'auditor'] as const) {
+      assert.ok(
+        (permissionsForRole(role) as readonly string[]).includes(item.permission),
+        `${role} must be able to see what the platform still owes`,
+      );
     }
   });
 
