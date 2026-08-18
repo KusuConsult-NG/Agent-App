@@ -8,13 +8,20 @@ import { z } from 'zod';
 import { parseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
-import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import {
+  asyncHandler,
+  koboSchema,
+  type RouteRequest,
+  uuidSchema,
+  validateBody,
+  validateQuery,
+} from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
-import { nextTicketNumber } from '../lib/references';
 import { recordAudit, verifyAuditChain } from '../services/audit';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import * as incentives from '../services/incentives';
+import * as support from '../services/support';
 import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
 import { integrationStatus } from '../integrations';
@@ -891,75 +898,38 @@ governmentRouter.get(
 // Support tickets (PRD §77, §78)
 // ---------------------------------------------------------------------------
 
+/**
+ * The signed-in officer or agent, as the support service wants them.
+ *
+ * Permissions travel with the viewer rather than being re-derived from the
+ * role, so scoping a query to "their own tickets" and gating a screen are the
+ * same decision made from the same source.
+ */
+function viewerFrom(req: RouteRequest): support.Viewer {
+  return {
+    userId: req.auth!.userId,
+    role: req.auth!.role,
+    permissions: req.auth!.permissions,
+  };
+}
+
 export const supportRouter = Router();
 
 supportRouter.use(authenticate);
 
+/** Anyone signed in may raise a ticket; that is the point of the channel. */
 supportRouter.post(
   '/tickets',
   validateBody(
     z.object({
-      category: z.enum([
-        'PAYMENT_ISSUE',
-        'TIN_ISSUE',
-        'VEHICLE_ISSUE',
-        'RECEIPT_ISSUE',
-        'TECHNICAL_ISSUE',
-        'TAXPAYER_COMPLAINT',
-        'INCORRECT_ASSESSMENT',
-        'AGENT_MISCONDUCT',
-        'UNAUTHORISED_CHARGE',
-      ]),
+      category: z.enum(support.TICKET_CATEGORIES),
       subject: z.string().min(5).max(200),
       description: z.string().min(10).max(4000),
       transactionReference: z.string().max(40).optional(),
       priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'URGENT']).default('NORMAL'),
     }),
     async (req, res, data) => {
-
-      const ticket = await withTransaction(async (client) => {
-        let transactionId: string | null = null;
-        let agentId: string | null = null;
-        let taxpayerId: string | null = null;
-
-        if (data.transactionReference) {
-          const transaction = await queryOne<{ id: string; agent_id: string | null; taxpayer_id: string }>(
-            client,
-            'SELECT id, agent_id, taxpayer_id FROM transactions WHERE transaction_reference = $1',
-            [data.transactionReference],
-          );
-          if (!transaction) {
-            throw badRequest(`No transaction found with reference ${data.transactionReference}.`);
-          }
-          transactionId = transaction.id;
-          agentId = transaction.agent_id;
-          taxpayerId = transaction.taxpayer_id;
-        }
-
-        const ticketNumber = await nextTicketNumber(client);
-        const row = await queryOne<{ id: string }>(
-          client,
-          `INSERT INTO support_tickets
-             (ticket_number, raised_by, raiser_role, category, subject, description,
-              transaction_id, agent_id, taxpayer_id, priority)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-          [
-            ticketNumber,
-            req.auth!.userId,
-            req.auth!.role,
-            data.category,
-            data.subject,
-            data.description,
-            transactionId,
-            agentId,
-            taxpayerId,
-            data.priority,
-          ],
-        );
-
-        return { id: row!.id, ticketNumber };
-      });
-
+      const ticket = await support.raiseTicket({ input: data, viewer: viewerFrom(req) });
       res.status(201).json(ticket);
     },
   ),
@@ -968,25 +938,44 @@ supportRouter.post(
 supportRouter.get(
   '/tickets',
   validateQuery(
-    z.object({ status: z.string().optional(), limit: z.coerce.number().int().max(200).default(50) }),
+    z.object({
+      status: z.string().optional(),
+      category: z.string().optional(),
+      assignedToMe: z.coerce.boolean().optional(),
+      limit: z.coerce.number().int().max(200).default(50),
+    }),
     async (req, res, data) => {
-      // A raiser sees only their own tickets; support staff see everything.
-      const scopeToSelf = !req.auth!.permissions.includes('support:read:all');
-      res.json(
-        await query(
-          pool,
-          `SELECT t.id, t.ticket_number, t.category, t.subject, t.status, t.priority,
-                  t.created_at, t.resolved_at, u.full_name AS raised_by_name,
-                  tr.transaction_reference
-             FROM support_tickets t
-             JOIN users u ON u.id = t.raised_by
-             LEFT JOIN transactions tr ON tr.id = t.transaction_id
-            WHERE ($1::uuid IS NULL OR t.raised_by = $1)
-              AND ($2::text IS NULL OR t.status = $2)
-            ORDER BY t.created_at DESC LIMIT $3`,
-          [scopeToSelf ? req.auth!.userId : null, data.status ?? null, data.limit],
-        ),
-      );
+      res.json(await support.listTickets(pool, { ...data, viewer: viewerFrom(req) }));
+    },
+  ),
+);
+
+supportRouter.get(
+  '/tickets/:id',
+  asyncHandler(async (req, res) => {
+    const ticket = await support.ticketDetail(pool, {
+      ticketId: req.params.id,
+      viewer: viewerFrom(req),
+    });
+    // 404 rather than 403 when it is somebody else's: whether a ticket exists
+    // is itself information the raiser is entitled to keep.
+    if (!ticket) throw notFound('That ticket');
+    res.json(ticket);
+  }),
+);
+
+supportRouter.post(
+  '/tickets/:id/messages',
+  validateBody(
+    z.object({ body: z.string().min(2).max(4000), internal: z.boolean().default(false) }),
+    async (req, res, data) => {
+      const result = await support.addMessage({
+        ticketId: req.params.id,
+        viewer: viewerFrom(req),
+        body: data.body,
+        internal: data.internal,
+      });
+      res.status(201).json(result);
     },
   ),
 );
@@ -1001,29 +990,7 @@ supportRouter.post(
       assignedTo: uuidSchema.optional(),
     }),
     async (req, res, data) => {
-      if (data.status === 'RESOLVED' && !data.resolution) {
-        throw badRequest('Record how the issue was resolved before marking the ticket resolved.');
-      }
-
-      await withTransaction(async (client) => {
-        await client.query(
-          `UPDATE support_tickets
-              SET status = $2, resolution = COALESCE($3, resolution),
-                  assigned_to = COALESCE($4, assigned_to),
-                  resolved_at = CASE WHEN $2 = 'RESOLVED' THEN now() ELSE resolved_at END
-            WHERE id = $1`,
-          [req.params.id, data.status, data.resolution ?? null, data.assignedTo ?? null],
-        );
-        await recordAudit(client, {
-          actorId: req.auth!.userId,
-          actorRole: req.auth!.role,
-          action: 'support.ticket_updated',
-          entityType: 'support_ticket',
-          entityId: req.params.id,
-          newValue: { status: data.status },
-        });
-      });
-
+      await support.updateTicket({ ticketId: req.params.id, viewer: viewerFrom(req), ...data });
       res.json({ updated: true });
     },
   ),

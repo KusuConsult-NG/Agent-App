@@ -27,6 +27,7 @@ import { RegisterTaxpayerScreen, TaxpayerScreen, TaxpayersScreen } from './scree
 import { CollectScreen, TransactionScreen } from './screens/Collect';
 import { CommissionScreen, ProfileScreen, ReceiptsScreen, VehiclesScreen } from './screens/More';
 import { VerifyScreen } from './screens/Verify';
+import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
   supported: boolean;
@@ -219,6 +220,7 @@ function Routes({
 }) {
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
+  const ticketMatch = matchRoute(route, '/support/:id');
 
   if (matchRoute(route, '/')) return <HomeScreen navigate={navigate} />;
   if (matchRoute(route, '/application')) return <ApplicationScreen navigate={navigate} />;
@@ -236,6 +238,10 @@ function Routes({
   if (matchRoute(route, '/verify')) return <VerifyScreen connection={connection} />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
+  if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;
+  if (matchRoute(route, '/support/new')) return <RaiseTicketScreen navigate={navigate} />;
+  // After /support/new, so the literal route is not swallowed by the pattern.
+  if (ticketMatch) return <TicketScreen ticketId={ticketMatch.id!} />;
 
   return (
     <Alert kind="info" title="Page not found">

@@ -293,6 +293,7 @@ const NOTIFICATION_TEMPLATES = [
   { code: 'AGENT_SUSPENDED_SMS', event: 'AGENT_SUSPENDED', channel: 'SMS', body: 'PSIRS: Your agent account has been suspended. Reason: {{reason}}. Contact your supervisor.' },
   { code: 'REFEREE_INVITATION_SMS', event: 'REFEREE_INVITATION', channel: 'SMS', body: 'PSIRS: {{applicant}} has named you as referee for a revenue agent application ({{reference}}). Confirm at {{link}} before {{expiry}}.' },
   { code: 'KYC_ACTION_SMS', event: 'KYC_ACTION_REQUIRED', channel: 'SMS', body: 'PSIRS: Your identity verification needs attention. {{reason}}. Open the app to resubmit.' },
+  { code: 'SUPPORT_REPLY_SMS', event: 'SUPPORT_TICKET_UPDATED', channel: 'SMS', body: 'PSIRS: There is a reply on your support ticket {{ticketNumber}}. Open the app to read it.' },
   { code: 'SECURITY_OTP_SMS', event: 'SECURITY_ALERT', channel: 'SMS', body: 'PSIRS: Your verification code is {{code}}. It expires in {{minutes}} minutes. Never share it with anyone, including PSIRS staff.' },
 ];
 

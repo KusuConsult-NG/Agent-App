@@ -665,3 +665,38 @@ button.danger {
   background: #000;
   margin-bottom: 10px;
 }
+
+/* --------------------------------------------------------------- support thread */
+
+/*
+ * A support conversation. Sided rather than uniform, because the first thing
+ * an agent needs to see on opening a report is whether anyone has answered —
+ * a single column of grey blocks makes them read to find out.
+ */
+.thread { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+
+.thread__item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+}
+
+.thread__item--mine {
+  margin-left: 24px;
+  background: var(--surface);
+}
+
+.thread__meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+.thread__body {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

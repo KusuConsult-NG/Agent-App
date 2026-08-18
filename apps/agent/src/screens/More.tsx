@@ -548,6 +548,17 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
       </div>
 
       <div className="card">
+        <h2 className="card__title">Something wrong?</h2>
+        <p className="card__hint">
+          Report a problem to PSIRS — a payment that has not confirmed, a receipt that looks
+          wrong, or anything a taxpayer has complained about.
+        </p>
+        <a className="button secondary" href="#/support">
+          Get help
+        </a>
+      </div>
+
+      <div className="card">
         <h2 className="card__title">Saved records on this device</h2>
         <p className="card__hint">
           Captures made offline. They are sent to PSIRS automatically when you have a connection.

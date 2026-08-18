@@ -35,7 +35,8 @@ export type NotificationEvent =
   | 'REFEREE_INVITATION'
   | 'REFEREE_CLEARED'
   | 'KYC_ACTION_REQUIRED'
-  | 'DEVICE_REGISTERED';
+  | 'DEVICE_REGISTERED'
+  | 'SUPPORT_TICKET_UPDATED';
 
 /**
  * Render `{{placeholders}}` from a template.
@@ -104,6 +105,26 @@ export async function queueNotification(
       recipientEmail = agent.email;
       userId ??= agent.user_id;
       variables.name ??= agent.full_name;
+    }
+  }
+
+  /*
+   * A plain user — an officer or an agent addressed as themselves rather than
+   * through their agent record. Without this, passing only `userId` resolved
+   * no recipient and the loop below queued nothing at all: the call returned
+   * 0 and said nothing, so the caller believed someone had been told. Every
+   * other branch here resolves a phone, and this one was simply missing.
+   */
+  if (!recipientPhone && !recipientEmail && userId) {
+    const user = await queryOne<{ phone: string; email: string | null; full_name: string }>(
+      client,
+      'SELECT phone, email, full_name FROM users WHERE id = $1',
+      [userId],
+    );
+    if (user) {
+      recipientPhone = user.phone;
+      recipientEmail = user.email;
+      variables.name ??= user.full_name;
     }
   }
 
