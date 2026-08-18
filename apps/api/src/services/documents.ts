@@ -17,6 +17,7 @@ import QRCode from 'qrcode';
 import type { PoolClient } from 'pg';
 import { formatNaira, type Kobo } from '@psirs/shared';
 import { config } from '../config';
+import { verificationUrl as publicVerificationUrl } from '../lib/public-urls';
 import { createHash } from 'node:crypto';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
@@ -148,7 +149,7 @@ export interface ReceiptPdfData {
 
 /** PRD §19 — the official government receipt. */
 export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
-  const verificationUrl = `${config.branding.verificationBaseUrl}/${data.verificationCode}`;
+  const verificationUrl = publicVerificationUrl(data.verificationCode);
   const qr = await qrDataUrl(verificationUrl);
 
   return renderPdf((doc) => {
@@ -250,7 +251,7 @@ export interface VehicleDocumentData {
 
 /** PRD §22 — the digital vehicle renewal document. */
 export async function renderVehicleDocumentPdf(data: VehicleDocumentData): Promise<Buffer> {
-  const verificationUrl = `${config.branding.verificationBaseUrl}/${data.verificationCode}`;
+  const verificationUrl = publicVerificationUrl(data.verificationCode);
   const qr = await qrDataUrl(verificationUrl);
 
   return renderPdf((doc) => {
@@ -320,7 +321,7 @@ export interface InvoicePdfData {
 
 /** PRD §15 — the invoice the taxpayer sees before paying anything. */
 export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
-  const verificationUrl = `${config.branding.verificationBaseUrl}/${data.verificationCode}`;
+  const verificationUrl = publicVerificationUrl(data.verificationCode);
   const qr = await qrDataUrl(verificationUrl);
 
   return renderPdf((doc) => {

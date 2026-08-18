@@ -19,6 +19,7 @@ import { generateToken, hashIdentityNumber, maskIdentityNumber, sha256 } from '.
 import { badRequest, conflict, notFound, AppError } from '../lib/errors';
 import { nextRefereeCode } from '../lib/references';
 import { config } from '../config';
+import { refereeInvitationUrl } from '../lib/public-urls';
 import { kycProvider } from '../integrations';
 import { recordAudit } from './audit';
 import { evaluateRefereeRisk } from './fraud';
@@ -151,7 +152,7 @@ export async function nominateReferee(params: {
 
     await evaluateRefereeRisk(client, { refereeId: referee!.id });
 
-    const invitationUrl = `${config.branding.verificationBaseUrl.replace('/verify', '')}/referee/${token}`;
+    const invitationUrl = refereeInvitationUrl(token);
 
     await queueNotification(client, {
       event: 'REFEREE_INVITATION',
