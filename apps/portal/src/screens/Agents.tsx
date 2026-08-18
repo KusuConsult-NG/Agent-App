@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { KycDocumentsCard } from './KycDocuments';
 import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
 
 interface KycDashboard {
@@ -324,7 +325,17 @@ export function AgentDetailScreen({
             <p className="empty">The applicant has not submitted identity verification.</p>
           )}
         </div>
+
       </div>
+
+      {/*
+        The documents behind that verdict, full width and directly below it,
+        because those are the two halves of the same question and an officer
+        could only ever see the first. Not inside the two-column grid above: a
+        document table needs the width, and a photograph of somebody's identity
+        papers is not a sidebar item.
+      */}
+      <KycDocumentsCard agentId={agentId} onReviewed={load} />
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>

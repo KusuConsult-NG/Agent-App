@@ -560,3 +560,45 @@ button.link:hover { background: none; color: var(--green-500); }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* --------------------------------------------------------- document viewer */
+
+/*
+ * Somebody's identity papers, on screen. Bounded rather than full-bleed: a
+ * reviewer needs to see the document and the decision controls at once, and a
+ * photograph that fills the viewport pushes Accept and Reject below the fold
+ * where the reason field is easy to skip.
+ */
+.document-viewer {
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  padding: 14px;
+  margin-top: 14px;
+  background: var(--bg);
+}
+
+.document-viewer__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.document-viewer__head h3 {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: capitalize;
+}
+
+.document-viewer__image {
+  display: block;
+  max-width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.document-viewer__access { margin-top: 12px; }
