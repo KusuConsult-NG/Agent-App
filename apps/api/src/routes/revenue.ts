@@ -6,7 +6,7 @@ import { serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireActiveAgent, requireStepUp } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
-import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import { asyncHandler, koboSchema, uuidSchema, validateBody, validateQuery, type RouteRequest } from '../middleware/validate';
 import { notFound, badRequest } from '../lib/errors';
 import * as revenue from '../services/revenue';
 import { recordAudit } from '../services/audit';
@@ -321,6 +321,31 @@ revenueRouter.get(
   }),
 );
 
+/**
+ * Refuse an invoice that is not this caller's to see.
+ *
+ * `requirePermission('invoice:read:own', 'invoice:read:all')` admits both an
+ * officer who may read every invoice and an agent who may read only their own,
+ * and then neither route filtered by anything. So a permission named `:own`
+ * enforced nothing: any agent could fetch any invoice by id and read another
+ * agent's taxpayer — their name, their TIN, the amounts and the computation
+ * trace — or mint a PDF of it.
+ *
+ * The scope has to be applied where the row is, because the permission name
+ * cannot do it. A caller holding `invoice:read:all` passes untouched; anyone
+ * else must be the agent the invoice was raised by.
+ */
+async function assertMaySeeInvoice(req: RouteRequest, invoiceAgentId: string | null): Promise<void> {
+  if (req.auth!.permissions.includes('invoice:read:all')) return;
+
+  const agentId = req.agent?.agentId ?? req.auth!.agentId ?? null;
+  if (!agentId || invoiceAgentId !== agentId) {
+    // Not found rather than forbidden: whether an invoice exists is itself
+    // something the taxpayer it belongs to is entitled to keep.
+    throw notFound('That invoice');
+  }
+}
+
 revenueRouter.get(
   '/invoices/:id',
   requirePermission('invoice:read:own', 'invoice:read:all'),
@@ -339,6 +364,7 @@ revenueRouter.get(
       [req.params.id],
     );
     if (!invoice) throw notFound('That invoice');
+    await assertMaySeeInvoice(req, (invoice as { agent_id?: string | null }).agent_id ?? null);
     res.json(invoice);
   }),
 );
@@ -355,7 +381,7 @@ revenueRouter.post(
                 i.verification_code, i.issued_at, i.expires_at, i.taxpayer_id,
                 a.assessment_number, a.period_label, a.computation_trace,
                 ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
-                l.name AS lga_name, ag.agent_code,
+                l.name AS lga_name, ag.agent_code, i.agent_id,
                 tp.first_name, tp.last_name, tp.business_name, tp.tin
            FROM invoices i
            JOIN assessments a ON a.id = i.assessment_id
@@ -369,6 +395,7 @@ revenueRouter.post(
         [req.params.id],
       );
       if (!invoice) throw notFound('That invoice');
+      await assertMaySeeInvoice(req, (invoice.agent_id as string | null) ?? null);
 
       const existing = await queryOne<{ id: string; document_number: string }>(
         client,
