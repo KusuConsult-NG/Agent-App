@@ -190,10 +190,154 @@ function useAction(onDone: () => void) {
   return { busy, error, message, run };
 }
 
+
+/**
+ * Capture one identity document.
+ *
+ * `capture="environment"` opens the camera directly on a phone, which is where
+ * this is used — an agent photographing a card held by the person in front of
+ * them. On a desktop the same control falls back to the file picker, and the
+ * platform is told which of the two happened, because a document photographed
+ * at capture time and one chosen from a gallery are not the same evidence.
+ *
+ * The file is sent as it is captured rather than held: an identity document
+ * left in browser storage on a shared handset is a worse problem than a
+ * capture the agent has to repeat.
+ */
+function DocumentCapture({
+  documentType,
+  label,
+  hint,
+  existing,
+  onUploaded,
+}: {
+  documentType: string;
+  label: string;
+  hint: string;
+  existing?: KycDocument;
+  onUploaded: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  async function send(file: File, source: 'CAMERA' | 'FILE') {
+    setBusy(true);
+    setError(null);
+    try {
+      // Shown from the file itself, so the agent can see the photograph is
+      // legible before it becomes the thing a reviewer has to read.
+      setPreview(URL.createObjectURL(file));
+      await api.upload(
+        `/agents/me/kyc/documents?type=${documentType}&captureSource=${source}`,
+        file,
+        file.name,
+      );
+      onUploaded();
+    } catch (caught) {
+      setError(
+        caught instanceof ApiRequestError
+          ? caught.error.message
+          : caught instanceof Error
+            ? caught.message
+            : 'The document could not be sent.',
+      );
+      setPreview(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="capture">
+      <div className="capture__head">
+        <p className="capture__label">{label}</p>
+        {existing ? (
+          <Badge status={existing.verification_status} />
+        ) : (
+          <span className="capture__todo">Not captured</span>
+        )}
+      </div>
+      <p className="card__hint" style={{ marginTop: 0 }}>
+        {hint}
+      </p>
+
+      {existing?.rejection_reason && (
+        <Alert kind="warning" title="This document was not accepted">
+          <p style={{ margin: 0 }}>{existing.rejection_reason}</p>
+        </Alert>
+      )}
+
+      {preview && <img className="capture__preview" src={preview} alt={`${label}, just captured`} />}
+      {error && (
+        <Alert kind="error">
+          <p style={{ margin: 0 }}>{error}</p>
+        </Alert>
+      )}
+
+      <label className="button secondary capture__button">
+        {busy ? 'Sending...' : existing ? 'Take again' : 'Take photograph'}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          capture="environment"
+          disabled={busy}
+          hidden
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            // A camera capture arrives with a generated name; one chosen from
+            // the device keeps its own. That is the honest signal available.
+            if (file) void send(file, /^(image|capture)\.\w+$/i.test(file.name) ? 'CAMERA' : 'FILE');
+            event.target.value = '';
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
+interface KycDocument {
+  id: string;
+  document_type: string;
+  verification_status: string;
+  uploaded_at: string;
+  rejection_reason: string | null;
+  superseded_at: string | null;
+}
+
+/** What PSIRS asks every applicant for, in the order it is asked for. */
+const REQUIRED_DOCUMENTS = [
+  {
+    type: 'IDENTITY_DOCUMENT',
+    label: 'Your identification document',
+    hint: 'Photograph the card itself, flat and in focus, with all four corners visible.',
+  },
+  {
+    type: 'SELFIE',
+    label: 'A photograph of you',
+    hint: 'Taken now, holding the same document, so PSIRS can see that they match.',
+  },
+] as const;
+
 function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
   const [identityType, setIdentityType] = useState('NIN');
   const [identityNumber, setIdentityNumber] = useState('');
+  const [documents, setDocuments] = useState<KycDocument[]>([]);
   const { busy, error, run } = useAction(onDone);
+
+  const loadDocuments = useCallback(() => {
+    api
+      .get<{ documents: KycDocument[] }>('/agents/me/kyc/documents')
+      .then((result) => setDocuments(result.documents.filter((d) => !d.superseded_at)))
+      .catch(() => setDocuments([]));
+  }, []);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  const held = (type: string) => documents.find((d) => d.document_type === type);
+  const missing = REQUIRED_DOCUMENTS.filter((d) => !held(d.type));
 
   if (status.checklist.kycCleared) {
     return (
@@ -215,7 +359,13 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
       onSubmit={(event: FormEvent) => {
         event.preventDefault();
         void run(async () => {
-          await api.post('/agents/me/kyc', { identityType, identityNumber });
+          await api.post('/agents/me/kyc', {
+            identityType,
+            identityNumber,
+            // The provider is asked to match the captured face against the
+            // identity record, rather than the number on its own.
+            selfieDocumentId: held('SELFIE')?.id ?? null,
+          });
         });
       }}
     >
@@ -252,10 +402,28 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         />
       </Field>
 
-      <button type="submit" disabled={busy || identityNumber.length < 5}>
+      <p className="section-title">Documents</p>
+      {REQUIRED_DOCUMENTS.map((doc) => (
+        <DocumentCapture
+          key={doc.type}
+          documentType={doc.type}
+          label={doc.label}
+          hint={doc.hint}
+          existing={held(doc.type)}
+          onUploaded={loadDocuments}
+        />
+      ))}
+
+      <button type="submit" disabled={busy || identityNumber.length < 5 || missing.length > 0}>
         {busy ? <Spinner /> : null}
         {busy ? 'Verifying…' : 'Submit for verification'}
       </button>
+      {missing.length > 0 && (
+        <p className="card__hint">
+          Still needed before this can be submitted:{' '}
+          {missing.map((d) => d.label.toLowerCase()).join(', ')}.
+        </p>
+      )}
     </form>
   );
 }
