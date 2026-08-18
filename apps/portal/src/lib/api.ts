@@ -21,12 +21,23 @@ export interface ApiError {
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly error: ApiError;
+  /**
+   * The parsed response body, exactly as PSIRS sent it.
+   *
+   * Not every rejection is a transport failure dressed as an envelope. Receipt
+   * verification answers "no such receipt" with a verdict on a 404, and that
+   * verdict is the answer the caller wants; synthesising "the request failed"
+   * over it turns "this receipt was never issued" into "the check did not
+   * work". Null when the body was absent or not JSON.
+   */
+  readonly body: unknown;
 
-  constructor(status: number, error: ApiError) {
+  constructor(status: number, error: ApiError, body: unknown = null) {
     super(error.message);
     this.name = 'ApiRequestError';
     this.status = status;
     this.error = error;
+    this.body = body;
   }
 }
 
@@ -168,7 +179,7 @@ async function raw<T>(
       message: `The request failed (${response.status}).`,
       moneyStatus: 'NOT_APPLICABLE',
     };
-    throw new ApiRequestError(response.status, error);
+    throw new ApiRequestError(response.status, error, payload);
   }
 
   return payload as T;

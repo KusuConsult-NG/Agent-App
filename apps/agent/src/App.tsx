@@ -110,6 +110,11 @@ export function App() {
       { path: '/collect', label: 'Collect', icon: Icons.collect },
       { path: '/receipts', label: 'Receipts', icon: Icons.receipt },
       { path: '/commission', label: 'Commission', icon: Icons.wallet },
+      // Profile is the way in to device registration, bank details and
+      // support. The API names it when it refuses a collection from an
+      // unregistered phone and when it cannot pay commission, so it has to be
+      // somewhere an agent can actually tap.
+      { path: '/profile', label: 'Profile', icon: Icons.profile },
     ],
     [],
   );
@@ -198,7 +203,7 @@ export function App() {
               aria-current={active ? 'page' : undefined}
             >
               <item.icon />
-              {item.label}
+              <span className="app-nav__label">{item.label}</span>
             </a>
           );
         })}

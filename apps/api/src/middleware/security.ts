@@ -9,6 +9,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { config } from '../config';
 import { tooManyRequests, badRequest } from '../lib/errors';
+import { subjectFromBearer } from '../lib/access-token';
 
 interface Bucket {
   count: number;
@@ -32,7 +33,17 @@ export function rateLimit(options: { max?: number; windowMs?: number; keyPrefix?
   return (req: Request, res: Response, next: NextFunction): void => {
     // Keyed by user where known, so one shared NAT address in a rural LGA does
     // not throttle every agent behind it.
-    const identity = req.auth?.userId ?? req.clientIp ?? 'unknown';
+    //
+    // The global limiter is mounted before any route reaches `authenticate`,
+    // so `req.auth` is usually still empty here and the subject has to come
+    // from the token itself. That check is signature-only and deliberately so:
+    // a limiter that queried the sessions table would let an unauthenticated
+    // flood cost a database round trip each, which is the thing it is here to
+    // prevent. Anything unverifiable — forged, malformed, expired, issued
+    // elsewhere — yields null and falls back to the address, so a caller
+    // cannot mint themselves a fresh budget by inventing a subject.
+    const identity =
+      req.auth?.userId ?? subjectFromBearer(req.header('authorization')) ?? req.clientIp ?? 'unknown';
     const key = `${options.keyPrefix ?? req.baseUrl}:${identity}`;
     const now = Date.now();
 

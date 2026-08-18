@@ -27,22 +27,15 @@ import {
 import { config } from '../config';
 import { pool, queryOne } from '../db/pool';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
+import {
+  issueAccessToken,
+  verifyAccessToken,
+  type AccessTokenPayload as SharedAccessTokenPayload,
+} from '../lib/access-token';
 
-interface AccessTokenPayload {
-  sub: string;
-  role: Role;
-  sid: string;
-  agentId?: string;
-  deviceId?: string;
-}
+type AccessTokenPayload = SharedAccessTokenPayload & { role: Role };
 
-export function issueAccessToken(payload: AccessTokenPayload): string {
-  return jwt.sign(payload, config.auth.jwtSecret, {
-    expiresIn: config.auth.accessTokenTtlSeconds,
-    issuer: 'psirs-revenue-platform',
-    audience: 'psirs-clients',
-  });
-}
+export { issueAccessToken };
 
 export async function authenticate(req: Request, _res: Response, next: NextFunction): Promise<void> {
   try {
@@ -53,10 +46,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 
     let payload: AccessTokenPayload;
     try {
-      payload = jwt.verify(header.slice(7), config.auth.jwtSecret, {
-        issuer: 'psirs-revenue-platform',
-        audience: 'psirs-clients',
-      }) as AccessTokenPayload;
+      payload = verifyAccessToken(header.slice(7)) as AccessTokenPayload;
     } catch (error) {
       if (error instanceof jwt.TokenExpiredError) {
         throw new AppError({

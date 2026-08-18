@@ -62,8 +62,15 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       // and gets the same answer.
       setResult(await api.get<VerificationResult>(`/verify/${encodeURIComponent(candidate)}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else
+      if (caught instanceof ApiRequestError) {
+        // "No such receipt" is an answer, not a failure, and it comes back as
+        // the body of a 404. An agent checking a receipt a taxpayer is holding
+        // needs to be told it was never issued — not that the request failed,
+        // which reads as "try again" and lets a forged receipt pass.
+        const verdict = caught.body as VerificationResult | null;
+        if (caught.status === 404 && verdict?.status) setResult(verdict);
+        else setError(caught.error);
+      } else
         setError({
           code: 'VERIFY_FAILED',
           message: 'PSIRS could not be reached, so this receipt could not be checked.',

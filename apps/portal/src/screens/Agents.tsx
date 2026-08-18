@@ -419,7 +419,10 @@ export function AgentDetailScreen({
         <div className="card card--flush">
           <div style={{ padding: '18px 18px 0' }}>
             <h2 className="card__title">Devices</h2>
-            <p className="card__hint">Revoking a device ends its sessions immediately.</p>
+            <p className="card__hint">
+              A phone an agent has just registered waits here as PENDING and cannot be used to
+              collect until it is approved. Revoking a device ends its sessions immediately.
+            </p>
           </div>
           <Table
             columns={[
@@ -430,20 +433,45 @@ export function AgentDetailScreen({
                 key: 'action',
                 label: '',
                 render: (row) =>
-                  row.status !== 'REVOKED' && can('device:manage') ? (
-                    <button
-                      type="button"
-                      className="small danger"
-                      disabled={busy || reason.trim().length < 5}
-                      onClick={() =>
-                        act(async () => {
-                          await api.post(`/agents/devices/${row.id}/revoke`, { reason });
-                          return 'Device revoked and its sessions ended.';
-                        })
-                      }
-                    >
-                      Revoke
-                    </button>
+                  can('device:manage') ? (
+                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                      {/*
+                        * Approving takes no reason, unlike revoking. The API asks for
+                        * none, and requiring one here would leave a newly registered
+                        * phone stranded behind an empty textarea — which is the state
+                        * every agent's first sign-in from a browser lands in.
+                        */}
+                      {row.status === 'PENDING' && (
+                        <button
+                          type="button"
+                          className="small"
+                          disabled={busy}
+                          onClick={() =>
+                            act(async () => {
+                              await api.post(`/agents/devices/${row.id}/approve`);
+                              return 'Device approved. The agent can now collect from it.';
+                            })
+                          }
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {row.status !== 'REVOKED' && (
+                        <button
+                          type="button"
+                          className="small danger"
+                          disabled={busy || reason.trim().length < 5}
+                          onClick={() =>
+                            act(async () => {
+                              await api.post(`/agents/devices/${row.id}/revoke`, { reason });
+                              return 'Device revoked and its sessions ended.';
+                            })
+                          }
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </div>
                   ) : null,
               },
             ]}
