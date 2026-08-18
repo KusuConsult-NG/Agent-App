@@ -185,6 +185,52 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
+/**
+ * A request whose body is the file itself.
+ *
+ * It shares the session and the refresh path with everything else, but not
+ * `rawRequest`: that one sets a JSON content type and serialises its body, and
+ * both are wrong here. The document's own type has to reach the server intact,
+ * because the server checks the bytes against it.
+ */
+async function uploadRequest<T>(path: string, file: Blob, filename?: string): Promise<T> {
+  const query = filename ? `${path.includes('?') ? '&' : '?'}filename=${encodeURIComponent(filename)}` : '';
+  const send = async (): Promise<Response> =>
+    fetch(`${API_BASE}${path}${query}`, {
+      method: 'POST',
+      headers: {
+        'content-type': file.type || 'application/octet-stream',
+        'x-app-version': APP_VERSION,
+        'x-device-id': getDeviceIdentifier(),
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: file,
+    });
+
+  let response = await send();
+  if (response.status === 401 && localStorage.getItem(REFRESH_KEY)) {
+    // One refresh, then one retry — the same contract `request` offers.
+    await restoreSession();
+    response = await send();
+  }
+
+  const text = await response.text();
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
+  if (!response.ok) {
+    throw new ApiRequestError(response.status, (payload as { error: ApiError })?.error ?? {
+      code: 'UPLOAD_FAILED',
+      message: 'The document could not be sent. Try again.',
+      moneyStatus: 'NOT_APPLICABLE',
+    });
+  }
+  return payload as T;
+}
+
 async function rawRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -299,6 +345,25 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown, idempotencyKey?: string) =>
     request<T>(path, { method: 'POST', body, idempotencyKey }),
+  /**
+   * Send a captured file as the request body.
+   *
+   * Not JSON, and deliberately not queued when offline. A draft is a record
+   * the agent can finish later; a photograph of somebody's identity document
+   * sitting unencrypted in browser storage on a shared handset is a different
+   * proposition, and `drafts.ts` refuses financial payloads for the same kind
+   * of reason. If there is no connection the agent is told to capture it when
+   * there is one.
+   */
+  upload: async <T>(path: string, file: Blob, filename?: string): Promise<T> => {
+    if (!navigator.onLine) {
+      throw new Error(
+        'You are offline. An identity document is sent to PSIRS as it is captured and is not ' +
+          'stored on this device — take the photograph again when you have a connection.',
+      );
+    }
+    return uploadRequest<T>(path, file, filename);
+  },
 };
 
 export async function login(phone: string, password: string): Promise<Session> {

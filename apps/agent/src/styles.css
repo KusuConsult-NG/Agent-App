@@ -614,3 +614,43 @@ button.danger {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Identity document capture. The preview matters more than the control: an
+   agent needs to see the photograph is legible before it becomes the evidence
+   a reviewer has to read. */
+.capture {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.capture__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.capture__label { font-weight: 600; margin: 0 0 2px; }
+
+.capture__todo { font-size: 0.78rem; color: var(--muted); }
+
+.capture__preview {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 8px 0;
+  background: var(--surface-2, #f4f6f5);
+}
+
+/* A whole-width target: this is used one-handed, outdoors, on a phone. */
+.capture__button {
+  display: block;
+  width: 100%;
+  text-align: center;
+  margin-top: 8px;
+  cursor: pointer;
+}

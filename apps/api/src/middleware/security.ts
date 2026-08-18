@@ -99,14 +99,33 @@ export function cors(req: Request, res: Response, next: NextFunction): void {
  * Reject oversized JSON before parsing. Express's own limit returns an opaque
  * error; PRD §60 requires the caller be told what to do about it.
  */
-export function payloadGuard(maxBytes = 1_000_000) {
+/**
+ * Refuse oversized requests before a body is read.
+ *
+ * One ceiling for ordinary requests, and a higher one for the routes that
+ * exist to receive a file. The message used to end "upload large documents
+ * separately", which was written when there was nowhere to upload one; now
+ * that identity capture exists, the guard has to let those bytes through
+ * rather than send an agent away with advice they cannot follow.
+ */
+export function payloadGuard(
+  maxBytes = 1_000_000,
+  options: { uploadMaxBytes?: number; isUpload?: (req: Request) => boolean } = {},
+) {
+  const uploadMax = options.uploadMaxBytes ?? 8 * 1024 * 1024;
+  // Path-based rather than content-type based: a client that lies about its
+  // type must still be held to the ordinary limit.
+  const isUpload = options.isUpload ?? ((req: Request) => /\/kyc\/documents(\?|$)/.test(req.path));
+
   return (req: Request, _res: Response, next: NextFunction): void => {
     const length = Number.parseInt(req.header('content-length') ?? '0', 10);
-    if (length > maxBytes) {
+    const ceiling = isUpload(req) ? uploadMax : maxBytes;
+    if (length > ceiling) {
       return next(
         badRequest(
           `The request is too large (${Math.round(length / 1024)}KB). ` +
-            `The maximum is ${Math.round(maxBytes / 1024)}KB. Upload large documents separately.`,
+            `The maximum is ${Math.round(ceiling / 1024)}KB.` +
+            (isUpload(req) ? ' Photograph the document rather than filming it.' : ''),
         ),
       );
     }

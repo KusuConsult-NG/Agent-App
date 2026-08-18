@@ -1,6 +1,6 @@
 /** Agent application, clearance, devices, commission and field endpoints. */
 
-import { Router, type Request } from 'express';
+import express, { Router, type Request } from 'express';
 import { z } from 'zod';
 import { REFEREE_CATEGORIES, serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
@@ -18,6 +18,7 @@ import { asyncHandler, emailSchema, phoneSchema, uuidSchema, validateBody, valid
 import { forbidden, notFound } from '../lib/errors';
 import * as agents from '../services/agents';
 import * as referees from '../services/referees';
+import * as kycDocuments from '../services/kyc-documents';
 import * as commission from '../services/commission';
 import { agentPerformance, agentToday } from '../services/reports';
 
@@ -83,6 +84,140 @@ async function ownAgentId(req: Request): Promise<string> {
   if (!agent) throw notFound('An agent profile for this account');
   return agent.id;
 }
+
+
+// ---------------------------------------------------------------------------
+// Identity document capture (PRD §5, §29)
+//
+// The body is the file itself rather than a multipart envelope. A phone
+// capture is one image, the platform accepts one image, and parsing a
+// multipart body to find it would be a dependency and a parser for no gain.
+// The type comes from Content-Type and is then checked against the bytes,
+// because the header is the uploader's claim about the file and nothing more.
+// ---------------------------------------------------------------------------
+
+const documentBody = express.raw({
+  type: kycDocuments.ACCEPTED_CONTENT_TYPES,
+  limit: kycDocuments.MAX_DOCUMENT_BYTES,
+});
+
+agentRouter.post(
+  '/me/kyc/documents',
+  // Deliberately not requireActiveAgent: this is how an applicant becomes one.
+  rateLimit({ max: 30, windowMs: 60_000, keyPrefix: 'kyc-document' }),
+  documentBody,
+  validateQuery(
+    z.object({
+      type: z.enum(kycDocuments.KYC_DOCUMENT_TYPES),
+      captureSource: z.enum(kycDocuments.CAPTURE_SOURCES).default('CAMERA'),
+      filename: z.string().max(200).optional(),
+    }),
+    async (req, res, data) => {
+      const agentId = await ownAgentId(req);
+      const bytes = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+
+      const stored = await kycDocuments.storeKycDocument({
+        agentId,
+        documentType: data.type,
+        declaredContentType: (req.header('content-type') ?? '').split(';')[0]!.trim(),
+        bytes,
+        captureSource: data.captureSource,
+        originalFilename: data.filename ?? null,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        ipAddress: req.clientIp,
+      });
+
+      res.status(201).json({
+        ...stored,
+        message: 'Document received. It will be checked as part of your identity verification.',
+      });
+    },
+  ),
+);
+
+agentRouter.get(
+  '/me/kyc/documents',
+  asyncHandler(async (req, res) => {
+    res.json({ documents: await kycDocuments.listKycDocuments({ agentId: await ownAgentId(req) }) });
+  }),
+);
+
+/** An applicant may look at what they submitted; nobody else's. */
+agentRouter.get(
+  '/me/kyc/documents/:id',
+  asyncHandler(async (req, res) => {
+    const doc = await kycDocuments.readKycDocument({
+      documentId: req.params.id,
+      actorId: req.auth!.userId,
+      actorRole: req.auth!.role,
+      ownAgentId: await ownAgentId(req),
+      accessType: 'VIEW',
+      ipAddress: req.clientIp,
+    });
+    res.setHeader('content-type', doc.contentType);
+    res.setHeader('cache-control', 'private, no-store');
+    res.send(doc.bytes);
+  }),
+);
+
+/** Government review: the documents behind one applicant's identity. */
+agentRouter.get(
+  '/:id/kyc/documents',
+  requirePermission('agent:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json({ documents: await kycDocuments.listKycDocuments({ agentId: req.params.id }) });
+  }),
+);
+
+agentRouter.get(
+  '/kyc/documents/:id/file',
+  requirePermission('agent:read:all'),
+  asyncHandler(async (req, res) => {
+    const doc = await kycDocuments.readKycDocument({
+      documentId: req.params.id,
+      actorId: req.auth!.userId,
+      actorRole: req.auth!.role,
+      accessType: 'VIEW',
+      ipAddress: req.clientIp,
+    });
+    res.setHeader('content-type', doc.contentType);
+    res.setHeader('cache-control', 'private, no-store');
+    res.send(doc.bytes);
+  }),
+);
+
+agentRouter.post(
+  '/kyc/documents/:id/review',
+  requirePermission('agent:approve'),
+  validateBody(
+    z.object({
+      decision: z.enum(['ACCEPT', 'REJECT']),
+      // Every decision carries a reason, the same as an agent review.
+      reason: z.string().min(4).max(500),
+    }),
+    async (req, res, data) => {
+      const result = await kycDocuments.reviewKycDocument({
+        documentId: req.params.id,
+        decision: data.decision,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        ipAddress: req.clientIp,
+      });
+      res.json(result);
+    },
+  ),
+);
+
+/** Who has looked at this citizen's identity papers (NDPR). */
+agentRouter.get(
+  '/kyc/documents/:id/access',
+  requirePermission('audit:read'),
+  asyncHandler(async (req, res) => {
+    res.json({ access: await kycDocuments.documentAccessHistory(req.params.id) });
+  }),
+);
 
 agentRouter.get(
   '/me/application',

@@ -91,6 +91,11 @@ export async function startTestServer(): Promise<string> {
   return baseUrl;
 }
 
+/** The running test server's base URL, for requests the helpers do not cover. */
+export function apiBaseUrl(): string {
+  return baseUrl;
+}
+
 export async function stopTestServer(): Promise<void> {
   if (server) {
     await new Promise<void>((resolve) => server!.close(() => resolve()));
