@@ -406,4 +406,28 @@ export class RemitaGateway implements PaymentGateway {
   async fetchStatement(_params: { from: Date; to: Date }): Promise<SettlementLine[]> {
     return [];
   }
+
+  /**
+   * Not wired to Remita's refund API, and it reports that rather than
+   * inventing a result.
+   *
+   * UNAVAILABLE rather than REJECTED is the whole point: the refund stays in
+   * the queue as money still owed to a taxpayer, so it surfaces to a finance
+   * officer instead of being closed as refused. Returning ACCEPTED here would
+   * tell a citizen who paid twice that they have their money back.
+   */
+  async refund(request: {
+    gatewayReference: string;
+    amountKobo: bigint;
+    refundReference: string;
+    reason: string;
+  }): Promise<{ outcome: 'ACCEPTED' | 'REJECTED' | 'UNAVAILABLE'; reference?: string; reason?: string; provider: string }> {
+    return {
+      outcome: 'UNAVAILABLE',
+      reason:
+        'Remita refunds are not yet wired to this platform. The refund remains outstanding ' +
+        'and must be made through Remita directly, then recorded here.',
+      provider: 'remita',
+    };
+  }
 }

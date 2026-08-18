@@ -459,7 +459,193 @@ export async function executeReversal(params: {
   approvalId: string;
   actorId: string;
   actorRole: string;
-}): Promise<{ refundReference: string; commissionReversed: number; clawbackKobo: string }> {
+}): Promise<{
+  refundReference: string;
+  commissionReversed: number;
+  clawbackKobo: string;
+  refundStatus: string;
+  refundMessage: string;
+}> {
+  const recorded = await recordReversal(params);
+
+  // Now ask the gateway to return the money. Outside the transaction, because
+  // it is a network call; after it, because the reversal of the transaction,
+  // the receipt and the commission is government's decision and stands whether
+  // or not a third party is reachable this minute. What must not happen is the
+  // platform claiming the refund was made when nobody has made it.
+  const settled = await attemptRefund({
+    refundReference: recorded.refundReference,
+    gatewayReference: recorded.gatewayReference,
+    amountKobo: recorded.amountKobo,
+    reason: recorded.reason,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+  });
+
+  return {
+    refundReference: recorded.refundReference,
+    commissionReversed: recorded.commissionReversed,
+    clawbackKobo: recorded.clawbackKobo,
+    refundStatus: settled.status,
+    refundMessage: settled.message,
+  };
+}
+
+/**
+ * Ask the gateway for one outstanding refund and record what it said.
+ *
+ * Shared by the reversal itself and by the retry job, so a refund that could
+ * not be made at the time is made later by the same code path rather than a
+ * second one that might drift from it.
+ */
+export async function attemptRefund(params: {
+  refundReference: string;
+  gatewayReference: string | null;
+  amountKobo: Kobo;
+  reason: string;
+  actorId: string | null;
+  actorRole: string;
+}): Promise<{ status: string; message: string }> {
+  if (!params.gatewayReference) {
+    await markRefund(params.refundReference, 'FAILED', 'The original payment has no gateway reference.');
+    return {
+      status: 'FAILED',
+      message:
+        'This payment has no gateway reference, so the money cannot be returned automatically. ' +
+        'A finance officer must return it directly and record the reference.',
+    };
+  }
+
+  let result: Awaited<ReturnType<typeof gateway.refund>>;
+  try {
+    result = await gateway.refund({
+      gatewayReference: params.gatewayReference,
+      amountKobo: params.amountKobo,
+      refundReference: params.refundReference,
+      reason: params.reason,
+    });
+  } catch (error) {
+    // A gateway that threw has not refused; it did not answer.
+    result = {
+      outcome: 'UNAVAILABLE',
+      reason: error instanceof Error ? error.message : 'The gateway could not be reached.',
+      provider: gateway.name,
+    };
+  }
+
+  if (result.outcome === 'ACCEPTED') {
+    await markRefund(params.refundReference, 'COMPLETED', null, result.reference ?? null);
+    return { status: 'COMPLETED', message: 'The gateway has returned the money to the taxpayer.' };
+  }
+
+  // REJECTED is terminal for the automatic path; UNAVAILABLE is not, and the
+  // retry job will ask again. Neither may leave the refund looking done.
+  const status = result.outcome === 'REJECTED' ? 'FAILED' : 'PENDING';
+  await markRefund(params.refundReference, status, result.reason ?? 'The gateway did not accept the refund.');
+
+  return {
+    status,
+    message:
+      status === 'FAILED'
+        ? `The gateway refused the refund: ${result.reason ?? 'no reason given'}. ` +
+          'The taxpayer is still owed this money and a finance officer must return it directly.'
+        : 'The gateway could not be reached, so the taxpayer has NOT been refunded yet. ' +
+          'This refund stays in the outstanding queue and will be retried.',
+  };
+}
+
+async function markRefund(
+  refundReference: string,
+  status: string,
+  failureReason: string | null,
+  gatewayReference?: string | null,
+): Promise<void> {
+  await withTransaction((client) =>
+    client.query(
+      `UPDATE refunds
+          SET status = $2,
+              failure_reason = $3,
+              attempts = attempts + 1,
+              last_attempt_at = now(),
+              gateway_reference = COALESCE($4, gateway_reference),
+              completed_at = CASE WHEN $2 = 'COMPLETED' THEN now() ELSE completed_at END
+        WHERE refund_reference = $1`,
+      [refundReference, status, failureReason, gatewayReference ?? null],
+    ),
+  );
+}
+
+/** Refunds a taxpayer is still owed, oldest first. */
+export async function outstandingRefunds(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT r.id, r.refund_reference, r.amount_kobo, r.status, r.attempts, r.failure_reason,
+            r.last_attempt_at, r.created_at, t.transaction_reference, p.gateway_reference
+       FROM refunds r
+       JOIN transactions t ON t.id = r.transaction_id
+       LEFT JOIN payments p ON p.id = r.payment_id
+      WHERE r.status IN ('PENDING', 'PROCESSING', 'FAILED')
+      ORDER BY r.created_at
+      LIMIT $1`,
+    [limit],
+  );
+}
+
+/**
+ * Retry every refund the gateway has not yet made (PRD §71).
+ *
+ * A taxpayer owed money must not depend on somebody remembering to press a
+ * button, which is what the vehicle authority queue already learned.
+ */
+export async function retryOutstandingRefunds(params: {
+  actorId: string | null;
+  actorRole: string;
+  limit?: number;
+}): Promise<{ attempted: number; completed: number; stillOutstanding: number }> {
+  const due = await query<{
+    refund_reference: string;
+    amount_kobo: string;
+    reason: string;
+    gateway_reference: string | null;
+  }>(
+    pool,
+    `SELECT r.refund_reference, r.amount_kobo, r.reason, p.gateway_reference
+       FROM refunds r
+       LEFT JOIN payments p ON p.id = r.payment_id
+      WHERE r.status IN ('PENDING', 'PROCESSING')
+      ORDER BY r.created_at
+      LIMIT $1`,
+    [params.limit ?? 50],
+  );
+
+  let completed = 0;
+  for (const row of due) {
+    const result = await attemptRefund({
+      refundReference: row.refund_reference,
+      gatewayReference: row.gateway_reference,
+      amountKobo: parseKobo(row.amount_kobo),
+      reason: row.reason,
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+    });
+    if (result.status === 'COMPLETED') completed += 1;
+  }
+
+  return { attempted: due.length, completed, stillOutstanding: due.length - completed };
+}
+
+async function recordReversal(params: {
+  approvalId: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  refundReference: string;
+  commissionReversed: number;
+  clawbackKobo: string;
+  gatewayReference: string | null;
+  amountKobo: Kobo;
+  reason: string;
+}> {
   return withTransaction(async (client) => {
     const approval = await queryOne<{
       id: string;
@@ -503,9 +689,9 @@ export async function executeReversal(params: {
     );
     if (!transaction) throw notFound('That transaction');
 
-    const payment = await queryOne<{ id: string }>(
+    const payment = await queryOne<{ id: string; gateway_reference: string | null }>(
       client,
-      `SELECT id FROM payments WHERE transaction_id = $1 AND status = 'VERIFIED'`,
+      `SELECT id, gateway_reference FROM payments WHERE transaction_id = $1 AND status = 'VERIFIED'`,
       [transactionId],
     );
     if (!payment) {
@@ -518,11 +704,16 @@ export async function executeReversal(params: {
     const refundReference = await nextRefundReference(client);
     const amount = parseKobo(approval.payload.amountKobo ?? transaction.amount_kobo);
 
+    // PENDING, not COMPLETED. The gateway has not been asked yet, and it is
+    // asked after this transaction commits — a network call must not be made
+    // while holding the row locks that the reversal cascade takes. COMPLETED
+    // is a statement that a citizen has their money back; only the gateway
+    // saying so may set it.
     await client.query(
       `INSERT INTO refunds
          (refund_reference, transaction_id, payment_id, amount_kobo, refund_type, reason,
-          approval_id, requested_by, approved_by, approved_at, status, completed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),'COMPLETED',now())`,
+          approval_id, requested_by, approved_by, approved_at, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),'PENDING')`,
       [
         refundReference,
         transactionId,
@@ -597,6 +788,9 @@ export async function executeReversal(params: {
       refundReference,
       commissionReversed: commission.reversed,
       clawbackKobo: commission.clawbackKobo.toString(),
+      gatewayReference: payment.gateway_reference,
+      amountKobo: amount,
+      reason: approval.payload.reason ?? 'Approved reversal',
     };
   });
 }

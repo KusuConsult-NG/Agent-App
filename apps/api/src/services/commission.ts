@@ -17,6 +17,7 @@ import type { PoolClient } from 'pg';
 import {
   applyBasisPoints,
   assertCommissionTransition,
+  formatNaira,
   parseKobo,
   type CommissionState,
   type Kobo,
@@ -305,6 +306,12 @@ export interface WalletSummary {
   approvedKobo: string;
   paidKobo: string;
   reversedKobo: string;
+  /**
+   * Commission that was paid and then reversed, and has not yet been recovered.
+   * It is deducted from the next payout, so an agent can see what is coming
+   * rather than discovering it when the payment is smaller than expected.
+   */
+  owedBackKobo: string;
   lifetimeKobo: string;
   transactionCount: number;
 }
@@ -326,6 +333,8 @@ export async function getWallet(db: Db, agentId: string): Promise<WalletSummary>
        COALESCE(SUM(amount_kobo) FILTER (WHERE status = 'APPROVED'), 0)::text AS approved,
        COALESCE(SUM(amount_kobo) FILTER (WHERE status = 'PAID'), 0)::text     AS paid,
        COALESCE(SUM(amount_kobo) FILTER (WHERE status = 'REVERSED'), 0)::text AS reversed,
+       COALESCE(SUM(amount_kobo) FILTER (
+         WHERE status = 'REVERSED' AND paid_at IS NOT NULL AND recovered_at IS NULL), 0)::text AS owed_back,
        COALESCE(SUM(amount_kobo) FILTER (WHERE status <> 'REVERSED'), 0)::text AS lifetime,
        COUNT(*)::text AS transaction_count
      FROM commissions WHERE agent_id = $1`,
@@ -339,6 +348,7 @@ export async function getWallet(db: Db, agentId: string): Promise<WalletSummary>
     approvedKobo: row?.approved ?? '0',
     paidKobo: row?.paid ?? '0',
     reversedKobo: row?.reversed ?? '0',
+    owedBackKobo: row?.owed_back ?? '0',
     lifetimeKobo: row?.lifetime ?? '0',
     transactionCount: Number.parseInt(row?.transaction_count ?? '0', 10),
   };
@@ -355,7 +365,16 @@ export async function requestPayout(params: {
   agentId: string;
   actorId: string;
   actorRole: string;
-}): Promise<{ payoutId: string; payoutReference: string; amountKobo: Kobo; commissionCount: number }> {
+}): Promise<{
+  payoutId: string;
+  payoutReference: string;
+  amountKobo: Kobo;
+  commissionCount: number;
+  /** Deducted for commission that was paid and then reversed. Usually zero. */
+  clawbackAppliedKobo: Kobo;
+  /** What was eligible before that deduction. */
+  grossKobo: Kobo;
+}> {
   return withTransaction(async (client) => {
     const agent = await queryOne<{
       id: string;
@@ -414,7 +433,36 @@ export async function requestPayout(params: {
       );
     }
 
-    const total = eligible.reduce((sum, row) => sum + parseKobo(row.amount_kobo), 0n);
+    const gross = eligible.reduce((sum, row) => sum + parseKobo(row.amount_kobo), 0n);
+
+    // Commission that was paid and then reversed is money the agent holds and
+    // does not own. It used to be recorded and left there: the wallet showed
+    // it, the reversal reported a clawback figure, and the next payout handed
+    // over the full amount anyway. It is netted off here so recovery happens
+    // by itself rather than depending on somebody remembering.
+    const outstanding = await query<{ id: string; amount_kobo: string }>(
+      client,
+      `SELECT id, amount_kobo FROM commissions
+        WHERE agent_id = $1 AND status = 'REVERSED' AND paid_at IS NOT NULL AND recovered_at IS NULL
+        ORDER BY reversed_at
+        FOR UPDATE`,
+      [params.agentId],
+    );
+
+    const clawback = outstanding.reduce((sum, row) => sum + parseKobo(row.amount_kobo), 0n);
+    const total = gross > clawback ? gross - clawback : 0n;
+
+    if (total === 0n) {
+      // Refusing rather than paying zero: a payout of nothing is a confusing
+      // record, and the agent needs to be told why, in money they recognise.
+      throw conflict(
+        'CLAWBACK_EXCEEDS_COMMISSION',
+        `Commission of ${formatNaira(gross)} is eligible, but ${formatNaira(clawback)} is owed back ` +
+          'from transactions that were reversed after being paid. Nothing is payable yet.',
+        'The balance is recovered from your commission as you earn it.',
+      );
+    }
+
     const payoutReference = await nextPayoutReference(client);
 
     const payout = await queryOne<{ id: string }>(
@@ -431,6 +479,17 @@ export async function requestPayout(params: {
         params.actorId,
       ],
     );
+
+    // Marked recovered against this payout, so the same overpayment is never
+    // deducted twice. The partial-index on recovered_at makes that structural
+    // rather than a promise.
+    if (outstanding.length > 0) {
+      await client.query(
+        `UPDATE commissions SET recovered_at = now(), recovered_by_payout_id = $2
+          WHERE id = ANY($1::uuid[])`,
+        [outstanding.map((row) => row.id), payout!.id],
+      );
+    }
 
     const approval = await queryOne<{ id: string }>(
       client,
@@ -483,6 +542,11 @@ export async function requestPayout(params: {
       payoutReference,
       amountKobo: total,
       commissionCount: eligible.length,
+      // Reported because an agent who earned ₦135 and is paid ₦45 is owed the
+      // reason, in the same response rather than in a statement they have to
+      // go and find.
+      clawbackAppliedKobo: clawback,
+      grossKobo: gross,
     };
   });
 }
