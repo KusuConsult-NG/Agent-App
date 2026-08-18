@@ -859,7 +859,7 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
   const transaction = await queryOne<Record<string, unknown>>(
     db,
     `SELECT t.id, t.transaction_reference, t.status, t.amount_kobo, t.service_charge_kobo,
-            t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at,
+            t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at, t.agent_id,
             i.id AS invoice_id, i.invoice_number, i.status AS invoice_status, i.expires_at,
             ri.name AS revenue_item, rc.name AS revenue_category,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,

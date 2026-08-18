@@ -21,6 +21,7 @@ import {
 import { idempotent } from '../middleware/idempotency';
 import { rateLimit } from '../middleware/security';
 import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
 import { notFound, forbidden, badRequest } from '../lib/errors';
 import * as payments from '../services/payments';
 import * as receipts from '../services/receipts';
@@ -142,7 +143,14 @@ paymentRouter.get(
   '/transactions/:reference/status',
   requirePermission('payment:read:own', 'payment:read:all'),
   asyncHandler(async (req, res) => {
-    res.json(await payments.getTransactionStatus(pool, req.params.reference));
+    const status = await payments.getTransactionStatus(pool, req.params.reference);
+    assertOwnRecord(
+      req,
+      'payment:read:all',
+      (status.transaction as { agent_id?: string | null }).agent_id ?? null,
+      'That transaction',
+    );
+    res.json(status);
   }),
 );
 
@@ -280,7 +288,8 @@ receiptRouter.get(
 );
 
 const RECEIPT_DETAIL_SQL = `
-  SELECT r.*, t.transaction_reference, ri.name AS revenue_item,
+  SELECT r.*, t.transaction_reference, t.agent_id AS collected_by_agent_id,
+         ri.name AS revenue_item,
          p.gateway_reference, p.payment_method, p.paid_at
     FROM receipts r
     JOIN transactions t ON t.id = r.transaction_id
@@ -298,13 +307,19 @@ receiptRouter.get(
   requirePermission('receipt:read:own', 'receipt:read:all'),
   validateQuery(
     z.object({ number: z.string().min(4).max(64) }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       const receipt = await queryOne<{ document_id: string | null }>(
         pool,
         `${RECEIPT_DETAIL_SQL} WHERE r.receipt_number = $1`,
         [data.number],
       );
       if (!receipt) throw notFound('That receipt');
+      assertOwnRecord(
+        req,
+        'receipt:read:all',
+        (receipt as { collected_by_agent_id?: string | null }).collected_by_agent_id ?? null,
+        'That receipt',
+      );
       res.json({
         ...receipt,
         downloadUrl: receipt.document_id ? signDocumentUrl(receipt.document_id) : null,
@@ -325,6 +340,12 @@ receiptRouter.get(
       [req.params.id],
     ).catch(() => null);
     if (!receipt) throw notFound('That receipt');
+    assertOwnRecord(
+      req,
+      'receipt:read:all',
+      (receipt as { collected_by_agent_id?: string | null }).collected_by_agent_id ?? null,
+      'That receipt',
+    );
 
     res.json({
       ...receipt,
@@ -390,15 +411,40 @@ documentRouter.get(
   authenticate,
   requirePermission('document:read:own', 'document:read:all'),
   asyncHandler(async (req, res) => {
-    const document = await queryOne(
+    /*
+     * The worst of the six, because it does not only describe the document —
+     * it returns a signed URL that downloads it. An unrelated agent could read
+     * the record for a taxpayer-owned receipt or invoice and pull the PDF,
+     * with that citizen's name, TIN, amounts and computation trace in it.
+     *
+     * A document has no agent of its own, so the scope comes from whatever it
+     * was issued for: the invoice or renewal's agent, or the agent on the
+     * transaction behind a receipt. A document issued *to* an agent is theirs.
+     */
+    const document = await queryOne<Record<string, unknown> & { issued_for_agent_id: string | null }>(
       pool,
-      `SELECT id, document_number, document_type, owner_type, owner_id, issued_at, expires_at,
-              status, version, issuing_authority, verification_code, byte_size
-         FROM documents WHERE id = $1`,
+      `SELECT d.id, d.document_number, d.document_type, d.owner_type, d.owner_id,
+              d.issued_at, d.expires_at, d.status, d.version, d.issuing_authority,
+              d.verification_code, d.byte_size,
+              CASE
+                WHEN d.owner_type = 'AGENT' THEN d.owner_id
+                WHEN d.entity_type = 'invoice' THEN inv.agent_id
+                WHEN d.entity_type = 'receipt' THEN rt.agent_id
+                WHEN d.entity_type = 'vehicle_renewal' THEN vr.agent_id
+              END AS issued_for_agent_id
+         FROM documents d
+         LEFT JOIN invoices inv ON d.entity_type = 'invoice' AND inv.id = d.entity_id
+         LEFT JOIN receipts rc ON d.entity_type = 'receipt' AND rc.id = d.entity_id
+         LEFT JOIN transactions rt ON rt.id = rc.transaction_id
+         LEFT JOIN vehicle_renewals vr ON d.entity_type = 'vehicle_renewal' AND vr.id = d.entity_id
+        WHERE d.id = $1`,
       [req.params.id],
     );
     if (!document) throw notFound('That document');
-    res.json({ ...document, downloadUrl: signDocumentUrl(req.params.id) });
+    assertOwnRecord(req, 'document:read:all', document.issued_for_agent_id, 'That document');
+
+    const { issued_for_agent_id: _scope, ...record } = document;
+    res.json({ ...record, downloadUrl: signDocumentUrl(req.params.id) });
   }),
 );
 
