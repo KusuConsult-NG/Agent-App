@@ -113,7 +113,15 @@ body {
 }
 
 .app-nav a {
-  flex: 1;
+  /*
+   * `min-width: 0` matters: without it a flex item will not shrink below its
+   * text, so the longest label ("Commission") holds its full width and pushes
+   * the last tab off the right edge of a 320px phone. The label ellipsises
+   * instead, which costs a few letters on the narrowest screens and never
+   * costs a whole tab.
+   */
+  flex: 1 1 0;
+  min-width: 0;
   min-height: var(--tap);
   display: flex;
   flex-direction: column;
@@ -134,6 +142,22 @@ body {
 .app-nav svg {
   width: 22px;
   height: 22px;
+  flex: none;
+}
+
+.app-nav__label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Narrow phones: buy the labels a few more letters before they ellipsise. */
+@media (max-width: 359px) {
+  .app-nav a {
+    font-size: 0.62rem;
+    padding: 8px 2px;
+  }
 }
 
 /* ----------------------------------------------------------- connection */
