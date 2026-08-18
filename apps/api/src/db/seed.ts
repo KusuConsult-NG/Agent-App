@@ -582,10 +582,34 @@ async function seedDemoUsers(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const demo = process.argv.includes('--demo');
+  const wantsAgent = process.argv.includes('--demo-agent');
+
+  /*
+   * `--demo-agent` implies `--demo`, and says so.
+   *
+   * It used to be `demo && argv.includes('--demo-agent')`, so asking for the
+   * agent without also asking for the officers produced a run that seeded the
+   * catalogue, printed "Seed complete" and created no users at all — while
+   * saying nothing about the flag it had just discarded. The next thing that
+   * happens is a sign-in attempt answered "Phone number or password is
+   * incorrect", which sends you looking at your password rather than at the
+   * seed.
+   *
+   * The dependency is real: the agent is walked through the clearance pipeline
+   * rather than inserted, and that pipeline needs an officer to approve the
+   * application. So the right response to being given one flag is to apply the
+   * other, not to drop the request on the floor.
+   */
+  const demo = process.argv.includes('--demo') || wantsAgent;
 
   console.log('Seeding Plateau State Revenue Platform...');
   console.log(`  target: ${describeDatabase(config.database.url)}`);
+  if (wantsAgent && !process.argv.includes('--demo')) {
+    console.log(
+      '  note: --demo-agent needs an officer to approve the application, ' +
+        'so --demo has been applied as well.',
+    );
+  }
   await runMigrations({ silent: true });
   await seedReferenceData();
   if (demo) await seedDemoUsers();
@@ -593,7 +617,7 @@ async function main(): Promise<void> {
   // The agent has to be walked through the clearance pipeline rather than
   // inserted, so it is opt-in: it makes several service calls and its failure
   // would otherwise obscure an ordinary reference-data seed.
-  const agent = demo && process.argv.includes('--demo-agent') ? await seedDemoAgent() : null;
+  const agent = wantsAgent ? await seedDemoAgent() : null;
 
   const summary = await queryOne<Record<string, string>>(
     pool,
