@@ -106,6 +106,25 @@ body {
   font-size: 0.75rem;
 }
 
+/*
+ * The read-only marker beside an officer's role.
+ *
+ * Deliberately quiet — it states a fact about the account, it is not a warning
+ * that something is wrong. An auditor's inability to change anything is the
+ * role working correctly.
+ */
+.sidebar__tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 0.65rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 .topbar {

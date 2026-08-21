@@ -28,7 +28,15 @@ import { join } from 'node:path';
 import { PERMISSIONS, ROLES, permissionsForRole } from '@psirs/shared';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
-const PORTAL_APP = join(REPO_ROOT, 'apps', 'portal', 'src', 'App.tsx');
+/**
+ * The menu moved out of `App.tsx` into `lib/permissions.ts` so the portal could
+ * test it without a DOM. This path moved with it — and the move is exactly the
+ * hazard the parser note below describes: reading a table out of source means a
+ * refactor can leave the test reading nothing while still passing. The
+ * "finds the navigation at all" case is what turns that into a failure, and it
+ * is why this file caught its own breakage rather than going quiet.
+ */
+const PORTAL_NAV = join(REPO_ROOT, 'apps', 'portal', 'src', 'lib', 'permissions.ts');
 const GOVERNMENT_ROUTES = join(REPO_ROOT, 'apps', 'api', 'src', 'routes', 'government.ts');
 
 interface NavItem {
@@ -51,7 +59,7 @@ interface NavItem {
  * one of the things it exists to check, which is worse than one that fails.
  */
 function navigationItems(): NavItem[] {
-  const source = readFileSync(PORTAL_APP, 'utf8');
+  const source = readFileSync(PORTAL_NAV, 'utf8');
   const pattern =
     /\{\s*path:\s*'([^']+)',\s*label:\s*'([^']+)',\s*permission:\s*(\[[^\]]*\]|'[^']+')\s*,?\s*\}/g;
   return [...source.matchAll(pattern)].map((match) => ({
