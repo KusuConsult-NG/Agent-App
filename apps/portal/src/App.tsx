@@ -5,6 +5,10 @@
  * role name, so the menu always matches what the backend will actually allow
  * (PRD §36). Hiding a link is a convenience; the API is the control.
  *
+ * The table that does the filtering lives in `lib/permissions.ts` so it can be
+ * tested without a DOM — see the note there on the two gate bugs that reached
+ * users because nothing checked it.
+ *
  * The public verification and referee routes are resolved before any
  * authentication check, because neither requires an account (PRD §43,
  * Addendum §10).
@@ -12,6 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import { getUser, hasStoredSession, logout, restoreSession, type User } from './lib/api';
+import { availableGroups, belongsInPortal, isReadOnly, landingPath } from './lib/permissions';
 import { matchRoute, useRoute } from './router';
 import { LoginScreen } from './screens/Login';
 import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
@@ -25,98 +30,6 @@ import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
 import { RefereePortalScreen, VerifyScreen } from './screens/Public';
 
-interface NavItem {
-  path: string;
-  label: string;
-  /**
-   * The permission that opens this item, or any one of several.
-   *
-   * `requirePermission` on the API grants when the role holds *any* of the
-   * permissions it names, and the menu has to model the same thing or it
-   * cannot describe a screen like agent performance — which the API opens to
-   * report:read:all or report:read:territory, and no single one of those is
-   * held by every role that should see it.
-   */
-  permission?: string | string[];
-}
-
-const NAV: { group: string; items: NavItem[] }[] = [
-  {
-    group: 'Overview',
-    items: [
-      { path: '/', label: 'Dashboard', permission: 'report:read:all' },
-      { path: '/intelligence', label: 'Revenue intelligence', permission: 'report:read:all' },
-      { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
-    ],
-  },
-  {
-    group: 'Agents',
-    items: [
-      { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
-      { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
-      // Either report permission, matching what GET /agents/performance
-      // accepts. A supervisor holds only report:read:territory and is the
-      // role this screen is most for, so gating on report:read:all alone
-      // would hide it from them.
-      {
-        path: '/performance',
-        label: 'Agent performance',
-        permission: ['report:read:all', 'report:read:territory'],
-      },
-    ],
-  },
-  {
-    group: 'Finance',
-    items: [
-      // report:financial, not payment:read:all. The screen is the settlement
-      // dashboard, and GET /government/settlements requires report:financial or
-      // payment:reconcile — neither of which an admin holds, because settlement
-      // figures are a finance and audit responsibility rather than an
-      // administrative one. Gating on the wider permission put the item in the
-      // admin's menu and then answered a 403 when they opened it.
-      { path: '/reconciliation', label: 'Reconciliation', permission: 'report:financial' },
-      { path: '/commissions', label: 'Commissions', permission: 'commission:read:all' },
-      { path: '/approvals', label: 'Approvals', permission: 'approval:review' },
-    ],
-  },
-  {
-    group: 'Oversight',
-    items: [
-      { path: '/fraud', label: 'Fraud & leakage', permission: 'fraud:read' },
-      // support:read:all, not support:manage. An auditor holds the first and
-      // not the second, and reading the support queue is exactly the kind of
-      // thing an auditor is for — the screen hides the reply and status
-      // controls from anyone who cannot use them.
-      { path: '/support', label: 'Support desk', permission: 'support:read:all' },
-      // payment:read:all, which every portal role holds, because the refund
-      // queue is the part of this screen everyone should be able to see. The
-      // TIN and vehicle-authority queues are guarded separately and the screen
-      // shows only the sections the officer may read, rather than the page
-      // answering 403 for whoever holds two of the three permissions.
-      { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
-      { path: '/audit', label: 'Audit log', permission: 'audit:read' },
-    ],
-  },
-  {
-    group: 'Configuration',
-    items: [
-      { path: '/catalogue', label: 'Revenue catalogue', permission: 'catalogue:read' },
-      { path: '/programmes', label: 'Social incentives', permission: 'incentive:read:all' },
-    ],
-  },
-];
-
-/** The nav items this user may open, in menu order. */
-function availableItems(permissions: readonly string[]): NavItem[] {
-  return NAV.flatMap((group) => group.items).filter(
-    (item) =>
-      !item.permission ||
-      (Array.isArray(item.permission) ? item.permission : [item.permission]).some((permission) =>
-        permissions.includes(permission),
-      ),
-  );
-}
-
 export function App() {
   const [route, navigate] = useRoute();
   const [user, setUser] = useState<User | null>(getUser());
@@ -128,25 +41,30 @@ export function App() {
       return;
     }
     restoreSession()
-      .then(setUser)
+      .then((restored) => {
+        // The same door check the login screen applies. A field agent who
+        // signed in before this existed still has a stored session, and
+        // restoring it would put them back in the one-item shell.
+        setUser(restored && belongsInPortal(restored.role) ? restored : null);
+      })
       .finally(() => setRestoring(false));
   }, []);
 
   /*
    * Land on a screen this officer can actually open.
    *
-   * '/' renders the executive dashboard, which needs dashboard:executive or
-   * report:read:all. A supervisor holds neither, so signing in put them on
-   * "Your role (supervisor) is not permitted to perform this action" — their
-   * first and only impression of the portal, on a screen the menu had already
-   * decided not to offer them.
+   * '/' renders the executive dashboard, which needs report:read:all. A
+   * supervisor does not hold it, so signing in put them on "Your role
+   * (supervisor) is not permitted to perform this action" — their first and
+   * only impression of the portal, on a screen the menu had already decided not
+   * to offer them.
    *
    * The menu is the authority on what a role may open, so the landing page is
    * taken from the same filter rather than assumed to be the dashboard.
    */
   useEffect(() => {
     if (!user || route !== '/') return;
-    const first = availableItems(user.permissions)[0]?.path;
+    const first = landingPath(user);
     if (first && first !== '/') navigate(first);
   }, [user, route, navigate]);
 
@@ -171,29 +89,12 @@ export function App() {
 
   if (!user) return <LoginScreen onSignedIn={setUser} />;
 
-  const allowed = new Set(availableItems(user.permissions).map((item) => item.path));
-  const groups = NAV.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => allowed.has(item.path)),
-  })).filter((group) => group.items.length > 0);
-
+  const groups = availableGroups(user);
   const available = groups.flatMap((group) => group.items);
+  const readOnly = isReadOnly(user);
 
   const activeLabel =
     available.find((item) => item.path === route)?.label ?? 'Revenue administration';
-
-  /*
-   * Land on a screen this officer can actually open.
-   *
-   * '/' renders the executive dashboard, which needs dashboard:executive or
-   * report:read:all. A supervisor holds neither, so signing in put them on
-   * "Your role (supervisor) is not permitted to perform this action" — their
-   * first and only impression of the portal, on a screen the menu had already
-   * decided not to offer them.
-   *
-   * The menu is the authority on what a role may open, so the landing page
-   * comes from the same filter rather than being assumed.
-   */
 
   return (
     <div className="shell">
@@ -223,7 +124,19 @@ export function App() {
 
         <div className="sidebar__footer">
           <p style={{ margin: '0 0 2px', color: '#fff', fontWeight: 650 }}>{user.fullName}</p>
-          <p style={{ margin: '0 0 10px', opacity: 0.7 }}>{user.role.replace(/_/g, ' ')}</p>
+          <p style={{ margin: '0 0 10px', opacity: 0.7 }}>
+            {user.role.replace(/_/g, ' ')}
+            {/*
+             * Say it, rather than leaving it to be inferred from an absence.
+             *
+             * An auditor holds no permission that changes anything — that is
+             * the whole point of the role, and it is part of the control
+             * environment a reviewer is entitled to observe. Until now the
+             * portal expressed it only by not rendering buttons, which is
+             * indistinguishable from a portal that forgot to.
+             */}
+            {readOnly && <span className="sidebar__tag">read-only</span>}
+          </p>
           <button
             type="button"
             className="secondary"
