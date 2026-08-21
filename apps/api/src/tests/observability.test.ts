@@ -318,24 +318,48 @@ describe('Error reporting is best-effort and never leaks', () => {
 // ===========================================================================
 describe('Background jobs run once across the fleet', () => {
   it('lets one caller hold a job lock and turns the other away', async () => {
-    let firstIsRunning = false;
     let secondRan = false;
 
     // Hold the lock, and while holding it try to take it again — which is what
     // a second replica reaching the same interval looks like.
     const held = await withJobLock('audit-test-job', async () => {
-      firstIsRunning = true;
       const second = await withJobLock('audit-test-job', async () => {
         secondRan = true;
         return 'second';
       });
-      assert.equal(second, null, 'the second caller must be turned away, not queued');
+      assert.equal(second.ran, false, 'the second caller must be turned away, not queued');
       return 'first';
     });
 
-    assert.equal(held, 'first');
-    assert.ok(firstIsRunning);
+    assert.deepEqual(held, { ran: true, value: 'first' });
     assert.equal(secondRan, false, 'the job body must not run twice');
+  });
+
+  /**
+   * The distinction this pins is the one that broke worker monitoring.
+   *
+   * Most of these jobs return null to mean "ran, nothing worth reporting".
+   * When the lock helper also used null for "another instance has it", a job
+   * that did its work and found nothing to do was indistinguishable from one
+   * that never ran — so the caller recorded no timing and no liveness for it,
+   * and six of the seven workers reported nothing at all. CI caught it: a
+   * single freshly booted instance logged "another instance holds it" for
+   * every worker, with no other instance in existence.
+   */
+  it('tells a job that returned null apart from a lock it could not take', async () => {
+    const ranAndFoundNothing = await withJobLock('audit-test-null-job', async () => null);
+    assert.deepEqual(
+      ranAndFoundNothing,
+      { ran: true, value: null },
+      'a job that ran and returned null must report that it ran',
+    );
+
+    // And while it is held, a second caller is distinguishable from that.
+    await withJobLock('audit-test-null-job-2', async () => {
+      const blocked = await withJobLock('audit-test-null-job-2', async () => null);
+      assert.deepEqual(blocked, { ran: false }, 'a blocked caller must report that it did not run');
+      return null;
+    });
   });
 
   it('releases the lock when the job throws', async () => {
@@ -348,13 +372,29 @@ describe('Background jobs run once across the fleet', () => {
 
     // The next caller must be able to take it.
     const after = await withJobLock('audit-test-throwing-job', async () => 'acquired');
-    assert.equal(after, 'acquired', 'a thrown job must not strand its lock');
+    assert.deepEqual(after, { ran: true, value: 'acquired' }, 'a thrown job must not strand its lock');
   });
 
   it('does not block a different job', async () => {
     const outcome = await withJobLock('audit-job-a', async () =>
       withJobLock('audit-job-b', async () => 'both'),
     );
-    assert.equal(outcome, 'both');
+    assert.deepEqual(outcome, { ran: true, value: { ran: true, value: 'both' } });
+  });
+
+  /**
+   * The symptom as an operator would see it: every worker must leave a
+   * liveness reading behind, including the ones that had nothing to do.
+   */
+  it('records liveness for a worker that ran and found nothing to do', async () => {
+    resetMetrics();
+
+    const outcome = await withJobLock('audit-quiet-worker', async () => null);
+    assert.equal(outcome.ran, true);
+    if (outcome.ran) metrics.workerRun('audit-quiet-worker', 'success', 12);
+
+    const output = render();
+    assert.match(output, /psirs_worker_last_run_ok\{worker="audit-quiet-worker"\} 1/);
+    assert.match(output, /psirs_worker_last_run_timestamp_seconds\{worker="audit-quiet-worker"\} \d+/);
   });
 });

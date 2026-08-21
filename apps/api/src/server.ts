@@ -86,14 +86,19 @@ const SYSTEM_ACTOR = { actorId: null as string | null, actorRole: 'system' };
 async function runJob(name: string, job: () => Promise<string | null>): Promise<void> {
   const startedAt = Date.now();
   try {
-    const summary = await withJobLock(name, job);
-    if (summary === null) {
+    const outcome = await withJobLock(name, job);
+    if (!outcome.ran) {
       log.debug('job skipped; another instance holds it', { component: `worker.${name}` });
       return;
     }
+
+    // Recorded whether or not the job had anything to say. A worker that runs
+    // every five minutes and finds nothing to do is the healthy case, and it
+    // still has to show up in `psirs_worker_last_run_*` — otherwise an alert on
+    // "this worker has not run recently" fires on the workers that are working.
     metrics.workerRun(name, 'success', Date.now() - startedAt);
-    if (summary) {
-      log.info(summary, { component: `worker.${name}`, durationMs: Date.now() - startedAt });
+    if (outcome.value) {
+      log.info(outcome.value, { component: `worker.${name}`, durationMs: Date.now() - startedAt });
     }
   } catch (error) {
     metrics.workerRun(name, 'failure', Date.now() - startedAt);

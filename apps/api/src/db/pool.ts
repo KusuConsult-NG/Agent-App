@@ -122,19 +122,27 @@ export const LOCK_NAMESPACE = {
  * transaction-scoped because these jobs open and close many transactions, so
  * it is released explicitly and in a `finally`.
  *
- * Returns null when another instance holds the lock.
+ * The result is a discriminated object rather than `T | null`, because `null`
+ * is a perfectly ordinary thing for a job to return — most of these return it
+ * to mean "ran, nothing worth reporting". Collapsing the two made a job that
+ * did its work and found nothing to do indistinguishable from one that never
+ * ran, and the caller recorded neither its timing nor its liveness. Worker
+ * monitoring then had no reading for exactly the workers that were quietly
+ * healthy, which is the opposite of what it is for.
  */
-export async function withJobLock<T>(name: string, fn: () => Promise<T>): Promise<T | null> {
+export type JobOutcome<T> = { ran: false } | { ran: true; value: T };
+
+export async function withJobLock<T>(name: string, fn: () => Promise<T>): Promise<JobOutcome<T>> {
   const client = await pool.connect();
   try {
     const acquired = await client.query<{ locked: boolean }>(
       'SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked',
       [LOCK_NAMESPACE.WORKER, name],
     );
-    if (!acquired.rows[0]?.locked) return null;
+    if (!acquired.rows[0]?.locked) return { ran: false };
 
     try {
-      return await fn();
+      return { ran: true, value: await fn() };
     } finally {
       await client
         .query('SELECT pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.WORKER, name])
