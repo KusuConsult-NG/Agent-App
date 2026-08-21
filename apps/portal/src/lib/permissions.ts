@@ -2,13 +2,23 @@
  * What this officer may see, and what they may do.
  *
  * The navigation table lives here rather than in `App.tsx` so it can be tested
- * without a DOM. That matters because of what the table encodes: two bugs of
- * the same shape have already been found in it — a link offered to a role whose
- * screen then answered 403 (reconciliation for an admin), and a screen hidden
- * from the role it was written for (performance for a supervisor). Both were
- * invisible until somebody signed in as that role and looked. `permissions.test.ts`
- * now checks every gate against the permission the screen's own endpoint
- * requires, so the next one fails a test instead.
+ * without a DOM. What it encodes is worth guarding: two bugs of the same shape
+ * have already been found in it — a link offered to a role whose screen then
+ * answered 403 (reconciliation for an admin), and a screen hidden from the role
+ * it was written for (performance for a supervisor). Both were invisible until
+ * somebody signed in as that role and looked.
+ *
+ * Two suites cover it, and the division matters:
+ *
+ *   * `apps/api/src/tests/portal-navigation.test.ts` checks each gate against
+ *     the permissions the route actually enforces, reading both this table and
+ *     the route definitions from source so neither side can drift. It is the
+ *     authority on gate-versus-endpoint, because only the API suite can see
+ *     the routes.
+ *   * `permissions.test.ts`, beside this file, pins the resulting menus per
+ *     role, and the two properties with no home in the API suite: that the
+ *     auditor holds nothing that mutates, and that a field agent is turned
+ *     away at the door.
  *
  * WHY THE BACK-OFFICE MENUS RESEMBLE EACH OTHER
  *
