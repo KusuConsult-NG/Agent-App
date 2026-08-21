@@ -75,6 +75,18 @@ export const config = {
   isTest,
   port: int('PORT', 4000),
 
+  /**
+   * Whether the API applies pending migrations as it starts.
+   *
+   * Convenient for a single node and for development, and wrong for a real
+   * deployment, where the pipeline runs migrations once as its own step before
+   * any new container is admitted (docs/DEPLOYMENT.md). Set
+   * `RUN_MIGRATIONS_ON_BOOT=false` there. It stays on by default so existing
+   * single-node setups keep working, and the run now takes an advisory lock
+   * either way.
+   */
+  runMigrationsOnBoot: bool('RUN_MIGRATIONS_ON_BOOT', true),
+
   database: {
     url:
       process.env.DATABASE_URL ??
@@ -364,6 +376,32 @@ export const config = {
     defaultHoldPeriodHours: int('COMMISSION_HOLD_HOURS', 72),
   },
 
+  observability: {
+    /**
+     * Where unexpected exceptions are sent.
+     *
+     * `mock` records them in memory and nothing more, which is right for
+     * development and wrong for production — an exception here is a taxpayer
+     * who paid and did not get a receipt. Any service that accepts a JSON POST
+     * works: Sentry, GlitchTip, Rollbar, or a webhook into an operations
+     * channel.
+     */
+    errorReporting: process.env.ERROR_REPORTING ?? 'mock',
+    errorReportingUrl: process.env.ERROR_REPORTING_URL ?? '',
+    errorReportingApiKey: process.env.ERROR_REPORTING_API_KEY ?? '',
+    errorReportingTimeoutMs: int('ERROR_REPORTING_TIMEOUT_MS', 5_000),
+
+    /**
+     * Bearer token required to scrape `/metrics`.
+     *
+     * The endpoint exposes queue depths and confirmation counts — operational
+     * shape rather than taxpayer data, but not something to publish. Unset
+     * outside production, the endpoint is open so a developer can curl it;
+     * production refuses to boot without a token.
+     */
+    metricsToken: process.env.METRICS_TOKEN ?? '',
+  },
+
   security: {
     rateLimitWindowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax: int('RATE_LIMIT_MAX', 120),
@@ -481,10 +519,95 @@ if (isProduction) {
       problems.push('REMITA_SUCCESS_STATUS_CODES is empty — no payment could ever be confirmed');
     }
   }
+  // ---------------------------------------------------------------------
+  // Addresses the public is sent to.
+  //
+  // These three defaulted to localhost and nothing checked them, so a
+  // deployment that set every integration above correctly still booted
+  // clean while pointing citizens at a machine that is not there.
+  //
+  // VERIFICATION_BASE_URL is the expensive one. It is QR-encoded onto every
+  // receipt and renewal certificate and forms every referee invitation link.
+  // Left at its default: a citizen scanning their receipt to check it is
+  // genuine reaches nothing, and no referee can answer an invitation, which
+  // stops agent clearance altogether. Receipts are immutable by design, so
+  // every receipt issued before anyone notices carries the dead link for good.
+  //
+  // Unlike a wrong integration mapping, this is detectable here — so it is
+  // detected here rather than by the first taxpayer to scan a QR code.
+  for (const [name, value] of [
+    ['VERIFICATION_BASE_URL', config.branding.verificationBaseUrl],
+    ['PAYMENT_CALLBACK_URL', config.payments.callbackUrl],
+  ] as const) {
+    const problem = publicUrlProblem(value);
+    if (problem) problems.push(`${name} ${problem}`);
+  }
+
+  // An unwatched revenue platform is the failure mode this whole codebase is
+  // built to avoid: it records what it still owes in half a dozen queues, and
+  // that is worth nothing if nobody is told when one stops draining.
+  if (config.observability.errorReporting === 'mock') {
+    problems.push('ERROR_REPORTING is still "mock" — no exception would reach anyone');
+  }
+  if (
+    config.observability.errorReporting !== 'mock' &&
+    !config.observability.errorReportingUrl
+  ) {
+    problems.push(
+      `ERROR_REPORTING is "${config.observability.errorReporting}" but ERROR_REPORTING_URL is not set`,
+    );
+  }
+  if (!config.observability.metricsToken) {
+    problems.push('METRICS_TOKEN is not set — /metrics would be unauthenticated');
+  }
+
+  // CORS_ORIGINS fails loudly on its own — nothing can reach the API — but it
+  // is the same class of mistake and costs nothing to catch at boot.
+  if (config.security.corsOrigins.length === 0) {
+    problems.push('CORS_ORIGINS is empty — no browser application could reach the API');
+  }
+  for (const origin of config.security.corsOrigins) {
+    const problem = publicUrlProblem(origin);
+    if (problem) problems.push(`CORS_ORIGINS entry "${origin}" ${problem}`);
+  }
+
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production with development integrations: ${problems.join('; ')}`,
     );
   }
   required('DATABASE_URL');
+}
+
+/**
+ * Why this URL cannot be given to the public, or null if it can.
+ *
+ * Local addresses and plain HTTP are both disqualifying: the first is
+ * unreachable from a citizen's phone, and the second carries receipt
+ * verification and payment returns over a network anyone can read.
+ */
+function publicUrlProblem(value: string): string | null {
+  if (!value) return 'is not set';
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return `is not a valid URL ("${value}")`;
+  }
+
+  const host = url.hostname.toLowerCase();
+  const isLocal =
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host === '[::1]' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    /^127\./.test(host);
+
+  if (isLocal) return `still points at a local address ("${value}")`;
+  if (url.protocol !== 'https:') return `must use HTTPS in production ("${value}")`;
+
+  return null;
 }

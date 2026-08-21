@@ -11,6 +11,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { ZodError } from 'zod';
 import { IllegalTransitionError, MoneyError } from '@psirs/shared';
 import { AppError, internal, validationFailed } from '../lib/errors';
+import { log } from '../lib/logger';
+import { reportError } from '../services/error-reporting';
 
 interface PostgresError extends Error {
   code?: string;
@@ -54,7 +56,13 @@ export function errorHandler(
 
   if (error instanceof AppError) {
     if (!error.expose) {
-      console.error(`[error] ${req.requestId} ${error.code}`, error);
+      log.error('request failed', {
+        requestId: req.requestId,
+        component: 'http',
+        code: error.code,
+        path: req.path,
+        error,
+      });
     }
     res.status(error.statusCode).json(error.toJSON());
     return;
@@ -115,7 +123,13 @@ export function errorHandler(
 
     // 23514 check_violation / 23503 foreign_key_violation
     if (error.code === '23514' || error.code === '23503') {
-      console.error(`[error] ${req.requestId} constraint violation`, error.constraint, error.detail);
+      log.warn('a financial integrity rule blocked the request', {
+        requestId: req.requestId,
+        component: 'http',
+        constraint: error.constraint,
+        detail: error.detail,
+        path: req.path,
+      });
       res.status(409).json(
         new AppError({
           statusCode: 409,
@@ -162,7 +176,23 @@ export function errorHandler(
     }
   }
 
-  console.error(`[error] ${req.requestId} unhandled`, error);
+  // Nothing above recognised this, which means it is a bug rather than a rule
+  // firing. Somebody has to find out now: on a revenue platform an unhandled
+  // exception is a taxpayer who paid and has no receipt.
+  log.error('unhandled error', {
+    requestId: req.requestId,
+    component: 'http',
+    method: req.method,
+    path: req.path,
+    error,
+  });
+  reportError({
+    message: `Unhandled error on ${req.method} ${req.path}`,
+    error,
+    requestId: req.requestId,
+    component: 'http',
+    context: { method: req.method, path: req.path, role: req.auth?.role ?? null },
+  });
   res.status(500).json(internal(req.requestId).toJSON());
 }
 

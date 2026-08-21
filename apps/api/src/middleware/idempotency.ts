@@ -19,6 +19,7 @@ import { createHash } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { pool, queryOne } from '../db/pool';
 import { AppError, badRequest } from '../lib/errors';
+import { log } from '../lib/logger';
 
 function hashRequest(req: Request): string {
   return createHash('sha256')
@@ -137,7 +138,7 @@ export function idempotent(scope: string, options: { required?: boolean } = {}) 
               WHERE scope = $4 AND idempotency_key = $5`,
             [status >= 500 ? 'FAILED' : 'COMPLETED', status, JSON.stringify(body), scope, key],
           )
-          .catch((error) => console.error('[idempotency] failed to persist response', error))
+          .catch((error) => log.error('failed to persist idempotent response', { component: 'idempotency', error }))
           // finally, not then: a failed write must not also cost the caller
           // their response. It leaves the key IN_PROGRESS, which is the old
           // behaviour for that case and no worse.

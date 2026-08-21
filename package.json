@@ -20,7 +20,8 @@
     "dev:agent": "npm run dev --workspace @psirs/agent",
     "dev:portal": "npm run dev --workspace @psirs/portal",
     "test": "npm run build --workspace @psirs/shared && npm run test --workspace @psirs/api && npm run test --workspace @psirs/agent",
-    "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json"
+    "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json",
+    "verify:integrations": "npm run verify:integrations --workspace @psirs/api --"
   },
   "devDependencies": {
     "typescript": "^7.0.2"

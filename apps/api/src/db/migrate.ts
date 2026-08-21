@@ -13,7 +13,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config';
 import { describeDatabase } from '../env';
-import { pool, query, withTransaction, closePool } from './pool';
+import { pool, query, withTransaction, closePool, LOCK_NAMESPACE } from './pool';
 
 const MIGRATIONS_DIR = join(__dirname, 'migrations');
 
@@ -38,7 +38,34 @@ function checksumOf(contents: string): string {
   return createHash('sha256').update(contents).digest('hex');
 }
 
+/**
+ * Apply pending migrations, holding a lock so only one process does.
+ *
+ * Without the lock, two instances starting together both read the applied set,
+ * both decide the same file is pending, and both run it. One wins and the other
+ * dies on "relation already exists" — safe, because DDL is transactional in
+ * PostgreSQL and nothing is left half-applied, but a rolling deploy then
+ * crash-loops its replicas until the first finishes.
+ *
+ * `pg_advisory_lock` queues rather than failing: the second instance waits,
+ * then finds the schema already current and applies nothing. The lock is held
+ * on a dedicated connection for the whole run and released in a `finally`,
+ * including when a migration throws.
+ */
 export async function runMigrations(options: { silent?: boolean } = {}): Promise<number> {
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1, $2)', [LOCK_NAMESPACE.MIGRATION, 0]);
+    return await applyMigrations(options);
+  } finally {
+    await client
+      .query('SELECT pg_advisory_unlock($1, $2)', [LOCK_NAMESPACE.MIGRATION, 0])
+      .catch(() => undefined);
+    client.release();
+  }
+}
+
+async function applyMigrations(options: { silent?: boolean }): Promise<number> {
   const log = options.silent ? () => {} : (message: string) => console.log(message);
 
   await ensureMigrationsTable();

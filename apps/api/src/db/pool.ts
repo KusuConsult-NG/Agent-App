@@ -12,6 +12,7 @@
 
 import { Pool, types, type PoolClient, type QueryResultRow } from 'pg';
 import { config } from '../config';
+import { log } from '../lib/logger';
 
 // int8/BIGINT -> string. Losing precision on money would be silent otherwise.
 types.setTypeParser(types.builtins.INT8, (value) => value);
@@ -27,7 +28,7 @@ export const pool = new Pool({
 
 pool.on('error', (error) => {
   // An idle client erroring out must never take the process down silently.
-  console.error('[db] idle client error', error);
+  log.error('idle client error', { component: 'db', error });
 });
 
 export type Db = Pool | PoolClient;
@@ -73,7 +74,7 @@ export async function withTransaction<T>(
     try {
       await client.query('ROLLBACK');
     } catch (rollbackError) {
-      console.error('[db] rollback failed', rollbackError);
+      log.error('rollback failed', { component: 'db', error: rollbackError });
     }
     throw error;
   } finally {
@@ -100,7 +101,57 @@ export const LOCK_NAMESPACE = {
   AUDIT_CHAIN: 4,
   IDEMPOTENCY: 5,
   RECONCILIATION: 6,
+  /** Scheduled jobs: one instance runs each sweep, however many are deployed. */
+  WORKER: 7,
+  /** Schema migration, so simultaneous boots do not race each other. */
+  MIGRATION: 8,
 } as const;
+
+/**
+ * Run something exactly once across every instance, or not at all.
+ *
+ * The background workers were `setInterval` timers guarded by a module-level
+ * boolean, which is a correct guard for one process and no guard at all for
+ * the second replica. Behind a load balancer that meant N reconciliation
+ * sweeps every six hours, each asking the gateway about every payment
+ * reference in a 48-hour window.
+ *
+ * `pg_try_advisory_lock` returns immediately rather than queueing: a sweep
+ * another instance is already running does not need to be run again afterwards,
+ * it needs to be skipped. The lock is session-scoped rather than
+ * transaction-scoped because these jobs open and close many transactions, so
+ * it is released explicitly and in a `finally`.
+ *
+ * The result is a discriminated object rather than `T | null`, because `null`
+ * is a perfectly ordinary thing for a job to return — most of these return it
+ * to mean "ran, nothing worth reporting". Collapsing the two made a job that
+ * did its work and found nothing to do indistinguishable from one that never
+ * ran, and the caller recorded neither its timing nor its liveness. Worker
+ * monitoring then had no reading for exactly the workers that were quietly
+ * healthy, which is the opposite of what it is for.
+ */
+export type JobOutcome<T> = { ran: false } | { ran: true; value: T };
+
+export async function withJobLock<T>(name: string, fn: () => Promise<T>): Promise<JobOutcome<T>> {
+  const client = await pool.connect();
+  try {
+    const acquired = await client.query<{ locked: boolean }>(
+      'SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked',
+      [LOCK_NAMESPACE.WORKER, name],
+    );
+    if (!acquired.rows[0]?.locked) return { ran: false };
+
+    try {
+      return { ran: true, value: await fn() };
+    } finally {
+      await client
+        .query('SELECT pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.WORKER, name])
+        .catch(() => undefined);
+    }
+  } finally {
+    client.release();
+  }
+}
 
 export async function closePool(): Promise<void> {
   await pool.end();

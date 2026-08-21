@@ -24,3 +24,9 @@ coverage/
 .DS_Store
 *.tsbuildinfo
 .vite/
+
+# Database dumps. Anchored for the same reason storage/ is: a bare `backups/`
+# would also match any source directory of that name. These contain every
+# receipt the government has issued and must never reach a repository.
+/backups/
+/apps/api/backups/

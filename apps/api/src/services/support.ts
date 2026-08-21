@@ -33,6 +33,7 @@ import { badRequest, forbidden, notFound } from '../lib/errors';
 import { nextTicketNumber } from '../lib/references';
 import { recordAudit } from './audit';
 import { queueNotification } from './notifications';
+import { log } from '../lib/logger';
 
 export type TicketStatus = 'OPEN' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
 
@@ -390,6 +391,6 @@ async function notifyRaiser(
       variables: { ticketNumber: params.ticketNumber },
     });
   } catch (error) {
-    console.error('[support] could not queue a reply notification', error);
+    log.error('could not queue a reply notification', { component: 'support', error });
   }
 }

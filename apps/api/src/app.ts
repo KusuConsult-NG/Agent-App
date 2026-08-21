@@ -32,6 +32,8 @@ import { refereeRouter } from './routes/referees';
 import { vehicleRouter } from './routes/vehicles';
 import { governmentRouter, supportRouter } from './routes/government';
 import { referenceRouter } from './routes/reference';
+import { log } from './lib/logger';
+import { collectDatabaseGauges, metrics, render as renderMetrics } from './lib/metrics';
 
 export function createApp(): Express {
   const app = express();
@@ -56,6 +58,57 @@ export function createApp(): Express {
     }),
   );
 
+  // One line per completed request, with the correlation id the response
+  // carries, so a support ticket quoting a reference can be traced without
+  // anyone reading container output by eye.
+  app.use((req, res, next) => {
+    const startedAt = process.hrtime.bigint();
+    res.on('finish', () => {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      metrics.httpRequest(req.method, res.statusCode);
+      // 4xx is the caller being told no, which is routine; 5xx is ours.
+      log[res.statusCode >= 500 ? 'error' : 'info']('request', {
+        requestId: req.requestId,
+        component: 'http',
+        method: req.method,
+        path: req.path,
+        status: res.statusCode,
+        durationMs: Math.round(durationMs),
+        role: req.auth?.role ?? null,
+      });
+    });
+    next();
+  });
+
+  /**
+   * Liveness: is the process itself wedged?
+   *
+   * Deliberately does not touch the database. An orchestrator restarts a
+   * container that fails this, and restarting every replica because Postgres
+   * is briefly unreachable turns a database blip into a full outage.
+   */
+  app.get('/health/live', (_req, res) => {
+    res.json({ status: 'ok', service: 'psirs-revenue-platform', uptimeSeconds: Math.floor(process.uptime()) });
+  });
+
+  /**
+   * Readiness: can this instance actually serve a request?
+   *
+   * This one does check the database, because an instance that cannot reach it
+   * should be taken out of the load balancer rather than restarted.
+   */
+  app.get('/health/ready', async (_req, res) => {
+    try {
+      await pool.query('SELECT 1');
+      res.json({ status: 'ok', database: 'connected' });
+    } catch (error) {
+      log.error('readiness check failed', { component: 'health', error });
+      res.status(503).json({ status: 'degraded', database: 'unavailable' });
+    }
+  });
+
+  // The original path, kept because deployments and uptime checks may already
+  // point at it. Same behaviour as readiness.
   app.get('/health', async (_req, res) => {
     try {
       await pool.query('SELECT 1');
@@ -63,6 +116,36 @@ export function createApp(): Express {
     } catch {
       res.status(503).json({ status: 'degraded', database: 'unavailable' });
     }
+  });
+
+  /**
+   * Metrics for a scraper.
+   *
+   * Counters come from this process; the queue depths are read from the
+   * database at scrape time, because those are facts about the platform rather
+   * than about whichever replica answered.
+   */
+  app.get('/metrics', async (req, res) => {
+    const expected = config.observability.metricsToken;
+    if (expected) {
+      const provided = req.header('authorization')?.replace(/^Bearer /, '') ?? '';
+      // Length-independent comparison is unnecessary here — the token guards
+      // operational counters, not money — but constant work costs nothing.
+      if (provided !== expected) {
+        res.status(401).type('text/plain').send('unauthorised\n');
+        return;
+      }
+    }
+
+    try {
+      await collectDatabaseGauges(pool);
+    } catch (error) {
+      // Serve the process counters anyway: a database that cannot be read is
+      // exactly when an operator most needs whatever is still available.
+      log.error('could not collect database gauges', { component: 'metrics', error });
+    }
+
+    res.type('text/plain; version=0.0.4').send(renderMetrics());
   });
 
   const api = express.Router();

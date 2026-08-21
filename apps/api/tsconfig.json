@@ -15,6 +15,12 @@
     "declaration": true
   },
   "include": ["src/**/*"],
-  "exclude": ["src/**/*.test.ts"],
+  // The whole test directory, not just `*.test.ts`. `helpers.ts` was being
+  // compiled into `dist` and shipped in the production image, and it exports a
+  // `resetDatabase()` that TRUNCATEs every financial table. Nothing reachable
+  // from the entrypoint imports it, so this is dead weight rather than a live
+  // hazard — but dead weight that truncates the receipts table does not belong
+  // in a government revenue image.
+  "exclude": ["src/tests/**"],
   "references": [{ "path": "../../packages/shared" }]
 }
