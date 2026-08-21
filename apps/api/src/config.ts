@@ -481,10 +481,77 @@ if (isProduction) {
       problems.push('REMITA_SUCCESS_STATUS_CODES is empty — no payment could ever be confirmed');
     }
   }
+  // ---------------------------------------------------------------------
+  // Addresses the public is sent to.
+  //
+  // These three defaulted to localhost and nothing checked them, so a
+  // deployment that set every integration above correctly still booted
+  // clean while pointing citizens at a machine that is not there.
+  //
+  // VERIFICATION_BASE_URL is the expensive one. It is QR-encoded onto every
+  // receipt and renewal certificate and forms every referee invitation link.
+  // Left at its default: a citizen scanning their receipt to check it is
+  // genuine reaches nothing, and no referee can answer an invitation, which
+  // stops agent clearance altogether. Receipts are immutable by design, so
+  // every receipt issued before anyone notices carries the dead link for good.
+  //
+  // Unlike a wrong integration mapping, this is detectable here — so it is
+  // detected here rather than by the first taxpayer to scan a QR code.
+  for (const [name, value] of [
+    ['VERIFICATION_BASE_URL', config.branding.verificationBaseUrl],
+    ['PAYMENT_CALLBACK_URL', config.payments.callbackUrl],
+  ] as const) {
+    const problem = publicUrlProblem(value);
+    if (problem) problems.push(`${name} ${problem}`);
+  }
+
+  // CORS_ORIGINS fails loudly on its own — nothing can reach the API — but it
+  // is the same class of mistake and costs nothing to catch at boot.
+  if (config.security.corsOrigins.length === 0) {
+    problems.push('CORS_ORIGINS is empty — no browser application could reach the API');
+  }
+  for (const origin of config.security.corsOrigins) {
+    const problem = publicUrlProblem(origin);
+    if (problem) problems.push(`CORS_ORIGINS entry "${origin}" ${problem}`);
+  }
+
   if (problems.length > 0) {
     throw new Error(
       `Refusing to start in production with development integrations: ${problems.join('; ')}`,
     );
   }
   required('DATABASE_URL');
+}
+
+/**
+ * Why this URL cannot be given to the public, or null if it can.
+ *
+ * Local addresses and plain HTTP are both disqualifying: the first is
+ * unreachable from a citizen's phone, and the second carries receipt
+ * verification and payment returns over a network anyone can read.
+ */
+function publicUrlProblem(value: string): string | null {
+  if (!value) return 'is not set';
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return `is not a valid URL ("${value}")`;
+  }
+
+  const host = url.hostname.toLowerCase();
+  const isLocal =
+    host === 'localhost' ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    host === '[::1]' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    /^127\./.test(host);
+
+  if (isLocal) return `still points at a local address ("${value}")`;
+  if (url.protocol !== 'https:') return `must use HTTPS in production ("${value}")`;
+
+  return null;
 }

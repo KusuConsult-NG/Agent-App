@@ -1047,6 +1047,186 @@ describe('AUDIT 12 — production configuration refuses to be unsafe', () => {
       assert.match(output, new RegExp(expected), `boot guard should name ${expected}`);
     }
   });
+
+  /**
+   * Every integration set correctly, so the checks above all pass — and the
+   * addresses the public is sent to left at their defaults.
+   *
+   * This configuration used to boot clean. VERIFICATION_BASE_URL is QR-encoded
+   * onto every receipt and forms every referee invitation, so booting meant
+   * issuing immutable receipts whose verification link points at localhost, and
+   * invitations no referee can answer.
+   */
+  it('refuses to boot in production with public URLs left on localhost', () => {
+    const result = bootProduction({}, PUBLIC_URL_SETTINGS);
+
+    assert.ok(result.threw, 'a fully-configured production boot with default URLs must fail');
+    assert.match(result.output, /VERIFICATION_BASE_URL still points at a local address/);
+    assert.match(result.output, /PAYMENT_CALLBACK_URL still points at a local address/);
+    assert.match(result.output, /CORS_ORIGINS entry .* still points at a local address/);
+  });
+
+  it('refuses plain HTTP, loopback addresses and malformed URLs', () => {
+    const overHttp = bootProduction({
+      VERIFICATION_BASE_URL: 'http://portal.psirs.pl.gov.ng/verify',
+      PAYMENT_CALLBACK_URL: 'https://agent.psirs.pl.gov.ng/payment/return',
+      CORS_ORIGINS: 'https://portal.psirs.pl.gov.ng',
+    });
+    assert.ok(overHttp.threw, 'plain HTTP must be refused in production');
+    assert.match(overHttp.output, /VERIFICATION_BASE_URL must use HTTPS in production/);
+
+    const loopback = bootProduction({
+      VERIFICATION_BASE_URL: 'https://127.0.0.1:5174/verify',
+      PAYMENT_CALLBACK_URL: 'not-a-url',
+      CORS_ORIGINS: 'https://portal.psirs.pl.gov.ng',
+    });
+    assert.ok(loopback.threw);
+    assert.match(loopback.output, /VERIFICATION_BASE_URL still points at a local address/);
+    assert.match(loopback.output, /PAYMENT_CALLBACK_URL is not a valid URL/);
+  });
+
+  it('boots when the public URLs are real HTTPS addresses', () => {
+    const result = bootProduction({});
+    assert.equal(
+      result.threw,
+      false,
+      `a correctly configured production boot must succeed: ${result.output}`,
+    );
+  });
+});
+
+/** The three settings that name addresses the public is sent to. */
+const PUBLIC_URL_SETTINGS = [
+  'VERIFICATION_BASE_URL',
+  'PAYMENT_CALLBACK_URL',
+  'CORS_ORIGINS',
+] as const;
+
+/** Every production setting the guard checks, correct — the caller overrides. */
+const PRODUCTION_ENV: Record<string, string> = {
+  NODE_ENV: 'production',
+  DATABASE_URL: 'postgres://user:pass@db.example.gov.ng:5432/psirs',
+  JWT_SECRET: 'a'.repeat(40),
+  IDENTITY_HASH_SECRET: 'b'.repeat(40),
+  PAYMENT_WEBHOOK_SECRET: 'c'.repeat(40),
+  VERIFICATION_BASE_URL: 'https://portal.psirs.pl.gov.ng/verify',
+  PAYMENT_CALLBACK_URL: 'https://agent.psirs.pl.gov.ng/payment/return',
+  CORS_ORIGINS: 'https://agent.psirs.pl.gov.ng,https://portal.psirs.pl.gov.ng',
+  PAYMENT_GATEWAY: 'remita',
+  REMITA_MERCHANT_ID: '123',
+  REMITA_API_KEY: 'key',
+  REMITA_SERVICE_TYPE_ID: 'svc',
+  REMITA_BASE_URL: 'https://login.remita.net',
+  TIN_SERVICE: 'http',
+  TIN_SERVICE_URL: 'https://tin.psirs.gov.ng',
+  VEHICLE_REGISTRY: 'http',
+  VEHICLE_REGISTRY_URL: 'https://vreg.gov.ng',
+  KYC_PROVIDER: 'http',
+  KYC_PROVIDER_URL: 'https://kyc.vendor.ng',
+  BANK_VERIFICATION: 'http',
+  BANK_VERIFICATION_URL: 'https://bank.vendor.ng',
+  SMS_PROVIDER: 'termii',
+  SMS_PROVIDER_URL: 'https://sms.termii.com',
+  EMAIL_PROVIDER: 'smtp',
+  STORAGE_DRIVER: 's3',
+  STORAGE_ENDPOINT: 'https://s3.eu-west-1.amazonaws.com',
+  STORAGE_BUCKET: 'psirs',
+  STORAGE_ACCESS_KEY_ID: 'AK',
+  STORAGE_SECRET_ACCESS_KEY: 'SK',
+};
+
+/**
+ * A production environment for a child process.
+ *
+ * `omit` removes a setting entirely so config.ts falls back to its default,
+ * which is the only way to test what an operator who never set it would get.
+ */
+function productionEnv(
+  overrides: Record<string, string>,
+  omit: readonly string[] = [],
+): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...PRODUCTION_ENV, ...overrides };
+  for (const name of omit) delete env[name];
+  return env;
+}
+
+/** Load config.ts in a child process, since config is a module singleton. */
+function bootProduction(
+  overrides: Record<string, string>,
+  omit: readonly string[] = [],
+): { threw: boolean; output: string } {
+  const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+  const { join } = require('node:path') as typeof import('node:path');
+
+  try {
+    execFileSync(
+      'npx',
+      ['tsx', '-e', `require(${JSON.stringify(join(__dirname, '..', 'config.ts'))})`],
+      { encoding: 'utf8', stdio: 'pipe', env: productionEnv(overrides, omit) },
+    );
+    return { threw: false, output: '' };
+  } catch (error) {
+    return { threw: true, output: String((error as { stderr?: string }).stderr ?? '') };
+  }
+}
+
+// ===========================================================================
+describe('AUDIT 16 — demonstration accounts cannot be created in production', () => {
+  const { execFileSync } = require('node:child_process') as typeof import('node:child_process');
+  const { join } = require('node:path') as typeof import('node:path');
+  const SEED = join(__dirname, '..', 'db', 'seed.ts');
+
+  /**
+   * `--demo` creates five ACTIVE government accounts, one of them `admin`, all
+   * sharing the password `Password123`. `seedDemoAgent` had refused production
+   * since it was written; this path did not, and the seed's closing line used
+   * to recommend the flag — in production, to an operator who had just run the
+   * seed for the reference data production actually needs.
+   */
+  function seedInProduction(...flags: string[]): { threw: boolean; output: string } {
+    // A real production environment in every respect except the database,
+    // which points at the test one so the run has somewhere to go.
+    const env = productionEnv({ DATABASE_URL: process.env.DATABASE_URL! });
+    try {
+      const stdout = execFileSync('npx', ['tsx', SEED, ...flags], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env,
+      });
+      return { threw: false, output: stdout };
+    } catch (error) {
+      const e = error as { stdout?: string; stderr?: string };
+      return { threw: true, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  }
+
+  it('refuses --demo, before touching the database', () => {
+    const result = seedInProduction('--demo');
+    assert.ok(result.threw, '--demo must fail in production');
+    assert.match(result.output, /Refusing --demo\/--demo-agent in production/);
+    assert.ok(
+      !result.output.includes('Password123'),
+      'no demonstration password may be printed in production',
+    );
+  });
+
+  it('refuses --demo-agent, which implies --demo', () => {
+    const result = seedInProduction('--demo-agent');
+    assert.ok(result.threw, '--demo-agent must fail in production');
+    assert.match(result.output, /Refusing --demo\/--demo-agent in production/);
+  });
+
+  it('never recommends the demonstration flags in production', () => {
+    // The legitimate production step: reference data, no flags. It must
+    // succeed, and it must not close by pointing at --demo.
+    const result = seedInProduction();
+    assert.equal(result.threw, false, `the no-flag seed must work in production: ${result.output}`);
+    assert.ok(
+      !/Re-run with --demo/.test(result.output),
+      'production must not be told to re-run with --demo',
+    );
+    assert.match(result.output, /Demonstration users and agents are refused in production/);
+  });
 });
 
 // ===========================================================================

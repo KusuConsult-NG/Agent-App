@@ -551,7 +551,31 @@ async function seedReferenceData(): Promise<void> {
   });
 }
 
+/**
+ * Government users for development and acceptance testing.
+ *
+ * Refuses to run in production, for the same reason `seedDemoAgent` does and
+ * with more at stake: these are ACTIVE government accounts — including an
+ * `admin` — sharing one published password. `seedDemoAgent` has always had this
+ * guard and this function did not, which left the more dangerous of the two
+ * unprotected.
+ *
+ * The exposure was not theoretical. Reference data (LGAs, wards, the revenue
+ * catalogue) is seeded by this same command and production genuinely needs it,
+ * so an operator setting up production runs `npm run seed` — and on success it
+ * used to print "Re-run with --demo to add demonstration government users",
+ * recommending the dangerous flag at exactly the wrong moment. The hint below
+ * is now suppressed in production, and reaching it anyway fails here.
+ */
 async function seedDemoUsers(): Promise<void> {
+  if (config.isProduction) {
+    throw new Error(
+      'Refusing to seed demonstration government users in production. ' +
+        'These are ACTIVE accounts, including an administrator, sharing one ' +
+        'well-known password. Create real accounts instead.',
+    );
+  }
+
   console.log('  seeding demonstration government users...');
 
   const users = [
@@ -602,6 +626,19 @@ async function main(): Promise<void> {
    */
   const demo = process.argv.includes('--demo') || wantsAgent;
 
+  // Refuse before touching anything. `seedDemoUsers` and `seedDemoAgent` both
+  // refuse on their own, but they run after migrations and the reference data,
+  // so the operator would watch a long successful-looking run end in an error
+  // and have to work out how much of it had happened. Say no to the flag while
+  // the answer is still simple.
+  if (demo && config.isProduction) {
+    throw new Error(
+      'Refusing --demo/--demo-agent in production: they create ACTIVE government ' +
+        'accounts, including an administrator, sharing one well-known password. ' +
+        'Run the seed without flags for reference data only.',
+    );
+  }
+
   console.log('Seeding Plateau State Revenue Platform...');
   console.log(`  target: ${describeDatabase(config.database.url)}`);
   if (wantsAgent && !process.argv.includes('--demo')) {
@@ -643,7 +680,14 @@ async function main(): Promise<void> {
     console.log('    under Agents → Devices, or sign in and register it from the app.');
   }
 
-  if (!demo) {
+  // Never advertise the demonstration flags in production: the seed there is a
+  // legitimate step (the revenue catalogue has to come from somewhere), and it
+  // must not close by suggesting the one thing that would compromise the
+  // platform. Both flags now refuse in production anyway; this stops an
+  // operator being pointed at a wall.
+  if (config.isProduction) {
+    console.log('\n  Reference data only. Demonstration users and agents are refused in production.');
+  } else if (!demo) {
     console.log('\n  Re-run with --demo to add demonstration government users.');
   } else if (!agent) {
     console.log('\n  Add --demo-agent to also create a cleared, active field agent.');
