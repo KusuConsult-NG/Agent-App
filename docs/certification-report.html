@@ -553,11 +553,11 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">ee88518</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">173be39</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>21 August 2026</dd></div>
+      <div><dt>Date</dt><dd>21 August 2026 (rev. 2)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
-      <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL</dd></div>
+      <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 4 blockers</dd></div>
     </dl>
   </header>
 
@@ -573,6 +573,12 @@
         monitoring, and not one of the five external integrations has ever exchanged a
         packet with the real provider it will depend on. Certification fails on
         operational readiness, not on correctness.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Revision 2.</strong> Two of the original six blockers — the demonstration
+        administrator account and the localhost public URLs — have been fixed and
+        re-verified at commit <code>173be39</code>. Four remain, all of them programme
+        work that no code change can shorten.
       </p>
     </div>
   </div>
@@ -611,8 +617,8 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">496</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">39</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">502</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">45</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
@@ -652,10 +658,11 @@
       </p>
       <p>
         Separately, I found five defects the project had not recorded, two of which would
-        cause visible harm on day one of a real deployment: every receipt would carry a QR
-        code pointing at <code>localhost</code>, and the documented seeding command invites
-        an operator to create a government administrator account with a published password
-        in production.
+        have caused visible harm on day one: every receipt would have carried a QR code
+        pointing at <code>localhost</code>, and the documented seeding command invited an
+        operator to create a government administrator account with a published password in
+        production. Both have since been fixed and pinned by regression tests, which is
+        why this revision reports four blockers rather than six.
       </p>
     </div>
   </section>
@@ -667,7 +674,9 @@
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:26px">
       Each of these independently prevents certification. None is hidden in the
-      recommendations below.
+      recommendations below. Two have since been resolved and are retained, marked
+      <span class="pill p-pass">Fixed</span>, so the record of what was wrong survives
+      the fix.
     </p>
 
     <div class="findings">
@@ -754,11 +763,11 @@
         </dl>
       </article>
 
-      <article class="finding crit">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">B-5</span>
-          <h3 class="finding-title" style="margin:0">The seed command offers to create a production administrator with a published password</h3>
-          <span class="pill p-fail">Blocker</span>
+          <h3 class="finding-title" style="margin:0">The seed command offered to create a production administrator with a published password</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           <code>seedDemoAgent()</code> refuses to run when <code>NODE_ENV=production</code>.
@@ -776,17 +785,19 @@
           with no guard.
         </p>
         <dl>
-          <dt>Evidence</dt><dd><code>apps/api/src/db/seed.ts:554–582</code> (no <code>isProduction</code> check) versus <code>apps/api/src/db/seed-agent.ts:39</code> (has one).</dd>
+          <dt>Was</dt><dd><code>seed.ts</code> had no <code>isProduction</code> check, unlike <code>seed-agent.ts:39</code>.</dd>
           <dt>Consequence</dt><dd>Full administrative compromise of the platform by anyone who reads the repository.</dd>
+          <dt>Fixed in</dt><dd><code>173be39</code>. Both flags now refuse in production at the top of <code>main()</code>, before anything is migrated, and again inside <code>seedDemoUsers()</code> so no other caller can reach it. The closing hint is suppressed in production.</dd>
+          <dt>Verified</dt><dd>Three regression tests run the real seed command against a production environment: <code>--demo</code> and <code>--demo-agent</code> both refuse before touching the database and print no password; the no-flag seed still works and no longer recommends the flag.</dd>
           <dt>Brief</dt><dd>§30 Production data audit, §21 Security audit</dd>
         </dl>
       </article>
 
-      <article class="finding crit">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">B-6</span>
-          <h3 class="finding-title" style="margin:0">Public URLs default to localhost, and the production boot guard does not check them</h3>
-          <span class="pill p-fail">Blocker</span>
+          <h3 class="finding-title" style="margin:0">Public URLs defaulted to localhost, and the production boot guard did not check them</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           I booted <code>config.ts</code> with a fully production-shaped environment — real
@@ -796,6 +807,12 @@
         <div class="evidence">callbackUrl         : http://localhost:5173/payment/return
 verificationBaseUrl : http://localhost:5174/verify
 corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
+        <p style="margin-top:14px">The same environment at <code>173be39</code>:</p>
+        <div class="evidence">Error: Refusing to start in production with development integrations:
+  VERIFICATION_BASE_URL still points at a local address ("http://localhost:5174/verify");
+  PAYMENT_CALLBACK_URL  still points at a local address ("http://localhost:5173/payment/return");
+  CORS_ORIGINS entry "http://localhost:5173" still points at a local address (...);
+  CORS_ORIGINS entry "http://localhost:5174" still points at a local address (...)</div>
         <p>
           <code>VERIFICATION_BASE_URL</code> is QR-encoded and printed onto every receipt
           PDF and every vehicle renewal certificate, and it forms every referee invitation
@@ -812,8 +829,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           know that.
         </p>
         <dl>
-          <dt>Evidence</dt><dd><code>apps/api/src/config.ts:130, 398</code>; the production guard at <code>config.ts:441–490</code> checks eleven other settings and not these.</dd>
-          <dt>Note</dt><dd><code>CORS_ORIGINS</code> shares the defect but fails loudly and immediately, so it is self-correcting.</dd>
+          <dt>Was</dt><dd>The production guard checked eleven settings and not these three.</dd>
+          <dt>Fixed in</dt><dd><code>173be39</code>. The guard now refuses a local address, plain HTTP, a malformed URL or an empty origin list for all three settings, and <code>.env.example</code> explains why each matters.</dd>
+          <dt>Verified</dt><dd>The exact environment that booted clean above is now refused, naming all four offending values. Plain HTTP on a real domain, <code>127.0.0.1</code> and a malformed URL are each refused; correct HTTPS addresses boot. Three regression tests pin this.</dd>
           <dt>Brief</dt><dd>§13 Public receipt verification, §6 Referee certification, §3 Environment audit</dd>
         </dl>
       </article>
@@ -834,7 +852,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
     <div class="scroll">
       <table>
-        <caption>Assessed at commit ee88518 against a live PostgreSQL 16 database.</caption>
+        <caption>Assessed at commit 173be39 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in revision 1.</caption>
         <thead>
           <tr>
             <th scope="col">Area</th>
@@ -856,7 +874,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Role-based access control</td><td><span class="pill p-pass">Pass</span></td><td>All 6 roles × 11 guarded endpoints; admin correctly denied <code>payment:reverse:approve</code>; auditor holds no mutating permission</td><td>—</td><td>No</td></tr>
           <tr><td>Authentication hardening</td><td><span class="pill p-pass">Pass</span></td><td>Foreign-key JWT rejected; <code>alg:none</code> rejected; revocation immediate; bcrypt; no user enumeration; DB-backed lockout</td><td>—</td><td>No</td></tr>
           <tr><td>Cross-agent / cross-role isolation</td><td><span class="pill p-pass">Pass</span></td><td>Second agent refused first agent's transaction; agent refused every government endpoint tested</td><td>—</td><td>No</td></tr>
-          <tr><td>Public receipt verification</td><td><span class="pill p-partial">Partial</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly</td><td>D-6 (localhost QR)</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Public receipt verification</td><td><span class="pill p-pass">Pass</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly; localhost QR defect fixed and pinned by test</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Audit trail</td><td><span class="pill p-pass">Pass</span></td><td>18 distinct actions across the full lifecycle, append-only, with actor, entity, timestamp and values</td><td>—</td><td>No</td></tr>
           <tr><td>Injection &amp; input validation</td><td><span class="pill p-pass">Pass</span></td><td>Injection payload stored as literal data; zero, negative and non-numeric amounts rejected; consent enforced</td><td>—</td><td>No</td></tr>
           <tr><td>Reconciliation (three-way)</td><td><span class="pill p-pass">Pass</span></td><td>Gateway-confirmed but unsettled correctly reported <code>PENDING_SETTLEMENT</code>, not <code>MATCHED</code>; settlement transitions to <code>SETTLED</code> and releases commission</td><td>—</td><td>No</td></tr>
@@ -866,9 +884,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
-          <tr><td>Production config guard</td><td><span class="pill p-partial">Partial</span></td><td>Refuses to boot with any mock adapter — confirmed in a child process</td><td>D-6 (URLs unchecked)</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised</td><td>B-4</td><td><strong>Yes</strong></td></tr>
-          <tr><td>Production seed hygiene</td><td><span class="pill p-fail">Fail</span></td><td><code>--demo</code> creates an <code>admin</code> with <code>Password123</code>; no production guard; actively suggested by the tool</td><td>B-5</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Production seed hygiene</td><td><span class="pill p-pass">Pass</span></td><td>Both demonstration flags refuse in production before migrating; the hint that recommended them is suppressed; three regression tests</td><td>B-5 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Deployment &amp; rollback</td><td><span class="pill p-fail">Fail</span></td><td>No Dockerfile, IaC, orchestration, CD pipeline or rollback path in the repository</td><td>B-1</td><td><strong>Yes</strong></td></tr>
           <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-fail">Fail</span></td><td>None configured; restoration test impossible</td><td>B-2</td><td><strong>Yes</strong></td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-fail">Fail</span></td><td><code>/health</code> and console logging only; no error tracking, metrics, alerts or job monitoring</td><td>B-3</td><td><strong>Yes</strong></td></tr>
@@ -996,9 +1014,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
     </div>
 
     <h3>Final verification run</h3>
-    <div class="evidence"># tests 496
-# suites 121
-# pass 496
+    <div class="evidence"># tests 502
+# suites 122
+# pass 502
 # fail 0
 
 typecheck  clean  (tsc -b packages/shared apps/api && tsc --noEmit -p tsconfig.test.json)
@@ -1009,7 +1027,8 @@ build      shared, api, agent, portal — all clean</div>
       <code>apps/api/src/tests/certification-audit.test.ts</code> and
       <code>apps/api/src/tests/certification-e2e.test.ts</code>, so the evidence behind
       every <span class="pill p-pass">Pass</span> above is reproducible rather than
-      asserted.
+      asserted. The six tests added in revision 2 cover the two fixed blockers, so a
+      regression on either fails the build rather than reaching production.
     </p>
   </section>
 
@@ -1019,8 +1038,9 @@ build      shared, api, agent, portal — all clean</div>
     <h2 class="sec">The fourteen business rules</h2>
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:24px">
-      Each rule was tested directly. Rule 14 passes on disclosure but is compromised in
-      practice by defect D-6.
+      Each rule was tested directly, and all fourteen hold. Rule 14 passed on disclosure
+      from the outset; it was compromised in practice by blocker B-6, which is now fixed,
+      so the citizen's QR code reaches the verification page it names.
     </p>
 
     <div class="rules">
@@ -1037,7 +1057,7 @@ build      shared, api, agent, portal — all clean</div>
       <div class="rule-row"><span class="rid">Rule 11</span><span class="rtext">Duplicate webhooks cannot create duplicate transactions</span><span class="pill p-pass">Pass</span></div>
       <div class="rule-row"><span class="rid">Rule 12</span><span class="rtext">Offline mode cannot report a government payment as successful</span><span class="pill p-pass">Pass</span></div>
       <div class="rule-row"><span class="rid">Rule 13</span><span class="rtext">Unauthorized roles cannot access restricted data or APIs</span><span class="pill p-pass">Pass</span></div>
-      <div class="rule-row"><span class="rid">Rule 14</span><span class="rtext">Public verification exposes no protected taxpayer information</span><span class="pill p-partial">Partial</span></div>
+      <div class="rule-row"><span class="rid">Rule 14</span><span class="rtext">Public verification exposes no protected taxpayer information</span><span class="pill p-pass">Pass</span></div>
     </div>
 
     <h3>Rule 6 is stronger than the brief requires</h3>
@@ -1309,15 +1329,15 @@ build      shared, api, agent, portal — all clean</div>
         </dl>
       </article>
 
-      <article class="finding med">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">D-6</span>
           <h3 class="finding-title" style="margin:0">Public URL defaults — see blocker B-6</h3>
-          <span class="pill p-fail">Blocker</span>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
-          Listed here for cross-reference from the certification matrix. Full detail in
-          §02.
+          Listed here for cross-reference from the certification matrix. Fixed in
+          <code>173be39</code>; full detail in §02.
         </p>
       </article>
 
@@ -1399,18 +1419,19 @@ build      shared, api, agent, portal — all clean</div>
     <h2 class="sec">Required before production</h2>
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:28px">
-      In the order I would sequence them. Items 1 and 2 are hours of work and remove real
-      day-one harm; the rest are the substance of the remaining programme.
+      In the order I would sequence them. Items 1 and 2 are complete; item 1 leaves one
+      action for PSIRS. The rest are the substance of the remaining programme, and none of
+      them can be shortened by how good the code is.
     </p>
 
     <ol class="required">
       <li>
-        <strong>Guard the demo seed against production</strong>
-        <p>Add the <code>config.isProduction</code> check to <code>seedDemoUsers()</code> that <code>seedDemoAgent()</code> already has, and remove the "Re-run with --demo" hint when running in production. Rotate <code>+2348000000001</code>–<code>05</code> if any environment has already been seeded. <em>(B-5)</em></p>
+        <strong><s>Guard the demo seed against production</s> — done in <code>173be39</code></strong>
+        <p>Both demonstration flags now refuse in production before anything is migrated, and the hint that recommended them is suppressed. <strong>One action remains for PSIRS:</strong> if any environment has already been seeded with <code>--demo</code>, rotate or remove <code>+2348000000001</code>–<code>05</code>, because the fix prevents creation and does not delete accounts that already exist. <em>(B-5)</em></p>
       </li>
       <li>
-        <strong>Add the missing settings to the production boot guard</strong>
-        <p>Refuse to start if <code>VERIFICATION_BASE_URL</code>, <code>PAYMENT_CALLBACK_URL</code> or <code>CORS_ORIGINS</code> is unset, still on <code>localhost</code>, or not HTTPS. These sit alongside eleven checks that already exist. <em>(B-6)</em></p>
+        <strong><s>Add the missing settings to the production boot guard</s> — done in <code>173be39</code></strong>
+        <p>The guard now refuses a local address, plain HTTP, a malformed URL or an empty origin list for <code>VERIFICATION_BASE_URL</code>, <code>PAYMENT_CALLBACK_URL</code> and <code>CORS_ORIGINS</code>, alongside the eleven checks that already existed. <em>(B-6)</em></p>
       </li>
       <li>
         <strong>Confirm every integration mapping against a provider sandbox</strong>
@@ -1458,10 +1479,11 @@ build      shared, api, agent, portal — all clean</div>
       <div>
         <h2>Production certification: FAIL — not production ready</h2>
         <p>
-          Six blockers, each independently disqualifying. The application cannot yet be
-          deployed, cannot be recovered if it fails, cannot be observed while it runs, and
-          depends on five integrations that have never spoken to the systems they will
-          depend on.
+          Four blockers remain, each independently disqualifying. The application cannot
+          yet be deployed, cannot be recovered if it fails, cannot be observed while it
+          runs, and depends on five integrations that have never spoken to the systems
+          they will depend on. Two further blockers — the demonstration administrator and
+          the localhost public URLs — were fixed during this engagement.
         </p>
       </div>
     </div>
@@ -1486,12 +1508,13 @@ build      shared, api, agent, portal — all clean</div>
       </p>
       <p>
         What it says is that a well-built application is not a production system. Two of
-        the six blockers would cause visible harm on the first day: every citizen who
-        scanned a receipt would find nothing, and every referee invitation would be
-        unfollowable — which alone would halt agent onboarding entirely. Both are small
-        code changes. The other four are programme work: deployment, backup, monitoring,
-        and integration confirmation, none of which can be shortened by how good the code
-        is.
+        the six blockers would have caused visible harm on the first day: every citizen who
+        scanned a receipt would have found nothing, and every referee invitation would have
+        been unfollowable — which alone would have halted agent onboarding entirely. Both
+        were small code changes and both are now fixed, verified, and pinned by tests that
+        will fail if they regress. The remaining four are programme work: deployment,
+        backup, monitoring, and integration confirmation, none of which can be shortened by
+        how good the code is.
       </p>
       <p>
         The repository says the same thing about itself in <code>README.md</code> §Status
@@ -1509,10 +1532,12 @@ build      shared, api, agent, portal — all clean</div>
 
     <footer class="report-foot">
       <p>
-        Assessed at commit <code>ee88518</code> on branch
-        <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Evidence
-        suites committed as <code>certification-audit.test.ts</code> (33 tests) and
-        <code>certification-e2e.test.ts</code> (6 tests). Full suite: 496 passing, 0
+        Revision 2, assessed at commit <code>173be39</code> on branch
+        <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
+        assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
+        <code>173be39</code> and re-verified. Evidence suites committed as
+        <code>certification-audit.test.ts</code> (39 tests) and
+        <code>certification-e2e.test.ts</code> (6 tests). Full suite: 502 passing, 0
         failing, typecheck clean, 0 dependency vulnerabilities.
       </p>
     </footer>
