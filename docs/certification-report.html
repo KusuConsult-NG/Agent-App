@@ -1,0 +1,1521 @@
+<title>PSIRS Revenue Platform Certification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #FBFCFD;
+    --surface:     #FFFFFF;
+    --surface-alt: #F3F6F8;
+    --ink:         #111820;
+    --ink-soft:    #35424E;
+    --muted:       #5A6672;
+    --rule:        #DCE3E9;
+    --rule-strong: #BCC8D2;
+    --accent:      #1B4D6B;
+    --accent-soft: #E7EFF4;
+
+    --pass:        #166B4A;
+    --pass-bg:     #E6F2EC;
+    --partial:     #8A5A00;
+    --partial-bg:  #FBF0DC;
+    --fail:        #A32217;
+    --fail-bg:     #FBEAE8;
+    --none:        #5A6672;
+    --none-bg:     #EDF1F4;
+
+    --serif: "Newsreader", Georgia, "Times New Roman", serif;
+    --sans:  "Source Sans 3", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono:  "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+    --measure: 68ch;
+    --page: 1180px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0E1418;
+      --surface:     #151D23;
+      --surface-alt: #1B252C;
+      --ink:         #E7EEF3;
+      --ink-soft:    #C2CFD9;
+      --muted:       #8B9AA6;
+      --rule:        #26333C;
+      --rule-strong: #3A4A56;
+      --accent:      #6FB2D4;
+      --accent-soft: #16303F;
+
+      --pass:        #63C298;
+      --pass-bg:     #133024;
+      --partial:     #DBA33C;
+      --partial-bg:  #33260D;
+      --fail:        #F08579;
+      --fail-bg:     #3A1815;
+      --none:        #8B9AA6;
+      --none-bg:     #1D262D;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:      #0E1418;
+    --surface:     #151D23;
+    --surface-alt: #1B252C;
+    --ink:         #E7EEF3;
+    --ink-soft:    #C2CFD9;
+    --muted:       #8B9AA6;
+    --rule:        #26333C;
+    --rule-strong: #3A4A56;
+    --accent:      #6FB2D4;
+    --accent-soft: #16303F;
+
+    --pass:        #63C298;
+    --pass-bg:     #133024;
+    --partial:     #DBA33C;
+    --partial-bg:  #33260D;
+    --fail:        #F08579;
+    --fail-bg:     #3A1815;
+    --none:        #8B9AA6;
+    --none-bg:     #1D262D;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: var(--page);
+    margin: 0 auto;
+    padding: 0 28px 96px;
+  }
+
+  .measure { max-width: var(--measure); }
+
+  p { margin: 0 0 1em; color: var(--ink-soft); }
+  p:last-child { margin-bottom: 0; }
+
+  strong { color: var(--ink); font-weight: 600; }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--surface-alt);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 0.08em 0.34em;
+    color: var(--ink);
+    word-break: break-word;
+  }
+
+  /* ---------- masthead ---------- */
+
+  .masthead {
+    border-bottom: 2px solid var(--ink);
+    padding: 56px 0 22px;
+    margin-bottom: 40px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: clamp(2.3rem, 5.2vw, 3.5rem);
+    line-height: 1.06;
+    letter-spacing: -0.018em;
+    text-wrap: balance;
+    margin: 0 0 20px;
+    color: var(--ink);
+    max-width: 20ch;
+  }
+
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(1.05rem, 2vw, 1.28rem);
+    line-height: 1.5;
+    color: var(--ink-soft);
+    max-width: 58ch;
+    margin: 0 0 30px;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 18px 28px;
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
+  }
+  .meta div { display: flex; flex-direction: column; gap: 4px; }
+  .meta dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .meta dd {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- verdict ---------- */
+
+  .verdict {
+    border: 2px solid var(--fail);
+    background: var(--fail-bg);
+    padding: 30px 32px;
+    margin: 0 0 22px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 26px;
+    align-items: start;
+  }
+  @media (max-width: 640px) {
+    .verdict { grid-template-columns: 1fr; gap: 16px; }
+  }
+  .verdict-mark {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--fail);
+    border: 1.5px solid var(--fail);
+    padding: 7px 12px;
+    white-space: nowrap;
+  }
+  .verdict h2 {
+    font-family: var(--serif);
+    font-size: clamp(1.5rem, 3.4vw, 2rem);
+    font-weight: 600;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    color: var(--ink);
+    letter-spacing: -0.012em;
+  }
+  .verdict p { margin: 0; color: var(--ink-soft); max-width: 62ch; }
+
+  .verdict-note {
+    border-left: 3px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 18px 22px;
+    margin-bottom: 56px;
+  }
+  .verdict-note p { margin: 0; max-width: 70ch; font-size: 15.5px; }
+
+  /* ---------- sections ---------- */
+
+  section { margin-bottom: 60px; scroll-margin-top: 24px; }
+
+  h2.sec {
+    font-family: var(--serif);
+    font-size: clamp(1.45rem, 3vw, 1.85rem);
+    font-weight: 600;
+    letter-spacing: -0.012em;
+    line-height: 1.2;
+    margin: 0 0 6px;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  .sec-num {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 10px;
+  }
+  .sec-rule {
+    border: 0;
+    border-top: 1px solid var(--rule-strong);
+    margin: 0 0 26px;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.005em;
+    margin: 34px 0 10px;
+    color: var(--ink);
+  }
+
+  /* ---------- tables ---------- */
+
+  .scroll { overflow-x: auto; margin: 0 0 8px; border: 1px solid var(--rule); background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 720px; }
+  caption {
+    caption-side: bottom;
+    text-align: left;
+    font-size: 13px;
+    color: var(--muted);
+    padding: 10px 2px 0;
+    font-style: italic;
+  }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 14px;
+    border-bottom: 1.5px solid var(--rule-strong);
+    background: var(--surface-alt);
+    white-space: nowrap;
+    vertical-align: bottom;
+  }
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink-soft);
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td:first-child { color: var(--ink); font-weight: 600; }
+  .num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; }
+
+  /* ---------- status pills ---------- */
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  .p-pass    { color: var(--pass);    background: var(--pass-bg);    border-color: var(--pass); }
+  .p-partial { color: var(--partial); background: var(--partial-bg); border-color: var(--partial); }
+  .p-fail    { color: var(--fail);    background: var(--fail-bg);    border-color: var(--fail); }
+  .p-none    { color: var(--none);    background: var(--none-bg);    border-color: var(--rule-strong); }
+
+  /* ---------- findings ---------- */
+
+  .findings { display: flex; flex-direction: column; gap: 16px; }
+
+  .finding {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 4px solid var(--rule-strong);
+    padding: 20px 24px;
+  }
+  .finding.crit { border-left-color: var(--fail); }
+  .finding.high { border-left-color: var(--partial); }
+  .finding.med  { border-left-color: var(--accent); }
+
+  .finding-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 14px;
+    margin-bottom: 10px;
+  }
+  .finding-id {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+  }
+  .finding-title {
+    font-family: var(--sans);
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--ink);
+    margin: 0;
+    flex: 1 1 320px;
+    line-height: 1.35;
+  }
+  .finding p { font-size: 15.5px; max-width: 74ch; }
+  .finding dl {
+    margin: 14px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 6px 18px;
+    font-size: 14px;
+  }
+  .finding dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-top: 3px;
+  }
+  .finding dd { margin: 0; color: var(--ink-soft); }
+  @media (max-width: 560px) {
+    .finding dl { grid-template-columns: 1fr; gap: 2px 0; }
+    .finding dd { margin-bottom: 8px; }
+  }
+
+  /* ---------- evidence blocks ---------- */
+
+  .evidence {
+    background: var(--surface-alt);
+    border: 1px solid var(--rule);
+    padding: 16px 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+    overflow-x: auto;
+    margin: 0 0 8px;
+    white-space: pre;
+  }
+
+  /* ---------- rule list ---------- */
+
+  .rules { display: grid; gap: 0; border: 1px solid var(--rule); background: var(--surface); }
+  .rule-row {
+    display: grid;
+    grid-template-columns: 62px 1fr auto;
+    gap: 16px;
+    align-items: baseline;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .rule-row:last-child { border-bottom: 0; }
+  .rule-row .rid {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+  }
+  .rule-row .rtext { color: var(--ink-soft); font-size: 15px; }
+  @media (max-width: 620px) {
+    .rule-row { grid-template-columns: 1fr auto; }
+    .rule-row .rid { grid-column: 1 / -1; }
+  }
+
+  /* ---------- inventory ---------- */
+
+  .inv { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 14px; }
+  .inv-card {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    padding: 17px 19px;
+  }
+  .inv-card h4 {
+    margin: 0 0 10px;
+    font-size: 0.94rem;
+    font-weight: 700;
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+  .inv-card ul { margin: 0; padding-left: 17px; font-size: 14px; color: var(--ink-soft); }
+  .inv-card li { margin-bottom: 4px; }
+  .inv-card li:last-child { margin-bottom: 0; }
+
+  /* ---------- stats ---------- */
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin-bottom: 28px;
+  }
+  .stat { background: var(--surface); padding: 18px 20px; }
+  .stat .v {
+    font-family: var(--serif);
+    font-size: 1.95rem;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    display: block;
+    margin-bottom: 7px;
+  }
+  .stat .k {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    line-height: 1.4;
+    display: block;
+  }
+
+  /* ---------- ordered required list ---------- */
+
+  ol.required { counter-reset: req; list-style: none; padding: 0; margin: 0; }
+  ol.required > li {
+    counter-increment: req;
+    position: relative;
+    padding: 0 0 18px 46px;
+    margin: 0;
+  }
+  ol.required > li::before {
+    content: counter(req, decimal-leading-zero);
+    position: absolute;
+    left: 0;
+    top: 1px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    border: 1px solid var(--rule-strong);
+    padding: 2px 6px;
+  }
+  ol.required strong { display: block; margin-bottom: 3px; }
+  ol.required p { font-size: 15px; margin: 0; max-width: 72ch; }
+
+  /* ---------- toc ---------- */
+
+  nav.toc {
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    padding: 22px 26px;
+    margin-bottom: 56px;
+  }
+  nav.toc h2 {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  nav.toc ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+    column-gap: 36px;
+    font-size: 14.5px;
+  }
+  @media (max-width: 620px) { nav.toc ol { columns: 1; } }
+  nav.toc li { margin-bottom: 7px; break-inside: avoid; }
+  nav.toc a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+  nav.toc .n { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-right: 8px; }
+
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  ul.plain { margin: 0 0 1em; padding-left: 20px; color: var(--ink-soft); }
+  ul.plain li { margin-bottom: 6px; }
+
+  footer.report-foot {
+    border-top: 2px solid var(--ink);
+    padding-top: 22px;
+    margin-top: 20px;
+    font-size: 14px;
+    color: var(--muted);
+    max-width: var(--measure);
+  }
+  footer.report-foot p { color: var(--muted); font-size: 14px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Production Readiness Certification</p>
+    <h1>Plateau State Grassroots Revenue Platform</h1>
+    <p class="standfirst">
+      An independent assessment of whether this application can safely be trusted with
+      real government revenue and real taxpayer information — conducted by driving the
+      running system against a live PostgreSQL database and attacking its stated
+      guarantees from outside.
+    </p>
+    <dl class="meta">
+      <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">ee88518</dd></div>
+      <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
+      <div><dt>Date</dt><dd>21 August 2026</dd></div>
+      <div><dt>Method</dt><dd>Live system + source trace</dd></div>
+      <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL</dd></div>
+    </dl>
+  </header>
+
+  <div class="verdict">
+    <span class="verdict-mark">Not production ready</span>
+    <div>
+      <h2>The application logic is sound. The system around it does not yet exist.</h2>
+      <p>
+        Every financial invariant this platform claims survived direct attack, including
+        attacks that bypass the application entirely and write to the database as a
+        compromised service account would. That work is genuinely strong. But a platform
+        is not only its code: there is no deployment mechanism, no backup, no restore, no
+        monitoring, and not one of the five external integrations has ever exchanged a
+        packet with the real provider it will depend on. Certification fails on
+        operational readiness, not on correctness.
+      </p>
+    </div>
+  </div>
+
+  <div class="verdict-note">
+    <p>
+      <strong>The repository does not claim otherwise.</strong> <code>README.md</code> §Status
+      and <code>docs/SECURITY.md</code> §Known gaps both state plainly that integration and
+      operations work remains. This assessment confirms that self-description is accurate,
+      quantifies what is outstanding, and adds five defects the project had not recorded.
+    </p>
+  </div>
+
+  <nav class="toc" aria-label="Contents">
+    <h2>Contents</h2>
+    <ol>
+      <li><span class="n">01</span><a href="#summary">Executive summary</a></li>
+      <li><span class="n">02</span><a href="#blockers">Blockers</a></li>
+      <li><span class="n">03</span><a href="#matrix">Certification matrix</a></li>
+      <li><span class="n">04</span><a href="#inventory">System inventory</a></li>
+      <li><span class="n">05</span><a href="#method">Method and evidence</a></li>
+      <li><span class="n">06</span><a href="#rules">The fourteen business rules</a></li>
+      <li><span class="n">07</span><a href="#financial">Financial integrity</a></li>
+      <li><span class="n">08</span><a href="#security">Security and access control</a></li>
+      <li><span class="n">09</span><a href="#defects">Defects</a></li>
+      <li><span class="n">10</span><a href="#ops">Operational readiness</a></li>
+      <li><span class="n">11</span><a href="#required">Required before production</a></li>
+      <li><span class="n">12</span><a href="#final">Final certification</a></li>
+    </ol>
+  </nav>
+
+  <!-- ================= 01 ================= -->
+  <section id="summary">
+    <span class="sec-num">01</span>
+    <h2 class="sec">Executive summary</h2>
+    <hr class="sec-rule">
+
+    <div class="stats">
+      <div class="stat"><span class="v">496</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">39</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
+      <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
+      <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
+      <div class="stat"><span class="v">5</span><span class="k">Integrations never<br>run for real</span></div>
+    </div>
+
+    <div class="measure">
+      <p>
+        This platform is built on an unusual and correct architectural decision: its
+        financial guarantees live in the database, not in application code. A receipt
+        cannot be inserted for an unverified payment because a PostgreSQL trigger refuses
+        it. Transactions, payments, receipts, commissions and audit rows cannot be deleted
+        or silently amended because triggers refuse that too. I attacked those rules
+        directly with SQL, as a compromised service account or a careless DBA would, and
+        every one of them held.
+      </p>
+      <p>
+        The money path is equally disciplined. No route anywhere accepts a payment status
+        from its caller; <code>confirmPayment</code> takes no outcome argument and always
+        re-asks the gateway. Ten replayed webhook deliveries produced one receipt and one
+        commission. Ten concurrent payment initiations produced one payment row. Commission
+        computed to the kobo at ₦1,000, ₦10,000, ₦100,000 and ₦1,000,000, and — stricter
+        than the brief requires — will not be released until the transaction is
+        <code>SETTLED</code>, meaning government has actually been paid, not merely that a
+        gateway said so.
+      </p>
+      <p>
+        What fails is everything between that code and a running government service. There
+        is no Dockerfile, no infrastructure definition, no deployment pipeline, no backup
+        configuration and no monitoring. A restoration test — which the brief requires
+        rather than a claim that backups exist — could not be performed because there is
+        nothing to restore from. And the five adapters that connect this platform to
+        Remita, the PSIRS TIN service, a KYC vendor, the vehicle registry and bank
+        verification have only ever spoken to development mocks. The boot guard correctly
+        refuses to start in production while any adapter is still <code>mock</code>, but no
+        guard can detect a <em>wrong</em> field mapping against a real provider.
+      </p>
+      <p>
+        Separately, I found five defects the project had not recorded, two of which would
+        cause visible harm on day one of a real deployment: every receipt would carry a QR
+        code pointing at <code>localhost</code>, and the documented seeding command invites
+        an operator to create a government administrator account with a published password
+        in production.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 02 ================= -->
+  <section id="blockers">
+    <span class="sec-num">02</span>
+    <h2 class="sec">Blockers</h2>
+    <hr class="sec-rule">
+    <p class="measure" style="margin-bottom:26px">
+      Each of these independently prevents certification. None is hidden in the
+      recommendations below.
+    </p>
+
+    <div class="findings">
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-1</span>
+          <h3 class="finding-title" style="margin:0">No deployment mechanism of any kind exists</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          The repository contains no Dockerfile, no container definition, no infrastructure
+          as code, no orchestration manifest, no service unit, and no deployment pipeline.
+          CI builds and tests; nothing deploys. There is consequently no rollback strategy,
+          because there is no deployment to roll back.
+        </p>
+        <dl>
+          <dt>Evidence</dt>
+          <dd>A search across the repository for <code>Dockerfile</code>, <code>*.tf</code>, <code>docker-compose*</code>, <code>*.service</code>, <code>Procfile</code> and Kubernetes manifests returns only <code>.github/workflows/ci.yml</code> and <code>.github/dependabot.yml</code>.</dd>
+          <dt>Brief</dt><dd>§32 Production deployment checklist</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-2</span>
+          <h3 class="finding-title" style="margin:0">No backup, no recovery procedure, and no restoration test</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          Nothing in the repository configures database backups, retention, or
+          point-in-time recovery, and no disaster recovery procedure is documented.
+          <code>docs/PRD-TRACEABILITY.md</code> records RPO ≤15 min and RTO ≤2 h as
+          <em>targets to be agreed</em>, not as implemented capabilities. The brief
+          explicitly requires an actual restoration test rather than confirmation that
+          backups exist; that test cannot be attempted.
+        </p>
+        <dl>
+          <dt>Consequence</dt><dd>A storage failure loses every receipt, every transaction and the entire audit trail, permanently and with no stated recovery path.</dd>
+          <dt>Brief</dt><dd>§27 Backup and disaster recovery</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-3</span>
+          <h3 class="finding-title" style="margin:0">No production observability — failures would be invisible</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          The platform has a <code>/health</code> endpoint that checks database
+          connectivity, and 62 <code>console.*</code> calls. There is no error tracking, no
+          metrics endpoint, no structured logging, no uptime monitoring, no alerting, and no
+          background-job monitoring. The reconciliation sweep logs an <code>ABORTED</code>
+          run to standard output and nothing else; a reconciliation that stopped running
+          would look exactly like one finding no exceptions.
+        </p>
+        <dl>
+          <dt>Consequence</dt><dd>The brief's requirement that "critical failures must be detectable" is not met. Failed webhooks, stalled workers and unreturned refunds accumulate silently.</dd>
+          <dt>Brief</dt><dd>§28 Observability</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-4</span>
+          <h3 class="finding-title" style="margin:0">Every external integration is unproven against its real provider</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          Payment (Remita), TIN, KYC, vehicle registry and bank verification all run
+          against development mocks. Each adapter reads its provider's response through
+          configurable field paths and maps the provider's status vocabulary onto the
+          platform's — and none of those mappings has been confirmed against a sandbox. The
+          design fails closed where it can (an unrecognised KYC status becomes
+          <code>UNDER_REVIEW</code>; an unmapped Remita code stays <code>PENDING</code>),
+          which is the right instinct, but a mapping that is wrong rather than unrecognised
+          is not protected by that.
+        </p>
+        <dl>
+          <dt>Specifically unconfirmed</dt><dd>Remita service type ID and status code set; the PSIRS TIN format and field names; the contracted KYC vendor's status vocabulary; the vehicle registry's response shape; the bank verification endpoint.</dd>
+          <dt>Mitigation in place</dt><dd><code>config.ts</code> refuses to boot in production while any adapter is <code>mock</code> — verified in a child process during this audit.</dd>
+          <dt>Brief</dt><dd>§3 Environment audit, §32 Deployment checklist</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-5</span>
+          <h3 class="finding-title" style="margin:0">The seed command offers to create a production administrator with a published password</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          <code>seedDemoAgent()</code> refuses to run when <code>NODE_ENV=production</code>.
+          <code>seedDemoUsers()</code> has no such guard. Running
+          <code>npm run seed -- --demo</code> against a production database creates five
+          <code>ACTIVE</code> government accounts — including role <code>admin</code> at
+          <code>+2348000000001</code> — all with the password <code>Password123</code>.
+        </p>
+        <p>
+          This is not a hypothetical misuse. <code>npm run seed</code> is the only way to
+          load the reference catalogue (LGAs, wards, revenue items) that production
+          genuinely needs, so an operator setting up production will run it — and on
+          completion it prints: <em>"Re-run with --demo to add demonstration government
+          users."</em> The tool actively recommends the dangerous action, in production,
+          with no guard.
+        </p>
+        <dl>
+          <dt>Evidence</dt><dd><code>apps/api/src/db/seed.ts:554–582</code> (no <code>isProduction</code> check) versus <code>apps/api/src/db/seed-agent.ts:39</code> (has one).</dd>
+          <dt>Consequence</dt><dd>Full administrative compromise of the platform by anyone who reads the repository.</dd>
+          <dt>Brief</dt><dd>§30 Production data audit, §21 Security audit</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">B-6</span>
+          <h3 class="finding-title" style="margin:0">Public URLs default to localhost, and the production boot guard does not check them</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          I booted <code>config.ts</code> with a fully production-shaped environment — real
+          gateway, real TIN service, real KYC provider, real registry, real bank
+          verification, S3 storage, 40-character secrets — and it started cleanly with:
+        </p>
+        <div class="evidence">callbackUrl         : http://localhost:5173/payment/return
+verificationBaseUrl : http://localhost:5174/verify
+corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
+        <p>
+          <code>VERIFICATION_BASE_URL</code> is QR-encoded and printed onto every receipt
+          PDF and every vehicle renewal certificate, and it forms every referee invitation
+          link. Unset, that means: every citizen who scans their receipt to check it is
+          genuine reaches nothing; every referee invitation is unfollowable, so no agent can
+          ever complete clearance and the entire onboarding pipeline stops. Because receipts
+          are immutable by design, receipts issued before anyone notices carry the broken
+          code permanently.
+        </p>
+        <p>
+          <code>PAYMENT_CALLBACK_URL</code> unset sends the taxpayer's browser to a dead
+          page at the moment immediately after they part with money. The payment itself
+          still verifies by webhook, so no revenue is lost — but the citizen has no way to
+          know that.
+        </p>
+        <dl>
+          <dt>Evidence</dt><dd><code>apps/api/src/config.ts:130, 398</code>; the production guard at <code>config.ts:441–490</code> checks eleven other settings and not these.</dd>
+          <dt>Note</dt><dd><code>CORS_ORIGINS</code> shares the defect but fails loudly and immediately, so it is self-correcting.</dd>
+          <dt>Brief</dt><dd>§13 Public receipt verification, §6 Referee certification, §3 Environment audit</dd>
+        </dl>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= 03 ================= -->
+  <section id="matrix">
+    <span class="sec-num">03</span>
+    <h2 class="sec">Certification matrix</h2>
+    <hr class="sec-rule">
+    <p class="measure" style="margin-bottom:24px">
+      Nothing is marked <span class="pill p-pass">Pass</span> without evidence produced
+      during this audit. <span class="pill p-none">Not tested</span> means exactly that —
+      it is not a soft pass.
+    </p>
+
+    <div class="scroll">
+      <table>
+        <caption>Assessed at commit ee88518 against a live PostgreSQL 16 database.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Area</th>
+            <th scope="col">Status</th>
+            <th scope="col">Evidence</th>
+            <th scope="col">Defect</th>
+            <th scope="col">Blocker</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Receipt requires verified payment</td><td><span class="pill p-pass">Pass</span></td><td>Direct <code>INSERT</code> into <code>receipts</code> for a PENDING payment rejected by trigger; forged amount rejected; no HTTP route creates receipts</td><td>—</td><td>No</td></tr>
+          <tr><td>Financial immutability &amp; no-delete</td><td><span class="pill p-pass">Pass</span></td><td>SQL <code>UPDATE</code>/<code>DELETE</code> on transactions, payments, receipts, commissions, audit logs all refused by trigger</td><td>—</td><td>No</td></tr>
+          <tr><td>Backend-only payment confirmation</td><td><span class="pill p-pass">Pass</span></td><td>Caller-supplied <code>status: VERIFIED</code> ignored; payment stayed PENDING; <code>confirmPayment</code> takes no outcome argument</td><td>—</td><td>No</td></tr>
+          <tr><td>Webhook idempotency</td><td><span class="pill p-pass">Pass</span></td><td>10 identical deliveries → 1 webhook row, 1 receipt, 1 commission, 9 reported duplicate</td><td>—</td><td>No</td></tr>
+          <tr><td>Concurrency &amp; race conditions</td><td><span class="pill p-pass">Pass</span></td><td>10 concurrent initiations → 1 payment row; 8 racing confirmations → 1 receipt, 1 commission</td><td>—</td><td>No</td></tr>
+          <tr><td>Commission engine (1.5%)</td><td><span class="pill p-pass">Pass</span></td><td>Exact at ₦1k/₦10k/₦100k/₦1M; requires <code>SETTLED</code>, not merely verified; immutable; nil on failed payment</td><td>—</td><td>No</td></tr>
+          <tr><td>Historical record immutability</td><td><span class="pill p-pass">Pass</span></td><td>Rate raised tenfold after payment; transaction and receipt amounts unchanged; assessment pins its rate version</td><td>—</td><td>No</td></tr>
+          <tr><td>Agent clearance gates</td><td><span class="pill p-pass">Pass</span></td><td>Uncleared applicant refused revenue APIs (403, zero rows written); suspension effective on next request; activation refused while any item outstanding</td><td>—</td><td>No</td></tr>
+          <tr><td>Role-based access control</td><td><span class="pill p-pass">Pass</span></td><td>All 6 roles × 11 guarded endpoints; admin correctly denied <code>payment:reverse:approve</code>; auditor holds no mutating permission</td><td>—</td><td>No</td></tr>
+          <tr><td>Authentication hardening</td><td><span class="pill p-pass">Pass</span></td><td>Foreign-key JWT rejected; <code>alg:none</code> rejected; revocation immediate; bcrypt; no user enumeration; DB-backed lockout</td><td>—</td><td>No</td></tr>
+          <tr><td>Cross-agent / cross-role isolation</td><td><span class="pill p-pass">Pass</span></td><td>Second agent refused first agent's transaction; agent refused every government endpoint tested</td><td>—</td><td>No</td></tr>
+          <tr><td>Public receipt verification</td><td><span class="pill p-partial">Partial</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly</td><td>D-6 (localhost QR)</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Audit trail</td><td><span class="pill p-pass">Pass</span></td><td>18 distinct actions across the full lifecycle, append-only, with actor, entity, timestamp and values</td><td>—</td><td>No</td></tr>
+          <tr><td>Injection &amp; input validation</td><td><span class="pill p-pass">Pass</span></td><td>Injection payload stored as literal data; zero, negative and non-numeric amounts rejected; consent enforced</td><td>—</td><td>No</td></tr>
+          <tr><td>Reconciliation (three-way)</td><td><span class="pill p-pass">Pass</span></td><td>Gateway-confirmed but unsettled correctly reported <code>PENDING_SETTLEMENT</code>, not <code>MATCHED</code>; settlement transitions to <code>SETTLED</code> and releases commission</td><td>—</td><td>No</td></tr>
+          <tr><td>Reversal &amp; refund</td><td><span class="pill p-pass">Pass</span></td><td>Requires approval + step-up + <code>payment:reverse:approve</code>; receipt voided not deleted; commission clawed back; agent refused</td><td>—</td><td>No</td></tr>
+          <tr><td>Vehicle renewal gating</td><td><span class="pill p-partial">Partial</span></td><td>No renewal document can exist without a verified payment (trigger + query verified); full happy path not driven against a real registry</td><td>D-4</td><td>No</td></tr>
+          <tr><td>Offline / PWA financial safety</td><td><span class="pill p-pass">Pass</span></td><td>Service worker never caches financial paths; draft queue has no payment type and rejects financial keys at runtime</td><td>—</td><td>No</td></tr>
+          <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
+          <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
+          <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
+          <tr><td>Production config guard</td><td><span class="pill p-partial">Partial</span></td><td>Refuses to boot with any mock adapter — confirmed in a child process</td><td>D-6 (URLs unchecked)</td><td><strong>Yes</strong></td></tr>
+          <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised</td><td>B-4</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Production seed hygiene</td><td><span class="pill p-fail">Fail</span></td><td><code>--demo</code> creates an <code>admin</code> with <code>Password123</code>; no production guard; actively suggested by the tool</td><td>B-5</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Deployment &amp; rollback</td><td><span class="pill p-fail">Fail</span></td><td>No Dockerfile, IaC, orchestration, CD pipeline or rollback path in the repository</td><td>B-1</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-fail">Fail</span></td><td>None configured; restoration test impossible</td><td>B-2</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Observability &amp; alerting</td><td><span class="pill p-fail">Fail</span></td><td><code>/health</code> and console logging only; no error tracking, metrics, alerts or job monitoring</td><td>B-3</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Horizontal scalability</td><td><span class="pill p-fail">Fail</span></td><td>Workers are in-process <code>setInterval</code> with an in-memory guard; rate limiter in-process; migrations unlocked on boot</td><td>D-1, D-2, D-3</td><td>No</td></tr>
+          <tr><td>Government portal test coverage</td><td><span class="pill p-fail">Fail</span></td><td>5,633 lines, the highest-privilege surface, zero tests and no test script</td><td>D-5</td><td>No</td></tr>
+          <tr><td>Performance under load</td><td><span class="pill p-none">Not tested</span></td><td>Indexes reviewed and present on every hot path; no load, soak or N+1 profiling performed</td><td>—</td><td>No</td></tr>
+          <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
+          <tr><td>Cross-device UI verification</td><td><span class="pill p-none">Not tested</span></td><td>Builds clean; 51 agent PWA tests pass; no Android/iOS/desktop visual pass performed</td><td>—</td><td>No</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ================= 04 ================= -->
+  <section id="inventory">
+    <span class="sec-num">04</span>
+    <h2 class="sec">System inventory</h2>
+    <hr class="sec-rule">
+
+    <div class="inv">
+      <div class="inv-card">
+        <h4>Backend API — <code>@psirs/api</code></h4>
+        <ul>
+          <li>22,202 lines TypeScript, Express 5, Node 22</li>
+          <li>132 routes across 9 routers</li>
+          <li>PostgreSQL 16, 15 migrations, 83 triggers</li>
+          <li>Background workers in-process</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Agent PWA — <code>@psirs/agent</code></h4>
+        <ul>
+          <li>6,811 lines, React 19 + Vite</li>
+          <li>Service worker, manifest, IndexedDB drafts</li>
+          <li>51 tests passing</li>
+          <li>Financial paths never cached</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Government portal — <code>@psirs/portal</code></h4>
+        <ul>
+          <li>5,633 lines, React 19, hash router</li>
+          <li>12 screens incl. Finance, Oversight, KYC</li>
+          <li><strong>Zero tests, no test script</strong></li>
+          <li>Also serves public verification &amp; referee</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Shared — <code>@psirs/shared</code></h4>
+        <ul>
+          <li>RBAC: 6 roles, ~60 permissions</li>
+          <li>Kobo arithmetic in <code>BigInt</code></li>
+          <li>State machines for payment &amp; transaction</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Integrations (all mock)</h4>
+        <ul>
+          <li>Payment: Remita + mock gateway</li>
+          <li>TIN: HTTP adapter + mock</li>
+          <li>KYC: HTTP adapter + mock</li>
+          <li>Vehicle registry, bank verification</li>
+          <li>SMS/email: HTTP adapter + mock</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Storage &amp; documents</h4>
+        <ul>
+          <li>S3-compatible (own SigV4) or local disk</li>
+          <li>PDFKit receipts, invoices, certificates</li>
+          <li>QR codes via <code>qrcode</code></li>
+          <li>Signed, expiring document URLs</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Background jobs</h4>
+        <ul>
+          <li>Commission promotion (5 min)</li>
+          <li>Notification dispatch (30 s)</li>
+          <li>Fraud sweep (15 min)</li>
+          <li>TIN, authority, refund catch-up</li>
+          <li>Reconciliation sweep (6 h)</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Operations</h4>
+        <ul>
+          <li>CI: build, typecheck, migrate, test</li>
+          <li>Dependabot configured</li>
+          <li><strong>No CD, no IaC, no container</strong></li>
+          <li><strong>No backup, no monitoring</strong></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 05 ================= -->
+  <section id="method">
+    <span class="sec-num">05</span>
+    <h2 class="sec">Method and evidence</h2>
+    <hr class="sec-rule">
+    <div class="measure">
+      <p>
+        I did not accept the existing test suite as evidence. I started PostgreSQL 16,
+        applied all 15 migrations, ran the platform's own 457 tests to establish a baseline
+        (all passed), and then wrote 39 further tests whose purpose was to break the
+        system's stated guarantees rather than demonstrate them.
+      </p>
+      <p>
+        Where a guarantee is claimed to be enforced in the database, the audit bypasses the
+        application entirely and issues SQL directly — the position of a compromised
+        service account or a DBA at a <code>psql</code> prompt. A rule that only holds when
+        you go through the service layer is not an invariant, and this distinction is what
+        separates a real control from a convention.
+      </p>
+      <p>
+        Several of my early failures were my own harness being wrong about the system's
+        contract, and each one was a control working correctly: taxpayer registration
+        refused to proceed without explicit <code>consentGiven</code> and
+        <code>declarationAccepted</code>; payment initiation refused to proceed without an
+        <code>Idempotency-Key</code> header; the gateway simulation endpoint refused an
+        unauthenticated caller; consumption tax refused to apply to an individual taxpayer.
+        I corrected the harness rather than the platform in every case.
+      </p>
+    </div>
+
+    <h3>Final verification run</h3>
+    <div class="evidence"># tests 496
+# suites 121
+# pass 496
+# fail 0
+
+typecheck  clean  (tsc -b packages/shared apps/api && tsc --noEmit -p tsconfig.test.json)
+npm audit  0 vulnerabilities (production and full tree)
+build      shared, api, agent, portal — all clean</div>
+    <p class="measure" style="margin-top:16px">
+      The two audit suites are committed to this branch as
+      <code>apps/api/src/tests/certification-audit.test.ts</code> and
+      <code>apps/api/src/tests/certification-e2e.test.ts</code>, so the evidence behind
+      every <span class="pill p-pass">Pass</span> above is reproducible rather than
+      asserted.
+    </p>
+  </section>
+
+  <!-- ================= 06 ================= -->
+  <section id="rules">
+    <span class="sec-num">06</span>
+    <h2 class="sec">The fourteen business rules</h2>
+    <hr class="sec-rule">
+    <p class="measure" style="margin-bottom:24px">
+      Each rule was tested directly. Rule 14 passes on disclosure but is compromised in
+      practice by defect D-6.
+    </p>
+
+    <div class="rules">
+      <div class="rule-row"><span class="rid">Rule 1</span><span class="rtext">No KYC clearance = no agent activation</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 2</span><span class="rtext">No referee clearance = no agent activation</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 3</span><span class="rtext">No government approval = no revenue collection</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 4</span><span class="rtext">Suspended agent = no revenue collection</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 5</span><span class="rtext">No verified payment = no receipt</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 6</span><span class="rtext">No verified, reconciled, eligible transaction = no payable commission</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 7</span><span class="rtext">Agent cannot manually confirm government payment</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 8</span><span class="rtext">Agent cannot manually create government receipts</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 9</span><span class="rtext">Financial transactions cannot be silently deleted</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 10</span><span class="rtext">Historical transactions unaffected by future rate changes</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 11</span><span class="rtext">Duplicate webhooks cannot create duplicate transactions</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 12</span><span class="rtext">Offline mode cannot report a government payment as successful</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 13</span><span class="rtext">Unauthorized roles cannot access restricted data or APIs</span><span class="pill p-pass">Pass</span></div>
+      <div class="rule-row"><span class="rid">Rule 14</span><span class="rtext">Public verification exposes no protected taxpayer information</span><span class="pill p-partial">Partial</span></div>
+    </div>
+
+    <h3>Rule 6 is stronger than the brief requires</h3>
+    <div class="measure">
+      <p>
+        Commission does not become payable when a payment is verified. The promotion job
+        requires <code>transactions.status = 'SETTLED'</code> — meaning a settlement has
+        been recorded against a bank reference and government has actually received the
+        money — plus the policy hold period elapsed, plus no open high-severity fraud flag.
+        I ran the promotion job with a clock set one year forward against a verified but
+        unsettled transaction; it released nothing. After recording a settlement, the same
+        job released exactly one commission.
+      </p>
+    </div>
+
+    <h3>Rule 12 is enforced structurally, not by check</h3>
+    <div class="measure">
+      <p>
+        The offline draft queue has no payment draft type, so a payment cannot be
+        expressed offline at all. On top of that, a runtime guard rejects any queued
+        payload containing financial keys, and the service worker's never-cache list covers
+        every financial path so a stale "payment successful" screen cannot be replayed.
+        Three independent mechanisms, of which the first alone would be sufficient.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 07 ================= -->
+  <section id="financial">
+    <span class="sec-num">07</span>
+    <h2 class="sec">Financial integrity</h2>
+    <hr class="sec-rule">
+    <div class="measure">
+      <p>
+        This is the strongest part of the system and it deserves to be described precisely,
+        because the design choice behind it is the reason the certification failure is
+        operational rather than architectural.
+      </p>
+      <p>
+        The rule "no verified payment, no government receipt" is a
+        <code>BEFORE INSERT</code> trigger on <code>receipts</code>. It checks that the
+        referenced payment exists, is <code>VERIFIED</code>, carries both a
+        <code>verified_at</code> timestamp and a gateway reference, belongs to the same
+        transaction, matches the amount exactly, and that the transaction is in a state
+        that permits issuance. A <code>CHECK</code> constraint separately forbids a payment
+        row from claiming <code>VERIFIED</code> without recording what verified it. The
+        practical effect is that there is no code path — API, migration, maintenance script
+        or human at a prompt — that produces a receipt for money that did not arrive.
+      </p>
+      <p>
+        Duplicate protection is layered the same way. A partial unique index permits only
+        one payment per transaction in an in-flight state, so a double-tapped Pay button
+        cannot create two obligations even if the application logic failed.
+        <code>UNIQUE (gateway, event_id)</code> on the webhook table makes a redelivery
+        detectable at insert time. An advisory lock serialises concurrent confirmations of
+        one payment, and verification runs at <code>SERIALIZABLE</code> isolation because
+        it reads and writes the payment, the invoice and the commission ledger together.
+      </p>
+    </div>
+
+    <h3>Commission verified independently</h3>
+    <div class="scroll">
+      <table>
+        <caption>Computed by the platform, checked against arithmetic performed in the test.</caption>
+        <thead><tr><th scope="col">Government revenue</th><th scope="col">Kobo</th><th scope="col">Expected at 150 bp</th><th scope="col">Platform recorded</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+          <tr><td>₦1,000</td><td class="num">100,000</td><td class="num">1,500</td><td class="num">1,500</td><td><span class="pill p-pass">Exact</span></td></tr>
+          <tr><td>₦10,000</td><td class="num">1,000,000</td><td class="num">15,000</td><td class="num">15,000</td><td><span class="pill p-pass">Exact</span></td></tr>
+          <tr><td>₦100,000</td><td class="num">10,000,000</td><td class="num">150,000</td><td class="num">150,000</td><td><span class="pill p-pass">Exact</span></td></tr>
+          <tr><td>₦1,000,000</td><td class="num">100,000,000</td><td class="num">1,500,000</td><td class="num">1,500,000</td><td><span class="pill p-pass">Exact</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="measure" style="margin-top:18px">
+      All arithmetic is <code>BigInt</code> kobo; no floating point appears anywhere in the
+      money path. Government revenue and agent commission are stored in separate columns
+      and never netted — verified by confirming the transaction amount equals the full
+      assessed amount after commission accrual.
+    </p>
+
+    <h3>Amount mismatch is treated as fraud, not as an error</h3>
+    <div class="measure">
+      <p>
+        If the gateway reports success for an amount that differs from the invoice, the
+        platform does not issue a receipt and does not fail quietly. It moves the
+        transaction to <code>UNDER_REVIEW</code>, writes a <code>CRITICAL</code> fraud flag
+        recording both amounts, writes a failure audit entry, and returns an error telling
+        the agent explicitly not to collect payment again. That is the correct handling of
+        the case that would otherwise let a ₦100 payment discharge a ₦100,000 assessment.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 08 ================= -->
+  <section id="security">
+    <span class="sec-num">08</span>
+    <h2 class="sec">Security and access control</h2>
+    <hr class="sec-rule">
+
+    <div class="measure">
+      <p>
+        Authorisation is three separate gates that are deliberately not collapsed:
+        <code>authenticate()</code> confirms a live, unrevoked session;
+        <code>requirePermission()</code> checks the role's permission;
+        <code>requireActiveAgent()</code> checks that the agent is operationally cleared,
+        on a registered device, running a permitted app version. A signed-in agent and a
+        cleared agent are different things, and the platform is careful about the
+        difference.
+      </p>
+      <p>
+        Two details are worth singling out. The role is read from the database on every
+        request rather than trusted from the token, so a suspension or role change applies
+        to sessions issued before it — I confirmed this by suspending an agent mid-session
+        and watching the very next request return <code>AGENT_SUSPENDED</code>. And
+        step-up grants are <em>consumed</em>, not merely checked, so one OTP authorises
+        exactly one high-risk action and a captured token cannot approve a second payout.
+      </p>
+    </div>
+
+    <h3>Segregation of duties</h3>
+    <div class="measure">
+      <p>
+        The <code>admin</code> role can configure the platform, manage users, approve
+        agents and change the revenue catalogue — and cannot approve a payment reversal, a
+        refund, or a commission payout. Those require <code>finance_officer</code>. The
+        <code>auditor</code> role holds no mutating permission at all. This is real
+        segregation, verified by both permission inspection and a live request: an
+        administrator calling the reversal endpoint receives 403.
+      </p>
+      <p>
+        The brief asks about a "KYC Officer" and a "Super Administrator". Neither exists as
+        a distinct role; KYC review sits with <code>revenue_officer</code> and
+        <code>admin</code>, and <code>admin</code> is terminal with no tier above it. Both
+        are defensible design decisions rather than defects, but the absence of a tier
+        above <code>admin</code> means there is no one who can review an administrator's
+        own configuration changes. Worth a decision from PSIRS rather than a silent
+        inheritance.
+      </p>
+      <p>
+        There is no taxpayer role, and the code documents this as a deliberate product
+        decision: a citizen never signs in, so there is no credential to phish and no
+        session to hijack. They receive their receipt by SMS and verify it through a public
+        page needing no account. This is a coherent security posture — and it is exactly
+        the posture that defect D-6 breaks, since that public page is the citizen's only
+        recourse.
+      </p>
+    </div>
+
+    <h3>Verified during this audit</h3>
+    <ul class="plain measure">
+      <li>A JWT signed with an attacker's own key is rejected (401).</li>
+      <li>An <code>alg: none</code> unsigned token is rejected (401).</li>
+      <li>Session revocation takes effect on the next request, not at token expiry.</li>
+      <li>Passwords are bcrypt-hashed; the plaintext appears nowhere.</li>
+      <li>A wrong password and an unknown phone number return byte-identical responses — no user enumeration.</li>
+      <li>Brute-force lockout is database-backed, so it survives a multi-instance deployment.</li>
+      <li>Webhook signatures are verified over the raw request bytes, not the re-serialised body.</li>
+      <li>An unsigned or forged webhook is recorded and refused, never acted on.</li>
+      <li>An anonymous document request is refused; another agent cannot read a KYC document.</li>
+      <li>Security headers include HSTS, <code>nosniff</code>, <code>frame-options: DENY</code>, a restrictive permissions policy and <code>no-referrer</code>.</li>
+      <li>Public receipt verification returns receipt number, revenue type, amount, date and LGA — and no phone, address, name or identity hash.</li>
+    </ul>
+  </section>
+
+  <!-- ================= 09 ================= -->
+  <section id="defects">
+    <span class="sec-num">09</span>
+    <h2 class="sec">Defects</h2>
+    <hr class="sec-rule">
+    <p class="measure" style="margin-bottom:26px">
+      Blockers B-1 to B-6 are above. These are the remaining findings, none of which alone
+      prevents certification but all of which should be resolved.
+    </p>
+
+    <div class="findings">
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-1</span>
+          <h3 class="finding-title" style="margin:0">Background workers assume a single instance</h3>
+          <span class="pill p-partial">High</span>
+        </div>
+        <p>
+          All seven workers are <code>setInterval</code> timers inside the API process, and
+          the reconciliation sweep's re-entrancy guard is a module-level boolean
+          (<code>sweepInFlight</code>). Behind a load balancer with N instances, N
+          reconciliation sweeps run concurrently every six hours, each issuing a status
+          query to Remita for every payment reference in a 48-hour window. Confirmation is
+          idempotent so no double receipts result, but the gateway load multiplies by
+          instance count and may hit rate limits. There is no leader election.
+        </p>
+        <dl>
+          <dt>Location</dt><dd><code>apps/api/src/server.ts:80–160</code>, <code>services/reconciliation.ts:763</code></dd>
+          <dt>Fix</dt><dd>A PostgreSQL advisory lock around each sweep, or move the schedule out of the API process.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-2</span>
+          <h3 class="finding-title" style="margin:0">Migrations run on boot with no advisory lock</h3>
+          <span class="pill p-partial">High</span>
+        </div>
+        <p>
+          <code>server.ts</code> calls <code>runMigrations()</code> before listening, and
+          the runner takes no lock. Two instances starting together both read the applied
+          set and both attempt the same file; one fails and calls
+          <code>process.exit(1)</code>. It fails safe rather than corrupting — DDL is
+          transactional in PostgreSQL — but a rolling deploy will crash-loop replicas until
+          the first finishes.
+        </p>
+        <dl>
+          <dt>Location</dt><dd><code>apps/api/src/db/migrate.ts:40</code></dd>
+          <dt>Fix</dt><dd><code>pg_advisory_lock</code> around the run, or a separate migration step in the deploy pipeline.</dd>
+        </dl>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-3</span>
+          <h3 class="finding-title" style="margin:0">Rate limiting is per-instance</h3>
+          <span class="pill p-partial">Medium</span>
+        </div>
+        <p>
+          The limiter keeps its buckets in a process-local <code>Map</code>. With N
+          instances the effective limit is N times the configured maximum. This is
+          documented in <code>docs/SECURITY.md</code> as a known gap awaiting a Redis
+          store. The impact is bounded because account lockout — the control that actually
+          stops credential stuffing — is database-backed.
+        </p>
+        <dl><dt>Location</dt><dd><code>apps/api/src/middleware/security.ts:19</code></dd></dl>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-4</span>
+          <h3 class="finding-title" style="margin:0">Vehicle renewal happy path never exercised against a real registry</h3>
+          <span class="pill p-partial">Medium</span>
+        </div>
+        <p>
+          The critical invariant holds — I confirmed by query that no renewal document can
+          exist without a verified payment, and the trigger enforces it. But vehicle
+          lookup, eligibility and authority notification have only run against the mock
+          registry, so the full search → verify → renew → certificate → QR chain is
+          unproven end to end. This is a specific instance of B-4.
+        </p>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-5</span>
+          <h3 class="finding-title" style="margin:0">The government portal has no automated tests</h3>
+          <span class="pill p-partial">High</span>
+        </div>
+        <p>
+          5,633 lines across twelve screens — where officers approve agents, review KYC
+          documents, run reconciliation, resolve exceptions, approve payouts and execute
+          reversals — carry no test of any kind. There is no <code>test</code> script in
+          <code>apps/portal/package.json</code>, and the root <code>npm test</code> runs
+          only the API and agent workspaces. CI typechecks and builds it; nothing exercises
+          it.
+        </p>
+        <p>
+          The portal also serves the two public surfaces: receipt verification and the
+          referee response form. A regression in either is invisible to the current suite.
+        </p>
+        <dl>
+          <dt>Mitigating</dt><dd>The API tests pin the permissions each screen depends on, so a screen offering an action the API refuses is caught server-side.</dd>
+        </dl>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-6</span>
+          <h3 class="finding-title" style="margin:0">Public URL defaults — see blocker B-6</h3>
+          <span class="pill p-fail">Blocker</span>
+        </div>
+        <p>
+          Listed here for cross-reference from the certification matrix. Full detail in
+          §02.
+        </p>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-7</span>
+          <h3 class="finding-title" style="margin:0">Web push is unimplemented and throws</h3>
+          <span class="pill p-none">Low</span>
+        </div>
+        <p>
+          <code>providerFor('PUSH')</code> throws by design rather than falling back to the
+          SMS gateway — the code explains that posting a browser push subscription to an
+          SMS vendor would fail obscurely or be silently billed. No notification template
+          currently produces a <code>PUSH</code> channel, and the dispatch loop marks such
+          a row <code>FAILED</code> and continues rather than stalling the queue that
+          carries every other citizen's receipt. An honest, safely-handled gap.
+        </p>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-8</span>
+          <h3 class="finding-title" style="margin:0">No independent security or penetration testing</h3>
+          <span class="pill p-partial">Medium</span>
+        </div>
+        <p>
+          This audit is a source-and-behaviour assessment, not a penetration test. No
+          network-level testing, no authenticated fuzzing, no third-party review has been
+          performed. <code>docs/SECURITY.md</code> records this as outstanding. For a
+          platform handling government revenue and citizen identity data, an independent
+          assessment should precede go-live.
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <!-- ================= 10 ================= -->
+  <section id="ops">
+    <span class="sec-num">10</span>
+    <h2 class="sec">Operational readiness</h2>
+    <hr class="sec-rule">
+    <div class="measure">
+      <p>
+        The gap between this codebase and a running government service is the whole of the
+        certification failure, so it is worth stating plainly what is and is not there.
+      </p>
+      <p>
+        <strong>What exists.</strong> A CI pipeline that builds, typechecks, migrates and
+        tests against a real PostgreSQL service container — a genuinely good choice, since
+        the financial guarantees are triggers and a mocked database would verify nothing.
+        Dependabot. A <code>/health</code> endpoint that checks database connectivity.
+        Graceful shutdown that drains in-flight requests before closing the pool, with a
+        hard timeout, so a payment confirmation is never cut off mid-transaction. A
+        production boot guard that refuses eleven classes of misconfiguration.
+      </p>
+      <p>
+        <strong>What does not exist.</strong> Any way to deploy the thing. Any backup. Any
+        restore. Any alert. Any dashboard. Any error tracker. Any load test. Any staging
+        environment described in the repository. Any rollback procedure. Any runbook for
+        the failure modes the code carefully creates queues for — the outstanding TIN
+        queue, the unacknowledged vehicle renewals, the unreturned refunds, the
+        reconciliation exception queue. Those queues are well built and there is a screen
+        that shows them; there is nothing that tells a human to go and look.
+      </p>
+      <p>
+        That last point is the shape of the whole problem. This platform is unusually
+        careful about recording what it still owes — a taxpayer without their TIN, a
+        renewal the authority never acknowledged, money a citizen has not had back. All of
+        that honesty is only worth having if somebody is watching, and nothing in the
+        repository arranges for anybody to be.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================= 11 ================= -->
+  <section id="required">
+    <span class="sec-num">11</span>
+    <h2 class="sec">Required before production</h2>
+    <hr class="sec-rule">
+    <p class="measure" style="margin-bottom:28px">
+      In the order I would sequence them. Items 1 and 2 are hours of work and remove real
+      day-one harm; the rest are the substance of the remaining programme.
+    </p>
+
+    <ol class="required">
+      <li>
+        <strong>Guard the demo seed against production</strong>
+        <p>Add the <code>config.isProduction</code> check to <code>seedDemoUsers()</code> that <code>seedDemoAgent()</code> already has, and remove the "Re-run with --demo" hint when running in production. Rotate <code>+2348000000001</code>–<code>05</code> if any environment has already been seeded. <em>(B-5)</em></p>
+      </li>
+      <li>
+        <strong>Add the missing settings to the production boot guard</strong>
+        <p>Refuse to start if <code>VERIFICATION_BASE_URL</code>, <code>PAYMENT_CALLBACK_URL</code> or <code>CORS_ORIGINS</code> is unset, still on <code>localhost</code>, or not HTTPS. These sit alongside eleven checks that already exist. <em>(B-6)</em></p>
+      </li>
+      <li>
+        <strong>Confirm every integration mapping against a provider sandbox</strong>
+        <p>Remita service type ID and the full status code set; the PSIRS TIN format, field paths and status vocabulary; the contracted KYC vendor's response shape; the vehicle registry; bank verification. Exercise each end to end and record the confirmed mapping. <em>(B-4)</em></p>
+      </li>
+      <li>
+        <strong>Build the deployment path</strong>
+        <p>Container image, infrastructure definition, environment promotion, secret injection, and a documented rollback. Run migrations as an explicit pipeline step rather than on process boot. <em>(B-1, D-2)</em></p>
+      </li>
+      <li>
+        <strong>Provision backups and perform a real restoration</strong>
+        <p>Automated backups with agreed retention, point-in-time recovery, and object-storage backup for documents. Then restore into a clean environment and verify a receipt PDF and its audit trail survive. Agree RPO and RTO with government IT and prove them. <em>(B-2)</em></p>
+      </li>
+      <li>
+        <strong>Instrument the platform</strong>
+        <p>Error tracking, structured logging with request correlation, uptime monitoring, and alerts on the things that must never go quiet: failed webhooks, aborted reconciliation runs, growth in the exception queue, unreturned refunds, and worker liveness. <em>(B-3)</em></p>
+      </li>
+      <li>
+        <strong>Make the workers safe for more than one instance</strong>
+        <p>Advisory locks or an external scheduler for all seven jobs, and the Redis rate-limit store already anticipated in the code comments. <em>(D-1, D-3)</em></p>
+      </li>
+      <li>
+        <strong>Test the government portal</strong>
+        <p>At minimum the approval, reversal, reconciliation-exception and KYC-review flows, plus the two public surfaces it serves. Add it to the root test script and to CI. <em>(D-5)</em></p>
+      </li>
+      <li>
+        <strong>Commission an independent security assessment</strong>
+        <p>Penetration testing against a deployed staging environment with real integrations configured. <em>(D-8)</em></p>
+      </li>
+      <li>
+        <strong>Load-test the revenue path and verify the device matrix</strong>
+        <p>Establish behaviour under realistic concurrent collection load, and complete the Android, iPhone and desktop verification the PWA has not yet had.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ================= 12 ================= -->
+  <section id="final">
+    <span class="sec-num">12</span>
+    <h2 class="sec">Final certification</h2>
+    <hr class="sec-rule">
+
+    <div class="verdict" style="margin-bottom:30px">
+      <span class="verdict-mark">Fail</span>
+      <div>
+        <h2>Production certification: FAIL — not production ready</h2>
+        <p>
+          Six blockers, each independently disqualifying. The application cannot yet be
+          deployed, cannot be recovered if it fails, cannot be observed while it runs, and
+          depends on five integrations that have never spoken to the systems they will
+          depend on.
+        </p>
+      </div>
+    </div>
+
+    <div class="measure">
+      <p>
+        I want to be precise about what this verdict does and does not say, because the two
+        halves of it point in opposite directions.
+      </p>
+      <p>
+        It does not say the software is untrustworthy with money. On the evidence I
+        gathered, the opposite is true to an unusual degree. I tried to forge receipts
+        through the API and through raw SQL, to make an agent assert a payment, to replay
+        webhooks, to race concurrent confirmations, to rewrite a commission, to alter a
+        paid transaction by changing its rate, to read another agent's records, to reach
+        government endpoints as an agent, to forge a token, to inject SQL, and to delete
+        the audit trail. Every one of those failed, most of them at the database rather
+        than in application code, which is the difference between a control and a
+        convention. The commission engine is exact to the kobo and refuses to pay until
+        government has actually been paid. Offline mode cannot express a payment at all.
+        That is a well-built revenue platform.
+      </p>
+      <p>
+        What it says is that a well-built application is not a production system. Two of
+        the six blockers would cause visible harm on the first day: every citizen who
+        scanned a receipt would find nothing, and every referee invitation would be
+        unfollowable — which alone would halt agent onboarding entirely. Both are small
+        code changes. The other four are programme work: deployment, backup, monitoring,
+        and integration confirmation, none of which can be shortened by how good the code
+        is.
+      </p>
+      <p>
+        The repository says the same thing about itself in <code>README.md</code> §Status
+        and <code>docs/SECURITY.md</code> §Known gaps. That honesty is worth noting in a
+        certification report, because the most common reason a platform like this fails in
+        production is that nobody wrote down what was still missing. Here it was written
+        down, and this audit largely confirms it — with five defects added that had not
+        been recorded.
+      </p>
+      <p>
+        Re-certification should be straightforward once the ten items in §11 are complete.
+        Nothing I found requires rearchitecting anything.
+      </p>
+    </div>
+
+    <footer class="report-foot">
+      <p>
+        Assessed at commit <code>ee88518</code> on branch
+        <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Evidence
+        suites committed as <code>certification-audit.test.ts</code> (33 tests) and
+        <code>certification-e2e.test.ts</code> (6 tests). Full suite: 496 passing, 0
+        failing, typecheck clean, 0 dependency vulnerabilities.
+      </p>
+    </footer>
+  </section>
+
+</div>
