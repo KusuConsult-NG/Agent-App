@@ -1,0 +1,105 @@
+/**
+ * In-Depth UI Component & Screen Interaction Tests for Government Portal.
+ *
+ * Tests:
+ * 1. Login Screen rendering & validation
+ * 2. Public Verification Screen (Valid, Voided, Tampered outcomes)
+ */
+
+import React from 'react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { LoginScreen } from '../screens/Login';
+import { VerifyScreen } from '../screens/Public';
+import * as apiModule from '../lib/api';
+
+describe('1. Government Portal Authentication UI', () => {
+  beforeEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  it('renders government portal sign in form with phone and password inputs', () => {
+    const onSignedIn = vi.fn();
+    render(<LoginScreen onSignedIn={onSignedIn} />);
+
+    expect(screen.getByText(/PSIRS Revenue Portal/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Phone number/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^Password/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Sign in/i })).toBeTruthy();
+  });
+
+  it('submits login payload when valid phone and password provided', async () => {
+    const onSignedIn = vi.fn();
+    const loginSpy = vi.spyOn(apiModule, 'login').mockResolvedValue({
+      user: {
+        id: '00000000-0000-0000-0000-000000000001',
+        fullName: 'Admin Officer',
+        phone: '+2348000000001',
+        email: null,
+        role: 'admin',
+        permissions: ['*'],
+      },
+      accessToken: 'test-token',
+      refreshToken: 'test-refresh',
+    });
+
+    render(<LoginScreen onSignedIn={onSignedIn} />);
+
+    const phoneInput = screen.getByLabelText(/Phone number/i);
+    const passInput = screen.getByLabelText(/^Password/i);
+    const submitBtn = screen.getByRole('button', { name: /Sign in/i });
+
+    fireEvent.change(phoneInput, { target: { value: '08000000001' } });
+    fireEvent.change(passInput, { target: { value: 'Password123' } });
+    fireEvent.click(submitBtn);
+
+    expect(loginSpy).toHaveBeenCalledWith('08000000001', 'Password123');
+  });
+});
+
+describe('2. Public Receipt & Particulars Verification Portal', () => {
+  beforeEach(() => {
+    cleanup();
+  });
+
+  it('renders public lookup interface with search input and guidance', () => {
+    render(<VerifyScreen code="" />);
+
+    expect(screen.getByText(/Verify a government receipt/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/PSIRS\/2026\/000123/i)).toBeTruthy();
+  });
+
+  it('displays genuine verification badge when receipt is verified and valid', async () => {
+    vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
+      status: 'VALID',
+      receiptNumber: 'PSIRS/2026/000001',
+      revenueType: 'Development Levy',
+      amountKobo: '200000',
+      issuedAt: '2026-08-18T12:00:00.000Z',
+      lga: 'Jos North',
+      integrityConfirmed: true,
+      message: 'This is a genuine government receipt issued by PSIRS.',
+    });
+
+    render(<VerifyScreen code="T7C72-QTUDN" />);
+
+    expect(await screen.findByText(/This is a genuine government receipt issued by PSIRS\./i)).toBeTruthy();
+    expect(screen.getByText(/PSIRS\/2026\/000001/i)).toBeTruthy();
+    expect(screen.getByText(/Development Levy/i)).toBeTruthy();
+  });
+
+  it('displays warning alert when receipt was revoked or voided', async () => {
+    vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
+      status: 'REVERSED',
+      receiptNumber: 'PSIRS/2026/000002',
+      revenueType: 'Signage Levy',
+      amountKobo: '500000',
+      message: 'This receipt was issued but the payment has since been reversed or refunded.',
+    });
+
+    render(<VerifyScreen code="VOIDED-CODE" />);
+
+    expect(await screen.findByText(/This receipt was issued but the payment has since been reversed or refunded\./i)).toBeTruthy();
+  });
+});

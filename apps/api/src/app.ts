@@ -34,6 +34,9 @@ import { governmentRouter, supportRouter } from './routes/government';
 import { referenceRouter } from './routes/reference';
 import { log } from './lib/logger';
 import { collectDatabaseGauges, metrics, render as renderMetrics } from './lib/metrics';
+import { citizenRouter } from './routes/citizen';
+import { pushRouter } from './routes/push';
+import { telemetry } from './services/telemetry';
 
 export function createApp(): Express {
   const app = express();
@@ -46,18 +49,6 @@ export function createApp(): Express {
   app.use(requestContext);
   app.use(payloadGuard());
 
-  // The raw body is retained so webhook signatures verify against the exact
-  // bytes received. Re-serialising parsed JSON would break verification and
-  // could hide a mismatch between what was signed and what was parsed.
-  app.use(
-    express.json({
-      limit: '1mb',
-      verify: (req, _res, buf) => {
-        (req as express.Request).rawBody = Buffer.from(buf);
-      },
-    }),
-  );
-
   // One line per completed request, with the correlation id the response
   // carries, so a support ticket quoting a reference can be traced without
   // anyone reading container output by eye.
@@ -66,6 +57,7 @@ export function createApp(): Express {
     res.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
       metrics.httpRequest(req.method, res.statusCode);
+      telemetry.recordRequest(req.method, req.path, res.statusCode);
       // 4xx is the caller being told no, which is routine; 5xx is ours.
       log[res.statusCode >= 500 ? 'error' : 'info']('request', {
         requestId: req.requestId,
@@ -79,6 +71,18 @@ export function createApp(): Express {
     });
     next();
   });
+
+  // The raw body is retained so webhook signatures verify against the exact
+  // bytes received. Re-serialising parsed JSON would break verification and
+  // could hide a mismatch between what was signed and what was parsed.
+  app.use(
+    express.json({
+      limit: '1mb',
+      verify: (req, _res, buf) => {
+        (req as express.Request).rawBody = Buffer.from(buf);
+      },
+    }),
+  );
 
   /**
    * Liveness: is the process itself wedged?
@@ -162,12 +166,14 @@ export function createApp(): Express {
   api.use('/vehicles', vehicleRouter);
   api.use('/government', governmentRouter);
   api.use('/support', supportRouter);
+  api.use('/push', pushRouter);
 
   // Public, unauthenticated surfaces.
   api.use('/reference', referenceRouter);
   api.use('/verify', verificationRouter);
   api.use('/referee', refereeRouter);
   api.use('/webhooks', webhookRouter);
+  api.use('/citizen-status', citizenRouter);
 
   app.use('/api/v1', api);
 

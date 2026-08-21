@@ -104,3 +104,313 @@ export type ApprovalState = (typeof APPROVAL_STATES)[number];
 
 export const TICKET_STATES = ['OPEN', 'ASSIGNED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const;
 export type TicketState = (typeof TICKET_STATES)[number];
+
+// ---------------------------------------------------------------------------
+// Economic sector taxonomy (PRD §10, §41)
+// ---------------------------------------------------------------------------
+// Used for structured taxpayer profiling during agent onboarding. Each sector
+// maps to a curated list of revenue item codes that commonly apply to it, so
+// the Agent PWA can suggest relevant taxes without requiring the agent to know
+// the full catalogue. Suggestions are not obligations — the agent confirms.
+//
+// hausa: Hausa-language display label for the Agent PWA.
+// suggestedRevenueCodes: revenue_items.code values likely applicable to this
+//   sector. The backend derives the actual UUIDs at runtime from these codes.
+
+export interface EconomicSectorDefinition {
+  readonly code: string;
+  readonly label: string;
+  readonly hausa: string;
+  readonly suggestedRevenueCodes: readonly string[];
+}
+
+export const ECONOMIC_SECTORS: readonly EconomicSectorDefinition[] = [
+  // ─── Primary sector ──────────────────────────────────────────────────────
+  {
+    code: 'AGRICULTURE',
+    label: 'Farmer / Agriculture',
+    hausa: 'Noma',
+    // Farmer owes: Development Levy (all taxable adults), Produce Sales Tax on crops
+    // sold, Ecological Fee for land use, Road Tax if using farm-to-market vehicles.
+    suggestedRevenueCodes: ['DEV-LEVY', 'PRODUCE-SALES-TAX', 'ECOLOGICAL-FEE'],
+  },
+  {
+    code: 'LIVESTOCK',
+    label: 'Livestock / Animal Husbandry / Herder',
+    hausa: 'Kiwo',
+    // Herders: Animal Trade Tax on sales, Abattoir Fee when slaughtering for sale,
+    // Domestic Animal Licence for kept animals, Development Levy.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ANIMAL-TRADE-TAX', 'ABATTOIR-FEE', 'DOMESTIC-ANIMAL-LICENCE',
+    ],
+  },
+  {
+    code: 'FISHING',
+    label: 'Fishing / Aquaculture',
+    hausa: 'Kamun Kifi',
+    suggestedRevenueCodes: ['DEV-LEVY', 'ECOLOGICAL-FEE'],
+  },
+  {
+    code: 'AGRICULTURE_PROCESSING',
+    label: 'Agro-Processing / Mill / Silo / Groundnut Oil',
+    hausa: 'Sarrafa Amfanin Gona',
+    // Processes primary produce: Produce Sales Tax on output, Economic Dev Levy,
+    // Ecological Fee, Fire Service (machinery/heat risk), Business Premises.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'PRODUCE-SALES-TAX', 'ECON-DEV-LEVY',
+      'ECOLOGICAL-FEE', 'FIRE-SERVICE-CHARGE',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'MINING',
+    label: 'Mining / Quarrying / Tin / Columbite',
+    hausa: "Hakar Ma'adini",
+    // Plateau State is historically a mining state (tin, columbite, limestone).
+    suggestedRevenueCodes: [
+      'MINING-FEE', 'ECOLOGICAL-FEE', 'ROAD-TAX', 'DEV-LEVY', 'ECON-DEV-LEVY',
+    ],
+  },
+
+  // ─── Secondary / Industry ────────────────────────────────────────────────
+  {
+    code: 'MANUFACTURING',
+    label: 'Manufacturing / Factory / Workshop',
+    hausa: "Masana'antu",
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ECON-DEV-LEVY', 'FIRE-SERVICE-CHARGE',
+      'ECOLOGICAL-FEE', 'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'CONSTRUCTION',
+    label: 'Construction / Building Contractor / Developer',
+    hausa: 'Gine-gine',
+    // Contractors: Land Use Charge on land held, Tenement Rates on structures,
+    // Infrastructure Levy, Road Tax (heavy machinery), Fire Service on sites.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'LAND-USE-CHARGE', 'TENEMENT-RATES',
+      'INFRA-LEVY', 'ROAD-TAX', 'FIRE-SERVICE-CHARGE',
+    ],
+  },
+  {
+    code: 'ARTISAN_CRAFT',
+    label: 'Artisan / Craftsman / Tailor / Welder / Carpenter',
+    hausa: "Sana'ar Hannu",
+    // Small-scale trade: Development Levy, Shops & Kiosks if operating from a fixed
+    // location, Business Premises (rural if outside Jos city).
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'SHOPS-KIOSKS', 'BP-REG-RURAL', 'BP-RENEW-RURAL',
+    ],
+  },
+
+  // ─── Commerce ────────────────────────────────────────────────────────────
+  {
+    code: 'RETAIL_TRADE',
+    label: 'Retail Trader / Market Seller / Shop Owner',
+    hausa: 'Kasuwanci',
+    // Market Levy for market-based trading, Shops & Kiosks for fixed premises,
+    // Business Premises Registration (rural if in LGA market, urban if in Jos).
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'MARKET-LEVY', 'SHOPS-KIOSKS',
+      'BP-REG-RURAL', 'BP-RENEW-RURAL',
+    ],
+  },
+  {
+    code: 'WHOLESALE_TRADE',
+    label: 'Wholesale Dealer / Distributor / Importer',
+    hausa: 'Manya-manya Kasuwanci',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'SHOPS-KIOSKS', 'ECON-DEV-LEVY',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'FOOD_BEVERAGE',
+    label: 'Food Seller / Restaurant / Canteen / Caterer',
+    hausa: 'Abinci da Sha',
+    // Hotels/restaurants pay Consumption Tax under Plateau State law.
+    // Fire Service Charge for cooking establishments. Shops & Kiosks for fixed spots.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'CONSUMPTION-TAX', 'FIRE-SERVICE-CHARGE',
+      'SHOPS-KIOSKS', 'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'HOTEL_HOSPITALITY',
+    label: 'Hotel / Guest House / Lodging / Event Centre',
+    hausa: 'Masauki',
+    // Full Consumption Tax on room nights and F&B, Entertainment Tax on live events,
+    // Fire Service mandatory for lodging, Signage Fee for billboards.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'CONSUMPTION-TAX', 'ENTERTAINMENT-TAX',
+      'FIRE-SERVICE-CHARGE', 'SIGNAGE-FEE',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+
+  // ─── Transport ───────────────────────────────────────────────────────────
+  {
+    code: 'TRANSPORT_PASSENGER',
+    label: 'Passenger Transport / Taxi / Okada / Keke Napep',
+    hausa: 'Sufurin Mutane (Mota, Okada, Keke)',
+    // Motor Park Levy collected daily at designated parks. Road Tax. Vehicle renewal.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'MOTOR-PARK-LEVY', 'ROAD-TAX', 'VEH-RENEW-COMMERCIAL',
+    ],
+  },
+  {
+    code: 'TRANSPORT_HAULAGE',
+    label: 'Haulage / Freight Truck / Logistics',
+    hausa: 'Hanyar Kaya',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ROAD-TAX', 'VEH-RENEW-COMMERCIAL', 'ECON-DEV-LEVY',
+    ],
+  },
+  {
+    code: 'MOTOR_VEHICLE',
+    label: 'Vehicle Dealer / Auto Parts / Mechanic Garage',
+    hausa: 'Sayar da Motoci / Gyaran Mota',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ROAD-TAX', 'VEH-RENEW-COMMERCIAL',
+      'SIGNAGE-FEE', 'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+
+  // ─── Services ────────────────────────────────────────────────────────────
+  {
+    code: 'ICT_TELECOMS',
+    label: 'ICT / Telecoms / Cybercafé / Printing / Media',
+    hausa: 'Fasahar Sadarwa',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ECON-DEV-LEVY', 'SIGNAGE-FEE',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'FINANCIAL_SERVICES',
+    label: 'Banking / Finance / Insurance / Cooperative / Microfinance',
+    hausa: 'Banki da Inshora',
+    // Stamp Duties on instruments (individual or group transactions).
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'PIT-STAMP', 'ECON-DEV-LEVY',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'PROFESSIONAL_SERVICES',
+    label: 'Professional / Lawyer / Doctor / Consultant / Accountant',
+    hausa: "Sana'ar Kwararru",
+    // Self-employed professionals file annual Direct Assessment. WHT deducted
+    // from fees received from companies. Stamp Duties on professional instruments.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'PIT-DIRECT', 'PIT-WHT', 'PIT-STAMP', 'ROAD-TAX',
+    ],
+  },
+  {
+    code: 'HEALTHCARE',
+    label: 'Hospital / Clinic / Pharmacy / Laboratory / Optician',
+    hausa: 'Lafiya',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'FIRE-SERVICE-CHARGE', 'ECON-DEV-LEVY',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'EDUCATION',
+    label: 'Private School / Nursery / Vocational Training / Tutoring',
+    hausa: 'Makaranta / Ilimi',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'INFRA-LEVY', 'FIRE-SERVICE-CHARGE',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'ENTERTAINMENT_ARTS',
+    label: 'Entertainment / Events / Arts / Photography / Salon / Barber',
+    hausa: 'Nishadì / Fasaha',
+    // Entertainment Tax on shows/events. Signage for outdoor promotions.
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'ENTERTAINMENT-TAX', 'SIGNAGE-FEE',
+      'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+  {
+    code: 'GAMING_BETTING',
+    label: 'Betting Shop / Gaming / Pool / Lottery',
+    hausa: 'Caca / Lottery',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'GAMING-TAX', 'BP-REG-URBAN', 'BP-RENEW-URBAN',
+    ],
+  },
+
+  // ─── Real property ───────────────────────────────────────────────────────
+  {
+    code: 'REAL_PROPERTY',
+    label: 'Landlord / Property Owner / Estate Developer',
+    hausa: 'Hayar Gida / Mai Gidaje',
+    suggestedRevenueCodes: [
+      'DEV-LEVY', 'PROPERTY-TAX', 'TENEMENT-RATES',
+      'LAND-USE-CHARGE', 'RIGHT-OCCUPANCY',
+    ],
+  },
+
+  // ─── Employment ──────────────────────────────────────────────────────────
+  {
+    code: 'CIVIL_SERVANT',
+    label: 'Civil Servant / Government Employee (Plateau State)',
+    hausa: "Ma'aikacin Gwamnati",
+    // PAYE deducted by employer and remitted to PSIRS. Dev Levy also applicable.
+    suggestedRevenueCodes: ['DEV-LEVY', 'PIT-PAYE'],
+  },
+  {
+    code: 'PRIVATE_EMPLOYEE',
+    label: 'Private Sector Employee (Formal Employment)',
+    hausa: "Ma'aikacin Kamfani",
+    // PAYE deducted by employer. WHT may apply to investment income.
+    suggestedRevenueCodes: ['DEV-LEVY', 'PIT-PAYE', 'PIT-WHT'],
+  },
+  {
+    code: 'SELF_EMPLOYED',
+    label: 'Self-Employed / Freelancer (No fixed employer)',
+    hausa: "Mai Sana'a",
+    // Files annual Direct Assessment return by March 31.
+    suggestedRevenueCodes: ['DEV-LEVY', 'PIT-DIRECT', 'ROAD-TAX'],
+  },
+
+  // ─── Non-profit / social ─────────────────────────────────────────────────
+  {
+    code: 'RELIGIOUS_NGO',
+    label: 'Religious Organisation / NGO / Community Group',
+    hausa: 'Addini / Agaji / \'Yan Uwa',
+    // Generally exempt from income tax but Development Levy still applies to
+    // individual members and staff. Staff pay PAYE through the organisation.
+    suggestedRevenueCodes: ['DEV-LEVY'],
+  },
+
+  // ─── Informal economy ────────────────────────────────────────────────────
+  {
+    code: 'INFORMAL_WORKER',
+    label: 'Informal / Casual / Daily-Wage Worker',
+    hausa: "Ma'aikacin Yau da Kullum",
+    suggestedRevenueCodes: ['DEV-LEVY'],
+  },
+  {
+    code: 'STUDENT_UNEMPLOYED',
+    label: 'Student / Unemployed / Dependent',
+    hausa: "Ɗalibi / Marasa Aiki",
+    suggestedRevenueCodes: ['DEV-LEVY'],
+  },
+  {
+    code: 'OTHER',
+    label: 'Other / Not Listed Above',
+    hausa: 'Wasu',
+    suggestedRevenueCodes: ['DEV-LEVY'],
+  },
+] as const;
+
+export type EconomicSectorCode = (typeof ECONOMIC_SECTORS)[number]['code'];
+
+export function sectorByCode(code: string): EconomicSectorDefinition | undefined {
+  return ECONOMIC_SECTORS.find((s) => s.code === code);
+}

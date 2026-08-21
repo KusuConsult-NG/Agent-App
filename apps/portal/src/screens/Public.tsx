@@ -3,13 +3,12 @@
  *
  *   /verify/:code    — receipt and document verification (PRD §20, §43)
  *   /referee/:token  — referee verification portal (Addendum §10-§13)
+ *   /citizen         — citizen self-service tax status lookup
  *
- * Neither requires an account. The verification page deliberately shows very
- * little: enough to prove a receipt is genuine, and nothing that would let a
- * stranger learn about a taxpayer's affairs.
+ * None of these require an account.
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
+import React, { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
 
@@ -370,6 +369,215 @@ export function RefereePortalScreen({ token }: { token: string }) {
           You do not need an account. This link can be used once and expires on{' '}
           {formatDate(invitation.expiresAt)}.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Citizen self-service tax status portal
+// ---------------------------------------------------------------------------
+
+interface CitizenStatusResult {
+  found: boolean;
+  count?: number;
+  tin?: string | null;
+  tinStatus?: string;
+  complianceStatus?: string;
+  complianceScore?: number;
+  lastPaymentDate?: string | null;
+  hasOutstanding?: boolean;
+  outstandingAmountKobo?: string;
+  obligations?: string[];
+  eligibleProgrammes?: string[];
+  message: string;
+}
+
+type SearchMode = 'tin' | 'phone' | 'name';
+
+const STATUS_COLORS: Record<string, string> = {
+  COMPLIANT: 'var(--success, #1a7f3c)',
+  HAS_ARREARS: 'var(--danger, #c0392b)',
+  NEEDS_ATTENTION: 'var(--warning, #b7651d)',
+  NOT_ASSESSED: 'var(--muted)',
+};
+
+export function CitizenPortalScreen() {
+  const [mode, setMode] = useState<SearchMode>('tin');
+  const [input, setInput] = useState('');
+  const [result, setResult] = useState<CitizenStatusResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  async function search(event: FormEvent) {
+    event.preventDefault();
+    if (!input.trim()) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      const params = new URLSearchParams({ [mode]: input.trim() });
+      const data = await api.publicGet<CitizenStatusResult>(
+        `/citizen-status?${params.toString()}`,
+      );
+      setResult(data);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const placeholders: Record<SearchMode, string> = {
+    tin: 'e.g. PL-000001234',
+    phone: 'e.g. 08012345678',
+    name: 'e.g. Aminu Ibrahim',
+  };
+
+  return (
+    <div className="public">
+      <div className="public__card">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <img src="/icon.svg" alt="" width={48} height={48} />
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>
+            Check your tax status
+          </h1>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+            Plateau State Internal Revenue Service
+          </p>
+        </div>
+
+        {/* Search mode selector */}
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          {(['tin', 'phone', 'name'] as SearchMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={mode === m ? undefined : 'secondary'}
+              style={{ flex: 1, justifyContent: 'center', fontSize: '0.82rem', padding: '8px 4px' }}
+              onClick={() => { setMode(m); setInput(''); setResult(null); setError(null); }}
+            >
+              {m === 'tin' ? 'By TIN' : m === 'phone' ? 'By phone' : 'By name'}
+            </button>
+          ))}
+        </div>
+
+        <form onSubmit={(e) => void search(e)}>
+          <div className="field">
+            <label htmlFor="citizen-input">
+              {mode === 'tin' ? 'Tax Identification Number (TIN)' :
+               mode === 'phone' ? 'Registered phone number' :
+               'Full name or business name'}
+            </label>
+            <input
+              id="citizen-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={placeholders[mode]}
+              inputMode={mode === 'phone' ? 'tel' : 'text'}
+            />
+          </div>
+          <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
+            {busy ? 'Searching…' : 'Check status'}
+          </button>
+        </form>
+
+        <ErrorAlert error={error} />
+
+        {result && !result.found && (
+          <div style={{ marginTop: 16 }}>
+            <div className="verdict verdict--invalid">
+              <p className="verdict__mark">×</p>
+              <p className="verdict__label">NOT FOUND</p>
+            </div>
+            <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
+            {result.count !== undefined && result.count > 1 && (
+              <p style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
+                Use your TIN or exact phone number for a precise result.
+              </p>
+            )}
+          </div>
+        )}
+
+        {result?.found && (
+          <div style={{ marginTop: 18 }}>
+            {/* Compliance status badge */}
+            <div style={{
+              background: 'var(--surface-2, #f5f5f5)',
+              border: `2px solid ${STATUS_COLORS[result.complianceStatus ?? ''] ?? 'var(--muted)'}`,
+              borderRadius: 10,
+              padding: '12px 16px',
+              marginBottom: 14,
+              textAlign: 'center',
+            }}>
+              <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--muted)' }}>Tax compliance status</p>
+              <p style={{
+                margin: 0,
+                fontWeight: 700,
+                fontSize: '1.05rem',
+                color: STATUS_COLORS[result.complianceStatus ?? ''] ?? 'var(--muted)',
+              }}>
+                {result.complianceStatus === 'COMPLIANT' ? '✓ Compliant' :
+                 result.complianceStatus === 'HAS_ARREARS' ? '⚠ Has Arrears' :
+                 result.complianceStatus === 'NEEDS_ATTENTION' ? '! Needs Attention' :
+                 'Not yet assessed'}
+              </p>
+              {result.complianceScore !== undefined && (
+                <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
+                  Compliance score: {result.complianceScore} / 100
+                </p>
+              )}
+            </div>
+
+            <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>{result.message}</p>
+
+            <KeyValue
+              items={[
+                ['TIN', result.tin ?? 'Pending assignment'],
+                ['TIN status', result.tinStatus ?? '—'],
+                ['Last payment', result.lastPaymentDate ?? 'No payments recorded'],
+                ['Outstanding obligations', result.hasOutstanding ? 'Yes — please contact PSIRS' : 'None'],
+                ...(result.outstandingAmountKobo ? [['Outstanding amount', <Money key="amt" kobo={result.outstandingAmountKobo} />] as [string, React.ReactNode]] : []),
+              ]}
+            />
+
+            {result.obligations && result.obligations.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '0 0 6px' }}>
+                  Your registered tax obligations
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.84rem', lineHeight: 1.8 }}>
+                  {result.obligations.map((name) => (
+                    <li key={name}>{name}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {result.eligibleProgrammes && result.eligibleProgrammes.length > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <Alert kind="info" title="You qualify for government benefits">
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.84rem', lineHeight: 1.8 }}>
+                    {result.eligibleProgrammes.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                </Alert>
+              </div>
+            )}
+
+            <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
+              For questions about your account, visit any PSIRS office or contact an authorised revenue agent.
+            </p>
+          </div>
+        )}
+
+        <div style={{ marginTop: 20, borderTop: '1px solid var(--border, #e0e0e0)', paddingTop: 14, textAlign: 'center' }}>
+          <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '0 0 8px' }}>
+            Also available:
+          </p>
+          <a href="#/verify" style={{ fontSize: '0.8rem' }}>Verify a payment receipt →</a>
+        </div>
       </div>
     </div>
   );

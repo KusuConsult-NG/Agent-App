@@ -28,7 +28,7 @@ import { AuditScreen, FraudScreen } from './screens/Oversight';
 import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
-import { RefereePortalScreen, VerifyScreen } from './screens/Public';
+import { CitizenPortalScreen, RefereePortalScreen, VerifyScreen } from './screens/Public';
 
 export function App() {
   const [route, navigate] = useRoute();
@@ -71,9 +71,11 @@ export function App() {
   // Public routes, resolved before authentication.
   const verifyMatch = matchRoute(route, '/verify/:code') ?? matchRoute(route, '/verify');
   const refereeMatch = matchRoute(route, '/referee/:token');
+  const citizenMatch = matchRoute(route, '/citizen');
 
   if (refereeMatch) return <RefereePortalScreen token={refereeMatch.token!} />;
   if (verifyMatch) return <VerifyScreen code={verifyMatch.code} />;
+  if (citizenMatch) return <CitizenPortalScreen />;
 
   if (restoring) {
     return (

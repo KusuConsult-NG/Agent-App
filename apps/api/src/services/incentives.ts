@@ -271,11 +271,14 @@ export async function createProgramme(params: {
  * Evaluate a taxpayer against a programme, recording the reasons either way
  * (PRD §41: "The system should record why a citizen qualifies").
  */
-export async function evaluateEligibility(params: {
-  programmeId: string;
-  taxpayerId: string;
-}): Promise<{ eligible: boolean; reasons: string[]; score: number }> {
-  return withTransaction(async (client) => {
+export async function evaluateEligibility(
+  params: {
+    programmeId: string;
+    taxpayerId: string;
+  },
+  existingClient?: PoolClient,
+): Promise<{ eligible: boolean; reasons: string[]; score: number }> {
+  const evaluate = async (client: PoolClient) => {
     const programme = await queryOne<{
       id: string;
       name: string;
@@ -384,7 +387,41 @@ export async function evaluateEligibility(params: {
     );
 
     return { eligible, reasons, score: compliance.score };
-  });
+  };
+
+  if (existingClient) {
+    return evaluate(existingClient);
+  }
+  return withTransaction(evaluate);
+}
+
+/**
+ * Automatically recompute a taxpayer's compliance score and re-evaluate all active
+ * social incentive programmes. This directly ties revenue payments and compliance
+ * to government benefits eligibility (e.g. Health Insurance, Fertilizer Subsidy).
+ */
+export async function syncTaxpayerComplianceAndIncentives(
+  dbOrClient: Db,
+  taxpayerId: string,
+): Promise<{ score: number; eligibleProgrammes: number }> {
+  const sync = async (client: PoolClient) => {
+    const compliance = await computeComplianceScore(client, taxpayerId);
+    const activeProgrammes = await query<{ id: string }>(
+      client,
+      `SELECT id FROM incentive_programmes WHERE status = 'ACTIVE'`,
+    );
+    let eligibleCount = 0;
+    for (const prog of activeProgrammes) {
+      const result = await evaluateEligibility({ programmeId: prog.id, taxpayerId }, client);
+      if (result.eligible) eligibleCount++;
+    }
+    return { score: compliance.score, eligibleProgrammes: eligibleCount };
+  };
+
+  if ('release' in dbOrClient && typeof (dbOrClient as PoolClient).release === 'function') {
+    return sync(dbOrClient as PoolClient);
+  }
+  return withTransaction(sync);
 }
 
 export async function listProgrammes(db: Db, options: { status?: string } = {}) {

@@ -96,15 +96,26 @@ export function idempotent(scope: string, options: { required?: boolean } = {}) 
       }
 
       try {
-        await pool.query(
+        const insertResult = await pool.query(
           `INSERT INTO idempotency_keys (scope, idempotency_key, user_id, request_hash, status)
            VALUES ($1, $2, $3, $4, 'IN_PROGRESS')
            ON CONFLICT (scope, idempotency_key)
            DO UPDATE SET status = 'IN_PROGRESS', request_hash = EXCLUDED.request_hash
-           WHERE idempotency_keys.status = 'FAILED'`,
+           WHERE idempotency_keys.status = 'FAILED'
+           RETURNING id`,
           [scope, key, userId, requestHash],
         );
-      } catch {
+
+        if ((insertResult.rowCount ?? 0) === 0) {
+          throw new AppError({
+            statusCode: 409,
+            code: 'REQUEST_IN_PROGRESS',
+            message: 'A request with this idempotency key is already being processed.',
+            moneyStatus: 'UNCONFIRMED',
+          });
+        }
+      } catch (err) {
+        if (err instanceof AppError) throw err;
         throw new AppError({
           statusCode: 409,
           code: 'REQUEST_IN_PROGRESS',

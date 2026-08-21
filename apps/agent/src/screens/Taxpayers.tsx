@@ -165,6 +165,16 @@ export function RegisterTaxpayerScreen({
   const [result, setResult] = useState<{ taxpayerId: string; tin: string | null } | null>(null);
   const [savedOffline, setSavedOffline] = useState(false);
 
+  // Sector taxonomy fetched once on mount.
+  const [sectors, setSectors] = useState<{
+    code: string;
+    label: string;
+    hausa: string;
+    suggestedItems: { id: string; code: string; name: string; frequency: string }[];
+  }[]>([]);
+  // Obligation IDs the agent has confirmed for this registration.
+  const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
+
   const [form, setForm] = useState({
     hasTin: false,
     existingTin: '',
@@ -183,6 +193,7 @@ export function RegisterTaxpayerScreen({
     lgaId: '',
     wardId: '',
     community: '',
+    economicSector: '',
     occupation: '',
     businessActivity: '',
     consentGiven: false,
@@ -194,6 +205,11 @@ export function RegisterTaxpayerScreen({
       .then((response) => (response.ok ? response.json() : []))
       .then(setLgas)
       .catch(() => setLgas([]));
+
+    fetch('/api/v1/taxpayers/sectors')
+      .then((response) => (response.ok ? response.json() : []))
+      .then(setSectors)
+      .catch(() => setSectors([]));
   }, []);
 
   /*
@@ -244,8 +260,10 @@ export function RegisterTaxpayerScreen({
       lgaId: form.lgaId,
       wardId: form.wardId || undefined,
       community: form.community || undefined,
+      economicSector: form.economicSector || undefined,
       occupation: form.occupation || undefined,
       businessActivity: form.businessActivity || undefined,
+      taxObligationIds: selectedObligations.length > 0 ? selectedObligations : undefined,
       identityType: form.identityNumber ? form.identityType : undefined,
       identityNumber: form.identityNumber || undefined,
       existingTin: form.hasTin && form.existingTin ? form.existingTin : undefined,
@@ -599,20 +617,84 @@ export function RegisterTaxpayerScreen({
           </>
         )}
 
-        {step === 4 && (
-          <>
-            <h2 className="card__title">Business or activity</h2>
-            <Field label="Occupation">
-              <input value={form.occupation} onChange={(event) => set('occupation', event.target.value)} />
-            </Field>
-            <Field label="Business activity">
-              <input
-                value={form.businessActivity}
-                onChange={(event) => set('businessActivity', event.target.value)}
-              />
-            </Field>
-          </>
-        )}
+        {step === 4 && (() => {
+          const selectedSector = sectors.find((s) => s.code === form.economicSector);
+          return (
+            <>
+              <h2 className="card__title">Business or activity</h2>
+              <Field label="Economic sector">
+                <select
+                  value={form.economicSector}
+                  onChange={(event) => {
+                    set('economicSector', event.target.value);
+                    // Reset obligation selections when sector changes.
+                    setSelectedObligations([]);
+                    // Pre-select all suggested items for the new sector.
+                    const newSector = sectors.find((s) => s.code === event.target.value);
+                    if (newSector) {
+                      setSelectedObligations(newSector.suggestedItems.map((item) => item.id));
+                    }
+                  }}
+                >
+                  <option value="">— Select sector —</option>
+                  {sectors.map((sector) => (
+                    <option key={sector.code} value={sector.code}>
+                      {sector.label} ({sector.hausa})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              {selectedSector && selectedSector.suggestedItems.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '0 0 8px', color: 'var(--ink)' }}>
+                    Suggested tax obligations for {selectedSector.label}
+                  </p>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 10px' }}>
+                    Confirm which taxes apply to this taxpayer. You can add more later.
+                  </p>
+                  {selectedSector.suggestedItems.map((item) => (
+                    <label
+                      key={item.id}
+                      style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '7px 0', fontSize: '0.86rem', cursor: 'pointer' }}
+                    >
+                      <input
+                        type="checkbox"
+                        style={{ width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
+                        checked={selectedObligations.includes(item.id)}
+                        onChange={(event) => {
+                          setSelectedObligations(
+                            event.target.checked
+                              ? [...selectedObligations, item.id]
+                              : selectedObligations.filter((id) => id !== item.id),
+                          );
+                        }}
+                      />
+                      <span>
+                        <strong>{item.name}</strong>{' '}
+                        <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
+                          {item.frequency.toLowerCase().replace('_', '-')}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ marginTop: 16 }}>
+                <Field label="Occupation (optional)">
+                  <input value={form.occupation} onChange={(event) => set('occupation', event.target.value)} />
+                </Field>
+              </div>
+              <Field label="Business activity (optional)">
+                <input
+                  value={form.businessActivity}
+                  onChange={(event) => set('businessActivity', event.target.value)}
+                />
+              </Field>
+            </>
+          );
+        })()}
 
         {step === 5 && (
           <>

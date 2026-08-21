@@ -25,6 +25,7 @@ import * as support from '../services/support';
 import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
 import { integrationStatus } from '../integrations';
+import { sendDueReminders } from '../services/reminders';
 
 export const governmentRouter = Router();
 
@@ -869,6 +870,118 @@ governmentRouter.post(
       res.json({ status: data.status });
     },
   ),
+);
+
+// ---------------------------------------------------------------------------
+// Social programme beneficiaries and evaluation
+// ---------------------------------------------------------------------------
+
+governmentRouter.get(
+  '/programmes/:id/beneficiaries',
+  requirePermission('incentive:read:all'),
+  validateQuery(
+    z.object({
+      eligible: z.enum(['true', 'false']).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+      offset: z.coerce.number().int().min(0).default(0),
+    }),
+    async (req, res, data) => {
+      const eligibleOnly = data.eligible !== 'false'; // default: only eligible
+      const rows = await query<{
+        taxpayer_id: string;
+        tin: string | null;
+        name: string;
+        lga_name: string;
+        score: number | null;
+        eligible: boolean;
+        reasons: unknown;
+        evaluated_at: Date;
+      }>(
+        pool,
+        `SELECT
+           pe.taxpayer_id,
+           t.tin,
+           COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name,'')) AS name,
+           l.name AS lga_name,
+           tc.score,
+           pe.eligible,
+           pe.reasons,
+           pe.evaluated_at
+         FROM programme_eligibility pe
+         JOIN taxpayers t ON t.id = pe.taxpayer_id
+         JOIN lgas l ON l.id = t.lga_id
+         LEFT JOIN taxpayer_compliance tc ON tc.taxpayer_id = pe.taxpayer_id
+         WHERE pe.programme_id = $1
+           AND ($4::boolean IS NULL OR pe.eligible = $4)
+         ORDER BY tc.score DESC NULLS LAST
+         LIMIT $2 OFFSET $3`,
+        [req.params.id, data.limit, data.offset, eligibleOnly ? true : null],
+      );
+      res.json({ beneficiaries: rows, total: rows.length, limit: data.limit, offset: data.offset });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/programmes/:id/evaluate-all',
+  requirePermission('incentive:configure'),
+  asyncHandler(async (req, res) => {
+    const programme = await queryOne<{ id: string; name: string }>(
+      pool,
+      `SELECT id, name FROM incentive_programmes WHERE id = $1`,
+      [req.params.id],
+    );
+    if (!programme) throw notFound('Incentive programme');
+
+    // Queue in background — can take minutes for large datasets.
+    const taxpayerIds = await query<{ id: string }>(
+      pool,
+      `SELECT id FROM taxpayers WHERE status = 'ACTIVE' AND tin IS NOT NULL`,
+    );
+
+    let evaluated = 0;
+    for (const { id: taxpayerId } of taxpayerIds) {
+      try {
+        await incentives.evaluateEligibility({ programmeId: req.params.id, taxpayerId });
+        evaluated++;
+      } catch {
+        // Non-fatal — one taxpayer failure should not abort the batch.
+      }
+    }
+
+    await withTransaction(async (client) => {
+      await recordAudit(client, {
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        action: 'incentive.bulk_evaluated',
+        entityType: 'incentive_programme',
+        entityId: req.params.id,
+        newValue: { evaluated },
+      });
+    });
+
+    res.json({
+      programme: programme.name,
+      evaluated,
+      message: `Evaluated ${evaluated} taxpayer(s) against this programme.`,
+    });
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Tax reminder trigger (on-demand)
+// ---------------------------------------------------------------------------
+
+governmentRouter.post(
+  '/reminders/send-due',
+  requirePermission('support:manage'),
+  asyncHandler(async (_req, res) => {
+    const result = await sendDueReminders();
+    res.json({
+      ...result,
+      message: `${result.sent} reminder(s) queued, ${result.skipped} skipped (errors or daily levies).`,
+    });
+  }),
 );
 
 // ---------------------------------------------------------------------------

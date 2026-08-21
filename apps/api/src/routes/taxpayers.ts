@@ -2,6 +2,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
+import { ECONOMIC_SECTORS } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
 import { authenticate, requireActiveAgent, requirePermission } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
@@ -9,12 +10,45 @@ import { asyncHandler, emailSchema, phoneSchema, uuidSchema, validateBody, valid
 import { badRequest, forbidden } from '../lib/errors';
 import * as taxpayers from '../services/taxpayers';
 import * as vehicles from '../services/vehicles';
+import * as obligations from '../services/obligations';
 import { vehicleCaptureSchema } from './vehicles';
 import { evaluateRegistrationRisk } from '../services/fraud';
-import { getTaxpayerIncentives } from '../services/incentives';
+import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 import { queueNotification } from '../services/notifications';
 
 export const taxpayerRouter = Router();
+
+/**
+ * Economic sector taxonomy with live revenue item suggestions.
+ *
+ * This endpoint is unauthenticated (the taxonomy is public reference data) and is
+ * used by the Agent PWA to populate the sector dropdown and pre-select
+ * applicable revenue items during taxpayer onboarding.
+ */
+taxpayerRouter.get(
+  '/sectors',
+  asyncHandler(async (_req, res) => {
+    const allCodes = [...new Set(ECONOMIC_SECTORS.flatMap((s) => [...s.suggestedRevenueCodes]))];
+    const items = await query<{ id: string; code: string; name: string; frequency: string }>(
+      pool,
+      `SELECT id, code, name, frequency FROM revenue_items
+        WHERE code = ANY($1::text[]) AND status = 'ACTIVE'`,
+      [allCodes],
+    );
+    const byCode = new Map(items.map((item) => [item.code, item]));
+
+    const sectors = ECONOMIC_SECTORS.map((sector) => ({
+      code: sector.code,
+      label: sector.label,
+      hausa: sector.hausa,
+      suggestedItems: sector.suggestedRevenueCodes
+        .map((code) => byCode.get(code))
+        .filter(Boolean),
+    }));
+
+    res.json(sectors);
+  }),
+);
 
 taxpayerRouter.use(authenticate);
 
@@ -39,6 +73,8 @@ const taxpayerInputSchema = z
     community: z.string().max(120).optional(),
     occupation: z.string().max(120).optional(),
     businessActivity: z.string().max(200).optional(),
+    economicSector: z.string().max(80).optional(),
+    taxObligationIds: z.array(uuidSchema).max(50).optional(),
     identityType: z.enum(['NIN', 'BVN', 'PASSPORT', 'DRIVERS_LICENCE', 'VOTERS_CARD', 'OTHER']).optional(),
     identityNumber: z.string().min(5).max(30).optional(),
     consentGiven: z.boolean(),
@@ -100,6 +136,20 @@ taxpayerRouter.post(
     });
 
     await withTransaction(async (client) => {
+      if (data.economicSector) {
+        await client.query('UPDATE taxpayers SET economic_sector = $1 WHERE id = $2', [
+          data.economicSector,
+          result.taxpayerId,
+        ]);
+      }
+      if (data.taxObligationIds && data.taxObligationIds.length > 0) {
+        await obligations.upsertObligations(
+          result.taxpayerId,
+          data.taxObligationIds,
+          'AGENT_ONBOARDING',
+          req.auth!.userId,
+        );
+      }
       await evaluateRegistrationRisk(client, {
         taxpayerId: result.taxpayerId,
         agentId: req.agent?.agentId ?? null,
@@ -114,6 +164,8 @@ taxpayerRouter.post(
           entityId: result.taxpayerId,
         });
       }
+      // Compute initial compliance & incentive eligibility for the new taxpayer.
+      await syncTaxpayerComplianceAndIncentives(client, result.taxpayerId);
     });
 
     res.status(201).json(result);
@@ -229,6 +281,55 @@ taxpayerRouter.get(
   asyncHandler(async (req, res) => {
     res.json(await getTaxpayerIncentives(pool, req.params.id));
   }),
+);
+
+// ---------------------------------------------------------------------------
+// Economic sector reference (public — used by Agent PWA dropdown)
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Tax obligation management (PRD §10)
+// ---------------------------------------------------------------------------
+
+taxpayerRouter.get(
+  '/:id/obligations',
+  requirePermission('taxpayer:read:assigned', 'taxpayer:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json(await obligations.getObligationsForTaxpayer(pool, req.params.id));
+  }),
+);
+
+taxpayerRouter.put(
+  '/:id/obligations',
+  requirePermission('taxpayer:update', 'taxpayer:manage'),
+  validateBody(
+    z.object({
+      itemIds: z.array(z.string().uuid()).max(50),
+      source: z.enum(['AGENT_ONBOARDING', 'OFFICER_REVIEW', 'AUTO_RECOMMENDATION']).default('OFFICER_REVIEW'),
+    }),
+    async (req, res, data) => {
+      // Agents may only update obligations for taxpayers they registered.
+      if (req.auth!.role === 'agent') {
+        const owns = await queryOne<{ id: string }>(
+          pool,
+          `SELECT t.id FROM taxpayers t
+           JOIN agents a ON a.id = t.registered_by_agent_id
+           WHERE t.id = $1 AND a.user_id = $2`,
+          [req.params.id, req.auth!.userId],
+        );
+        if (!owns) throw forbidden('Agents can only set obligations for their own registered taxpayers.');
+      }
+
+      const result = await obligations.upsertObligations(
+        req.params.id,
+        data.itemIds,
+        data.source,
+        req.auth!.userId,
+      );
+      await syncTaxpayerComplianceAndIncentives(pool, req.params.id);
+      res.json({ ...result, message: `${result.added} obligation(s) added, ${result.waived} waived.` });
+    },
+  ),
 );
 
 // ---------------------------------------------------------------------------

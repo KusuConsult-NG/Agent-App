@@ -18,6 +18,7 @@ import {
   type ConnectionState,
 } from './lib/device';
 import { pendingDrafts, requestBackgroundSync, syncDrafts } from './lib/drafts';
+import { useI18n } from './lib/i18n';
 import { matchRoute, useRoute } from './router';
 import { Alert, Icons } from './ui';
 import { ApplyScreen, LoginScreen } from './screens/Auth';
@@ -38,6 +39,7 @@ interface VersionState {
 
 export function App() {
   const [route, navigate] = useRoute();
+  const { lang, t, setLanguage } = useI18n();
   const [session, setSession] = useState<Session['user'] | null>(getUser());
   const [restoring, setRestoring] = useState(hasStoredSession());
   const [connection, setConnection] = useState<ConnectionState>(detectConnectionState);
@@ -105,18 +107,14 @@ export function App() {
 
   const nav = useMemo(
     () => [
-      { path: '/', label: 'Home', icon: Icons.home },
-      { path: '/taxpayers', label: 'Taxpayers', icon: Icons.people },
-      { path: '/collect', label: 'Collect', icon: Icons.collect },
-      { path: '/receipts', label: 'Receipts', icon: Icons.receipt },
+      { path: '/', label: t.home, icon: Icons.home },
+      { path: '/taxpayers', label: t.taxpayers, icon: Icons.people },
+      { path: '/collect', label: t.collect, icon: Icons.collect },
+      { path: '/receipts', label: t.receipts, icon: Icons.receipt },
       { path: '/commission', label: 'Commission', icon: Icons.wallet },
-      // Profile is the way in to device registration, bank details and
-      // support. The API names it when it refuses a collection from an
-      // unregistered phone and when it cannot pay commission, so it has to be
-      // somewhere an agent can actually tap.
       { path: '/profile', label: 'Profile', icon: Icons.profile },
     ],
-    [],
+    [t],
   );
 
   if (restoring) {
@@ -149,6 +147,15 @@ export function App() {
             <h1 className="app-header__title">PSIRS Revenue Agent</h1>
             <p className="app-header__subtitle">{session.fullName}</p>
           </div>
+          <button
+            type="button"
+            className="ghost"
+            style={{ color: '#fff', width: 'auto', padding: '4px 8px', fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', marginRight: '6px' }}
+            onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
+            aria-label="Switch Language"
+          >
+            {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
+          </button>
           <button
             type="button"
             className="ghost"

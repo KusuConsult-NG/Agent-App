@@ -36,7 +36,11 @@ export type NotificationEvent =
   | 'REFEREE_CLEARED'
   | 'KYC_ACTION_REQUIRED'
   | 'DEVICE_REGISTERED'
-  | 'SUPPORT_TICKET_UPDATED';
+  | 'SUPPORT_TICKET_UPDATED'
+  | 'TAX_REMINDER_6W'
+  | 'TAX_REMINDER_4W'
+  | 'TAX_REMINDER_2W'
+  | 'TAX_OBLIGATION_ASSIGNED';
 
 /**
  * Render `{{placeholders}}` from a template.
@@ -144,7 +148,9 @@ export async function queueNotification(
 
   for (const template of templates) {
     const recipient =
-      template.channel === 'EMAIL' ? recipientEmail : recipientPhone ?? recipientEmail;
+      template.channel === 'EMAIL'
+        ? recipientEmail
+        : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
     if (!recipient) continue;
 
     await client.query(

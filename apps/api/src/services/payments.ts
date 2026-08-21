@@ -51,6 +51,7 @@ import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { metrics } from '../lib/metrics';
 import { reportError } from './error-reporting';
+import { syncTaxpayerComplianceAndIncentives } from './incentives';
 
 export interface InitiatePaymentParams {
   transactionId: string;
@@ -671,9 +672,14 @@ async function verifyAndRecord(params: {
         },
       });
 
+      const taxpayerId = await taxpayerIdFor(client, payment.transaction_id);
+      if (taxpayerId) {
+        await syncTaxpayerComplianceAndIncentives(client, taxpayerId);
+      }
+
       await queueNotification(client, {
         event: 'PAYMENT_SUCCESSFUL',
-        taxpayerId: await taxpayerIdFor(client, payment.transaction_id),
+        taxpayerId,
         entityType: 'transaction',
         entityId: payment.transaction_id,
         variables: {

@@ -26,7 +26,7 @@
 export type DeliveryOutcome = 'SENT' | 'REJECTED' | 'UNAVAILABLE';
 
 export interface DeliveryRequest {
-  channel: 'SMS' | 'EMAIL' | 'PUSH';
+  channel: 'SMS' | 'EMAIL' | 'PUSH' | 'WHATSAPP';
   recipient: string;
   subject?: string | null;
   message: string;

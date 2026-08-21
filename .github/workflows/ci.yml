@@ -90,10 +90,17 @@ jobs:
 
       - name: Run tests
         # API: unit, full-lifecycle integration, agent scope containment,
-        # integration adapters. Agent PWA: the offline capture queue, which runs
-        # on a phone with no signal where a silent failure loses a citizen's
-        # registration and nobody finds out.
+        # integration adapters. Agent PWA: the offline capture queue.
+        # Portal: routing and RBAC permission checks.
         run: npm test
+
+      - name: Verify automated backup and disaster recovery restore
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: postgres
+          PGPASSWORD: postgres
+        run: bash deploy/backup/verify-backup.sh
 
       - name: Build all workspaces
         run: npm run build

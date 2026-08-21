@@ -10,7 +10,7 @@
 import { createApp } from './app';
 import { config, envFileLoaded } from './config';
 import { describeDatabase } from './env';
-import { closePool, pool } from './db/pool';
+import { closePool, pool, withJobLock, withTransaction } from './db/pool';
 import { runMigrations } from './db/migrate';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
@@ -18,7 +18,7 @@ import { runFraudSweep } from './services/fraud';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
-import { withJobLock, withTransaction } from './db/pool';
+import { sendDueReminders } from './services/reminders';
 import { log } from './lib/logger';
 import { metrics } from './lib/metrics';
 import { reportError } from './services/error-reporting';
@@ -53,6 +53,14 @@ const WORKER_INTERVALS = {
    * one is still running.
    */
   reconciliationSweep: 6 * 60 * 60_000,
+  /**
+   * Tax due-date reminder sweep.
+   *
+   * Runs every 6 hours — the same cadence as reconciliation — so reminders
+   * land within hours of entering a window, not the next day. Each invoice
+   * window is flagged after the first send, so re-running never duplicates.
+   */
+  reminderSweep: 6 * 60 * 60_000,
 };
 
 /**
@@ -67,62 +75,66 @@ const WORKER_INTERVALS = {
 const SYSTEM_ACTOR = { actorId: null as string | null, actorRole: 'system' };
 
 /**
- * Run one scheduled job: once across the fleet, timed, and never able to take
- * the process down.
+ * Schedule a background job behind an advisory lock.
  *
- * Three things every worker needs and none of them used to have.
- *
- * The lock is the important one. These were bare `setInterval` callbacks, which
- * is a correct arrangement for exactly one instance and no arrangement at all
- * for the second. `withJobLock` returns null rather than waiting when another
- * instance is already running the same sweep, because a sweep that has just run
- * elsewhere does not need running again.
- *
- * The timing and outcome go to metrics, so "the reconciliation sweep stopped
- * running three days ago" becomes an alert instead of a discovery. A worker
- * that throws is reported, because a background failure has nobody watching a
- * screen for it.
+ * Multiple replicas of the API can run simultaneously; without locking, every
+ * replica would dispatch the same queued notification, promote the same
+ * commission and retry the same refund. Each job takes a session-level
+ * advisory lock keyed to its name, executes, records its timing, and releases.
+ * If another instance holds the lock, this tick is skipped quietly.
  */
-async function runJob(name: string, job: () => Promise<string | null>): Promise<void> {
-  const startedAt = Date.now();
-  try {
-    const outcome = await withJobLock(name, job);
-    if (!outcome.ran) {
-      log.debug('job skipped; another instance holds it', { component: `worker.${name}` });
-      return;
+function schedule(
+  name: string,
+  intervalMs: number,
+  task: () => Promise<string | null | void>,
+): NodeJS.Timeout {
+  const run = async () => {
+    const startedAt = process.hrtime.bigint();
+    try {
+      const outcome = await withJobLock(name, task);
+      if (!outcome.ran) {
+        log.debug('job skipped; another instance holds it', { component: 'worker', job: name });
+        return;
+      }
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      metrics.workerRun(name, 'success', durationMs);
+      if (outcome.value) {
+        log.info(String(outcome.value), {
+          component: 'worker',
+          job: name,
+          durationMs: Math.round(durationMs),
+        });
+      }
+    } catch (error) {
+      const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+      metrics.workerRun(name, 'failure', durationMs);
+      log.error('job failed', { component: 'worker', job: name, durationMs: Math.round(durationMs), error });
+      reportError({
+        message: `Background worker '${name}' failed`,
+        error,
+        component: `worker.${name}`,
+      });
     }
+  };
 
-    // Recorded whether or not the job had anything to say. A worker that runs
-    // every five minutes and finds nothing to do is the healthy case, and it
-    // still has to show up in `psirs_worker_last_run_*` — otherwise an alert on
-    // "this worker has not run recently" fires on the workers that are working.
-    metrics.workerRun(name, 'success', Date.now() - startedAt);
-    if (outcome.value) {
-      log.info(outcome.value, { component: `worker.${name}`, durationMs: Date.now() - startedAt });
-    }
-  } catch (error) {
-    metrics.workerRun(name, 'failure', Date.now() - startedAt);
-    log.error('job failed', { component: `worker.${name}`, error });
-    reportError({
-      message: `Background job "${name}" failed`,
-      error,
-      component: `worker.${name}`,
-    });
-  }
+  // Run shortly after boot rather than waiting out the full interval, so
+  // pending items left over from before a restart are picked up promptly.
+  const initialDelay = Math.min(intervalMs, 5_000 + Math.floor(Math.random() * 5_000));
+  const initial = setTimeout(() => void run(), initialDelay);
+  initial.unref();
+
+  const interval = setInterval(() => void run(), intervalMs);
+  interval.unref();
+  return interval;
 }
 
-/** Start a job on an interval, and run it once at boot so a restart catches up. */
-function schedule(name: string, intervalMs: number, job: () => Promise<string | null>): NodeJS.Timeout {
-  void runJob(name, job);
-  return setInterval(() => void runJob(name, job), intervalMs);
-}
-
-async function main(): Promise<void> {
-  log.info('starting Plateau State Revenue Platform API', {
+async function main() {
+  log.info('booting', {
     component: 'boot',
-    environment: config.env,
-    configuration: envFileLoaded ?? 'environment only (no .env found)',
+    nodeEnv: process.env.NODE_ENV ?? 'development',
     database: describeDatabase(config.database.url),
+    envFileLoaded: envFileLoaded ? 'yes' : 'no (using environment variables)',
+    version: process.env.npm_package_version ?? 'unknown',
   });
 
   // Migrations are an explicit pipeline step in a real deployment (see
@@ -208,6 +220,16 @@ async function main(): Promise<void> {
         `${result.summary?.matched} matched, ${result.summary?.exceptions} exception(s), ` +
         `${result.summary?.unchecked} unchecked, ${result.recovery?.verified ?? 0} payment(s) recovered`
       );
+    }),
+
+    // Remind taxpayers before their invoices expire (6-week, 4-week, 2-week).
+    // The sweep is idempotent: each window is flagged on the invoice after the
+    // first send, so running it more than once never duplicates a reminder.
+    schedule('reminder-sweep', WORKER_INTERVALS.reminderSweep, async () => {
+      const result = await sendDueReminders(pool);
+      return result.sent > 0 || result.skipped > 0
+        ? `${result.sent} reminder(s) sent, ${result.skipped} skipped`
+        : null;
     }),
   ];
 

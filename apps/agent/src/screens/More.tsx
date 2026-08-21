@@ -11,6 +11,8 @@ import {
 } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
+import { bluetoothPrinter } from '../lib/bluetooth-printer';
+import { pushManager } from '../lib/push';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
 
@@ -579,11 +581,65 @@ export function CommissionScreen() {
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
+  const [printerBusy, setPrinterBusy] = useState(false);
+  const [printerMsg, setPrinterMsg] = useState<string | null>(null);
+  const [pushStatus, setPushStatus] = useState(pushManager.getPermission());
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
   const device = describeDevice(APP_VERSION);
 
   useEffect(() => {
     listDrafts().then(setDrafts);
+    const unsub = bluetoothPrinter.subscribe(setPrinterState);
+    return unsub;
   }, []);
+
+  async function connectPrinter() {
+    setPrinterBusy(true);
+    setPrinterMsg(null);
+    try {
+      await bluetoothPrinter.connect();
+      setPrinterMsg('Connected to Bluetooth printer.');
+    } catch (err: any) {
+      setPrinterMsg(err.message || 'Connection failed.');
+    } finally {
+      setPrinterBusy(false);
+    }
+  }
+
+  async function testPrint() {
+    setPrinterBusy(true);
+    setPrinterMsg(null);
+    try {
+      await bluetoothPrinter.printTestSlip();
+      setPrinterMsg('Test receipt sent to printer!');
+    } catch (err: any) {
+      setPrinterMsg(err.message || 'Print failed.');
+    } finally {
+      setPrinterBusy(false);
+    }
+  }
+
+  async function togglePush() {
+    setPushBusy(true);
+    setPushMsg(null);
+    try {
+      if (pushStatus === 'granted') {
+        await pushManager.unsubscribe();
+        setPushStatus('default');
+        setPushMsg('Push notifications disabled.');
+      } else {
+        const ok = await pushManager.subscribe();
+        setPushStatus(ok ? 'granted' : 'denied');
+        setPushMsg(ok ? 'Push notifications active!' : 'Permission was not granted.');
+      }
+    } catch (err: any) {
+      setPushMsg(err.message || 'Could not configure push notifications.');
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   return (
     <>
@@ -599,6 +655,101 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         <a className="button secondary" href="#/application">
           View my application and clearance
         </a>
+      </div>
+
+      <div className="card">
+        <h2 className="card__title">Field Thermal Printer</h2>
+        <p className="card__hint">
+          Pair a 58mm or 80mm Bluetooth ESC/POS mobile belt printer to issue instant paper receipts
+          to taxpayers in remote field locations.
+        </p>
+        <KeyValue
+          items={[
+            ['Status', <Badge status={printerState.status} />],
+            ['Connected Device', printerState.name || 'None'],
+            ['Paper Width', printerState.paperWidth],
+          ]}
+        />
+        {printerMsg && (
+          <p style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}>
+            {printerMsg}
+          </p>
+        )}
+        <div style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}>
+          <select
+            value={printerState.paperWidth}
+            onChange={(e) => bluetoothPrinter.setPaperWidth(e.target.value as any)}
+            style={{ width: 'auto', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--line)' }}
+          >
+            <option value="58mm">58mm (Standard)</option>
+            <option value="80mm">80mm (Wide)</option>
+          </select>
+          {printerState.status === 'connected' ? (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: 'auto' }}
+                disabled={printerBusy}
+                onClick={testPrint}
+              >
+                {printerBusy ? <Spinner /> : 'Print test slip'}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                style={{ width: 'auto' }}
+                onClick={() => bluetoothPrinter.disconnect()}
+              >
+                Disconnect
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="secondary"
+              style={{ width: 'auto' }}
+              disabled={printerBusy || !bluetoothPrinter.isSupported()}
+              onClick={connectPrinter}
+            >
+              {printerBusy ? <Spinner /> : 'Pair Bluetooth Printer'}
+            </button>
+          )}
+        </div>
+        {!bluetoothPrinter.isSupported() && (
+          <p className="field__hint" style={{ marginTop: '8px', color: 'var(--danger)' }}>
+            Web Bluetooth is not supported on this browser (use Chrome on Android or desktop).
+          </p>
+        )}
+      </div>
+
+      <div className="card">
+        <h2 className="card__title">Instant Push Notifications</h2>
+        <p className="card__hint">
+          Receive real-time alerts when your KYC clears, referee responds, or commissions settle.
+        </p>
+        <KeyValue
+          items={[
+            ['Permission', <Badge status={pushStatus === 'granted' ? 'ACTIVE' : 'DISABLED'} />],
+            ['Push Engine', pushManager.isSupported() ? 'Supported' : 'Unavailable'],
+          ]}
+        />
+        {pushMsg && (
+          <p style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}>
+            {pushMsg}
+          </p>
+        )}
+        <div style={{ marginTop: '12px' }}>
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: 'auto' }}
+            disabled={pushBusy || !pushManager.isSupported()}
+            onClick={togglePush}
+          >
+            {pushBusy ? <Spinner /> : pushStatus === 'granted' ? 'Disable Push Notifications' : 'Enable Push Notifications'}
+          </button>
+        </div>
       </div>
 
       <div className="card">

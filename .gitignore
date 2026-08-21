@@ -30,3 +30,4 @@ coverage/
 # receipt the government has issued and must never reach a repository.
 /backups/
 /apps/api/backups/
+scratch/

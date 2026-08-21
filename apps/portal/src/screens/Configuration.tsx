@@ -328,6 +328,9 @@ export function ProgrammesScreen() {
   const [programmes, setProgrammes] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [selectedProgramme, setSelectedProgramme] = useState<any | null>(null);
+  const [beneficiaries, setBeneficiaries] = useState<any[] | null>(null);
+  const [evaluating, setEvaluating] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
@@ -342,13 +345,39 @@ export function ProgrammesScreen() {
     load();
   }, [load]);
 
+  async function viewBeneficiaries(programme: any) {
+    setSelectedProgramme(programme);
+    setBeneficiaries(null);
+    const result = await api.get<{ beneficiaries: any[] }>(
+      `/government/programmes/${programme.id}/beneficiaries?limit=100`,
+    );
+    setBeneficiaries(result.beneficiaries);
+  }
+
+  async function evaluateAll(programme: any) {
+    setEvaluating(programme.id);
+    try {
+      const result = await api.post<{ evaluated: number; message: string }>(
+        `/government/programmes/${programme.id}/evaluate-all`,
+        {},
+      );
+      setMessage(result.message);
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setEvaluating(null);
+    }
+  }
+
   return (
     <>
       <div className="card">
         <h2 className="card__title">Social incentive programmes</h2>
         <p className="card__hint">
           Programmes record who qualifies for a government benefit and why. They add entitlement —
-          they never withdraw a service.
+          they never withdraw a service. Each citizen with a TIN who meets the criteria automatically
+          qualifies when evaluated.
         </p>
         <Alert kind="info" title="Essential services are protected">
           <p style={{ margin: 0 }}>
@@ -378,27 +407,46 @@ export function ProgrammesScreen() {
                 label: 'Requires no arrears',
                 render: (row) => (row.requires_no_arrears ? 'Yes' : 'No'),
               },
-              { key: 'approval_authority', label: 'Approval authority' },
-              { key: 'eligible_taxpayers', label: 'Eligible taxpayers', numeric: true },
+              { key: 'eligible_taxpayers', label: 'Eligible', numeric: true },
               { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
                 label: '',
-                render: (row) =>
-                  can('incentive:configure') ? (
+                render: (row) => (
+                  <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
                       className="small secondary"
-                      onClick={async () => {
-                        const next = row.status === 'ACTIVE' ? 'CLOSED' : 'ACTIVE';
-                        await api.post(`/government/programmes/${row.id}/status`, { status: next });
-                        setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
-                        load();
-                      }}
+                      onClick={() => void viewBeneficiaries(row)}
                     >
-                      {row.status === 'ACTIVE' ? 'Close' : 'Activate'}
+                      Beneficiaries
                     </button>
-                  ) : null,
+                    {can('incentive:configure') && (
+                      <>
+                        <button
+                          type="button"
+                          className="small secondary"
+                          disabled={evaluating === row.id}
+                          onClick={() => void evaluateAll(row)}
+                        >
+                          {evaluating === row.id ? 'Evaluating…' : 'Evaluate all'}
+                        </button>
+                        <button
+                          type="button"
+                          className="small secondary"
+                          onClick={async () => {
+                            const next = row.status === 'ACTIVE' ? 'CLOSED' : 'ACTIVE';
+                            await api.post(`/government/programmes/${row.id}/status`, { status: next });
+                            setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
+                            load();
+                          }}
+                        >
+                          {row.status === 'ACTIVE' ? 'Close' : 'Activate'}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ),
               },
             ]}
             rows={programmes}
@@ -406,6 +454,52 @@ export function ProgrammesScreen() {
           />
         )}
       </div>
+
+      {/* Beneficiaries inline panel */}
+      {selectedProgramme && (
+        <div className="card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0 }}>
+              Beneficiaries — {selectedProgramme.name}
+            </h3>
+            <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>
+              Close
+            </button>
+          </div>
+          {!beneficiaries ? (
+            <Loading rows={3} />
+          ) : beneficiaries.length === 0 ? (
+            <p style={{ color: 'var(--muted)', fontSize: '0.87rem' }}>
+              No eligible taxpayers yet. Run "Evaluate all" to assess the active taxpayer population.
+            </p>
+          ) : (
+            <Table
+              columns={[
+                { key: 'tin', label: 'TIN', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
+                { key: 'name', label: 'Name' },
+                { key: 'lga_name', label: 'LGA' },
+                { key: 'score', label: 'Score', numeric: true, render: (row) => row.score ?? '—' },
+                {
+                  key: 'eligible',
+                  label: 'Eligible',
+                  render: (row) => (
+                    <span style={{ color: row.eligible ? 'var(--success, #1a7f3c)' : 'var(--danger, #c0392b)', fontWeight: 600 }}>
+                      {row.eligible ? '✓ Yes' : '✗ No'}
+                    </span>
+                  ),
+                },
+                {
+                  key: 'evaluated_at',
+                  label: 'Evaluated',
+                  render: (row) => new Date(row.evaluated_at).toLocaleDateString('en-NG'),
+                },
+              ]}
+              rows={beneficiaries}
+              empty="No beneficiaries found."
+            />
+          )}
+        </div>
+      )}
     </>
   );
 }

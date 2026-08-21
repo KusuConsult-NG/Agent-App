@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { bluetoothPrinter } from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
@@ -539,7 +540,7 @@ export function TransactionScreen({
       </div>
 
       {paid && transaction.document_id && (
-        <div className="button-row">
+        <div className="button-row" style={{ flexWrap: 'wrap', gap: '8px' }}>
           <a
             className="button"
             href={`/api/v1/receipts/${transaction.receipt_id}`}
@@ -553,6 +554,43 @@ export function TransactionScreen({
           >
             Download receipt
           </a>
+          <button
+            type="button"
+            className="secondary"
+            onClick={async () => {
+              try {
+                setNotice('Transmitting receipt to Bluetooth printer...');
+                await bluetoothPrinter.printReceipt({
+                  receiptNumber: transaction.receipt_number!,
+                  paymentReference: transaction.transaction_reference,
+                  taxpayerName: name,
+                  taxpayerTin: transaction.tin,
+                  taxpayerPhone: null,
+                  revenueItemName: transaction.revenue_item,
+                  revenueCategoryName: transaction.revenue_category,
+                  amountKobo: transaction.total_amount_kobo,
+                  paymentMethod: transaction.payment_status || 'POS / Online',
+                  channel: 'FIELD_AGENT',
+                  lgaName: 'Plateau State',
+                  wardName: null,
+                  agentName: 'Authorized Field Officer',
+                  agentCode: 'AGT',
+                  issuedAt: new Date().toISOString(),
+                  verificationUrl: `http://localhost:5174/#/verify/${transaction.receipt_code ?? ''}`,
+                  verificationCode: transaction.receipt_code ?? undefined,
+                });
+                setNotice('Receipt printed successfully on Bluetooth printer!');
+              } catch (err: any) {
+                setError({
+                  code: 'PRINT_FAILED',
+                  message: `Bluetooth printing failed: ${err.message || 'Check printer connection'}`,
+                  moneyStatus: 'NOT_APPLICABLE',
+                });
+              }
+            }}
+          >
+            Print (Bluetooth)
+          </button>
           <button
             type="button"
             className="secondary"
