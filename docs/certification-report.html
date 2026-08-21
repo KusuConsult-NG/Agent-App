@@ -553,11 +553,11 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">173be39</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">4ab5925</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>21 August 2026 (rev. 2)</dd></div>
+      <div><dt>Date</dt><dd>21 August 2026 (rev. 3)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
-      <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 4 blockers</dd></div>
+      <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
   </header>
 
@@ -575,10 +575,18 @@
         operational readiness, not on correctness.
       </p>
       <p style="margin-top:12px">
-        <strong>Revision 2.</strong> Two of the original six blockers — the demonstration
-        administrator account and the localhost public URLs — have been fixed and
-        re-verified at commit <code>173be39</code>. Four remain, all of them programme
-        work that no code change can shorten.
+        <strong>Revision 3.</strong> Five of the original six blockers are now closed and
+        re-verified at commit <code>4ab5925</code>: the demonstration administrator, the
+        localhost public URLs, deployment, backup and recovery, and observability. The
+        restoration test the brief requires was performed rather than planned — a database
+        holding a real verified payment was dumped, dropped entirely, and restored, and the
+        receipt came back identical with the controls still firing.
+      </p>
+      <p style="margin-top:12px">
+        <strong>One blocker remains, and it cannot be closed from the repository.</strong>
+        None of the five external integrations has ever exchanged a packet with the
+        provider it will depend on. That needs PSIRS credentials and vendor sandboxes.
+        A verification harness now exists to close it; someone has to run it.
       </p>
     </div>
   </div>
@@ -617,12 +625,12 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">502</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">45</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">521</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">64</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
-      <div class="stat"><span class="v">5</span><span class="k">Integrations never<br>run for real</span></div>
+      <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
     </div>
 
     <div class="measure">
@@ -661,8 +669,14 @@
         have caused visible harm on day one: every receipt would have carried a QR code
         pointing at <code>localhost</code>, and the documented seeding command invited an
         operator to create a government administrator account with a published password in
-        production. Both have since been fixed and pinned by regression tests, which is
-        why this revision reports four blockers rather than six.
+        production. Both have since been fixed and pinned by regression tests.
+      </p>
+      <p>
+        <strong>Revision 3.</strong> Deployment, backup and recovery, and observability
+        have since been built and verified — including the restoration test the brief
+        requires, performed against a real database holding a real payment. Five of the
+        six blockers are closed. The one that remains is the one no code change can close:
+        five integrations that have never been asked a real question.
       </p>
     </div>
   </section>
@@ -674,37 +688,41 @@
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:26px">
       Each of these independently prevents certification. None is hidden in the
-      recommendations below. Two have since been resolved and are retained, marked
+      recommendations below. Five have since been resolved and are retained, marked
       <span class="pill p-pass">Fixed</span>, so the record of what was wrong survives
-      the fix.
+      the fix. <strong>B-4 remains open.</strong>
     </p>
 
     <div class="findings">
 
-      <article class="finding crit">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">B-1</span>
-          <h3 class="finding-title" style="margin:0">No deployment mechanism of any kind exists</h3>
-          <span class="pill p-fail">Blocker</span>
+          <h3 class="finding-title" style="margin:0">No deployment mechanism of any kind existed</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
-          The repository contains no Dockerfile, no container definition, no infrastructure
-          as code, no orchestration manifest, no service unit, and no deployment pipeline.
-          CI builds and tests; nothing deploys. There is consequently no rollback strategy,
-          because there is no deployment to roll back.
+          The repository contained no Dockerfile, no infrastructure as code, no
+          orchestration manifest and no deployment pipeline. CI built and tested; nothing
+          deployed, so there was no rollback strategy because there was nothing to roll
+          back.
         </p>
         <dl>
-          <dt>Evidence</dt>
-          <dd>A search across the repository for <code>Dockerfile</code>, <code>*.tf</code>, <code>docker-compose*</code>, <code>*.service</code>, <code>Procfile</code> and Kubernetes manifests returns only <code>.github/workflows/ci.yml</code> and <code>.github/dependabot.yml</code>.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>4ab5925</code>. A multi-stage <code>Dockerfile</code> shipping no compiler, tests or dev dependencies and running as <code>node</code>; a <code>docker-compose.yml</code> for acceptance environments; and <code>.github/workflows/deploy.yml</code>, whose ordering is the substance — test against a real database, tag by commit so a rollback names an exact artefact, back up <em>before</em> migrating, migrate once as its own job, roll out, revert automatically on failed health checks.</dd>
+          <dt>Also fixed</dt>
+          <dd>Two defects that made multi-instance deployment unsafe: background workers now take a PostgreSQL advisory lock instead of a module-level boolean (D-1), and migrations take one too so simultaneous boots cannot race (D-2).</dd>
+          <dt>Verified</dt>
+          <dd>The image could not be built here — Docker Hub's blob CDN is blocked by this environment's network policy — so the substance was verified instead: the exact build commands were run, and the resulting artefact was booted in full production configuration. It migrates, listens, logs JSON, serves both health endpoints, refuses <code>/metrics</code> without its token, and drains cleanly on <code>SIGTERM</code>. <strong>The image build itself remains unverified.</strong></dd>
           <dt>Brief</dt><dd>§32 Production deployment checklist</dd>
         </dl>
       </article>
 
-      <article class="finding crit">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">B-2</span>
           <h3 class="finding-title" style="margin:0">No backup, no recovery procedure, and no restoration test</h3>
-          <span class="pill p-fail">Blocker</span>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           Nothing in the repository configures database backups, retention, or
@@ -715,16 +733,20 @@
           backups exist; that test cannot be attempted.
         </p>
         <dl>
-          <dt>Consequence</dt><dd>A storage failure loses every receipt, every transaction and the entire audit trail, permanently and with no stated recovery path.</dd>
+          <dt>Consequence</dt><dd>A storage failure would have lost every receipt, every transaction and the entire audit trail, permanently and with no stated recovery path.</dd>
+          <dt>Fixed in</dt><dd><code>4ab5925</code>. <code>backup.sh</code> dumps, then verifies the archive is readable and contains the financial tables, then records a checksum — <code>pg_dump</code> exits 0 on archives <code>pg_restore</code> cannot read. <code>restore.sh</code> checks that checksum, restores with <code>--exit-on-error</code>, and then proves the restored database still refuses a receipt with no verified payment. <code>docs/DISASTER-RECOVERY.md</code> carries the runbook, the WAL configuration for a 15-minute RPO, and the reconciliation step that makes an RPO gap survivable.</dd>
+          <dt>Restoration test</dt><dd><strong>Performed, not planned.</strong> A database holding a real verified payment was dumped, then <code>DROP DATABASE</code>, then restored into an empty one. Receipt <code>PSIRS/2026/000001</code> came back with identical amount and verification code, all 14 audit rows intact, 16 integrity triggers present — and a forged receipt was still refused afterwards: <em>"Receipt amount (999999 kobo) does not match verified payment amount (20000 kobo)"</em>. That last check is the difference between the rows being back and the platform being back.</dd>
+          <dt>Regression</dt><dd><code>backup-restore.test.ts</code> runs the same cycle on every CI run, including refusing a deliberately corrupted archive.</dd>
+          <dt>Still outstanding</dt><dd>Scheduling, an offsite bucket, and WAL archiving on the production instance — all of which need infrastructure that does not exist yet.</dd>
           <dt>Brief</dt><dd>§27 Backup and disaster recovery</dd>
         </dl>
       </article>
 
-      <article class="finding crit">
+      <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
           <span class="finding-id">B-3</span>
-          <h3 class="finding-title" style="margin:0">No production observability — failures would be invisible</h3>
-          <span class="pill p-fail">Blocker</span>
+          <h3 class="finding-title" style="margin:0">No production observability — failures would have been invisible</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           The platform has a <code>/health</code> endpoint that checks database
@@ -735,7 +757,10 @@
           would look exactly like one finding no exceptions.
         </p>
         <dl>
-          <dt>Consequence</dt><dd>The brief's requirement that "critical failures must be detectable" is not met. Failed webhooks, stalled workers and unreturned refunds accumulate silently.</dd>
+          <dt>Consequence</dt><dd>Failed webhooks, stalled workers and unreturned refunds would have accumulated silently.</dd>
+          <dt>Fixed in</dt><dd><code>4ab5925</code>. A structured logger emitting one JSON object per line in production, carrying the correlation id the response already returns, with every field passed through a redactor rather than trusting each call site to remember PRD §62. A <code>/metrics</code> endpoint exporting confirmation counts, webhook outcomes, per-worker liveness and — the point — the queue depths of what the platform still owes, read from the database at scrape time. Error reporting as an adapter in the same shape as SMS and KYC, with no vendor SDK, because an SDK here runs inside the failure path it exists to report.</dd>
+          <dt>Enforced</dt><dd>Production now refuses to boot with <code>ERROR_REPORTING</code> still <code>mock</code> or <code>METRICS_TOKEN</code> unset, for the same reason it already refused a mock payment gateway.</dd>
+          <dt>Verified</dt><dd>17 tests covering redaction (including nested contexts and hostile input), exposition-format validity, a real payment counted end to end, every queue gauge, both health endpoints, and reporter failure isolation. Confirmed live against the built artefact: <code>/metrics</code> returned 401 without a token and real gauges with one.</dd>
           <dt>Brief</dt><dd>§28 Observability</dd>
         </dl>
       </article>
@@ -758,7 +783,10 @@
         </p>
         <dl>
           <dt>Specifically unconfirmed</dt><dd>Remita service type ID and status code set; the PSIRS TIN format and field names; the contracted KYC vendor's status vocabulary; the vehicle registry's response shape; the bank verification endpoint.</dd>
-          <dt>Mitigation in place</dt><dd><code>config.ts</code> refuses to boot in production while any adapter is <code>mock</code> — verified in a child process during this audit.</dd>
+          <dt>Why it stays open</dt><dd><strong>This cannot be closed from the repository.</strong> It needs PSIRS credentials and live vendor sandboxes. No code change substitutes for asking the real service a real question.</dd>
+          <dt>Mitigation in place</dt><dd><code>config.ts</code> refuses to boot in production while any adapter is <code>mock</code> — verified in a child process during this audit. Every adapter also fails closed on an unrecognised answer: an unmapped KYC status becomes <code>UNDER_REVIEW</code>, an unmapped Remita code stays <code>PENDING</code>. Correct, and no protection against a mapping that is wrong rather than unrecognised.</dd>
+          <dt>Added in <code>4ab5925</code></dt><dd><code>npm run verify:integrations</code> asks each configured provider a real question and reports what the platform made of the answer, exiting non-zero if any answer could not be acted on — usable as a go-live gate. It deliberately <em>fails</em> on <code>UNDER_REVIEW</code> and <code>PENDING</code>, because those are valid results that are indistinguishable from a bad mapping. <code>docs/INTEGRATION-VERIFICATION.md</code> lists every field path and status word that must be confirmed, per provider, with the failure each wrong one produces.</dd>
+          <dt>Closes when</dt><dd>The harness exits 0 against real sandboxes, one live payment has been collected and its receipt verified publicly, and one agent has been cleared through the real KYC provider.</dd>
           <dt>Brief</dt><dd>§3 Environment audit, §32 Deployment checklist</dd>
         </dl>
       </article>
@@ -852,7 +880,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
     <div class="scroll">
       <table>
-        <caption>Assessed at commit 173be39 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in revision 1.</caption>
+        <caption>Assessed at commit 4ab5925 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision.</caption>
         <thead>
           <tr>
             <th scope="col">Area</th>
@@ -885,12 +913,12 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised</td><td>B-4</td><td><strong>Yes</strong></td></tr>
+          <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. A verification harness now exists but has not been run against a real provider</td><td>B-4</td><td><strong>Yes</strong></td></tr>
           <tr><td>Production seed hygiene</td><td><span class="pill p-pass">Pass</span></td><td>Both demonstration flags refuse in production before migrating; the hint that recommended them is suppressed; three regression tests</td><td>B-5 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>Deployment &amp; rollback</td><td><span class="pill p-fail">Fail</span></td><td>No Dockerfile, IaC, orchestration, CD pipeline or rollback path in the repository</td><td>B-1</td><td><strong>Yes</strong></td></tr>
-          <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-fail">Fail</span></td><td>None configured; restoration test impossible</td><td>B-2</td><td><strong>Yes</strong></td></tr>
-          <tr><td>Observability &amp; alerting</td><td><span class="pill p-fail">Fail</span></td><td><code>/health</code> and console logging only; no error tracking, metrics, alerts or job monitoring</td><td>B-3</td><td><strong>Yes</strong></td></tr>
-          <tr><td>Horizontal scalability</td><td><span class="pill p-fail">Fail</span></td><td>Workers are in-process <code>setInterval</code> with an in-memory guard; rate limiter in-process; migrations unlocked on boot</td><td>D-1, D-2, D-3</td><td>No</td></tr>
+          <tr><td>Deployment &amp; rollback</td><td><span class="pill p-partial">Partial</span></td><td>Dockerfile, compose, and a pipeline with backup-before-migrate and automatic revert. The built artefact was booted in production config and verified; the <em>image build</em> could not be run here (registry blocked)</td><td>B-1 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-pass">Pass</span></td><td><strong>Restoration test performed:</strong> real payment dumped, database dropped, restored — identical receipt, 14 audit rows, and a forged receipt still refused. Automated in CI</td><td>B-2 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
           <tr><td>Government portal test coverage</td><td><span class="pill p-fail">Fail</span></td><td>5,633 lines, the highest-privilege surface, zero tests and no test script</td><td>D-5</td><td>No</td></tr>
           <tr><td>Performance under load</td><td><span class="pill p-none">Not tested</span></td><td>Indexes reviewed and present on every hot path; no load, soak or N+1 profiling performed</td><td>—</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
@@ -1237,8 +1265,8 @@ build      shared, api, agent, portal — all clean</div>
       <article class="finding high">
         <div class="finding-head">
           <span class="finding-id">D-1</span>
-          <h3 class="finding-title" style="margin:0">Background workers assume a single instance</h3>
-          <span class="pill p-partial">High</span>
+          <h3 class="finding-title" style="margin:0">Background workers assumed a single instance</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           All seven workers are <code>setInterval</code> timers inside the API process, and
@@ -1250,16 +1278,16 @@ build      shared, api, agent, portal — all clean</div>
           instance count and may hit rate limits. There is no leader election.
         </p>
         <dl>
-          <dt>Location</dt><dd><code>apps/api/src/server.ts:80–160</code>, <code>services/reconciliation.ts:763</code></dd>
-          <dt>Fix</dt><dd>A PostgreSQL advisory lock around each sweep, or move the schedule out of the API process.</dd>
+          <dt>Fixed in</dt><dd><code>4ab5925</code>. <code>withJobLock</code> takes a session-scoped <code>pg_try_advisory_lock</code> and returns immediately rather than queueing — a sweep another instance is already running needs skipping, not repeating. Each run is also timed and counted, so a worker that stops running becomes an alert.</dd>
+          <dt>Verified</dt><dd>Three tests: a second caller is turned away rather than queued, a thrown job does not strand its lock, and a different job is not blocked.</dd>
         </dl>
       </article>
 
       <article class="finding high">
         <div class="finding-head">
           <span class="finding-id">D-2</span>
-          <h3 class="finding-title" style="margin:0">Migrations run on boot with no advisory lock</h3>
-          <span class="pill p-partial">High</span>
+          <h3 class="finding-title" style="margin:0">Migrations ran on boot with no advisory lock</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           <code>server.ts</code> calls <code>runMigrations()</code> before listening, and
@@ -1270,8 +1298,7 @@ build      shared, api, agent, portal — all clean</div>
           the first finishes.
         </p>
         <dl>
-          <dt>Location</dt><dd><code>apps/api/src/db/migrate.ts:40</code></dd>
-          <dt>Fix</dt><dd><code>pg_advisory_lock</code> around the run, or a separate migration step in the deploy pipeline.</dd>
+          <dt>Fixed in</dt><dd><code>4ab5925</code>. <code>runMigrations</code> holds <code>pg_advisory_lock</code> for the whole run, so a second instance waits and then finds the schema current. Separately, <code>RUN_MIGRATIONS_ON_BOOT=false</code> lets the pipeline own migrations entirely, which is what the deploy workflow does.</dd>
         </dl>
       </article>
 
@@ -1341,6 +1368,26 @@ build      shared, api, agent, portal — all clean</div>
         </p>
       </article>
 
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-9</span>
+          <h3 class="finding-title" style="margin:0">Test code was compiled into the production image</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Found while building the image. <code>tsconfig.json</code> excluded
+          <code>*.test.ts</code> but not the rest of <code>src/tests</code>, so
+          <code>helpers.js</code> was compiled into <code>dist</code> and shipped — and it
+          exports a <code>resetDatabase()</code> that <code>TRUNCATE</code>s every
+          financial table. Nothing reachable from the entrypoint imported it, so this was
+          dead weight rather than a live hazard, but dead weight that truncates the
+          receipts table does not belong in a government revenue image.
+        </p>
+        <dl>
+          <dt>Fixed in</dt><dd><code>4ab5925</code>. The exclude is now <code>src/tests/**</code>; a clean rebuild confirms no <code>tests</code> directory in <code>dist</code>.</dd>
+        </dl>
+      </article>
+
       <article class="finding med">
         <div class="finding-head">
           <span class="finding-id">D-7</span>
@@ -1395,20 +1442,27 @@ build      shared, api, agent, portal — all clean</div>
         production boot guard that refuses eleven classes of misconfiguration.
       </p>
       <p>
-        <strong>What does not exist.</strong> Any way to deploy the thing. Any backup. Any
-        restore. Any alert. Any dashboard. Any error tracker. Any load test. Any staging
-        environment described in the repository. Any rollback procedure. Any runbook for
-        the failure modes the code carefully creates queues for — the outstanding TIN
-        queue, the unacknowledged vehicle renewals, the unreturned refunds, the
-        reconciliation exception queue. Those queues are well built and there is a screen
-        that shows them; there is nothing that tells a human to go and look.
+        <strong>What was missing, and now exists.</strong> A way to deploy the thing, with
+        a rollback. A backup, a restore, and a rehearsal of the restore. Structured logs,
+        metrics, an error-reporting path, and — the part that mattered most — an exported
+        depth for every queue of what the platform still owes: the outstanding TINs, the
+        unacknowledged renewals, the unreturned refunds, the unresolved reconciliation
+        exceptions.
       </p>
       <p>
-        That last point is the shape of the whole problem. This platform is unusually
-        careful about recording what it still owes — a taxpayer without their TIN, a
-        renewal the authority never acknowledged, money a citizen has not had back. All of
-        that honesty is only worth having if somebody is watching, and nothing in the
-        repository arranges for anybody to be.
+        That last point was the shape of the whole problem. This platform is unusually
+        careful about recording what it still owes, and all of that honesty is only worth
+        having if somebody is watching. Nothing in the repository arranged for anybody to
+        be. Now the numbers leave the database on every scrape, and production refuses to
+        start without somewhere to send an exception.
+      </p>
+      <p>
+        <strong>What still does not exist.</strong> Infrastructure. The pipeline needs five
+        secrets pointing at a real target; the backup script needs a schedule and an
+        offsite bucket; the metrics need a scraper and alert thresholds; the WAL archiving
+        needs a production instance to be configured on. Those are procurement and
+        provisioning tasks, and they are the reason a real deployment is still some
+        distance away even with the code in place.
       </p>
     </div>
   </section>
@@ -1434,24 +1488,24 @@ build      shared, api, agent, portal — all clean</div>
         <p>The guard now refuses a local address, plain HTTP, a malformed URL or an empty origin list for <code>VERIFICATION_BASE_URL</code>, <code>PAYMENT_CALLBACK_URL</code> and <code>CORS_ORIGINS</code>, alongside the eleven checks that already existed. <em>(B-6)</em></p>
       </li>
       <li>
-        <strong>Confirm every integration mapping against a provider sandbox</strong>
-        <p>Remita service type ID and the full status code set; the PSIRS TIN format, field paths and status vocabulary; the contracted KYC vendor's response shape; the vehicle registry; bank verification. Exercise each end to end and record the confirmed mapping. <em>(B-4)</em></p>
+        <strong>Confirm every integration mapping against a provider sandbox — THE REMAINING BLOCKER</strong>
+        <p>Remita service type ID and the full status code set; the PSIRS TIN format, field paths and status vocabulary; the contracted KYC vendor's response shape; the vehicle registry; bank verification. Run <code>npm run verify:integrations</code> against each sandbox and attach its output to the go-live record; <code>docs/INTEGRATION-VERIFICATION.md</code> is the checklist. <em>(B-4)</em></p>
       </li>
       <li>
-        <strong>Build the deployment path</strong>
-        <p>Container image, infrastructure definition, environment promotion, secret injection, and a documented rollback. Run migrations as an explicit pipeline step rather than on process boot. <em>(B-1, D-2)</em></p>
+        <strong><s>Build the deployment path</s> — done in <code>4ab5925</code></strong>
+        <p>Dockerfile, compose, and a pipeline that backs up before migrating and reverts on failed health checks. Migrations are an explicit step. <strong>Remaining for PSIRS:</strong> wire the five deployment secrets named in <code>docs/DEPLOYMENT.md</code> to real infrastructure, and build the image once in an environment with registry access. <em>(B-1, D-2)</em></p>
       </li>
       <li>
-        <strong>Provision backups and perform a real restoration</strong>
-        <p>Automated backups with agreed retention, point-in-time recovery, and object-storage backup for documents. Then restore into a clean environment and verify a receipt PDF and its audit trail survive. Agree RPO and RTO with government IT and prove them. <em>(B-2)</em></p>
+        <strong><s>Provision backups and perform a real restoration</s> — done in <code>4ab5925</code></strong>
+        <p>Scripts written, the restoration performed and verified, and the cycle automated in CI. <strong>Remaining for PSIRS:</strong> schedule <code>backup.sh</code>, point <code>BACKUP_UPLOAD</code> at an offsite bucket with a 35-day lifecycle, enable WAL archiving on the production instance, and agree the RPO/RTO targets in <code>docs/DISASTER-RECOVERY.md</code>. <em>(B-2)</em></p>
       </li>
       <li>
-        <strong>Instrument the platform</strong>
-        <p>Error tracking, structured logging with request correlation, uptime monitoring, and alerts on the things that must never go quiet: failed webhooks, aborted reconciliation runs, growth in the exception queue, unreturned refunds, and worker liveness. <em>(B-3)</em></p>
+        <strong><s>Instrument the platform</s> — done in <code>4ab5925</code></strong>
+        <p>Structured logging with correlation and redaction, an error-reporting adapter, and <code>/metrics</code> exporting every queue that must never go quiet — failed webhooks, aborted reconciliation, exception depth, unreturned refunds, worker liveness. <strong>Remaining for PSIRS:</strong> point <code>ERROR_REPORTING</code> at a real destination, scrape <code>/metrics</code>, and set alert thresholds on those gauges. <em>(B-3)</em></p>
       </li>
       <li>
-        <strong>Make the workers safe for more than one instance</strong>
-        <p>Advisory locks or an external scheduler for all seven jobs, and the Redis rate-limit store already anticipated in the code comments. <em>(D-1, D-3)</em></p>
+        <strong>Finish making the platform safe for more than one instance</strong>
+        <p>Workers and migrations now take advisory locks (<s>D-1</s>, <s>D-2</s>). What remains is the shared rate-limit store already anticipated in the code comments — bounded in impact, because account lockout is database-backed. <em>(D-3)</em></p>
       </li>
       <li>
         <strong>Test the government portal</strong>
@@ -1479,11 +1533,11 @@ build      shared, api, agent, portal — all clean</div>
       <div>
         <h2>Production certification: FAIL — not production ready</h2>
         <p>
-          Four blockers remain, each independently disqualifying. The application cannot
-          yet be deployed, cannot be recovered if it fails, cannot be observed while it
-          runs, and depends on five integrations that have never spoken to the systems
-          they will depend on. Two further blockers — the demonstration administrator and
-          the localhost public URLs — were fixed during this engagement.
+          One blocker remains, and it is disqualifying on its own: not one of the five
+          external integrations has ever exchanged a packet with the provider it will
+          depend on. Five of the original six are closed — the demonstration
+          administrator, the localhost public URLs, deployment, backup and recovery, and
+          observability — and each was re-verified rather than assumed.
         </p>
       </div>
     </div>
@@ -1507,14 +1561,21 @@ build      shared, api, agent, portal — all clean</div>
         That is a well-built revenue platform.
       </p>
       <p>
-        What it says is that a well-built application is not a production system. Two of
-        the six blockers would have caused visible harm on the first day: every citizen who
-        scanned a receipt would have found nothing, and every referee invitation would have
-        been unfollowable — which alone would have halted agent onboarding entirely. Both
-        were small code changes and both are now fixed, verified, and pinned by tests that
-        will fail if they regress. The remaining four are programme work: deployment,
-        backup, monitoring, and integration confirmation, none of which can be shortened by
-        how good the code is.
+        What it said, in revision 1, was that a well-built application is not a
+        production system. Four of those six gaps have since been closed in code, and the
+        closing was worth doing properly: the restoration test was performed rather than
+        planned, and the thing it proves is not that the rows came back but that the
+        restored database still refuses a forged receipt. Two of the fixes were small and
+        prevented real day-one harm — receipts whose QR codes reached nothing, an
+        invitation to create a government administrator with a published password.
+      </p>
+      <p>
+        The one that remains cannot be closed by writing anything. Five integrations have
+        never been asked a real question, and no amount of care in the adapters
+        substitutes for asking. The adapters fail closed, which is right, and a mapping
+        that is wrong rather than unrecognised sails straight past that — quietly, for
+        weeks, looking like somebody else's outage. There is now a harness that would
+        catch it in an afternoon against a sandbox. Somebody has to run it.
       </p>
       <p>
         The repository says the same thing about itself in <code>README.md</code> §Status
@@ -1532,13 +1593,14 @@ build      shared, api, agent, portal — all clean</div>
 
     <footer class="report-foot">
       <p>
-        Revision 2, assessed at commit <code>173be39</code> on branch
+        Revision 3, assessed at commit <code>4ab5925</code> on branch
         <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
         assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
-        <code>173be39</code> and re-verified. Evidence suites committed as
-        <code>certification-audit.test.ts</code> (39 tests) and
-        <code>certification-e2e.test.ts</code> (6 tests). Full suite: 502 passing, 0
-        failing, typecheck clean, 0 dependency vulnerabilities.
+        <code>173be39</code>, and B-1, B-2 and B-3 in <code>4ab5925</code>, each
+        re-verified. Evidence suites committed as <code>certification-audit.test.ts</code>
+        (39 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
+        (17) and <code>backup-restore.test.ts</code> (2). Full suite: 521 passing, 0
+        failing; agent PWA 51 passing; typecheck clean; 0 dependency vulnerabilities.
       </p>
     </footer>
   </section>
