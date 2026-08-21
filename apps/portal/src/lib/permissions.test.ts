@@ -1,37 +1,37 @@
 /**
  * What each role actually sees when it signs in.
  *
- * The portal filters its navigation by permission, which is the right design
- * and was already implemented. What was missing was anything checking the
- * result — and the result is not obvious, because it comes from crossing a
- * fifteen-row menu table with six role definitions in another package. Two bugs
- * had already reached users through that gap:
+ * WHAT THIS FILE DOES NOT DO
  *
- *   * "Reconciliation" was offered to an administrator, whose click then
- *     answered 403, because the menu gated on `payment:read:all` while the
- *     endpoint required `report:financial`.
- *   * "Agent performance" was hidden from the supervisor it was written for,
- *     because the menu gated on `report:read:all` and a supervisor holds only
- *     `report:read:territory`.
+ * It does not check the menu's gates against the permissions the API actually
+ * enforces. `apps/api/src/tests/portal-navigation.test.ts` owns that, and owns
+ * it properly: it reads both the nav table and the route definitions from
+ * source, so neither side can drift without failing. Restating those route
+ * permissions here would produce a table that goes stale silently while still
+ * passing — which is worse than not having one, and is the precise hazard that
+ * file's own header warns about.
  *
- * Both are the same shape: the menu's gate disagreed with the endpoint's. So
- * the central test here is not a snapshot of labels — it is that assertion,
- * made per screen. `SCREEN_REQUIRES` restates what each screen's own API
- * endpoint demands, and every gate is checked against it. Change one without
- * the other and this fails.
+ * WHAT IT DOES
  *
- * The snapshots exist for a different reason. Eleven of the fifteen items are
- * common to the four back-office roles, which is mostly deliberate — they are
- * all oversight roles and all supposed to see the revenue picture. But
- * "mostly deliberate" degrades quietly. Pinning each menu exactly means any
- * further convergence is a decision somebody makes, not a drift nobody notices.
+ * It pins the *outcome*: the exact menu each of the six roles receives. That
+ * catches a changed gate too — a gate cannot move without moving a menu — but
+ * it states the consequence rather than duplicating the cause. Eleven of the
+ * fifteen items are common to the four back-office roles, and most of that is
+ * deliberate: they are all oversight roles and all meant to see the revenue
+ * picture. But "mostly deliberate" degrades quietly, and this was the shape of
+ * the original complaint — that every officer's portal looked the same. Pinning
+ * each menu means any further convergence is a decision somebody makes rather
+ * than a drift nobody notices.
+ *
+ * And it pins the two properties that have no home in the API suite: that the
+ * auditor holds nothing that changes anything, and that a field agent is turned
+ * away at the door rather than admitted to a shell containing one item.
  */
 
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, type Role } from '@psirs/shared';
 import {
   MUTATING_PERMISSIONS,
-  NAV,
   availableItems,
   belongsInPortal,
   can,
@@ -47,80 +47,6 @@ function principal(role: Role) {
 function menu(role: Role): string[] {
   return availableItems(principal(role)).map((item) => item.label);
 }
-
-// ===========================================================================
-/**
- * What each screen's own API endpoint requires, transcribed from the routes.
- *
- * This is a deliberate restatement rather than an import — the portal cannot
- * import the API's route table, and pinning it here means a change on either
- * side has to be reflected on the other. Where a route accepts several
- * permissions, all of them are listed.
- */
-const SCREEN_REQUIRES: Record<string, readonly string[]> = {
-  '/': ['report:read:all'],
-  '/intelligence': ['report:read:all'],
-  '/transactions': ['payment:read:all'],
-  '/agents': ['agent:read:all'],
-  '/referees': ['agent:read:all'],
-  '/performance': ['report:read:all', 'report:read:territory'],
-  '/reconciliation': ['report:financial', 'payment:reconcile'],
-  '/commissions': ['commission:read:all'],
-  '/approvals': ['approval:review'],
-  '/fraud': ['fraud:read'],
-  '/support': ['support:read:all'],
-  '/outstanding': ['payment:read:all'],
-  '/audit': ['audit:read'],
-  '/catalogue': ['catalogue:read'],
-  '/programmes': ['incentive:read:all', 'incentive:configure'],
-};
-
-describe('every offered link opens', () => {
-  it('covers every nav item', () => {
-    const paths = NAV.flatMap((group) => group.items).map((item) => item.path);
-    expect(Object.keys(SCREEN_REQUIRES).sort()).toEqual([...paths].sort());
-  });
-
-  /**
-   * The bug that produced the admin's 403 on Reconciliation.
-   *
-   * A role that can see a link must hold at least one permission its screen
-   * accepts. This is the check that was missing.
-   */
-  it.each(ROLES)('offers %s nothing it cannot open', (role) => {
-    const user = principal(role);
-    for (const item of availableItems(user)) {
-      const accepted = SCREEN_REQUIRES[item.path]!;
-      expect(
-        can(user, accepted),
-        `${role} is offered "${item.label}" (${item.path}) but holds none of ${accepted.join(', ')}`,
-      ).toBe(true);
-    }
-  });
-
-  /**
-   * The mirror bug, which hid Agent performance from supervisors.
-   *
-   * A role that can open a screen should be offered it. One exception is
-   * carried explicitly: the settlement dashboard accepts `payment:reconcile`,
-   * but the menu gates on `report:financial` so that the item means "you are
-   * accountable for settlement figures" rather than "you happen to be able to
-   * fetch them".
-   */
-  it.each(ROLES)('does not hide a screen %s can open', (role) => {
-    const user = principal(role);
-    const offered = new Set(availableItems(user).map((item) => item.path));
-    const deliberatelyWithheld = new Set(['/reconciliation']);
-
-    for (const [path, accepted] of Object.entries(SCREEN_REQUIRES)) {
-      if (offered.has(path) || deliberatelyWithheld.has(path)) continue;
-      expect(
-        can(user, accepted),
-        `${role} could open ${path} but it is not in their menu`,
-      ).toBe(false);
-    }
-  });
-});
 
 // ===========================================================================
 describe('each role gets a distinct portal', () => {
@@ -223,11 +149,23 @@ describe('each role gets a distinct portal', () => {
     ]);
   });
 
-  it('lands every portal role somewhere they can actually open', () => {
+  /**
+   * Nobody signs in onto a permission error.
+   *
+   * A supervisor used to, because '/' renders the executive dashboard and they
+   * do not hold `report:read:all` — their first impression of the portal was
+   * "Your role (supervisor) is not permitted to perform this action", on a
+   * screen the menu had already decided not to offer them.
+   */
+  it('lands every portal role on a screen in their own menu', () => {
     for (const role of PORTAL_ROLES) {
-      const path = landingPath(principal(role as Role));
+      const user = principal(role as Role);
+      const path = landingPath(user);
       expect(path, `${role} lands nowhere`).not.toBeNull();
-      expect(can(principal(role as Role), SCREEN_REQUIRES[path!]!)).toBe(true);
+      expect(
+        availableItems(user).map((item) => item.path),
+        `${role} lands on ${path}, which is not in their menu`,
+      ).toContain(path);
     }
   });
 });
