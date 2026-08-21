@@ -176,9 +176,17 @@ export class HttpTinService implements TinService {
       return { outcome: 'NOT_FOUND', provider: this.name };
     }
 
-    const found = text(body, this.tinPath);
+    // The same format guard `register` applies, for the same reason and with
+    // more force: `taxpayers.tin` is UNIQUE on a row that cannot be deleted, so
+    // a malformed value written there is permanent and blocks the real number
+    // for good — and `registerTaxpayer` writes `lookup.tin` straight into that
+    // column. The guard was only on the registration path, which left the
+    // documented promise ("a response carrying a malformed number is treated as
+    // still pending rather than written to taxpayers.tin") half kept.
+    const found = assignedTin(walk(body, this.tinPath), this.tinPattern);
     if (!found) {
-      // No number in the response is not the service saying there is no TIN.
+      // Neither "no number" nor "a number we cannot read" is the service saying
+      // there is no such TIN, so neither may answer NOT_FOUND.
       return tinUnavailable(
         this.name,
         'TIN service returned a response this platform could not read',
