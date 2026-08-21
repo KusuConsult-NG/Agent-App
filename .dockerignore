@@ -1,0 +1,19 @@
+# Everything the image must not carry. A build context that includes .env or
+# .git is how a secret ends up in a published layer.
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+.env
+.env.*
+!.env.example
+backups
+storage
+docs
+*.md
+!README.md
+apps/agent
+apps/portal
+**/*.test.ts
+**/*.test.tsx

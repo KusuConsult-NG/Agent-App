@@ -48,6 +48,9 @@ import { completeRenewal } from './vehicles';
 import { transitionTransaction } from './revenue';
 import { evaluateTransactionRisk } from './fraud';
 import { queueNotification } from './notifications';
+import { log } from '../lib/logger';
+import { metrics } from '../lib/metrics';
+import { reportError } from './error-reporting';
 
 export interface InitiatePaymentParams {
   transactionId: string;
@@ -369,10 +372,22 @@ async function issueRenewalFor(
       actorRole: params.actorRole ?? 'system',
     });
   } catch (error) {
-    console.error(
-      `[payments] payment ${result.paymentId} verified but its vehicle renewal could not be issued`,
+    // The money is verified and the receipt exists; what the citizen actually
+    // bought does not. The retry job will pick it up, but somebody should know
+    // it happened rather than reading it out of a log later.
+    log.error('payment verified but its vehicle renewal could not be issued', {
+      component: 'payments',
+      paymentId: result.paymentId,
+      transactionReference: result.transactionReference,
       error,
-    );
+    });
+    reportError({
+      message: 'Payment verified but the vehicle renewal could not be issued',
+      error,
+      severity: 'error',
+      component: 'payments',
+      context: { transactionReference: result.transactionReference },
+    });
   }
 }
 
@@ -456,6 +471,7 @@ async function verifyAndRecord(params: {
           `UPDATE payments SET verification_response = $2 WHERE id = $1`,
           [payment.id, JSON.stringify(verification.raw)],
         );
+        metrics.paymentConfirmed('PENDING', params.source);
         throw paymentUnconfirmed(payment.transaction_reference);
       }
 
@@ -482,6 +498,8 @@ async function verifyAndRecord(params: {
           entityId: payment.id,
           newValue: { status: verification.status, reason: verification.failureReason },
         });
+
+        metrics.paymentConfirmed('FAILED', params.source);
 
         return {
           status: 'FAILED',
@@ -518,6 +536,21 @@ async function verifyAndRecord(params: {
             }),
           ],
         );
+        metrics.amountMismatch();
+        metrics.paymentConfirmed('FAILED', params.source);
+        // A gateway confirming a different amount than the invoice is either a
+        // gateway fault or an attack. Either way a person needs to look today.
+        reportError({
+          message: 'Gateway confirmed a payment for an amount that does not match the invoice',
+          severity: 'error',
+          component: 'payments',
+          context: {
+            transactionReference: payment.transaction_reference,
+            expectedKobo: expected.toString(),
+            gatewayKobo: verification.amountKobo?.toString() ?? null,
+          },
+        });
+
         await recordAudit(client, {
           actorId: params.actorId ?? null,
           actorRole: params.actorRole ?? 'system',
@@ -619,6 +652,9 @@ async function verifyAndRecord(params: {
       });
 
       await evaluateTransactionRisk(client, { transactionId: payment.transaction_id });
+
+      metrics.paymentConfirmed('VERIFIED', params.source);
+      metrics.receiptIssued();
 
       await recordAudit(client, {
         actorId: params.actorId ?? null,
@@ -735,6 +771,7 @@ export async function handleWebhook(params: {
         ],
       ),
     );
+    metrics.webhookReceived('unparseable');
     return { acknowledged: false, duplicate: false, note: 'Webhook payload could not be parsed.' };
   }
 
@@ -759,6 +796,12 @@ export async function handleWebhook(params: {
         ],
       ),
     );
+    metrics.webhookReceived('rejected');
+    log.warn('webhook delivery refused', {
+      component: 'payments',
+      gateway: gateway.name,
+      reason: auth.reason ?? 'could not be authenticated',
+    });
     throw new AppError({
       statusCode: 401,
       code: 'INVALID_WEBHOOK_SIGNATURE',
@@ -790,12 +833,14 @@ export async function handleWebhook(params: {
   });
 
   if (!insertion) {
+    metrics.webhookReceived('duplicate');
     return {
       acknowledged: true,
       duplicate: true,
       note: 'This webhook event was already processed. No duplicate payment has been created.',
     };
   }
+  metrics.webhookReceived('processed');
 
   const found = await withTransaction((client) =>
     queryOne<{ id: string }>(client, 'SELECT id FROM payments WHERE gateway_reference = $1', [

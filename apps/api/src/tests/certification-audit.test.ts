@@ -1133,6 +1133,9 @@ const PRODUCTION_ENV: Record<string, string> = {
   STORAGE_BUCKET: 'psirs',
   STORAGE_ACCESS_KEY_ID: 'AK',
   STORAGE_SECRET_ACCESS_KEY: 'SK',
+  ERROR_REPORTING: 'webhook',
+  ERROR_REPORTING_URL: 'https://alerts.psirs.pl.gov.ng/hook',
+  METRICS_TOKEN: 'a-scrape-token',
 };
 
 /**

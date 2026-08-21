@@ -75,6 +75,18 @@ export const config = {
   isTest,
   port: int('PORT', 4000),
 
+  /**
+   * Whether the API applies pending migrations as it starts.
+   *
+   * Convenient for a single node and for development, and wrong for a real
+   * deployment, where the pipeline runs migrations once as its own step before
+   * any new container is admitted (docs/DEPLOYMENT.md). Set
+   * `RUN_MIGRATIONS_ON_BOOT=false` there. It stays on by default so existing
+   * single-node setups keep working, and the run now takes an advisory lock
+   * either way.
+   */
+  runMigrationsOnBoot: bool('RUN_MIGRATIONS_ON_BOOT', true),
+
   database: {
     url:
       process.env.DATABASE_URL ??
@@ -364,6 +376,32 @@ export const config = {
     defaultHoldPeriodHours: int('COMMISSION_HOLD_HOURS', 72),
   },
 
+  observability: {
+    /**
+     * Where unexpected exceptions are sent.
+     *
+     * `mock` records them in memory and nothing more, which is right for
+     * development and wrong for production — an exception here is a taxpayer
+     * who paid and did not get a receipt. Any service that accepts a JSON POST
+     * works: Sentry, GlitchTip, Rollbar, or a webhook into an operations
+     * channel.
+     */
+    errorReporting: process.env.ERROR_REPORTING ?? 'mock',
+    errorReportingUrl: process.env.ERROR_REPORTING_URL ?? '',
+    errorReportingApiKey: process.env.ERROR_REPORTING_API_KEY ?? '',
+    errorReportingTimeoutMs: int('ERROR_REPORTING_TIMEOUT_MS', 5_000),
+
+    /**
+     * Bearer token required to scrape `/metrics`.
+     *
+     * The endpoint exposes queue depths and confirmation counts — operational
+     * shape rather than taxpayer data, but not something to publish. Unset
+     * outside production, the endpoint is open so a developer can curl it;
+     * production refuses to boot without a token.
+     */
+    metricsToken: process.env.METRICS_TOKEN ?? '',
+  },
+
   security: {
     rateLimitWindowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax: int('RATE_LIMIT_MAX', 120),
@@ -503,6 +541,24 @@ if (isProduction) {
   ] as const) {
     const problem = publicUrlProblem(value);
     if (problem) problems.push(`${name} ${problem}`);
+  }
+
+  // An unwatched revenue platform is the failure mode this whole codebase is
+  // built to avoid: it records what it still owes in half a dozen queues, and
+  // that is worth nothing if nobody is told when one stops draining.
+  if (config.observability.errorReporting === 'mock') {
+    problems.push('ERROR_REPORTING is still "mock" — no exception would reach anyone');
+  }
+  if (
+    config.observability.errorReporting !== 'mock' &&
+    !config.observability.errorReportingUrl
+  ) {
+    problems.push(
+      `ERROR_REPORTING is "${config.observability.errorReporting}" but ERROR_REPORTING_URL is not set`,
+    );
+  }
+  if (!config.observability.metricsToken) {
+    problems.push('METRICS_TOKEN is not set — /metrics would be unauthenticated');
   }
 
   // CORS_ORIGINS fails loudly on its own — nothing can reach the API — but it
