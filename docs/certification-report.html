@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">38d8c73</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">cc75938</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>21 August 2026 (rev. 4)</dd></div>
+      <div><dt>Date</dt><dd>21 August 2026 (rev. 5)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -625,8 +625,8 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">534</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">75</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">600</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">90</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
@@ -900,6 +900,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Historical record immutability</td><td><span class="pill p-pass">Pass</span></td><td>Rate raised tenfold after payment; transaction and receipt amounts unchanged; assessment pins its rate version</td><td>—</td><td>No</td></tr>
           <tr><td>Agent clearance gates</td><td><span class="pill p-pass">Pass</span></td><td>Uncleared applicant refused revenue APIs (403, zero rows written); suspension effective on next request; activation refused while any item outstanding</td><td>—</td><td>No</td></tr>
           <tr><td>Role-based access control</td><td><span class="pill p-pass">Pass</span></td><td>All 6 roles × 11 guarded endpoints; admin correctly denied <code>payment:reverse:approve</code>; auditor holds no mutating permission</td><td>—</td><td>No</td></tr>
+          <tr><td>Role differentiation in the portal</td><td><span class="pill p-pass">Pass</span></td><td>Enforcement was already correct — every one of 19 mutating controls gated, every nav gate matching its endpoint. What was missing was legibility: the auditor's read-only standing is now stated, and a field agent is no longer admitted to a one-item shell. Each role's menu is pinned by test</td><td>D-11, D-12 <em>(both fixed)</em></td><td>No</td></tr>
           <tr><td>Authentication hardening</td><td><span class="pill p-pass">Pass</span></td><td>Foreign-key JWT rejected; <code>alg:none</code> rejected; revocation immediate; bcrypt; no user enumeration; DB-backed lockout</td><td>—</td><td>No</td></tr>
           <tr><td>Cross-agent / cross-role isolation</td><td><span class="pill p-pass">Pass</span></td><td>Second agent refused first agent's transaction; agent refused every government endpoint tested</td><td>—</td><td>No</td></tr>
           <tr><td>Public receipt verification</td><td><span class="pill p-pass">Pass</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly; localhost QR defect fixed and pinned by test</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
@@ -920,7 +921,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-pass">Pass</span></td><td><strong>Restoration test performed:</strong> real payment dumped, database dropped, restored — identical receipt, 14 audit rows, and a forged receipt still refused. Automated in CI</td><td>B-2 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
-          <tr><td>Government portal test coverage</td><td><span class="pill p-fail">Fail</span></td><td>5,633 lines, the highest-privilege surface, zero tests and no test script</td><td>D-5</td><td>No</td></tr>
+          <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
           <tr><td>Performance under load</td><td><span class="pill p-none">Not tested</span></td><td>Indexes reviewed and present on every hot path; no load, soak or N+1 profiling performed</td><td>—</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
           <tr><td>Cross-device UI verification</td><td><span class="pill p-none">Not tested</span></td><td>Builds clean; 51 agent PWA tests pass; no Android/iOS/desktop visual pass performed</td><td>—</td><td>No</td></tr>
@@ -959,7 +960,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         <ul>
           <li>5,633 lines, React 19, hash router</li>
           <li>12 screens incl. Finance, Oversight, KYC</li>
-          <li><strong>Zero tests, no test script</strong></li>
+          <li><strong>15 tests</strong> (permission model); screens untested</li>
           <li>Also serves public verification &amp; referee</li>
         </ul>
       </div>
@@ -1334,26 +1335,41 @@ build      shared, api, agent, portal — all clean</div>
         </p>
       </article>
 
-      <article class="finding high">
+      <article class="finding med">
         <div class="finding-head">
           <span class="finding-id">D-5</span>
-          <h3 class="finding-title" style="margin:0">The government portal has no automated tests</h3>
-          <span class="pill p-partial">High</span>
+          <h3 class="finding-title" style="margin:0">The government portal's screens have no automated tests</h3>
+          <span class="pill p-partial">Medium</span>
         </div>
         <p>
-          5,633 lines across twelve screens — where officers approve agents, review KYC
-          documents, run reconciliation, resolve exceptions, approve payouts and execute
-          reversals — carry no test of any kind. There is no <code>test</code> script in
-          <code>apps/portal/package.json</code>, and the root <code>npm test</code> runs
-          only the API and agent workspaces. CI typechecks and builds it; nothing exercises
-          it.
+          As found: 5,633 lines across twelve screens — where officers approve agents,
+          review KYC documents, run reconciliation, resolve exceptions, approve payouts and
+          execute reversals — carried no test of any kind. There was no <code>test</code>
+          script in <code>apps/portal/package.json</code>, and the root <code>npm test</code>
+          ran only the API and agent workspaces. CI typechecked and built it; nothing
+          exercised it.
         </p>
         <p>
           The portal also serves the two public surfaces: receipt verification and the
-          referee response form. A regression in either is invisible to the current suite.
+          referee response form. A regression in either is still invisible to the suite.
         </p>
         <dl>
           <dt>Mitigating</dt><dd>The API tests pin the permissions each screen depends on, so a screen offering an action the API refuses is caught server-side.</dd>
+          <dt>Partly closed</dt>
+          <dd>
+            <code>cc75938</code> gives the workspace a <code>test</code> script, wires it
+            into the root <code>npm test</code> and therefore into CI, and adds 15 tests
+            over the permission model — the exact menu each of the six roles receives,
+            the auditor holding nothing that mutates, and the field agent being excluded.
+            That is the first automated coverage this workspace has ever had.
+          </dd>
+          <dt>Still open</dt>
+          <dd>
+            The twelve screens remain untested. Nothing exercises a rendered component,
+            and the two public surfaces — receipt verification and the referee response
+            form — are still outside the suite. The finding stays open at reduced
+            severity.
+          </dd>
         </dl>
       </article>
 
@@ -1367,6 +1383,73 @@ build      shared, api, agent, portal — all clean</div>
           Listed here for cross-reference from the certification matrix. Fixed in
           <code>173be39</code>; full detail in §02.
         </p>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-11</span>
+          <h3 class="finding-title" style="margin:0">The auditor's read-only standing was not observable</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Raised from a user's own observation, not from the audit plan: that the portal
+          looked the same whichever role signed in. Measuring it bore that out. Eleven of
+          the fifteen menu items are common to revenue_officer, finance_officer, auditor
+          and admin — and the auditor's menu was the administrator's menu <em>plus one
+          link</em>, Reconciliation. The read-only oversight role saw more of the portal
+          than the administrator did.
+        </p>
+        <p>
+          Most of that is correct and deliberate. These are all oversight roles and all
+          meant to see the whole revenue picture; what separates them is what they may
+          change, and that was already enforced — all 19 mutating controls across seven
+          screens are wrapped in <code>can()</code>, and every navigation gate already
+          matched the permission its screen's endpoint requires.
+        </p>
+        <p>
+          The defect was narrower and worth naming precisely. An auditor holds
+          <strong>no mutating permission at all</strong> — the entire point of the role —
+          and the portal conveyed that only by declining to render buttons, which is
+          indistinguishable from a portal that forgot to. A government auditor's
+          independence is part of the control environment, and an external reviewer should
+          be able to <em>observe</em> it rather than infer it from an absence or take it
+          from a permissions table.
+        </p>
+        <dl>
+          <dt>Severity</dt>
+          <dd>Not a security defect. API authorisation was correct throughout and is verified independently in the RBAC matrix above. This is an assurance and usability defect: the control existed but could not be seen.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>cc75938</code>. The role now reads <code>auditor · read-only</code>, derived from the permission set rather than a check for the role name — so a role later granted a mutating permission stops being described that way on its own.</dd>
+          <dt>Deliberately not done</dt>
+          <dd>Re-gating the navigation on write permissions. It would have differentiated the menus further and hidden legitimate oversight reads: the outstanding-refunds queue is money a citizen has not had back, and an auditor should see it.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-12</span>
+          <h3 class="finding-title" style="margin:0">A field agent could sign into the portal and reach a shell with one item in it</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          An agent's credentials are valid against the portal, because authentication is
+          shared. They hold <code>catalogue:read</code> and almost nothing else a
+          government screen is gated on, so the sidebar they received contained exactly one
+          entry — the revenue catalogue — and no way to do any part of their job.
+        </p>
+        <p>
+          It reads as a broken portal rather than as the wrong door, which is the failure
+          mode that generates support tickets from the field. The intent had in fact
+          already been written down: <code>portal-navigation.test.ts</code> carried the
+          comment <em>"<code>agent</code> is in ROLES but never signs in here"</em>. Nothing
+          enforced it.
+        </p>
+        <dl>
+          <dt>Severity</dt>
+          <dd>Not a security defect, and worth being explicit about why: every screen behind the door is permission-gated on the API regardless of which application asks. Nothing was reachable that should not have been. This is a door with no sign on it.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>cc75938</code>. A field agent is turned away at sign-in and pointed at the agent app, and the session is ended rather than merely hidden — leaving a live refresh token for a session the user cannot use is untidy at best. A restored agent session is dropped the same way, since sessions predating the change still exist.</dd>
+        </dl>
       </article>
 
       <article class="finding" style="border-left-color:var(--pass)">
@@ -1544,8 +1627,8 @@ build      shared, api, agent, portal — all clean</div>
         <p>Workers and migrations now take advisory locks (<s>D-1</s>, <s>D-2</s>). What remains is the shared rate-limit store already anticipated in the code comments — bounded in impact, because account lockout is database-backed. <em>(D-3)</em></p>
       </li>
       <li>
-        <strong>Test the government portal</strong>
-        <p>At minimum the approval, reversal, reconciliation-exception and KYC-review flows, plus the two public surfaces it serves. Add it to the root test script and to CI. <em>(D-5)</em></p>
+        <strong>Test the government portal's screens</strong>
+        <p>The workspace is now in the root test script and in CI, with 15 tests over the permission model (<s>half of D-5</s>). What is still untested is the behaviour of the screens themselves: at minimum the approval, reversal, reconciliation-exception and KYC-review flows, plus the two public surfaces it serves. <em>(D-5)</em></p>
       </li>
       <li>
         <strong>Commission an independent security assessment</strong>
