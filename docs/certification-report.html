@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">4ab5925</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">38d8c73</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>21 August 2026 (rev. 3)</dd></div>
+      <div><dt>Date</dt><dd>21 August 2026 (rev. 4)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -625,8 +625,8 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">521</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">64</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">534</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">75</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
@@ -914,6 +914,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. A verification harness now exists but has not been run against a real provider</td><td>B-4</td><td><strong>Yes</strong></td></tr>
+          <tr><td>Mapping-failure detection</td><td><span class="pill p-pass">Pass</span></td><td>A wrong mapping proven to fail closed and land on the outcome the harness reports as FAIL — so the sandbox run, when it happens, will mean something. Surfaced D-10</td><td>D-10 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Production seed hygiene</td><td><span class="pill p-pass">Pass</span></td><td>Both demonstration flags refuse in production before migrating; the hint that recommended them is suppressed; three regression tests</td><td>B-5 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Deployment &amp; rollback</td><td><span class="pill p-partial">Partial</span></td><td>Dockerfile, compose, and a pipeline with backup-before-migrate and automatic revert. The built artefact was booted in production config and verified; the <em>image build</em> could not be run here (registry blocked)</td><td>B-1 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-pass">Pass</span></td><td><strong>Restoration test performed:</strong> real payment dumped, database dropped, restored — identical receipt, 14 audit rows, and a forged receipt still refused. Automated in CI</td><td>B-2 <em>(fixed)</em></td><td>No</td></tr>
@@ -1366,6 +1367,41 @@ build      shared, api, agent, portal — all clean</div>
           Listed here for cross-reference from the certification matrix. Fixed in
           <code>173be39</code>; full detail in §02.
         </p>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-10</span>
+          <h3 class="finding-title" style="margin:0">The TIN format guard was missing from the path that reaches the column it protects</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Found while testing whether a wrong integration mapping is detectable at
+          all — the assumption the entire plan for closing B-4 rests on.
+        </p>
+        <p>
+          <code>TIN_FORMAT_PATTERN</code> exists for one stated reason:
+          <code>taxpayers.tin</code> is <code>UNIQUE</code> on a row that cannot be
+          deleted, so a malformed value written there is permanent and blocks the real
+          number forever. <code>register</code> honoured the pattern.
+          <code>lookup</code> did not — it returned whatever string sat at the
+          configured field path, unchecked. And <code>registerTaxpayer</code> writes
+          <code>lookup.tin</code> straight into that column on the
+          <code>existingTin</code> path.
+        </p>
+        <p>
+          So the guard was absent from a path that reaches precisely the column it was
+          written to protect. A TIN service answering a lookup with a
+          differently-formatted value would have had it persisted, permanently.
+        </p>
+        <dl>
+          <dt>Severity</dt>
+          <dd>Requires the TIN service to return a malformed value in the number field, so not directly attacker-controlled — but the damage is irreversible, which is the whole reason the guard exists.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>38d8c73</code>. Both paths now run the number through the same check, and an unreadable number reports <code>UNAVAILABLE</code> rather than <code>FOUND</code>, because neither "no number" nor "a number we cannot read" is the service saying the TIN does not exist.</dd>
+          <dt>Also added</dt>
+          <dd><code>mapping-detection.test.ts</code> pins the property the verification harness depends on: a wrong mapping fails closed and lands on the outcome the harness reports as FAIL, not one it reports as OK. If a bad mapping were indistinguishable from a good one, running the harness against a sandbox would prove nothing.</dd>
+        </dl>
       </article>
 
       <article class="finding" style="border-left-color:var(--pass)">
