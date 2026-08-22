@@ -176,6 +176,8 @@ export interface ProgrammeInput {
   targetTaxpayerTypes?: string[];
   /** Economic sectors this programme is open to. Empty means all of them. */
   targetSectors?: string[];
+  requiresGroupMembership?: boolean;
+  targetGroupTypes?: string[];
   minimumScore?: number;
   minimumCompliancePeriods?: number;
   requiresNoArrears?: boolean;
@@ -266,11 +268,11 @@ export async function createProgramme(params: {
       client,
       `INSERT INTO incentive_programmes
          (name, code, description, benefit_type, benefit_description, eligibility_rules,
-          target_sectors,
+          target_sectors, requires_group_membership, target_group_types,
           target_lga_ids, target_taxpayer_types, minimum_score, minimum_compliance_periods,
           requires_no_arrears, start_date, end_date, approval_authority, status, created_by,
           linkage_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'DRAFT',$16,$17)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'DRAFT',$18,$19)
        RETURNING id`,
       [
         input.name,
@@ -282,6 +284,8 @@ export async function createProgramme(params: {
           essentialServiceLegalBasis: input.essentialServiceLegalBasis ?? null,
         }),
         input.targetSectors ?? [],
+        input.requiresGroupMembership ?? false,
+        input.targetGroupTypes ?? [],
         input.targetLgaIds ?? [],
         input.targetTaxpayerTypes ?? ['INDIVIDUAL', 'BUSINESS'],
         input.minimumScore ?? 0,
@@ -342,6 +346,8 @@ export async function evaluateEligibility(
       target_lga_ids: string[];
       target_taxpayer_types: string[];
       target_sectors: string[];
+      requires_group_membership: boolean;
+      target_group_types: string[];
       start_date: Date;
       end_date: Date | null;
       status: string;
@@ -423,6 +429,44 @@ export async function evaluateEligibility(
         );
       } else {
         reasons.push(`Sector ${taxpayer.economic_sector} is within scope`);
+      }
+    }
+
+    /*
+     * Group membership, which is how the informal sector is reached at all.
+     *
+     * Only an ATTESTED membership counts. A claim recorded by an agent and not
+     * yet confirmed by the group's leader is exactly what an agent inventing
+     * members would produce, and the whole reason attestation exists is that
+     * the agent is paid on collections and should not also be the one
+     * certifying how many farmers there are.
+     */
+    if (programme.requires_group_membership) {
+      const membership = await queryOne<{ group_type: string; name: string }>(
+        client,
+        `SELECT g.group_type, g.name
+           FROM taxpayer_group_members m
+           JOIN taxpayer_groups g ON g.id = m.group_id
+          WHERE m.taxpayer_id = $1
+            AND m.status = 'ATTESTED'
+            AND g.status = 'ACTIVE'
+            AND (cardinality($2::text[]) = 0 OR g.group_type = ANY($2::text[]))
+          LIMIT 1`,
+        [params.taxpayerId, programme.target_group_types],
+      );
+
+      if (!membership) {
+        eligible = false;
+        reasons.push(
+          programme.target_group_types.length > 0
+            ? `No confirmed membership of a ${programme.target_group_types
+                .join(' or ')
+                .toLowerCase()
+                .replace(/_/g, ' ')}`
+            : 'No confirmed membership of a registered group',
+        );
+      } else {
+        reasons.push(`Confirmed member of ${membership.name}`);
       }
     }
 

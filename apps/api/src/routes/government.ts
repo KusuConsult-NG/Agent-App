@@ -834,6 +834,26 @@ governmentRouter.post(
        * typo is refused here rather than by a constraint at insert time.
        */
       targetSectors: z.array(z.enum(ECONOMIC_SECTOR_CODES)).max(30).optional(),
+      /*
+       * Reaching people through the body they already belong to. When set,
+       * only a taxpayer whose membership the group's leader has confirmed is
+       * in scope — an agent's unconfirmed claim is not enough.
+       */
+      requiresGroupMembership: z.boolean().optional(),
+      targetGroupTypes: z
+        .array(
+          z.enum([
+            'FARMERS_COOPERATIVE',
+            'MARKET_ASSOCIATION',
+            'TRANSPORT_UNION',
+            'ARTISAN_GUILD',
+            'TRADERS_ASSOCIATION',
+            'FISHERIES_GROUP',
+            'LIVESTOCK_ASSOCIATION',
+            'OTHER',
+          ]),
+        )
+        .optional(),
       minimumScore: z.number().int().min(0).max(100).optional(),
       minimumCompliancePeriods: z.number().int().min(0).optional(),
       requiresNoArrears: z.boolean().optional(),

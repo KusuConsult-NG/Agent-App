@@ -25,6 +25,7 @@ import { config } from '../config';
 
 export const verifyPath = 'verify';
 export const refereePath = 'referee';
+export const groupAttestationPath = 'group-attestation';
 
 /**
  * The portal origin, however VERIFICATION_BASE_URL happens to be written.
@@ -49,4 +50,16 @@ export function verificationUrl(verificationCode: string): string {
 /** The one-time link a referee is sent. */
 export function refereeInvitationUrl(token: string): string {
   return `${portalOrigin()}/#/${refereePath}/${encodeURIComponent(token)}`;
+}
+
+/**
+ * The link a group's leader follows to confirm their membership list.
+ *
+ * Third of its kind, and built here for the same reason as the other two: a
+ * cooperative chairman following a URL the portal cannot route would land on a
+ * government sign-in form and have no way to tell that anything had gone
+ * wrong.
+ */
+export function groupAttestationUrl(token: string): string {
+  return `${portalOrigin()}/#/${groupAttestationPath}/${encodeURIComponent(token)}`;
 }

@@ -22,5 +22,6 @@ process.env.RATE_LIMIT_MAX ??= '5000';
 // The suite creates a handful of agent applicants; production keeps the tight
 // default of 5 per hour.
 process.env.AGENT_APPLY_RATE_LIMIT_MAX ??= '100';
+process.env.GROUP_ATTESTATION_RATE_LIMIT_MAX ??= '2000';
 
 export {};

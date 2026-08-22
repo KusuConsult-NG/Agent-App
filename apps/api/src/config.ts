@@ -415,6 +415,10 @@ export const config = {
      * production default is unchanged.
      */
     agentApplyRateLimitMax: int('AGENT_APPLY_RATE_LIMIT_MAX', 5),
+    // A group leader confirms a membership list a handful of times. The cap is
+    // low because this is a public, token-addressed surface, and configurable
+    // because a test suite exercising the flow is not the shape of real use.
+    groupAttestationRateLimitMax: int('GROUP_ATTESTATION_RATE_LIMIT_MAX', 20),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())

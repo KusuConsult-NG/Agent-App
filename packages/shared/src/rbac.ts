@@ -43,6 +43,22 @@ export const PERMISSIONS = [
    * out the liabilities of a taxpayer they had registered.
    */
   'taxpayer:obligation:waive',
+  /*
+   * Informal-sector groups and the allocation of physical benefits.
+   *
+   * `group:register` is an agent's job — they meet the cooperative in the
+   * field. `group:manage` is the officer's decision that a group is real, and
+   * `allocation:manage` opens a round and awards from it, which is spending a
+   * finite public resource and belongs with the officers who answer for it.
+   * `allocation:collect` only records that somebody turned up and took theirs,
+   * so it can sit with the agent at the collection point.
+   */
+  'group:register',
+  'group:read:all',
+  'group:manage',
+  'allocation:read:all',
+  'allocation:manage',
+  'allocation:collect',
   /**
    * Chase TINs the PSIRS TIN service has not issued yet, and see who is still
    * waiting. Back-office data-quality work: an agent registers taxpayers, but
@@ -148,6 +164,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:read:assigned',
     'taxpayer:create',
     'taxpayer:update',
+    'group:register',
+    'group:read:all',
+    'allocation:collect',
     'catalogue:read',
     'assessment:create',
     'assessment:read:own',
@@ -191,6 +210,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:tin_sync',
     'taxpayer:update',
     'taxpayer:obligation:waive',
+    'group:read:all',
+    'group:manage',
+    'allocation:read:all',
+    'allocation:manage',
     'catalogue:read',
     'catalogue:configure',
     'assessment:read:all',
@@ -263,6 +286,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:tin_sync',
     'taxpayer:manage',
     'taxpayer:obligation:waive',
+    'group:read:all',
+    'group:manage',
+    'allocation:read:all',
+    'allocation:manage',
     'catalogue:read',
     'catalogue:configure',
     'assessment:read:all',

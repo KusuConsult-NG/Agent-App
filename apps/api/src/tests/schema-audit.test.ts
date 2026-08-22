@@ -121,6 +121,29 @@ const DELIBERATELY_MUTABLE = new Set([
   'app_versions',
   'schema_migrations',
   'incentive_programmes',
+  /*
+   * Groups and allocation rounds, classified on the same line this file draws
+   * everywhere else: evidence that something happened to a person is
+   * protected, configuration describing what may happen is editable.
+   *
+   * `taxpayer_groups` is a registry entry. A group that turns out not to exist
+   * is SUSPENDED in normal operation, and the decision to approve or suspend
+   * it is in the audit chain regardless of the row, so the row is not the
+   * evidence. Same reasoning as incentive_programmes above.
+   *
+   * `incentive_allocation_rounds` describes a distribution — how much, in what
+   * units, collected where. A draft round opened by mistake should be
+   * removable. What must not be lost is who actually received something, and
+   * that lives in `incentive_awards`, which carries a delete guard; the
+   * foreign key from awards to rounds means a round with awards against it
+   * cannot be deleted anyway.
+   *
+   * `group_attestation_invitations` holds tokens that expire, exactly like
+   * `referee_invitations` above it.
+   */
+  'taxpayer_groups',
+  'incentive_allocation_rounds',
+  'group_attestation_invitations',
   // Development only.
   'mock_gateway_transactions',
 ]);

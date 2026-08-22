@@ -41,6 +41,7 @@ import {
 } from './lib/metrics';
 import { citizenRouter } from './routes/citizen';
 import { pushRouter } from './routes/push';
+import { allocationRouter, groupAttestationRouter, groupRouter } from './routes/groups';
 
 export function createApp(): Express {
   const app = express();
@@ -194,12 +195,15 @@ export function createApp(): Express {
   api.use('/vehicles', vehicleRouter);
   api.use('/government', governmentRouter);
   api.use('/support', supportRouter);
+  api.use('/groups', groupRouter);
+  api.use('/allocations', allocationRouter);
   api.use('/push', pushRouter);
 
   // Public, unauthenticated surfaces.
   api.use('/reference', referenceRouter);
   api.use('/verify', verificationRouter);
   api.use('/referee', refereeRouter);
+  api.use('/group-attestation', groupAttestationRouter);
   api.use('/webhooks', webhookRouter);
   api.use('/citizen-status', citizenRouter);
 
