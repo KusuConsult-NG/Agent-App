@@ -6,7 +6,15 @@ import { ECONOMIC_SECTORS } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
 import { authenticate, requireActiveAgent, requirePermission } from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
-import { asyncHandler, emailSchema, phoneSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import {
+  asyncHandler,
+  birthDateSchema,
+  emailSchema,
+  phoneSchema,
+  uuidSchema,
+  validateBody,
+  validateQuery,
+} from '../middleware/validate';
 import { badRequest, forbidden } from '../lib/errors';
 import * as taxpayers from '../services/taxpayers';
 import * as vehicles from '../services/vehicles';
@@ -58,7 +66,7 @@ const taxpayerInputSchema = z
     firstName: z.string().min(2).max(80).optional(),
     middleName: z.string().max(80).optional(),
     lastName: z.string().min(2).max(80).optional(),
-    dateOfBirth: z.string().date().optional(),
+    dateOfBirth: birthDateSchema.optional(),
     gender: z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']).optional(),
     businessName: z.string().min(2).max(200).optional(),
     businessType: z.string().max(100).optional(),

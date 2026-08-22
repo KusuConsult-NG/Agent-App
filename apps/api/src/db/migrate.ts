@@ -100,11 +100,24 @@ async function applyMigrations(options: { silent?: boolean }): Promise<number> {
 
     const startedAt = Date.now();
     await withTransaction(async (client) => {
-      await client.query(contents);
-      await client.query(
-        'INSERT INTO schema_migrations (filename, checksum, duration_ms) VALUES ($1, $2, $3)',
-        [filename, checksum, Date.now() - startedAt],
-      );
+      // A migration that decides something at run time — skipping a VALIDATE
+      // because existing rows would fail it, say — says so with RAISE NOTICE
+      // or RAISE WARNING. Those go to the connection, not to stdout, so
+      // without this listener the decision is made and nobody is told.
+      const relay = (notice: { severity?: string; message?: string }) => {
+        if (!notice.message) return;
+        log(`  [${(notice.severity ?? 'NOTICE').toLowerCase()}] ${notice.message}`);
+      };
+      client.on('notice', relay);
+      try {
+        await client.query(contents);
+        await client.query(
+          'INSERT INTO schema_migrations (filename, checksum, duration_ms) VALUES ($1, $2, $3)',
+          [filename, checksum, Date.now() - startedAt],
+        );
+      } finally {
+        client.off('notice', relay);
+      }
     });
 
     log(`  applied ${filename} (${Date.now() - startedAt}ms)`);

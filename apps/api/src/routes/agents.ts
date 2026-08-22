@@ -14,7 +14,15 @@ import {
   requireStepUp,
 } from '../middleware/auth';
 import { rateLimit } from '../middleware/security';
-import { asyncHandler, emailSchema, phoneSchema, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
+import {
+  asyncHandler,
+  birthDateSchema,
+  emailSchema,
+  phoneSchema,
+  uuidSchema,
+  validateBody,
+  validateQuery,
+} from '../middleware/validate';
 import { forbidden, notFound } from '../lib/errors';
 import * as agents from '../services/agents';
 import * as referees from '../services/referees';
@@ -46,7 +54,7 @@ agentRouter.post(
         .min(8, 'Your password must be at least 8 characters')
         .regex(/[0-9]/, 'Include at least one number')
         .regex(/[a-zA-Z]/, 'Include at least one letter'),
-      dateOfBirth: z.string().date().optional(),
+      dateOfBirth: birthDateSchema.optional(),
       gender: z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']).optional(),
       alternatePhone: phoneSchema.optional(),
       address: z.string().min(5).max(300),

@@ -8,6 +8,7 @@
 
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { z, ZodError, type ZodTypeAny } from 'zod';
+import { birthDateMessage, birthDateProblem } from '@psirs/shared';
 import { validationFailed } from '../lib/errors';
 
 /**
@@ -117,6 +118,22 @@ export const phoneSchema = z
 export const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email address');
 
 export const uuidSchema = z.string().uuid('Not a valid identifier');
+
+/**
+ * A date of birth that can describe a living person.
+ *
+ * `z.string().date()` checks only the shape, so a slipped year passes it and
+ * lands in the database as a taxpayer born in 2099. The rule itself lives in
+ * the shared package so the registration form refuses the same dates before
+ * the agent reaches the end of the wizard.
+ */
+export const birthDateSchema = z
+  .string()
+  .trim()
+  .superRefine((value, ctx) => {
+    const problem = birthDateProblem(value);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: birthDateMessage(problem) });
+  });
 
 /**
  * Money on the wire: a whole number of kobo as a string.

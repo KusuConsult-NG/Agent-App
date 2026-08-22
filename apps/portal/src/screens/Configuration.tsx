@@ -214,7 +214,49 @@ function RateChangeForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  /**
+   * Why this rate cannot be recorded yet, or `null` when it can.
+   *
+   * This form decides what every taxpayer is charged for the item, so a value
+   * it does not understand must stop it rather than be coerced into one it
+   * does. Two coercions used to happen here silently. An empty box became
+   * `'0'`, so an officer who never typed an amount set the rate to nothing;
+   * and the percentage went through `Number.parseFloat`, which reads "5abc"
+   * as 5 and asks no questions. A blank field is not a zero rate, and a rate
+   * of zero is a decision somebody should have to type.
+   */
+  const rateProblem = ((): string | null => {
+    if (reason.trim().length < 10) return 'Give a reason for the rate change, in at least 10 characters.';
+    if (rateType === 'FIXED') {
+      if (!amount.trim()) return 'Enter the new amount. Leave nothing to chance \u2014 type 0 if the levy is being suspended.';
+      try {
+        const kobo = nairaToKobo(amount);
+        if (kobo < 0n) return 'A rate cannot be negative.';
+      } catch {
+        return `\u201c${amount.trim()}\u201d is not an amount in naira. Enter it as 15000 or 15000.00.`;
+      }
+      return null;
+    }
+    if (rateType === 'PERCENTAGE') {
+      const typed = percent.trim();
+      if (!typed) return 'Enter the new rate as a percentage. Type 0 if the levy is being suspended.';
+      // Deliberately stricter than parseFloat: the whole box must be a number.
+      if (!/^\d+(?:\.\d{1,2})?$/.test(typed)) {
+        return `\u201c${typed}\u201d is not a percentage. Enter it as 5 or 5.00.`;
+      }
+      if (Number.parseFloat(typed) > 100) return 'A percentage rate cannot be more than 100%.';
+      return null;
+    }
+    return null;
+  })();
+
   async function submit() {
+    // Checked before the one-time code is asked for. Validating afterwards
+    // spends a step-up code on a request that was never going to be sent.
+    if (rateProblem) {
+      setError({ code: 'CLIENT', message: rateProblem, moneyStatus: 'NOT_APPLICABLE' });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -224,10 +266,9 @@ function RateChangeForm({
 
       await api.post(`/revenue/items/${item.id}/rates`, {
         rateType,
-        fixedAmountKobo:
-          rateType === 'FIXED' ? nairaToKobo(amount || '0').toString() : undefined,
+        fixedAmountKobo: rateType === 'FIXED' ? nairaToKobo(amount).toString() : undefined,
         rateBasisPoints:
-          rateType === 'PERCENTAGE' ? Math.round(Number.parseFloat(percent || '0') * 100) : undefined,
+          rateType === 'PERCENTAGE' ? Math.round(Number.parseFloat(percent) * 100) : undefined,
         effectiveFrom: new Date(`${effectiveFrom}T00:00:00`).toISOString(),
         reason,
       });
@@ -310,8 +351,14 @@ function RateChangeForm({
         />
       </div>
 
+      {rateProblem && (
+        <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+          {rateProblem}
+        </p>
+      )}
+
       <div className="button-row">
-        <button type="button" disabled={busy || reason.trim().length < 10} onClick={submit}>
+        <button type="button" disabled={busy || rateProblem !== null} onClick={submit}>
           {busy ? 'Recording…' : 'Record new rate version'}
         </button>
         <button type="button" className="secondary" onClick={onCancel}>

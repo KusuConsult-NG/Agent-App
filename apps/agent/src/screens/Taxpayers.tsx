@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, type FormEvent } from 'react';
+import { birthDateMessage, birthDateProblem } from '@psirs/shared';
 import {
   ApiRequestError,
   api,
@@ -383,18 +384,52 @@ export function RegisterTaxpayerScreen({
     );
   }
 
-  const canContinue =
-    step === 0
-      ? !form.hasTin || form.existingTin.length >= 6
-      : step === 1
-        ? form.taxpayerType === 'BUSINESS'
-          ? form.businessName.length >= 2 && form.phone.length >= 10
-          : form.firstName.length >= 2 && form.lastName.length >= 2 && form.phone.length >= 10
-        : step === 3
-          ? form.address.length >= 5 && form.lgaId !== ''
-          : step === 5
-            ? form.consentGiven && form.declarationAccepted
-            : true;
+  /**
+   * What this step is still waiting for, in the words the agent needs, or
+   * `null` when it is ready. A greyed-out Continue with no explanation is the
+   * worst of both worlds in the field: the agent has filled the form in as far
+   * as they can see, and nothing tells them which value the form dislikes.
+   */
+  const blockedBecause = ((): string | null => {
+    if (step === 0) {
+      if (form.hasTin && form.existingTin.trim().length < 6) {
+        return 'Enter the taxpayer\u2019s existing TIN, or choose \u201cNo\u201d if they do not have one yet.';
+      }
+      return null;
+    }
+    if (step === 1) {
+      if (form.taxpayerType === 'BUSINESS') {
+        if (form.businessName.trim().length < 2) return 'Enter the name of the business.';
+      } else {
+        if (form.firstName.trim().length < 2) return 'Enter the taxpayer\u2019s first name.';
+        if (form.lastName.trim().length < 2) return 'Enter the taxpayer\u2019s last name.';
+      }
+      if (form.phone.trim().length < 10) {
+        return 'Enter the taxpayer\u2019s phone number in full, for example 08012345678.';
+      }
+      if (form.dateOfBirth) {
+        const problem = birthDateProblem(form.dateOfBirth);
+        if (problem) return birthDateMessage(problem);
+      }
+      if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+        return 'That email address does not look complete. Correct it, or leave it blank.';
+      }
+      return null;
+    }
+    if (step === 3) {
+      if (form.address.trim().length < 5) return 'Enter the taxpayer\u2019s address.';
+      if (form.lgaId === '') return 'Choose the Local Government Area.';
+      return null;
+    }
+    if (step === 5) {
+      if (!form.consentGiven) return 'The taxpayer must agree before you can register them.';
+      if (!form.declarationAccepted) return 'Confirm the declaration before you register the taxpayer.';
+      return null;
+    }
+    return null;
+  })();
+
+  const canContinue = blockedBecause === null;
 
   return (
     <>
@@ -469,6 +504,7 @@ export function RegisterTaxpayerScreen({
               <button
                 type="button"
                 className={form.hasTin ? '' : 'secondary'}
+                aria-pressed={form.hasTin}
                 onClick={() => set('hasTin', true)}
               >
                 Yes
@@ -476,6 +512,7 @@ export function RegisterTaxpayerScreen({
               <button
                 type="button"
                 className={form.hasTin ? 'secondary' : ''}
+                aria-pressed={!form.hasTin}
                 onClick={() => set('hasTin', false)}
               >
                 No
@@ -736,6 +773,12 @@ export function RegisterTaxpayerScreen({
               <span>The taxpayer declares that the information given is true and correct.</span>
             </label>
           </>
+        )}
+
+        {blockedBecause && (
+          <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+            {blockedBecause}
+          </p>
         )}
 
         <div className="button-row">
