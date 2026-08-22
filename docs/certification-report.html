@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">cc75938</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">e95cfcc</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>21 August 2026 (rev. 5)</dd></div>
+      <div><dt>Date</dt><dd>22 August 2026 (rev. 6)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -625,8 +625,8 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">600</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">90</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">689</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">117</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
@@ -919,6 +919,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Production seed hygiene</td><td><span class="pill p-pass">Pass</span></td><td>Both demonstration flags refuse in production before migrating; the hint that recommended them is suppressed; three regression tests</td><td>B-5 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Deployment &amp; rollback</td><td><span class="pill p-partial">Partial</span></td><td>Dockerfile, compose, and a pipeline with backup-before-migrate and automatic revert. The built artefact was booted in production config and verified; the <em>image build</em> could not be run here (registry blocked)</td><td>B-1 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-pass">Pass</span></td><td><strong>Restoration test performed:</strong> real payment dumped, database dropped, restored — identical receipt, 14 audit rows, and a forged receipt still refused. Automated in CI</td><td>B-2 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Continuous integration coverage</td><td><span class="pill p-pass">Pass</span></td><td>CI declared <code>push: branches: [main]</code> on a repository whose default branch is not <code>main</code>, so a direct push to the branch every PR merges into ran no CI whatsoever. Now every push is built, with push and PR runs deduplicated</td><td>D-13 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Test suite isolation</td><td><span class="pill p-pass">Pass</span></td><td>Two files ran against residue from whichever file preceded them, failing 16 tests elsewhere — including the receipt-forgery and webhook-replay audits. Both now reset; the same 534 pass with and without them</td><td>D-14 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Essential-service linkage (§40)</td><td><span class="pill p-pass">Pass</span></td><td>Health insurance and the bursary denied on tax arrears, bypassing the §40 guard twice over. Both are now additive: compliance sets the benefit tier and never withdraws the benefit. The guard matches by prefix and accepts either additive mode or a recorded legal basis</td><td>D-16 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
           <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
@@ -1370,6 +1373,195 @@ build      shared, api, agent, portal — all clean</div>
             form — are still outside the suite. The finding stays open at reduced
             severity.
           </dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-13</span>
+          <h3 class="finding-title" style="margin:0">Continuous integration was not running on the branch everything merges into</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The workflow declared:
+        </p>
+        <div class="code">on:
+  push:
+    branches: [main]
+  pull_request:</div>
+        <p>
+          This repository's default branch is <code>claude/plateau-revenue-platform-g1l0j4</code>,
+          not <code>main</code>. The consequence is narrow to state and wide in effect:
+          <strong>a direct push to the branch every pull request merges into ran no CI at
+          all.</strong> Only pull requests were ever checked.
+        </p>
+        <p>
+          A large feature commit reached the default branch that way. No workflow run
+          exists for it. It took the suite to <strong>16 failures</strong>, shipped 199
+          lines of code no endpoint could reach, added a disaster-recovery step that had
+          never executed, and included a test that passed without testing anything — none
+          of which was visible, because nothing looked.
+        </p>
+        <p>
+          This is the root cause of five of the six findings below. It is recorded first
+          for that reason: they are not five independent lapses, they are one missing
+          guardrail observed five times.
+        </p>
+        <dl>
+          <dt>Severity</dt>
+          <dd>Process rather than code, and the most consequential finding in this audit after B-4. A financial platform whose default branch is unverified has no floor under it — every control the rest of this report certifies could regress silently.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>144eb02</code>. Every push is built (<code>branches: ['**']</code>) rather than a named list that can drift from reality again. The concurrency group is keyed on the branch name rather than the raw ref, because a push reports <code>refs/heads/x</code> while its pull request reports <code>refs/pull/N/merge</code> — keyed on the ref they land in different groups and a branch with an open PR runs the whole suite twice.</dd>
+          <dt>Demonstrated, not asserted</dt>
+          <dd>The first push after the change produced a CI run that would not previously have existed, and its duplicate PR run was cancelled two seconds later by the concurrency group. Both halves observed working.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-14</span>
+          <h3 class="finding-title" style="margin:0">Two test files were failing sixteen tests in other files</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The suite reported 16 failures including <em>"no verified payment = no receipt"
+          survives a direct database attack</em>, <em>an agent cannot make money
+          appear</em>, and <em>webhook replay cannot duplicate money</em> — the financial
+          controls this certification rests on.
+        </p>
+        <p>
+          They were not broken. Run alone, <code>certification-audit.test.ts</code> passes
+          39 of 39, and the 534 pre-existing tests pass 534 of 534 with the new files
+          excluded. The cause was shared state, isolated by elimination to two files:
+        </p>
+        <ul>
+          <li><code>security-penetration.test.ts</code> imported <code>resetDatabase</code> and never called it — zero occurrences. A suite that writes deliberately hostile data, leaving it for whichever file ran next.</li>
+          <li><code>citizen-profiling-incentives.test.ts</code> had no setup at all.</li>
+        </ul>
+        <dl>
+          <dt>Why it matters beyond the failures</dt>
+          <dd>An audit finding of "the receipt-forgery control failed" is alarming and was false. Test interference does not merely break builds; it destroys the signal the suite exists to provide, in both directions — a suite that cries wolf is also a suite whose real failures get waved through.</dd>
+          <dt>Fixed in</dt>
+          <dd><code>144eb02</code>. Both files now establish their own state.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-15</span>
+          <h3 class="finding-title" style="margin:0">The profiling feature's test passed without testing the feature</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Roughly 1,500 lines of new logic — economic sector profiling, tax obligation
+          derivation, compliance scoring, incentive eligibility — arrived with a 41-line
+          test whose only substantive assertions sat inside:
+        </p>
+        <div class="code">if (taxpayerRes.rows.length &gt; 0) { ... }</div>
+        <p>
+          with no fixture creating that taxpayer. On a clean database the block was skipped
+          and the test reported success having asserted nothing. A second case asserted
+          only <code>typeof res.sent === 'number'</code> while being labelled "runs
+          idempotently" — it passes if the sweep always returns zero.
+        </p>
+        <p>
+          The missing fixture and the interference in D-14 were the same defect: state that
+          was never created, worked around with a conditional instead of built.
+        </p>
+        <dl>
+          <dt>Fixed in</dt>
+          <dd><code>144eb02</code>. Three hollow tests become thirteen real ones, against fixtures the file owns: every sector's revenue codes exist in the catalogue (a typo silently profiles a whole livelihood as owing nothing), a farmer and a betting shop are told they owe <em>different</em> taxes, no business-only item is suggested to an individual, back-fill adds without disturbing, a dropped obligation is <code>WAIVED</code> not deleted, and recording an obligation raises <strong>no invoice or assessment</strong> — enforcing the "notify, do not auto-assess" product decision rather than assuming it.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-16</span>
+          <h3 class="finding-title" style="margin:0">Essential public services were denied on tax arrears, past a safeguard that could not fire</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          PRD §40 states that the platform must not deny essential public services merely
+          because a person is not tax-compliant, unless the linkage is authorised by law or
+          policy. <code>createProgramme</code> enforces it.
+        </p>
+        <p>
+          The Plateau State Health Insurance Scheme was seeded requiring no arrears and a
+          compliance score of 40; the Scholarship and Bursary Scheme required 50. Both
+          <em>denied</em>: a citizen behind on a levy was recorded ineligible for subsidised
+          health cover. The safeguard was bypassed twice over, independently:
+        </p>
+        <ol>
+          <li><strong>By raw SQL.</strong> Both were inserted by a migration, so the service — and its guard — never ran.</li>
+          <li><strong>By naming.</strong> The guard matched the strings <code>HEALTHCARE</code> and <code>EDUCATION</code>; the programmes are typed <code>HEALTH_INSURANCE</code> and <code>EDUCATION_BURSARY</code>. It would not have fired even through the service. It was dead code protecting nothing.</li>
+        </ol>
+        <dl>
+          <dt>Severity</dt>
+          <dd>The platform was making a determination with real consequences for a citizen's access to healthcare, against an explicit safeguard, with no record that anyone had decided to override it. Not a security defect — an accountability one, which in a government revenue system is not a lesser category.</dd>
+          <dt>Resolved by policy decision</dt>
+          <dd>Health insurance and the bursary are now <code>ADDITIVE_BENEFIT</code>: compliance sets the benefit tier and never withdraws the benefit. A citizen holding a TIN is in; paying on time moves them from base to full entitlement. Nothing is withdrawn from anybody, so §40 is satisfied without a statute to cite. The fertilizer programme and housing fund remain <code>ELIGIBILITY_GATE</code> — allocating a finite quantity of subsidised inputs, or extending credit, is choosing between claimants on something scarce rather than withdrawing a service.</dd>
+          <dt>Guard repaired</dt>
+          <dd>Matching is now by prefix, so a future <code>HEALTH_SOMETHING</code> cannot slip past on a name, and an essential-service programme must be either additive or carry a recorded legal basis. Both facts are written to the audit trail, because together they are the §40 decision: how the programme treats a non-compliant citizen, and on whose authority.</dd>
+          <dt>Thresholds kept, not zeroed</dt>
+          <dd>Under additive mode they no longer deny anyone; they separate the base entitlement from the full one, which is the reward the programmes were meant to offer. Zeroing them would have removed the incentive along with the penalty.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-17</span>
+          <h3 class="finding-title" style="margin:0">An observability layer that no endpoint could reach, and a disaster-recovery check that had never run</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Two pieces of infrastructure shipped in a state where they could not have worked,
+          and both had tests that were failing unseen.
+        </p>
+        <p>
+          <code>services/telemetry.ts</code> (179 lines) defined a Prometheus renderer and
+          <code>routes/health.ts</code> a health router. Neither was reachable:
+          <code>/metrics</code> and <code>/health</code> are served by handlers in
+          <code>app.ts</code> backed by <code>lib/metrics.ts</code>, the router was never
+          mounted, and the renderer was never called. The only live part was
+          <code>recordRequest()</code>, feeding a store nothing read.
+        </p>
+        <p>
+          <code>verify-backup.sh</code> hardcoded the database name <code>psirs</code>,
+          while CI's database is <code>psirs_test</code>. The step failed with
+          <code>FATAL: database "psirs" does not exist</code> the first time it ever
+          executed — which was only after D-13 was fixed.
+        </p>
+        <dl>
+          <dt>Fixed in</dt>
+          <dd><code>144eb02</code>. The three gauges genuinely missing from the registry that <em>does</em> serve <code>/metrics</code> — <code>psirs_uptime_seconds</code>, <code>psirs_memory_bytes</code>, <code>psirs_db_pool_connections</code> — are collected there, and both orphaned files deleted. <code>psirs_http_requests_total</code> and <code>psirs_worker_runs_total</code> were deliberately not carried over: both already exist with their own label schemes, and duplicate metric families make Prometheus reject the entire scrape rather than just those two series.</dd>
+          <dt>Restoration verified</dt>
+          <dd>The disaster-recovery script now takes its database from the environment and has succeeded for the first time: a real snapshot restored into an isolated database, 17 LGAs, 37 revenue items, and the <code>receipts_require_verified_payment</code> trigger present on the restored copy.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-18</span>
+          <h3 class="finding-title" style="margin:0">The social incentive programmes could not be recovered once lost</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          All four programmes existed only as an <code>INSERT</code> inside migration 016.
+          Migrations run exactly once and are SHA-256 checksummed — the runner skips an
+          applied file and refuses an edited one. A database that had
+          <code>incentive_programmes</code> truncated, or was restored from a dump predating
+          those rows, could never get them back. Hand-written SQL was the only route.
+        </p>
+        <p>
+          They are the substance of the incentive feature, so that is not an acceptable
+          resting state for them. Found while writing D-15's tests: the test helper
+          truncates that table, and the programmes never returned.
+        </p>
+        <dl>
+          <dt>Fixed in</dt>
+          <dd><code>144eb02</code>. They now sit in <code>seed.ts</code> with the LGAs, revenue catalogue and notification templates, where <code>npm run seed</code> is idempotent. Migration 016 is untouched, being checksummed, and its own insert is already <code>ON CONFLICT DO NOTHING</code>.</dd>
+          <dt>Two properties pinned by test</dt>
+          <dd>Every programme seeds as <code>DRAFT</code>, so nobody becomes a beneficiary of a state scheme because a command ran — an officer must activate it. And <code>ON CONFLICT DO NOTHING</code>, never <code>DO UPDATE</code>: the test closes a programme, re-seeds, and asserts it stays closed. The seed establishes these programmes; it does not own them afterwards.</dd>
         </dl>
       </article>
 
