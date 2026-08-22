@@ -3,14 +3,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, login, type ApiError, type Session } from '../lib/api';
 import { Alert, ErrorAlert, Field, PasswordField, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 export function LoginScreen({
   onSignedIn,
   onApply,
+  languageSwitch,
 }: {
   onSignedIn: (user: Session['user']) => void;
   onApply: () => void;
+  /** Rendered here because signed-out screens have no header to hold it. */
+  languageSwitch?: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,6 +49,7 @@ export function LoginScreen({
         <img className="brand__mark" src="/icon.svg" alt="" />
         <p className="brand__name">Plateau State Revenue Agent</p>
         <p className="brand__tagline">Plateau State Internal Revenue Service</p>
+        {languageSwitch}
       </div>
 
       <form className="card" onSubmit={submit}>
@@ -82,11 +88,8 @@ export function LoginScreen({
         </button>
       </form>
 
-      <Alert kind="info" title="Never collect cash">
-        <p style={{ margin: 0 }}>
-          Government revenue must always be paid by the taxpayer through an approved payment
-          channel. Never accept cash into your own account.
-        </p>
+      <Alert kind="info" title={t.neverCollectCash}>
+        <p style={{ margin: 0 }}>{t.neverCollectCashBody}</p>
       </Alert>
     </div>
   );
@@ -98,7 +101,13 @@ interface Lga {
   zone: string;
 }
 
-export function ApplyScreen({ onDone }: { onDone: () => void }) {
+export function ApplyScreen({
+  onDone,
+  languageSwitch,
+}: {
+  onDone: () => void;
+  languageSwitch?: React.ReactNode;
+}) {
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -190,6 +199,7 @@ export function ApplyScreen({ onDone }: { onDone: () => void }) {
         <p className="brand__tagline">
           You will need identity documents, bank details and a referee.
         </p>
+        {languageSwitch}
       </div>
 
       <form className="card" onSubmit={submit}>

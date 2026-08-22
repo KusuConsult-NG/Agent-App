@@ -129,16 +129,26 @@ Comparing their completion rate against the English cohort would only produce
 a number confirming something already established, at the cost of two weeks of
 their time.
 
-**Their job is to establish which of the 277 strings actually block work.**
+**Since this was written, the highest-cost tier has been translated.** Twenty-nine
+strings — the cash warning, what happened to the money, attribution, receipt
+refusals, every reason a wizard step will not continue, and the device gate —
+are now in both languages, and the language toggle has been moved onto the
+signed-out screens so a Hausa-first applicant can choose Hausa *before* the
+sign-in screen and the application form rather than after them. That
+translation is **drafted and not yet reviewed by a native speaker**
+(`HAUSA-REVIEW.md`); the review must happen before Phase 0 runs, not after.
+
+**The cohort's job is therefore what remains: which of the other ~218 strings
+actually block work.**
 Not all text matters equally: a hint nobody reads costs nothing untranslated,
 while the sentence explaining why a payment was refused costs everything. The
 observer records, for each point where the agent stops, *which specific
 English sentence they were unable to act on*. That list — ordered by how many
-agents it stopped — is the translation backlog, and it will be far shorter
-than 277.
+agents it stopped — is the remaining backlog, and it will be far shorter than
+218.
 
-Run this cohort in Phase 0 regardless. The alternative is translating all 277
-strings on the assumption they matter, or translating none.
+Run this cohort in Phase 0 regardless. The alternative is translating the
+remaining strings on the assumption they all matter, or translating none.
 
 Recruit two supervisors and one revenue officer as well: the portal side has
 had the same amount of real-user exposure as the app, which is none.

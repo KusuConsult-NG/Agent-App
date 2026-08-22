@@ -21,6 +21,7 @@ import {
 } from '../lib/api';
 import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
+import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface TaxpayerSummary {
@@ -157,6 +158,7 @@ export function RegisterTaxpayerScreen({
   navigate: (path: string) => void;
   connection: ConnectionState;
 }) {
+  const { t } = useI18n();
   const [step, setStep] = useState(0);
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
@@ -393,7 +395,7 @@ export function RegisterTaxpayerScreen({
   const blockedBecause = ((): string | null => {
     if (step === 0) {
       if (form.hasTin && form.existingTin.trim().length < 6) {
-        return 'Enter the taxpayer\u2019s existing TIN, or choose \u201cNo\u201d if they do not have one yet.';
+        return t.needExistingTin;
       }
       return null;
     }
@@ -401,29 +403,33 @@ export function RegisterTaxpayerScreen({
       if (form.taxpayerType === 'BUSINESS') {
         if (form.businessName.trim().length < 2) return 'Enter the name of the business.';
       } else {
-        if (form.firstName.trim().length < 2) return 'Enter the taxpayer\u2019s first name.';
-        if (form.lastName.trim().length < 2) return 'Enter the taxpayer\u2019s last name.';
+        if (form.firstName.trim().length < 2) return t.needFirstName;
+        if (form.lastName.trim().length < 2) return t.needLastName;
       }
       if (form.phone.trim().length < 10) {
-        return 'Enter the taxpayer\u2019s phone number in full, for example 08012345678.';
+        return t.needPhone;
       }
       if (form.dateOfBirth) {
         const problem = birthDateProblem(form.dateOfBirth);
-        if (problem) return birthDateMessage(problem);
+        // The shared rule decides *whether* the date is recordable; the
+        // wording belongs to whichever language the agent chose.
+        if (problem === 'IN_THE_FUTURE') return t.birthDateFuture;
+        if (problem === 'TOO_LONG_AGO') return t.birthDateTooOld;
+        if (problem) return t.birthDateMalformed;
       }
       if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-        return 'That email address does not look complete. Correct it, or leave it blank.';
+        return t.emailIncomplete;
       }
       return null;
     }
     if (step === 3) {
-      if (form.address.trim().length < 5) return 'Enter the taxpayer\u2019s address.';
-      if (form.lgaId === '') return 'Choose the Local Government Area.';
+      if (form.address.trim().length < 5) return t.needAddress;
+      if (form.lgaId === '') return t.needLga;
       return null;
     }
     if (step === 5) {
-      if (!form.consentGiven) return 'The taxpayer must agree before you can register them.';
-      if (!form.declarationAccepted) return 'Confirm the declaration before you register the taxpayer.';
+      if (!form.consentGiven) return t.needConsent;
+      if (!form.declarationAccepted) return t.needDeclaration;
       return null;
     }
     return null;

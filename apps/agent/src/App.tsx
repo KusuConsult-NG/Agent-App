@@ -137,10 +137,35 @@ export function App() {
   }
 
   if (!session) {
+    /*
+     * The language toggle lived only in the signed-in header, which put it
+     * on the far side of the two things a Hausa-first applicant meets first:
+     * the sign-in screen, and a twenty-seven-field application form. Somebody
+     * who cannot read English could not reach the control that would have
+     * helped them until they had already got through it in English.
+     */
+    const languageSwitch = (
+      <button
+        type="button"
+        className="ghost"
+        style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}
+        onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
+        aria-label="Switch language"
+      >
+        {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
+      </button>
+    );
+
     if (matchRoute(route, '/apply')) {
-      return <ApplyScreen onDone={() => navigate('/')} />;
+      return <ApplyScreen onDone={() => navigate('/')} languageSwitch={languageSwitch} />;
     }
-    return <LoginScreen onSignedIn={(user) => setSession(user)} onApply={() => navigate('/apply')} />;
+    return (
+      <LoginScreen
+        onSignedIn={(user) => setSession(user)}
+        onApply={() => navigate('/apply')}
+        languageSwitch={languageSwitch}
+      />
+    );
   }
 
   const connectionCopy = CONNECTION_COPY[connection];

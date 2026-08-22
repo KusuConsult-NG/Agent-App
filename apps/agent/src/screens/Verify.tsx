@@ -18,6 +18,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
 import { Alert, ErrorAlert, Field, KeyValue, Money, Spinner } from '../ui';
 import type { ConnectionState } from '../lib/device';
+import { useI18n } from '../lib/i18n';
 
 /** Exactly the shape `GET /verify/:code` returns. */
 interface VerificationResult {
@@ -160,7 +161,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
             if (!found) {
               setError({
                 code: 'INVALID_CODE',
-                message: 'A receipt code looks like T7C72-QTUDN. Check the code and try again.',
+                message: '{t.receiptCodeShape}',
                 moneyStatus: 'NOT_APPLICABLE',
               });
               return;
@@ -193,10 +194,11 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
 }
 
 function VerificationOutcome({ result }: { result: VerificationResult }) {
+  const { t } = useI18n();
   const genuine = result.status === 'VALID';
   return (
     <div className="card">
-      <h2 className="card__title">{genuine ? 'Genuine receipt' : 'Not a valid receipt'}</h2>
+      <h2 className="card__title">{genuine ? t.genuineReceipt : t.receiptNotValid}</h2>
       <Alert kind={genuine ? 'success' : 'error'}>
         <p style={{ margin: 0 }}>{result.message}</p>
       </Alert>

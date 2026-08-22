@@ -1810,7 +1810,7 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         <div class="finding-head">
           <span class="finding-id">D-45</span>
           <h3 class="finding-title" style="margin:0">The language toggle offers more than the translation delivers</h3>
-          <span class="pill p-partial">Open &mdash; backlog to be established in the field</span>
+          <span class="pill p-partial">Partly closed &mdash; drafted, awaiting native review</span>
         </div>
         <p>
           The agent application carries a Hausa toggle, and a test asserts the dictionary is
@@ -1826,7 +1826,15 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>&ldquo;Provides complete Hausa dictionary matching all primary civic terms&rdquo; is true and passes. It measures the dictionary against itself rather than against the interface, so it stayed green while the untranslated surface grew &mdash; including with strings added by this audit.</dd>
           <dt>Why it is not simply fixed</dt>
           <dd>Translating 277 strings on the assumption that all of them matter is as unreasoned as translating none. Text differs enormously in cost when missing: a hint nobody reads costs nothing, and the sentence explaining why a payment was refused costs everything. Which is which is not knowable from the code.</dd>
-          <dt>Recorded as field work rather than closed here</dt>
+          <dt>The safety tier has since been translated</dt>
+          <dd>Twenty-nine strings &mdash; the ones whose absence costs money, integrity or the ability to proceed &mdash; are now in both languages and read from the dictionary rather than held as English literals in the screens: the cash warning, what happened to the money, attribution, receipt refusals, every reason a wizard step will not continue, and the device gate. Verified in a browser with the language set to Hausa.</dd>
+          <dt>A second gap found while testing the first</dt>
+          <dd>The language toggle lived only in the signed-in header. That put it on the far side of the two things a Hausa-first applicant meets first &mdash; the sign-in screen and a twenty-seven-field application form &mdash; so somebody who could not read English could not reach the control that would have helped them until they had already got through it in English. It is now on both signed-out screens.</dd>
+          <dt>Drafted without a native speaker, and not to be shipped on that basis</dt>
+          <dd>These are instructions, not prose: a dropped negative in &ldquo;the payment has <em>not</em> been confirmed&rdquo; or in &ldquo;never accept cash into your own account&rdquo; costs somebody money and somebody else their job. <code>HAUSA-REVIEW.md</code> lists all twenty-nine side by side with the English for a native speaker to check line by line, with the vocabulary decisions stated so they can be disagreed with. <strong>The translation is drafted, not approved.</strong></dd>
+          <dt>The test that should have caught this</dt>
+          <dd>&ldquo;Provides complete Hausa dictionary matching all primary civic terms&rdquo; measured the dictionary against itself. A new test measures it against the two things that matter: that the safety strings differ from the English rather than being copies of it, and that the screens read the dictionary rather than holding literals. It would have failed on the original state.</dd>
+          <dt>The rest remains field work</dt>
           <dd>The field trial (<code>UAT-FIELD-TRIAL.md</code> &sect;3.1) puts four Hausa-first agents through Phase 0 with one job: record the specific English sentence at every point where they stop. That produces a backlog ordered by how many agents each string stopped, which will be far shorter than 277 and can be translated with confidence. The alternative &mdash; a comparison of completion rates against the English cohort &mdash; would spend two weeks of their time confirming a gap already established here.</dd>
           <dt>Plateau State speaks more than two languages</dt>
           <dd>Berom, Ngas, Tarok and others are first languages for large populations in the state. Hausa is the lingua franca and the right second language to have chosen; whether the platform needs a third is a policy question, and it should be asked with the backlog in hand rather than in the abstract.</dd>

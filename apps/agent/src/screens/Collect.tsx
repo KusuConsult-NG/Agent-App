@@ -15,6 +15,7 @@ import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/a
 import { bluetoothPrinter } from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
+import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface RevenueItem {
@@ -58,6 +59,7 @@ export function CollectScreen({
   navigate: (path: string) => void;
   connection: ConnectionState;
 }) {
+  const { t } = useI18n();
   const [route] = useRoute();
   const initialTaxpayerId = queryParams(route).get('taxpayerId');
 
@@ -172,7 +174,7 @@ export function CollectScreen({
       <>
         <div className="card">
           <h2 className="card__title">Who is paying?</h2>
-          <p className="card__hint">Find the taxpayer first. Every payment must be attributed.</p>
+          <p className="card__hint">{t.findTaxpayerFirst}</p>
           <Field label="Search taxpayer">
             <input
               type="search"
@@ -209,8 +211,7 @@ export function CollectScreen({
         {results && results.length === 0 && (
           <div className="card card--flush">
             <p className="empty">
-              No taxpayer matches that search. Register them below before taking a payment —
-              every payment must be attributed to a taxpayer.
+              {t.noTaxpayerMatch}
             </p>
           </div>
         )}
@@ -344,11 +345,8 @@ export function CollectScreen({
             </ul>
           </div>
 
-          <Alert kind="warning" title="Never collect cash">
-            <p style={{ margin: 0 }}>
-              The taxpayer must pay through the approved payment channel. Confirm the amount with
-              them before you continue.
-            </p>
+          <Alert kind="warning" title={t.neverCollectCash}>
+            <p style={{ margin: 0 }}>{t.cashChannelReminder}</p>
           </Alert>
 
           <div className="button-row">
@@ -413,6 +411,7 @@ export function TransactionScreen({
   reference: string;
   navigate: (path: string) => void;
 }) {
+  const { t } = useI18n();
   const [data, setData] = useState<TransactionStatus | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -511,25 +510,22 @@ export function TransactionScreen({
     <>
       {paid ? (
         <div className="amount-confirm">
-          <p className="amount-confirm__label">Payment successful</p>
+          <p className="amount-confirm__label">{t.paymentSuccess}</p>
           <p className="amount-confirm__value">
             <Money kobo={transaction.amount_kobo} />
           </p>
           <p className="amount-confirm__label">Receipt {transaction.receipt_number}</p>
         </div>
       ) : failed ? (
-        <Alert kind="error" title="Payment did not go through">
+        <Alert kind="error" title={t.paymentFailed}>
           <p style={{ margin: 0 }}>
-            {transaction.failure_reason ?? 'The payment was not completed.'} No money has been taken
-            from the taxpayer. You can start the payment again.
+            {transaction.failure_reason ? `${transaction.failure_reason} ` : ''}
+            {t.paymentFailedBody}
           </p>
         </Alert>
       ) : (
-        <Alert kind="warning" title="Payment not yet confirmed">
-          <p style={{ margin: 0 }}>
-            This payment has <strong>not</strong> been marked as received. Do not ask the taxpayer to
-            pay again — check again in a moment.
-          </p>
+        <Alert kind="warning" title={t.paymentUnconfirmed}>
+          <p style={{ margin: 0 }}>{t.paymentUnconfirmedBody}</p>
         </Alert>
       )}
 
