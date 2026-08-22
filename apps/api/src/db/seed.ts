@@ -322,6 +322,17 @@ const INCENTIVE_PROGRAMMES = [
     minimumCompliancePeriods: 1,
     requiresNoArrears: true,
     approvalAuthority: 'Plateau State Health Insurance Authority',
+    /*
+     * Additive, not a gate (PRD §40).
+     *
+     * Health cover is an essential public service, and the platform must not
+     * withdraw one because a citizen is behind on a levy. The thresholds above
+     * are deliberately kept: under ADDITIVE_BENEFIT they no longer deny anyone
+     * — they separate the base entitlement from the full one, which is the
+     * reward this programme was always meant to offer. Zeroing them would
+     * remove the incentive along with the penalty.
+     */
+    linkageMode: 'ADDITIVE_BENEFIT',
   },
   {
     name: 'Input Fertilizer Distribution Programme',
@@ -343,6 +354,10 @@ const INCENTIVE_PROGRAMMES = [
     minimumCompliancePeriods: 1,
     requiresNoArrears: false,
     approvalAuthority: 'Plateau State Ministry of Agriculture and Food Security',
+    // A gate, and defensibly so: a finite quantity of subsidised fertilizer is
+    // allocated between applicants, so this is the state choosing between
+    // claimants on a scarce good rather than withdrawing a service.
+    linkageMode: 'ELIGIBILITY_GATE',
   },
   {
     name: 'State Housing Fund (Low-Income Subsidy)',
@@ -359,6 +374,9 @@ const INCENTIVE_PROGRAMMES = [
     minimumCompliancePeriods: 2,
     requiresNoArrears: true,
     approvalAuthority: 'Plateau State Housing Corporation',
+    // A gate: a subsidised loan is credit, extended at the state's discretion,
+    // and a payment record is a legitimate input to that decision.
+    linkageMode: 'ELIGIBILITY_GATE',
   },
   {
     name: 'Scholarship and Bursary Scheme',
@@ -375,6 +393,9 @@ const INCENTIVE_PROGRAMMES = [
     minimumCompliancePeriods: 1,
     requiresNoArrears: false,
     approvalAuthority: 'Plateau State Scholarship Board',
+    // Education is an essential public service on the same §40 footing as
+    // health: a child's bursary is not withheld because a parent is in arrears.
+    linkageMode: 'ADDITIVE_BENEFIT',
   },
 ] as const;
 
@@ -653,8 +674,8 @@ async function seedReferenceData(): Promise<void> {
         `INSERT INTO incentive_programmes
            (name, code, description, benefit_type, benefit_description, eligibility_rules,
             minimum_score, minimum_compliance_periods, requires_no_arrears,
-            start_date, approval_authority, status)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,CURRENT_DATE,$10,'DRAFT')
+            start_date, approval_authority, status, linkage_mode)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,CURRENT_DATE,$10,'DRAFT',$11)
          ON CONFLICT (code) DO NOTHING`,
         [
           programme.name,
@@ -667,6 +688,7 @@ async function seedReferenceData(): Promise<void> {
           programme.minimumCompliancePeriods,
           programme.requiresNoArrears,
           programme.approvalAuthority,
+          programme.linkageMode,
         ],
       );
     }
