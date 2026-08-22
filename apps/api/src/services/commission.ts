@@ -175,7 +175,7 @@ async function transitionCommission(
   await client.query(
     `UPDATE commissions
         SET status = $2,
-            hold_reason   = CASE WHEN $2 = 'ON_HOLD' THEN $3 ELSE hold_reason END,
+            hold_reason   = CASE WHEN $2 = 'ON_HOLD' THEN $3 ELSE NULL END,
             eligible_at   = CASE WHEN $2 = 'ELIGIBLE' THEN now() ELSE eligible_at END,
             approved_at   = CASE WHEN $2 = 'APPROVED' THEN now() ELSE approved_at END,
             approved_by   = CASE WHEN $2 = 'APPROVED' THEN $4 ELSE approved_by END,
@@ -275,6 +275,18 @@ export async function reverseCommissionForTransaction(
   return { reversed: commissions.length, clawbackKobo: clawback };
 }
 
+/**
+ * The hold reason a confirmed fraud flag writes.
+ *
+ * Named here because the hold and its release must agree on the string
+ * exactly — the release matches on it to avoid lifting a different
+ * investigation's freeze, so two copies of this literal would be a silent way
+ * for money to stay frozen forever.
+ */
+export function fraudFlagHoldReason(flagId: string): string {
+  return `Confirmed fraud flag ${flagId}`;
+}
+
 /** Place commissions on hold, e.g. while a fraud flag is investigated. */
 export async function holdCommissionsForAgent(
   client: PoolClient,
@@ -291,6 +303,43 @@ export async function holdCommissionsForAgent(
     await transitionCommission(client, {
       commissionId: row.id,
       to: 'ON_HOLD',
+      reason: params.reason,
+      actorId: params.actorId ?? null,
+    });
+  }
+
+  return rows.length;
+}
+
+/**
+ * Lift a hold that a particular reason placed, and nothing else.
+ *
+ * Scoped by `hold_reason` rather than by agent, because an agent can be held
+ * under more than one investigation at once and clearing a minor flag must not
+ * pay out money frozen by a serious one. `holdCommissionsForAgent` only ever
+ * picks up PENDING and ELIGIBLE rows, so a commission already on hold is never
+ * re-held and its reason stays the one that froze it.
+ *
+ * Released to PENDING, not ELIGIBLE. The conditions for payment — a settled
+ * transaction, an elapsed hold period, no other open investigation — are
+ * written down once, in `promoteEligibleCommissions`, and this hands the money
+ * back to that test rather than restating it.
+ */
+export async function releaseCommissionHold(
+  client: PoolClient,
+  params: { holdReason: string; reason: string; actorId?: string | null },
+): Promise<number> {
+  const rows = await query<{ id: string }>(
+    client,
+    `SELECT id FROM commissions
+      WHERE status = 'ON_HOLD' AND hold_reason = $1 FOR UPDATE`,
+    [params.holdReason],
+  );
+
+  for (const row of rows) {
+    await transitionCommission(client, {
+      commissionId: row.id,
+      to: 'PENDING',
       reason: params.reason,
       actorId: params.actorId ?? null,
     });

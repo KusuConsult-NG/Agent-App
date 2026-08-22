@@ -622,7 +622,19 @@ governmentRouter.post(
         if (data.decision === 'CONFIRMED' && flag.agent_id) {
           await commission.holdCommissionsForAgent(client, {
             agentId: flag.agent_id,
-            reason: `Confirmed fraud flag ${req.params.id}`,
+            reason: commission.fraudFlagHoldReason(req.params.id),
+            actorId: req.auth!.userId,
+          });
+        }
+
+        // And clearing the agent has to give it back. Freezing on CONFIRMED
+        // without releasing on DISMISSED left an investigated-and-cleared agent
+        // unable to be paid for settled, reconciled work by any route short of
+        // a manual database write.
+        if (data.decision === 'DISMISSED') {
+          await commission.releaseCommissionHold(client, {
+            holdReason: commission.fraudFlagHoldReason(req.params.id),
+            reason: `Fraud flag ${req.params.id} dismissed after review`,
             actorId: req.auth!.userId,
           });
         }

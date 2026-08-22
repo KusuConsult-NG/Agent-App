@@ -113,7 +113,11 @@ export type CommissionState = (typeof COMMISSION_STATES)[number];
 export const COMMISSION_TRANSITIONS: Record<CommissionState, readonly CommissionState[]> = {
   PENDING: ['ELIGIBLE', 'ON_HOLD', 'REVERSED', 'CANCELLED'],
   ELIGIBLE: ['APPROVED', 'ON_HOLD', 'REVERSED', 'CANCELLED'],
-  ON_HOLD: ['ELIGIBLE', 'REVERSED', 'CANCELLED'],
+  // PENDING is the destination when a hold is lifted rather than settled: the
+  // commission goes back to being ordinary accrued money and has to pass the
+  // usual eligibility test again. Releasing straight to ELIGIBLE would declare
+  // it payable without checking that its transaction ever settled.
+  ON_HOLD: ['PENDING', 'ELIGIBLE', 'REVERSED', 'CANCELLED'],
   APPROVED: ['PAID', 'ON_HOLD', 'REVERSED'],
   PAID: ['REVERSED'],
   REVERSED: [],
