@@ -77,11 +77,23 @@ export function badRequest(message: string, details?: ErrorDetail[]): AppError {
   return new AppError({ statusCode: 400, code: 'INVALID_REQUEST', message, details });
 }
 
+/**
+ * The message promised something the applications do not do.
+ *
+ * It said "correct the highlighted fields", and nothing was highlighted:
+ * neither client marks a field, sets `aria-invalid`, or renders anything at
+ * the input. The list of problems appears in the banner and nowhere else. On
+ * the twenty-seven-field agent application that is the difference between
+ * being told where to look and being told to look for something that is not
+ * there — and a message that describes an interface the user cannot see is
+ * worse than a plainer one, because they will keep hunting for the highlight.
+ */
 export function validationFailed(details: ErrorDetail[]): AppError {
   return new AppError({
     statusCode: 422,
     code: 'VALIDATION_FAILED',
-    message: 'Some of the information supplied is not valid. Correct the highlighted fields and try again.',
+    message:
+      'Some of the information supplied is not valid. Check the fields listed below and try again.',
     details,
   });
 }

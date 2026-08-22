@@ -576,8 +576,8 @@
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
-        every field what happens when somebody types the wrong thing into it. Nine defects and one
-        feature the platform had been missing since it was written, of which three matter.
+        every field what happens when somebody types the wrong thing into it. Twelve defects and one
+        feature the platform had been missing since it was written, of which four matter.
       </p>
       <p style="margin-top:12px">
         It also closed the one gap this pass recorded rather than fixed: an agent&rsquo;s
@@ -1803,6 +1803,77 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The two kinds of limit are now said apart. Where the limit protects the platform from a caller, key by caller; where it protects the public from whoever is at the other end of the connection, key by address and ignore any token. A structural test stops a new public surface quietly getting the wrong one.</dd>
           <dt>Recorded as self-inflicted</dt>
           <dd>Found during this revision, in this revision&rsquo;s own change, before it reached anyone.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-41</span>
+          <h3 class="finding-title" style="margin:0">The vehicle renewal asked an agent to type a UUID</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The renewal screen attributed a payment by putting a text box on screen labelled
+          &ldquo;Taxpayer paying&rdquo;, hinting &ldquo;Search for the taxpayer to get their
+          ID&rdquo;, and waiting for the agent to type one in. A taxpayer id is a
+          thirty-six-character UUID. There was no search anywhere on that screen, nothing ever
+          populated the field but the agent&rsquo;s own keystrokes, and the agent is standing
+          beside a vehicle holding a phone.
+        </p>
+        <dl>
+          <dt>Not awkward &mdash; impassable</dt>
+          <dd>Confirmed by reading every write to the field: <code>setTaxpayerId</code> was called from exactly one place, the input&rsquo;s own <code>onChange</code>. No lookup, no search result, no parameter populated it. The renewal flow behind that field could not be completed by anybody working the way agents work, and the button beyond it stayed dead with nothing said about why.</dd>
+          <dt>The rule it was meant to serve</dt>
+          <dd>Every payment is attributed to a taxpayer &mdash; the platform says so on the collect screen in those words. A control that makes attribution impossible does not enforce that rule, it stops the work; and work that cannot be done in the app gets done outside it.</dd>
+          <dt>The search already existed</dt>
+          <dd>The collect screen has always had one. Rather than a third copy it is now a component, with the &ldquo;searched and found nobody&rdquo; state that D-36 added to collect built in from the start. Driven end to end afterwards: search by name, five results offered, tap one, and the renewal proceeds.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-42</span>
+          <h3 class="finding-title" style="margin:0">The agent application let the browser accept what the API would refuse</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The application form is twenty-seven fields, filled in on a phone, by somebody
+          applying for a job. Two of its rules were stated but not enforced, so the browser
+          accepted the form and the server rejected it &mdash; after all twenty-seven had been
+          filled in.
+        </p>
+        <dl>
+          <dt>A password the form itself described correctly</dt>
+          <dd>The hint under the box said &ldquo;At least 8 characters, including a letter and a number&rdquo;, and the input checked only the length. <code>onlyletters</code> passed the browser and came back refused. Stating a rule and not enforcing it is the worst of the three options.</dd>
+          <dt>A date of birth in 2099</dt>
+          <dd>The date input had no bounds, so the server rule added in D-34 was the first thing to catch it &mdash; at the end of the form rather than at the box. Now bounded at the input to the same range.</dd>
+          <dt>Verified by asking the browser</dt>
+          <dd>Before: <code>form.checkValidity()</code> returned <code>true</code> for a passwordless-of-digits, born-in-2099 application. After: <code>false</code>, naming both fields, with nothing sent. A valid application still submits and was re-checked end to end.</dd>
+          <dt>Three quieter mismatches of the same kind</dt>
+          <dd>Referee full name, bank name and account name all carried <code>required</code> without the minimum length their API schemas apply. Each would have been refused at the end of a long form for a reason the form knew about all along.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--warn)">
+        <div class="finding-head">
+          <span class="finding-id">D-43</span>
+          <h3 class="finding-title" style="margin:0">&ldquo;Correct the highlighted fields&rdquo; highlighted nothing</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Every validation failure in both applications answered with &ldquo;Some of the
+          information supplied is not valid. Correct the highlighted fields and try
+          again&rdquo;. Neither client highlights a field, sets <code>aria-invalid</code>, or
+          renders anything at the input. Counted on a failing application form:
+          <code>aria-invalid: 0, field errors: 0</code>.
+        </p>
+        <dl>
+          <dt>Worse than a plainer message</dt>
+          <dd>It describes an interface the reader cannot see, so they hunt for a highlight that does not exist before finding the list in the banner. The message now points at the list that is actually rendered.</dd>
+          <dt>And the list named fields nobody recognises</dt>
+          <dd>Details arrive keyed by the API&rsquo;s identifiers, and those were printed straight out: &ldquo;dateOfBirth: That date of birth is in the future&rdquo;. On a twenty-seven-field form the reader then has to work out which box that was. Both applications now render the key as the label it belongs to.</dd>
+          <dt>One more of the same shape</dt>
+          <dd>The step-up prompt enabled Confirm at four characters for a six-digit code, so pressing it produced &ldquo;that code is incorrect&rdquo; when the truth was that the code was half typed. The length is now reported by the server rather than assumed by the client, because <code>OTP_LENGTH</code> is configuration and a client that hardcodes it is wrong in the dangerous direction.</dd>
         </dl>
       </article>
 

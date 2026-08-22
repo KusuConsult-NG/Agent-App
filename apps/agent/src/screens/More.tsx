@@ -15,6 +15,7 @@ import { bluetoothPrinter } from '../lib/bluetooth-printer';
 import { pushManager } from '../lib/push';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
+import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -39,7 +40,8 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
   const [items, setItems] = useState<{ id: string; name: string; code: string }[]>([]);
   const [revenueItemId, setRevenueItemId] = useState('');
   const [months, setMonths] = useState<6 | 12 | 24>(12);
-  const [taxpayerId, setTaxpayerId] = useState('');
+  const [taxpayer, setTaxpayer] = useState<PickedTaxpayer | null>(null);
+  const taxpayerId = taxpayer?.id ?? '';
   const [capturedOffline, setCapturedOffline] = useState(false);
   const [offlineCapture, setOfflineCapture] = useState(false);
   const [manual, setManual] = useState({ ownerName: '', vehicleType: 'PRIVATE', ownerPhone: '' });
@@ -294,18 +296,23 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                 </select>
               </Field>
 
-              <Field label="Taxpayer paying" hint="Search for the taxpayer to get their ID" required>
-                <input
-                  value={taxpayerId}
-                  onChange={(event) => setTaxpayerId(event.target.value)}
-                  placeholder="Taxpayer ID"
-                />
-              </Field>
+              <TaxpayerPicker
+                chosen={taxpayer}
+                onChoose={setTaxpayer}
+                onClear={() => setTaxpayer(null)}
+              />
 
               <button type="button" disabled={busy || !revenueItemId || !taxpayerId} onClick={renew}>
                 {busy ? <Spinner /> : null}
                 Calculate and proceed to payment
               </button>
+              {(!revenueItemId || !taxpayerId) && (
+                <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+                  {!revenueItemId
+                    ? 'Choose which renewal is being paid for.'
+                    : 'Find the taxpayer paying for this renewal. Every payment must be attributed to somebody.'}
+                </p>
+              )}
             </>
           )}
         </div>

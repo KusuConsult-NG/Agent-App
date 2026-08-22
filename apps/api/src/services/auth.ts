@@ -568,7 +568,20 @@ export async function requestOtp(params: {
   destination: string;
   purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
   userId?: string | null;
-}): Promise<{ sent: boolean; expiresInSeconds: number; developmentCode?: string }> {
+}): Promise<{
+  sent: boolean;
+  expiresInSeconds: number;
+  /**
+   * How many digits the code has.
+   *
+   * `OTP_LENGTH` is configuration, so a client that hardcodes six is wrong the
+   * moment it is set to anything else — and wrong in the worst direction,
+   * enabling Confirm on a code the caller has not finished typing. Saying it
+   * here lets the applications enforce the real rule rather than a guess at it.
+   */
+  codeLength: number;
+  developmentCode?: string;
+}> {
   const code = generateOtp();
   const expiresAt = new Date(Date.now() + config.auth.otpTtlSeconds * 1000);
 
@@ -597,6 +610,7 @@ export async function requestOtp(params: {
   return {
     sent: true,
     expiresInSeconds: config.auth.otpTtlSeconds,
+    codeLength: config.auth.otpLength,
     // Development convenience only; never returned when a real SMS provider is
     // configured, and config.ts refuses to start in production with 'mock'.
     ...(config.notifications.smsProvider === 'mock' ? { developmentCode: code } : {}),

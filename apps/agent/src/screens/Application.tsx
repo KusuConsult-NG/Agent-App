@@ -414,15 +414,26 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         />
       ))}
 
-      <button type="submit" disabled={busy || identityNumber.length < 5 || missing.length > 0}>
+      <button
+        type="submit"
+        disabled={busy || identityNumber.trim().length < 5 || missing.length > 0}
+      >
         {busy ? <Spinner /> : null}
         {busy ? 'Verifying…' : 'Submit for verification'}
       </button>
-      {missing.length > 0 && (
+      {missing.length > 0 ? (
         <p className="card__hint">
           Still needed before this can be submitted:{' '}
           {missing.map((d) => d.label.toLowerCase()).join(', ')}.
         </p>
+      ) : (
+        identityNumber.trim().length < 5 && (
+          // The documents case explained itself and this one did not, so a
+          // short number left the button dead with nothing said about why.
+          <p className="card__hint" role="status">
+            Enter your identification number in full before submitting.
+          </p>
+        )
       )}
     </form>
   );
@@ -520,6 +531,7 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
               value={form.fullName}
               onChange={(event) => setForm({ ...form, fullName: event.target.value })}
               required
+              minLength={3}
             />
           </Field>
           <Field label="Referee phone number" hint="They will receive the verification link here" required>

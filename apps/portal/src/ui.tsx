@@ -71,6 +71,25 @@ export function Alert({
   );
 }
 
+/**
+ * The name of a field as the person filling it in saw it.
+ *
+ * Validation details arrive keyed by the API's own identifiers —
+ * `dateOfBirth`, `accountNumber`, `lgaId` — and those were printed straight
+ * into the list of problems. Somebody reading "dateOfBirth: That date of
+ * birth is in the future" has to work out which box on the form that was,
+ * which is a small tax on every failed submission and a larger one on a long
+ * form filled in on a phone.
+ */
+function fieldLabel(field: string): string {
+  const spaced = field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._]/g, ' ')
+    .trim();
+  const readable = spaced.replace(/\bId\b$/i, '').trim() || spaced;
+  return readable.charAt(0).toUpperCase() + readable.slice(1).toLowerCase();
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   if (!error) return null;
   return (
@@ -80,7 +99,7 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
           {error.details.map((detail, index) => (
             <li key={index}>
-              {detail.field ? `${detail.field}: ` : ''}
+              {detail.field ? `${fieldLabel(detail.field)}: ` : ''}
               {detail.issue}
             </li>
           ))}

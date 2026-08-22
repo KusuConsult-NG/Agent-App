@@ -17,6 +17,25 @@ export function Money({ kobo, className }: { kobo: string | bigint | null | unde
  * payment: PRD §60 requires the agent to know, without interpreting anything,
  * whether the taxpayer has been debited.
  */
+/**
+ * The name of a field as the person filling it in saw it.
+ *
+ * Validation details arrive keyed by the API's own identifiers —
+ * `dateOfBirth`, `accountNumber`, `lgaId` — and those were printed straight
+ * into the list of problems. Somebody reading "dateOfBirth: That date of
+ * birth is in the future" has to work out which box on the form that was,
+ * which is a small tax on every failed submission and a larger one on a long
+ * form filled in on a phone.
+ */
+function fieldLabel(field: string): string {
+  const spaced = field
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[._]/g, ' ')
+    .trim();
+  const readable = spaced.replace(/\bId\b$/i, '').trim() || spaced;
+  return readable.charAt(0).toUpperCase() + readable.slice(1).toLowerCase();
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   if (!error) return null;
 
@@ -38,7 +57,7 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
         <ul>
           {error.details.map((detail, index) => (
             <li key={index}>
-              {detail.field ? `${detail.field}: ` : ''}
+              {detail.field ? `${fieldLabel(detail.field)}: ` : ''}
               {detail.issue}
             </li>
           ))}
@@ -305,6 +324,8 @@ export function PasswordField({
   autoComplete,
   required,
   minLength,
+  pattern,
+  patternHint,
 }: {
   label: string;
   hint?: string;
@@ -313,6 +334,18 @@ export function PasswordField({
   autoComplete: 'current-password' | 'new-password';
   required?: boolean;
   minLength?: number;
+  /**
+   * The rule the API will apply, so the browser applies it first.
+   *
+   * The application form told applicants a password needs "a letter and a
+   * number" and then only checked the length, so one without a digit passed
+   * the browser and was refused by the server — after twenty-seven fields had
+   * been filled in on a phone. Stating a rule and not enforcing it is the
+   * worst of the three options.
+   */
+  pattern?: string;
+  /** Shown in the browser's own refusal, which otherwise says only "match the requested format". */
+  patternHint?: string;
 }) {
   const [shown, setShown] = useState(false);
   const id = useId();
@@ -333,6 +366,8 @@ export function PasswordField({
           value={value}
           required={required}
           minLength={minLength}
+          pattern={pattern}
+          title={patternHint}
           aria-describedby={hint ? hintId : undefined}
           onChange={(event) => onChange(event.target.value)}
         />

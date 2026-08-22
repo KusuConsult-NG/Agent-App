@@ -27,6 +27,8 @@ import { api, getUser } from './api';
 /** How long the code is good for, as the server reported it. */
 export interface CodeRequest {
   expiresInSeconds: number;
+  /** How many digits the code has, as the server reported it. */
+  codeLength: number;
   /**
    * Present only while a mock SMS provider is configured; `config.ts` refuses
    * to boot in production with one. It is shown to the agent rather than
@@ -45,12 +47,15 @@ export async function requestStepUpCode(): Promise<CodeRequest> {
   const destination = stepUpDestination();
   if (!destination) throw new Error('Sign in again to request a code.');
 
-  const result = await api.post<{ expiresInSeconds: number; developmentCode?: string }>(
-    '/auth/otp/request',
-    { destination, purpose: 'STEP_UP' },
-  );
+  const result = await api.post<{
+    expiresInSeconds: number;
+    codeLength?: number;
+    developmentCode?: string;
+  }>('/auth/otp/request', { destination, purpose: 'STEP_UP' });
   return {
     expiresInSeconds: result.expiresInSeconds,
+    // Six is the configured default, used only if an older server does not say.
+    codeLength: result.codeLength ?? 6,
     ...(result.developmentCode ? { developmentCode: result.developmentCode } : {}),
   };
 }

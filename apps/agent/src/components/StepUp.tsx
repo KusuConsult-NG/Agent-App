@@ -48,6 +48,8 @@ export function StepUpPrompt({
   const [busy, setBusy] = useState(false);
   const [developmentCode, setDevelopmentCode] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  /** The length the server says the code has, rather than one assumed here. */
+  const [codeLength, setCodeLength] = useState(6);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const destination = stepUpDestination();
@@ -61,6 +63,7 @@ export function StepUpPrompt({
     try {
       const result = await requestStepUpCode();
       setSecondsLeft(result.expiresInSeconds);
+      setCodeLength(result.codeLength);
       setDevelopmentCode(result.developmentCode ?? null);
       inputRef.current?.focus();
     } catch (caught) {
@@ -161,7 +164,14 @@ export function StepUpPrompt({
         ))}
 
       <div className="button-row">
-        <button type="submit" disabled={busy || sending || code.length < 4}>
+        {/*
+          * The API requires exactly as many digits as it issued. Enabling at
+          * four let the agent press Confirm on a half-typed code and be told it
+          * was incorrect, which reads as "the code you were sent is wrong"
+          * rather than "you have not finished typing it". The length comes
+          * from the server because OTP_LENGTH is configuration.
+          */}
+        <button type="submit" disabled={busy || sending || code.trim().length !== codeLength}>
           {busy ? <Spinner /> : confirmLabel}
         </button>
         <button type="button" className="secondary" disabled={sending || busy} onClick={() => void send()}>

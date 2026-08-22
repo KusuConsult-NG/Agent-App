@@ -206,7 +206,19 @@ export function ApplyScreen({ onDone }: { onDone: () => void }) {
           <input type="email" inputMode="email" value={form.email} onChange={update('email')} />
         </Field>
         <Field label="Date of birth">
-          <input type="date" value={form.dateOfBirth} onChange={update('dateOfBirth')} />
+          {/*
+            * Bounded here as well as on the server. The rule is the same one
+            * the API applies, and applying it at the input means a slipped
+            * year is caught while the applicant is still looking at the box
+            * rather than at the end of a twenty-seven-field form.
+            */}
+          <input
+            type="date"
+            value={form.dateOfBirth}
+            onChange={update('dateOfBirth')}
+            min="1900-01-01"
+            max={new Date().toISOString().slice(0, 10)}
+          />
         </Field>
         <PasswordField
           label="Password"
@@ -216,6 +228,8 @@ export function ApplyScreen({ onDone }: { onDone: () => void }) {
           onChange={(next) => setForm((current) => ({ ...current, password: next }))}
           required
           minLength={8}
+          pattern="(?=.*[0-9])(?=.*[a-zA-Z]).{8,}"
+          patternHint="At least 8 characters, including at least one letter and at least one number."
         />
 
         <p className="section-title">Where you live</p>
@@ -247,10 +261,10 @@ export function ApplyScreen({ onDone }: { onDone: () => void }) {
           </p>
         </Alert>
         <Field label="Bank name" required>
-          <input value={form.bankName} onChange={update('bankName')} required />
+          <input value={form.bankName} onChange={update('bankName')} required minLength={2} />
         </Field>
         <Field label="Account name" required>
-          <input value={form.accountName} onChange={update('accountName')} required />
+          <input value={form.accountName} onChange={update('accountName')} required minLength={3} />
         </Field>
         <Field label="Account number" hint="10 digits" required>
           <input
