@@ -14,6 +14,14 @@ VERIFY_DB="psirs_verify_restore_$$"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
 DB_USER="${DB_USER:-postgres}"
+# The database to snapshot.
+#
+# This was hardcoded to "psirs" at the call below, so the step could only ever
+# work against a deployment that happened to use that name. In CI the database
+# is `psirs_test`, and the step failed with `FATAL: database "psirs" does not
+# exist` the first time it ran — which was long after it was added, because CI
+# was not running on this branch at all.
+DB_NAME="${DB_NAME:-psirs}"
 
 cleanup() {
   echo "[verify-backup] Cleaning up temporary files and verification database..."
@@ -24,10 +32,14 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== PSIRS Disaster Recovery & Backup Integrity Verification ==="
-echo "1. Creating fresh snapshot of 'psirs' into ${TEMP_BACKUP_DIR}..."
-BACKUP_DIR="${TEMP_BACKUP_DIR}" DB_NAME="psirs" bash "${SCRIPT_DIR}/backup.sh"
+echo "1. Creating fresh snapshot of '${DB_NAME}' into ${TEMP_BACKUP_DIR}..."
+BACKUP_DIR="${TEMP_BACKUP_DIR}" DB_NAME="${DB_NAME}" bash "${SCRIPT_DIR}/backup.sh"
 
-LATEST_DUMP="$(ls "${TEMP_BACKUP_DIR}"/psirs_backup_*.dump | head -n 1)"
+# Deliberately "psirs_backup_*" and not "${DB_NAME}_backup_*": backup.sh names
+# every dump `psirs_backup_<timestamp>` regardless of which database it read,
+# and its retention sweep matches the same fixed prefix. Following DB_NAME here
+# would look for a file backup.sh never writes.
+LATEST_DUMP="$(ls "${TEMP_BACKUP_DIR}"/psirs_backup_*.dump 2>/dev/null | head -n 1)"
 if [ -z "${LATEST_DUMP}" ]; then
   echo "FAILED: No backup dump was produced."
   exit 1
