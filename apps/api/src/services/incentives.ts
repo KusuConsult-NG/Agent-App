@@ -174,6 +174,8 @@ export interface ProgrammeInput {
   benefitDescription?: string;
   targetLgaIds?: string[];
   targetTaxpayerTypes?: string[];
+  /** Economic sectors this programme is open to. Empty means all of them. */
+  targetSectors?: string[];
   minimumScore?: number;
   minimumCompliancePeriods?: number;
   requiresNoArrears?: boolean;
@@ -264,10 +266,11 @@ export async function createProgramme(params: {
       client,
       `INSERT INTO incentive_programmes
          (name, code, description, benefit_type, benefit_description, eligibility_rules,
+          target_sectors,
           target_lga_ids, target_taxpayer_types, minimum_score, minimum_compliance_periods,
           requires_no_arrears, start_date, end_date, approval_authority, status, created_by,
           linkage_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'DRAFT',$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'DRAFT',$16,$17)
        RETURNING id`,
       [
         input.name,
@@ -278,6 +281,7 @@ export async function createProgramme(params: {
         JSON.stringify({
           essentialServiceLegalBasis: input.essentialServiceLegalBasis ?? null,
         }),
+        input.targetSectors ?? [],
         input.targetLgaIds ?? [],
         input.targetTaxpayerTypes ?? ['INDIVIDUAL', 'BUSINESS'],
         input.minimumScore ?? 0,
@@ -337,6 +341,7 @@ export async function evaluateEligibility(
       requires_no_arrears: boolean;
       target_lga_ids: string[];
       target_taxpayer_types: string[];
+      target_sectors: string[];
       start_date: Date;
       end_date: Date | null;
       status: string;
@@ -344,9 +349,14 @@ export async function evaluateEligibility(
     }>(client, 'SELECT * FROM incentive_programmes WHERE id = $1', [params.programmeId]);
     if (!programme) throw notFound('That programme');
 
-    const taxpayer = await queryOne<{ lga_id: string; taxpayer_type: string; tin: string | null }>(
+    const taxpayer = await queryOne<{
+      lga_id: string;
+      taxpayer_type: string;
+      tin: string | null;
+      economic_sector: string | null;
+    }>(
       client,
-      'SELECT lga_id, taxpayer_type, tin FROM taxpayers WHERE id = $1',
+      'SELECT lga_id, taxpayer_type, tin, economic_sector FROM taxpayers WHERE id = $1',
       [params.taxpayerId],
     );
     if (!taxpayer) throw notFound('That taxpayer');
@@ -392,6 +402,28 @@ export async function evaluateEligibility(
       reasons.push('Taxpayer is outside the programme target area');
     } else if (programme.target_lga_ids.length > 0) {
       reasons.push('Taxpayer is within the programme target area');
+    }
+
+    /*
+     * Sector, which is what makes "fertiliser for compliant farmers" sayable.
+     * Empty means every sector, as with the LGA list. A taxpayer whose sector
+     * was never recorded is out of scope for a sector-targeted programme
+     * rather than quietly in it — the remedy is to record what they do, not to
+     * guess.
+     */
+    if (programme.target_sectors.length > 0) {
+      if (!taxpayer.economic_sector) {
+        eligible = false;
+        reasons.push('No economic sector recorded for this taxpayer');
+      } else if (!programme.target_sectors.includes(taxpayer.economic_sector)) {
+        eligible = false;
+        reasons.push(
+          `Programme is for ${programme.target_sectors.join(', ').toLowerCase()}, ` +
+            `not ${taxpayer.economic_sector.toLowerCase()}`,
+        );
+      } else {
+        reasons.push(`Sector ${taxpayer.economic_sector} is within scope`);
+      }
     }
 
     if (!taxpayer.tin) {

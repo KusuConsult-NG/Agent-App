@@ -5,7 +5,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { parseKobo } from '@psirs/shared';
+import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
 import {
@@ -828,6 +828,12 @@ governmentRouter.post(
       benefitDescription: z.string().max(500).optional(),
       targetLgaIds: z.array(uuidSchema).optional(),
       targetTaxpayerTypes: z.array(z.enum(['INDIVIDUAL', 'BUSINESS'])).optional(),
+      /*
+       * Which sectors the programme is for. Empty or absent means all of them,
+       * as with targetLgaIds. Validated against the shared vocabulary so a
+       * typo is refused here rather than by a constraint at insert time.
+       */
+      targetSectors: z.array(z.enum(ECONOMIC_SECTOR_CODES)).max(30).optional(),
       minimumScore: z.number().int().min(0).max(100).optional(),
       minimumCompliancePeriods: z.number().int().min(0).optional(),
       requiresNoArrears: z.boolean().optional(),

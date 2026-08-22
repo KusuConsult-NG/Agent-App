@@ -411,6 +411,19 @@ export const ECONOMIC_SECTORS: readonly EconomicSectorDefinition[] = [
 
 export type EconomicSectorCode = (typeof ECONOMIC_SECTORS)[number]['code'];
 
+/**
+ * The sector codes alone, derived rather than retyped.
+ *
+ * Needed as a plain tuple for request validation. Deriving it means a sector
+ * added to the list above is accepted by the API without a second edit — the
+ * database CHECK and this list having drifted apart once already is what makes
+ * a second hand-maintained copy a bad idea.
+ */
+export const ECONOMIC_SECTOR_CODES = ECONOMIC_SECTORS.map((s) => s.code) as unknown as [
+  EconomicSectorCode,
+  ...EconomicSectorCode[],
+];
+
 export function sectorByCode(code: string): EconomicSectorDefinition | undefined {
   return ECONOMIC_SECTORS.find((s) => s.code === code);
 }
