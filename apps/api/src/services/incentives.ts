@@ -185,15 +185,38 @@ export interface ProgrammeInput {
    * to tax compliance. Required to create such a programme (PRD §40).
    */
   essentialServiceLegalBasis?: string | null;
+  /**
+   * How compliance affects the benefit.
+   *
+   * ELIGIBILITY_GATE (the default) — compliance decides whether the citizen
+   * qualifies. ADDITIVE_BENEFIT — compliance decides the tier and never denies.
+   */
+  linkageMode?: 'ELIGIBILITY_GATE' | 'ADDITIVE_BENEFIT';
 }
 
-const ESSENTIAL_SERVICE_BENEFITS = [
-  'HEALTHCARE',
+/**
+ * Benefit types that are essential public services under PRD §40.
+ *
+ * The list previously held only the generic words HEALTHCARE and EDUCATION,
+ * and the programmes actually created were typed HEALTH_INSURANCE and
+ * EDUCATION_BURSARY — so the guard below matched nothing and never fired. It
+ * was dead code protecting nothing. The real type names are now included,
+ * along with the generic ones, and matching is by prefix so a future
+ * HEALTH_SOMETHING cannot slip past on a name again.
+ */
+const ESSENTIAL_SERVICE_PREFIXES = [
+  'HEALTH',
   'EDUCATION',
   'WATER',
   'EMERGENCY_RELIEF',
   'SOCIAL_WELFARE',
+  'SCHOLARSHIP',
 ];
+
+function isEssentialService(benefitType: string): boolean {
+  const type = benefitType.toUpperCase();
+  return ESSENTIAL_SERVICE_PREFIXES.some((prefix) => type.startsWith(prefix));
+}
 
 export async function createProgramme(params: {
   input: ProgrammeInput;
@@ -202,18 +225,35 @@ export async function createProgramme(params: {
 }): Promise<{ programmeId: string }> {
   const { input } = params;
 
-  // PRD §40's safeguard, enforced rather than documented.
+  /*
+   * PRD §40's safeguard, enforced rather than documented.
+   *
+   * An essential public service may be linked to tax compliance in exactly two
+   * ways. Either the programme is additive — compliance raises the benefit tier
+   * and never withdraws the benefit — in which case nothing is being denied and
+   * no legal authority is needed. Or it denies, and then the law or policy that
+   * permits the denial has to be on the record before the programme exists.
+   *
+   * What is not allowed is the third thing: a programme that quietly refuses a
+   * citizen health cover because they are behind on a levy, with nobody having
+   * written down who decided that was lawful.
+   */
+  const linkageMode = input.linkageMode ?? 'ELIGIBILITY_GATE';
   if (
-    ESSENTIAL_SERVICE_BENEFITS.includes(input.benefitType.toUpperCase()) &&
+    isEssentialService(input.benefitType) &&
+    linkageMode !== 'ADDITIVE_BENEFIT' &&
     !input.essentialServiceLegalBasis
   ) {
     throw badRequest(
-      'This programme links an essential public service to tax compliance. ' +
-        'It can only be created if the legal or policy authority for that linkage is recorded.',
+      'This programme would deny an essential public service on tax-compliance grounds. ' +
+        'Either make it additive, so compliance raises the benefit tier rather than ' +
+        'withdrawing the benefit, or record the legal or policy authority for the denial.',
       [
         {
           field: 'essentialServiceLegalBasis',
-          issue: 'Required for programmes affecting essential public services',
+          issue:
+            'Required when an essential-service programme denies on compliance grounds. ' +
+            'Not required when linkageMode is ADDITIVE_BENEFIT.',
         },
       ],
     );
@@ -225,8 +265,9 @@ export async function createProgramme(params: {
       `INSERT INTO incentive_programmes
          (name, code, description, benefit_type, benefit_description, eligibility_rules,
           target_lga_ids, target_taxpayer_types, minimum_score, minimum_compliance_periods,
-          requires_no_arrears, start_date, end_date, approval_authority, status, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'DRAFT',$15)
+          requires_no_arrears, start_date, end_date, approval_authority, status, created_by,
+          linkage_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'DRAFT',$15,$16)
        RETURNING id`,
       [
         input.name,
@@ -246,6 +287,7 @@ export async function createProgramme(params: {
         input.endDate ?? null,
         input.approvalAuthority,
         params.actorId,
+        linkageMode,
       ],
     );
 
@@ -259,6 +301,9 @@ export async function createProgramme(params: {
         code: input.code,
         benefitType: input.benefitType,
         minimumScore: input.minimumScore ?? 0,
+        // Both recorded, because together they are the §40 decision: how this
+        // programme treats a non-compliant citizen, and on whose authority.
+        linkageMode,
         essentialServiceLegalBasis: input.essentialServiceLegalBasis ?? null,
       },
     });
@@ -277,7 +322,12 @@ export async function evaluateEligibility(
     taxpayerId: string;
   },
   existingClient?: PoolClient,
-): Promise<{ eligible: boolean; reasons: string[]; score: number }> {
+): Promise<{
+  eligible: boolean;
+  reasons: string[];
+  score: number;
+  benefitTier: 'BASE' | 'FULL' | null;
+}> {
   const evaluate = async (client: PoolClient) => {
     const programme = await queryOne<{
       id: string;
@@ -290,6 +340,7 @@ export async function evaluateEligibility(
       start_date: Date;
       end_date: Date | null;
       status: string;
+      linkage_mode: string;
     }>(client, 'SELECT * FROM incentive_programmes WHERE id = $1', [params.programmeId]);
     if (!programme) throw notFound('That programme');
 
@@ -350,10 +401,27 @@ export async function evaluateEligibility(
       reasons.push('Valid TIN on record');
     }
 
+    /*
+     * Everything above this point is *scope*: the programme is open, the
+     * citizen is the right kind of taxpayer, in the right place, holding a TIN.
+     * Failing any of those means the programme is not for them, in either mode.
+     *
+     * Everything below is *compliance*, and this is where the two modes part.
+     * Under ELIGIBILITY_GATE a shortfall denies. Under ADDITIVE_BENEFIT it
+     * cannot deny anybody — it decides the tier, so paying on time buys a
+     * better entitlement and falling behind never costs the entitlement
+     * itself. PRD §40 forbids the platform from denying an essential public
+     * service on tax grounds absent a recorded legal authority, and an
+     * additive programme never denies, so it needs no such authority.
+     */
+    const additive = programme.linkage_mode === 'ADDITIVE_BENEFIT';
+
+    /** Compliance shortfalls: they deny under a gate, and downgrade otherwise. */
+    const shortfalls: string[] = [];
+
     if (compliance.score < programme.minimum_score) {
-      eligible = false;
-      reasons.push(
-        `Compliance score ${compliance.score} is below the required minimum of ${programme.minimum_score}`,
+      shortfalls.push(
+        `Compliance score ${compliance.score} is below ${programme.minimum_score}`,
       );
     } else {
       reasons.push(`Compliance score ${compliance.score} meets the minimum of ${programme.minimum_score}`);
@@ -361,32 +429,58 @@ export async function evaluateEligibility(
 
     const periods = detail?.compliant_periods ?? 0;
     if (periods < programme.minimum_compliance_periods) {
-      eligible = false;
-      reasons.push(
+      shortfalls.push(
         `${periods} compliant period(s) recorded; ${programme.minimum_compliance_periods} required`,
       );
     }
 
     if (programme.requires_no_arrears && parseKobo(detail?.outstanding_amount_kobo ?? '0') > 0n) {
-      eligible = false;
-      reasons.push('There are outstanding revenue obligations');
+      shortfalls.push('There are outstanding revenue obligations');
     } else if (programme.requires_no_arrears) {
       reasons.push('No outstanding revenue obligations');
     }
 
+    /*
+     * A tier is only meaningful on an additive programme; a gated one is a yes
+     * or a no. It is also only awarded to somebody the scope checks admitted —
+     * a citizen with no TIN does not get a BASE entitlement to something they
+     * are not in scope for.
+     */
+    let benefitTier: 'BASE' | 'FULL' | null = null;
+    if (additive) {
+      benefitTier = eligible ? (shortfalls.length === 0 ? 'FULL' : 'BASE') : null;
+      if (shortfalls.length > 0) {
+        reasons.push(...shortfalls.map((reason) => `${reason} — base entitlement rather than full`));
+        reasons.push('This benefit is never withdrawn for tax arrears; compliance raises the tier');
+      } else if (eligible) {
+        reasons.push('Full entitlement: compliance requirements met');
+      }
+    } else if (shortfalls.length > 0) {
+      eligible = false;
+      reasons.push(...shortfalls);
+    }
+
     await client.query(
       `INSERT INTO programme_eligibility
-         (programme_id, taxpayer_id, eligible, reasons, score_at_evaluation)
-       VALUES ($1,$2,$3,$4,$5)
+         (programme_id, taxpayer_id, eligible, reasons, score_at_evaluation, benefit_tier)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (programme_id, taxpayer_id) DO UPDATE SET
          eligible = EXCLUDED.eligible,
          reasons = EXCLUDED.reasons,
          score_at_evaluation = EXCLUDED.score_at_evaluation,
+         benefit_tier = EXCLUDED.benefit_tier,
          evaluated_at = now()`,
-      [params.programmeId, params.taxpayerId, eligible, JSON.stringify(reasons), compliance.score],
+      [
+        params.programmeId,
+        params.taxpayerId,
+        eligible,
+        JSON.stringify(reasons),
+        compliance.score,
+        benefitTier,
+      ],
     );
 
-    return { eligible, reasons, score: compliance.score };
+    return { eligible, reasons, score: compliance.score, benefitTier };
   };
 
   if (existingClient) {
