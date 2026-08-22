@@ -186,6 +186,7 @@ describe('Recording what a taxpayer owes', () => {
       suggested.map((item) => item.revenueItemId),
       'AGENT_ONBOARDING',
       null,
+      { role: 'revenue_officer', mayWaive: true },
     );
 
     assert.equal(result.added, suggested.length);
@@ -205,7 +206,7 @@ describe('Recording what a taxpayer owes', () => {
     assert.ok(suggested.length >= 2, 'this test needs a sector with at least two obligations');
 
     // Onboard with only the first.
-    await upsertObligations(taxpayerId, [suggested[0]!.revenueItemId], 'AGENT_ONBOARDING', null);
+    await upsertObligations(taxpayerId, [suggested[0]!.revenueItemId], 'AGENT_ONBOARDING', null, { role: 'revenue_officer', mayWaive: true });
     assert.equal((await getObligationsForTaxpayer(pool, taxpayerId)).filter((r) => r.status === 'ACTIVE').length, 1);
 
     // Later the full set is recognised.
@@ -214,6 +215,7 @@ describe('Recording what a taxpayer owes', () => {
       suggested.map((item) => item.revenueItemId),
       'OFFICER_REVIEW',
       null,
+      { role: 'revenue_officer', mayWaive: true },
     );
 
     const held = await getObligationsForTaxpayer(pool, taxpayerId);
@@ -228,10 +230,10 @@ describe('Recording what a taxpayer owes', () => {
   it('waives rather than deletes an obligation that no longer applies', async () => {
     const taxpayerId = await createTaxpayer({ sector: 'AGRICULTURE', type: 'INDIVIDUAL' });
     const suggested = await deriveSuggestedObligations('AGRICULTURE', 'INDIVIDUAL');
-    await upsertObligations(taxpayerId, suggested.map((i) => i.revenueItemId), 'AGENT_ONBOARDING', null);
+    await upsertObligations(taxpayerId, suggested.map((i) => i.revenueItemId), 'AGENT_ONBOARDING', null, { role: 'revenue_officer', mayWaive: true });
 
     // Re-confirm with only the first item; the rest should be waived, not gone.
-    await upsertObligations(taxpayerId, [suggested[0]!.revenueItemId], 'OFFICER_REVIEW', null);
+    await upsertObligations(taxpayerId, [suggested[0]!.revenueItemId], 'OFFICER_REVIEW', null, { role: 'revenue_officer', mayWaive: true });
 
     const { rows } = await pool.query<{ count: string }>(
       'SELECT count(*)::text AS count FROM taxpayer_tax_obligations WHERE taxpayer_id = $1',
@@ -258,7 +260,7 @@ describe('Recording what a taxpayer owes', () => {
     const taxpayerId = await createTaxpayer({ sector: 'AGRICULTURE', type: 'INDIVIDUAL' });
     const suggested = await deriveSuggestedObligations('AGRICULTURE', 'INDIVIDUAL');
 
-    await upsertObligations(taxpayerId, suggested.map((i) => i.revenueItemId), 'AGENT_ONBOARDING', null);
+    await upsertObligations(taxpayerId, suggested.map((i) => i.revenueItemId), 'AGENT_ONBOARDING', null, { role: 'revenue_officer', mayWaive: true });
 
     for (const table of ['invoices', 'assessments', 'transactions']) {
       const { rows } = await pool.query<{ count: string }>(

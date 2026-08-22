@@ -35,6 +35,14 @@ export const PERMISSIONS = [
   'taxpayer:create',
   'taxpayer:update',
   'taxpayer:manage',
+  /*
+   * Cancelling an obligation is not the same authority as correcting a record.
+   * `taxpayer:update` covers fixing a phone number during onboarding and is
+   * held by agents; removing what a citizen owes government is a revenue
+   * decision. Without a permission that separates them, any agent could zero
+   * out the liabilities of a taxpayer they had registered.
+   */
+  'taxpayer:obligation:waive',
   /**
    * Chase TINs the PSIRS TIN service has not issued yet, and see who is still
    * waiting. Back-office data-quality work: an agent registers taxpayers, but
@@ -182,6 +190,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:update',
+    'taxpayer:obligation:waive',
     'catalogue:read',
     'catalogue:configure',
     'assessment:read:all',
@@ -253,6 +262,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:manage',
+    'taxpayer:obligation:waive',
     'catalogue:read',
     'catalogue:configure',
     'assessment:read:all',

@@ -169,6 +169,8 @@ export const get = <T = any>(path: string, options?: RequestOptions) =>
   api<T>('GET', path, undefined, options);
 export const post = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>
   api<T>('POST', path, body, options);
+export const put = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>
+  api<T>('PUT', path, body, options);
 
 /**
  * Sign in.

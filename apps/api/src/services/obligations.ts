@@ -21,6 +21,7 @@ import { ECONOMIC_SECTORS } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from './audit';
+import { forbidden } from '../lib/errors';
 
 export interface SuggestedObligation {
   revenueItemId: string;
@@ -131,8 +132,39 @@ export async function upsertObligations(
   itemIds: string[],
   source: 'AGENT_ONBOARDING' | 'OFFICER_REVIEW' | 'AUTO_RECOMMENDATION',
   actorId: string | null,
+  actor: { role: string; mayWaive: boolean },
 ): Promise<{ added: number; waived: number }> {
   return withTransaction(async (client) => {
+    /*
+     * Waiving is a separate authority from adding.
+     *
+     * This endpoint takes the whole list, so dropping an item from it cancels
+     * that obligation and an empty list cancels all of them. Adding is
+     * onboarding and belongs to the agent registering the taxpayer; removing
+     * is a revenue decision. The check happens here, before anything is
+     * written, because only here is it known which obligations the submitted
+     * list would actually remove — the caller may simply not have realised
+     * what they were leaving out.
+     */
+    if (!actor.mayWaive) {
+      const wouldWaive = await query<{ id: string }>(
+        client,
+        itemIds.length > 0
+          ? `SELECT id FROM taxpayer_tax_obligations
+              WHERE taxpayer_id = $1 AND status = 'ACTIVE' AND revenue_item_id <> ALL($2::uuid[])`
+          : `SELECT id FROM taxpayer_tax_obligations
+              WHERE taxpayer_id = $1 AND status = 'ACTIVE'`,
+        itemIds.length > 0 ? [taxpayerId, itemIds] : [taxpayerId],
+      );
+      if (wouldWaive.length > 0) {
+        throw forbidden(
+          `This would cancel ${wouldWaive.length} obligation(s) already on file, which a ` +
+            'revenue officer has to do. Submit the full list of what this taxpayer owes, ' +
+            'including the ones already recorded.',
+        );
+      }
+    }
+
     // Insert new obligations (ignore duplicates).
     let added = 0;
     for (const itemId of itemIds) {
@@ -174,7 +206,10 @@ export async function upsertObligations(
     if (added > 0 || waived > 0) {
       await recordAudit(client, {
         actorId,
-        actorRole: source === 'AGENT_ONBOARDING' ? 'agent' : 'revenue_officer',
+        // The role comes from the authenticated caller, never from `source` —
+        // that is a field in the request body, and deriving the audited role
+        // from it let an agent file their own change as a revenue officer's.
+        actorRole: actor.role,
         action: 'OBLIGATION_SET',
         entityType: 'taxpayer',
         entityId: taxpayerId,

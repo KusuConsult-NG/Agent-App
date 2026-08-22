@@ -143,11 +143,17 @@ taxpayerRouter.post(
         ]);
       }
       if (data.taxObligationIds && data.taxObligationIds.length > 0) {
+        // A taxpayer being created has nothing on file yet, so this can only
+        // add. `mayWaive` is still passed honestly rather than hardcoded true.
         await obligations.upsertObligations(
           result.taxpayerId,
           data.taxObligationIds,
           'AGENT_ONBOARDING',
           req.auth!.userId,
+          {
+            role: req.auth!.role,
+            mayWaive: req.auth!.permissions.includes('taxpayer:obligation:waive'),
+          },
         );
       }
       await evaluateRegistrationRisk(client, {
@@ -325,6 +331,10 @@ taxpayerRouter.put(
         data.itemIds,
         data.source,
         req.auth!.userId,
+        {
+          role: req.auth!.role,
+          mayWaive: req.auth!.permissions.includes('taxpayer:obligation:waive'),
+        },
       );
       await syncTaxpayerComplianceAndIncentives(pool, req.params.id);
       res.json({ ...result, message: `${result.added} obligation(s) added, ${result.waived} waived.` });
