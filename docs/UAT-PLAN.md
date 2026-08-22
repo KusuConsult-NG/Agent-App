@@ -1,5 +1,17 @@
 # User Acceptance Testing (UAT) Plan & Test Execution Scripts
 
+> **This document is the conference-room walkthrough**: it confirms, against a
+> demonstration build, that every feature is present and behaves. It is not a
+> field trial and cannot tell you whether an agent can use the platform.
+>
+> For that, see **[UAT-FIELD-TRIAL.md](UAT-FIELD-TRIAL.md)** — real agents, real
+> markets, real handsets — and **[UAT-OBSERVER-SHEET.md](UAT-OBSERVER-SHEET.md)**,
+> the sheet an observer carries.
+>
+> Note in particular that no real citizen may pay real money through the
+> platform until B-4 is closed: every external integration is still a mock, and
+> a mock confirms everything.
+
 **Document ID:** PSIRS-UAT-2026-V1  
 **Target Roles:** PSIRS Revenue Officers, Finance Officers, Field Supervisors, Taxpayer Advocates  
 **Acceptance Standard:** 100% Pass rate on critical financial and integrity journeys  
