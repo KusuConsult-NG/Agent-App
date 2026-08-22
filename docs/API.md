@@ -40,12 +40,41 @@ JSON number — `JSON.parse` silently rounds large integers.
 | `GET` | `/reference/lgas` | Plateau's 17 LGAs; needed before sign-in |
 | `GET` | `/reference/wards?lgaId=` | Wards within an LGA |
 | `GET` | `/verify/:code` | Receipt or document verification; minimal fields only |
+| `GET` | `/citizen-status?tin=` · `?phone=` · `?name=` | A person's own status check; withholds what a stranger must not learn — see below |
+| `GET` | `/group-attestation/:token` | Open a group membership check |
 | `GET` | `/referee/:token` | Open a referee invitation |
 | `POST` | `/referee/:token/respond` | Submit referee verification |
 | `POST` | `/referee/:token/decline` | Decline the request |
 | `POST` | `/webhooks/payments` | Gateway webhook; HMAC-SHA512 signed, idempotent |
 | `GET` | `/documents/:id/download?expires=&signature=` | Signed, expiring document URL |
 | `GET` | `/health` | Liveness and database connectivity |
+
+### What `/citizen-status` withholds
+
+The status check is deliberately open: a citizen with a feature phone and no
+account has to be able to find out whether they owe anything. The price of
+that openness is that the endpoint cannot tell the taxpayer apart from anyone
+else who knows their phone number, and a phone number is not a secret.
+
+So it answers `found`, `tinStatus`, `complianceStatus`, `hasOutstanding`, a
+`message` and a `detail` telling the reader where to go — and nothing else.
+It does **not** return the TIN, the numeric compliance score, the obligation
+names, the last payment date, the outstanding amount, or the list of
+programmes the taxpayer qualifies for.
+
+Each of those was withheld for a reason. Returning the TIN would hand a
+government identifier to a caller who supplied only a phone number, and this
+platform's own duplicate detection treats a matching TIN as identity-grade
+where a shared phone is merely suggestive. The score and the programme list
+decide access to fertiliser, health insurance and farm inputs, so a person's
+score is nobody else's business. Obligation names describe a livelihood.
+
+A name-only search never returns a record at all: it answers with a count and
+tells the reader to use their TIN or phone number.
+
+The full record remains available through the agent and officer APIs, which
+establish who they are speaking to first. Rate limited to 10 requests per
+minute per IP.
 
 ## Authentication
 

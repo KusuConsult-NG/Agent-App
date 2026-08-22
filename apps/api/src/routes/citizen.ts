@@ -15,7 +15,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { pool, queryOne, query } from '../db/pool';
+import { pool, queryOne } from '../db/pool';
 import { rateLimit } from '../middleware/security';
 import { validateQuery } from '../middleware/validate';
 import { syncTaxpayerComplianceAndIncentives } from '../services/incentives';
@@ -124,29 +124,6 @@ citizenRouter.get(
       ? BigInt(compliance.outstanding_amount_kobo) > 0n
       : false;
 
-    // Obligation names (revenue item names only — no amounts or rates).
-    const obligationNames = await query<{ name: string }>(
-      pool,
-      `SELECT ri.name FROM taxpayer_tax_obligations o
-       JOIN revenue_items ri ON ri.id = o.revenue_item_id
-       WHERE o.taxpayer_id = $1 AND o.status = 'ACTIVE'
-       ORDER BY ri.name`,
-      [taxpayer.id],
-    );
-
-    // Eligible social programmes.
-    const programmes = await query<{ name: string }>(
-      pool,
-      `SELECT ip.name
-         FROM programme_eligibility pe
-         JOIN incentive_programmes ip ON ip.id = pe.programme_id
-        WHERE pe.taxpayer_id = $1
-          AND pe.eligible = true
-          AND ip.status = 'ACTIVE'
-        ORDER BY ip.name`,
-      [taxpayer.id],
-    );
-
     const score = compliance?.score ?? 0;
     const complianceStatus =
       !compliance
@@ -164,19 +141,48 @@ citizenRouter.get(
       NOT_ASSESSED: 'Your compliance has not been assessed yet. This will update after your first payment.',
     };
 
+    // WHAT AN ANONYMOUS CALLER IS TOLD, AND WHY IT IS THIS LITTLE.
+    //
+    // This endpoint cannot tell the taxpayer from anyone else who knows their
+    // phone number, and a phone number is not a secret: a rival trader, a
+    // lender, a former partner or a local official may all have it. So every
+    // field here is read as though a stranger asked for it, because one can.
+    //
+    // Three things used to be returned that do not survive that reading.
+    //
+    // The TIN itself. The caller supplied a phone number and received a
+    // government identifier they did not have — and this platform's own
+    // duplicate detection treats a matching TIN as identity-grade, blocking
+    // at 100 where a shared phone scores 85. Handing out the stronger
+    // identifier in exchange for the weaker one inverts that judgement.
+    //
+    // The numeric compliance score, and the programmes it makes the taxpayer
+    // eligible for. Under the incentive design these decide access to
+    // fertiliser, health insurance and farm inputs, which makes a person's
+    // score socially and economically consequential — and so nobody else's
+    // business.
+    //
+    // The obligation names and the last payment date. A list like "Cattle
+    // Dealer Levy" describes someone's trade and livelihood, and a payment
+    // date describes their circumstances.
+    //
+    // What remains is what a person needs in order to act: whether anything
+    // is owed, whether a TIN has been issued, and where to go. The detail is
+    // still available in full through the agent and officer channels, which
+    // establish who they are speaking to first. The queries that fetched the
+    // obligation names and the eligible programmes are gone with the fields
+    // they fed — syncTaxpayerComplianceAndIncentives above already refreshes
+    // both, so nothing else depended on them.
     res.json({
       found: true,
-      tin: taxpayer.tin,
       tinStatus: taxpayer.tin_status,
       complianceStatus,
-      complianceScore: score,
-      lastPaymentDate: compliance?.last_payment_at?.toISOString().slice(0, 10) ?? null,
       hasOutstanding,
-      // Outstanding figure is shown only on TIN search (strongest identifier).
-      outstandingAmountKobo: tin && hasOutstanding ? compliance?.outstanding_amount_kobo : undefined,
-      obligations: obligationNames.map((o) => o.name),
-      eligibleProgrammes: programmes.map((p) => p.name),
       message: statusMessages[complianceStatus] ?? '',
+      detail:
+        'For your TIN, your compliance score, what you owe and which support programmes you ' +
+        'qualify for, visit any PSIRS office or an authorised revenue agent. They will confirm ' +
+        'who you are first, which is why those details are not shown here.',
     });
   }),
 );

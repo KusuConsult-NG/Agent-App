@@ -575,6 +575,42 @@
         operational readiness, not on correctness.
       </p>
       <p style="margin-top:12px">
+        <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
+        every field what happens when somebody types the wrong thing into it. Five defects,
+        of which two matter.
+      </p>
+      <p style="margin-top:12px">
+        The first is a disclosure. <code>/citizen-status</code> is the platform&rsquo;s one
+        unauthenticated read of a named person&rsquo;s record, and it answered a phone number
+        with that person&rsquo;s TIN, their numeric compliance score, the names of the taxes
+        they owe and the benefit programmes they qualify for. A phone number is not a
+        secret. The TIN is the sharper half: the caller supplied the weaker identifier and
+        was handed the stronger one, and this platform&rsquo;s own duplicate detection treats a
+        matching TIN as identity-grade where a shared phone scores only 85 of the 100 needed
+        to block. Under the incentive design a compliance score decides access to fertiliser,
+        health insurance and farm inputs, which makes it consequential enough to be nobody
+        else&rsquo;s business. The endpoint now answers only whether anything is owed, whether
+        a TIN has been issued, and where to go to be identified properly. The full record
+        remains available through the agent and officer channels, which establish who they
+        are speaking to first.
+      </p>
+      <p style="margin-top:12px">
+        The second is a date of birth nobody can hold. <code>dateOfBirth</code> was declared
+        as <code>z.string().date()</code> over a bare <code>DATE</code> column, so the string
+        was checked for shape and nothing else at any of the three layers; 2099 passed the
+        wizard, the API and the database. Date of birth is one of the fields duplicate
+        detection weighs and is printed on the taxpayer&rsquo;s identity card, so a row nobody
+        can be born into corrupts both. The rule now lives in the shared package, and
+        migration 021 adds the matching constraint.
+      </p>
+      <p style="margin-top:12px">
+        The remaining three are smaller but of a kind: a rate-change form that turned an
+        empty amount into a rate of &#8358;0 and read &ldquo;5abc&rdquo; as five per cent; a
+        taxpayer search that answered a search matching nobody by not changing at all; and a
+        yes/no toggle whose selection was visible only to people who could see it. In each
+        case the form invented a value or an outcome the person never chose.
+      </p>
+      <p style="margin-top:12px">
         <strong>Revision 8.</strong> Eleven further defects, found by reading the routes no
         test exercised and by driving each surface in a real browser rather than reasoning
         about it. Three are serious: the audit log took the actor&rsquo;s role from a field in
@@ -947,7 +983,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Offline / PWA financial safety</td><td><span class="pill p-pass">Pass</span></td><td>Service worker never caches financial paths; draft queue has no payment type and rejects financial keys at runtime</td><td>—</td><td>No</td></tr>
           <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
           <tr><td>Append-only coverage</td><td><span class="pill p-pass">Pass</span></td><td>Three tables holding audit evidence had no delete protection while their siblings did, including the record that a reconciliation ran. Fixed, and a test now asserts the property so an unclassified new table fails the suite</td><td>D-19 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>API route coverage</td><td><span class="pill p-partial">Partial</span></td><td>156 routes declared, 9 exercised by no test, down from 24. Reading the uncovered ones produced nine of this revision&rsquo;s eleven defects, which is the argument for closing the rest</td><td>D-21</td><td>No</td></tr>
+          <tr><td>API route coverage</td><td><span class="pill p-pass">Pass</span></td><td>156 routes declared, 156 exercised by at least one test; none left unexercised, down from 24. Reading the uncovered ones produced nine of revision 8&rsquo;s eleven defects, which was the argument for closing the rest &mdash; and closing them produced several more</td><td>D-21 (fixed)</td><td>&mdash;</td></tr>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
@@ -1756,6 +1792,129 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
 
       <article class="finding" style="border-left-color:var(--fail)">
         <div class="finding-head">
+          <span class="finding-id">D-33</span>
+          <h3 class="finding-title" style="margin:0">A phone number bought a stranger the taxpayer&rsquo;s TIN and compliance score</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>/citizen-status</code> is the platform&rsquo;s one unauthenticated read of a
+          named person&rsquo;s record, and it is meant to be open: a citizen with a feature
+          phone and no account has to be able to find out whether they owe anything. The
+          price of that openness is that the endpoint cannot tell the taxpayer from anyone
+          else who knows their phone number &mdash; and a phone number is not a secret. It
+          answered one with the person&rsquo;s TIN, their numeric compliance score, their last
+          payment date, the names of the taxes they owe and the benefit programmes they
+          qualify for.
+        </p>
+        <dl>
+          <dt>The TIN is the sharp end</dt>
+          <dd>The caller supplied the weaker identifier and was handed the stronger one. This platform&rsquo;s own duplicate detection scores a matching TIN at the full 100 that blocks a registration outright, where a shared phone number reaches only 85 &mdash; it already treats a TIN as proof of identity and a phone number as merely suggestive. Giving out the first in exchange for the second inverts that judgement.</dd>
+          <dt>Why the score matters here and would not elsewhere</dt>
+          <dd>Under the incentive design the compliance score decides access to fertiliser, health insurance, tractors and farm inputs. That makes a person&rsquo;s score socially and economically consequential, and so nobody else&rsquo;s business. Obligation names carry the same weight in a different way: &ldquo;Cattle Dealer Levy&rdquo; describes a livelihood.</dd>
+          <dt>What it answers now</dt>
+          <dd>Whether anything is owed, whether a TIN has been issued, a status in words, and where to go to be identified properly. Not the TIN, the score, the obligation names, the payment date, the outstanding figure or the programme list. A name search was already careful &mdash; it returns a count and refuses to pick a record &mdash; and that behaviour is unchanged and now pinned by a test.</dd>
+          <dt>Not a defect that could be fixed in the UI</dt>
+          <dd>Hiding the fields in the portal was tried first and was not enough: the data was still on the wire, one <code>curl</code> away. The fields are gone from the response, and the queries that fetched them are gone with them. A test asserts the TIN does not appear anywhere in the body, not merely that the field is absent.</dd>
+          <dt>A decision, not only a fix</dt>
+          <dd>Requiring a one-time code before showing anything was the alternative, and was rejected deliberately: it needs working SMS and network, which is friction for exactly the grassroots users the platform exists to reach, and it fails outright where a handset is shared. The full record remains available through the agent and officer channels, which establish who they are speaking to first.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-34</span>
+          <h3 class="finding-title" style="margin:0">A date of birth in 2099 passed every layer</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>dateOfBirth</code> was declared <code>z.string().date()</code> on both the
+          taxpayer and agent-application routes, over a bare <code>DATE</code> column with no
+          constraint on it. That checks the shape of the string and nothing else, so a
+          slipped year passed the wizard, passed the API and would have been stored.
+        </p>
+        <dl>
+          <dt>Why it is not cosmetic</dt>
+          <dd>Date of birth is one of the fields the duplicate-detection weighting compares when deciding whether two registrations are the same person, and it is printed on the taxpayer&rsquo;s identity card. A row nobody can be born into corrupts both.</dd>
+          <dt>Fixed at three layers, deliberately narrowly</dt>
+          <dd>The rule lives in the shared package so the form refuses the date before the agent reaches the end of a six-step wizard, the request schema refuses it at the boundary, and migration 021 adds the constraint. It rejects only dates that cannot describe someone alive, and takes no view on how old a taxpayer must be &mdash; the platform has no such policy, and inventing one would refuse rows the law allows.</dd>
+          <dt>The migration does not gamble on legacy data</dt>
+          <dd>The constraints are added <code>NOT VALID</code>, which still binds every insert and update while skipping the scan of existing rows. These tables will be loaded from legacy PSIRS records nobody has audited, and a <code>VALIDATE</code> that trips over one turns a data-quality problem into a failed release. The migration counts the unusable rows and warns instead, validating automatically when there are none. Both paths were run against a live database and confirmed.</dd>
+          <dt>A second defect fell out of the first</dt>
+          <dd>That warning reached nobody: the migration runner discarded PostgreSQL notices, so a migration could decide to skip a step and say so to an empty room. It now relays them.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-35</span>
+          <h3 class="finding-title" style="margin:0">An empty box set a revenue item&rsquo;s rate to &#8358;0, and &ldquo;5abc&rdquo; meant five per cent</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The rate-change form decides what every taxpayer is charged for an item. An empty
+          amount went through as <code>nairaToKobo('0')</code>, so an officer who never typed
+          a figure set the rate to nothing; and the percentage went through
+          <code>Number.parseFloat</code>, which reads &ldquo;5abc&rdquo; as 5 and asks no
+          questions.
+        </p>
+        <dl>
+          <dt>One form, two standards</dt>
+          <dd>The fixed-amount path used a strict parser that throws on anything malformed. The percentage path beside it used the most permissive parser in the language. Both now hold to the same standard, and a percentage above 100 is refused.</dd>
+          <dt>The order was wrong as well as the checking</dt>
+          <dd>Validation ran <em>after</em> the step-up code was requested, so a mistyped amount spent a one-time code on a request that was never going to be sent. It now runs first.</dd>
+          <dt>Zero is still reachable</dt>
+          <dd>Suspending a levy is a real decision, so typing <code>0</code> works. Leaving the box empty is not the same act, and no longer produces the same result.</dd>
+          <dt>Negatives were never possible</dt>
+          <dd>Checked rather than assumed: the wire schema matches <code>^\d+$</code> and the table carries <code>&gt;= 0</code> checks on all four money columns. That part of the design was already sound.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-36</span>
+          <h3 class="finding-title" style="margin:0">A taxpayer search that matched nobody did not change the screen</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>CollectScreen</code> held its results in
+          <code>useState&lt;TaxpayerSummary[]&gt;([])</code> and drew them behind
+          <code>results.length &gt; 0</code>. Starting at <code>[]</code> collapses two
+          different states into one &mdash; &ldquo;no search has been run&rdquo; and &ldquo;the
+          search found nobody&rdquo; are indistinguishable &mdash; so the screen had no way to
+          report the second, and did not.
+        </p>
+        <dl>
+          <dt>Where it is felt</dt>
+          <dd>This is the first step of every collection: &ldquo;Every payment must be attributed&rdquo;, as the screen itself says. An agent with a trader in front of them typed a name, pressed Search, and nothing happened. No way to tell whether the search had run, whether the person was unregistered, or whether the app had failed &mdash; and the one useful next step, registering them, was already on screen but unconnected to what had just happened.</dd>
+          <dt>The correct pattern was one file away</dt>
+          <dd><code>TaxpayersScreen</code> already had this right: <code>null</code> until searched, then an explicit empty state naming registration as the way forward. The fix is the same treatment, and the wording now points at the button underneath.</dd>
+          <dt>Confirmed rather than assumed</dt>
+          <dd>The API log shows the search reaching the server and answering 200 with an empty list. The silence was the screen&rsquo;s, not the network&rsquo;s.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--warn)">
+        <div class="finding-head">
+          <span class="finding-id">D-37</span>
+          <h3 class="finding-title" style="margin:0">A yes/no choice that only sighted users could read</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The registration wizard opens on &ldquo;Does the taxpayer already have a TIN?&rdquo;
+          with a Yes/No pair whose selection was conveyed by button emphasis alone. A screen
+          reader announced two buttons and no state, so the answer already recorded on the
+          person&rsquo;s behalf was not readable.
+        </p>
+        <dl>
+          <dt>Narrow, and confirmed narrow</dt>
+          <dd>It was the only two-state toggle in either application without <code>aria-pressed</code>. The group attestation screen sets it on exactly this pattern, so the codebase already knew the right answer &mdash; this one place had been missed.</dd>
+          <dt>Found by a harness error, not by looking</dt>
+          <dd>An automated pass timed out waiting for a &ldquo;No&rdquo; button and the temptation was to file it as a wizard that advanced without an answer. Reading the DOM instead showed the wizard was fine and the question was pre-answered. The accessibility gap was what the investigation actually turned up.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
           <span class="finding-id">D-32</span>
           <h3 class="finding-title" style="margin:0">Group and collection capture was not bound to the handset <em>(introduced by this audit)</em></h3>
           <span class="pill p-pass">Fixed</span>
@@ -1788,7 +1947,7 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         <p>
           <strong>Reading the uncovered routes produced nine of the eleven defects in this
           revision</strong> (D-22, D-23, D-24, D-26, D-27, D-28, D-29, D-30, D-31). That is the
-          argument for closing the remaining nine: on this codebase, &ldquo;exercised by nothing&rdquo;
+          argument for closing the remaining nine, which has since been done: on this codebase, &ldquo;exercised by nothing&rdquo;
           has been a reliable predictor of &ldquo;wrong&rdquo;, at a rate close to one defect per
           route read.
         </p>
@@ -1805,8 +1964,8 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>Sessions on other devices end, revocation takes effect on the very next request rather than waiting for a token to expire, and one user's sign-out does not touch another's sessions. Codes are single-use and purpose-scoped: a <code>LOGIN</code> code will not satisfy a <code>STEP_UP</code> check. No defects — coverage where there was none, over behaviour that would be expensive to discover wrong later.</dd>
           <dt>The counting tool was itself wrong</dt>
           <dd>The coverage script matched test paths against a hardcoded list of mount prefixes, so every route on a newly added router read as untested. It reported 24 uncovered when the true figure was 9. Prefixes are now derived from what <code>app.ts</code> actually mounts: a measurement that silently misreports new work is worse than no measurement, because it is trusted.</dd>
-          <dt>Still open</dt>
-          <dd>Nine. Two touch money or access control directly — <code>POST /government/reconciliation/recover</code> and <code>POST /agents/devices/:deviceId/approve</code> — and are the next to read. The rest are reference reads and reporting endpoints. Recorded rather than closed, because &ldquo;no test&rdquo; and &ldquo;no risk&rdquo; are different statements and only the first has been established.</dd>
+          <dt>Since closed</dt>
+          <dd>All nine were subsequently read and covered, including the two that touched money or access control directly — <code>POST /government/reconciliation/recover</code> and <code>POST /agents/devices/:deviceId/approve</code>. Every one of the 156 declared routes is now exercised by at least one test. The premise held: reading them produced further defects, and &ldquo;no test&rdquo; kept turning out to be a reliable predictor of &ldquo;no thought given to the failure case&rdquo;.</dd>
         </dl>
       </article>
 

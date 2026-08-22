@@ -378,19 +378,24 @@ export function RefereePortalScreen({ token }: { token: string }) {
 // Citizen self-service tax status portal
 // ---------------------------------------------------------------------------
 
+/**
+ * What the public status check is allowed to know.
+ *
+ * Narrower than it was, and narrower than the officer and agent views, for
+ * the reason set out in `routes/citizen.ts`: nobody proves who they are
+ * before asking, and a phone number is not proof. The TIN, the numeric
+ * score, the obligation names and the eligible programmes are no longer
+ * returned to an anonymous caller, so there is nothing here to render them
+ * from.
+ */
 interface CitizenStatusResult {
   found: boolean;
   count?: number;
-  tin?: string | null;
   tinStatus?: string;
   complianceStatus?: string;
-  complianceScore?: number;
-  lastPaymentDate?: string | null;
   hasOutstanding?: boolean;
-  outstandingAmountKobo?: string;
-  obligations?: string[];
-  eligibleProgrammes?: string[];
   message: string;
+  detail?: string;
 }
 
 type SearchMode = 'tin' | 'phone' | 'name';
@@ -720,7 +725,28 @@ export function CitizenPortalScreen() {
           </div>
         )}
 
-        {result?.found && (
+        {/*
+          * A name search answers with a count, never a record: the API sends
+          * back `count` and a message and nothing else, because it has not
+          * established which of the five Danjumas is asking. The block below
+          * renders a specific person's status, so it must not run for that
+          * case — `complianceStatus` being absent is what distinguishes the
+          * two. Rendering it anyway drew "TIN status —" and "Outstanding
+          * obligations: None" from undefined values, which reads as a clean
+          * bill of health for a record that was never looked up.
+          */}
+        {/*
+          * A name search matched somebody, but not a specific somebody, so it
+          * gets its own answer rather than falling through to the record view
+          * below or to the NOT FOUND block above — neither of which is true.
+          */}
+        {result?.found && result.complianceStatus === undefined && (
+          <div style={{ marginTop: 16 }}>
+            <p style={{ fontSize: '0.87rem', margin: 0 }}>{result.message}</p>
+          </div>
+        )}
+
+        {result?.found && result.complianceStatus !== undefined && (
           <div style={{ marginTop: 18 }}>
             {/* Compliance status badge */}
             <div style={{
@@ -743,52 +769,20 @@ export function CitizenPortalScreen() {
                  result.complianceStatus === 'NEEDS_ATTENTION' ? '! Needs Attention' :
                  'Not yet assessed'}
               </p>
-              {result.complianceScore !== undefined && (
-                <p style={{ margin: '6px 0 0', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                  Compliance score: {result.complianceScore} / 100
-                </p>
-              )}
             </div>
 
             <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>{result.message}</p>
 
             <KeyValue
               items={[
-                ['TIN', result.tin ?? 'Pending assignment'],
                 ['TIN status', result.tinStatus ?? '—'],
-                ['Last payment', result.lastPaymentDate ?? 'No payments recorded'],
                 ['Outstanding obligations', result.hasOutstanding ? 'Yes — please contact PSIRS' : 'None'],
-                ...(result.outstandingAmountKobo ? [['Outstanding amount', <Money key="amt" kobo={result.outstandingAmountKobo} />] as [string, React.ReactNode]] : []),
               ]}
             />
 
-            {result.obligations && result.obligations.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '0 0 6px' }}>
-                  Your registered tax obligations
-                </p>
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.84rem', lineHeight: 1.8 }}>
-                  {result.obligations.map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {result.eligibleProgrammes && result.eligibleProgrammes.length > 0 && (
-              <div style={{ marginTop: 14 }}>
-                <Alert kind="info" title="You qualify for government benefits">
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.84rem', lineHeight: 1.8 }}>
-                    {result.eligibleProgrammes.map((name) => (
-                      <li key={name}>{name}</li>
-                    ))}
-                  </ul>
-                </Alert>
-              </div>
-            )}
-
             <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
-              For questions about your account, visit any PSIRS office or contact an authorised revenue agent.
+              {result.detail ??
+                'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.'}
             </p>
           </div>
         )}
