@@ -532,6 +532,25 @@ export async function recordSettlement(params: {
 }
 
 /** Finance officer exception queue (PRD §46). */
+/**
+ * The statuses that describe an outstanding exception.
+ *
+ * Named once and shared, because listing and resolving are two halves of the
+ * same idea. They were written separately: the query below spelled the list
+ * out, `resolveException` spelled out nothing, and set RESOLVED on whatever
+ * record id it was handed. The other statuses are not lesser exceptions, they
+ * are not exceptions — MATCHED is a row the sweep reconciled, and UNCHECKED is
+ * a row that was never compared to anything because the gateway statement
+ * could not be fetched.
+ */
+export const EXCEPTION_STATUSES = [
+  'MISSING_PAYMENT',
+  'MISSING_PLATFORM_TRANSACTION',
+  'AMOUNT_MISMATCH',
+  'DUPLICATE_PAYMENT',
+  'PENDING_SETTLEMENT',
+] as const;
+
 export async function exceptionQueue(db: Db, options: { status?: string; limit?: number } = {}) {
   return query(
     db,
@@ -546,11 +565,10 @@ export async function exceptionQueue(db: Db, options: { status?: string; limit?:
        LEFT JOIN agents ag ON ag.id = t.agent_id
       WHERE r.reconciled_at IS NULL
         AND ($1::text IS NULL OR r.status = $1)
-        AND r.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH',
-                         'DUPLICATE_PAYMENT','PENDING_SETTLEMENT')
+        AND r.status = ANY($3::text[])
       ORDER BY r.created_at DESC
       LIMIT $2`,
-    [options.status ?? null, options.limit ?? 100],
+    [options.status ?? null, options.limit ?? 100, [...EXCEPTION_STATUSES]],
   );
 }
 
@@ -561,12 +579,35 @@ export async function resolveException(params: {
   actorRole: string;
 }): Promise<void> {
   await withTransaction(async (client) => {
-    const record = await queryOne<{ id: string; status: string }>(
+    const record = await queryOne<{ id: string; status: string; reconciled_at: Date | null }>(
       client,
-      'SELECT id, status FROM reconciliation_records WHERE id = $1',
+      'SELECT id, status, reconciled_at FROM reconciliation_records WHERE id = $1 FOR UPDATE',
       [params.recordId],
     );
     if (!record) throw notFound('That reconciliation record');
+
+    // Resolving is for an exception that is still open. Anything else would be
+    // recording an answer to a question nobody asked.
+    if (record.reconciled_at !== null) {
+      throw conflict(
+        'ALREADY_RESOLVED',
+        'This record has already been resolved.',
+        'Open the record to see who resolved it and why.',
+      );
+    }
+    if (!(EXCEPTION_STATUSES as readonly string[]).includes(record.status)) {
+      throw conflict(
+        'NOT_AN_EXCEPTION',
+        record.status === 'UNCHECKED'
+          ? 'This record was never compared against a gateway statement, so there is ' +
+            'nothing to resolve. Re-run reconciliation for that period once the ' +
+            'statement is available.'
+          : `A record with status ${record.status} is not an outstanding exception.`,
+        record.status === 'UNCHECKED'
+          ? 'Marking it resolved would record an examination that never happened.'
+          : undefined,
+      );
+    }
 
     await client.query(
       `UPDATE reconciliation_records
