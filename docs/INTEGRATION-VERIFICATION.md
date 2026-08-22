@@ -166,3 +166,66 @@ This blocker closes when:
 
 Until then the platform is configured for these providers, not verified against
 them, and the distinction is the whole of blocker B-4.
+
+## Keeping it verified
+
+A sign-off decays. A mapping confirmed in March is not confirmed in September:
+a vendor adds a status code, somebody edits an environment variable, a sandbox
+is reprovisioned. None of those announce themselves — they surface as payments
+that stay `PENDING` and agents who are never cleared, which is exactly the
+failure mode B-4 exists to prevent.
+
+`.github/workflows/integration-verification.yml` runs the harness daily against
+whatever the repository secrets point at, so the answer is never more than a day
+old.
+
+**Until the secrets are set it reports *skipped*, naming what is missing.** Not
+failed, because a red cross every morning for a condition nobody can fix that
+morning teaches people to ignore red crosses. Not passed either — a green tick
+would assert the integrations were verified. "Not checked" must not be able to
+look like "checked".
+
+### Secrets to add
+
+Provider selection — the job skips unless at least these are set:
+
+| Secret | Example |
+|---|---|
+| `PAYMENT_GATEWAY` | `remita` |
+| `KYC_PROVIDER` | the provider's name |
+| `TIN_SERVICE` | the provider's name |
+| `VEHICLE_REGISTRY` | the provider's name |
+| `BANK_VERIFICATION` | the provider's name |
+
+Endpoints and credentials: `REMITA_BASE_URL`, `REMITA_MERCHANT_ID`,
+`REMITA_API_KEY`, `REMITA_SERVICE_TYPE_ID`, `REMITA_SUCCESS_STATUS_CODES`,
+`REMITA_FAILURE_STATUS_CODES`, `KYC_PROVIDER_URL`, `KYC_PROVIDER_API_KEY`,
+`KYC_CLEARED_VALUES`, `KYC_FAILED_VALUES`, `KYC_MORE_INFO_VALUES`,
+`TIN_SERVICE_URL`, `TIN_ASSIGNED_VALUES`, `TIN_NOT_FOUND_VALUES`,
+`TIN_PENDING_VALUES`, `VEHICLE_REGISTRY_URL`, `BANK_VERIFICATION_URL`.
+
+Subjects to ask about — `VERIFY_TIN`, `VERIFY_NIN`, `VERIFY_PLATE`,
+`VERIFY_ACCOUNT`, `VERIFY_BANK_CODE`, `VERIFY_RRR`.
+
+These are held as secrets rather than written into the workflow so that no
+identity number appears in the repository or in a build log. **Use sandbox
+identities.** A real citizen's NIN does not belong in CI configuration, and
+`VERIFY_RRR` should be a reference known to have been paid — that is the only
+way the run confirms `REMITA_SUCCESS_STATUS_CODES` rather than merely confirming
+the gateway answers.
+
+`--sms` is excluded from the scheduled run: sending a message is a side effect,
+and a daily job should not text somebody at 05:00 to prove that it can. Run it
+by hand at sign-off.
+
+### What a run proves
+
+The job fails if any provider returns something the platform could not read.
+`UNDER_REVIEW`, `PENDING` and `UNKNOWN` count as failures, not passes — they are
+legitimate vendor replies and therefore indistinguishable from a mapping that
+does not recognise what the vendor said. That strictness is what makes a green
+run worth having.
+
+Output is kept as a build artifact for 180 days, because B-4 closes on evidence
+and evidence that expires in ninety days is little use to an auditor asking in
+month four.

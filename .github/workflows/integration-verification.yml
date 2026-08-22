@@ -1,0 +1,232 @@
+name: Integration verification
+
+# Blocker B-4: no external integration has ever been exercised against a real
+# provider. All five run against development mocks, and the certification
+# cannot pass while that is true.
+#
+# The reason B-4 stays open is not that the check is hard — the harness exists
+# and works. It is that a one-off sign-off decays. A mapping verified in March
+# is not verified in September: the vendor adds a status code, someone edits an
+# environment variable, a sandbox is reprovisioned. This workflow turns the
+# check into something continuous, so the answer is never older than a day.
+#
+# WHAT IT DOES WHEN THE CREDENTIALS ARE NOT THERE
+#
+# It skips, visibly, and reports why. It does not fail, because a red cross on
+# every run for a condition nobody can fix that morning trains people to ignore
+# red crosses. It does not pass either — a green tick would say the
+# integrations were verified, which would be a lie, and the whole point of B-4
+# is that nobody should be able to mistake "not checked" for "checked".
+#
+# It reports "skipped" and names the missing secret.
+#
+# WHAT IT DOES WHEN THEY ARE THERE
+#
+# It runs the harness against the real sandboxes and fails the workflow if any
+# provider gives an answer the platform could not read. `verify:integrations`
+# exits non-zero for that, and counts UNDER_REVIEW / PENDING / UNKNOWN as
+# failures: they are legitimate vendor replies and therefore indistinguishable
+# from a mapping that does not recognise what the vendor said. That strictness
+# is the reason a green run here means something.
+
+on:
+  schedule:
+    # Daily, early UTC. A mapping that breaks at 09:00 should be known about
+    # before the agents are in the field, not after a day of PENDING payments.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why this run was triggered (recorded in the log)'
+        required: false
+        default: 'manual verification'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Ask each provider one real question
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Deliberately NOT production. `config.ts` runs a fail-fast guard when
+      # NODE_ENV is production, demanding VERIFICATION_BASE_URL, CORS_ORIGINS,
+      # METRICS_TOKEN, a non-local STORAGE_DRIVER and more. Those are deployment
+      # settings; this job verifies provider mappings and has no business
+      # supplying them. Setting production here aborts the run before it
+      # contacts a single provider.
+      #
+      # Nothing is weakened by that: what makes this run real is the provider
+      # selectors below pointing at sandboxes instead of mocks, and the harness
+      # refusing to treat a mock as evidence regardless of NODE_ENV.
+      NODE_ENV: test
+
+      # Selectors. Without these the platform uses mock adapters, and the
+      # harness refuses to treat a mock as evidence.
+      PAYMENT_GATEWAY: ${{ secrets.PAYMENT_GATEWAY }}
+      KYC_PROVIDER: ${{ secrets.KYC_PROVIDER }}
+      TIN_SERVICE: ${{ secrets.TIN_SERVICE }}
+      VEHICLE_REGISTRY: ${{ secrets.VEHICLE_REGISTRY }}
+      BANK_VERIFICATION: ${{ secrets.BANK_VERIFICATION }}
+
+      # Endpoints and credentials.
+      REMITA_BASE_URL: ${{ secrets.REMITA_BASE_URL }}
+      REMITA_MERCHANT_ID: ${{ secrets.REMITA_MERCHANT_ID }}
+      REMITA_API_KEY: ${{ secrets.REMITA_API_KEY }}
+      REMITA_SERVICE_TYPE_ID: ${{ secrets.REMITA_SERVICE_TYPE_ID }}
+      REMITA_SUCCESS_STATUS_CODES: ${{ secrets.REMITA_SUCCESS_STATUS_CODES }}
+      REMITA_FAILURE_STATUS_CODES: ${{ secrets.REMITA_FAILURE_STATUS_CODES }}
+
+      KYC_PROVIDER_URL: ${{ secrets.KYC_PROVIDER_URL }}
+      KYC_PROVIDER_API_KEY: ${{ secrets.KYC_PROVIDER_API_KEY }}
+      KYC_CLEARED_VALUES: ${{ secrets.KYC_CLEARED_VALUES }}
+      KYC_FAILED_VALUES: ${{ secrets.KYC_FAILED_VALUES }}
+      KYC_MORE_INFO_VALUES: ${{ secrets.KYC_MORE_INFO_VALUES }}
+
+      TIN_SERVICE_URL: ${{ secrets.TIN_SERVICE_URL }}
+      TIN_ASSIGNED_VALUES: ${{ secrets.TIN_ASSIGNED_VALUES }}
+      TIN_NOT_FOUND_VALUES: ${{ secrets.TIN_NOT_FOUND_VALUES }}
+      TIN_PENDING_VALUES: ${{ secrets.TIN_PENDING_VALUES }}
+
+      VEHICLE_REGISTRY_URL: ${{ secrets.VEHICLE_REGISTRY_URL }}
+      BANK_VERIFICATION_URL: ${{ secrets.BANK_VERIFICATION_URL }}
+
+      # Subjects to ask about. Sandbox identities, not real citizens — see the
+      # note in the "Ask each provider" step.
+      VERIFY_TIN: ${{ secrets.VERIFY_TIN }}
+      VERIFY_NIN: ${{ secrets.VERIFY_NIN }}
+      VERIFY_PLATE: ${{ secrets.VERIFY_PLATE }}
+      VERIFY_ACCOUNT: ${{ secrets.VERIFY_ACCOUNT }}
+      VERIFY_BANK_CODE: ${{ secrets.VERIFY_BANK_CODE }}
+      VERIFY_RRR: ${{ secrets.VERIFY_RRR }}
+
+      # The harness touches the database only to read configuration; nothing it
+      # does writes revenue. A throwaway instance is enough.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/psirs_verify
+      JWT_SECRET: verification-run-jwt-secret-long-enough-32
+      IDENTITY_HASH_SECRET: verification-run-identity-secret-long-32
+      PAYMENT_WEBHOOK_SECRET: verification-run-webhook-secret-long-32
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: psirs_verify
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Decide whether the credentials are present
+        id: gate
+        # One representative secret per provider. If the gateway and KYC
+        # selectors are absent there is nothing real to talk to, and running
+        # would only verify the mocks — which is precisely the thing B-4 says
+        # proves nothing.
+        run: |
+          # Written as explicit `if` blocks rather than `[ -z "$X" ] && ...`:
+          # GitHub runs each step under `bash -e`, and an AND-list whose test
+          # fails returns non-zero, so the terse form aborted the step in the
+          # one case that matters — every credential present.
+          missing=""
+          for name in PAYMENT_GATEWAY KYC_PROVIDER VERIFY_RRR VERIFY_NIN; do
+            if [ -z "$(printenv "${name}" || true)" ]; then
+              missing="${missing} ${name}"
+            fi
+          done
+
+          if [ -n "${missing}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Integration verification skipped"
+              echo
+              echo "Blocker **B-4** remains open: the provider credentials are not configured."
+              echo
+              echo "Missing repository secrets:${missing}"
+              echo
+              echo "This run is neither a pass nor a failure. It reports skipped so that"
+              echo "\"not checked\" cannot be mistaken for \"checked\" — which is the whole"
+              echo "substance of B-4."
+              echo
+              echo "See \`docs/INTEGRATION-VERIFICATION.md\` for the field paths and status"
+              echo "words each provider needs confirmed."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v5
+        if: steps.gate.outputs.ready == 'true'
+
+      - uses: actions/setup-node@v7
+        if: steps.gate.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        if: steps.gate.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Build shared
+        if: steps.gate.outputs.ready == 'true'
+        run: npm run build --workspace @psirs/shared
+
+      - name: Prepare the schema
+        if: steps.gate.outputs.ready == 'true'
+        # The harness reads configuration through the same code path the API
+        # uses, which expects its tables to exist.
+        run: npm run migrate
+
+      - name: Ask each provider one real question
+        if: steps.gate.outputs.ready == 'true'
+        # Deliberately not --sms: sending a message is a side effect, and a
+        # daily job should not text somebody at 05:00 to prove it can.
+        #
+        # The subjects come from secrets rather than being written here, so a
+        # real citizen's NIN never appears in this file or in a build log.
+        run: |
+          npm run verify:integrations -- \
+            --tin "${VERIFY_TIN}" \
+            --nin "${VERIFY_NIN}" \
+            --plate "${VERIFY_PLATE}" \
+            --account "${VERIFY_ACCOUNT}" \
+            --bank-code "${VERIFY_BANK_CODE}" \
+            --rrr "${VERIFY_RRR}" \
+            | tee verification.log
+
+      - name: Record the result
+        if: always() && steps.gate.outputs.ready == 'true'
+        run: |
+          {
+            echo "### Integration verification"
+            echo
+            echo '```'
+            # The harness prints provider names and mapped outcomes, never
+            # credentials or the subject values themselves.
+            sed -e 's/[0-9]\{6,\}/<redacted>/g' verification.log 2>/dev/null || echo "no output captured"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the evidence
+        if: always() && steps.gate.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-verification-${{ github.run_number }}
+          path: verification.log
+          # B-4 is closed by evidence, and evidence that vanishes in ninety days
+          # is not much use to an auditor asking in month four.
+          retention-days: 180
+          if-no-files-found: warn

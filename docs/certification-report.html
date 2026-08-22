@@ -786,7 +786,27 @@
           <dt>Why it stays open</dt><dd><strong>This cannot be closed from the repository.</strong> It needs PSIRS credentials and live vendor sandboxes. No code change substitutes for asking the real service a real question.</dd>
           <dt>Mitigation in place</dt><dd><code>config.ts</code> refuses to boot in production while any adapter is <code>mock</code> — verified in a child process during this audit. Every adapter also fails closed on an unrecognised answer: an unmapped KYC status becomes <code>UNDER_REVIEW</code>, an unmapped Remita code stays <code>PENDING</code>. Correct, and no protection against a mapping that is wrong rather than unrecognised.</dd>
           <dt>Added in <code>4ab5925</code></dt><dd><code>npm run verify:integrations</code> asks each configured provider a real question and reports what the platform made of the answer, exiting non-zero if any answer could not be acted on — usable as a go-live gate. It deliberately <em>fails</em> on <code>UNDER_REVIEW</code> and <code>PENDING</code>, because those are valid results that are indistinguishable from a bad mapping. <code>docs/INTEGRATION-VERIFICATION.md</code> lists every field path and status word that must be confirmed, per provider, with the failure each wrong one produces.</dd>
-          <dt>Closes when</dt><dd>The harness exits 0 against real sandboxes, one live payment has been collected and its receipt verified publicly, and one agent has been cleared through the real KYC provider.</dd>
+          <dt>Kept verified, not merely verified once</dt>
+          <dd>
+            A sign-off decays. A mapping confirmed in March is not confirmed in
+            September — a vendor adds a status code, an environment variable is edited, a
+            sandbox is reprovisioned — and none of those announce themselves. They surface
+            as payments stuck on <code>PENDING</code> and agents who are never cleared,
+            which is the failure this blocker exists to prevent.
+            <code>.github/workflows/integration-verification.yml</code> now runs the
+            harness daily against whatever the repository secrets point at, so the answer
+            is never more than a day old, and keeps the run output as evidence for 180
+            days.
+            <br><br>
+            Until those secrets exist the job reports <strong>skipped</strong>, naming what
+            is missing. Deliberately not failed — a red cross every morning for a condition
+            nobody can fix that morning teaches people to ignore red crosses. Deliberately
+            not passed — a green tick would assert these integrations were verified. That
+            "not checked" must never be able to look like "checked" is the whole substance
+            of this blocker, so the job is built to preserve the distinction rather than
+            paper over it.
+          </dd>
+          <dt>Closes when</dt><dd>The harness exits 0 against real sandboxes, one live payment has been collected and its receipt verified publicly, and one agent has been cleared through the real KYC provider. <strong>Adding the credentials is what closes it; the scheduled job is what keeps it closed.</strong></dd>
           <dt>Brief</dt><dd>§3 Environment audit, §32 Deployment checklist</dd>
         </dl>
       </article>
@@ -914,7 +934,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. A verification harness now exists but has not been run against a real provider</td><td>B-4</td><td><strong>Yes</strong></td></tr>
+          <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. The harness exists and is now scheduled daily, reporting <em>skipped</em> — neither pass nor fail — until credentials are configured</td><td>B-4</td><td><strong>Yes</strong></td></tr>
           <tr><td>Mapping-failure detection</td><td><span class="pill p-pass">Pass</span></td><td>A wrong mapping proven to fail closed and land on the outcome the harness reports as FAIL — so the sandbox run, when it happens, will mean something. Surfaced D-10</td><td>D-10 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Production seed hygiene</td><td><span class="pill p-pass">Pass</span></td><td>Both demonstration flags refuse in production before migrating; the hint that recommended them is suppressed; three regression tests</td><td>B-5 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Deployment &amp; rollback</td><td><span class="pill p-partial">Partial</span></td><td>Dockerfile, compose, and a pipeline with backup-before-migrate and automatic revert. The built artefact was booted in production config and verified; the <em>image build</em> could not be run here (registry blocked)</td><td>B-1 <em>(fixed)</em></td><td>No</td></tr>
