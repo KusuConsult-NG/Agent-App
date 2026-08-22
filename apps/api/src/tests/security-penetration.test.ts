@@ -17,6 +17,20 @@ import { pool } from '../db/pool';
 
 describe('Security Penetration & OWASP Compliance', () => {
   before(async () => {
+    /*
+     * Start from a known database, like every other suite here.
+     *
+     * `resetDatabase` was imported and never called, so this file ran against
+     * whatever the previous file happened to leave behind and left its own
+     * residue for the next one. On its own it passed; in the full run it
+     * contributed to sixteen failures in *other* files — including the
+     * receipt-forgery and webhook-replay audits, which is an alarming thing to
+     * see fail for a reason that has nothing to do with either.
+     *
+     * A penetration suite writes deliberately hostile data. It is the last file
+     * that should leave it lying around.
+     */
+    await resetDatabase();
     await startTestServer();
   });
 

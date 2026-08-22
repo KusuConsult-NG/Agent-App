@@ -8,13 +8,33 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Every branch, not a named list.
+    #
+    # This said `[main]`, and this repository's default branch is not `main`.
+    # The effect was that a direct push to the branch everything merges into ran
+    # no CI at all — only pull requests were ever checked. A large feature
+    # commit went in that way and took the suite red (16 failures), and nobody
+    # found out, because nothing looked.
+    #
+    # Listing branches is what created the gap: the list and the actual default
+    # branch drifted apart silently. Checking every push cannot drift. A push to
+    # a branch that also has an open PR is deduplicated by the concurrency group
+    # below, so this does not double the CI bill.
+    branches: ['**']
   pull_request:
   workflow_dispatch:
 
 # A newer push to the same branch supersedes an in-flight run.
+#
+# Keyed on the branch *name* rather than on `github.ref`, because the two event
+# types spell the same branch differently: a push reports `refs/heads/x` while
+# its pull request reports `refs/pull/N/merge`. Keyed on `github.ref` the two
+# land in different groups, so a branch with an open PR runs the whole suite
+# twice for one push. `head_ref` is set only on pull_request events and
+# `ref_name` gives the plain branch name on a push, so this expression yields
+# "x" for both and the redundant run is cancelled.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
