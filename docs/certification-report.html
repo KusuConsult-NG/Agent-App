@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">2980009</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">c7e9d74</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>22 August 2026 (rev. 6)</dd></div>
+      <div><dt>Date</dt><dd>22 August 2026 (rev. 7)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -625,8 +625,8 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">689</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">117</span><span class="k">Independent<br>audit tests added</span></div>
+      <div class="stat"><span class="v">722</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">138</span><span class="k">Independent<br>audit tests added</span></div>
       <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
       <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
@@ -931,6 +931,8 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Vehicle renewal gating</td><td><span class="pill p-partial">Partial</span></td><td>No renewal document can exist without a verified payment (trigger + query verified); full happy path not driven against a real registry</td><td>D-4</td><td>No</td></tr>
           <tr><td>Offline / PWA financial safety</td><td><span class="pill p-pass">Pass</span></td><td>Service worker never caches financial paths; draft queue has no payment type and rejects financial keys at runtime</td><td>—</td><td>No</td></tr>
           <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
+          <tr><td>Append-only coverage</td><td><span class="pill p-pass">Pass</span></td><td>Three tables holding audit evidence had no delete protection while their siblings did, including the record that a reconciliation ran. Fixed, and a test now asserts the property so an unclassified new table fails the suite</td><td>D-19 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>API route coverage</td><td><span class="pill p-partial">Partial</span></td><td>141 routes declared, 24 exercised by no test. The two security-relevant ones — sign out of all devices, and OTP verification — are now covered and were found correct. The rest are reporting endpoints</td><td>D-21</td><td>No</td></tr>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
@@ -945,9 +947,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
           <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
-          <tr><td>Performance under load</td><td><span class="pill p-none">Not tested</span></td><td>Indexes reviewed and present on every hot path; no load, soak or N+1 profiling performed</td><td>—</td><td>No</td></tr>
+          <tr><td>Performance under load</td><td><span class="pill p-partial">Partial</span></td><td>Measured. Read paths healthy — TIN lookup under 5ms at p99 with 32 concurrent callers, every hot path on an index confirmed by the planner. The audit chain is a global serialisation point capping the platform at roughly 40 collections/second, which horizontal scaling cannot move. No sustained soak, and no production topology</td><td>D-20</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
-          <tr><td>Cross-device UI verification</td><td><span class="pill p-none">Not tested</span></td><td>Builds clean; 51 agent PWA tests pass; no Android/iOS/desktop visual pass performed</td><td>—</td><td>No</td></tr>
+          <tr><td>Cross-device UI verification</td><td><span class="pill p-partial">Partial</span></td><td>Both applications now driven in a real browser at desktop, laptop and phone viewports: all twelve portal screens render, neither app overflows horizontally, and a console error fails the test. Still no run on physical Android or iOS hardware</td><td>D-5 <em>(further reduced)</em></td><td>No</td></tr>
         </tbody>
       </table>
     </div>
@@ -1393,6 +1395,122 @@ build      shared, api, agent, portal — all clean</div>
             form — are still outside the suite. The finding stays open at reduced
             severity.
           </dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-19</span>
+          <h3 class="finding-title" style="margin:0">Three tables holding audit evidence could be emptied</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The platform's central claim is that financial and audit records cannot be
+          deleted, and 85 triggers enforce it. Three tables were missed — and each has a
+          sibling that was not, which is what marks them as oversights rather than
+          decisions.
+        </p>
+        <table>
+          <thead><tr><th>Unprotected</th><th>Protected sibling</th></tr></thead>
+          <tbody>
+            <tr><td><code>document_access_logs</code></td><td><code>kyc_document_access_logs</code></td></tr>
+            <tr><td><code>reconciliation_runs</code></td><td><code>reconciliation_records</code></td></tr>
+            <tr><td><code>gateway_statement_lines</code></td><td>— the gateway's side of the three-way reconciliation</td></tr>
+          </tbody>
+        </table>
+        <p>
+          <code>reconciliation_runs</code> is the sharpest of the three. It is where an
+          <code>ABORTED</code> sweep is recorded, and an aborted sweep means nothing was
+          compared for that period — making it the single most useful row to erase if the
+          goal is to make an unexamined period look examined. The individual matched lines
+          were append-only; the record that the examination happened at all was not.
+        </p>
+        <p>
+          None of these was found by reading code. They were found by asking the database
+          which tables lacked a delete trigger, and looking at the answer.
+        </p>
+        <dl>
+          <dt>Severity</dt>
+          <dd>No evidence is known to have been lost, and reaching these rows needs database access rather than an API call. But an audit trail with a hole in it provides its assurance only until somebody looks, and the tables involved record who opened a citizen's identity document and whether a reconciliation period was ever examined.</dd>
+          <dt>Fixed in</dt>
+          <dd>Migration 018. <code>programme_eligibility</code> and <code>taxpayer_compliance</code> are deliberately left mutable and named as such: they cache a determination rather than record an event, and migration 017 clears eligibility on purpose so that verdicts reached under the old gate rule do not linger as stale refusals against a citizen.</dd>
+          <dt>The test that finds the next one</dt>
+          <dd><code>schema-audit.test.ts</code> asserts the property rather than the three instances: a table with no delete protection that is not explicitly classified as mutable fails the suite. Naming tables individually only ever proves the tables somebody thought of. Mutation-tested by dropping a trigger — both the named check and the catch-the-next-one check fail with the right message.</dd>
+          <dt>A near-miss worth recording</dt>
+          <dd><code>taxpayer_tax_obligations</code> appeared unprotected and was not: its guard is named <code>prevent_obligation_delete()</code> rather than <code>prevent_delete()</code>, so a grep missed it. The first version of the delete check also ran against empty tables, where a row trigger cannot fire — a vacuous test of exactly the kind this audit has been finding elsewhere. Both were caught by attempting real deletions instead.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--partial)">
+        <div class="finding-head">
+          <span class="finding-id">D-20</span>
+          <h3 class="finding-title" style="margin:0">The audit chain caps the platform, and horizontal scaling cannot move it</h3>
+          <span class="pill p-partial">Measured</span>
+        </div>
+        <p>
+          This report previously recorded "Performance under load — Not tested" alongside
+          the observation that the indexes look right. Those are different claims, and only
+          one was evidenced. An index existing tells you a query <em>can</em> use it; not
+          that the planner does, nor that a transaction is not serialising behind another.
+        </p>
+        <div class="code">audit chain append, c=1     p50  1.57ms   p99  3.59ms   about 637 appends/sec
+audit chain append, c=4     p50  6.67ms   p99 12.93ms   about 600 appends/sec
+audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</div>
+        <p>
+          Latency rises almost exactly in step with concurrency while total throughput stays
+          flat and drifts slightly down. That is the signature of a resource behind one
+          lock, and here the lock is deliberate: <code>audit_logs</code> is tamper-evident,
+          each entry hashing its predecessor, so <code>recordAudit</code> serialises appends
+          because two concurrent writers reading the same tail would fork a chain no
+          verifier could replay.
+        </p>
+        <p>
+          <strong>The design is right.</strong> The finding is that nobody had measured what
+          it costs. Every money movement writes audit entries, so this is the ceiling on
+          recording revenue — on the order of <strong>40 complete collections per
+          second</strong>. Three things follow that are worth knowing before they matter:
+        </p>
+        <ul>
+          <li><strong>Adding instances will not help.</strong> The lock is global.</li>
+          <li><strong>It degrades as latency, not as errors.</strong> Collections queue rather than fail, so the symptom is agents saying the app is slow on market day — not an alert.</li>
+          <li><strong>It is the first place to look</strong> if collection ever feels slow under load, because nothing else on the write path is serialised this way.</li>
+        </ul>
+        <dl>
+          <dt>Comfortable for Plateau State</dt>
+          <dd>Roughly 150,000 collections an hour. No change is recommended: the remedies — batching appends, or sharding the chain per entity type — all weaken the single-chain guarantee, and none should be applied speculatively.</dd>
+          <dt>Read paths are healthy</dt>
+          <dd>TIN lookup, the path an agent hits for every taxpayer, stays under 5ms at p99 with 32 concurrent callers. Zero errors throughout. Every hot path uses an index, confirmed with <code>EXPLAIN ANALYZE</code> rather than inferred from <code>pg_indexes</code> — including the sector index that incentive targeting depends on.</dd>
+          <dt>Still not measured</dt>
+          <dd>A full collection lifecycle at concurrency, the reconciliation sweep at volume, sustained soak over days, and any production topology. One machine, no network, warm cache: the absolute figures are a floor, not a forecast. The movement between concurrency levels is the part that travels.</dd>
+          <dt>Reproduce</dt>
+          <dd><code>npm run load-test</code>; full results and limits in <code>docs/LOAD-TEST-RESULTS.md</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--partial)">
+        <div class="finding-head">
+          <span class="finding-id">D-21</span>
+          <h3 class="finding-title" style="margin:0">Twenty-four API routes are exercised by no test</h3>
+          <span class="pill p-partial">Partly closed</span>
+        </div>
+        <p>
+          141 routes are declared; 24 are touched by nothing in the suite. Found by
+          enumerating the surface rather than counting tests — a test count says what was
+          written, not what is covered.
+        </p>
+        <p>
+          Most are reporting endpoints where a regression costs an empty table. Two were
+          not, and both are now covered:
+        </p>
+        <dl>
+          <dt><code>POST /auth/logout-all</code></dt>
+          <dd>What somebody presses when they believe their account is compromised. Silently revoking nothing would be worse than having no such button, because the user is told they are safe and stops looking for the attacker.</dd>
+          <dt><code>POST /auth/otp/verify</code></dt>
+          <dd>A separate route from <code>/auth/step-up</code>, which the helpers do cover. A replayable code would bypass the control guarding rate changes, reversals and payouts.</dd>
+          <dt>Both are correct</dt>
+          <dd>Sessions on other devices end, revocation takes effect on the very next request rather than waiting for a token to expire, and one user's sign-out does not touch another's sessions. Codes are single-use and purpose-scoped: a <code>LOGIN</code> code will not satisfy a <code>STEP_UP</code> check. No defects — coverage where there was none, over behaviour that would be expensive to discover wrong later.</dd>
+          <dt>Still open</dt>
+          <dd>The remaining 22, chiefly support-desk and reporting endpoints. Recorded rather than closed, because "no test" and "no risk" are different statements and only the first has been established.</dd>
         </dl>
       </article>
 
