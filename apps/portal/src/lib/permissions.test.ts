@@ -87,6 +87,7 @@ describe('each role gets a distinct portal', () => {
       'Audit log',
       'Revenue catalogue',
       'Social incentives',
+      'Groups & cooperatives',
     ]);
   });
 
@@ -146,6 +147,7 @@ describe('each role gets a distinct portal', () => {
       'Audit log',
       'Revenue catalogue',
       'Social incentives',
+      'Groups & cooperatives',
     ]);
   });
 

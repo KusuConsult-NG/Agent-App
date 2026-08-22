@@ -361,6 +361,34 @@ export async function roundSummary(db: Db, roundId: string) {
   };
 }
 
+/**
+ * The rounds under a programme, with what is left in each.
+ *
+ * Exists because a round had no way in. It could be created and awarded
+ * against through the API, and the screen that shows it could only be reached
+ * by typing its id into the address bar — which is the same "built but
+ * unreachable" fault this codebase keeps turning up, committed fresh.
+ */
+export async function listRounds(db: Db, options: { programmeId?: string; limit?: number } = {}) {
+  return query(
+    db,
+    `SELECT r.id, r.name, r.unit, r.total_quantity, r.quantity_per_beneficiary,
+            r.status, r.collection_point, r.opens_at, r.closes_at,
+            p.name AS programme_name,
+            COALESCE(SUM(a.quantity) FILTER (WHERE a.status <> 'FORFEITED'), 0)::text AS awarded_quantity,
+            count(a.id) FILTER (WHERE a.status = 'COLLECTED')::text AS collected_count,
+            count(a.id) FILTER (WHERE a.status <> 'FORFEITED')::text AS awarded_count
+       FROM incentive_allocation_rounds r
+       JOIN incentive_programmes p ON p.id = r.programme_id
+       LEFT JOIN incentive_awards a ON a.round_id = r.id
+      WHERE ($1::uuid IS NULL OR r.programme_id = $1)
+      GROUP BY r.id, p.name
+      ORDER BY r.created_at DESC
+      LIMIT $2`,
+    [options.programmeId ?? null, options.limit ?? 100],
+  );
+}
+
 export async function listAwards(
   db: Db,
   roundId: string,

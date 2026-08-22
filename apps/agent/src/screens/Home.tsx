@@ -27,6 +27,10 @@ const QUICK_ACTIONS = [
   // Agents are asked "is this receipt real?" in the field constantly; until
   // now answering meant leaving the application.
   { href: '#/verify', label: 'Check a receipt', icon: Icons.receipt },
+  // The collection point. Reachable from here rather than from a tab, because
+  // a distribution is a season's work for an agent rather than a daily one —
+  // but reachable, which the Profile screen was not until somebody looked.
+  { href: '#/collections', label: 'Hand out allocation', icon: Icons.check },
 ];
 
 function greeting(): string {

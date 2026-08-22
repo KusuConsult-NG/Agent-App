@@ -28,7 +28,8 @@ import { AuditScreen, FraudScreen } from './screens/Oversight';
 import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
-import { CitizenPortalScreen, RefereePortalScreen, VerifyScreen } from './screens/Public';
+import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
+import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
 
 export function App() {
   const [route, navigate] = useRoute();
@@ -71,9 +72,11 @@ export function App() {
   // Public routes, resolved before authentication.
   const verifyMatch = matchRoute(route, '/verify/:code') ?? matchRoute(route, '/verify');
   const refereeMatch = matchRoute(route, '/referee/:token');
+  const attestationMatch = matchRoute(route, '/group-attestation/:token');
   const citizenMatch = matchRoute(route, '/citizen');
 
   if (refereeMatch) return <RefereePortalScreen token={refereeMatch.token!} />;
+  if (attestationMatch) return <GroupAttestationScreen token={attestationMatch.token!} />;
   if (verifyMatch) return <VerifyScreen code={verifyMatch.code} />;
   if (citizenMatch) return <CitizenPortalScreen />;
 
@@ -95,8 +98,20 @@ export function App() {
   const available = groups.flatMap((group) => group.items);
   const readOnly = isReadOnly(user);
 
+  /*
+   * The heading names the screen, including the ones the menu does not list.
+   *
+   * Detail screens are reached from a list rather than from the sidebar, so
+   * exact-matching the menu left an officer looking at one allocation round
+   * under a heading that said "Revenue administration" — true of every page
+   * and therefore useful on none. Falling back to the section the route sits
+   * under says where they are.
+   */
   const activeLabel =
-    available.find((item) => item.path === route)?.label ?? 'Revenue administration';
+    available.find((item) => item.path === route)?.label ??
+    available.find((item) => item.path !== '/' && route.startsWith(item.path))?.label ??
+    SECTION_LABELS[`/${route.split('/')[1]}`] ??
+    'Revenue administration';
 
   return (
     <div className="shell">
@@ -169,6 +184,11 @@ export function App() {
   );
 }
 
+/** Headings for screens reached from a list rather than from the menu. */
+const SECTION_LABELS: Record<string, string> = {
+  '/allocations': 'Distribution round',
+};
+
 function Routes({
   route,
   navigate,
@@ -180,6 +200,7 @@ function Routes({
 }) {
   const agentMatch = matchRoute(route, '/agents/:id');
   const ticketMatch = matchRoute(route, '/support/:id');
+  const roundMatch = matchRoute(route, '/allocations/:id');
 
   if (matchRoute(route, '/')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
@@ -198,6 +219,8 @@ function Routes({
   if (matchRoute(route, '/audit')) return <AuditScreen />;
   if (matchRoute(route, '/catalogue')) return <CatalogueScreen user={user} />;
   if (matchRoute(route, '/programmes')) return <ProgrammesScreen />;
+  if (matchRoute(route, '/groups')) return <GroupsScreen navigate={navigate} />;
+  if (roundMatch) return <AllocationRoundScreen roundId={roundMatch.id!} />;
 
   return (
     <div className="card">

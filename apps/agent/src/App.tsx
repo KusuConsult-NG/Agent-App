@@ -28,6 +28,7 @@ import { RegisterTaxpayerScreen, TaxpayerScreen, TaxpayersScreen } from './scree
 import { CollectScreen, TransactionScreen } from './screens/Collect';
 import { CommissionScreen, ProfileScreen, ReceiptsScreen, VehiclesScreen } from './screens/More';
 import { VerifyScreen } from './screens/Verify';
+import { CollectionScreen } from './screens/Collection';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
@@ -248,6 +249,7 @@ function Routes({
   if (matchRoute(route, '/vehicles')) return <VehiclesScreen navigate={navigate} />;
   if (matchRoute(route, '/receipts')) return <ReceiptsScreen />;
   if (matchRoute(route, '/verify')) return <VerifyScreen connection={connection} />;
+  if (matchRoute(route, '/collections')) return <CollectionScreen />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
   if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;

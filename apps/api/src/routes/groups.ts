@@ -239,6 +239,20 @@ allocationRouter.post(
   ),
 );
 
+allocationRouter.get(
+  '/rounds',
+  requirePermission('allocation:read:all', 'allocation:collect'),
+  validateQuery(
+    z.object({
+      programmeId: uuidSchema.optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }),
+    async (_req, res, data) => {
+      res.json({ rounds: await allocations.listRounds(pool, data) });
+    },
+  ),
+);
+
 allocationRouter.post(
   '/rounds/:id/status',
   requirePermission('allocation:manage'),

@@ -190,6 +190,12 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
     items: [
       { path: '/catalogue', label: 'Revenue catalogue', permission: 'catalogue:read' },
       { path: '/programmes', label: 'Social incentives', permission: 'incentive:read:all' },
+      // group:manage, not group:read:all. Agents hold the read permission
+      // because they register groups and record members — but they do that in
+      // the PWA, and this portal is for officers. Keying the menu on the read
+      // permission put a portal item in front of field agents, which the menu
+      // tests object to for the right reason.
+      { path: '/groups', label: 'Groups & cooperatives', permission: 'group:manage' },
     ],
   },
 ];

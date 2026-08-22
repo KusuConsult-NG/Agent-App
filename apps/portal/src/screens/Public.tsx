@@ -402,6 +402,227 @@ const STATUS_COLORS: Record<string, string> = {
   NOT_ASSESSED: 'var(--muted)',
 };
 
+interface AttestationMember {
+  id: string;
+  status: string;
+  full_name: string;
+  phone: string;
+  member_reference: string | null;
+}
+
+interface AttestationView {
+  groupName: string;
+  groupCode: string;
+  leaderName: string;
+  lga: string;
+  members: AttestationMember[];
+}
+
+/**
+ * The group leader's screen: is this person really one of yours?
+ *
+ * Reached by a link in an SMS, with no account, because a cooperative chairman
+ * in a village has no reason to hold one. The question is deliberately narrow —
+ * membership, one person at a time — since that is the only thing the leader
+ * is being asked to put their name to.
+ *
+ * There is no "confirm all". The whole worth of an attestation over an
+ * assertion is that somebody looked at each name, and a button that answers
+ * three hundred at once removes exactly that. Members already confirmed are
+ * shown but not asked about again, so a growing cooperative only ever presents
+ * the people who are new.
+ */
+export function GroupAttestationScreen({ token }: { token: string }) {
+  const [view, setView] = useState<AttestationView | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, 'YES' | 'NO'>>({});
+
+  useEffect(() => {
+    api
+      .publicGet<AttestationView>(`/group-attestation/${token}`)
+      .then(setView)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      })
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const pending = (view?.members ?? []).filter((m) => m.status === 'PENDING_ATTESTATION');
+  const alreadyConfirmed = (view?.members ?? []).filter((m) => m.status === 'ATTESTED');
+  const answered = pending.filter((m) => answers[m.id]).length;
+  const allAnswered = pending.length > 0 && answered === pending.length;
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.publicPost<{ message: string }>(
+        `/group-attestation/${token}/confirm`,
+        {
+          confirmedMemberIds: pending.filter((m) => answers[m.id] === 'YES').map((m) => m.id),
+          rejectedMemberIds: pending.filter((m) => answers[m.id] === 'NO').map((m) => m.id),
+        },
+      );
+      setOutcome(result.message);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="public">
+        <div className="public__card">
+          <Loading rows={4} />
+        </div>
+      </div>
+    );
+  }
+
+  if (outcome) {
+    return (
+      <div className="public">
+        <div className="public__card">
+          <div className="verdict verdict--valid">
+            <p className="verdict__mark">✓</p>
+            <p className="verdict__label">THANK YOU</p>
+          </div>
+          <p style={{ fontSize: '0.9rem' }}>{outcome}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!view) {
+    return (
+      <div className="public">
+        <div className="public__card">
+          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+            <img src="/icon.svg" alt="" width={48} height={48} />
+            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>Group membership check</h1>
+          </div>
+          <ErrorAlert error={error} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="public">
+      <div className="public__card">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <img src="/icon.svg" alt="" width={48} height={48} />
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>Group membership check</h1>
+          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+            Plateau State Internal Revenue Service · {view.groupCode}
+          </p>
+        </div>
+
+        <Alert kind="info" title={`${view.groupName}`}>
+          <p style={{ margin: 0 }}>
+            You are recorded as the leader of this group in {view.lga}. PSIRS needs you to confirm
+            which of these people really are members. Government support is offered to members, so
+            confirming somebody who is not one takes it from somebody who is.
+          </p>
+        </Alert>
+
+        <KeyValue
+          items={[
+            ['Group', view.groupName],
+            ['You are recorded as', view.leaderName],
+            ['Local Government Area', view.lga],
+            ['Already confirmed', String(alreadyConfirmed.length)],
+          ]}
+        />
+
+        <ErrorAlert error={error} />
+
+        {pending.length === 0 ? (
+          <Alert kind="success" title="Nothing waiting">
+            <p style={{ margin: 0 }}>
+              Every member on this list has already been confirmed. There is nothing for you to do.
+            </p>
+          </Alert>
+        ) : (
+          <>
+            <p className="card__hint" style={{ marginTop: 18, fontWeight: 650, color: 'var(--ink)' }}>
+              Is each of these people a member of your group? ({answered} of {pending.length}{' '}
+              answered)
+            </p>
+
+            {pending.map((member) => (
+              <div
+                key={member.id}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '12px 0',
+                  borderBottom: '1px solid var(--line)',
+                }}
+              >
+                {/*
+                  * The name takes the whole row on a narrow screen.
+                  * Sharing it with two buttons on a 390px phone broke names
+                  * like "Nanribet Choji" across lines, and this is a screen
+                  * whose entire job is reading a name and recognising it.
+                  */}
+                <div style={{ flex: '1 1 100%', minWidth: 0 }}>
+                  <div style={{ fontWeight: 650 }}>{member.full_name.trim()}</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>
+                    {member.phone}
+                    {member.member_reference ? ` · ${member.member_reference}` : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flex: '1 1 auto' }}>
+                  <button
+                    type="button"
+                    className={answers[member.id] === 'YES' ? 'small' : 'small secondary'}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    aria-pressed={answers[member.id] === 'YES'}
+                    onClick={() => setAnswers((prev) => ({ ...prev, [member.id]: 'YES' }))}
+                  >
+                    Member
+                  </button>
+                  <button
+                    type="button"
+                    className={answers[member.id] === 'NO' ? 'small danger' : 'small secondary'}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                    aria-pressed={answers[member.id] === 'NO'}
+                    onClick={() => setAnswers((prev) => ({ ...prev, [member.id]: 'NO' }))}
+                  >
+                    Not a member
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              disabled={busy || !allAnswered}
+              style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
+              onClick={() => void submit()}
+            >
+              {busy ? 'Sending…' : 'Send my answers to PSIRS'}
+            </button>
+            {!allAnswered && (
+              <p className="card__hint" style={{ marginTop: 8 }}>
+                Please answer for every person before sending.
+              </p>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function CitizenPortalScreen() {
   const [mode, setMode] = useState<SearchMode>('tin');
   const [input, setInput] = useState('');

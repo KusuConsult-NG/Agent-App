@@ -33,7 +33,8 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { refereeInvitationUrl, verificationUrl } from '../lib/public-urls';
+import { refereeInvitationUrl,
+  groupAttestationUrl, verificationUrl } from '../lib/public-urls';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 const PORTAL_ROUTER = join(REPO_ROOT, 'apps', 'portal', 'src', 'router.tsx');
@@ -92,10 +93,24 @@ describe('Public links resolve in the portal that receives them', () => {
     assert.equal(params!.token, '2HzPiCwZGMrXS08ipobzyvo2b_pMY33Al');
   });
 
+  it('sends a group leader to their membership list, not to sign-in', () => {
+    const url = groupAttestationUrl('ya_z9nNYHIZMknjYBaDXaC1aPfIczwJEHes4B0EDjuI');
+    const route = routeFor(url);
+
+    assert.notEqual(route, '/', `${url} resolves to the sign-in screen`);
+    const params = matchRoute(route, '/group-attestation/:token');
+    assert.ok(params, `${route} does not match the portal's /group-attestation/:token route`);
+    assert.equal(params!.token, 'ya_z9nNYHIZMknjYBaDXaC1aPfIczwJEHes4B0EDjuI');
+  });
+
   it('matches routes the portal actually declares', () => {
     // Guards against fixing the hash but naming a screen that does not exist.
     const app = readFileSync(PORTAL_APP, 'utf8');
-    for (const pattern of ["'/verify/:code'", "'/referee/:token'"]) {
+    for (const pattern of [
+      "'/verify/:code'",
+      "'/referee/:token'",
+      "'/group-attestation/:token'",
+    ]) {
       assert.ok(
         app.includes(`matchRoute(route, ${pattern})`),
         `the portal no longer declares ${pattern}`,
