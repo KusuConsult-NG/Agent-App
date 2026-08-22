@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">c7e9d74</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">48879de</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>22 August 2026 (rev. 7)</dd></div>
+      <div><dt>Date</dt><dd>22 August 2026 (rev. 8)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -573,6 +573,21 @@
         monitoring, and not one of the five external integrations has ever exchanged a
         packet with the real provider it will depend on. Certification fails on
         operational readiness, not on correctness.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Revision 8.</strong> Eleven further defects, found by reading the routes no
+        test exercised and by driving each surface in a real browser rather than reasoning
+        about it. Three are serious: the audit log took the actor&rsquo;s role from a field in
+        the request body, so an agent could file their own change as a revenue officer&rsquo;s;
+        a spent referee link could overturn a clearance an officer had already granted; and
+        commission frozen while a fraud flag was investigated was never released when the
+        flag was dismissed, so an agent who was investigated and cleared could not be paid
+        by any route short of a manual database write.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Two of the eleven were introduced by this revision&rsquo;s own work</strong> and
+        are recorded as such (D-25, D-32). An audit that only reports faults it inherited is
+        not measuring itself.
       </p>
       <p style="margin-top:12px">
         <strong>Revision 3.</strong> Five of the original six blockers are now closed and
@@ -625,10 +640,10 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">722</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">793</span><span class="k">Tests passing<br>0 failing</span></div>
       <div class="stat"><span class="v">138</span><span class="k">Independent<br>audit tests added</span></div>
-      <div class="stat"><span class="v">83</span><span class="k">Database<br>integrity triggers</span></div>
-      <div class="stat"><span class="v">132</span><span class="k">API routes<br>traced</span></div>
+      <div class="stat"><span class="v">96</span><span class="k">Database<br>integrity triggers</span></div>
+      <div class="stat"><span class="v">156</span><span class="k">API routes<br>traced</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
       <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
     </div>
@@ -932,7 +947,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Offline / PWA financial safety</td><td><span class="pill p-pass">Pass</span></td><td>Service worker never caches financial paths; draft queue has no payment type and rejects financial keys at runtime</td><td>—</td><td>No</td></tr>
           <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
           <tr><td>Append-only coverage</td><td><span class="pill p-pass">Pass</span></td><td>Three tables holding audit evidence had no delete protection while their siblings did, including the record that a reconciliation ran. Fixed, and a test now asserts the property so an unclassified new table fails the suite</td><td>D-19 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>API route coverage</td><td><span class="pill p-partial">Partial</span></td><td>141 routes declared, 24 exercised by no test. The two security-relevant ones — sign out of all devices, and OTP verification — are now covered and were found correct. The rest are reporting endpoints</td><td>D-21</td><td>No</td></tr>
+          <tr><td>API route coverage</td><td><span class="pill p-partial">Partial</span></td><td>156 routes declared, 9 exercised by no test, down from 24. Reading the uncovered ones produced nine of this revision&rsquo;s eleven defects, which is the argument for closing the rest</td><td>D-21</td><td>No</td></tr>
           <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
@@ -966,9 +981,19 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         <h4>Backend API — <code>@psirs/api</code></h4>
         <ul>
           <li>22,202 lines TypeScript, Express 5, Node 22</li>
-          <li>132 routes across 9 routers</li>
-          <li>PostgreSQL 16, 15 migrations, 83 triggers</li>
+          <li>156 routes across 12 routers</li>
+          <li>PostgreSQL 16, 20 migrations, 96 triggers, 72 tables</li>
           <li>Background workers in-process</li>
+        </ul>
+      </div>
+      <div class="inv-card">
+        <h4>Groups &amp; allocations <span class="pill p-partial">New at rev 8</span></h4>
+        <ul>
+          <li>Informal-sector groups: cooperatives, market associations, unions</li>
+          <li>Membership attested by the group&rsquo;s leader through a tokenised link, no account</li>
+          <li>Allocation rounds with a finite quantity; single collection and the round
+              ceiling both enforced by database constraints rather than application checks</li>
+          <li>Untested in the field, and unexercised against a real distribution</li>
         </ul>
       </div>
       <div class="inv-card">
@@ -976,7 +1001,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         <ul>
           <li>6,811 lines, React 19 + Vite</li>
           <li>Service worker, manifest, IndexedDB drafts</li>
-          <li>51 tests passing</li>
+          <li>60 tests passing</li>
           <li>Financial paths never cached</li>
         </ul>
       </div>
@@ -1049,6 +1074,14 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         applied all 15 migrations, ran the platform's own 457 tests to establish a baseline
         (all passed), and then wrote 39 further tests whose purpose was to break the
         system's stated guarantees rather than demonstrate them.
+      </p>
+      <p>
+        Later revisions kept the same rule and added two methods to it. Revision 7 measured
+        the platform under load instead of asserting it would hold. Revision 8 enumerated
+        every mounted route, read the ones no test touched, and drove each user-facing
+        surface in a real browser — which is where nine of its eleven defects came from, and
+        why several of them had survived every previous pass: they were all invisible to
+        anyone reading the code with the assumption that a written route is a reached one.
       </p>
       <p>
         Where a guarantee is claimed to be enforced in the database, the audit bypasses the
@@ -1388,12 +1421,33 @@ build      shared, api, agent, portal — all clean</div>
             the auditor holding nothing that mutates, and the field agent being excluded.
             That is the first automated coverage this workspace has ever had.
           </dd>
+          <dt>Rendered components now covered</dt>
+          <dd>
+            <code>portal-screens.test.tsx</code> renders the sign-in form and the public
+            verification screen against a real DOM and asserts what an officer or a citizen
+            sees: the fields present, the payload the form submits, the genuine-receipt
+            badge, and the warning shown for a revoked one. The workspace stands at
+            <strong>26 tests across three files</strong> — permissions, hash routing, and
+            rendered screens. Receipt verification, named above as outside the suite, is
+            inside it.
+          </dd>
+          <dt>A false alarm worth recording</dt>
+          <dd>
+            During revision 8 these tests were reported as five pre-existing failures. They
+            were not failing. They had been run with <code>vitest --dir apps/portal</code>
+            from the repository root, which ignores the workspace&rsquo;s own
+            <code>vitest.config.ts</code> and its <code>environment: 'happy-dom'</code>, so
+            DOM tests ran under Node and died on <code>document is not defined</code>.
+            Stashing the working tree appeared to confirm the failures pre-existed, because
+            the same wrong command was used both times. Run as the project runs them, all 26
+            pass. A measurement taken with the wrong instrument confirms itself.
+          </dd>
           <dt>Still open</dt>
           <dd>
-            The twelve screens remain untested. Nothing exercises a rendered component,
-            and the two public surfaces — receipt verification and the referee response
-            form — are still outside the suite. The finding stays open at reduced
-            severity.
+            Ten of the twelve officer screens — agent approval, KYC review, reconciliation,
+            exception resolution, payout approval, reversal execution and the rest — still
+            have no rendered test, and the referee response form remains outside the suite.
+            The finding stays open at reduced severity.
           </dd>
         </dl>
       </article>
@@ -1480,23 +1534,263 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>Roughly 150,000 collections an hour. No change is recommended: the remedies — batching appends, or sharding the chain per entity type — all weaken the single-chain guarantee, and none should be applied speculatively.</dd>
           <dt>Read paths are healthy</dt>
           <dd>TIN lookup, the path an agent hits for every taxpayer, stays under 5ms at p99 with 32 concurrent callers. Zero errors throughout. Every hot path uses an index, confirmed with <code>EXPLAIN ANALYZE</code> rather than inferred from <code>pg_indexes</code> — including the sector index that incentive targeting depends on.</dd>
+          <dt>Sustained load, now measured</dt>
+          <dd>Twelve one-minute windows at concurrency 4: <strong>511,737 appends, zero errors</strong>. p50 drifted 5.23ms &rarr; 5.39ms (&times;1.03), throughput 721/s &rarr; 699/s (&times;0.97), heap +1.1MB, and the pool never had a waiter. The ceiling measured in a burst holds under sustained load; nothing leaks and nothing degrades.</dd>
+          <dt>The chain check was vacuous, and is not any more</dt>
+          <dd>The soak first reported &ldquo;verifying the chain end to end… valid, 10000 entries replayed&rdquo; after writing half a million. <code>verifyAuditChain</code> defaults to 10,000 rows from sequence 0, so it replayed the <em>oldest</em> ten thousand and touched nothing the run had produced — the same shape as the delete guard tested against empty tables. Both the soak and a standalone script now page to the highest sequence: <strong>511,822 entries replayed, chain valid</strong>.</dd>
           <dt>Still not measured</dt>
-          <dd>A full collection lifecycle at concurrency, the reconciliation sweep at volume, sustained soak over days, and any production topology. One machine, no network, warm cache: the absolute figures are a floor, not a forecast. The movement between concurrency levels is the part that travels.</dd>
+          <dd>A full collection lifecycle at concurrency, the reconciliation sweep at volume, a soak over days rather than minutes, and any production topology. One machine, no network, warm cache: the absolute figures are a floor, not a forecast. The movement between concurrency levels is the part that travels.</dd>
           <dt>Reproduce</dt>
           <dd><code>npm run load-test</code>; full results and limits in <code>docs/LOAD-TEST-RESULTS.md</code>.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-24</span>
+          <h3 class="finding-title" style="margin:0">The audit log took the actor&rsquo;s role from the request body</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>Setting a taxpayer&rsquo;s obligations wrote its audit entry like this:</p>
+        <div class="code">actorRole: source === 'AGENT_ONBOARDING' ? 'agent' : 'revenue_officer'</div>
+        <p>
+          <code>source</code> is a field in the request body. An agent sending
+          <code>source: "OFFICER_REVIEW"</code> produced an audit row attributing their own
+          change to a revenue officer.
+        </p>
+        <dl>
+          <dt>Why the chain does not help</dt>
+          <dd>The hash chain makes an entry impossible to alter after the fact. It says nothing about whether the entry was true when written. The false attribution was written and then sealed, so the chain verifies perfectly and reports a lie. Tamper-evidence is not the same property as accuracy, and this is the difference.</dd>
+          <dt>Confirmed before the fix</dt>
+          <dd>An agent set obligations with <code>source: "OFFICER_REVIEW"</code>; the resulting <code>audit_logs.actor_role</code> read <code>revenue_officer</code>.</dd>
+          <dt>Fix</dt>
+          <dd>The role comes from <code>req.auth.role</code>. Nothing a caller sends can describe who the caller is.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-22</span>
+          <h3 class="finding-title" style="margin:0">A reconciliation record that was never examined could be marked resolved</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>exceptionQueue</code> states exactly what an exception is: five statuses, and
+          only rows not already reconciled. <code>resolveException</code> enforced neither
+          half. It read the record&rsquo;s status solely to quote in the audit entry, then set
+          <code>RESOLVED</code> on whatever record id it was handed.
+        </p>
+        <dl>
+          <dt>The sharp case</dt>
+          <dd><code>UNCHECKED</code> exists because the gateway statement could not be fetched, so nothing about that row was ever compared to anything. Resolving it converts &ldquo;never examined&rdquo; into &ldquo;examined and settled&rdquo; and removes it from every queue — the per-record twin of the <code>reconciliation_runs</code> deletion gap recorded as D-19.</dd>
+          <dt>Also let through</dt>
+          <dd>A <code>MATCHED</code> record could be relabelled, and one already resolved could be resolved again, overwriting <code>resolution_note</code>, <code>reconciled_by</code> and <code>reconciled_at</code> — so the first officer&rsquo;s name and reason vanish from the row.</dd>
+          <dt>Root cause</dt>
+          <dd>Listing and resolving each encoded &ldquo;what is an exception&rdquo; separately, so only one of them was ever right. The list is now named once and shared.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-23</span>
+          <h3 class="finding-title" style="margin:0">Commission frozen by a fraud flag was never released when the flag was dismissed</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Confirming a fraud flag moves an agent&rsquo;s <code>PENDING</code> and
+          <code>ELIGIBLE</code> commissions to <code>ON_HOLD</code>, which is right — PRD §28
+          freezes the incentive while an investigation runs. Dismissing the flag did nothing.
+          The review route branched on <code>CONFIRMED</code> and had no branch for
+          <code>DISMISSED</code>, and no code anywhere moved a commission out of hold.
+        </p>
+        <dl>
+          <dt>A legal move the platform could not make</dt>
+          <dd><code>COMMISSION_TRANSITIONS</code> lists <code>ELIGIBLE</code> among <code>ON_HOLD</code>&rsquo;s destinations, so release was intended. Nothing performed it — the same shape as an endpoint with no caller.</dd>
+          <dt>What it cost</dt>
+          <dd>An agent flagged, investigated and <em>cleared</em> had money accrued against settled, reconciled transactions frozen for good, carrying a <code>hold_reason</code> naming a flag since dismissed. Only a manual database write could pay them. The third inviolable rule forbids paying for work that was not confirmed; it does not license withholding pay for work that was.</dd>
+          <dt>Released to PENDING, not ELIGIBLE</dt>
+          <dd>A commission still pending when the hold landed has not necessarily earned payment. The conditions are written down once, in <code>promoteEligibleCommissions</code>, and release hands the money back to that test rather than restating it. Scoped by hold reason, so clearing a minor flag cannot unfreeze a serious one.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-28</span>
+          <h3 class="finding-title" style="margin:0">A spent referee link could overturn a clearance an officer had granted</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>submitRefereeResponse</code> reads an invitation&rsquo;s status and expiry and
+          refuses a second response, or a 410 once expired. <code>declineInvitation</code>
+          selected neither column and checked neither: it looked the invitation up by token
+          hash and wrote <code>REJECTED</code> over whatever was there.
+        </p>
+        <dl>
+          <dt>The far end of it</dt>
+          <dd>A referee confirms; an officer reviews and clears it; the agent is cleared, activated and out collecting. A POST to the old decline link then rewrote the referee to <code>REJECTED</code> and ran <code>syncAgentRefereeStatus</code>, pulling the agent&rsquo;s clearance back down — an officer&rsquo;s recorded decision undone through a public endpoint by a message anyone might have forwarded.</dd>
+          <dt>Both halves are unauthenticated by design</dt>
+          <dd>The token is the authorisation, and it lives in an SMS or an email for as long as the referee keeps the message. Only one of the two halves checked whether it had already been spent.</dd>
+          <dt>Confirmed before the fix</dt>
+          <dd>Declining after a confirmation returned 200; declining after an officer had set <code>CLEARED</code> returned 200 and reverted it; an expired invitation declined happily.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-30</span>
+          <h3 class="finding-title" style="margin:0">A vehicle renewal document was not scoped to the agent who processed it</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>POST /vehicles/renewals/:renewalId/document</code> answers with the
+          document&rsquo;s verification code and a signed download URL. It checked that the
+          renewal had been paid for — the second inviolable rule holds — and nothing about
+          whose renewal it was. Any active agent could post another agent&rsquo;s renewal id
+          and receive that motorist&rsquo;s document.
+        </p>
+        <dl>
+          <dt>Why the earlier <code>:own</code> sweep missed it</dt>
+          <dd>The route is guarded by <code>vehicle:renew</code>, which reads as an action rather than a scope, so searching for <code>:own</code> did not surface it. <code>vehicle:read:all</code> cannot narrow it either — every role holds that, agents included and deliberately, because an agent serving a motorist who has walked up must be able to look their vehicle up. Looking up a vehicle and being handed somebody else&rsquo;s renewal document are different acts.</dd>
+          <dt>Fix</dt>
+          <dd>Narrowed on the agent context, using <code>vehicle_renewals.agent_id</code>, which has recorded the attribution since the renewal was created. Officers, who have no agent context, are untouched.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-29</span>
+          <h3 class="finding-title" style="margin:0">Push subscriptions belonged to nobody, and the PWA never reached them</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>Three faults stacked in one feature, each enough alone to break it.</p>
+        <dl>
+          <dt>A phantom property</dt>
+          <dd>The subscribe route stored <code>(req as any).actor</code>. There is no <code>req.actor</code> anywhere in the codebase — the cast is what kept the compiler quiet. Every subscription was saved with no user and no agent, and <code>sendPushNotification</code> matches a target against exactly those fields: a targeted push would have matched nobody, while its untargeted fallback matches everybody.</dd>
+          <dt>No authentication</dt>
+          <dd>The router had none, so there was no identity to record even in principle, and unsubscribing accepted any endpoint from anyone.</dd>
+          <dt>A doubled prefix</dt>
+          <dd>The PWA called <code>/api/v1/push/…</code> through a client that already prefixes <code>/api/v1</code>, so every push request went to <code>/api/v1/api/v1/push/…</code>. Those three were the only calls in the whole app spelled that way.</dd>
+          <dt>Why nobody noticed</dt>
+          <dd>Web push delivery is deliberately not built: <code>providerFor('PUSH')</code> throws and says to add an adapter first. That guard works as designed — and it is also why the subscription half could rot underneath it. Whoever added the adapter would have inherited a store of anonymous subscriptions from an endpoint anyone could post to.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-31</span>
+          <h3 class="finding-title" style="margin:0">The API offered four economic sectors the database refused</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>GET /taxpayers/sectors</code> serves thirty sectors from the shared package,
+          with Hausa labels, feeding the registration dropdown in the agent PWA. The CHECK
+          constraint allowed twenty-seven.
+        </p>
+        <dl>
+          <dt>Who it locked out</dt>
+          <dd><code>SELF_EMPLOYED</code>, <code>PRIVATE_EMPLOYEE</code>, <code>TRANSPORT_HAULAGE</code> and <code>TRANSPORT_PASSENGER</code> were offered to agents and refused by the database. Self-employed is most of the informal sector, and precisely the population the compliance-to-incentive pipeline exists to reach. <code>TRANSPORT_LOGISTICS</code> survived in the constraint after being split into the two transport codes, and could no longer be chosen by anyone.</dd>
+          <dt>The second drift of its kind</dt>
+          <dd>The essential-services guard (D-16) matched <code>HEALTHCARE</code> while the programmes were typed <code>HEALTH_INSURANCE</code>, and protected nobody until someone looked. A test now compares the two vocabularies directly, and was confirmed to fail when they are made to disagree.</dd>
+          <dt>Confirmed before the fix</dt>
+          <dd>Three of the four were rejected outright by the running database; <code>AGRICULTURE</code> went through.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-26</span>
+          <h3 class="finding-title" style="margin:0">The lawful additive linkage could not be chosen through the API</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          PRD §40 allows an essential service to be linked to compliance in one of two ways:
+          additively, where compliance raises the benefit tier and never withdraws the
+          service, or as a gate, which may deny and therefore needs a recorded legal
+          authority. <code>linkageMode</code> reached <code>ProgrammeInput</code>, the §40
+          guard and the database — but was missing from the route&rsquo;s schema, and zod
+          strips unknown keys silently.
+        </p>
+        <dl>
+          <dt>The inversion</dt>
+          <dd>Every programme created through the API was a gate. The one option that <em>cannot</em> take health cover from a citizen in arrears could not be chosen, and an officer building an additive programme was pushed into recording a legal basis for a denial their programme does not make. This is the safe path being unreachable — the same defect shape as an endpoint with no caller, pointing the other way.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--partial)">
+        <div class="finding-head">
+          <span class="finding-id">D-27</span>
+          <h3 class="finding-title" style="margin:0">A programme status change reported success for a programme that does not exist</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The update matched no rows, returned <code>200</code>, and wrote an audit entry
+          recording a status change that never happened — sealed and hash-linked like a true
+          one. The wasted call matters less than the entry: the chain is what government
+          reads to find out what happened.
+        </p>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-25</span>
+          <h3 class="finding-title" style="margin:0">Public rate limits stopped metering the connection <em>(introduced by this audit)</em></h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The platform-wide limiter carried the comment &ldquo;keyed by user where known, so one
+          shared NAT address in a rural LGA does not throttle every agent behind it&rdquo; and read
+          <code>req.auth?.userId</code> to do it — but it is mounted ahead of every route that
+          reaches <code>authenticate</code>, so the user branch never fired and all traffic fell
+          through to the client IP. Agents sharing a mast shared one budget of 120 requests a
+          minute.
+        </p>
+        <dl>
+          <dt>The repair, and its cost</dt>
+          <dd>Reading the subject from the token&rsquo;s signature — no I/O, and anything unverifiable falls back to the address — fixed the shared-mast problem. Applied indiscriminately it weakened the limits that exist to stop enumeration: <code>/citizen-status</code> caps lookups at 10 a minute expressly &ldquo;to prevent TIN/phone enumeration&rdquo;, and once a bearer subject was preferred, anyone holding an account got a budget of their own. <code>POST /agents/apply</code> lets anyone create one.</dd>
+          <dt>Fix</dt>
+          <dd>The two kinds of limit are now said apart. Where the limit protects the platform from a caller, key by caller; where it protects the public from whoever is at the other end of the connection, key by address and ignore any token. A structural test stops a new public surface quietly getting the wrong one.</dd>
+          <dt>Recorded as self-inflicted</dt>
+          <dd>Found during this revision, in this revision&rsquo;s own change, before it reached anyone.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-32</span>
+          <h3 class="finding-title" style="margin:0">Group and collection capture was not bound to the handset <em>(introduced by this audit)</em></h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          An agent registering a taxpayer passes <code>requireActiveAgent()</code>, which
+          insists the request came from a device that agent registered and PSIRS has not
+          revoked. That is what makes revoking a lost phone actually stop collection from it.
+          The group and allocation routes added in this revision skipped it.
+        </p>
+        <dl>
+          <dt>The sharpest of the three</dt>
+          <dd><code>POST /allocations/collections</code> is the moment public property changes hands. An agent whose handset was revoked for mishandling a distribution could have carried on from a laptop, while the same agent registering a taxpayer through <code>/taxpayers</code> was held to the device.</dd>
+          <dt>Confirmed both ways</dt>
+          <dd>Driving the PWA from a fresh browser produced &ldquo;This device is not registered to your agent account&rdquo; on the collection screen — the hole, demonstrated. Registering that handset, having an officer approve it, and collecting again succeeded. Officers are untouched, and a test pins that: a guard locking officers out of group registration would be a worse fault than the one being fixed.</dd>
         </dl>
       </article>
 
       <article class="finding" style="border-left-color:var(--partial)">
         <div class="finding-head">
           <span class="finding-id">D-21</span>
-          <h3 class="finding-title" style="margin:0">Twenty-four API routes are exercised by no test</h3>
+          <h3 class="finding-title" style="margin:0">Nine API routes are exercised by no test</h3>
           <span class="pill p-partial">Partly closed</span>
         </div>
         <p>
-          141 routes are declared; 24 are touched by nothing in the suite. Found by
-          enumerating the surface rather than counting tests — a test count says what was
-          written, not what is covered.
+          156 routes are declared; 9 are touched by nothing in the suite, down from 24 at
+          rev 7. Found by enumerating the surface rather than counting tests — a test count
+          says what was written, not what is covered.
+        </p>
+        <p>
+          <strong>Reading the uncovered routes produced nine of the eleven defects in this
+          revision</strong> (D-22, D-23, D-24, D-26, D-27, D-28, D-29, D-30, D-31). That is the
+          argument for closing the remaining nine: on this codebase, &ldquo;exercised by nothing&rdquo;
+          has been a reliable predictor of &ldquo;wrong&rdquo;, at a rate close to one defect per
+          route read.
         </p>
         <p>
           Most are reporting endpoints where a regression costs an empty table. Two were
@@ -1509,8 +1803,10 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>A separate route from <code>/auth/step-up</code>, which the helpers do cover. A replayable code would bypass the control guarding rate changes, reversals and payouts.</dd>
           <dt>Both are correct</dt>
           <dd>Sessions on other devices end, revocation takes effect on the very next request rather than waiting for a token to expire, and one user's sign-out does not touch another's sessions. Codes are single-use and purpose-scoped: a <code>LOGIN</code> code will not satisfy a <code>STEP_UP</code> check. No defects — coverage where there was none, over behaviour that would be expensive to discover wrong later.</dd>
+          <dt>The counting tool was itself wrong</dt>
+          <dd>The coverage script matched test paths against a hardcoded list of mount prefixes, so every route on a newly added router read as untested. It reported 24 uncovered when the true figure was 9. Prefixes are now derived from what <code>app.ts</code> actually mounts: a measurement that silently misreports new work is worse than no measurement, because it is trusted.</dd>
           <dt>Still open</dt>
-          <dd>The remaining 22, chiefly support-desk and reporting endpoints. Recorded rather than closed, because "no test" and "no risk" are different statements and only the first has been established.</dd>
+          <dd>Nine. Two touch money or access control directly — <code>POST /government/reconciliation/recover</code> and <code>POST /agents/devices/:deviceId/approve</code> — and are the next to read. The rest are reference reads and reporting endpoints. Recorded rather than closed, because &ldquo;no test&rdquo; and &ldquo;no risk&rdquo; are different statements and only the first has been established.</dd>
         </dl>
       </article>
 
@@ -2042,7 +2338,8 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
 
     <footer class="report-foot">
       <p>
-        Revision 3, assessed at commit <code>4ab5925</code> on branch
+        Revision 8, assessed at commit <code>48879de</code>. Revision 3 was assessed at
+        <code>4ab5925</code> on branch
         <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
         assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
         <code>173be39</code>, and B-1, B-2 and B-3 in <code>4ab5925</code>, each
