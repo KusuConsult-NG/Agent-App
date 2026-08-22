@@ -120,6 +120,10 @@ jobs:
           DB_PORT: 5432
           DB_USER: postgres
           PGPASSWORD: postgres
+          # The service container's database. Without this the script defaults
+          # to "psirs", which does not exist here — the step failed with
+          # `FATAL: database "psirs" does not exist` the first time it ever ran.
+          DB_NAME: psirs_test
         run: bash deploy/backup/verify-backup.sh
 
       - name: Build all workspaces
