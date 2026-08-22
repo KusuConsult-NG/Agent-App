@@ -31,3 +31,7 @@ coverage/
 /backups/
 /apps/api/backups/
 scratch/
+
+# Playwright
+/test-results/
+/playwright-report/
