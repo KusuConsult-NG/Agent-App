@@ -304,6 +304,49 @@ describe('Social incentives follow the TIN', () => {
    * and cannot come back. That is a real fragility in how the programmes are
    * provisioned, but it is not this test's subject.)
    */
+  /**
+   * The programmes must survive losing them.
+   *
+   * They shipped as an `INSERT` inside a checksum-locked migration, so once
+   * `incentive_programmes` was truncated they were gone for good: migrations
+   * skip an applied file and refuse an edited one. This asserts the recovery
+   * path — seeding restores them — and that a second run neither duplicates
+   * them nor resurrects a programme an officer deliberately closed.
+   */
+  it('restores the state programmes on re-seed, without reviving a closed one', async () => {
+    const { seedReferenceData } = await import('../db/seed');
+
+    await pool.query('DELETE FROM programme_eligibility');
+    await pool.query('DELETE FROM incentive_programmes');
+
+    await seedReferenceData();
+    const first = await pool.query<{ code: string; status: string }>(
+      `SELECT code, status FROM incentive_programmes ORDER BY code`,
+    );
+    assert.ok(
+      first.rows.length >= 4,
+      `seeding must restore the state programmes, found ${first.rows.length}`,
+    );
+    for (const row of first.rows) {
+      assert.equal(row.status, 'DRAFT', `${row.code} was seeded already active`);
+    }
+
+    // An officer closes one, then the seed runs again — as it does on every
+    // deployment that re-runs reference data.
+    await pool.query(`UPDATE incentive_programmes SET status = 'CLOSED' WHERE code = 'PLASHIA'`);
+    await seedReferenceData();
+
+    const second = await pool.query<{ code: string; status: string; n: string }>(
+      `SELECT code, status, count(*) OVER ()::text AS n FROM incentive_programmes WHERE code = 'PLASHIA'`,
+    );
+    assert.equal(second.rows.length, 1, 're-seeding duplicated a programme');
+    assert.equal(
+      second.rows[0]!.status,
+      'CLOSED',
+      're-seeding reopened a programme an officer had closed',
+    );
+  });
+
   it('never clears anyone against a programme that is still DRAFT', async () => {
     const taxpayerId = await createTaxpayer({
       sector: 'AGRICULTURE',

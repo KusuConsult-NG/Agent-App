@@ -279,6 +279,105 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
   ],
 };
 
+/**
+ * Plateau State social incentive programmes (PRD §40, §41).
+ *
+ * These arrived as an `INSERT` inside migration 016, which made them
+ * unrecoverable. Migrations run exactly once and are checksum-locked, so a
+ * database that had `incentive_programmes` truncated — or restored from a dump
+ * predating the rows — could never get them back: re-running migrations skips
+ * an applied file, and editing one is refused. The four programmes are the
+ * substance of the incentive feature, so "gone until somebody writes SQL by
+ * hand" is not an acceptable resting state for them.
+ *
+ * Reference data belongs here, with the LGAs, the revenue catalogue and the
+ * notification templates, where `npm run seed` is idempotent and re-runnable.
+ * Migration 016 is left exactly as it is: it is checksummed, and its own insert
+ * is `ON CONFLICT (code) DO NOTHING`, so a fresh deploy running both is fine.
+ *
+ * Two properties are deliberate and load-bearing:
+ *
+ *   * every programme seeds as DRAFT. Nobody becomes a beneficiary of a state
+ *     scheme because a command ran — an officer with `incentive:configure` has
+ *     to activate it. `citizen-profiling-incentives.test.ts` pins that a DRAFT
+ *     programme clears nobody.
+ *   * `ON CONFLICT (code) DO NOTHING`, never `DO UPDATE`. Re-seeding must not
+ *     reactivate a programme an officer deliberately closed, nor overwrite
+ *     thresholds they tuned. The seed establishes these programmes; it does not
+ *     own them afterwards.
+ */
+const INCENTIVE_PROGRAMMES = [
+  {
+    name: 'Plateau State Health Insurance Scheme',
+    code: 'PLASHIA',
+    description:
+      'Subsidised health insurance cover for registered taxpayers and their immediate ' +
+      'families under the Plateau State Health Insurance Authority (PLASHIA).',
+    benefitType: 'HEALTH_INSURANCE',
+    benefitDescription:
+      'Basic health insurance cover for the taxpayer and up to 4 dependants. ' +
+      'Enrolment at any PLASHIA-accredited facility in Plateau State.',
+    eligibilityRules: { requires_tin: true, min_score: 40, no_arrears: true },
+    minimumScore: 40,
+    minimumCompliancePeriods: 1,
+    requiresNoArrears: true,
+    approvalAuthority: 'Plateau State Health Insurance Authority',
+  },
+  {
+    name: 'Input Fertilizer Distribution Programme',
+    code: 'FERTILIZER-SUBSIDY',
+    description:
+      'Subsidised agricultural inputs (fertilizer, seed, pesticide) distributed through ' +
+      'LGA-level collection points for registered farmers and livestock keepers.',
+    benefitType: 'AGRICULTURAL_SUBSIDY',
+    benefitDescription:
+      'Access to subsidised fertilizer allocation at LGA collection point. ' +
+      'Quantity determined by farm size declared at registration.',
+    eligibilityRules: {
+      requires_tin: true,
+      min_score: 30,
+      no_arrears: false,
+      sectors: ['AGRICULTURE', 'LIVESTOCK', 'FISHING', 'AGRICULTURE_PROCESSING'],
+    },
+    minimumScore: 30,
+    minimumCompliancePeriods: 1,
+    requiresNoArrears: false,
+    approvalAuthority: 'Plateau State Ministry of Agriculture and Food Security',
+  },
+  {
+    name: 'State Housing Fund (Low-Income Subsidy)',
+    code: 'STATE-HOUSING-FUND',
+    description:
+      'Access to the Plateau State Housing Corporation low-income loan scheme for ' +
+      'compliant taxpayers with a clean payment record.',
+    benefitType: 'HOUSING_SUBSIDY',
+    benefitDescription:
+      'Preferential interest rate on housing loans from the Plateau State Housing ' +
+      'Corporation. Requires 2 years of compliance history.',
+    eligibilityRules: { requires_tin: true, min_score: 60, no_arrears: true, min_periods: 2 },
+    minimumScore: 60,
+    minimumCompliancePeriods: 2,
+    requiresNoArrears: true,
+    approvalAuthority: 'Plateau State Housing Corporation',
+  },
+  {
+    name: 'Scholarship and Bursary Scheme',
+    code: 'SCHOLARSHIP-BURSARY',
+    description:
+      'Annual bursary for children and dependants of compliant taxpayers, awarded ' +
+      'through the Plateau State Scholarship Board.',
+    benefitType: 'EDUCATION_BURSARY',
+    benefitDescription:
+      'Annual bursary award for up to 2 qualifying dependants in secondary or tertiary ' +
+      'education. Subject to Scholarship Board approval.',
+    eligibilityRules: { requires_tin: true, min_score: 50, no_arrears: false },
+    minimumScore: 50,
+    minimumCompliancePeriods: 1,
+    requiresNoArrears: false,
+    approvalAuthority: 'Plateau State Scholarship Board',
+  },
+] as const;
+
 const NOTIFICATION_TEMPLATES = [
   { code: 'TIN_CREATED_SMS', event: 'TIN_CREATED', channel: 'SMS', body: 'PSIRS: Your Taxpayer Identification Number is {{tin}}. Keep it safe — you will need it for every government payment.' },
   { code: 'INVOICE_SMS', event: 'INVOICE_GENERATED', channel: 'SMS', body: 'PSIRS: Invoice {{reference}} for {{amount}} has been raised. Pay only through approved government channels.' },
@@ -548,6 +647,29 @@ async function seedReferenceData(): Promise<void> {
               'Plateau State Government Consolidated Revenue Account', '0000000001', 'VERIFIED', now()
         WHERE NOT EXISTS (SELECT 1 FROM bank_accounts WHERE owner_type = 'GOVERNMENT')`,
     );
+
+    for (const programme of INCENTIVE_PROGRAMMES) {
+      await client.query(
+        `INSERT INTO incentive_programmes
+           (name, code, description, benefit_type, benefit_description, eligibility_rules,
+            minimum_score, minimum_compliance_periods, requires_no_arrears,
+            start_date, approval_authority, status)
+         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,CURRENT_DATE,$10,'DRAFT')
+         ON CONFLICT (code) DO NOTHING`,
+        [
+          programme.name,
+          programme.code,
+          programme.description,
+          programme.benefitType,
+          programme.benefitDescription,
+          JSON.stringify(programme.eligibilityRules),
+          programme.minimumScore,
+          programme.minimumCompliancePeriods,
+          programme.requiresNoArrears,
+          programme.approvalAuthority,
+        ],
+      );
+    }
   });
 }
 
