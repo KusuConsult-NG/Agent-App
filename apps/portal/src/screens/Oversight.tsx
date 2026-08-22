@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { withJustification } from '../lib/justify';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -88,19 +89,22 @@ export function FraudScreen() {
   }, [load]);
 
   async function review(id: string, decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED') {
-    const note = window.prompt('Record what you found (minimum 10 characters):');
-    if (!note || note.trim().length < 10) return;
-    try {
-      await api.post(`/government/fraud/flags/${id}/review`, { decision, note });
-      setMessage(
+    await withJustification({
+      question: 'Record what you found (at least 10 characters):',
+      minimum: 10,
+      tooShort:
+        'Record what you found, in at least 10 characters. It is the only account of why this flag was settled the way it was.',
+      run: async (note) => {
+        await api.post(`/government/fraud/flags/${id}/review`, { decision, note });
+        load();
+      },
+      onSuccess:
         decision === 'CONFIRMED'
-          ? 'Flag confirmed. The agent’s commission has been placed on hold pending resolution.'
+          ? 'Flag confirmed. The agent\u2019s commission has been placed on hold pending resolution.'
           : `Flag marked ${decision.toLowerCase().replace(/_/g, ' ')}.`,
-      );
-      load();
-    } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-    }
+      setError,
+      setMessage,
+    });
   }
 
   return (
@@ -519,6 +523,15 @@ function AuditQueryParameters({
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
   const [value, setValue] = useState('');
   const [search, setSearch] = useState('');
+  /**
+   * Whether a taxpayer search has been run, as distinct from whether it found
+   * anything. Taxpayers are searched rather than listed, so an empty option
+   * list means one of two opposite things: nobody has searched yet, or the
+   * search came back with nobody. Without this flag the select said "Search
+   * for a taxpayer first" in both cases, which tells an auditor who has just
+   * searched to do the thing they have already done.
+   */
+  const [searched, setSearched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState(() => {
     const to = new Date();
@@ -531,6 +544,7 @@ function AuditQueryParameters({
   useEffect(() => {
     setOptions(null);
     setValue('');
+    setSearched(false);
     if (source === 'agents') {
       api
         .get<{ agents: any[] } | any[]>('/agents?limit=200')
@@ -577,6 +591,7 @@ function AuditQueryParameters({
           label: `${taxpayer.display_name ?? taxpayer.business_name ?? [taxpayer.first_name, taxpayer.last_name].filter(Boolean).join(' ')} · ${taxpayer.phone ?? ''}`,
         })),
       );
+      setSearched(true);
     } catch (caught) {
       if (caught instanceof ApiRequestError) onError(caught.error);
     } finally {
@@ -642,7 +657,9 @@ function AuditQueryParameters({
               ? 'Loading…'
               : options.length === 0
                 ? source === 'taxpayerSearch'
-                  ? 'Search for a taxpayer first'
+                  ? searched
+                    ? 'No taxpayer matched that search'
+                    : 'Search for a taxpayer first'
                   : 'Nothing to choose from'
                 : 'Select one'}
           </option>

@@ -576,8 +576,17 @@
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
-        every field what happens when somebody types the wrong thing into it. Five defects,
-        of which two matter.
+        every field what happens when somebody types the wrong thing into it. Eight defects
+        and one open question, of which three matter.
+      </p>
+      <p style="margin-top:12px">
+        The sharpest is not a missing control but an invisible one. The API refuses a
+        commission payout approved by the officer who requested it &mdash; separation of
+        duties, correctly implemented and carefully worded. The portal ran that call outside
+        any error handling, so the refusal became an uncaught promise and the screen did not
+        change. The officer pressed Approve, typed a reason, and nothing happened. Three
+        other money-releasing actions behaved the same way. A control nobody is told about
+        is a control that gets worked around.
       </p>
       <p style="margin-top:12px">
         The first is a disclosure. <code>/citizen-status</code> is the platform&rsquo;s one
@@ -1787,6 +1796,78 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The two kinds of limit are now said apart. Where the limit protects the platform from a caller, key by caller; where it protects the public from whoever is at the other end of the connection, key by address and ignore any token. A structural test stops a new public surface quietly getting the wrong one.</dd>
           <dt>Recorded as self-inflicted</dt>
           <dd>Found during this revision, in this revision&rsquo;s own change, before it reached anyone.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--fail)">
+        <div class="finding-head">
+          <span class="finding-id">D-38</span>
+          <h3 class="finding-title" style="margin:0">A refusal to release money looked exactly like a button that did nothing</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Four actions on the finance and configuration screens &mdash; resolving a
+          reconciliation exception, approving a commission payout, recording a payout as
+          paid, and opening or closing an incentive programme &mdash; ran their
+          <code>api.post</code> outside any <code>try/catch</code>. A rejection became an
+          unhandled promise and the screen did not change at all.
+        </p>
+        <dl>
+          <dt>The case that makes it serious</dt>
+          <dd>The API refuses a payout approval by the officer who requested it: <em>&ldquo;You cannot approve a payout you requested yourself.&rdquo;</em> That is separation of duties, correctly implemented, carefully worded &mdash; and the officer it exists to stop saw nothing. Pressed Approve, typed a reason, and the page did not move. A control nobody is told about is a control that gets worked around, usually by asking a colleague to press the button without explaining why.</dd>
+          <dt>Demonstrated, not deduced</dt>
+          <dd>Driven in a real browser with the payout list faked and the approval refused with the API&rsquo;s own 403. Before: <code>page changed at all: false</code>, with the refusal surfacing only as an uncaught <code>ApiRequestError</code> in the console. After: the officer reads the sentence the server sent.</dd>
+          <dt>A second silence, on all five prompts</dt>
+          <dd><code>if (!reason || reason.trim().length &lt; n) return</code> abandoned the action without a word, so typing four characters into a box that wanted five was indistinguishable from success. Cancelling stays quiet &mdash; the person changed their mind and knows it &mdash; but a too-short answer now says so and does not call the server.</dd>
+          <dt>The correct pattern already existed twice over</dt>
+          <dd><code>Agents.tsx</code> and <code>Groups.tsx</code> route every action through an <code>act()</code> wrapper that catches, reports and clears busy state; a static sweep flagged their eleven call sites and reading them showed all eleven were already safe. Finance was the outlier. It now uses a shared <code>withJustification</code> helper of the same shape, which the fraud-flag review on the oversight screen uses too.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--warn)">
+        <div class="finding-head">
+          <span class="finding-id">D-39</span>
+          <h3 class="finding-title" style="margin:0">The audit log told an auditor who had just searched to search first</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Taxpayers are searched rather than listed on the audit query builder, because
+          there are more of them than any select should hold. The option list started as
+          <code>[]</code> and was replaced by the search results &mdash; so an empty list
+          meant either &ldquo;nobody has searched yet&rdquo; or &ldquo;the search found
+          nobody&rdquo;, and the placeholder said <em>&ldquo;Search for a taxpayer
+          first&rdquo;</em> for both.
+        </p>
+        <dl>
+          <dt>Why it matters more here than it reads</dt>
+          <dd>The query is &ldquo;who has looked at one taxpayer&rsquo;s record&rdquo; &mdash; the access-audit an auditor runs when they suspect somebody has been browsing files they had no business in. Being told to search first, having just searched, sends them round in circles rather than telling them the record is not there.</dd>
+          <dt>The same root cause as D-36</dt>
+          <dd>One value standing for two opposite states. Both are now fixed by keeping the &ldquo;has this been run?&rdquo; question separate from the &ldquo;what did it return?&rdquo; one. Three states verified in the browser: before searching, after matching nobody, and after matching five.</dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--warn)">
+        <div class="finding-head">
+          <span class="finding-id">D-40</span>
+          <h3 class="finding-title" style="margin:0">An agent&rsquo;s commission bank account can never be changed</h3>
+          <span class="pill p-partial">Open &mdash; decision needed</span>
+        </div>
+        <p>
+          <code>STEP_UP_ACTIONS</code> names seven actions that require a fresh one-time
+          code. Four are enforced by a route. Three &mdash;
+          <code>agent.bank_account.change</code>, <code>taxpayer.identity.change</code> and
+          <code>user.role.change</code> &mdash; are enforced nowhere, because the operations
+          they name do not exist.
+        </p>
+        <dl>
+          <dt>Not a bypass, which is worth being precise about</dt>
+          <dd>No route performs these operations without the guard; no route performs them at all. Bank details are written once, at application time, and thereafter only their <em>verification status</em> is ever updated. Nothing in the API, the portal or the PWA changes an account number, a taxpayer&rsquo;s identity fields, or a user&rsquo;s role.</dd>
+          <dt>The operational gap</dt>
+          <dd>Agents change banks, accounts get closed, banks merge. An agent whose account is no longer live has no way to be paid, and no officer has a way to fix it &mdash; short of a manual database write, which is exactly what the append-only audit design exists to prevent. For a platform whose third inviolable rule governs how commission reaches an agent, that is a real hole in the lifecycle.</dd>
+          <dt>Why it is recorded rather than built</dt>
+          <dd>A bank-account change is the classic payout-fraud vector: change the destination, then trigger a payout. Done properly it needs the step-up code the constant already anticipates, re-verification against the bank, a maker-checker approval, and the old account kept on record. That is a feature with a security design, not a form fix, and the shape of it is PSIRS&rsquo;s call &mdash; particularly who may initiate one, and whether an agent may do it for themselves at all.</dd>
+          <dt>The list should not promise what is not there</dt>
+          <dd>Until those operations exist, <code>STEP_UP_ACTIONS</code> overstates the platform&rsquo;s controls to anyone reading it, and offers no protection to whoever adds the route later.</dd>
         </dl>
       </article>
 

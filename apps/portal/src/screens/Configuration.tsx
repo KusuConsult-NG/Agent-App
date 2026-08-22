@@ -482,10 +482,31 @@ export function ProgrammesScreen() {
                           type="button"
                           className="small secondary"
                           onClick={async () => {
+                            // Opening or closing a programme decides whether
+                            // anybody can be awarded under it. A refusal — a
+                            // programme that has since been deleted, a
+                            // permission withdrawn mid-session — used to leave
+                            // the screen unchanged and the officer guessing
+                            // whether the toggle had taken.
                             const next = row.status === 'ACTIVE' ? 'CLOSED' : 'ACTIVE';
-                            await api.post(`/government/programmes/${row.id}/status`, { status: next });
-                            setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
-                            load();
+                            setError(null);
+                            setMessage(null);
+                            try {
+                              await api.post(`/government/programmes/${row.id}/status`, {
+                                status: next,
+                              });
+                              setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
+                              load();
+                            } catch (caught) {
+                              if (caught instanceof ApiRequestError) setError(caught.error);
+                              else if (caught instanceof Error) {
+                                setError({
+                                  code: 'CLIENT',
+                                  message: caught.message,
+                                  moneyStatus: 'NOT_APPLICABLE',
+                                });
+                              }
+                            }
                           }}
                         >
                           {row.status === 'ACTIVE' ? 'Close' : 'Activate'}

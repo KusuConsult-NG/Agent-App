@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { withJustification } from '../lib/justify';
 
 // ------------------------------------------------------------ reconciliation
 
@@ -253,16 +254,24 @@ export function ReconciliationScreen() {
                     <button
                       type="button"
                       className="small secondary"
-                      onClick={async () => {
-                        const resolution = window.prompt(
-                          'Record how this exception was resolved (minimum 10 characters):',
-                        );
-                        if (!resolution || resolution.trim().length < 10) return;
-                        await api.post(`/government/reconciliation/exceptions/${row.id}/resolve`, {
-                          resolution,
-                        });
-                        load();
-                      }}
+                      onClick={() =>
+                        void withJustification({
+                          question: 'Record how this exception was resolved (at least 10 characters):',
+                          minimum: 10,
+                          tooShort:
+                            'Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed.',
+                          run: async (resolution) => {
+                            await api.post(
+                              `/government/reconciliation/exceptions/${row.id}/resolve`,
+                              { resolution },
+                            );
+                            load();
+                          },
+                          onSuccess: 'Exception recorded as resolved.',
+                          setError,
+                          setMessage,
+                        })
+                      }
                     >
                       Resolve
                     </button>
@@ -403,15 +412,23 @@ export function CommissionsScreen() {
                       <button
                         type="button"
                         className="small"
-                        onClick={async () => {
-                          const reason = window.prompt('Reason for approving this payout:');
-                          if (!reason || reason.trim().length < 5) return;
-                          await api.post(`/government/commissions/payouts/${row.id}/approve`, {
-                            reason,
-                          });
-                          setMessage('Payout approved.');
-                          load();
-                        }}
+                        onClick={() =>
+                          void withJustification({
+                            question: 'Reason for approving this payout (at least 5 characters):',
+                            minimum: 5,
+                            tooShort: 'Give a reason for approving this payout, in at least 5 characters.',
+                            run: async (reason) => {
+                              await api.post(
+                                `/government/commissions/payouts/${row.id}/approve`,
+                                { reason },
+                              );
+                              load();
+                            },
+                            onSuccess: 'Payout approved.',
+                            setError,
+                            setMessage,
+                          })
+                        }
                       >
                         Approve
                       </button>
@@ -420,15 +437,24 @@ export function CommissionsScreen() {
                       <button
                         type="button"
                         className="small secondary"
-                        onClick={async () => {
-                          const bankReference = window.prompt('Bank transfer reference:');
-                          if (!bankReference || bankReference.trim().length < 3) return;
-                          await api.post(`/government/commissions/payouts/${row.id}/complete`, {
-                            bankReference,
-                          });
-                          setMessage('Payout recorded as paid.');
-                          load();
-                        }}
+                        onClick={() =>
+                          void withJustification({
+                            question: 'Bank transfer reference (at least 3 characters):',
+                            minimum: 3,
+                            tooShort:
+                              'Enter the bank transfer reference. It is what ties this payout to the money that actually left the account.',
+                            run: async (bankReference) => {
+                              await api.post(
+                                `/government/commissions/payouts/${row.id}/complete`,
+                                { bankReference },
+                              );
+                              load();
+                            },
+                            onSuccess: 'Payout recorded as paid.',
+                            setError,
+                            setMessage,
+                          })
+                        }
                       >
                         Record payment
                       </button>
@@ -470,16 +496,18 @@ export function ApprovalsScreen({ user }: { user: User }) {
   }, [load]);
 
   async function decide(id: string, decision: 'REVIEW' | 'APPROVE' | 'REJECT') {
-    const reason = window.prompt(`Reason for this decision (minimum 10 characters):`);
-    if (!reason || reason.trim().length < 10) return;
-    setError(null);
-    try {
-      await api.post(`/government/approvals/${id}/decide`, { decision, reason });
-      setMessage(`Request ${decision.toLowerCase()}d.`);
-      load();
-    } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-    }
+    await withJustification({
+      question: 'Reason for this decision (at least 10 characters):',
+      minimum: 10,
+      tooShort: 'Give a reason for this decision, in at least 10 characters.',
+      run: async (reason) => {
+        await api.post(`/government/approvals/${id}/decide`, { decision, reason });
+        load();
+      },
+      onSuccess: `Request ${decision.toLowerCase()}d.`,
+      setError,
+      setMessage,
+    });
   }
 
   async function executeReversal(id: string) {
