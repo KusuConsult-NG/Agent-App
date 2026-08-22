@@ -164,13 +164,34 @@ async function main(): Promise<void> {
   console.log(`\ntotal ${totalAppends} appends, ${totalErrors} errors, peak pool waiters ${maxWaiting}`);
   if (errors.length) console.log('first errors: ' + errors.join(' | '));
 
-  // The reason the lock exists. If sustained concurrent appending forked the
-  // chain, every integrity guarantee above it is void.
-  process.stdout.write('\nverifying the chain end to end... ');
-  const verification = await verifyAuditChain(pool, {});
+  /*
+   * The reason the lock exists. If sustained concurrent appending forked the
+   * chain, every integrity guarantee above it is void.
+   *
+   * Paged deliberately: `verifyAuditChain` defaults to 10,000 entries from
+   * sequence 0, so calling it plainly after half a million appends replays the
+   * oldest ten thousand rows and reports "valid" without having looked at a
+   * single entry this run produced. That reads like an end-to-end check and is
+   * not one.
+   */
+  process.stdout.write('\nreplaying the whole chain... ');
+  const PAGE = 10_000;
+  let from = 0;
+  let checked = 0;
+  let verification = { valid: true } as Awaited<ReturnType<typeof verifyAuditChain>>;
+  for (;;) {
+    const page = await verifyAuditChain(pool, { fromSequence: from, limit: PAGE });
+    if (!page.valid) {
+      verification = page;
+      break;
+    }
+    checked += page.entriesChecked;
+    if (page.entriesChecked < PAGE) break;
+    from += PAGE;
+  }
   console.log(
     verification.valid
-      ? `valid, ${verification.entriesChecked} entries replayed`
+      ? `valid, ${checked} entries replayed`
       : `BROKEN at sequence ${verification.brokenAtSequence}: ${verification.detail}`,
   );
 
