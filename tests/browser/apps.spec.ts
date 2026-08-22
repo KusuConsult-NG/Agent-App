@@ -7,6 +7,12 @@
  * discloses more than it should, or a layout that collapses at a given viewport
  * would all have passed every check in the repository.
  *
+ * It lives at the repository root rather than under `apps/portal`, for two
+ * reasons: it drives both applications, so it is not portal source; and the
+ * portal's `tsc -b` compiles everything under `src`, where a Playwright spec
+ * using `process.env` fails to build against a browser tsconfig with no Node
+ * types. CI caught exactly that.
+ *
  * This runs against a live stack: the API on 4000, the portal on 5174, the
  * agent PWA on 5173. It is deliberately not part of `npm test` — it needs three
  * processes and a seeded database, and a suite that cannot run on a laptop

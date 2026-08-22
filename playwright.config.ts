@@ -8,7 +8,7 @@
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './apps/portal/src/tests',
+  testDir: './tests/browser',
   testMatch: '**/*.spec.ts',
   timeout: 45_000,
   fullyParallel: false,
