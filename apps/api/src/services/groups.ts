@@ -24,7 +24,7 @@ import { randomBytes } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
-import { badRequest, conflict, notFound } from '../lib/errors';
+import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { nextGroupCode } from '../lib/references';
 import { generateVerificationCode, sha256 } from '../lib/crypto';
 import { recordAudit } from './audit';
@@ -287,9 +287,30 @@ export async function openAttestation(db: Db, token: string) {
       WHERE i.invitation_token_hash = $1`,
     [sha256(token)],
   );
-  if (!invitation) throw notFound('That attestation request');
+  /*
+   * Written for the person holding the link, not for the developer reading the
+   * log. A cooperative chairman who mistypes a URL or follows an old message
+   * gets a sentence telling him what happened and who can fix it — the same
+   * courtesy the referee invitation extends, and for the same reason: neither
+   * of them has an account, a support portal, or any idea what an
+   * "attestation request" is.
+   */
+  if (!invitation) {
+    throw new AppError({
+      statusCode: 404,
+      code: 'ATTESTATION_NOT_FOUND',
+      message:
+        'This membership link is not valid. Ask PSIRS to send you a new one.',
+    });
+  }
   if (invitation.expires_at.getTime() < Date.now()) {
-    throw conflict('ATTESTATION_EXPIRED', 'This link has expired. Ask PSIRS for a new one.');
+    throw new AppError({
+      statusCode: 410,
+      code: 'ATTESTATION_EXPIRED',
+      message:
+        'This membership link has expired. Ask PSIRS to send you a new one — ' +
+        'your earlier answers are still on record.',
+    });
   }
 
   const members = await query<{
@@ -347,9 +368,21 @@ export async function submitAttestation(params: {
         FOR UPDATE OF i`,
       [sha256(params.token)],
     );
-    if (!invitation) throw notFound('That attestation request');
+    if (!invitation) {
+      throw new AppError({
+        statusCode: 404,
+        code: 'ATTESTATION_NOT_FOUND',
+        message: 'This membership link is not valid. Ask PSIRS to send you a new one.',
+      });
+    }
     if (invitation.expires_at.getTime() < Date.now()) {
-      throw conflict('ATTESTATION_EXPIRED', 'This link has expired. Ask PSIRS for a new one.');
+      throw new AppError({
+        statusCode: 410,
+        code: 'ATTESTATION_EXPIRED',
+        message:
+          'This membership link expired before your answers were sent. Ask PSIRS for a ' +
+          'new one — nothing you entered has been lost from the list.',
+      });
     }
 
     const overlap = params.confirmedMemberIds.filter((id) =>
