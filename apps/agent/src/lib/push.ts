@@ -45,7 +45,7 @@ export class PushNotificationManager {
     const registration = await navigator.serviceWorker.ready;
 
     // 3. Fetch public VAPID key from backend
-    const { publicKey } = await api.get<{ publicKey: string }>('/api/v1/push/vapid-key');
+    const { publicKey } = await api.get<{ publicKey: string }>('/push/vapid-key');
     if (!publicKey) {
       throw new Error('VAPID public key not configured on server.');
     }
@@ -58,7 +58,7 @@ export class PushNotificationManager {
     });
 
     // 5. Send subscription JSON payload to backend
-    await api.post('/api/v1/push/subscribe', {
+    await api.post('/push/subscribe', {
       subscription: subscription.toJSON(),
     });
 
@@ -71,7 +71,7 @@ export class PushNotificationManager {
     const subscription = await registration.pushManager.getSubscription();
     if (subscription) {
       await subscription.unsubscribe();
-      await api.post('/api/v1/push/unsubscribe', {
+      await api.post('/push/unsubscribe', {
         endpoint: subscription.endpoint,
       }).catch(() => {});
     }

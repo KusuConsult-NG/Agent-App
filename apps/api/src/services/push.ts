@@ -61,7 +61,17 @@ export function saveSubscription(
   });
 }
 
-export function removeSubscription(endpoint: string): void {
+/**
+ * Forget a device.
+ *
+ * `owner` is optional so an internal caller can drop a subscription the push
+ * service itself found dead, but a request coming from a person must pass it:
+ * an endpoint is long and random, and that is not the same as checked.
+ */
+export function removeSubscription(endpoint: string, owner?: { userId?: string }): void {
+  const stored = subscriptions.get(endpoint);
+  if (!stored) return;
+  if (owner && stored.userId !== owner.userId) return;
   subscriptions.delete(endpoint);
 }
 

@@ -1,0 +1,177 @@
+/**
+ * A push subscription belongs to somebody.
+ *
+ * Three faults stacked in one feature, each enough on its own to break it.
+ *
+ * The route stored `(req as any).actor`, which exists nowhere in this
+ * codebase. The cast is what kept the compiler quiet. Every subscription was
+ * saved with no userId and no agentId, and `sendPushNotification` matches a
+ * target against exactly those two fields — so a targeted push would have
+ * matched nobody, while its untargeted fallback, `!target.userId &&
+ * !target.agentId`, matches everybody.
+ *
+ * The router had no `authenticate`, so there was no identity to record even
+ * in principle, and unsubscribing accepted any endpoint from anyone.
+ *
+ * And the PWA called `/api/v1/push/...` through a client that already prefixes
+ * `/api/v1`, so every push request went to `/api/v1/api/v1/push/...` and
+ * 404ed. Those three were the only calls in the whole app spelled that way.
+ *
+ * All of it survived because web push delivery is deliberately not built yet —
+ * `providerFor('PUSH')` throws and says to add an adapter first. That guard is
+ * working as intended, and it is also why nobody was ever going to notice the
+ * subscription half rotting underneath it.
+ */
+
+import {
+  createGovernmentUser,
+  get,
+  loginAs,
+  post,
+  resetDatabase,
+  startTestServer,
+  stopTestServer,
+} from './helpers';
+import { describe, it, before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { seedReferenceData } from '../db/seed';
+import { seedDemoAgent } from '../db/seed-agent';
+import { sendPushNotification, saveSubscription } from '../services/push';
+
+let agentToken = '';
+let agentDevice = '';
+let agentUserId = '';
+let officerToken = '';
+let officerUserId = '';
+
+const endpointFor = (name: string) => `https://push.example.test/${name}-${Date.now()}`;
+
+before(async () => {
+  await startTestServer();
+});
+after(async () => {
+  await stopTestServer();
+});
+
+beforeEach(async () => {
+  await resetDatabase();
+  await seedReferenceData();
+
+  officerUserId = await createGovernmentUser({
+    role: 'admin',
+    phone: '+2348030000099',
+    fullName: 'Push Admin',
+  });
+  officerToken = (await loginAs('+2348030000099')).accessToken;
+
+  const demo = await seedDemoAgent();
+  const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+  agentToken = session.accessToken;
+  agentDevice = demo!.deviceIdentifier;
+  agentUserId = session.user.id;
+});
+
+describe('registering a device for push', () => {
+  it('will not take a subscription from nobody', async () => {
+    const response = await post('/push/subscribe', {
+      subscription: { endpoint: endpointFor('anonymous') },
+    });
+
+    assert.equal(
+      response.status,
+      401,
+      `an unauthenticated subscription cannot be attributed: ${JSON.stringify(response.body)}`,
+    );
+  });
+
+  it('records the subscriber, so a targeted push can find them', async () => {
+    const endpoint = endpointFor('agent');
+    const response = await post(
+      '/push/subscribe',
+      { subscription: { endpoint } },
+      { token: agentToken, deviceId: agentDevice },
+    );
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+
+    // The proof is that targeting works: an ownerless row matches no target.
+    const delivered = await sendPushNotification(
+      { userId: agentUserId },
+      { title: 'Payment confirmed', body: 'A collection has been verified.' },
+    );
+    assert.ok(
+      delivered.sent + delivered.failed > 0,
+      'the subscription must be findable by the user it belongs to',
+    );
+  });
+
+  it('does not deliver one agent notification to another', async () => {
+    await post(
+      '/push/subscribe',
+      { subscription: { endpoint: endpointFor('agent-a') } },
+      { token: agentToken, deviceId: agentDevice },
+    );
+
+    const other = await sendPushNotification(
+      { userId: officerUserId },
+      { title: 'Not for you', body: 'Addressed to someone else.' },
+    );
+
+    assert.equal(
+      other.sent + other.failed,
+      0,
+      'a push addressed to one person must not reach another',
+    );
+  });
+
+  it('only lets you forget your own device', async () => {
+    const endpoint = endpointFor('mine');
+    saveSubscription({ endpoint }, { userId: agentUserId });
+
+    // Somebody else asks for it to be removed.
+    const response = await post('/push/unsubscribe', { endpoint }, { token: officerToken });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+
+    const stillThere = await sendPushNotification(
+      { userId: agentUserId },
+      { title: 'Still subscribed', body: 'This device was not theirs to remove.' },
+    );
+    assert.ok(
+      stillThere.sent + stillThere.failed > 0,
+      'another account must not be able to unsubscribe your device',
+    );
+
+    // The owner can.
+    await post('/push/unsubscribe', { endpoint }, { token: agentToken, deviceId: agentDevice });
+    const gone = await sendPushNotification(
+      { userId: agentUserId },
+      { title: 'Gone', body: 'Removed by its owner.' },
+    );
+    assert.equal(gone.sent + gone.failed, 0, 'the owner can remove their own device');
+  });
+
+  it('still serves the VAPID key without an account, since the browser needs it first', async () => {
+    const response = await get('/push/vapid-key');
+    assert.ok(
+      [200, 404, 503].includes(response.status),
+      `unexpected ${response.status}: ${JSON.stringify(response.body).slice(0, 160)}`,
+    );
+  });
+});
+
+describe('the PWA addresses the push routes correctly', () => {
+  it('does not repeat the API prefix that its client already adds', () => {
+    // A structural guard: this was the only file in the app spelling paths
+    // with /api/v1, and it made every push request 404 before it began.
+    const source = readFileSync(
+      join(__dirname, '..', '..', '..', '..', 'apps', 'agent', 'src', 'lib', 'push.ts'),
+      'utf8',
+    );
+    assert.doesNotMatch(
+      source,
+      /['"`]\/api\/v1\//,
+      'the agent API client already prefixes /api/v1; paths here must be relative to it',
+    );
+  });
+});
