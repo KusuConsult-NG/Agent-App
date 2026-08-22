@@ -314,7 +314,7 @@ describe('Social incentives follow the TIN', () => {
    * them nor resurrects a programme an officer deliberately closed.
    */
   it('restores the state programmes on re-seed, without reviving a closed one', async () => {
-    const { seedReferenceData } = await import('../db/seed');
+    const { seedReferenceData } = await import('../db/seed.js');
 
     await pool.query('DELETE FROM programme_eligibility');
     await pool.query('DELETE FROM incentive_programmes');
