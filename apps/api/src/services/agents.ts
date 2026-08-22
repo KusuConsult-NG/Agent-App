@@ -728,15 +728,114 @@ export async function acceptAgreement(params: {
  * blocker that reads like the account belongs to someone else; an applicant
  * whose bank happened to be down must not carry that on their record.
  */
-export async function verifyBankAccount(params: {
-  agentId: string;
-  actorId: string;
-}): Promise<{
+export interface BankVerificationResult {
   verified: boolean;
   outcome: BankVerificationOutcome;
   accountName?: string;
   failureReason?: string;
-}> {
+}
+
+/**
+ * Ask the bank about one specific account row and record what it said.
+ *
+ * Split out from `verifyBankAccount` so that a *proposed* account can be
+ * checked before anybody is asked to approve it. The resolved account name is
+ * the strongest control in the change flow — it is the one thing somebody
+ * redirecting a payout cannot supply — so it has to be obtained while the
+ * proposal is still a proposal, not after it is in use.
+ */
+async function verifyAccountRow(
+  client: PoolClient,
+  params: { accountId: string; agentId: string; actorId: string },
+): Promise<BankVerificationResult> {
+  const account = await queryOne<{
+    id: string;
+    bank_code: string | null;
+    account_number: string;
+    account_name: string;
+  }>(
+    client,
+    `SELECT id, bank_code, account_number, account_name FROM bank_accounts WHERE id = $1`,
+    [params.accountId],
+  );
+  if (!account) throw notFound('That bank account');
+
+  if (!account.bank_code) {
+    // Our own data is incomplete; there is nothing to ask the bank yet. Say
+    // so before making a call that could only fail confusingly.
+    throw badRequest(
+      'This account has no bank code recorded, so it cannot be verified. ' +
+        'Select the bank on the application and try again.',
+      [{ field: 'bankCode', issue: 'Required to verify an account' }],
+    );
+  }
+
+  const result = await bankVerification.verify({
+    bankCode: account.bank_code,
+    accountNumber: account.account_number,
+    expectedName: account.account_name,
+  });
+
+  const verified = result.outcome === 'VERIFIED';
+  const status = verified ? 'VERIFIED' : result.outcome === 'UNAVAILABLE' ? 'PENDING' : 'FAILED';
+
+  await client.query(
+    `UPDATE bank_accounts
+        SET verification_status = $2,
+            verification_reference = COALESCE($3, verification_reference),
+            verification_reason = $4,
+            verification_resolved_name = COALESCE($5, verification_resolved_name),
+            verification_attempts = verification_attempts + 1,
+            verified_at = CASE WHEN $2 = 'VERIFIED' THEN now() ELSE NULL END,
+            verified_by = CASE WHEN $2 = 'VERIFIED' THEN $6 ELSE verified_by END
+      WHERE id = $1`,
+    [
+      account.id,
+      status,
+      result.reference || null,
+      result.failureReason ?? null,
+      result.accountName ?? null,
+      params.actorId,
+    ],
+  );
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: 'agent',
+    action: 'agent.bank_verification_attempted',
+    entityType: 'bank_account',
+    entityId: account.id,
+    newValue: {
+      outcome: result.outcome,
+      status,
+      provider: result.provider,
+      // The account number is not written to the audit log; the resolved name
+      // is, because it is the evidence for a mismatch decision.
+      resolvedName: result.accountName ?? null,
+    },
+  });
+
+  if (verified) {
+    await journal(client, {
+      agentId: params.agentId,
+      eventType: 'BANK_VERIFIED',
+      actorId: params.actorId,
+      metadata: { reference: result.reference, provider: result.provider },
+    });
+  }
+
+  return {
+    verified,
+    outcome: result.outcome,
+    accountName: result.accountName,
+    failureReason: result.failureReason,
+  };
+}
+
+export async function verifyBankAccount(params: {
+  agentId: string;
+  actorId: string;
+}): Promise<BankVerificationResult> {
   return withTransaction(async (client) => {
     const account = await queryOne<{
       id: string;
@@ -752,78 +851,13 @@ export async function verifyBankAccount(params: {
     );
     if (!account) throw notFound('A bank account for this agent');
 
-    if (!account.bank_code) {
-      // Our own data is incomplete; there is nothing to ask the bank yet. Say
-      // so before making a call that could only fail confusingly.
-      throw badRequest(
-        'This account has no bank code recorded, so it cannot be verified. ' +
-          'Select the bank on the application and try again.',
-        [{ field: 'bankCode', issue: 'Required to verify an account' }],
-      );
-    }
-
-    const result = await bankVerification.verify({
-      bankCode: account.bank_code,
-      accountNumber: account.account_number,
-      expectedName: account.account_name,
-    });
-
-    const verified = result.outcome === 'VERIFIED';
-    const status = verified ? 'VERIFIED' : result.outcome === 'UNAVAILABLE' ? 'PENDING' : 'FAILED';
-
-    await client.query(
-      `UPDATE bank_accounts
-          SET verification_status = $2,
-              verification_reference = COALESCE($3, verification_reference),
-              verification_reason = $4,
-              verification_resolved_name = COALESCE($5, verification_resolved_name),
-              verification_attempts = verification_attempts + 1,
-              verified_at = CASE WHEN $2 = 'VERIFIED' THEN now() ELSE NULL END,
-              verified_by = CASE WHEN $2 = 'VERIFIED' THEN $6 ELSE verified_by END
-        WHERE id = $1`,
-      [
-        account.id,
-        status,
-        result.reference || null,
-        result.failureReason ?? null,
-        result.accountName ?? null,
-        params.actorId,
-      ],
-    );
-
-    await refreshClearance(client, params.agentId);
-
-    if (verified) {
-      await journal(client, {
-        agentId: params.agentId,
-        eventType: 'BANK_VERIFIED',
-        actorId: params.actorId,
-        metadata: { reference: result.reference, provider: result.provider },
-      });
-    }
-
-    await recordAudit(client, {
+    const result = await verifyAccountRow(client, {
+      accountId: account.id,
+      agentId: params.agentId,
       actorId: params.actorId,
-      actorRole: 'agent',
-      action: 'agent.bank_verification_attempted',
-      entityType: 'bank_account',
-      entityId: account.id,
-      newValue: {
-        outcome: result.outcome,
-        status,
-        provider: result.provider,
-        // The account number is not written to the audit log; the resolved name
-        // is, because it is the evidence for a mismatch decision.
-        resolvedName: result.accountName ?? null,
-      },
     });
-
-    return {
-      verified,
-      outcome: result.outcome,
-      accountName: result.accountName,
-      failureReason: result.failureReason,
-    };
+    await refreshClearance(client, params.agentId);
+    return result;
   });
 }
 
@@ -1295,3 +1329,550 @@ export async function kycDashboard(db: Db, filters: { lgaId?: string; reviewerId
 }
 
 export const trainingCurriculum = TRAINING_MODULES;
+
+// ---------------------------------------------------------------------------
+// Changing the account commission is paid into
+// ---------------------------------------------------------------------------
+//
+// The destination of somebody else's money is the thing an attacker wants to
+// move, so no single control is trusted with it. A request needs a step-up
+// code (proving possession of the phone, not just a live session); the new
+// account must come back VERIFIED from the bank before anyone may approve it;
+// a second officer must authorise it, and never the one who asked; the agent
+// is told on their existing number the moment a change is requested, so if it
+// was not them they find out while it is still a proposal; and the old
+// account is superseded rather than overwritten, so the trail of where money
+// went is never lost.
+//
+// Two ordering rules are worth stating plainly, because both are easy to get
+// wrong and expensive to get wrong:
+//
+//   A payout in flight blocks a change. `commission_payouts.bank_account_id`
+//   is fixed when the payout is requested, so an approved change cannot
+//   retarget money already authorised. Refusing the change anyway removes the
+//   ambiguity entirely — settle first, then move the account — and spares an
+//   officer having to reason about which account a half-finished payout meant.
+//
+//   An unverified account cannot be approved. Not "should not": the execution
+//   path refuses it. Verification returning UNAVAILABLE is not a soft yes; it
+//   leaves the proposal waiting, exactly as an unreachable TIN service leaves
+//   a registration waiting rather than inventing a number.
+
+export interface BankAccountChange {
+  approvalId: string;
+  proposedAccountId: string;
+  status: string;
+  bankName: string;
+  accountNumberMasked: string;
+  accountName: string;
+  verificationStatus: string;
+  verificationResolvedName: string | null;
+  verificationReason: string | null;
+  requestedReason: string;
+  requestedAt: string;
+  requestedByRole: string | null;
+  current: {
+    bankName: string;
+    accountNumberMasked: string;
+    accountName: string;
+  } | null;
+}
+
+/** Account numbers are never returned in full to a screen or a log. */
+function maskAccountNumber(accountNumber: string): string {
+  return accountNumber.length <= 4
+    ? '····'
+    : `····${accountNumber.slice(-4)}`;
+}
+
+async function payoutInFlight(client: PoolClient, agentId: string): Promise<string | null> {
+  const row = await queryOne<{ payout_reference: string; status: string }>(
+    client,
+    `SELECT payout_reference, status FROM commission_payouts
+      WHERE agent_id = $1 AND status IN ('REQUESTED', 'APPROVED')
+      ORDER BY requested_at LIMIT 1`,
+    [agentId],
+  );
+  return row ? `${row.payout_reference} (${row.status.toLowerCase()})` : null;
+}
+
+/**
+ * Propose a new account, check it with the bank, and put it in front of an
+ * officer. Nothing about where money goes changes here.
+ */
+export async function requestBankAccountChange(params: {
+  agentId: string;
+  actorId: string;
+  actorRole: string;
+  bankName: string;
+  bankCode: string;
+  accountName: string;
+  accountNumber: string;
+  reason: string;
+}): Promise<BankAccountChange> {
+  return withTransaction(async (client) => {
+    const agent = await queryOne<{
+      id: string;
+      full_name: string;
+      bank_account_id: string | null;
+    }>(
+      client,
+      `SELECT a.id, u.full_name, a.bank_account_id
+         FROM agents a JOIN users u ON u.id = a.user_id
+        WHERE a.id = $1 FOR UPDATE OF a`,
+      [params.agentId],
+    );
+    if (!agent) throw notFound('That agent');
+
+    const existing = await queryOne<{ id: string }>(
+      client,
+      `SELECT id FROM bank_accounts
+        WHERE owner_type = 'AGENT' AND owner_id = $1 AND status = 'PROPOSED'`,
+      [params.agentId],
+    );
+    if (existing) {
+      throw conflict(
+        'BANK_CHANGE_ALREADY_PENDING',
+        'A change to this bank account is already waiting for an officer. ' +
+          'It has to be approved or refused before another can be requested.',
+      );
+    }
+
+    const inFlight = await payoutInFlight(client, params.agentId);
+    if (inFlight) {
+      throw conflict(
+        'PAYOUT_IN_FLIGHT',
+        `Payout ${inFlight} has not been paid yet. ` +
+          'Wait until it has been settled before changing the account it is going to.',
+      );
+    }
+
+    const current = agent.bank_account_id
+      ? await queryOne<{
+          id: string;
+          bank_name: string;
+          account_number: string;
+          account_name: string;
+        }>(
+          client,
+          `SELECT id, bank_name, account_number, account_name
+             FROM bank_accounts WHERE id = $1`,
+          [agent.bank_account_id],
+        )
+      : null;
+    if (!current) {
+      throw badRequest(
+        'This agent has no bank account on record yet, so there is nothing to change. ' +
+          'The account is captured on the application.',
+      );
+    }
+
+    const accountNumber = params.accountNumber.trim();
+    if (
+      accountNumber === current.account_number &&
+      params.bankName.trim() === current.bank_name
+    ) {
+      throw badRequest(
+        'Those are the details already on record. Nothing would change.',
+        [{ field: 'accountNumber', issue: 'Same as the account already in use' }],
+      );
+    }
+
+    const proposed = await queryOne<{ id: string }>(
+      client,
+      `INSERT INTO bank_accounts
+         (owner_type, owner_id, bank_name, bank_code, account_name, account_number,
+          status, replaces_account_id)
+       VALUES ('AGENT', $1, $2, $3, $4, $5, 'PROPOSED', $6)
+       RETURNING id`,
+      [
+        params.agentId,
+        params.bankName.trim(),
+        params.bankCode.trim(),
+        params.accountName.trim(),
+        accountNumber,
+        current.id,
+      ],
+    );
+
+    const approval = await queryOne<{ id: string }>(
+      client,
+      `INSERT INTO approvals
+         (approval_type, entity_type, entity_id, payload, requested_by, requested_reason)
+       VALUES ('BANK_ACCOUNT_CHANGE', 'bank_account', $1, $2, $3, $4)
+       RETURNING id`,
+      [
+        proposed!.id,
+        JSON.stringify({
+          agentId: params.agentId,
+          proposedAccountId: proposed!.id,
+          replacesAccountId: current.id,
+          // Masked in the payload too: an approval record is read by more
+          // people than the account itself ever should be.
+          proposedAccountMasked: maskAccountNumber(accountNumber),
+          currentAccountMasked: maskAccountNumber(current.account_number),
+          requestedByRole: params.actorRole,
+        }),
+        params.actorId,
+        params.reason,
+      ],
+    );
+
+    await client.query('UPDATE bank_accounts SET change_approval_id = $2 WHERE id = $1', [
+      proposed!.id,
+      approval!.id,
+    ]);
+
+    // Ask the bank now, while it is still only a proposal. An officer should
+    // never be the first person to find out the name does not match.
+    const verification = await verifyAccountRow(client, {
+      accountId: proposed!.id,
+      agentId: params.agentId,
+      actorId: params.actorId,
+    });
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.bank_account_change_requested',
+      entityType: 'bank_account',
+      entityId: proposed!.id,
+      oldValue: { accountMasked: maskAccountNumber(current.account_number), bankName: current.bank_name },
+      newValue: {
+        accountMasked: maskAccountNumber(accountNumber),
+        bankName: params.bankName.trim(),
+        approvalId: approval!.id,
+        verification: verification.outcome,
+      },
+      reason: params.reason,
+    });
+
+    await journal(client, {
+      agentId: params.agentId,
+      eventType: 'BANK_CHANGE_REQUESTED',
+      actorId: params.actorId,
+      reason: params.reason,
+      metadata: { approvalId: approval!.id, verification: verification.outcome },
+    });
+
+    // Sent to the number already on the agent's record, never to anything
+    // supplied with the request. If somebody else asked for this change, this
+    // message is how the agent finds out — while it is still a proposal.
+    await queueNotification(client, {
+      event: 'AGENT_BANK_CHANGE_REQUESTED',
+      agentId: params.agentId,
+      variables: {
+        bank: params.bankName.trim(),
+        account: maskAccountNumber(accountNumber),
+      },
+      entityType: 'bank_account',
+      entityId: proposed!.id,
+    });
+
+    return {
+      approvalId: approval!.id,
+      proposedAccountId: proposed!.id,
+      status: 'PROPOSED',
+      bankName: params.bankName.trim(),
+      accountNumberMasked: maskAccountNumber(accountNumber),
+      accountName: params.accountName.trim(),
+      verificationStatus: verification.verified
+        ? 'VERIFIED'
+        : verification.outcome === 'UNAVAILABLE'
+          ? 'PENDING'
+          : 'FAILED',
+      verificationResolvedName: verification.accountName ?? null,
+      verificationReason: verification.failureReason ?? null,
+      requestedReason: params.reason,
+      requestedAt: new Date().toISOString(),
+      requestedByRole: params.actorRole,
+      current: {
+        bankName: current.bank_name,
+        accountNumberMasked: maskAccountNumber(current.account_number),
+        accountName: current.account_name,
+      },
+    };
+  });
+}
+
+/**
+ * Put an approved change into effect, inside the caller's transaction.
+ *
+ * Called from the approvals decision rather than from a route of its own, so
+ * that there is exactly one way for a bank change to be authorised and it is
+ * the one carrying the separation-of-duties checks. An approval that says
+ * APPROVED and an account that never moved would be the worst of both worlds:
+ * the record claims a decision was carried out, and the money still goes
+ * somewhere else.
+ */
+export async function executeBankAccountChange(
+  client: PoolClient,
+  params: { approvalId: string; actorId: string; actorRole: string },
+): Promise<{ agentId: string; accountNumberMasked: string; bankName: string }> {
+  const proposed = await queryOne<{
+    id: string;
+    owner_id: string;
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    status: string;
+    verification_status: string;
+    verification_reason: string | null;
+    replaces_account_id: string | null;
+  }>(
+    client,
+    `SELECT id, owner_id, bank_name, account_number, account_name, status,
+            verification_status, verification_reason, replaces_account_id
+       FROM bank_accounts WHERE change_approval_id = $1 FOR UPDATE`,
+    [params.approvalId],
+  );
+  if (!proposed) throw notFound('The account this approval refers to');
+
+  if (proposed.status !== 'PROPOSED') {
+    throw conflict(
+      'BANK_CHANGE_ALREADY_SETTLED',
+      `This change has already been ${proposed.status.toLowerCase()}.`,
+    );
+  }
+
+  // The control that does the real work. An account the bank has not
+  // confirmed is not a destination for public money, and an officer cannot
+  // wave it through — "unavailable" is not a soft yes.
+  if (proposed.verification_status !== 'VERIFIED') {
+    throw conflict(
+      'BANK_ACCOUNT_NOT_VERIFIED',
+      proposed.verification_status === 'PENDING'
+        ? 'The bank has not confirmed this account yet, so the change cannot be approved. ' +
+          'Try the verification again once the bank service is reachable.'
+        : `The bank did not confirm this account${
+            proposed.verification_reason ? `: ${proposed.verification_reason}` : ''
+          }. The change cannot be approved until it does.`,
+    );
+  }
+
+  const inFlight = await payoutInFlight(client, proposed.owner_id);
+  if (inFlight) {
+    throw conflict(
+      'PAYOUT_IN_FLIGHT',
+      `Payout ${inFlight} has not been paid yet. ` +
+        'Settle it before moving the account it is going to.',
+    );
+  }
+
+  const previous = proposed.replaces_account_id
+    ? await queryOne<{ id: string; bank_name: string; account_number: string }>(
+        client,
+        'SELECT id, bank_name, account_number FROM bank_accounts WHERE id = $1 FOR UPDATE',
+        [proposed.replaces_account_id],
+      )
+    : null;
+
+  // Order matters: the old account gives up ACTIVE before the new one takes
+  // it, because only one account per owner may hold that status.
+  if (previous) {
+    await client.query(
+      `UPDATE bank_accounts SET status = 'SUPERSEDED', superseded_at = now() WHERE id = $1`,
+      [previous.id],
+    );
+  }
+  await client.query(`UPDATE bank_accounts SET status = 'ACTIVE' WHERE id = $1`, [proposed.id]);
+  await client.query('UPDATE agents SET bank_account_id = $2 WHERE id = $1', [
+    proposed.owner_id,
+    proposed.id,
+  ]);
+
+  await refreshClearance(client, proposed.owner_id);
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    action: 'agent.bank_account_changed',
+    entityType: 'bank_account',
+    entityId: proposed.id,
+    oldValue: previous
+      ? { accountMasked: maskAccountNumber(previous.account_number), bankName: previous.bank_name }
+      : null,
+    newValue: {
+      accountMasked: maskAccountNumber(proposed.account_number),
+      bankName: proposed.bank_name,
+      approvalId: params.approvalId,
+    },
+  });
+
+  await journal(client, {
+    agentId: proposed.owner_id,
+    eventType: 'BANK_CHANGE_APPLIED',
+    actorId: params.actorId,
+    metadata: { approvalId: params.approvalId },
+  });
+
+  await queueNotification(client, {
+    event: 'AGENT_BANK_CHANGE_APPLIED',
+    agentId: proposed.owner_id,
+    variables: {
+      bank: proposed.bank_name,
+      account: maskAccountNumber(proposed.account_number),
+    },
+    entityType: 'bank_account',
+    entityId: proposed.id,
+  });
+
+  return {
+    agentId: proposed.owner_id,
+    accountNumberMasked: maskAccountNumber(proposed.account_number),
+    bankName: proposed.bank_name,
+  };
+}
+
+/** Refuse a proposed change. The account in use is untouched. */
+export async function refuseBankAccountChange(
+  client: PoolClient,
+  params: { approvalId: string; actorId: string; actorRole: string; reason: string },
+): Promise<void> {
+  const proposed = await queryOne<{ id: string; owner_id: string; status: string }>(
+    client,
+    `SELECT id, owner_id, status FROM bank_accounts WHERE change_approval_id = $1 FOR UPDATE`,
+    [params.approvalId],
+  );
+  if (!proposed || proposed.status !== 'PROPOSED') return;
+
+  await client.query(`UPDATE bank_accounts SET status = 'REJECTED' WHERE id = $1`, [proposed.id]);
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    action: 'agent.bank_account_change_refused',
+    entityType: 'bank_account',
+    entityId: proposed.id,
+    reason: params.reason,
+  });
+
+  await journal(client, {
+    agentId: proposed.owner_id,
+    eventType: 'BANK_CHANGE_REFUSED',
+    actorId: params.actorId,
+    reason: params.reason,
+  });
+
+  await queueNotification(client, {
+    event: 'AGENT_BANK_CHANGE_REFUSED',
+    agentId: proposed.owner_id,
+    variables: { reason: params.reason },
+    entityType: 'bank_account',
+    entityId: proposed.id,
+  });
+}
+
+/** Re-ask the bank about a proposal that could not be checked first time. */
+export async function reverifyProposedAccount(params: {
+  approvalId: string;
+  actorId: string;
+}): Promise<BankVerificationResult> {
+  return withTransaction(async (client) => {
+    const proposed = await queryOne<{ id: string; owner_id: string; status: string }>(
+      client,
+      `SELECT id, owner_id, status FROM bank_accounts WHERE change_approval_id = $1`,
+      [params.approvalId],
+    );
+    if (!proposed) throw notFound('The account this approval refers to');
+    if (proposed.status !== 'PROPOSED') {
+      throw conflict(
+        'BANK_CHANGE_ALREADY_SETTLED',
+        `This change has already been ${proposed.status.toLowerCase()}.`,
+      );
+    }
+    return verifyAccountRow(client, {
+      accountId: proposed.id,
+      agentId: proposed.owner_id,
+      actorId: params.actorId,
+    });
+  });
+}
+
+/** The proposal outstanding for one agent, if there is one. */
+export async function bankAccountChangeFor(
+  db: Db,
+  agentId: string,
+): Promise<BankAccountChange | null> {
+  const row = await queryOne<any>(
+    db,
+    `SELECT p.id, p.bank_name, p.account_number, p.account_name, p.status,
+            p.verification_status, p.verification_resolved_name, p.verification_reason,
+            p.change_approval_id, a.requested_reason, a.requested_at, a.payload,
+            c.bank_name AS current_bank_name, c.account_number AS current_account_number,
+            c.account_name AS current_account_name
+       FROM bank_accounts p
+       JOIN approvals a ON a.id = p.change_approval_id
+       LEFT JOIN bank_accounts c ON c.id = p.replaces_account_id
+      WHERE p.owner_type = 'AGENT' AND p.owner_id = $1 AND p.status = 'PROPOSED'`,
+    [agentId],
+  );
+  if (!row) return null;
+  return {
+    approvalId: row.change_approval_id,
+    proposedAccountId: row.id,
+    status: row.status,
+    bankName: row.bank_name,
+    accountNumberMasked: maskAccountNumber(row.account_number),
+    accountName: row.account_name,
+    verificationStatus: row.verification_status,
+    verificationResolvedName: row.verification_resolved_name,
+    verificationReason: row.verification_reason,
+    requestedReason: row.requested_reason,
+    requestedAt: row.requested_at?.toISOString?.() ?? String(row.requested_at),
+    requestedByRole: row.payload?.requestedByRole ?? null,
+    current: row.current_bank_name
+      ? {
+          bankName: row.current_bank_name,
+          accountNumberMasked: maskAccountNumber(row.current_account_number),
+          accountName: row.current_account_name,
+        }
+      : null,
+  };
+}
+
+/** Every proposal waiting on an officer. */
+export async function pendingBankAccountChanges(db: Db): Promise<
+  (BankAccountChange & { agentId: string; agentName: string; agentCode: string })[]
+> {
+  const rows = await query<any>(
+    db,
+    `SELECT p.id, p.owner_id, p.bank_name, p.account_number, p.account_name, p.status,
+            p.verification_status, p.verification_resolved_name, p.verification_reason,
+            p.change_approval_id, ap.requested_reason, ap.requested_at, ap.payload,
+            u.full_name AS agent_name, ag.agent_code,
+            c.bank_name AS current_bank_name, c.account_number AS current_account_number,
+            c.account_name AS current_account_name
+       FROM bank_accounts p
+       JOIN approvals ap ON ap.id = p.change_approval_id
+       JOIN agents ag ON ag.id = p.owner_id
+       JOIN users u ON u.id = ag.user_id
+       LEFT JOIN bank_accounts c ON c.id = p.replaces_account_id
+      WHERE p.owner_type = 'AGENT' AND p.status = 'PROPOSED'
+      ORDER BY ap.requested_at`,
+  );
+  return rows.map((row) => ({
+    approvalId: row.change_approval_id,
+    proposedAccountId: row.id,
+    agentId: row.owner_id,
+    agentName: row.agent_name,
+    agentCode: row.agent_code,
+    status: row.status,
+    bankName: row.bank_name,
+    accountNumberMasked: maskAccountNumber(row.account_number),
+    accountName: row.account_name,
+    verificationStatus: row.verification_status,
+    verificationResolvedName: row.verification_resolved_name,
+    verificationReason: row.verification_reason,
+    requestedReason: row.requested_reason,
+    requestedAt: row.requested_at?.toISOString?.() ?? String(row.requested_at),
+    requestedByRole: row.payload?.requestedByRole ?? null,
+    current: row.current_bank_name
+      ? {
+          bankName: row.current_bank_name,
+          accountNumberMasked: maskAccountNumber(row.current_account_number),
+          accountName: row.current_account_name,
+        }
+      : null,
+  }));
+}

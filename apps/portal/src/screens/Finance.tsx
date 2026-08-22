@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
+import { BankChangesCard } from './Agents';
 
 // ------------------------------------------------------------ reconciliation
 
@@ -532,6 +533,15 @@ export function ApprovalsScreen({ user }: { user: User }) {
 
   return (
     <>
+      {/*
+        * Bank account changes get their own card above the generic queue.
+        * A row reading "BANK_ACCOUNT_CHANGE / bank_account / <uuid>" tells an
+        * officer nothing they can weigh; the decision turns on the name the
+        * bank returned against the name the agent gave, and that has to be on
+        * screen next to the buttons or it will not be looked at.
+        */}
+      <BankChangesCard />
+
       <div className="card">
         <div className="card__header">
           <div>

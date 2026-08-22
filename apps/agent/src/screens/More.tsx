@@ -1,6 +1,6 @@
 /** Vehicles, receipts, commission wallet and profile. */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ApiRequestError,
   APP_VERSION,
@@ -753,6 +753,18 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
       </div>
 
       <div className="card">
+        <h2 className="card__title">Where your commission is paid</h2>
+        <p className="card__hint">
+          Change the bank account PSIRS pays your commission into. It takes a one-time code, the
+          bank's confirmation and an officer's approval, so your existing account keeps being
+          used until all three are done.
+        </p>
+        <a className="button secondary" href="#/bank">
+          Change my bank account
+        </a>
+      </div>
+
+      <div className="card">
         <h2 className="card__title">Something wrong?</h2>
         <p className="card__hint">
           Report a problem to PSIRS — a payment that has not confirmed, a receipt that looks
@@ -791,6 +803,228 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
       <button type="button" className="danger" onClick={onSignOut}>
         Sign out
       </button>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+interface BankChange {
+  approvalId: string;
+  bankName: string;
+  accountNumberMasked: string;
+  accountName: string;
+  verificationStatus: string;
+  verificationResolvedName: string | null;
+  verificationReason: string | null;
+  requestedReason: string;
+  requestedAt: string;
+  current: { bankName: string; accountNumberMasked: string; accountName: string } | null;
+}
+
+/**
+ * Changing where commission is paid.
+ *
+ * The account was captured once, on the application, and there was no way to
+ * move it afterwards — so an agent whose account was closed could not be paid
+ * at all. What makes self-service safe here is not who may ask but what has to
+ * be true before anything moves: a one-time code with the request, the bank's
+ * own confirmation of the new account, and an officer's approval. The screen
+ * says all three, because an agent who does not know a change is still
+ * pending will assume it has taken effect and wonder where their money went.
+ */
+export function BankAccountScreen({ navigate }: { navigate: (path: string) => void }) {
+  const [pending, setPending] = useState<BankChange | null | undefined>(undefined);
+  const [form, setForm] = useState({
+    bankName: '',
+    bankCode: '',
+    accountName: '',
+    accountNumber: '',
+    reason: '',
+  });
+  const [authorising, setAuthorising] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .get<{ change: BankChange | null }>('/agents/me/bank/change')
+      .then((data) => setPending(data.change))
+      .catch((caught) => {
+        setPending(null);
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, []);
+
+  useEffect(load, [load]);
+
+  const set = (key: keyof typeof form) => (event: { target: { value: string } }) =>
+    setForm((previous) => ({ ...previous, [key]: event.target.value }));
+
+  /** What the form is still waiting for, in words rather than a dead button. */
+  const blockedBecause = ((): string | null => {
+    if (form.bankName.trim().length < 2) return 'Choose the bank the new account is with.';
+    if (!/^\d{3,6}$/.test(form.bankCode.trim())) {
+      return 'Enter the bank code. It is the 3 to 6 digit number the bank uses, not your account number.';
+    }
+    if (form.accountName.trim().length < 2) {
+      return 'Enter the name the account is held in, exactly as the bank has it.';
+    }
+    if (!/^\d{10}$/.test(form.accountNumber.trim())) {
+      return 'A Nigerian account number is 10 digits.';
+    }
+    if (form.reason.trim().length < 10) {
+      return 'Say why the account is changing, in at least 10 characters.';
+    }
+    return null;
+  })();
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.post('/agents/me/bank/change', {
+        bankName: form.bankName.trim(),
+        bankCode: form.bankCode.trim(),
+        accountName: form.accountName.trim(),
+        accountNumber: form.accountNumber.trim(),
+        reason: form.reason.trim(),
+      });
+      setMessage(
+        'Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change.',
+      );
+      setForm({ bankName: '', bankCode: '', accountName: '', accountNumber: '', reason: '' });
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      else if (caught instanceof Error) {
+        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    } finally {
+      setBusy(false);
+      setAuthorising(false);
+    }
+  }
+
+  if (pending === undefined) return <Loading rows={3} />;
+
+  if (authorising) {
+    return (
+      <StepUpPrompt
+        action="agent.bank_account.change"
+        title="Authorise this change"
+        confirmLabel="Send to PSIRS"
+        description={
+          <>
+            <p style={{ margin: '0 0 4px' }}>
+              You are asking PSIRS to pay your commission into {form.bankName}{' '}
+              {form.accountNumber.slice(-4).padStart(8, '·')}.
+            </p>
+            <p style={{ margin: 0 }}>
+              Nothing changes until an officer approves it.
+            </p>
+          </>
+        }
+        onAuthorised={submit}
+        onCancel={() => setAuthorising(false)}
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="card">
+        <h2 className="card__title">Where your commission is paid</h2>
+        <p className="card__hint">
+          Commission is paid only into an account PSIRS has confirmed with the bank, and only
+          after an officer approves the change. Your existing account keeps being used until
+          then.
+        </p>
+      </div>
+
+      <ErrorAlert error={error} />
+      {message && <Alert kind="success">{message}</Alert>}
+
+      {pending ? (
+        <>
+          <div className="card">
+            <h2 className="card__title">A change is waiting for PSIRS</h2>
+            <KeyValue
+              items={[
+                ['Paid into now', pending.current
+                  ? `${pending.current.bankName} ${pending.current.accountNumberMasked}`
+                  : '—'],
+                ['Would change to', `${pending.bankName} ${pending.accountNumberMasked}`],
+                ['Name on the new account', pending.accountName],
+                [
+                  'Bank check',
+                  pending.verificationStatus === 'VERIFIED'
+                    ? `Confirmed${pending.verificationResolvedName ? ` as ${pending.verificationResolvedName}` : ''}`
+                    : pending.verificationStatus === 'PENDING'
+                      ? 'Waiting — the bank could not be reached'
+                      : `Not confirmed${pending.verificationReason ? `: ${pending.verificationReason}` : ''}`,
+                ],
+                ['Reason you gave', pending.requestedReason],
+              ]}
+            />
+          </div>
+          {pending.verificationStatus !== 'VERIFIED' && (
+            <Alert kind="warning" title="The bank has not confirmed this account">
+              <p style={{ margin: 0 }}>
+                PSIRS cannot approve a change until the bank confirms the account belongs to you.
+                If the details are wrong, ask your supervisor to refuse this request so you can
+                send the right ones.
+              </p>
+            </Alert>
+          )}
+          <Alert kind="info" title="You will be told either way">
+            <p style={{ margin: 0 }}>
+              A message goes to your phone when this is approved or refused. Only one change can
+              be waiting at a time.
+            </p>
+          </Alert>
+        </>
+      ) : (
+        <div className="card">
+          <h2 className="card__title">Ask for a different account</h2>
+          <Field label="Bank" required>
+            <input value={form.bankName} onChange={set('bankName')} />
+          </Field>
+          <Field label="Bank code" hint="The 3 to 6 digit code the bank uses" required>
+            <input inputMode="numeric" value={form.bankCode} onChange={set('bankCode')} />
+          </Field>
+          <Field label="Name on the account" hint="Exactly as the bank has it" required>
+            <input value={form.accountName} onChange={set('accountName')} />
+          </Field>
+          <Field label="Account number" required>
+            <input inputMode="numeric" value={form.accountNumber} onChange={set('accountNumber')} />
+          </Field>
+          <Field label="Why it is changing" required>
+            <textarea value={form.reason} onChange={set('reason')} rows={3} />
+          </Field>
+
+          {blockedBecause && (
+            <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+              {blockedBecause}
+            </p>
+          )}
+
+          <div className="button-row">
+            <button
+              type="button"
+              disabled={busy || blockedBecause !== null}
+              onClick={() => setAuthorising(true)}
+            >
+              Continue
+            </button>
+            <button type="button" className="secondary" onClick={() => navigate('/profile')}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }

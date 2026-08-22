@@ -83,6 +83,8 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         <Stat label="Referee failed" value={counts.referee_failed} />
       </div>
 
+      <BankChangesCard />
+
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
           <h2 className="card__title">Awaiting government review</h2>
@@ -693,5 +695,234 @@ export function RefereesScreen() {
         />
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+interface PendingBankChange {
+  approvalId: string;
+  agentId: string;
+  agentName: string;
+  agentCode: string;
+  bankName: string;
+  accountNumberMasked: string;
+  accountName: string;
+  verificationStatus: string;
+  verificationResolvedName: string | null;
+  verificationReason: string | null;
+  requestedReason: string;
+  requestedAt: string;
+  requestedByRole: string | null;
+  current: { bankName: string; accountNumberMasked: string; accountName: string } | null;
+}
+
+/**
+ * Changes of the account an agent's commission is paid into.
+ *
+ * The decision an officer makes here moves where public money goes, so the
+ * screen is built around the one piece of evidence that matters: the name the
+ * bank returned for the new account. That is the thing somebody redirecting a
+ * payout cannot supply, and it is shown next to the name the agent gave
+ * rather than reduced to a status badge, because "verified" tells an officer
+ * nothing they can weigh.
+ *
+ * Approve is not offered at all until the bank has confirmed the account. The
+ * API refuses it in that state regardless; hiding the button as well means an
+ * officer is never invited to press something that cannot work.
+ */
+export function BankChangesCard() {
+  const [changes, setChanges] = useState<PendingBankChange[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api
+      .get<{ changes: PendingBankChange[] }>('/agents/bank-changes')
+      .then((data) => setChanges(data.changes))
+      .catch((caught) => {
+        setChanges([]);
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, []);
+
+  useEffect(load, [load]);
+
+  async function act(id: string, run: () => Promise<string>) {
+    setBusy(id);
+    setError(null);
+    setMessage(null);
+    try {
+      setMessage(await run());
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      else if (caught instanceof Error) {
+        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function decide(change: PendingBankChange, decision: 'APPROVE' | 'REJECT') {
+    const reason = window.prompt(
+      decision === 'APPROVE'
+        ? `Say how you confirmed this change with ${change.agentName} (at least 10 characters):`
+        : `Say why this change is being refused (at least 10 characters):`,
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 10) {
+      setError({
+        code: 'CLIENT',
+        message:
+          'Give a reason of at least 10 characters. It is the only record of why the account ' +
+          'somebody is paid into was moved.',
+        moneyStatus: 'NOT_APPLICABLE',
+      });
+      return;
+    }
+    void act(change.approvalId, async () => {
+      const result = await api.post<{ message?: string }>(
+        `/government/approvals/${change.approvalId}/decide`,
+        { decision, reason: reason.trim() },
+      );
+      return (
+        result.message ??
+        (decision === 'APPROVE'
+          ? `${change.agentName}'s commission account has been changed.`
+          : `The change for ${change.agentName} was refused. Their existing account is unchanged.`)
+      );
+    });
+  }
+
+  if (!changes) return <Loading rows={2} />;
+
+  return (
+    <div className="card">
+      <h2 className="card__title">Bank account changes</h2>
+      <p className="card__hint">
+        Where an agent&rsquo;s commission is paid. Nothing moves until the bank confirms the new
+        account and an officer other than the one who asked approves it. The account in use keeps
+        being used until then.
+      </p>
+
+      <ErrorAlert error={error} />
+      {message && <Alert kind="success">{message}</Alert>}
+
+      {changes.length === 0 ? (
+        <p className="empty">No bank account changes are waiting.</p>
+      ) : (
+        <ul className="list">
+          {changes.map((change) => {
+            const confirmed = change.verificationStatus === 'VERIFIED';
+            const nameDiffers =
+              confirmed &&
+              change.verificationResolvedName !== null &&
+              change.verificationResolvedName.trim().toLowerCase() !==
+                change.accountName.trim().toLowerCase();
+            return (
+              <li key={change.approvalId} style={{ padding: '14px 0' }}>
+                <p className="list__title" style={{ margin: '0 0 6px' }}>
+                  {change.agentName} <span className="mono">{change.agentCode}</span>
+                </p>
+                <KeyValue
+                  items={[
+                    [
+                      'Paid into now',
+                      change.current
+                        ? `${change.current.bankName} ${change.current.accountNumberMasked}`
+                        : '—',
+                    ],
+                    ['Would change to', `${change.bankName} ${change.accountNumberMasked}`],
+                    ['Name the agent gave', change.accountName],
+                    [
+                      'Name the bank returned',
+                      confirmed
+                        ? (change.verificationResolvedName ?? 'Confirmed, no name returned')
+                        : change.verificationStatus === 'PENDING'
+                          ? 'The bank could not be reached'
+                          : `Not confirmed${change.verificationReason ? `: ${change.verificationReason}` : ''}`,
+                    ],
+                    ['Reason given', change.requestedReason],
+                    [
+                      'Asked for by',
+                      change.requestedByRole === 'agent'
+                        ? 'The agent'
+                        : `An officer (${change.requestedByRole ?? 'unknown role'})`,
+                    ],
+                    ['Requested', formatDateTime(change.requestedAt)],
+                  ]}
+                />
+
+                {nameDiffers && (
+                  <Alert kind="warning" title="The bank returned a different name">
+                    <p style={{ margin: 0 }}>
+                      The agent gave &ldquo;{change.accountName}&rdquo; and the bank holds this
+                      account as &ldquo;{change.verificationResolvedName}&rdquo;. Confirm with the
+                      agent directly before approving.
+                    </p>
+                  </Alert>
+                )}
+
+                {!confirmed && (
+                  <Alert kind="warning" title="The bank has not confirmed this account">
+                    <p style={{ margin: 0 }}>
+                      {change.verificationStatus === 'PENDING'
+                        ? 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.'
+                        : 'This account cannot be approved while the bank does not confirm it. Refuse the request so the agent can send the right details.'}
+                    </p>
+                  </Alert>
+                )}
+
+                <div className="button-row">
+                  {can('agent:manage') && change.verificationStatus === 'PENDING' && (
+                    <button
+                      type="button"
+                      className="small secondary"
+                      disabled={busy === change.approvalId}
+                      onClick={() =>
+                        void act(change.approvalId, async () => {
+                          const result = await api.post<{ verified: boolean; outcome: string }>(
+                            `/agents/bank-changes/${change.approvalId}/verify`,
+                            {},
+                          );
+                          return result.verified
+                            ? 'The bank confirmed the account.'
+                            : `The bank still did not confirm it (${result.outcome.toLowerCase()}).`;
+                        })
+                      }
+                    >
+                      Ask the bank again
+                    </button>
+                  )}
+                  {can('approval:authorise') && confirmed && (
+                    <button
+                      type="button"
+                      className="small"
+                      disabled={busy === change.approvalId}
+                      onClick={() => decide(change, 'APPROVE')}
+                    >
+                      Approve
+                    </button>
+                  )}
+                  {can('approval:review') && (
+                    <button
+                      type="button"
+                      className="small danger"
+                      disabled={busy === change.approvalId}
+                      onClick={() => decide(change, 'REJECT')}
+                    >
+                      Refuse
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

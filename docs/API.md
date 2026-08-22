@@ -76,6 +76,41 @@ The full record remains available through the agent and officer APIs, which
 establish who they are speaking to first. Rate limited to 10 requests per
 minute per IP.
 
+### Changing the account commission is paid into
+
+The destination of somebody else's money is what an attacker wants to move, so
+no single control is trusted with it. A change passes through five:
+
+1. **A step-up code with the request.** `agent.bank_account.change` proves
+   possession of the phone rather than a live session, so a signed-in browser
+   on a stolen laptop gets no further.
+2. **The bank's own confirmation.** The proposed account is created as a
+   `PROPOSED` row and verified against the bank immediately, before an officer
+   sees it. The resolved account name is the evidence an officer weighs, and it
+   is shown beside the name the agent gave. `UNAVAILABLE` is not a soft yes —
+   the proposal waits, and `POST /agents/bank-changes/:approvalId/verify` asks
+   again.
+3. **A second officer.** The change is carried by a `BANK_ACCOUNT_CHANGE`
+   approval, decided through `POST /government/approvals/:id/decide`. The
+   officer who raised it can never decide it. In practice the roles separate
+   structurally too: `agent:manage` (who may raise one on an agent's behalf)
+   and `approval:authorise` (who may authorise it) are held by different roles.
+4. **No payout in flight.** A change is refused while the agent has a payout in
+   `REQUESTED` or `APPROVED` state, at both the request and the execution step.
+   Settle first, then move the account.
+5. **The agent is told.** A message goes to the number already on their record
+   — never one supplied with the request — the moment a change is *requested*,
+   so a change somebody else asked for is noticed while it is still a proposal.
+
+The decision and the change are one transaction. If execution refuses, the
+approval rolls back with it: an approval is never recorded for a change that
+did not happen.
+
+The previous account becomes `SUPERSEDED` rather than being overwritten, and
+the new row records `replaces_account_id`, so the chain of where money went is
+walkable. Account numbers are masked (`····4321`) in every response, in the
+approval payload and in the audit log.
+
 ## Authentication
 
 | Method | Path | Notes |
@@ -103,6 +138,11 @@ usable login; government users are provisioned by an administrator.
 | `GET`/`POST` | `/agents/me/training[/:moduleCode]` | own |
 | `GET` | `/agents/agreement` · `POST` `/agents/me/agreement` | own |
 | `POST` | `/agents/me/bank/verify` | own |
+| `GET` | `/agents/me/bank/change` | own — the proposal waiting, if any |
+| `POST` | `/agents/me/bank/change` | own — **step-up** `agent.bank_account.change` |
+| `POST` | `/agents/:agentId/bank/change` | `agent:manage` — **step-up**; raised on an agent's behalf |
+| `GET` | `/agents/bank-changes` | `agent:read:all` or `approval:review` |
+| `POST` | `/agents/bank-changes/:approvalId/verify` | `agent:manage` — ask the bank again |
 | `POST` | `/agents/me/devices` | own, requires government approval first |
 | `GET` | `/agents/app-version` | version gate (Addendum §43) |
 | `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |

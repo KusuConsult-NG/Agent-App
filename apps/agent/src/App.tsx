@@ -26,7 +26,13 @@ import { ApplicationScreen } from './screens/Application';
 import { HomeScreen } from './screens/Home';
 import { RegisterTaxpayerScreen, TaxpayerScreen, TaxpayersScreen } from './screens/Taxpayers';
 import { CollectScreen, TransactionScreen } from './screens/Collect';
-import { CommissionScreen, ProfileScreen, ReceiptsScreen, VehiclesScreen } from './screens/More';
+import {
+  BankAccountScreen,
+  CommissionScreen,
+  ProfileScreen,
+  ReceiptsScreen,
+  VehiclesScreen,
+} from './screens/More';
 import { VerifyScreen } from './screens/Verify';
 import { CollectionScreen } from './screens/Collection';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
@@ -252,6 +258,7 @@ function Routes({
   if (matchRoute(route, '/collections')) return <CollectionScreen />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
+  if (matchRoute(route, '/bank')) return <BankAccountScreen navigate={navigate} />;
   if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;
   if (matchRoute(route, '/support/new')) return <RaiseTicketScreen navigate={navigate} />;
   // After /support/new, so the literal route is not swallowed by the pattern.

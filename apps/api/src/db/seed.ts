@@ -415,6 +415,12 @@ const NOTIFICATION_TEMPLATES = [
   { code: 'KYC_ACTION_SMS', event: 'KYC_ACTION_REQUIRED', channel: 'SMS', body: 'PSIRS: Your identity verification needs attention. {{reason}}. Open the app to resubmit.' },
   { code: 'SUPPORT_REPLY_SMS', event: 'SUPPORT_TICKET_UPDATED', channel: 'SMS', body: 'PSIRS: There is a reply on your support ticket {{ticketNumber}}. Open the app to read it.' },
   { code: 'SECURITY_OTP_SMS', event: 'SECURITY_ALERT', channel: 'SMS', body: 'PSIRS: Your verification code is {{code}}. It expires in {{minutes}} minutes. Never share it with anyone, including PSIRS staff.' },
+  // Sent to the number already on the agent's record, never to anything supplied
+  // with the request: if somebody else asked for the change, this is how the
+  // agent finds out while it is still only a proposal.
+  { code: 'AGENT_BANK_CHANGE_REQUESTED_SMS', event: 'AGENT_BANK_CHANGE_REQUESTED', channel: 'SMS', body: 'PSIRS: A request was made to pay your commission into {{bank}} {{account}}. Nothing has changed yet. If this was not you, contact your supervisor now.' },
+  { code: 'AGENT_BANK_CHANGE_APPLIED_SMS', event: 'AGENT_BANK_CHANGE_APPLIED', channel: 'SMS', body: 'PSIRS: Your commission will now be paid into {{bank}} {{account}}. If this was not you, contact your supervisor now.' },
+  { code: 'AGENT_BANK_CHANGE_REFUSED_SMS', event: 'AGENT_BANK_CHANGE_REFUSED', channel: 'SMS', body: 'PSIRS: The request to change your commission account was not approved. Reason: {{reason}}. Your existing account is unchanged.' },
 ];
 
 const AGENT_AGREEMENT = `PLATEAU STATE INTERNAL REVENUE SERVICE

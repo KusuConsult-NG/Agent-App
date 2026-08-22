@@ -18,6 +18,7 @@ import {
 } from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { recordAudit, verifyAuditChain } from '../services/audit';
+import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import * as incentives from '../services/incentives';
@@ -401,7 +402,54 @@ governmentRouter.post(
           reason: data.reason,
         });
 
-        return { status: nextStatus, approvalType: approval.approval_type };
+        /*
+         * A bank account change is carried out here, in the same transaction
+         * that records the decision, rather than by a route of its own.
+         *
+         * The alternative — marking the approval APPROVED and leaving a
+         * separate endpoint to do the work — is how an approval comes to say a
+         * decision was carried out while the money still goes somewhere else.
+         * Deciding and doing are one act or they are a discrepancy waiting to
+         * be found by an auditor.
+         *
+         * It also means the separation-of-duties checks above guard the change
+         * itself and not merely the paperwork about it: the officer who asked
+         * for the change cannot approve it, and the one who reviewed it cannot
+         * authorise it, because those checks stand between this line and the
+         * request. If execution refuses — an account the bank never confirmed,
+         * a payout still in flight — it throws, and the whole transaction
+         * including the decision is rolled back. An approval is never recorded
+         * for a change that did not happen.
+         */
+        let applied: { accountNumberMasked: string; bankName: string } | null = null;
+        if (approval.approval_type === 'BANK_ACCOUNT_CHANGE') {
+          if (nextStatus === 'APPROVED') {
+            applied = await agents.executeBankAccountChange(client, {
+              approvalId: req.params.id,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+            });
+          } else if (nextStatus === 'REJECTED') {
+            await agents.refuseBankAccountChange(client, {
+              approvalId: req.params.id,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              reason: data.reason,
+            });
+          }
+        }
+
+        return {
+          status: nextStatus,
+          approvalType: approval.approval_type,
+          ...(applied
+            ? {
+                message:
+                  `Commission for this agent will now be paid into ${applied.bankName} ` +
+                  `${applied.accountNumberMasked}. The previous account has been kept on record.`,
+              }
+            : {}),
+        };
       });
 
       res.json(result);

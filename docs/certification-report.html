@@ -576,11 +576,18 @@
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
-        every field what happens when somebody types the wrong thing into it. Eight defects
-        and one open question, of which three matter.
+        every field what happens when somebody types the wrong thing into it. Nine defects and one
+        feature the platform had been missing since it was written, of which three matter.
       </p>
       <p style="margin-top:12px">
-        The sharpest is not a missing control but an invisible one. The API refuses a
+        It also closed the one gap this pass recorded rather than fixed: an agent&rsquo;s
+        commission bank account can now be changed, through a flow the schema had been
+        waiting for since the beginning &mdash; step-up, the bank&rsquo;s own confirmation, a
+        second officer, a payout-in-flight block, and a message to the agent the moment a
+        change is requested.
+      </p>
+      <p style="margin-top:12px">
+        The sharpest defect is not a missing control but an invisible one. The API refuses a
         commission payout approved by the officer who requested it &mdash; separation of
         duties, correctly implemented and carefully worded. The portal ran that call outside
         any error handling, so the refusal became an uncaught promise and the screen did not
@@ -1849,25 +1856,32 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
       <article class="finding" style="border-left-color:var(--warn)">
         <div class="finding-head">
           <span class="finding-id">D-40</span>
-          <h3 class="finding-title" style="margin:0">An agent&rsquo;s commission bank account can never be changed</h3>
-          <span class="pill p-partial">Open &mdash; decision needed</span>
+          <h3 class="finding-title" style="margin:0">An agent&rsquo;s commission bank account could never be changed</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
-          <code>STEP_UP_ACTIONS</code> names seven actions that require a fresh one-time
-          code. Four are enforced by a route. Three &mdash;
-          <code>agent.bank_account.change</code>, <code>taxpayer.identity.change</code> and
-          <code>user.role.change</code> &mdash; are enforced nowhere, because the operations
-          they name do not exist.
+          Bank details were written once, at application time, and only their
+          <em>verification status</em> was ever updated afterwards. Nothing in the API, the
+          portal or the PWA could change an account number. Agents change banks and accounts
+          get closed, so an agent whose account was no longer live could not be paid, and no
+          officer could fix it &mdash; short of a manual database write, which is precisely
+          what the append-only audit design exists to prevent.
         </p>
         <dl>
-          <dt>Not a bypass, which is worth being precise about</dt>
-          <dd>No route performs these operations without the guard; no route performs them at all. Bank details are written once, at application time, and thereafter only their <em>verification status</em> is ever updated. Nothing in the API, the portal or the PWA changes an account number, a taxpayer&rsquo;s identity fields, or a user&rsquo;s role.</dd>
-          <dt>The operational gap</dt>
-          <dd>Agents change banks, accounts get closed, banks merge. An agent whose account is no longer live has no way to be paid, and no officer has a way to fix it &mdash; short of a manual database write, which is exactly what the append-only audit design exists to prevent. For a platform whose third inviolable rule governs how commission reaches an agent, that is a real hole in the lifecycle.</dd>
-          <dt>Why it is recorded rather than built</dt>
-          <dd>A bank-account change is the classic payout-fraud vector: change the destination, then trigger a payout. Done properly it needs the step-up code the constant already anticipates, re-verification against the bank, a maker-checker approval, and the old account kept on record. That is a feature with a security design, not a form fix, and the shape of it is PSIRS&rsquo;s call &mdash; particularly who may initiate one, and whether an agent may do it for themselves at all.</dd>
-          <dt>The list should not promise what is not there</dt>
-          <dd>Until those operations exist, <code>STEP_UP_ACTIONS</code> overstates the platform&rsquo;s controls to anyone reading it, and offers no protection to whoever adds the route later.</dd>
+          <dt>The schema had been waiting for it</dt>
+          <dd><code>bank_accounts.status</code> always allowed <code>SUPERSEDED</code>, <code>APPROVAL_TYPES</code> always listed <code>BANK_ACCOUNT_CHANGE</code>, and <code>STEP_UP_ACTIONS</code> always named <code>agent.bank_account.change</code>. The design anticipated the flow; nobody built it, and the constant promised a control that guarded nothing.</dd>
+          <dt>Five controls, because one would not do</dt>
+          <dd>Changing where money goes is the classic payout-fraud vector. A request needs a step-up code, which proves possession of the phone rather than a live session. The proposed account is created as a row and checked with the bank <em>before</em> an officer sees it, because the resolved account name is the one thing somebody redirecting a payout cannot supply. A second officer authorises it, never the one who asked. A payout in flight blocks the change at both the request and the execution step. And the agent is told, on the number already on their record, the moment a change is <em>requested</em> &mdash; so a change nobody asked for is noticed while it is still a proposal.</dd>
+          <dt>Deciding and doing are one transaction</dt>
+          <dd>Execution runs inside the approval decision rather than behind a route of its own. The alternative is how an approval comes to say a decision was carried out while the money still goes somewhere else. If execution refuses &mdash; an unconfirmed account, a payout still outstanding &mdash; the decision rolls back with it, and a test pins that: the approval is still <code>REQUESTED</code> afterwards.</dd>
+          <dt>&ldquo;Unavailable&rdquo; is not a soft yes</dt>
+          <dd>An account the bank has not confirmed cannot be approved, and no officer may wave it through; the execution path refuses it outright. A separate retry endpoint asks the bank again, so a proposal raised during an outage is not stuck between an approval that cannot be given and a refusal it does not deserve.</dd>
+          <dt>Two faults found in this work by its own tests</dt>
+          <dd>The listing endpoint was gated on <code>agent:read:all</code>, which supervisors do not hold &mdash; leaving the very officers who must authorise a change unable to see the queue of them. And the officer card was first mounted only on the agents screen, which a supervisor cannot reach at all. Both are the same fault this audit keeps finding, committed twice in one feature: a control built and then placed where the person who needs it cannot get to it. It now sits on the approvals screen, which is gated on <code>approval:review</code>.</dd>
+          <dt>Account numbers are masked everywhere</dt>
+          <dd>In every API response, in the approval payload, in the notification text and in the audit log. A test asserts the full number appears in none of them, rather than merely that a field is absent.</dd>
+          <dt>Still declared and still unbuilt</dt>
+          <dd><code>STEP_UP_ACTIONS</code> names two further operations that do not exist: <code>taxpayer.identity.change</code> and <code>user.role.change</code>. Neither is a bypass &mdash; no route performs them at all &mdash; but the list continues to overstate the platform&rsquo;s controls to anyone reading it, and offers nothing to whoever adds those routes later.</dd>
         </dl>
       </article>
 

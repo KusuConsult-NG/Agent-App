@@ -367,6 +367,130 @@ agentRouter.post(
   }),
 );
 
+/**
+ * The account somebody's commission is paid into.
+ *
+ * Deliberately reachable by the agent themselves. The alternative — officers
+ * only — means every closed account requires a trip to an office, and the
+ * predictable result is a note passed to whoever is nearest a portal, which
+ * is worse for everybody including the audit trail. What makes it safe is not
+ * who may ask but what has to be true before anything moves: a step-up code
+ * with the request, the bank's own confirmation of the new account, a second
+ * officer's approval, and a message to the number already on record so a
+ * change nobody asked for is noticed while it is still a proposal.
+ *
+ * `requireStepUp` proves possession of the phone rather than a live session,
+ * which is the point: a stolen laptop with a signed-in browser gets no
+ * further than this line.
+ */
+const bankChangeSchema = z.object({
+  bankName: z.string().trim().min(2, 'Name the bank').max(120),
+  bankCode: z
+    .string()
+    .trim()
+    .regex(/^\d{3,6}$/, 'Enter the bank code, which is 3 to 6 digits'),
+  accountName: z
+    .string()
+    .trim()
+    .min(2, 'Enter the name the account is held in')
+    .max(160),
+  accountNumber: z
+    .string()
+    .trim()
+    .regex(/^\d{10}$/, 'A Nigerian account number is 10 digits'),
+  reason: z
+    .string()
+    .trim()
+    .min(10, 'Say why the account is changing, in at least 10 characters'),
+});
+
+agentRouter.get(
+  '/me/bank/change',
+  requireActiveAgent({ requireDevice: false }),
+  asyncHandler(async (req, res) => {
+    const agentId = await ownAgentId(req);
+    res.json({ change: await agents.bankAccountChangeFor(pool, agentId) });
+  }),
+);
+
+agentRouter.post(
+  '/me/bank/change',
+  requireActiveAgent({ requireDevice: false }),
+  requireStepUp('agent.bank_account.change'),
+  validateBody(bankChangeSchema, async (req, res, data) => {
+    const agentId = await ownAgentId(req);
+    res.status(201).json(
+      await agents.requestBankAccountChange({
+        agentId,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        ...data,
+      }),
+    );
+  }),
+);
+
+/**
+ * An officer raising the change on an agent's behalf — for the agent who
+ * cannot reach the app at all, which is the case the self-service route
+ * cannot serve. Held to the same step-up, and still approved by somebody
+ * else: `approvals` refuses a decision from the officer who requested it, so
+ * one compromised officer account cannot both raise and authorise a change of
+ * destination.
+ */
+agentRouter.post(
+  '/:agentId/bank/change',
+  requirePermission('agent:manage'),
+  requireStepUp('agent.bank_account.change'),
+  validateBody(bankChangeSchema, async (req, res, data) => {
+    res.status(201).json(
+      await agents.requestBankAccountChange({
+        agentId: req.params.agentId,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        ...data,
+      }),
+    );
+  }),
+);
+
+/**
+ * Every proposal waiting on an officer.
+ *
+ * `approval:review` sits alongside `agent:read:all` here for a reason found
+ * by a failing test: supervisors hold the first and not the second, so gating
+ * on agent-reading alone left the very officers who must authorise a change
+ * unable to see the queue of changes awaiting them. A decision nobody can
+ * reach is not a control.
+ */
+agentRouter.get(
+  '/bank-changes',
+  requirePermission('agent:read:all', 'approval:review'),
+  asyncHandler(async (_req, res) => {
+    res.json({ changes: await agents.pendingBankAccountChanges(pool) });
+  }),
+);
+
+/**
+ * Ask the bank again about a proposal it could not confirm first time.
+ *
+ * Without this a proposal raised while the bank service was unreachable would
+ * sit unverifiable forever, and the only way out would be to refuse a change
+ * that may be perfectly good.
+ */
+agentRouter.post(
+  '/bank-changes/:approvalId/verify',
+  requirePermission('agent:manage'),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await agents.reverifyProposedAccount({
+        approvalId: req.params.approvalId,
+        actorId: req.auth!.userId,
+      }),
+    );
+  }),
+);
+
 agentRouter.post(
   '/me/devices',
   validateBody(
