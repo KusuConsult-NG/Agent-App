@@ -316,7 +316,7 @@ describe('The §40 guard, which had never fired', () => {
 // ===========================================================================
 describe('The seeded state programmes', () => {
   it('makes health insurance and the bursary additive, and leaves the rest gated', async () => {
-    const { seedReferenceData } = await import('../db/seed');
+    const { seedReferenceData } = await import('../db/seed.js');
     await pool.query('DELETE FROM programme_eligibility');
     await pool.query('DELETE FROM incentive_programmes');
     await seedReferenceData();
