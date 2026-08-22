@@ -63,7 +63,11 @@ export function CollectScreen({
 
   const [taxpayer, setTaxpayer] = useState<TaxpayerSummary | null>(null);
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState<TaxpayerSummary[]>([]);
+  // `null` until a search has actually been run, so that "nothing found" can
+  // be told apart from "nothing searched for yet". Starting at `[]` collapses
+  // the two, and the screen then has no way to say the taxpayer is not
+  // registered — which is the answer the agent most needs to hear.
+  const [results, setResults] = useState<TaxpayerSummary[] | null>(null);
   const [items, setItems] = useState<RevenueItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<RevenueItem | null>(null);
   const [baseAmount, setBaseAmount] = useState('');
@@ -202,7 +206,16 @@ export function CollectScreen({
 
         <ErrorAlert error={error} />
 
-        {results.length > 0 && (
+        {results && results.length === 0 && (
+          <div className="card card--flush">
+            <p className="empty">
+              No taxpayer matches that search. Register them below before taking a payment —
+              every payment must be attributed to a taxpayer.
+            </p>
+          </div>
+        )}
+
+        {results && results.length > 0 && (
           <div className="card card--flush">
             <ul className="list">
               {results.map((result) => (
