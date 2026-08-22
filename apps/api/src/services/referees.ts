@@ -325,6 +325,31 @@ export interface RefereeResponseInput {
  * they know the applicant has not vouched for anyone. The referee then goes
  * through their own KYC, at the level government has configured.
  */
+/**
+ * Reject a token that has already been used or has run out.
+ *
+ * Both halves of a referee's answer — confirming and declining — are
+ * unauthenticated and addressed only by a token that lives in an SMS or an
+ * email for as long as the referee keeps the message. Only one of them
+ * checked. Declining wrote REJECTED over whatever the invitation had already
+ * said, including a confirmation an officer had since reviewed and cleared,
+ * which let a forwarded link pull a working agent's clearance back down.
+ *
+ * Shared so the two answers cannot drift apart again.
+ */
+function assertInvitationOpen(invitation: { status: string; expires_at: Date }): void {
+  if (invitation.status === 'RESPONDED') {
+    throw conflict('INVITATION_ALREADY_USED', 'You have already responded to this request.');
+  }
+  if (invitation.expires_at.getTime() < Date.now()) {
+    throw new AppError({
+      statusCode: 410,
+      code: 'INVITATION_EXPIRED',
+      message: 'This verification request has expired.',
+    });
+  }
+}
+
 export async function submitRefereeResponse(params: {
   token: string;
   input: RefereeResponseInput;
@@ -364,16 +389,7 @@ export async function submitRefereeResponse(params: {
     );
 
     if (!invitation) throw notFound('That verification request');
-    if (invitation.status === 'RESPONDED') {
-      throw conflict('INVITATION_ALREADY_USED', 'You have already responded to this request.');
-    }
-    if (invitation.expires_at.getTime() < Date.now()) {
-      throw new AppError({
-        statusCode: 410,
-        code: 'INVITATION_EXPIRED',
-        message: 'This verification request has expired.',
-      });
-    }
+    assertInvitationOpen(invitation);
 
     await client.query(
       `UPDATE referees
@@ -514,14 +530,23 @@ export async function declineInvitation(params: {
   reason?: string;
 }): Promise<{ message: string }> {
   return withTransaction(async (client) => {
-    const invitation = await queryOne<{ id: string; referee_id: string; agent_id: string }>(
+    const invitation = await queryOne<{
+      id: string;
+      referee_id: string;
+      agent_id: string;
+      status: string;
+      expires_at: Date;
+    }>(
       client,
-      `SELECT i.id, i.referee_id, r.agent_id FROM referee_invitations i
+      `SELECT i.id, i.referee_id, r.agent_id, i.status, i.expires_at
+         FROM referee_invitations i
          JOIN referees r ON r.id = i.referee_id
-        WHERE i.invitation_token_hash = $1`,
+        WHERE i.invitation_token_hash = $1
+        FOR UPDATE OF i`,
       [sha256(params.token)],
     );
     if (!invitation) throw notFound('That verification request');
+    assertInvitationOpen(invitation);
 
     await client.query(
       `UPDATE referees SET status = 'REJECTED', responded_at = now(), rejected_at = now(),
