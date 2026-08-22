@@ -88,6 +88,7 @@ describe('each role gets a distinct portal', () => {
       'Revenue catalogue',
       'Social incentives',
       'Groups & cooperatives',
+      'Taxpayer corrections',
     ]);
   });
 
@@ -148,6 +149,8 @@ describe('each role gets a distinct portal', () => {
       'Revenue catalogue',
       'Social incentives',
       'Groups & cooperatives',
+      'Taxpayer corrections',
+      'Officer access',
     ]);
   });
 

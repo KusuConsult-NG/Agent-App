@@ -196,6 +196,17 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
       // permission put a portal item in front of field agents, which the menu
       // tests object to for the right reason.
       { path: '/groups', label: 'Groups & cooperatives', permission: 'group:manage' },
+      // taxpayer:correct, not taxpayer:update. Agents hold the latter for the
+      // records they maintain in the field, and this is a portal for officers —
+      // gating on it put a menu item in an agent's portal that the API would
+      // have refused. The screen hides the identity-document fields from
+      // anyone without taxpayer:manage rather than the menu hiding it all.
+      {
+        path: '/taxpayer-records',
+        label: 'Taxpayer corrections',
+        permission: 'taxpayer:correct',
+      },
+      { path: '/users', label: 'Officer access', permission: 'user:manage' },
     ],
   },
 ];

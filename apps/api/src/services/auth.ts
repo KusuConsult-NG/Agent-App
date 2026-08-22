@@ -9,6 +9,7 @@
 import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
 import { permissionsForRole } from '@psirs/shared';
+import type { Db } from '../db/pool';
 import { pool, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import {
@@ -18,7 +19,7 @@ import {
   sha256,
   verifyPassword,
 } from '../lib/crypto';
-import { AppError, forbidden, unauthorised, conflict, badRequest } from '../lib/errors';
+import { AppError, forbidden, unauthorised, conflict, badRequest, notFound } from '../lib/errors';
 import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
 import { queueNotification } from './notifications';
@@ -555,8 +556,22 @@ export async function logout(params: { sessionId: string; userId: string }): Pro
 }
 
 /** Revoke every session for a user — used on suspension and by "sign out everywhere". */
-export async function revokeAllSessions(userId: string, reason: string): Promise<number> {
-  const result = await pool.query(
+/**
+ * End every live session for a user.
+ *
+ * `db` defaults to the pool so existing callers are unchanged, and is taken as
+ * a parameter so a caller that is already inside a transaction can revoke in
+ * it. A role change needs exactly that: the access token carries the role, so
+ * an officer demoted in one transaction and revoked in another keeps the
+ * permissions of the old role for as long as their token lives — and if the
+ * revocation fails after the demotion commits, keeps them indefinitely.
+ */
+export async function revokeAllSessions(
+  userId: string,
+  reason: string,
+  db: Db = pool,
+): Promise<number> {
+  const result = await db.query(
     `UPDATE sessions SET revoked_at = now(), revoked_reason = $2
       WHERE user_id = $1 AND revoked_at IS NULL`,
     [userId, reason],
@@ -689,4 +704,116 @@ export async function grantStepUp(params: {
   });
 
   return { expiresAt };
+}
+
+// ---------------------------------------------------------------------------
+// Changing what a government user is allowed to do
+// ---------------------------------------------------------------------------
+//
+// `STEP_UP_ACTIONS` has always named `user.role.change`, and nothing performed
+// it. Roles were set when a user was seeded and never moved, so an officer
+// promoted, moved between offices, or found to be doing something they should
+// not could only be changed by an UPDATE against the database.
+//
+// The risk is self-escalation, and it is guarded three ways.
+//
+// Nobody changes their own role. That is the whole attack in one line: an
+// account with `user:manage` that could promote itself needs no other
+// weakness to become anything it likes.
+//
+// The role is in the access token, so a demotion that did not end the user's
+// sessions would leave them holding the old permissions until the token
+// expired — which is precisely the window that matters when somebody is being
+// demoted for cause. Sessions are revoked in the same transaction as the
+// change, so there is no state in which one has happened and the other has
+// not.
+//
+// And the user is told, because a change to what somebody may do is a change
+// they are entitled to know about, and because an unexpected one is how they
+// find out an administrator account has been taken.
+
+export async function changeUserRole(params: {
+  targetUserId: string;
+  newRole: Role;
+  actorId: string;
+  actorRole: string;
+  reason: string;
+}): Promise<{ previousRole: string; newRole: string; sessionsEnded: number; message: string }> {
+  if (params.targetUserId === params.actorId) {
+    throw forbidden(
+      'You cannot change your own role. Another administrator has to make this change.',
+    );
+  }
+
+  return withTransaction(async (client) => {
+    const target = await queryOne<{
+      id: string;
+      full_name: string;
+      role: string;
+      status: string;
+    }>(client, 'SELECT id, full_name, role, status FROM users WHERE id = $1 FOR UPDATE', [
+      params.targetUserId,
+    ]);
+    if (!target) throw notFound('That user');
+
+    if (target.role === 'agent' || params.newRole === 'agent') {
+      // An agent's permissions follow their clearance, not an administrator's
+      // choice: activation, suspension and device approval already decide what
+      // they may do. Letting a role change cross that boundary would put an
+      // uncleared person into the field, or take a cleared one out of the
+      // pipeline that is meant to govern them.
+      throw forbidden(
+        'Agent access is set by the clearance pipeline, not by changing a role. ' +
+          'Use activation or suspension instead.',
+      );
+    }
+
+    if (target.role === params.newRole) {
+      throw badRequest(`${target.full_name} already has the ${params.newRole} role.`);
+    }
+
+    await client.query('UPDATE users SET role = $2 WHERE id = $1', [
+      params.targetUserId,
+      params.newRole,
+    ]);
+
+    // In the same transaction as the change: the role is carried in the access
+    // token, so a demotion whose revocation happened separately would leave a
+    // window in which the old permissions still work.
+    const sessionsEnded = await revokeAllSessions(
+      params.targetUserId,
+      `Role changed from ${target.role} to ${params.newRole}`,
+      client,
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'user.role_changed',
+      entityType: 'user',
+      entityId: params.targetUserId,
+      oldValue: { role: target.role },
+      newValue: { role: params.newRole, sessionsEnded },
+      reason: params.reason,
+    });
+
+    await queueNotification(client, {
+      event: 'USER_ROLE_CHANGED',
+      userId: params.targetUserId,
+      variables: { previousRole: target.role, newRole: params.newRole },
+      entityType: 'user',
+      entityId: params.targetUserId,
+    });
+
+    return {
+      previousRole: target.role,
+      newRole: params.newRole,
+      sessionsEnded,
+      message:
+        `${target.full_name} is now ${params.newRole.replace(/_/g, ' ')}. ` +
+        (sessionsEnded > 0
+          ? `${sessionsEnded} open session${sessionsEnded === 1 ? '' : 's'} ended, so they must sign in again.`
+          : 'They had no open sessions.'),
+    };
+  });
 }

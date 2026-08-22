@@ -143,6 +143,53 @@ usable login; government users are provisioned by an administrator.
 | `POST` | `/agents/:agentId/bank/change` | `agent:manage` — **step-up**; raised on an agent's behalf |
 | `GET` | `/agents/bank-changes` | `agent:read:all` or `approval:review` |
 | `POST` | `/agents/bank-changes/:approvalId/verify` | `agent:manage` — ask the bank again |
+
+### Step-up actions, and the routes that enforce them
+
+`STEP_UP_ACTIONS` names every operation that needs a fresh one-time code as
+well as the permission. All seven are now enforced by a route:
+
+| Action | Route | Also requires |
+|---|---|---|
+| `commission.payout.request` | `POST /agents/me/commission/payout` | own agent record |
+| `agent.bank_account.change` | `POST /agents/me/bank/change` · `/agents/:agentId/bank/change` | `agent:manage` for the officer-raised form |
+| `agent.suspend` | `POST /agents/:id/suspend` | `agent:manage` |
+| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:manage` |
+| `payment.reversal.approve` | `POST /government/payments/:id/reverse` | `payment:reverse` |
+| `taxpayer.identity.change` | `POST /taxpayers/:id/identity` | `taxpayer:correct`; the identity *document* additionally needs `taxpayer:manage` |
+| `user.role.change` | `POST /government/users/:id/role` | `user:manage`; never your own role |
+
+#### Correcting a taxpayer record
+
+`POST /taxpayers/:id/identity` alters only the fields supplied, and refuses a
+request that would change nothing. Two tiers, because two different things are
+being changed:
+
+- **What the record says about a person** — names, date of birth, gender.
+  `taxpayer:correct`, which revenue officers and administrators hold.
+- **Which person the record is about** — `identityType` and `identityNumber`.
+  Additionally `taxpayer:manage`, so administrators only. The identity hash is
+  what duplicate detection blocks on, and a change is refused if the new number
+  already belongs to another active taxpayer.
+
+Agents hold `taxpayer:update` but not `taxpayer:correct`: an agent who notices
+a misspelling raises it through support, so that somebody who did not capture
+the record decides. The identity number is never written to the audit log —
+the masked form is. The taxpayer is sent a message saying their record was
+corrected.
+
+#### Changing an officer's role
+
+`POST /government/users/:id/role` sets the role and **ends every session the
+user holds, in the same transaction**. The role travels in the access token, so
+a demotion whose revocation happened separately would leave the old permissions
+working until the token expired — precisely the window that matters when
+somebody is demoted for cause. `GET /government/users` lists the officers whose
+access can be changed.
+
+Nobody may change their own role, and nobody may be moved in or out of `agent`:
+agent access follows the clearance pipeline, and activation or suspension is
+how it changes.
 | `POST` | `/agents/me/devices` | own, requires government approval first |
 | `GET` | `/agents/app-version` | version gate (Addendum §43) |
 | `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |

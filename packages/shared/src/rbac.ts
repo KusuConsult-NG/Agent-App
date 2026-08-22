@@ -35,6 +35,17 @@ export const PERMISSIONS = [
   'taxpayer:create',
   'taxpayer:update',
   'taxpayer:manage',
+  /**
+   * Correcting what a taxpayer record says about somebody.
+   *
+   * Separate from `taxpayer:update`, which agents hold so they can maintain
+   * the records they register in the field. A correction is decided by
+   * somebody who did not capture the record — an agent who notices a
+   * misspelling raises it through support — so this is an officer permission
+   * and the distinction is enforced by the permission rather than by a check
+   * inside the handler.
+   */
+  'taxpayer:correct',
   /*
    * Cancelling an obligation is not the same authority as correcting a record.
    * `taxpayer:update` covers fixing a phone number during onboarding and is
@@ -206,6 +217,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'approval:authorise',
   ],
   revenue_officer: [
+    'taxpayer:correct',
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:update',
@@ -282,6 +294,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'support:read:all',
   ],
   admin: [
+    'taxpayer:correct',
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:manage',

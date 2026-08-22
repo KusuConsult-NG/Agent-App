@@ -2,9 +2,14 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTORS } from '@psirs/shared';
+import { ECONOMIC_SECTORS, roleHasPermission } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
-import { authenticate, requireActiveAgent, requirePermission } from '../middleware/auth';
+import {
+  authenticate,
+  requireActiveAgent,
+  requirePermission,
+  requireStepUp,
+} from '../middleware/auth';
 import { idempotent } from '../middleware/idempotency';
 import {
   asyncHandler,
@@ -311,6 +316,76 @@ taxpayerRouter.get(
   asyncHandler(async (req, res) => {
     res.json(await obligations.getObligationsForTaxpayer(pool, req.params.id));
   }),
+);
+
+/**
+ * Correcting who a taxpayer record says somebody is.
+ *
+ * Two tiers, because two different things are being changed. A name or a date
+ * of birth corrects what the record says about a person, and is within a
+ * revenue officer's ordinary work. The identity document decides *which*
+ * person the record is about — the identity hash is what duplicate detection
+ * blocks on — so it needs `taxpayer:manage`, which only an administrator has.
+ *
+ * Agents hold neither. `taxpayer:correct` exists precisely so that the
+ * distinction lives in the permission rather than in a role check inside the
+ * handler: agents keep `taxpayer:update` for the records they maintain in the
+ * field, and an agent who notices a misspelling raises it through support,
+ * where somebody who did not capture the record decides. An agent able to
+ * rewrite the identity of a taxpayer they registered could point a compliance
+ * history, and the benefits that follow it, at another person.
+ */
+taxpayerRouter.post(
+  '/:id/identity',
+  requirePermission('taxpayer:correct'),
+  requireStepUp('taxpayer.identity.change'),
+  validateBody(
+    z
+      .object({
+        firstName: z.string().trim().min(2).max(80).optional(),
+        middleName: z.string().trim().max(80).optional(),
+        lastName: z.string().trim().min(2).max(80).optional(),
+        businessName: z.string().trim().min(2).max(200).optional(),
+        dateOfBirth: birthDateSchema.optional(),
+        gender: z.enum(['MALE', 'FEMALE', 'UNSPECIFIED']).optional(),
+        identityType: z.enum(['NIN', 'BVN', 'PASSPORT', 'DRIVERS_LICENCE', 'VOTERS_CARD', 'OTHER']).optional(),
+        identityNumber: z.string().trim().min(5).max(30).optional(),
+        reason: z
+          .string()
+          .trim()
+          .min(10, 'Say what is being corrected and why, in at least 10 characters'),
+      })
+      .refine(
+        (data) => Object.keys(data).some((key) => key !== 'reason'),
+        { message: 'Give at least one detail to correct.', path: ['reason'] },
+      )
+      .refine((data) => !(data.identityNumber !== undefined && data.identityType === undefined), {
+        message: 'Name the type of identification when changing the number.',
+        path: ['identityType'],
+      }),
+    async (req, res, data) => {
+      if (
+        taxpayers.changesIdentityDocument(data) &&
+        !roleHasPermission(req.auth!.role, 'taxpayer:manage')
+      ) {
+        throw forbidden(
+          'Changing which identification document a record is held under needs an administrator. ' +
+            'A name or date of birth can be corrected here; the document cannot.',
+        );
+      }
+
+      const { reason, ...fields } = data;
+      res.json(
+        await taxpayers.changeTaxpayerIdentity({
+          taxpayerId: req.params.id,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          reason,
+          ...fields,
+        }),
+      );
+    },
+  ),
 );
 
 taxpayerRouter.put(

@@ -421,6 +421,10 @@ const NOTIFICATION_TEMPLATES = [
   { code: 'AGENT_BANK_CHANGE_REQUESTED_SMS', event: 'AGENT_BANK_CHANGE_REQUESTED', channel: 'SMS', body: 'PSIRS: A request was made to pay your commission into {{bank}} {{account}}. Nothing has changed yet. If this was not you, contact your supervisor now.' },
   { code: 'AGENT_BANK_CHANGE_APPLIED_SMS', event: 'AGENT_BANK_CHANGE_APPLIED', channel: 'SMS', body: 'PSIRS: Your commission will now be paid into {{bank}} {{account}}. If this was not you, contact your supervisor now.' },
   { code: 'AGENT_BANK_CHANGE_REFUSED_SMS', event: 'AGENT_BANK_CHANGE_REFUSED', channel: 'SMS', body: 'PSIRS: The request to change your commission account was not approved. Reason: {{reason}}. Your existing account is unchanged.' },
+  // Told on the number already on the record, so a correction somebody else
+  // asked for is noticed by the person it was made to.
+  { code: 'TAXPAYER_RECORD_CORRECTED_SMS', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', body: 'PSIRS: {{fields}} on your taxpayer record has been corrected by a revenue officer. If you did not ask for this, visit any PSIRS office.' },
+  { code: 'USER_ROLE_CHANGED_SMS', event: 'USER_ROLE_CHANGED', channel: 'SMS', body: 'PSIRS: Your access has been changed from {{previousRole}} to {{newRole}}. You have been signed out and must sign in again. If this was not expected, contact your administrator now.' },
 ];
 
 const AGENT_AGREEMENT = `PLATEAU STATE INTERNAL REVENUE SERVICE

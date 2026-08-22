@@ -21,6 +21,8 @@ import { matchRoute, useRoute } from './router';
 import { LoginScreen } from './screens/Login';
 import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
 import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agents';
+import { UserAccessScreen } from './screens/UserAccess';
+import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
 import { PerformanceScreen } from './screens/Performance';
 import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
@@ -217,6 +219,8 @@ function Routes({
   if (matchRoute(route, '/support')) return <SupportScreen navigate={navigate} />;
   if (ticketMatch) return <TicketDetailScreen ticketId={ticketMatch.id!} navigate={navigate} />;
   if (matchRoute(route, '/audit')) return <AuditScreen />;
+  if (matchRoute(route, '/users')) return <UserAccessScreen user={user} />;
+  if (matchRoute(route, '/taxpayer-records')) return <TaxpayerRecordsScreen user={user} />;
   if (matchRoute(route, '/catalogue')) return <CatalogueScreen user={user} />;
   if (matchRoute(route, '/programmes')) return <ProgrammesScreen />;
   if (matchRoute(route, '/groups')) return <GroupsScreen navigate={navigate} />;

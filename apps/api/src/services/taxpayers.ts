@@ -17,6 +17,7 @@ import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
   taxpayerType: TaxpayerType;
@@ -825,4 +826,218 @@ export async function getTaxpayerProfile(
         }
       : {}),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Correcting who a taxpayer record says somebody is
+// ---------------------------------------------------------------------------
+//
+// A record captured in a market by an agent working from what somebody told
+// them will sometimes be wrong: a misspelt surname, a date of birth a year
+// out, an identity document replaced after it was lost. There was no way to
+// correct any of it. The record was written at registration and the only
+// fields that ever moved afterwards were the TIN and the compliance figures.
+//
+// `STEP_UP_ACTIONS` has always named `taxpayer.identity.change`, which is the
+// shape of the answer: a correction is an ordinary act of administration, but
+// it is not one to be made from a session somebody left open.
+//
+// TWO TIERS, BECAUSE TWO DIFFERENT THINGS ARE BEING CHANGED. Correcting a
+// name or a date of birth fixes what the record says about a person. Changing
+// the identity document changes *which person the record is about*: the
+// identity hash is what duplicate detection blocks on, scoring a full 100
+// where a shared phone reaches 85. So names and dates are within a revenue
+// officer's ordinary work, and the identity document is not.
+//
+// Agents are excluded from both. An agent who notices a misspelling raises it
+// through support, where somebody who did not capture the record decides. An
+// agent who can rewrite the identity of a taxpayer they registered can point
+// a compliance history, and the benefits that follow from it, at a different
+// person.
+
+export interface IdentityChangeInput {
+  taxpayerId: string;
+  actorId: string;
+  actorRole: string;
+  reason: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  businessName?: string;
+  dateOfBirth?: string;
+  gender?: 'MALE' | 'FEMALE' | 'UNSPECIFIED';
+  identityType?: string;
+  identityNumber?: string;
+}
+
+/** The fields that say which person a record is about, rather than what it says about them. */
+export function changesIdentityDocument(input: {
+  identityType?: string;
+  identityNumber?: string;
+}): boolean {
+  return input.identityType !== undefined || input.identityNumber !== undefined;
+}
+
+export async function changeTaxpayerIdentity(input: IdentityChangeInput): Promise<{
+  changed: string[];
+  message: string;
+}> {
+  return withTransaction(async (client) => {
+    const current = await queryOne<{
+      id: string;
+      taxpayer_type: string;
+      first_name: string | null;
+      middle_name: string | null;
+      last_name: string | null;
+      business_name: string | null;
+      date_of_birth: Date | null;
+      gender: string | null;
+      identity_type: string | null;
+      identity_hash: string | null;
+      identity_masked: string | null;
+      phone: string;
+      status: string;
+    }>(
+      client,
+      `SELECT id, taxpayer_type, first_name, middle_name, last_name, business_name,
+              date_of_birth, gender, identity_type, identity_hash, identity_masked, phone, status
+         FROM taxpayers WHERE id = $1 FOR UPDATE`,
+      [input.taxpayerId],
+    );
+    if (!current) throw notFound('That taxpayer');
+    if (current.status !== 'ACTIVE') {
+      throw conflict(
+        'TAXPAYER_NOT_ACTIVE',
+        `This taxpayer record is ${current.status.toLowerCase()}, so it cannot be corrected.`,
+      );
+    }
+
+    const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
+    const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
+
+    // The identity hash is what duplicate detection blocks on, so a change to
+    // it must not walk this record onto somebody else's identity. Checked
+    // before anything is written, and inside the transaction so a concurrent
+    // registration cannot slip in behind it.
+    if (identityHash && identityHash !== current.identity_hash) {
+      const clash = await queryOne<{ id: string; tin: string | null }>(
+        client,
+        `SELECT id, tin FROM taxpayers
+          WHERE identity_hash = $1 AND id <> $2 AND status = 'ACTIVE'`,
+        [identityHash, input.taxpayerId],
+      );
+      if (clash) {
+        throw conflict(
+          'IDENTITY_ALREADY_REGISTERED',
+          'Another active taxpayer is already registered with that identification number. ' +
+            'If the same person has been registered twice, the duplicate has to be resolved ' +
+            'rather than the number moved.',
+        );
+      }
+    }
+
+    const previousDob = current.date_of_birth?.toISOString().slice(0, 10) ?? null;
+
+    /** Only what genuinely differs, so a no-op correction is refused rather than audited. */
+    const changed: string[] = [];
+    const differs = (field: string, before: unknown, after: unknown) => {
+      if (after === undefined) return false;
+      if ((before ?? null) === (after ?? null)) return false;
+      changed.push(field);
+      return true;
+    };
+
+    differs('firstName', current.first_name, input.firstName);
+    differs('middleName', current.middle_name, input.middleName);
+    differs('lastName', current.last_name, input.lastName);
+    differs('businessName', current.business_name, input.businessName);
+    differs('dateOfBirth', previousDob, input.dateOfBirth);
+    differs('gender', current.gender, input.gender);
+    differs('identityType', current.identity_type, input.identityType);
+    if (identityHash && identityHash !== current.identity_hash) changed.push('identityNumber');
+
+    if (changed.length === 0) {
+      throw badRequest(
+        'Nothing on this record would change. Check the values against what is already held.',
+      );
+    }
+
+    await client.query(
+      `UPDATE taxpayers
+          SET first_name    = COALESCE($2, first_name),
+              middle_name   = COALESCE($3, middle_name),
+              last_name     = COALESCE($4, last_name),
+              business_name = COALESCE($5, business_name),
+              date_of_birth = COALESCE($6::date, date_of_birth),
+              gender        = COALESCE($7, gender),
+              identity_type = COALESCE($8, identity_type),
+              identity_hash = COALESCE($9, identity_hash),
+              identity_masked = COALESCE($10, identity_masked)
+        WHERE id = $1`,
+      [
+        input.taxpayerId,
+        input.firstName ?? null,
+        input.middleName ?? null,
+        input.lastName ?? null,
+        input.businessName ?? null,
+        input.dateOfBirth ?? null,
+        input.gender ?? null,
+        input.identityType ?? null,
+        identityHash,
+        identityMasked,
+      ],
+    );
+
+    // The identity number itself is never written to the audit log — the
+    // masked form is, which is enough to see that the document on file
+    // changed and which one it now is, without putting the number in a table
+    // more people can read than can read the taxpayer record.
+    await recordAudit(client, {
+      actorId: input.actorId,
+      actorRole: input.actorRole,
+      action: 'taxpayer.identity_changed',
+      entityType: 'taxpayer',
+      entityId: input.taxpayerId,
+      oldValue: {
+        firstName: current.first_name,
+        middleName: current.middle_name,
+        lastName: current.last_name,
+        businessName: current.business_name,
+        dateOfBirth: previousDob,
+        gender: current.gender,
+        identityType: current.identity_type,
+        identityMasked: current.identity_masked,
+      },
+      newValue: {
+        firstName: input.firstName ?? current.first_name,
+        middleName: input.middleName ?? current.middle_name,
+        lastName: input.lastName ?? current.last_name,
+        businessName: input.businessName ?? current.business_name,
+        dateOfBirth: input.dateOfBirth ?? previousDob,
+        gender: input.gender ?? current.gender,
+        identityType: input.identityType ?? current.identity_type,
+        identityMasked: identityMasked ?? current.identity_masked,
+        changed,
+      },
+      reason: input.reason,
+    });
+
+    // Told on the number already on the record. A correction somebody else
+    // asked for is then noticed by the person it was made to.
+    await queueNotification(client, {
+      event: 'TAXPAYER_RECORD_CORRECTED',
+      taxpayerId: input.taxpayerId,
+      variables: { fields: changed.length === 1 ? 'one detail' : `${changed.length} details` },
+      entityType: 'taxpayer',
+      entityId: input.taxpayerId,
+    });
+
+    return {
+      changed,
+      message:
+        changed.length === 1
+          ? 'One detail on this taxpayer record has been corrected. The change is on the audit trail.'
+          : `${changed.length} details on this taxpayer record have been corrected. The change is on the audit trail.`,
+    };
+  });
 }

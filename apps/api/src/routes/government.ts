@@ -18,6 +18,7 @@ import {
 } from '../middleware/validate';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { recordAudit, verifyAuditChain } from '../services/audit';
+import * as auth from '../services/auth';
 import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
@@ -453,6 +454,77 @@ governmentRouter.post(
       });
 
       res.json(result);
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Government users
+// ---------------------------------------------------------------------------
+
+/**
+ * The officers whose access an administrator can change.
+ *
+ * Agents are excluded: their access follows the clearance pipeline, and
+ * listing them here would invite somebody to change by role what activation
+ * and suspension are meant to decide.
+ */
+governmentRouter.get(
+  '/users',
+  requirePermission('user:manage'),
+  asyncHandler(async (req, res) => {
+    const users = await query<{
+      id: string;
+      full_name: string;
+      phone: string;
+      role: string;
+      status: string;
+      last_login_at: Date | null;
+    }>(
+      pool,
+      `SELECT id, full_name, phone, role, status, last_login_at
+         FROM users WHERE role <> 'agent' ORDER BY full_name`,
+    );
+    res.json({
+      users: users.map((user) => ({
+        ...user,
+        // So a screen can grey out the one row that can never be changed here
+        // rather than offering a control that always refuses.
+        isSelf: user.id === req.auth!.userId,
+      })),
+    });
+  }),
+);
+
+/**
+ * Change what an officer is allowed to do.
+ *
+ * Step-up as well as `user:manage`, because this is the action that turns one
+ * compromised administrator session into any level of access at all. Nobody
+ * may change their own role; the service refuses it before anything else.
+ */
+governmentRouter.post(
+  '/users/:id/role',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      role: z.enum(['admin', 'supervisor', 'revenue_officer', 'finance_officer', 'auditor']),
+      reason: z
+        .string()
+        .trim()
+        .min(10, 'Say why this access is changing, in at least 10 characters'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await auth.changeUserRole({
+          targetUserId: req.params.id,
+          newRole: data.role,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          reason: data.reason,
+        }),
+      );
     },
   ),
 );

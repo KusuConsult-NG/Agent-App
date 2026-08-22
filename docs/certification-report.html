@@ -576,8 +576,8 @@
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
-        every field what happens when somebody types the wrong thing into it. Twelve defects and one
-        feature the platform had been missing since it was written, of which four matter.
+        every field what happens when somebody types the wrong thing into it. Twelve defects and three
+        features the platform had been missing since it was written, of which four matter.
       </p>
       <p style="margin-top:12px">
         It also closed the one gap this pass recorded rather than fixed: an agent&rsquo;s
@@ -1806,6 +1806,33 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         </dl>
       </article>
 
+      <article class="finding" style="border-left-color:var(--warn)">
+        <div class="finding-head">
+          <span class="finding-id">D-44</span>
+          <h3 class="finding-title" style="margin:0">The last two step-up actions named operations that did not exist</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>STEP_UP_ACTIONS</code> declared seven actions requiring a fresh one-time code.
+          Four were enforced by a route; the bank account change closed a fifth. These are the
+          remaining two, and each carries a different risk.
+        </p>
+        <dl>
+          <dt>A taxpayer&rsquo;s record could never be corrected</dt>
+          <dd>Records are captured in markets, by agents, from what somebody told them &mdash; and surnames get misspelt, dates of birth are a year out, documents are replaced after being lost. Nothing in the platform could correct any of it: the record was written at registration and only the TIN and the compliance figures ever moved. The remedy was an UPDATE against the database, which is what the append-only audit design exists to prevent.</dd>
+          <dt>Two tiers, because two different things are being changed</dt>
+          <dd>Correcting a name fixes what the record says about a person. Changing the identification document changes <em>which person the record is about</em>: the identity hash is what duplicate detection blocks on, scoring the full 100 where a shared phone reaches 85. So names and dates are within a revenue officer&rsquo;s ordinary work and the document is administrator-only, and the change is refused outright if the new number already belongs to another active taxpayer &mdash; a record cannot be walked onto somebody else&rsquo;s identity.</dd>
+          <dt>A new permission rather than a role check</dt>
+          <dd>Agents hold <code>taxpayer:update</code> for the records they maintain in the field, so gating the correction on it would have let an agent rewrite the identity of a taxpayer they registered themselves. The first attempt refused agents with an <code>if</code> inside the handler; that works, but it also put a &ldquo;Taxpayer corrections&rdquo; item in an agent&rsquo;s portal menu leading to a guaranteed 403 &mdash; caught by the existing per-role menu test, which is exactly what that test is for. <code>taxpayer:correct</code> now carries the distinction, so the door and the handler agree.</dd>
+          <dt>A role change that did not end sessions would not be a demotion</dt>
+          <dd>The role travels in the access token. An officer demoted in one transaction and revoked in another keeps the permissions of the old role until the token expires &mdash; precisely the window that matters when somebody is being demoted for cause &mdash; and keeps them indefinitely if the revocation fails after the demotion commits. Sessions are ended in the same transaction as the change. Proved by disabling the revocation and watching the test fail: with it removed, the demoted administrator&rsquo;s existing token still opened an administrator-only endpoint.</dd>
+          <dt>Nobody changes their own role</dt>
+          <dd>That is the whole attack in one line: an account holding <code>user:manage</code> that could promote itself needs no other weakness. Refused before anything else is read, and the screen greys the caller&rsquo;s own row rather than hiding it, so an administrator looking for themselves finds out why instead of wondering where the row went.</dd>
+          <dt>And nobody crosses into the agent role</dt>
+          <dd>Agent access follows the clearance pipeline &mdash; KYC, referees, training, bank verification, a registered device. A role change that could set somebody to <code>agent</code> would put an uncleared person in the field; one that could set an agent to something else would take a cleared person out of the pipeline meant to govern them.</dd>
+        </dl>
+      </article>
+
       <article class="finding" style="border-left-color:var(--fail)">
         <div class="finding-head">
           <span class="finding-id">D-41</span>
@@ -1951,8 +1978,8 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The listing endpoint was gated on <code>agent:read:all</code>, which supervisors do not hold &mdash; leaving the very officers who must authorise a change unable to see the queue of them. And the officer card was first mounted only on the agents screen, which a supervisor cannot reach at all. Both are the same fault this audit keeps finding, committed twice in one feature: a control built and then placed where the person who needs it cannot get to it. It now sits on the approvals screen, which is gated on <code>approval:review</code>.</dd>
           <dt>Account numbers are masked everywhere</dt>
           <dd>In every API response, in the approval payload, in the notification text and in the audit log. A test asserts the full number appears in none of them, rather than merely that a field is absent.</dd>
-          <dt>Still declared and still unbuilt</dt>
-          <dd><code>STEP_UP_ACTIONS</code> names two further operations that do not exist: <code>taxpayer.identity.change</code> and <code>user.role.change</code>. Neither is a bypass &mdash; no route performs them at all &mdash; but the list continues to overstate the platform&rsquo;s controls to anyone reading it, and offers nothing to whoever adds those routes later.</dd>
+          <dt>The other two have since been built</dt>
+          <dd><code>taxpayer.identity.change</code> and <code>user.role.change</code> named operations that did not exist when this was written. Both now do (D-44), so all seven declared step-up actions are enforced by a route and the constant no longer promises a control that guards nothing.</dd>
         </dl>
       </article>
 
