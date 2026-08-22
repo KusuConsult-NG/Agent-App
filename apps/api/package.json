@@ -12,7 +12,8 @@
     "seed": "tsx src/db/seed.ts",
     "test": "tsx --test --test-concurrency=1 src/tests/*.test.ts",
     "pretest": "npm run build --workspace @psirs/shared",
-    "verify:integrations": "tsx src/db/verify-integrations.ts"
+    "verify:integrations": "tsx src/db/verify-integrations.ts",
+    "load-test": "tsx src/db/load-test.ts"
   },
   "dependencies": {
     "@psirs/shared": "*",
