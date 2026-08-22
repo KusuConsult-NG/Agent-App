@@ -127,6 +127,34 @@ vehicleRouter.post(
   '/renewals/:renewalId/document',
   requirePermission('vehicle:renew', 'vehicle:read:all'),
   asyncHandler(async (req, res) => {
+    /*
+     * An agent gets their own renewals.
+     *
+     * This answers with the document's verification code and a signed download
+     * URL, and checked only that the renewal had been paid for. Any active
+     * agent could post another agent's renewal id and receive that motorist's
+     * document.
+     *
+     * `vehicle:read:all` cannot do the narrowing: every role holds it, agents
+     * included and deliberately, because an agent serving a motorist who has
+     * walked up has to be able to look their vehicle up. Looking up a vehicle
+     * and being handed the document for someone else's renewal are different
+     * acts. So the narrowing is on the agent context — an officer, who has
+     * none, is unaffected.
+     *
+     * `notFound` rather than `forbidden`, as elsewhere: whether a particular
+     * renewal exists is the motorist's business, not a stranger's.
+     */
+    const callerAgent = req.agent?.agentId ?? req.auth?.agentId ?? null;
+    if (callerAgent) {
+      const renewal = await queryOne<{ agent_id: string | null }>(
+        pool,
+        'SELECT agent_id FROM vehicle_renewals WHERE id = $1',
+        [req.params.renewalId],
+      );
+      if (!renewal || renewal.agent_id !== callerAgent) throw notFound('That renewal');
+    }
+
     const result = await vehicles.completeRenewal({
       renewalId: req.params.renewalId,
       actorId: req.auth!.userId,
