@@ -1,5 +1,11 @@
 # Integration verification
 
+> This is the **internal checklist**: what must be configured once credentials
+> arrive, and how the harness proves it. For the outward-facing ask — what to
+> request from each of the six providers, and the questions only they can
+> answer — see **[INTEGRATION-CREDENTIAL-BRIEF.md](INTEGRATION-CREDENTIAL-BRIEF.md)**,
+> whose sections are written to be detached and sent.
+
 **Status: not complete, and not completable from this repository.**
 
 Five external services stand between this platform and a working revenue

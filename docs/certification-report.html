@@ -876,7 +876,10 @@
           <dt>Closes when</dt><dd>The harness exits 0 against real sandboxes, one live payment has been collected and its receipt verified publicly, and one agent has been cleared through the real KYC provider. <strong>Adding the credentials is what closes it; the scheduled job is what keeps it closed.</strong></dd>
           <dt>Brief</dt><dd>§3 Environment audit, §32 Deployment checklist</dd>
         </dl>
-      </article>
+      <dl style="margin-top:10px">
+          <dt>What is actually blocking it</dt>
+          <dd>Not engineering. The harness is written, a scheduled workflow already runs it and reports per provider, and the required secrets are enumerated. The moment credentials are in place that workflow turns itself green with no code change. What is missing is sandbox credentials from six organisations, which is procurement rather than development and runs in weeks rather than hours. <code>INTEGRATION-CREDENTIAL-BRIEF.md</code> states what to ask each provider for, in sections written to be detached and sent, including the questions only the vendor can answer &mdash; above all the full list of status values their API can return, because an answer the platform does not recognise is treated as a failure rather than as a success.</dd>
+        </dl></article>
 
       <article class="finding" style="border-left-color:var(--pass)">
         <div class="finding-head">
