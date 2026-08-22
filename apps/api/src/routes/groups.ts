@@ -14,7 +14,7 @@ import { z } from 'zod';
 import { ECONOMIC_SECTOR_CODES } from '@psirs/shared';
 import { config } from '../config';
 import { pool } from '../db/pool';
-import { authenticate, requirePermission } from '../middleware/auth';
+import { authenticate, requireActiveAgent, requirePermission } from '../middleware/auth';
 import { rateLimit } from '../middleware/security';
 import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import * as groups from '../services/groups';
@@ -80,6 +80,15 @@ groupRouter.use(authenticate);
 groupRouter.post(
   '/',
   requirePermission('group:register', 'group:manage'),
+  /*
+   * Field capture is bound to the handset it was captured on, exactly as
+   * registering a taxpayer is. Without this an agent whose phone had been
+   * revoked — which is how a lost or misused handset is dealt with — could
+   * carry on registering cooperatives from any browser they could sign into.
+   * `requireActiveAgent` returns early for an officer, who has no handset to
+   * be bound to.
+   */
+  requireActiveAgent(),
   validateBody(
     z.object({
       name: z.string().min(3).max(150),
@@ -165,6 +174,7 @@ groupRouter.post(
 groupRouter.post(
   '/:id/members',
   requirePermission('group:register', 'group:manage'),
+  requireActiveAgent(),
   validateBody(
     z.object({
       taxpayerId: uuidSchema,
@@ -314,6 +324,12 @@ allocationRouter.post(
 allocationRouter.post(
   '/collections',
   requirePermission('allocation:collect', 'allocation:manage'),
+  /*
+   * The moment public property changes hands, and the strongest case of the
+   * three for binding to a device: an agent whose handset was revoked for
+   * mishandling a distribution should not be able to continue from a laptop.
+   */
+  requireActiveAgent(),
   validateBody(
     z.object({ collectionCode: z.string().min(4).max(20) }),
     async (req, res, data) => {
