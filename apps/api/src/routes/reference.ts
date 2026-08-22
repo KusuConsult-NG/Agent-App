@@ -19,7 +19,7 @@ import { asyncHandler, uuidSchema, validateQuery } from '../middleware/validate'
 
 export const referenceRouter = Router();
 
-referenceRouter.use(rateLimit({ max: 120, keyPrefix: 'reference' }));
+referenceRouter.use(rateLimit({ max: 120, keyPrefix: 'reference', keyBy: 'ip' }));
 
 referenceRouter.get(
   '/lgas',

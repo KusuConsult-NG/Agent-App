@@ -34,6 +34,7 @@ agentRouter.post(
     max: config.security.agentApplyRateLimitMax,
     windowMs: 3_600_000,
     keyPrefix: 'agent-apply',
+    keyBy: 'ip',
   }),
   validateBody(
     z.object({

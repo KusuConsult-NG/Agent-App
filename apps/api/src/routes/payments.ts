@@ -41,7 +41,7 @@ export const webhookRouter = Router();
 // query — but it should not be an unmetered way to make the platform call out.
 webhookRouter.post(
   '/payments',
-  rateLimit({ max: 240, windowMs: 60_000, keyPrefix: 'webhook' }),
+  rateLimit({ max: 240, windowMs: 60_000, keyPrefix: 'webhook', keyBy: 'ip' }),
   asyncHandler(async (req, res) => {
     const result = await payments.handleWebhook({
       // The RAW body, exactly as received: a signature covers these bytes.
@@ -454,7 +454,7 @@ documentRouter.get(
 
 export const verificationRouter = Router();
 
-verificationRouter.use(rateLimit({ max: 60, keyPrefix: 'verify' }));
+verificationRouter.use(rateLimit({ max: 60, keyPrefix: 'verify', keyBy: 'ip' }));
 
 verificationRouter.get(
   '/:code',

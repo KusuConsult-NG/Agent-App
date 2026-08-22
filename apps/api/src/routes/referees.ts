@@ -16,7 +16,7 @@ import * as referees from '../services/referees';
 export const refereeRouter = Router();
 
 // A token is a bearer credential, so guessing attempts are rate limited hard.
-refereeRouter.use(rateLimit({ max: 20, windowMs: 60_000, keyPrefix: 'referee' }));
+refereeRouter.use(rateLimit({ max: 20, windowMs: 60_000, keyPrefix: 'referee', keyBy: 'ip' }));
 
 refereeRouter.get('/:token', async (req, res, next) => {
   try {

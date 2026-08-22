@@ -23,7 +23,7 @@ import { syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 export const citizenRouter = Router();
 
 // Strict rate limit — 10 per minute per IP — to prevent TIN/phone enumeration.
-citizenRouter.use(rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'citizen-status' }));
+citizenRouter.use(rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'citizen-status', keyBy: 'ip' }));
 
 const citizenQuerySchema = z.object({
   tin:   z.string().min(3).max(30).optional(),

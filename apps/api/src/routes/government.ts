@@ -834,6 +834,21 @@ governmentRouter.post(
       startDate: z.string().date(),
       endDate: z.string().date().optional(),
       approvalAuthority: z.string().min(3).max(150),
+      /*
+       * PRD §40's two lawful ways to link an essential service to compliance.
+       * ADDITIVE_BENEFIT raises the tier for compliant taxpayers and never
+       * withdraws the service; ELIGIBILITY_GATE can deny, and then the legal
+       * authority for denying has to be recorded.
+       *
+       * This was missing from the schema while the service, the §40 guard and
+       * the database all understood it, and zod strips unknown keys without
+       * complaint. So every programme created through the API became a gate,
+       * and the additive option — the one that cannot take health cover away
+       * from a citizen in arrears — could not be chosen at all. An officer
+       * building an additive programme was pushed into recording a legal basis
+       * for a denial their programme does not make.
+       */
+      linkageMode: z.enum(['ELIGIBILITY_GATE', 'ADDITIVE_BENEFIT']).optional(),
       essentialServiceLegalBasis: z.string().max(500).optional(),
     }),
     async (req, res, data) => {
@@ -866,6 +881,17 @@ governmentRouter.post(
     z.object({ status: z.enum(['DRAFT', 'ACTIVE', 'CLOSED']) }),
     async (req, res, data) => {
       await withTransaction(async (client) => {
+        // Confirm the programme exists before recording that it changed. The
+        // update alone matches nothing for a wrong id and says so to no one,
+        // leaving an audit entry that reports a change to a programme that is
+        // not there — sealed and hash-linked like any true one.
+        const programme = await queryOne<{ id: string; status: string }>(
+          client,
+          'SELECT id, status FROM incentive_programmes WHERE id = $1 FOR UPDATE',
+          [req.params.id],
+        );
+        if (!programme) throw notFound('That programme');
+
         await client.query('UPDATE incentive_programmes SET status = $2 WHERE id = $1', [
           req.params.id,
           data.status,
@@ -876,6 +902,7 @@ governmentRouter.post(
           action: 'incentive.programme_status_changed',
           entityType: 'incentive_programme',
           entityId: req.params.id,
+          oldValue: { status: programme.status },
           newValue: { status: data.status },
         });
       });

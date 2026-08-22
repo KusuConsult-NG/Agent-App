@@ -26,7 +26,24 @@ setInterval(() => {
   }
 }, 60_000).unref();
 
-export function rateLimit(options: { max?: number; windowMs?: number; keyPrefix?: string } = {}) {
+/**
+ * How a limit decides who is being metered.
+ *
+ * `caller` is the default and the right choice for the platform's own traffic:
+ * a signed-in user gets their own budget, so one shared address in a rural LGA
+ * does not throttle every agent behind it.
+ *
+ * `ip` is for public surfaces, where the cap exists to make some behaviour
+ * expensive for whoever is at the other end of the connection — enumerating
+ * TINs, guessing receipt codes, farming applications. Preferring an
+ * authenticated subject there would let a caller buy extra budget by holding
+ * an account, which on this platform anyone can create.
+ */
+export type RateLimitKey = 'caller' | 'ip';
+
+export function rateLimit(
+  options: { max?: number; windowMs?: number; keyPrefix?: string; keyBy?: RateLimitKey } = {},
+) {
   const max = options.max ?? config.security.rateLimitMax;
   const windowMs = options.windowMs ?? config.security.rateLimitWindowMs;
 
@@ -43,7 +60,12 @@ export function rateLimit(options: { max?: number; windowMs?: number; keyPrefix?
     // elsewhere — yields null and falls back to the address, so a caller
     // cannot mint themselves a fresh budget by inventing a subject.
     const identity =
-      req.auth?.userId ?? subjectFromBearer(req.header('authorization')) ?? req.clientIp ?? 'unknown';
+      options.keyBy === 'ip'
+        ? (req.clientIp ?? 'unknown')
+        : (req.auth?.userId ??
+           subjectFromBearer(req.header('authorization')) ??
+           req.clientIp ??
+           'unknown');
     const key = `${options.keyPrefix ?? req.baseUrl}:${identity}`;
     const now = Date.now();
 
