@@ -164,7 +164,50 @@ export async function collectDatabaseGauges(db: Db): Promise<void> {
 }
 
 /** The whole registry, in the format a scraper expects. */
+/**
+ * Facts about this process, read at scrape time rather than counted up.
+ *
+ * These arrived with a second, parallel telemetry module whose renderer was
+ * never wired to an endpoint — `/metrics` has always been served from this
+ * registry, so nothing it produced was ever exposed. Rather than run two
+ * registries (both emitted `psirs_http_requests_total` and
+ * `psirs_worker_runs_total`, and duplicate metric families make Prometheus
+ * reject the whole scrape), the three gauges that were genuinely missing here
+ * are collected in this one.
+ *
+ * Sampled on each scrape because a gauge of "right now" is meaningless if it
+ * was last written whenever some unrelated code path happened to run.
+ */
+function sampleProcessGauges(): void {
+  setGauge('psirs_uptime_seconds', 'Seconds since this process started', Math.floor(process.uptime()));
+
+  const memory = process.memoryUsage();
+  setGauge('psirs_memory_bytes', 'Process memory in bytes, by area', memory.rss, { area: 'rss' });
+  setGauge('psirs_memory_bytes', 'Process memory in bytes, by area', memory.heapUsed, { area: 'heap_used' });
+  setGauge('psirs_memory_bytes', 'Process memory in bytes, by area', memory.heapTotal, { area: 'heap_total' });
+}
+
+/**
+ * Connection-pool depth.
+ *
+ * Separate from `sampleProcessGauges` because it needs the pool, and `render`
+ * is deliberately synchronous and dependency-free so it can still answer when
+ * the database cannot. Saturation here is the earliest visible sign that
+ * requests are about to start queueing.
+ */
+export function setPoolGauges(pool: {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+}): void {
+  const help = 'Database connection pool sockets, by state';
+  setGauge('psirs_db_pool_connections', help, pool.totalCount, { state: 'total' });
+  setGauge('psirs_db_pool_connections', help, pool.idleCount, { state: 'idle' });
+  setGauge('psirs_db_pool_connections', help, pool.waitingCount, { state: 'waiting' });
+}
+
 export function render(): string {
+  sampleProcessGauges();
   const lines: string[] = [];
   for (const [name, entry] of [...registry.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     lines.push(`# HELP ${name} ${entry.help}`);

@@ -33,10 +33,14 @@ import { vehicleRouter } from './routes/vehicles';
 import { governmentRouter, supportRouter } from './routes/government';
 import { referenceRouter } from './routes/reference';
 import { log } from './lib/logger';
-import { collectDatabaseGauges, metrics, render as renderMetrics } from './lib/metrics';
+import {
+  collectDatabaseGauges,
+  metrics,
+  render as renderMetrics,
+  setPoolGauges,
+} from './lib/metrics';
 import { citizenRouter } from './routes/citizen';
 import { pushRouter } from './routes/push';
-import { telemetry } from './services/telemetry';
 
 export function createApp(): Express {
   const app = express();
@@ -57,7 +61,6 @@ export function createApp(): Express {
     res.on('finish', () => {
       const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
       metrics.httpRequest(req.method, res.statusCode);
-      telemetry.recordRequest(req.method, req.path, res.statusCode);
       // 4xx is the caller being told no, which is routine; 5xx is ours.
       log[res.statusCode >= 500 ? 'error' : 'info']('request', {
         requestId: req.requestId,
@@ -114,11 +117,32 @@ export function createApp(): Express {
   // The original path, kept because deployments and uptime checks may already
   // point at it. Same behaviour as readiness.
   app.get('/health', async (_req, res) => {
+    /*
+     * The richer of the three, for an APM probe rather than a load balancer.
+     *
+     * `database` carries the round-trip time as well as the verdict, because
+     * "reachable" and "reachable in 4ms" are different facts and the second one
+     * is what tells you a problem is coming. `/health/ready` keeps its flat
+     * string shape — a load balancer wants one thing to compare.
+     */
+    const startedAt = process.hrtime.bigint();
     try {
       await pool.query('SELECT 1');
-      res.json({ status: 'ok', service: 'psirs-revenue-platform', database: 'connected' });
+      const latencyMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      res.json({
+        status: 'ok',
+        service: 'psirs-revenue-platform',
+        uptimeSeconds: Math.floor(process.uptime()),
+        database: { status: 'connected', latencyMs: Math.round(latencyMs * 100) / 100 },
+      });
     } catch {
-      res.status(503).json({ status: 'degraded', database: 'unavailable' });
+      const latencyMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      res.status(503).json({
+        status: 'degraded',
+        service: 'psirs-revenue-platform',
+        uptimeSeconds: Math.floor(process.uptime()),
+        database: { status: 'unavailable', latencyMs: Math.round(latencyMs * 100) / 100 },
+      });
     }
   });
 
@@ -140,6 +164,10 @@ export function createApp(): Express {
         return;
       }
     }
+
+    // Pool depth is a fact about this process, so it is recorded even when the
+    // database itself cannot be read for the queue gauges below.
+    setPoolGauges(pool);
 
     try {
       await collectDatabaseGauges(pool);
