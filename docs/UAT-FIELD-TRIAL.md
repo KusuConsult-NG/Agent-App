@@ -347,6 +347,12 @@ Settled, and not worth an observer's attention unless an agent contradicts it:
 - **J-7.** The commission screen separates available from pending from paid,
   states that the record is not a bank account, and explains the wait as
   settlement plus a hold rather than naming it.
+- **J-8.** The five roles get five genuinely different menus, and the auditor's
+  carries a read-only tag. A bank account change puts "Name the agent gave" and
+  "Name the bank returned" on adjacent rows above the buttons. Every decision
+  demands ten characters, and a shorter one is refused with a sentence saying
+  why the reason matters rather than only that it is too short. Refusing
+  reports back, and says the existing account is unchanged.
 
 Two defects were found and fixed in the process, both worth knowing because
 they shape what to watch:
@@ -360,6 +366,30 @@ they shape what to watch:
   send" with the reason known only to the server. Refusals are now shown with
   their next step. **Watch for:** whether an agent reads that alert or keeps
   waiting.
+- A refusal message joined the bank's own prose to ours without checking its
+  punctuation, so a supervisor deciding where an agent's money goes read
+  "…in the agent's own name.. The change cannot be approved". Fixed, and the
+  provider's text is now ended properly whether or not it punctuates itself.
+
+Two things were found and deliberately **not** changed, because the trial is
+the right instrument for deciding them:
+
+- **A name mismatch is shown, not judged.** When the bank returns a different
+  account holder, the officer sees the bank's own words in the row where they
+  look for its answer, the Approve button is withdrawn, and the server refuses
+  the change through both the bank-change card and the generic approvals table.
+  What the platform does *not* do is score the two names as matching or not.
+  Nigerian bank records reorder surnames and expand initials constantly, so a
+  match indicator would fire on legitimate variation and train officers to
+  dismiss it. **Watch for:** whether officers compare the two rows at all, and
+  which real-world variations actually occur. That evidence is what should
+  decide whether a signal is added, not a guess made in advance.
+- **The generic approvals table still offers Approve** for a bank change the
+  card above has correctly reduced to Refuse. The server refuses it either way
+  and explains why, so nothing can slip through — but the button is there.
+  Teaching a table that spans every approval type about bank-specific state
+  couples the two. **Watch for:** whether any officer reaches for it, and what
+  they make of the refusal when they do.
 
 What the dry run **cannot** settle is everything the trial is actually for:
 whether any of this is understood by somebody who did not write it, how long

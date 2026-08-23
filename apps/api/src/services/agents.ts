@@ -1379,6 +1379,20 @@ export interface BankAccountChange {
 }
 
 /** Account numbers are never returned in full to a screen or a log. */
+/**
+ * End a fragment of provider text with exactly one full stop.
+ *
+ * The reason comes from whichever bank verification service answered, and
+ * whether it punctuates its own sentences is not ours to decide. Appending one
+ * unconditionally produced "…in the agent's own name.. The change cannot be
+ * approved" on a refusal a supervisor reads before deciding where an agent's
+ * money goes.
+ */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
 function maskAccountNumber(accountNumber: string): string {
   return accountNumber.length <= 4
     ? '····'
@@ -1645,8 +1659,8 @@ export async function executeBankAccountChange(
         ? 'The bank has not confirmed this account yet, so the change cannot be approved. ' +
           'Try the verification again once the bank service is reachable.'
         : `The bank did not confirm this account${
-            proposed.verification_reason ? `: ${proposed.verification_reason}` : ''
-          }. The change cannot be approved until it does.`,
+            proposed.verification_reason ? `: ${sentence(proposed.verification_reason)}` : '.'
+          } The change cannot be approved until it does.`,
     );
   }
 
