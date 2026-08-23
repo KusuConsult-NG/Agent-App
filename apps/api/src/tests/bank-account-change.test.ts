@@ -260,6 +260,57 @@ describe('approving a change', () => {
     assert.equal(current!.id, unchanged!.id, 'the account must not have moved');
   });
 
+  it('reads as one sentence whatever punctuation the bank sent', async () => {
+    // The reason is the verification provider's own prose. Appending a full
+    // stop to text that already ended in one put "…own name.. The change" in
+    // front of the officer deciding where an agent's money goes.
+    const proposal = await proposeAsAgent();
+    await pool.query(
+      `UPDATE bank_accounts
+          SET verification_status = 'FAILED',
+              verification_reason = $2
+        WHERE id = $1`,
+      [proposal.body.proposedAccountId, 'The account is held by "CHINEDU OKAFOR".'],
+    );
+
+    const decided = await post(
+      `/government/approvals/${proposal.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Trying to wave through a mismatched account.' },
+      { token: officerB },
+    );
+    assert.equal(decided.status, 409, JSON.stringify(decided.body));
+    const message: string = decided.body.error.message;
+    assert.ok(!/\.\./.test(message), `no doubled full stop: ${message}`);
+    assert.ok(message.includes('CHINEDU OKAFOR'), 'the bank\'s answer is quoted');
+    assert.ok(
+      message.includes('OKAFOR". The change cannot be approved'),
+      `the two sentences join cleanly: ${message}`,
+    );
+
+    // And a provider that punctuates nothing still gets a full stop. Only one
+    // proposal may stand per agent, so this one has to be cleared first.
+    await pool.query(`UPDATE bank_accounts SET status = 'REJECTED' WHERE id = $1`, [
+      proposal.body.proposedAccountId,
+    ]);
+    const bare = await proposeAsAgent();
+    assert.ok(bare.body.approvalId, JSON.stringify(bare.body));
+    await pool.query(
+      `UPDATE bank_accounts
+          SET verification_status = 'FAILED', verification_reason = $2
+        WHERE id = $1`,
+      [bare.body.proposedAccountId, 'account closed'],
+    );
+    const second = await post(
+      `/government/approvals/${bare.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Trying to wave through a closed account.' },
+      { token: officerB },
+    );
+    assert.ok(
+      second.body.error.message.includes('account closed. The change cannot be approved'),
+      second.body.error.message,
+    );
+  });
+
   it('records no approval for a change that did not happen', async () => {
     const proposal = await proposeAsAgent();
     await pool.query(
