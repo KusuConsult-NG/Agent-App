@@ -7,7 +7,10 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-COPY package.json package-lock.json tsconfig.json ./
+# The root of the workspace carries no tsconfig.json — every workspace holds
+# its own and none of them extend upwards. Copying one here aborted the build
+# on its first instruction, which is why this image had never been built.
+COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/shared/tsconfig.json packages/shared/tsconfig.esm.json ./packages/shared/
 COPY apps/agent/package.json apps/agent/tsconfig.json ./apps/agent/
