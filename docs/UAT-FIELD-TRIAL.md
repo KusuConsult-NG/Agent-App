@@ -214,7 +214,7 @@ device.
 
 | Watch for | Because |
 |---|---|
-| Where they stop in a 27-field form | It is long, it is on a phone, and it asks for bank details up front. |
+| Where they stop in the application form | Twelve fields on a phone, and it asks for bank details before it asks for anything else about the work. |
 | Whether the password rule is understood first time | It asks for a letter and a number and now says so before submission. Does the agent read it? |
 | What they photograph for identity | A cropped, glared, or wrong-document photograph is the commonest cause of a KYC rejection nobody understands. |
 | Whether the rejection reason means anything to them | A refused document tells them why. Does the reason produce a correct second attempt? |
@@ -314,6 +314,58 @@ Not a pass rate. Thresholds, by class:
 Two of those are zero-tolerance. They are the two that correspond to the
 platform's inviolable rules, and no amount of good usability elsewhere buys a
 tolerance for them.
+
+---
+
+## 6.1 What the dry run already settled
+
+Before the cohort is recruited, the Phase 0 journeys were walked against a
+database built from nothing — migrations, seed, and a browser at handset size.
+The point is not that the software passed. It is that an observer's day is
+expensive, and none of it should be spent discovering something a dry run
+would have caught.
+
+Settled, and not worth an observer's attention unless an agent contradicts it:
+
+- **J-1.** The form is twelve fields in three named sections. The password
+  rule is printed under the field before the button is reached, and a password
+  that breaks it is refused at the field with the same rule restated. The bank
+  section explains, where it is asked, that the account is for commission only
+  and never for government revenue. On submission the applicant gets an
+  application number and the four things that happen next; signing in as an
+  uncleared applicant shows all nine clearance stages, names what is still
+  outstanding, and offers no way to collect.
+- **J-4.** Offline capture saves, says so in words that name what has *not*
+  happened ("no payment can be taken until it is sent"), and shows a running
+  count of unsent records. The Collect screen withdraws its search box
+  entirely while offline and explains why in terms of the confirmation rule.
+  An unsynced taxpayer cannot be selected for collection. On reconnection the
+  queue empties and says how many went.
+- **J-6.** An unregistered handset, a suspended account and a missing
+  step-up code are each refused with a specific reason and a next step. A
+  revoked device loses its session outright.
+- **J-7.** The commission screen separates available from pending from paid,
+  states that the record is not a bank account, and explains the wait as
+  settlement plus a hold rather than naming it.
+
+Two defects were found and fixed in the process, both worth knowing because
+they shape what to watch:
+
+- `POST /drafts/sync` exempted itself from the handset check, so going offline
+  first was a way around a device binding every other agent write enforced,
+  and the resulting audit entry named no device. Both halves fixed. **Watch
+  for:** any agent who works from a handset that is not theirs.
+- Closing that gate exposed the app catching every sync failure the same way
+  and retrying silently, which left a refused queue sitting at "waiting to
+  send" with the reason known only to the server. Refusals are now shown with
+  their next step. **Watch for:** whether an agent reads that alert or keeps
+  waiting.
+
+What the dry run **cannot** settle is everything the trial is actually for:
+whether any of this is understood by somebody who did not write it, how long
+it takes, what people do when they are hurried, and what they say to the
+taxpayer in the gap. One operator who knows the answer proves nothing about
+sixteen who do not.
 
 ---
 
