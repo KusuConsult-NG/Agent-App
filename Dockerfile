@@ -68,6 +68,15 @@ COPY --from=build /app/apps/api/package.json     ./apps/api/package.json
 COPY apps/api/scripts/backup.sh apps/api/scripts/restore.sh ./apps/api/scripts/
 RUN chmod +x ./apps/api/scripts/*.sh
 
+# The process runs as `node`, and `/app` belongs to root — so the local
+# storage driver could not create its own directory and the image died at
+# startup with EACCES on `mkdir storage`. The path is also made absolute here
+# rather than left relative to the working directory: the two API images have
+# different working directories, so `./storage` resolved to two different
+# places, and only one of them was where docker-compose mounts its volume.
+ENV STORAGE_PATH=/app/storage
+RUN mkdir -p /app/storage && chown node:node /app/storage
+
 # Never root. The process needs to read its own code and write nothing.
 USER node
 
