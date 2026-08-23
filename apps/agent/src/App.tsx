@@ -10,7 +10,17 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { APP_VERSION, api, getUser, hasStoredSession, logout, restoreSession, type Session } from './lib/api';
+import {
+  APP_VERSION,
+  api,
+  ApiRequestError,
+  getUser,
+  hasStoredSession,
+  isConnectivityFailure,
+  logout,
+  restoreSession,
+  type Session,
+} from './lib/api';
 import {
   CONNECTION_COPY,
   detectConnectionState,
@@ -53,6 +63,18 @@ export function App() {
   const [version, setVersion] = useState<VersionState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  /**
+   * A sync that failed for a reason retrying cannot mend.
+   *
+   * Losing the connection is not this: that resolves itself and is already
+   * reported by the connection banner. This is the server refusing the
+   * captures — an unregistered handset, a clearance withdrawn — where the
+   * queue would otherwise sit at "waiting to send" for ever with the reason
+   * known to the server and to nobody else.
+   */
+  const [syncProblem, setSyncProblem] = useState<{ message: string; nextStep?: string } | null>(
+    null,
+  );
 
   useEffect(() => watchConnection(setConnection), []);
 
@@ -86,9 +108,25 @@ export function App() {
             '.',
         );
       }
+      setSyncProblem(null);
       refreshPending();
-    } catch {
-      requestBackgroundSync();
+    } catch (caught) {
+      if (isConnectivityFailure(caught)) {
+        // The signal went, which is what the queue is for. Ask the browser to
+        // try again later and say nothing: the connection banner already has it.
+        requestBackgroundSync();
+        return;
+      }
+      // The server refused the captures. Retrying will not register a handset
+      // or restore a clearance, so the agent is told now, while the records are
+      // still on the phone and can still be sent from somewhere that works.
+      if (caught instanceof ApiRequestError) {
+        setSyncProblem({ message: caught.error.message, nextStep: caught.error.nextStep });
+      } else {
+        setSyncProblem({
+          message: 'Your saved records could not be sent to PSIRS. They are still on this phone.',
+        });
+      }
     }
   }, [session, connection, refreshPending]);
 
@@ -226,6 +264,17 @@ export function App() {
         {syncMessage && (
           <Alert kind="success" title="Records synchronised">
             <p style={{ margin: 0 }}>{syncMessage}</p>
+          </Alert>
+        )}
+
+        {syncProblem && (
+          <Alert kind="error" title="Saved records could not be sent">
+            <p style={{ margin: 0 }}>{syncProblem.message}</p>
+            {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
+            <p style={{ margin: '0.5rem 0 0' }}>
+              Nothing has been lost — the records are still on this phone and will be sent once this
+              is put right.
+            </p>
           </Alert>
         )}
 

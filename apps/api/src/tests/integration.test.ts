@@ -1294,7 +1294,7 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
           },
         ],
       },
-      { token },
+      { token, deviceId: ctx.deviceId },
     );
 
     assert.equal(response.status, 200);
@@ -1313,7 +1313,7 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
           },
         ],
       },
-      { token },
+      { token, deviceId: ctx.deviceId },
     );
     assert.equal(replay.body.results[0].status, 'DUPLICATE');
   });
@@ -1429,6 +1429,95 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
         WHERE status NOT IN ('SYNCED', 'REJECTED')`,
     );
     assert.equal(limbo!.count, '0');
+  });
+
+  it('refuses a sync from a handset government never registered', async () => {
+    // Going offline must not be a way around the device binding. The same
+    // registration is refused on an unregistered handset whether it is posted
+    // directly or replayed from the queue, because the queue is the easier
+    // path and would otherwise be the one an unapproved device took
+    // (Addendum §21).
+    const token = (await loginAs(ctx.agentPhone, 'FieldAgent2026')).accessToken;
+    const person = {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: 'Unregistered',
+      lastName: 'Handset',
+      phone: '+2347044000031',
+      address: 'Village square, Kuru',
+      lgaId: ctx.lgaId,
+      consentGiven: true,
+      declarationAccepted: true,
+    };
+    const stranger = { token, deviceId: 'handset-nobody-approved-0001' };
+
+    const direct = await post('/taxpayers', person, stranger);
+    assert.equal(direct.status, 403);
+    assert.equal(direct.body.error.code, 'DEVICE_NOT_REGISTERED');
+
+    const queued = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-draft-unregistered-device',
+            draftType: 'TAXPAYER_REGISTRATION',
+            capturedAt: new Date().toISOString(),
+            payload: person,
+          },
+        ],
+      },
+      stranger,
+    );
+    assert.equal(queued.status, 403, JSON.stringify(queued.body));
+    assert.equal(queued.body.error.code, 'DEVICE_NOT_REGISTERED');
+
+    // And nothing was written on the way to being refused.
+    const written = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM taxpayers WHERE phone = $1`,
+      [person.phone],
+    );
+    assert.equal(written!.count, '0', 'a refused sync must not leave a taxpayer behind');
+  });
+
+  it('records which handset produced a synced registration', async () => {
+    // A registration whose audit entry names no device cannot be traced to a
+    // handset afterwards, which is the point of binding devices at all.
+    const token = (await loginAs(ctx.agentPhone, 'FieldAgent2026')).accessToken;
+    const synced = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-draft-attributed-000001',
+            draftType: 'TAXPAYER_REGISTRATION',
+            capturedAt: new Date().toISOString(),
+            payload: {
+              taxpayerType: 'INDIVIDUAL',
+              firstName: 'Attributed',
+              lastName: 'Capture',
+              phone: '+2347044000032',
+              address: 'Village square, Kuru',
+              lgaId: ctx.lgaId,
+              consentGiven: true,
+              declarationAccepted: true,
+            },
+          },
+        ],
+      },
+      { token, deviceId: ctx.deviceId },
+    );
+    assert.equal(synced.status, 200, JSON.stringify(synced.body));
+    assert.equal(synced.body.results[0].status, 'SYNCED');
+
+    const entry = await queryOne<{ device_id: string | null }>(
+      pool,
+      `SELECT device_id FROM audit_logs
+        WHERE action = 'taxpayer.registered' AND entity_id = $1`,
+      [synced.body.results[0].entityId],
+    );
+    assert.ok(entry, 'the registration is audited');
+    assert.ok(entry!.device_id, 'the audit entry names the handset that captured it');
   });
 });
 
