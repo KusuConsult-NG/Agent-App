@@ -180,3 +180,58 @@ jobs:
             git status --porcelain
             exit 1
           fi
+
+  # ---------------------------------------------------------------------
+  images:
+    name: Build every image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    # Independent of `verify`: a Dockerfile can be broken while the source is
+    # perfect, and that is exactly what happened. All three compose images
+    # began by copying a tsconfig.json the workspace root does not have, so
+    # `docker compose build` aborted on its first instruction for every
+    # service — and nothing caught it, because the deploy workflow builds a
+    # different Dockerfile and has never run, and CI built no image at all.
+    #
+    # Nothing is pushed. This asks one question: do they build?
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dockerfile: Dockerfile
+            name: api-deploy
+          - dockerfile: Dockerfile.api
+            name: api-compose
+          - dockerfile: Dockerfile.agent
+            name: agent
+          - dockerfile: Dockerfile.portal
+            name: portal
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          load: true
+          tags: psirs-${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+
+      - name: Check the API image can load its own code
+        # Building proves the instructions run. This proves the artefact
+        # inside is the one the CMD names and that it resolves its imports —
+        # the failure that otherwise waits until a container starts in
+        # production.
+        if: startsWith(matrix.name, 'api')
+        run: |
+          docker run --rm --entrypoint node "psirs-${{ matrix.name }}:ci" \
+            -e "require('/app/apps/api/dist/app.js'); console.log('image loads')"
