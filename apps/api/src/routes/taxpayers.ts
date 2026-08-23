@@ -434,16 +434,9 @@ export const draftRouter = Router();
 draftRouter.use(authenticate);
 
 /**
- * Accept drafts captured without connectivity.
- *
- * Only non-financial work can arrive this way — the draft type enum has no
- * payment member, so an offline device cannot queue a payment at all
- * (Addendum §23 financial rule). Server ids are assigned on sync (PRD §30).
- */
-/**
  * Accept captures taken without a connection (PRD §30; Addendum §23).
  *
- * Two rules govern this endpoint, and both are about what it refuses.
+ * Three rules govern this endpoint, and all of them are about what it refuses.
  *
  * First, the draft types. Every one is a record of something the agent
  * observed; none of them moves money. There is no payment draft type, and the
@@ -455,13 +448,20 @@ draftRouter.use(authenticate);
  * which was not true: nothing processed it, the phone deleted its copy on the
  * next sync, and the capture was lost while every message said it had worked.
  * A type this endpoint cannot complete is now rejected in the agent's face.
+ *
+ * Third, the handset. This endpoint writes the same government records as
+ * `POST /taxpayers`, so it asks the same question of the device (Addendum
+ * §21). It used to exempt itself, which made going offline first a way around
+ * a binding every other agent write enforces — and left the audit entry with
+ * no device against it, so the record could not afterwards be traced to a
+ * handset at all. A queued capture is not a lesser capture.
  */
 const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE'] as const;
 
 draftRouter.post(
   '/sync',
   requirePermission('taxpayer:create'),
-  requireActiveAgent({ requireDevice: false }),
+  requireActiveAgent(),
   validateBody(
     z.object({
       drafts: z
@@ -570,8 +570,14 @@ draftRouter.post(
               actorId: req.auth!.userId,
               actorRole: req.auth!.role,
               agentId,
+              source: 'AGENT',
               acknowledgeDuplicates: parsed.data.acknowledgeDuplicates,
               ipAddress: req.clientIp,
+              // The same fields the online route records. A capture that
+              // arrived through the queue is audited no differently from one
+              // typed with a signal, or the queue becomes the way to file a
+              // registration nothing can trace back to a handset.
+              deviceId: req.agent?.deviceId ?? null,
             });
             await accept(
               'taxpayer',
