@@ -56,6 +56,91 @@ document exists.
 
 ---
 
+## A second reading, which is still not yours
+
+A second language model read all 78 pairs cold, without the drafting context
+and without being told what to conclude. It was explicit that it is **not a
+native speaker** and that its register judgements are the ones most likely to
+be wrong. So this is corroboration, not clearance — it does not discharge the
+review, and none of its proposed Hausa has been applied.
+
+What it found is set out below in three groups, because they need different
+things from you.
+
+### Group 1 — content errors, true regardless of which Hausa you prefer
+
+These are checkable by comparing the two columns, so they do not depend on
+anyone's Hausa. They need fixing whatever you decide about wording.
+
+| Key | What is wrong |
+|---|---|
+| `scanHelp` | The English says "the receipt QR code **or vehicle license**". The Hausa names only the receipt. Half the instruction is missing, and an agent scanning a vehicle licence is told this screen does not do that. |
+| `statusOffline` / `offlineMessage` | `BA HANYAR SADARWA` in one, `Babu hanyar sadarwa` in the other, for the same thing. |
+| `statusFailed` / `paymentFailed` | `BA TA YI BA` treats the subject as feminine; `bai yi nasara ba` treats it as masculine. Same subject, two agreements. |
+| `needDeclaration` / `enablePush` | `sanarwa` does duty for both the *declaration* a taxpayer accepts and a push *notification*. One word, two unrelated things. |
+| `receiptCodeShape` | Calls `T7C72-QTUDN` a `lambar rasit`, but `lambar rasit` is already the receipt **number** (`receiptNumber`) and the verification **code** is `lambar tabbatarwa` (`verificationCode`). If this string means the verification code, it points the agent at the wrong field. |
+
+`Mungode` → `Mun gode` in `civicDutyThanks` was a plain word-separation typo
+and has been corrected already. It is the only change made without you.
+
+### Group 2 — the one it called dangerous
+
+**`kwamishan` may be the wrong word for commission.** The reading is that in
+Nigerian Hausa *kwamishan / kwamishina* means **Commissioner** — the office
+holder — and not a percentage earned on a collection. If so, `Wannan asusu na
+kwamishan ka ne kawai` can be parsed as *the Commissioner's account*, on the
+one screen whose entire job is to say **this account is yours, and government
+revenue never enters it**.
+
+This document already asked whether `lada` was better. A reader who had never
+seen that question arrived at the same answer independently. That is not proof
+— you are the proof — but it is why this sits at the top of the list.
+
+Proposed, pending you: `lada` throughout (`Lada`, `asusun ladanka`, `a biya
+lada`). `kaso` was offered as the alternative if "share/percentage" is wanted
+specifically.
+
+Also flagged, with less confidence: `paymentUnconfirmedBody` wraps `ba a … ba`
+around an embedded affirmative clause (`an karbi wannan kudin` — "this money
+HAS been received"). The reading is that the sentence is *technically* correct
+because the closing `ba` can only attach to `nuna`, but that a reader's eye
+lands on the affirmative before reaching the negation that cancels it. On this
+string of all strings, please read it slowly and say whether that is a real
+hazard or an imagined one. The reviewer was explicitly unsure.
+
+And `offlineNotice`: the English says no money has been **marked as received**;
+the Hausa was read as saying money **was not received**. Those are different
+claims, and an agent who watched a payment happen offline and then reads the
+second has been handed a reason to collect again.
+
+### Group 3 — wording, register, and one question for PSIRS
+
+Offered as suggestions only, and the reviewer asked that they be treated as
+hypotheses to test on two or three real agents rather than as corrections:
+`kudi a hannu` → `kudin hannu`; `Takardun Rasit` → `Rasit`; `Karbi Haraji` →
+`Karbar Haraji` (imperative where a label wants a noun); `Karin Bayani` →
+`Sauran` for "More"; `tana gaba a lokaci` and `Cikin Nasara` read as calques;
+`na'ura` and `waya` are used for the same object in different strings; `Aiki`
+and `Hidima` likewise. `An Biyar da Kudi` in `paymentSuccess` was flagged
+harder — `biyar` is the numeral **five**.
+
+It agreed with the no-hooked-letters decision and would not overrule it. It
+disagreed with one thing this document does: if the argument is that agents
+type on phone keyboards, then the **curly apostrophe** in `Nau’in` and `A’a`
+should be the ASCII `'` by the same logic. These are display strings rather
+than typed input, so the argument is weaker than it looks — but it is your
+call.
+
+**A question this document should have asked and did not:** every imperative
+addresses the agent as `ka`, masculine singular. A woman collecting revenue in
+Bokkos is addressed as a man by every instruction in the app. The options are
+`ki`, the impersonal subjunctive (`A duba…`), or the polite plural `ku` which
+is gender-neutral. This is a decision for PSIRS about who its agents are, not
+a translation matter, and it should be settled before Phase 0 rather than
+discovered in it.
+
+---
+
 ## One specific question: the tab bar
 
 Six labels sit along the bottom of the agent's phone, and each has about
