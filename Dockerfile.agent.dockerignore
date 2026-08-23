@@ -1,0 +1,25 @@
+# Per-image build context for the agent PWA.
+#
+# BuildKit reads `<dockerfile>.dockerignore` in preference to `.dockerignore`,
+# which is the only way one context can serve images that need different
+# things. The root file excludes `apps/agent` and `apps/portal` so the API
+# image does not carry two front-ends it never serves — correct for that
+# image, and fatal for this one, whose entire source lives there. The build
+# failed on `COPY apps/agent ./apps/agent` with "not found", because the
+# context genuinely did not contain it.
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+.env
+.env.*
+!.env.example
+backups
+storage
+docs
+*.md
+!README.md
+apps/portal
+**/*.test.ts
+**/*.test.tsx

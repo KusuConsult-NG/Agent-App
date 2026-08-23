@@ -228,10 +228,20 @@ jobs:
 
       - name: Check the API image can load its own code
         # Building proves the instructions run. This proves the artefact
-        # inside is the one the CMD names and that it resolves its imports —
+        # inside is the one the CMD names and that every import resolves —
         # the failure that otherwise waits until a container starts in
         # production.
+        #
+        # NODE_ENV is overridden because the image sets `production`, and in
+        # production `config.js` refuses to load without real secrets and real
+        # integrations. That guard is deliberate and tested elsewhere; here it
+        # would only ever prove that an image built without credentials has no
+        # credentials. What is in question is whether the files are all
+        # present and the module graph resolves.
         if: startsWith(matrix.name, 'api')
         run: |
-          docker run --rm --entrypoint node "psirs-${{ matrix.name }}:ci" \
+          docker run --rm --entrypoint node \
+            -e NODE_ENV=development \
+            -e DATABASE_URL=postgres://unused:unused@127.0.0.1:5432/unused \
+            "psirs-${{ matrix.name }}:ci" \
             -e "require('/app/apps/api/dist/app.js'); console.log('image loads')"

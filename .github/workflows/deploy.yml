@@ -124,8 +124,15 @@ jobs:
       - name: Smoke-test the image before anyone deploys it
         # The suite runs the TypeScript source through tsx; this is the only
         # thing that checks the artefact people actually deploy can start.
+        #
+        # NODE_ENV is overridden because the image sets `production`, where
+        # `config.js` refuses to load without real secrets and real
+        # integrations. Without this the step fails on every deploy — it never
+        # had the chance to, because this workflow has never run.
         run: |
           docker run --rm --entrypoint node \
+            -e NODE_ENV=development \
+            -e DATABASE_URL=postgres://unused:unused@127.0.0.1:5432/unused \
             ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }} \
             -e "require('/app/apps/api/dist/app.js'); console.log('image loads')"
 
