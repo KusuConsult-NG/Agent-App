@@ -152,12 +152,12 @@ export function App() {
 
   const nav = useMemo(
     () => [
-      { path: '/', label: t.home, icon: Icons.home },
-      { path: '/taxpayers', label: t.taxpayers, icon: Icons.people },
-      { path: '/collect', label: t.collect, icon: Icons.collect },
-      { path: '/receipts', label: t.receipts, icon: Icons.receipt },
-      { path: '/commission', label: 'Commission', icon: Icons.wallet },
-      { path: '/profile', label: 'Profile', icon: Icons.profile },
+      { path: '/', label: t.navHome, icon: Icons.home },
+      { path: '/taxpayers', label: t.navTaxpayers, icon: Icons.people },
+      { path: '/collect', label: t.navCollect, icon: Icons.collect },
+      { path: '/receipts', label: t.navReceipts, icon: Icons.receipt },
+      { path: '/commission', label: t.navCommission, icon: Icons.wallet },
+      { path: '/profile', label: t.navProfile, icon: Icons.profile },
     ],
     [t],
   );

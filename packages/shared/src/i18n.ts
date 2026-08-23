@@ -64,6 +64,22 @@ export interface TranslationDictionary {
   neverCollectCash: string;
   neverCollectCashBody: string;
   cashChannelReminder: string;
+  /**
+   * Tab-bar labels, kept separate from the prose terms they echo.
+   *
+   * A tab is about 52 logical pixels wide on a common handset. English gets
+   * away with reusing its prose words because they are already short;
+   * "Taxpayers" is one word. Hausa's term for the same thing is "Masu Biyan
+   * Haraji", which renders as "Masu ..." and names nothing. Sharing one key
+   * between a heading and a tab forces the longer language to choose between
+   * reading correctly in prose and fitting in a tab, and it loses both.
+   */
+  navHome: string;
+  navTaxpayers: string;
+  navCollect: string;
+  navReceipts: string;
+  navCommission: string;
+  navProfile: string;
   commissionAccountOnly: string;
   commissionAccountNote: string;
 
@@ -158,6 +174,12 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Government revenue must always be paid by the taxpayer through an approved payment channel. Never accept cash into your own account.',
     cashChannelReminder:
       'The taxpayer must pay through the approved payment channel. Confirm the amount with them before you continue.',
+    navHome: 'Home',
+    navTaxpayers: 'Taxpayers',
+    navCollect: 'Collect',
+    navReceipts: 'Receipts',
+    navCommission: 'Commission',
+    navProfile: 'Profile',
     commissionAccountOnly: 'This account is for your commission only',
     commissionAccountNote:
       'Verified before any commission can be paid. Government revenue never enters this account.',
@@ -238,7 +260,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     phone: 'Lambar Waya',
     lga: 'Karamar Hukuma (LGA)',
     ward: 'Gunduma (Ward)',
-    service: 'Nau\'in Haraji / Aiki',
+    service: 'Nau’in Haraji / Aiki',
     amount: 'Kudin Haraji',
     totalPaid: 'Jimlar Kudin da Aka Biya',
     receiptNumber: 'Lambar Rasit',
@@ -249,6 +271,19 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Dole mai biyan haraji ya biya kudin gwamnati ta hanyar biyan kudi da aka amince da ita. Kada ka taba karbar kudi a asusunka.',
     cashChannelReminder:
       'Dole mai biyan haraji ya biya ta hanyar da aka amince da ita. Ka tabbatar da adadin kudin tare da shi kafin ka ci gaba.',
+    // The four below are the existing prose terms, unchanged. They do not fit
+    // a tab and are listed in HAUSA-REVIEW.md with the width they have to fit
+    // in, because shortening them is a translation decision and not ours.
+    navHome: 'Gida',
+    navTaxpayers: 'Masu Biyan Haraji',
+    navCollect: 'Karbi Haraji',
+    navReceipts: 'Takardun Rasit',
+    // `kwamishan` is the glossary's agreed word, applied here rather than
+    // chosen here. It also fits.
+    navCommission: 'Kwamishan',
+    // Awaiting the review. It was an English literal in the tab bar before,
+    // which was the same gap with nothing recording it.
+    navProfile: 'Profile',
     commissionAccountOnly: 'Wannan asusu na kwamishan ka ne kawai',
     commissionAccountNote:
       'Ana tabbatar da shi kafin a biya kowane kwamishan. Kudin gwamnati ba ya shiga wannan asusu ko kadan.',

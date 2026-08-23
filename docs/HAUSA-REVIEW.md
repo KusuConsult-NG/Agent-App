@@ -29,6 +29,61 @@ Please read them as instructions, not as prose.
 4. **Is the vocabulary consistent?** One word for one thing, throughout. If
    `mai biyan haraji` is the taxpayer in one line it must be in all of them.
 
+## What a machine has already checked, so you need not
+
+A consistency pass runs in the test suite
+(`hausa-dictionary-consistency.test.tsx`) and currently holds. None of it is a
+judgement about the Hausa — it is bookkeeping, and it is listed here only so
+you do not spend your attention repeating it:
+
+- All 72 keys exist in both languages; nothing is missing and nothing is spare.
+- No Hausa string is a copy of its English (one exception, `navProfile`, is
+  named below and is waiting on you).
+- **Every English string containing a negative has a Hausa negation** —
+  `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
+  tell you whether the negative is attached to the right verb. It only
+  guarantees that none of them vanished entirely. Question 2 is still yours.
+- The glossary below is applied consistently across all 72 strings: where the
+  English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
+  receipt, confirm, device, account, commission and cash.
+- No hooked letters; no `kuɗi`; apostrophes written one way throughout.
+- Example phone numbers and receipt codes survive translation intact.
+
+What no machine can check is whether a Hausa speaker takes the same
+instruction from these that an English speaker takes from the left-hand
+column. That is questions 1, 2 and 3, and it is the whole reason this
+document exists.
+
+---
+
+## One specific question: the tab bar
+
+Six labels sit along the bottom of the agent's phone, and each has about
+**52 logical pixels** — roughly 8 to 10 characters at the rendered size. On a
+360px handset the Hausa labels do not fit:
+
+| Tab | Hausa now | Needs | Renders as |
+|---|---|---|---|
+| Taxpayers | Masu Biyan Haraji | 111px of 52px | `Masu ...` |
+| Receipts | Takardun Rasit | 91px of 52px | `Takard...` |
+| Collect | Karbi Haraji | 73px of 52px | `Karbi ...` |
+| Commission | Kwamishan | 70px of 52px | `Kwamis...` |
+
+It does not improve on a larger phone. `Gida` fits.
+
+These are the existing prose terms, reused as labels. They have not been
+shortened, because shortening them is a translation decision and not one to
+make without you. **What is wanted is a short form for each — a word or two
+an agent would recognise on a tab, not a full description.** They now have
+their own dictionary keys (`navTaxpayers` and the rest), so a short label
+here will not disturb the longer term where it reads correctly in prose.
+
+`navProfile` is still the English word "Profile". It was hardcoded into the
+tab bar where no dictionary could reach it; it is now a key with nothing in
+it. A Hausa word for it would be welcome.
+
+---
+
 ## Conventions used
 
 The existing dictionary avoids hooked letters (`ɗ`, `ƙ`) and writes `kudi`
@@ -42,6 +97,12 @@ They are read off a screen and typed.
 ---
 
 ## The strings
+
+Two tables. **A** is the tier where being wrong costs somebody money — read
+these first, and if your time runs out, stop after them. **B** is everything
+else in the dictionary; it has never been put to a native speaker at all.
+
+### A · The safety tier
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
@@ -75,6 +136,65 @@ They are read off a screen and typed.
 | `deviceNotRegistered` | This device is not registered to your agent account. Register it before collecting revenue. | Ba a yi rajistar wannan na’ura ga asusun wakilcin ka ba. Ka yi rajistar ta kafin ka karbi haraji. | ☐ | |
 | `deviceAfterApproval` | You can register a device once PSIRS has approved your application. | Za ka iya yin rajistar na’ura bayan PSIRS ta amince da bukatarka. | ☐ | |
 
+
+### B · The rest of the dictionary
+
+Never reviewed by a Hausa speaker. Lower stakes than table A — these are
+labels, headings and status words rather than instructions — but they are what
+an agent reads all day, and the tab-bar question above lives in here.
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `appName` | PSIRS Revenue Platform | Hukumar Haraji ta Jihar Filato (PSIRS) | ☐ | |
+| `appTagline` | Plateau State Digital Grassroots Revenue & Taxpayer Services | Tsarin Karbar Haraji da Hidimar Masu Biyan Haraji a Jihar Filato | ☐ | |
+| `home` | Home | Gida | ☐ | |
+| `collect` | Collect | Karbi Haraji | ☐ | |
+| `taxpayers` | Taxpayers | Masu Biyan Haraji | ☐ | |
+| `vehicles` | Vehicles | Motoci | ☐ | |
+| `receipts` | Receipts | Takardun Rasit | ☐ | |
+| `more` | More | Karin Bayani | ☐ | |
+| `search` | Search | Bincika | ☐ | |
+| `verify` | Verify Receipt | Tabbatar da Rasit | ☐ | |
+| `signOut` | Sign Out | Fita Daga Tsarin | ☐ | |
+| `payRevenue` | Pay Revenue | Biyan Haraji | ☐ | |
+| `confirmPayment` | Confirm Payment | Tabbatar da Biyan Kudi | ☐ | |
+| `downloadReceipt` | Download Receipt | Sauke Rasit (PDF) | ☐ | |
+| `shareReceipt` | Share Receipt | Tura Rasit | ☐ | |
+| `printBluetooth` | Print (Bluetooth Thermal) | Buga Rasit a Inji (Bluetooth) | ☐ | |
+| `scanQr` | Scan QR / Barcode | Duba Lambar QR | ☐ | |
+| `registerTaxpayer` | Register Taxpayer | Yi Rajistar Mai Biyan Haraji | ☐ | |
+| `renewVehicle` | Renew Vehicle | Sabunta Lasisin Mota | ☐ | |
+| `pairPrinter` | Pair Bluetooth Printer | Hada Injin Buga Rasit | ☐ | |
+| `testPrint` | Print Test Slip | Buga Gwaji | ☐ | |
+| `enablePush` | Enable Push Notifications | Kunna Sanarwa ta Wayar Salula | ☐ | |
+| `taxpayerName` | Taxpayer Name | Sunan Mai Biyan Haraji | ☐ | |
+| `taxpayerTin` | Tax Identification Number (TIN) | Lambar Shaida ta Haraji (TIN) | ☐ | |
+| `phone` | Phone Number | Lambar Waya | ☐ | |
+| `lga` | LGA (Local Government) | Karamar Hukuma (LGA) | ☐ | |
+| `ward` | Ward | Gunduma (Ward) | ☐ | |
+| `service` | Revenue Item / Service | Nau’in Haraji / Aiki | ☐ | |
+| `amount` | Amount | Kudin Haraji | ☐ | |
+| `totalPaid` | Total Paid | Jimlar Kudin da Aka Biya | ☐ | |
+| `receiptNumber` | Receipt Number | Lambar Rasit | ☐ | |
+| `verificationCode` | Verification Code | Lambar Tabbatarwa | ☐ | |
+| `paymentMode` | Payment Mode | Hanyar Biyan Kudi | ☐ | |
+| `navHome` | Home | Gida | ☐ | |
+| `navTaxpayers` | Taxpayers | Masu Biyan Haraji | ☐ | |
+| `navCollect` | Collect | Karbi Haraji | ☐ | |
+| `navReceipts` | Receipts | Takardun Rasit | ☐ | |
+| `navCommission` | Commission | Kwamishan | ☐ | |
+| `navProfile` | Profile | Profile | ☐ | |
+| `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
+| `statusPending` | PENDING | ANA JIRA | ☐ | |
+| `statusFailed` | FAILED | BA TA YI BA | ☐ | |
+| `statusOffline` | OFFLINE | BA HANYAR SADARWA (OFFLINE) | ☐ | |
+| `statusOnline` | ONLINE | AKWAI HANYAR SADARWA (ONLINE) | ☐ | |
+| `offlineMessage` | You are offline. Saved records will sync when signal returns. | Babu hanyar sadarwa a yanzu. Za a aika bayanan da zaran an samu netiwok. | ☐ | |
+| `offlineNotice` | Captured offline. No money has been marked as received until confirmed. | An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar. | ☐ | |
+| `scanHelp` | Align the receipt QR code or vehicle license inside the frame. | Sanya lambar QR ta rasit din a tsakiyar akwatin. | ☐ | |
+| `civicDutyThanks` | Thank you for fulfilling your civic duty. | Mungode da kuka sauke nauyin da ya rataya a wuyanku. | ☐ | |
+| `paymentSuccess` | Payment Successful | An Biyar da Kudi Cikin Nasara | ☐ | |
+
 ---
 
 ## Words this draft chose, and why
@@ -94,11 +214,15 @@ They are read off a screen and typed.
 
 ## After your review
 
-Corrections go into `packages/shared/src/i18n.ts` under `ha`. A test
-(`hausa-safety-strings.test.tsx`) checks that each key exists, is not a copy
-of the English, and keeps the shared vocabulary — it will fail if a
-correction drops one of those words, which is deliberate. Adjust the test with
-the translation if the vocabulary decision changes.
+Corrections go into `packages/shared/src/i18n.ts` under `ha`. Two tests guard
+them: `hausa-safety-strings.test.tsx` checks the safety tier is genuinely
+translated and that the screens read the dictionary rather than holding
+English literals, and `hausa-dictionary-consistency.test.tsx` holds the
+bookkeeping listed at the top of this document. Both will fail if a correction
+drops an agreed word or a negation, which is deliberate — change the test
+alongside the translation when the decision itself changes.
+
+If you shorten a tab label, put it in the `nav*` key, not the prose one.
 
 **Reviewed by:** ___________________________  **Date:** ____________
 
