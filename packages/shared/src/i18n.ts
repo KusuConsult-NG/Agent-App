@@ -331,7 +331,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     offlineMessage: 'Babu hanyar sadarwa a yanzu. Za a aika bayanan da zaran an samu netiwok.',
     offlineNotice: 'An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar.',
     scanHelp: 'Sanya lambar QR ta rasit din a tsakiyar akwatin.',
-    civicDutyThanks: 'Mungode da kuka sauke nauyin da ya rataya a wuyanku.',
+    civicDutyThanks: 'Mun gode da kuka sauke nauyin da ya rataya a wuyanku.',
     paymentSuccess: 'An Biyar da Kudi Cikin Nasara',
   },
 };
