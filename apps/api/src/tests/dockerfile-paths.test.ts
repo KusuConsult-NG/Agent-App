@@ -18,9 +18,30 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
-const repoRoot = resolve(import.meta.dirname, '../../../..');
+/**
+ * The workspace root, found by walking up rather than counted in `../`.
+ *
+ * This file compiles to CommonJS, so `import.meta` is unavailable, and a fixed
+ * number of parent hops breaks the moment the file moves or the runner's
+ * working directory differs from the one it was written against.
+ */
+function workspaceRoot(): string {
+  let directory = process.cwd();
+  for (;;) {
+    const manifest = join(directory, 'package.json');
+    if (existsSync(manifest)) {
+      const parsed = JSON.parse(readFileSync(manifest, 'utf8')) as { workspaces?: unknown };
+      if (parsed.workspaces) return directory;
+    }
+    const parent = dirname(directory);
+    if (parent === directory) throw new Error('no workspace root above ' + process.cwd());
+    directory = parent;
+  }
+}
+
+const repoRoot = workspaceRoot();
 
 const dockerfiles = readdirSync(repoRoot).filter((name) => name.startsWith('Dockerfile'));
 
