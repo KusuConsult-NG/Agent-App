@@ -22,16 +22,16 @@
  * change rather than that the test was too weak to notice.
  */
 
-import './env';
+import '../env';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGovernmentUser, firstLgaId, pool, resetDatabase } from './helpers';
-import { queryOne, query } from '../db/pool';
-import { seedReferenceData } from '../db/seed';
-import { createAssessment } from '../services/revenue';
-import { confirmPayment, initiatePayment } from '../services/payments';
-import { registerTaxpayer } from '../services/taxpayers';
-import { verifyAuditChain } from '../services/audit';
+import { createGovernmentUser, firstLgaId, pool, resetDatabase } from '../helpers';
+import { queryOne, query } from '../../db/pool';
+import { seedReferenceData } from '../../db/seed';
+import { createAssessment } from '../../services/revenue';
+import { confirmPayment, initiatePayment } from '../../services/payments';
+import { registerTaxpayer } from '../../services/taxpayers';
+import { verifyAuditChain } from '../../services/audit';
 
 let officerId = '';
 let lgaId = '';

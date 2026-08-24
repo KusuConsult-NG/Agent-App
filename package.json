@@ -20,6 +20,7 @@
     "dev:agent": "npm run dev --workspace @psirs/agent",
     "dev:portal": "npm run dev --workspace @psirs/portal",
     "test": "npm run build --workspace @psirs/shared && npm run test --workspace @psirs/api && npm run test --workspace @psirs/agent && npm run test --workspace @psirs/portal",
+    "test:concurrency": "npm run build --workspace @psirs/shared && npm run test:concurrency --workspace @psirs/api",
     "verify:integrations": "node scripts/verify-integrations.mjs",
     "benchmark": "node scripts/benchmark-load.mjs",
     "audit:e2e": "node scripts/audit-e2e.mjs",
