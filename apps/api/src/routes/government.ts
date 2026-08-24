@@ -97,13 +97,16 @@ governmentRouter.get(
         from: data.from ? new Date(data.from) : undefined,
         to: data.to ? new Date(data.to) : undefined,
       };
-      const [byMda, areas, agents, coverage] = await Promise.all([
+      const [byMda, areas, agents, coverage, localGovernment] = await Promise.all([
         reports.revenueByMda(pool, window, scope),
         reports.revenueGenerationAreas(pool, window, scope),
         reports.agentCollectionMap(pool, window, scope),
         reports.collectionMappingCoverage(pool, window, scope),
+        // PSIRS collects for the Councils, so what each is owed belongs on
+        // the same page as what was collected.
+        reports.localGovernmentRemittance(pool, window, scope),
       ]);
-      res.json({ byMda, areas, agents, coverage, scope });
+      res.json({ byMda, areas, agents, coverage, localGovernment, scope });
     },
   ),
 );

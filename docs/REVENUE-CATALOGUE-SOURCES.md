@@ -6,7 +6,8 @@
 
 ## Answered
 
-**PSIRS confirmed on 24 August 2026 that it is the source for every figure and
+**PSIRS confirmed on 24 August 2026 that it collects local government revenue
+on the Councils' behalf, and that it is the source for every figure and
 mapping in this catalogue** — the prices as configured, the local government
 items it collects on the Councils' behalf, the personal income tax bands, the
 development levy, and the attribution of revenue to Ministries.
@@ -22,6 +23,14 @@ been read from this environment. `catalogue-provenance.test.ts` therefore
 records a figure confirmed by PSIRS as a different thing from one read out of
 an Act — both are acceptable provenance, and being unable to tell them apart
 later would not be.
+
+That PSIRS collects for the Councils settles the largest question this
+document raised — and makes a new one first-class. Money collected for
+somebody must be attributable back to them, and nothing could say what any of
+the seventeen Councils was owed. `localGovernmentRemittance` now does, on the
+Revenue summary: only items whose rate a Council sets, attributed to the
+Council whose area they were collected in, counting only revenue a payment
+confirmed, and listing every Council including those that collected nothing.
 
 Three things in here were **not** questions about figures and are not settled
 by confirming them: the market-levy exclusion for markets where state finance

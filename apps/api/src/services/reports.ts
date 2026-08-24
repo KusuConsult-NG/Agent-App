@@ -635,3 +635,77 @@ export async function collectionMappingCoverage(
     [from, to, statewide, territoryIds],
   );
 }
+
+/**
+ * What each Local Government Council is owed.
+ *
+ * PSIRS collects local government revenue on the Councils' behalf, which makes
+ * remittance a first-class question the platform could not answer: it knew
+ * what it had collected and had no view of any one Council's share.
+ * `settlements` tracks money arriving from the gateway into a government
+ * account and stops there.
+ *
+ * WHAT MAKES A COLLECTION A COUNCIL'S. An item whose rate is set per Council
+ * is a Council's revenue — that is what per-Council rating means, and it is a
+ * fact in the database rather than a list in code that would drift. A State
+ * item collected in a Council's area stays the State's: an infrastructure
+ * levy raised in Wase is not Wase's money, and counting it would overstate
+ * that Council's share by exactly what the State took there.
+ *
+ * WHICH COUNCIL. The LGA on the transaction, which comes from the taxpayer
+ * and is the same LGA the amount was priced on. Money collected in one
+ * Council's area is that Council's and never another's.
+ *
+ * EVERY COUNCIL APPEARS, including one that collected nothing. A remittance
+ * run has to account for all seventeen, and a Council missing from the list
+ * looks exactly like a Council nobody ran the report for.
+ */
+export async function localGovernmentRemittance(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return query(
+    db,
+    `WITH council_revenue AS (
+       SELECT t.lga_id, ri.id AS item_id, ri.code, ri.name,
+              count(t.id) AS transactions,
+              SUM(t.amount_kobo) AS amount_kobo
+         FROM transactions t
+         JOIN revenue_items ri ON ri.id = t.revenue_item_id
+        WHERE t.status IN ${REVENUE_STATES}
+          AND t.created_at BETWEEN $1 AND $2
+          AND ${transactionScopeSql('t', 3, 4)}
+          -- An item rated per Council is a Council's revenue. This is the
+          -- database's own record of the arrangement rather than a list here
+          -- that would drift away from the catalogue.
+          AND EXISTS (
+            SELECT 1 FROM revenue_item_rates r
+             WHERE r.revenue_item_id = ri.id AND r.lga_id IS NOT NULL
+          )
+        GROUP BY t.lga_id, ri.id, ri.code, ri.name
+     )
+     SELECT l.name AS lga, l.zone,
+            COALESCE(SUM(cr.transactions),0)::text AS transactions,
+            COALESCE(SUM(cr.amount_kobo),0)::text AS amount_kobo,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'code', cr.code,
+                  'name', cr.name,
+                  'transactions', cr.transactions::text,
+                  'amount_kobo', cr.amount_kobo::text
+                ) ORDER BY cr.amount_kobo DESC
+              ) FILTER (WHERE cr.item_id IS NOT NULL),
+              '[]'::json
+            ) AS items
+       FROM lgas l
+       LEFT JOIN council_revenue cr ON cr.lga_id = l.id
+      GROUP BY l.name, l.zone
+      ORDER BY COALESCE(SUM(cr.amount_kobo),0) DESC, l.name`,
+    [from, to, statewide, territoryIds],
+  );
+}

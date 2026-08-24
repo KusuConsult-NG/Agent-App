@@ -58,11 +58,12 @@ type Authority =
    * than one statewide figure that could only be right for all of them by
    * coincidence.
    *
-   * PSIRS confirmed on 24 August 2026 that it is the source for these — it
-   * collects them, and the configured figures are right. The per-Council
-   * structure stays regardless: it is what lets a Council's figure be
-   * corrected on its own, and what gives "not collectable here" a
-   * representation.
+   * PSIRS confirmed on 24 August 2026 that it collects these on the
+   * Councils' behalf and is the source for the rates. That settles the
+   * question the Part III finding raised, and makes remittance a first-class
+   * one: money collected for somebody has to be attributable back to them.
+   * `localGovernmentRemittance` answers it, and the per-Council rating is
+   * what makes an item identifiable as a Council's in the first place.
    */
   | 'LOCAL_GOVERNMENT_LIST'
   /** The state's power to charge it at all is under live challenge. */
