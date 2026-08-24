@@ -301,7 +301,11 @@ async function seedConfirmablePayments(count: number): Promise<string[]> {
  * Each level is seeded into its own day so a run reconciles exactly its own
  * traffic and not the level before it.
  */
-async function seedSettledDay(count: number, daysAgo: number): Promise<{ from: Date; to: Date }> {
+async function seedSettledDay(
+  count: number,
+  daysAgo: number,
+  options: { variances?: boolean } = {},
+): Promise<{ from: Date; to: Date }> {
   const template = await pool.query<{
     taxpayer_id: string;
     invoice_id: string;
@@ -355,6 +359,53 @@ async function seedSettledDay(count: number, daysAgo: number): Promise<{ from: D
        FROM generate_series(1, $3) g`,
     [tag, daysAgo, count],
   );
+
+  if (options.variances) {
+    /*
+     * A day that did not go perfectly, which is every real day.
+     *
+     * The clean fixture above reconciles eight thousand lines to eight
+     * thousand matches, and a run that finds nothing wrong is the one case
+     * the exception path never executes. These are the disagreements an
+     * officer actually opens the queue to see, seeded in the proportions that
+     * make the measurement worth reading rather than at a rate that would
+     * make every record an exception.
+     */
+    // One in ten: the gateway says a different amount than the platform.
+    await pool.query(
+      `UPDATE mock_gateway_transactions SET amount_kobo = 190000
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 10) = 0`,
+      [tag],
+    );
+    // One in twenty: the platform believes it was paid and the gateway has no
+    // line for it at all. The worst kind, and the reason the sweep exists.
+    await pool.query(
+      `DELETE FROM mock_gateway_transactions
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 20) = 1`,
+      [tag],
+    );
+    // One in twenty: the gateway says it failed while the platform says paid.
+    await pool.query(
+      `UPDATE mock_gateway_transactions SET status = 'FAILED'
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 20) = 2`,
+      [tag],
+    );
+    // And lines the gateway has that the platform never issued, which are
+    // found by the second pass rather than the first.
+    await pool.query(
+      `INSERT INTO mock_gateway_transactions
+         (gateway_reference, payment_reference, amount_kobo, status, paid_at,
+          settlement_reference, created_at)
+       SELECT 'RECONGW-' || $1 || '-orphan-' || g, 'RECONPAY-' || $1 || '-orphan-' || g,
+              200000, 'SUCCESS', now() - make_interval(days => $2),
+              'SETL-' || $1, now() - make_interval(days => $2)
+         FROM generate_series(1, $3) g`,
+      [tag, daysAgo, Math.max(1, Math.floor(count / 20))],
+    );
+  }
 
   /*
    * The third leg: government's own record that the money arrived in its
@@ -534,12 +585,19 @@ async function main(): Promise<void> {
   const actorId = officer.rows[0]?.id ?? null;
 
   console.log(
-    `  ${'payments in the day'.padEnd(24)}${'elapsed'.padStart(12)}${'per record'.padStart(14)}${'matched'.padStart(10)}${'exceptions'.padStart(12)}`,
+    `  ${'day'.padEnd(24)}${'elapsed'.padStart(12)}${'per record'.padStart(14)}${'matched'.padStart(10)}${'exceptions'.padStart(12)}`,
   );
-  console.log('  ' + '-'.repeat(70));
+  console.log('  ' + '-'.repeat(72));
   let daysAgo = 1;
-  for (const volume of [500, 2000, 8000]) {
-    const window = await seedSettledDay(volume, daysAgo);
+  for (const [volume, variances] of [
+    [500, false],
+    [2000, false],
+    [8000, false],
+    // The same volume again, on a day that did not go perfectly. Compared
+    // against the row above it, the difference is what an exception costs.
+    [8000, true],
+  ] as [number, boolean][]) {
+    const window = await seedSettledDay(volume, daysAgo, { variances });
     daysAgo += 1;
     const startedAt = process.hrtime.bigint();
     const summary = await runReconciliation({
@@ -557,8 +615,9 @@ async function main(): Promise<void> {
       [summary.runId],
     );
     const checked = Number(written.rows[0]!.n);
+    const label = variances ? `${volume}, with variances` : String(volume);
     console.log(
-      `  ${String(volume).padEnd(24)}${(elapsedMs.toFixed(0) + ' ms').padStart(12)}` +
+      `  ${label.padEnd(24)}${(elapsedMs.toFixed(0) + ' ms').padStart(12)}` +
         `${((checked ? elapsedMs / checked : 0).toFixed(2) + ' ms').padStart(14)}` +
         `${String(summary.matched).padStart(10)}${String(summary.exceptions).padStart(12)}`,
     );
