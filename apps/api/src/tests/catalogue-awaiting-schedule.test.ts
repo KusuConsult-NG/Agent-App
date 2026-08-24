@@ -29,14 +29,12 @@ const AWAITING_SCHEDULE = [
   'PIT-PRESUMPTIVE-MEDIUM',
   'BP-REG-SEMI-URBAN',
   'BP-RENEW-SEMI-URBAN',
-  // Repealed by the Nigeria Tax Act, 2025, in force since 1 January 2026:
-  // PITA, the Capital Gains Tax Act and the Stamp Duties Act. The figures
-  // that were seeded against them charged tax the current law does not levy,
-  // including on the first ₦800,000 of income, which it exempts entirely.
-  'PIT-DIRECT',
-  'PIT-PAYE',
+  // Not one rate but a table: withholding differs by what is being paid for,
+  // stamp duty by which instrument is being stamped. A single figure would be
+  // wrong for everything except whichever transaction it happened to match,
+  // so these need a rate table and an input naming the kind — a change to the
+  // item rather than a number to fill in.
   'PIT-WHT',
-  'PIT-CGT',
   'PIT-STAMP',
 ];
 
@@ -49,7 +47,7 @@ const AWAITING_SCHEDULE = [
  * the platform refuses a business item for an individual first, and correctly,
  * which is not the refusal this test is about.
  */
-const BUSINESS_ITEMS = new Set(['BP-REG-SEMI-URBAN', 'BP-RENEW-SEMI-URBAN', 'PIT-PAYE']);
+const BUSINESS_ITEMS = new Set(['BP-REG-SEMI-URBAN', 'BP-RENEW-SEMI-URBAN']);
 
 before(async () => {
   await resetDatabase();

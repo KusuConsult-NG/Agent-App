@@ -12,7 +12,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import { parseKobo, assertTransactionTransition, type Kobo } from '@psirs/shared';
+import { parseKobo, koboToNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -273,6 +273,30 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
     const computation = computeAmount(rate, params.inputs);
 
     if (computation.amountKobo <= 0n) {
+      /*
+       * Zero means two entirely different things, and the platform used to say
+       * the same wrong thing about both.
+       *
+       * Under the Fourth Schedule to the Nigeria Tax Act, 2025 the first
+       * ₦800,000 of annual income is taxed at nothing. A trader on ₦300,000
+       * owes nothing — that is the law working, not a data-entry fault. The
+       * message here said "Check the values entered", which tells an agent
+       * their input is wrong when it is right, and leaves them one way to make
+       * the screen proceed: enter an income the trader does not have. Agents
+       * are paid commission on what they collect. A refusal that blames the
+       * figures is, to that agent, an instruction to raise them.
+       *
+       * So a zero that came out of the schedule is reported as a nil
+       * liability, and a zero that came out of an empty form keeps the old
+       * message. `declaredBaseKobo` is what separates them.
+       */
+      if (computation.declaredBaseKobo !== null && computation.declaredBaseKobo > 0n) {
+        throw conflict(
+          'NO_TAX_PAYABLE',
+          `No tax is payable on ₦${koboToNaira(computation.declaredBaseKobo)} under the rate in force for "${item.name}", so there is no invoice to raise.`,
+          'The figures are not wrong — this taxpayer is below the threshold. Do not increase the amount to make the assessment go through.',
+        );
+      }
       throw badRequest(
         'The calculated amount is zero. Check the values entered before raising an invoice.',
       );

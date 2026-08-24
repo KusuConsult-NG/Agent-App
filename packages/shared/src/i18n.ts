@@ -65,6 +65,17 @@ export interface TranslationDictionary {
   neverCollectCashBody: string;
   cashChannelReminder: string;
   /**
+   * A nil liability, which the Fourth Schedule makes an ordinary outcome.
+   *
+   * The first ₦800,000 of annual income is exempt, so for a large share of
+   * the traders this platform exists to reach the correct answer is that
+   * nothing is owed. That answer has to be sayable in the language the agent
+   * is working in — an exemption explained only in English is an exemption
+   * the agent cannot pass on to the person in front of them.
+   */
+  noTaxPayable: string;
+  noTaxPayableBody: string;
+  /**
    * Tab-bar labels, kept separate from the prose terms they echo.
    *
    * A tab is about 52 logical pixels wide on a common handset. English gets
@@ -174,6 +185,9 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Government revenue must always be paid by the taxpayer through an approved payment channel. Never accept cash into your own account.',
     cashChannelReminder:
       'The taxpayer must pay through the approved payment channel. Confirm the amount with them before you continue.',
+    noTaxPayable: 'No tax is payable',
+    noTaxPayableBody:
+      'This taxpayer owes nothing on the amount declared. Do not increase it to make a payment go through — there is nothing to collect.',
     navHome: 'Home',
     navTaxpayers: 'Taxpayers',
     navCollect: 'Collect',
@@ -271,6 +285,9 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Dole mai biyan haraji ya biya kudin gwamnati ta hanyar biyan kudi da aka amince da ita. Kada ka taba karbar kudi a asusunka.',
     cashChannelReminder:
       'Dole mai biyan haraji ya biya ta hanyar da aka amince da ita. Ka tabbatar da adadin kudin tare da shi kafin ka ci gaba.',
+    noTaxPayable: 'Babu harajin da za a biya',
+    noTaxPayableBody:
+      'Wannan mai biyan haraji ba shi da abin biya a kan adadin da aka shigar. Kada ka kara adadin domin a sami biyan kudi — babu abin karba.',
     // The four below are the existing prose terms, unchanged. They do not fit
     // a tab and are listed in HAUSA-REVIEW.md with the width they have to fit
     // in, because shortening them is a translation decision and not ours.

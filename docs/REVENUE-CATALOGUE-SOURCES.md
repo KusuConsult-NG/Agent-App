@@ -85,25 +85,92 @@ catalogue was priced against those Acts.
 
 The seeded direct-assessment bands were the old PITA schedule — 7% from the
 first naira, rising through 11 / 15 / 19 / 21 to 24%, with a ₦5,000 floor.
-Under the Fourth Schedule to the NTA **the first ₦800,000 of annual income is
-taxed at nothing at all**, the band above it at 15%, and the top rate is 25%.
+Under the Fourth Schedule to the NTA the first ₦800,000 of annual income is
+taxed at nothing at all.
 
 A trader on ₦300,000 a year owed 7% and a ₦5,000 minimum under the figures
 that were in this repository, and owes nothing under the law. On a platform
 built to collect from the grassroots, the people that error reaches first are
 the ones the reform deliberately exempts.
 
-Five items are now unpriced for that reason — `PIT-DIRECT`, `PIT-PAYE`,
-`PIT-WHT`, `PIT-CGT`, `PIT-STAMP` — and the platform refuses to assess them.
-`PIT-PAYE` was additionally wrong before the reform: it sat at a flat 7% when
-PAYE runs on the same progressive schedule as direct assessment, so it
-overcharged everyone in the lowest band and undercharged everyone above it.
+### What has been entered
 
-The correct bands are not written in here from a summary. The Fourth Schedule
-is the authority, the Federal Government has issued transition guidance whose
-effect on a state's own assessments is not something to infer, and Plateau is
-among the states domesticating the reforms. **Somebody has to read the
-Schedule.**
+**The Fourth Schedule now governs `PIT-DIRECT`, `PIT-PAYE` and `PIT-CGT`:**
+
+| Annual income | Rate |
+|---|---|
+| First ₦800,000 | Nil |
+| Next ₦2,200,000 (to ₦3m) | 15% |
+| Next ₦9,000,000 (to ₦12m) | 18% |
+| Next ₦13,000,000 (to ₦25m) | 21% |
+| Next ₦25,000,000 (to ₦50m) | 23% |
+| Above ₦50,000,000 | 25% |
+
+These three were entered rather than left unpriced because **personal income
+tax rates are federal**. States administer the tax; they do not set its rates.
+Unlike the Plateau fee Schedules, this is not a figure PSIRS chooses — it is
+the one PSIRS applies. `personal-income-tax-schedule.test.ts` locks the
+arithmetic at every band boundary.
+
+**There is no minimum, and that is the point rather than an omission.** A
+floor of any size falls on someone whose tax is nil, which is the exemption
+cancelled by the line beneath it. The test asserts its absence.
+
+`PIT-PAYE` carries the same schedule because PAYE is this tax deducted at
+source, not a different one; it sat at a flat 7%, which was wrong before the
+reform as well, overcharging everyone in the lowest band and undercharging
+everyone above it. `PIT-CGT` carries it because the NTA brought chargeable
+gains for individuals inside the personal income tax framework, replacing the
+flat 10% of the repealed Capital Gains Tax Act.
+
+**Two remain unpriced, for a different reason than before.** `PIT-WHT` and
+`PIT-STAMP` are not one rate each. Withholding differs by what is being paid
+for — rent, dividends, professional fees, construction, ordinary contracts —
+and stamp duty by which instrument is being stamped. A single figure would be
+wrong for every transaction except whichever one it happened to match. They
+need a rate table and an input naming the kind, which is a change to the item
+rather than a number to fill in.
+
+### The gazette itself was not read
+
+The bands above are consistent across the published summaries of the Act and
+across the PAYE tables issued under it. They were not read from the gazette,
+which could not be reached from this environment. **That is what needs
+checking**, along with whatever transition guidance governs a state assessment
+raised in 2026, and whether Plateau's domestication of the reform alters
+anything.
+
+### What entering them exposed
+
+Applying the Schedule to the running system found a defect that had nothing to
+do with the numbers.
+
+Assessing a trader on ₦300,000 produced:
+
+> The calculated amount is zero. Check the values entered before raising an
+> invoice.
+
+The values were not wrong; the trader is exempt. But an agent reading that has
+been told their input is the problem, and the only way past it is to enter an
+income the trader does not have. **Agents are paid commission on what they
+collect.** A refusal that blames the figures is, to that agent, an instruction
+to raise them — and the agent app compounded it, announcing "You are about to
+collect ₦0.00" with a payment button that then failed.
+
+The platform now distinguishes a zero that came out of the schedule from a
+zero that came out of an empty form. The first is reported as `NO_TAX_PAYABLE`
+with the working shown and an explicit instruction not to increase the amount;
+the second keeps the old message, which is correct for it. Nothing is stored
+either way, because there is no liability to record. The strings exist in
+Hausa as well as English: an exemption an agent cannot explain to the person
+in front of them is not much use.
+
+**One question for PSIRS follows from this and is not settled here.** A trader
+found to owe nothing gets no assessment, no invoice and no record of the
+visit. Whether PSIRS wants a nil assessment recorded — evidence, to the next
+agent who comes round, that this trader has been assessed and is exempt — is a
+decision about what the Service issues, not one for this repository. The
+platform currently refuses cleanly and stores nothing.
 
 ### One other price to check first
 
@@ -114,8 +181,9 @@ List for Collection) Act provides for a development levy on individuals only,
 Court in 2020. If that cap still governs, the seeded figure is twenty times
 the statutory maximum. It has been left priced rather than changed, because
 whether the state development levy survives the 2025 reform in its old form is
-exactly the question this document says not to answer by inference — but it
-should be the first one asked.
+a question of state law rather than federal — the reason the Fourth Schedule
+could be entered does not extend to it. `PSIRS-QUERY-DEVELOPMENT-LEVY.md` asks
+it.
 
 ---
 
@@ -136,12 +204,13 @@ Before Phase 1:
    Compendium that are absent here cannot be collected through this platform.
    Neither direction has been checked.
 
-Point 2 deserves emphasis. Of the thirty-seven prices originally seeded, five
-have since been withdrawn as resting on repealed Acts and one — `DEV-LEVY` —
-is flagged above as probably exceeding a statutory cap. **The remaining
-thirty-one have not been verified against anything.** Nothing in this
-repository establishes where ₦10,000 for urban business premises registration,
-or ₦200 for a daily market levy, or any of the others came from.
+Point 2 deserves emphasis. Of the thirty-seven prices originally seeded, three
+have been replaced with the Fourth Schedule, two have been withdrawn pending a
+rate table, and one — `DEV-LEVY` — is flagged above as probably exceeding a
+statutory cap. **The remaining thirty-one have not been verified against
+anything.** Nothing in this repository establishes where ₦10,000 for urban
+business premises registration, or ₦200 for a daily market levy, or any of the
+others came from.
 
 ## Sources
 
