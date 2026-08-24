@@ -81,13 +81,36 @@ function requireNumericInput(inputs: ComputationInputs, key: string, label: stri
       { field: key, issue: `${label} is missing` },
     ]);
   }
+  let amount: Kobo;
   try {
-    return parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
+    amount = parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
   } catch {
     throw badRequest(`${label} must be a whole number of kobo.`, [
       { field: key, issue: 'Not a valid amount' },
     ]);
   }
+
+  /*
+   * Nothing a revenue item is computed from can be negative.
+   *
+   * There is no negative turnover, no negative property value, no negative
+   * assessable income for this purpose. A negative here is a mistake or a
+   * crafted input, and it used to pass: the percentage of a negative base
+   * rounds to zero, the statutory minimum is then applied because zero is
+   * below it, and an assessment is raised for the floor. The taxpayer is
+   * charged, the trace reads "2.00% of ₦-0.01", and nothing refused it.
+   *
+   * It only ever failed to slip through on items with no minimum, where the
+   * zero result was caught further down — so whether a nonsensical input was
+   * rejected depended on whether the item happened to have a floor.
+   */
+  if (amount < 0n) {
+    throw badRequest(`${label} cannot be negative.`, [
+      { field: key, issue: `${label} must be zero or more` },
+    ]);
+  }
+
+  return amount;
 }
 
 /**

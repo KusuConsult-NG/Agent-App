@@ -521,19 +521,28 @@ describe('AUDIT 5 — commission arithmetic, checked independently', () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
 
-    // PIT-CGT is 10% of a declared base and applies to individuals, so a
-    // chosen base produces exactly the government amounts the brief names:
-    // base x 10% = 1,000 / 10,000 / 100,000 / 1,000,000 naira.
+    /*
+     * Produce Sales Tax is 2% of a declared base, so a chosen base produces
+     * exactly the government amounts the brief names: base x 2% = 1,000 /
+     * 10,000 / 100,000 / 1,000,000 naira. Its ₦500 floor does not bind at any
+     * of them.
+     *
+     * This used PIT-CGT, which is now unpriced: the Capital Gains Tax Act was
+     * repealed into the Nigeria Tax Act, 2025 and the platform refuses to
+     * assess an item whose rate no law in force sets. The property under test
+     * is commission arithmetic and does not care which item raises the
+     * invoice, only that the government amount is predictable.
+     */
     const cases = [
-      { naira: 1_000n, baseKobo: 1_000_000 },
-      { naira: 10_000n, baseKobo: 10_000_000 },
-      { naira: 100_000n, baseKobo: 100_000_000 },
-      { naira: 1_000_000n, baseKobo: 1_000_000_000 },
+      { naira: 1_000n, baseKobo: 5_000_000 },
+      { naira: 10_000n, baseKobo: 50_000_000 },
+      { naira: 100_000n, baseKobo: 500_000_000 },
+      { naira: 1_000_000n, baseKobo: 5_000_000_000 },
     ];
 
     for (const [index, testCase] of cases.entries()) {
       const raised = await raiseInvoice(session.accessToken, AGENT_DEVICE, {
-        itemCode: 'PIT-CGT',
+        itemCode: 'PRODUCE-SALES-TAX',
         inputs: { baseAmountKobo: testCase.baseKobo },
         name: `Commission Subject${index}`,
         phone: `+23490112000${index}0`,
@@ -926,7 +935,7 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
   it('rejects a negative or absurd assessable amount', async () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
-    const revenueItemId = await revenueItemByCode('PIT-CGT');
+    const revenueItemId = await revenueItemByCode('PRODUCE-SALES-TAX');
 
     const { response: taxpayer } = await registerTaxpayer(
       session.accessToken,
@@ -936,7 +945,18 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
     );
     assert.equal(taxpayer.status, 201, JSON.stringify(taxpayer.body));
 
-    for (const baseAmountKobo of [0, -1, -1_000_000, 'not-a-number']) {
+    /*
+     * Absurd on any item, whatever its rate: a negative assessable amount is
+     * not a small one, and a word is not a number.
+     *
+     * The negative cases used to pass only by accident. On an item with a
+     * statutory floor, a percentage of a negative base rounds to zero, the
+     * floor is applied because zero is below it, and the assessment is raised
+     * — so `2.00% of ₦-0.01` produced a ₦500 charge and nothing objected.
+     * Whether nonsense was refused depended on whether the item had a
+     * minimum. `rate-engine.ts` now refuses it outright.
+     */
+    for (const baseAmountKobo of [-1, -1_000_000, 'not-a-number']) {
       const assessment = await post(
         '/revenue/assessments',
         { taxpayerId: taxpayer.body.taxpayerId, revenueItemId, inputs: { baseAmountKobo } },
@@ -945,6 +965,28 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
       assert.ok(
         assessment.status >= 400,
         `base ${baseAmountKobo} must be rejected, got ${assessment.status}: ${JSON.stringify(assessment.body)}`,
+      );
+    }
+
+    /*
+     * Zero is the interesting one, and its right answer depends on the item.
+     * Produce Sales Tax carries a ₦500 statutory floor, so a declared zero
+     * base is charged the floor rather than refused — a minimum means "at
+     * least this much", and that is a policy the law sets rather than a bug.
+     * On an item with no floor the same input must be refused outright.
+     *
+     * What must hold either way, and is the property worth having, is that
+     * nothing ever stores an assessment for nothing.
+     */
+    const zeroBase = await post(
+      '/revenue/assessments',
+      { taxpayerId: taxpayer.body.taxpayerId, revenueItemId, inputs: { baseAmountKobo: 0 } },
+      { token: session.accessToken, deviceId: AGENT_DEVICE },
+    );
+    if (zeroBase.status < 400) {
+      assert.ok(
+        BigInt(zeroBase.body.amountKobo) > 0n,
+        `a zero base may charge the statutory minimum but never nothing: ${JSON.stringify(zeroBase.body)}`,
       );
     }
 
