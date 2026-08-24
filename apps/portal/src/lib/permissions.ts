@@ -132,8 +132,20 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
   {
     group: 'Overview',
     items: [
-      { path: '/', label: 'Dashboard', permission: 'report:read:all' },
-      { path: '/intelligence', label: 'Revenue intelligence', permission: 'report:read:all' },
+      /*
+       * Both accept report:read:territory as well, and it is the reason a
+       * supervisor now has any analytics at all. Gated on report:read:all
+       * alone, the menu hid the dashboard and the intelligence page from the
+       * one role whose job is a territory — so they signed in and landed on a
+       * raw transaction list. What a territory-scoped officer sees on these
+       * screens is narrowed by the API, not by whether the link is offered.
+       */
+      { path: '/', label: 'Dashboard', permission: ['report:read:all', 'report:read:territory'] },
+      {
+        path: '/intelligence',
+        label: 'Revenue intelligence',
+        permission: ['report:read:all', 'report:read:territory'],
+      },
       { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
     ],
   },

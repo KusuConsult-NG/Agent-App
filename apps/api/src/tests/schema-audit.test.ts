@@ -108,6 +108,16 @@ const DELIBERATELY_MUTABLE = new Set([
   'support_tickets',
   'ticket_messages',
   'users',
+  /*
+   * An assignment, not a record. Changing which territories an officer covers
+   * replaces the rows wholesale, so the table always states current coverage
+   * and nothing else. The history that matters — who widened whose view of the
+   * state's revenue, when, and why — is written to `audit_logs` by
+   * `setOfficerTerritories`, which is append-only and protected. Keeping stale
+   * assignments here as well would give two answers to "what may this officer
+   * see", and the wrong one would be the one a query found first.
+   */
+  'user_territories',
   // Reference and configuration data, edited by officers through the portal.
   'lgas',
   'wards',

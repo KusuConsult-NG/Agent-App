@@ -46,6 +46,23 @@ const ASSIGNABLE = ['admin', 'supervisor', 'revenue_officer', 'finance_officer',
 
 const readable = (role: string) => role.replace(/_/g, ' ');
 
+interface Territory {
+  id: string;
+  name: string;
+  code: string;
+  lga_name: string;
+}
+
+/**
+ * The roles whose reports are narrowed to territories rather than the state.
+ *
+ * Everybody else holds `report:read:all` and sees everything, so offering them
+ * a territory picker would imply a limit that does not apply. A supervisor is
+ * currently the only such role; the list is here rather than inline so adding
+ * the next one is a single edit.
+ */
+const TERRITORY_SCOPED_ROLES = ['supervisor'];
+
 export function UserAccessScreen({ user }: { user: User }) {
   const [users, setUsers] = useState<PortalUser[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -54,6 +71,13 @@ export function UserAccessScreen({ user }: { user: User }) {
   const [chosenRole, setChosenRole] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [coverage, setCoverage] = useState<PortalUser | null>(null);
+  const [territories, setTerritories] = useState<{
+    assigned: Territory[];
+    available: Territory[];
+  } | null>(null);
+  const [chosenTerritories, setChosenTerritories] = useState<string[]>([]);
+  const [coverageReason, setCoverageReason] = useState('');
 
   const load = useCallback(() => {
     api
@@ -102,6 +126,45 @@ export function UserAccessScreen({ user }: { user: User }) {
       else if (caught instanceof Error) {
         setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openCoverage(row: PortalUser) {
+    setCoverage(row);
+    setTerritories(null);
+    setCoverageReason('');
+    setMessage(null);
+    api
+      .get<{ assigned: Territory[]; available: Territory[] }>(
+        `/government/users/${row.id}/territories`,
+      )
+      .then((data) => {
+        setTerritories(data);
+        setChosenTerritories(data.assigned.map((t) => t.id));
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }
+
+  async function submitCoverage() {
+    if (!coverage || coverageReason.trim().length < 10) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ message: string }>(
+        `/government/users/${coverage.id}/territories`,
+        { territoryIds: chosenTerritories, reason: coverageReason.trim() },
+      );
+      setMessage(result.message);
+      setCoverage(null);
+      setTerritories(null);
+      setCoverageReason('');
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
       setBusy(false);
     }
@@ -186,6 +249,89 @@ export function UserAccessScreen({ user }: { user: User }) {
         </div>
       )}
 
+      {coverage && (
+        <div className="card">
+          <h2 className="card__title">Territories — {coverage.full_name}</h2>
+          <p className="card__hint">
+            A supervisor sees revenue for the territories assigned here and no others. With none
+            assigned they see nothing at all — which is deliberate, so an account nobody has
+            finished setting up is the least revealing one rather than the most.
+          </p>
+
+          {!territories ? (
+            <Loading rows={3} />
+          ) : (
+            <>
+              <div className="field">
+                <span className="field__label">Territories covered</span>
+                {territories.available.length === 0 ? (
+                  <p className="field__hint">No active territory has been created yet.</p>
+                ) : (
+                  <ul className="list" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                    {territories.available.map((territory) => (
+                      <li key={territory.id}>
+                        <label className="list__item" style={{ cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={chosenTerritories.includes(territory.id)}
+                            onChange={(event) =>
+                              setChosenTerritories((current) =>
+                                event.target.checked
+                                  ? [...current, territory.id]
+                                  : current.filter((id) => id !== territory.id),
+                              )
+                            }
+                          />
+                          <div className="list__body">
+                            <p className="list__title">{territory.name}</p>
+                            <p className="list__meta">
+                              {territory.lga_name} · {territory.code}
+                            </p>
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="field">
+                <label htmlFor="coverage-reason">Why this is changing</label>
+                <textarea
+                  id="coverage-reason"
+                  value={coverageReason}
+                  rows={3}
+                  onChange={(event) => setCoverageReason(event.target.value)}
+                  placeholder="Taking over the Jos North market round from 1 September."
+                />
+              </div>
+
+              {chosenTerritories.length === 0 && (
+                <Alert kind="warning" title="This will leave them covering nothing">
+                  <p style={{ margin: 0 }}>
+                    {coverage.full_name} will see no revenue figures at all until a territory is
+                    assigned.
+                  </p>
+                </Alert>
+              )}
+
+              <div className="button-row">
+                <button
+                  type="button"
+                  disabled={busy || coverageReason.trim().length < 10}
+                  onClick={submitCoverage}
+                >
+                  {busy ? 'Saving…' : 'Save territories'}
+                </button>
+                <button type="button" className="secondary" onClick={() => setCoverage(null)}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="card card--flush">
         <Table
           columns={[
@@ -217,18 +363,29 @@ export function UserAccessScreen({ user }: { user: User }) {
                   // changed, instead of wondering where it went.
                   <span className="list__meta">Your own access</span>
                 ) : (
-                  <button
-                    type="button"
-                    className="small secondary"
-                    onClick={() => {
-                      setEditing(row as PortalUser);
-                      setChosenRole('');
-                      setReason('');
-                      setMessage(null);
-                    }}
-                  >
-                    Change access
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="small secondary"
+                      onClick={() => {
+                        setEditing(row as PortalUser);
+                        setChosenRole('');
+                        setReason('');
+                        setMessage(null);
+                      }}
+                    >
+                      Change access
+                    </button>{' '}
+                    {TERRITORY_SCOPED_ROLES.includes(row.role) && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => openCoverage(row as PortalUser)}
+                      >
+                        Territories
+                      </button>
+                    )}
+                  </>
                 ),
             },
           ]}

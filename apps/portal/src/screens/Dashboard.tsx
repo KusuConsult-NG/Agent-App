@@ -20,6 +20,18 @@ interface Dashboard {
   revenueByMda: { mda: string; amount_kobo: string }[];
   dailyTrend: { day: string; amount_kobo: string; transactions: string }[];
   exceptions: Record<string, string>;
+  /**
+   * How much of the state these figures cover.
+   *
+   * A supervisor sees their territories and an administrator sees everything,
+   * and the numbers look identical either way. Labelling it is not decoration:
+   * "Collected today ₦0" from a supervisor with no territory assigned and
+   * "Collected today ₦0" from a genuinely quiet Tuesday are the same screen,
+   * and one of them is a configuration fault somebody has to fix.
+   */
+  scope?:
+    | { kind: 'STATEWIDE' }
+    | { kind: 'TERRITORIES'; territories: { id: string; name: string; code: string }[] };
 }
 
 export function DashboardScreen({ navigate }: { navigate: (path: string) => void }) {
@@ -38,12 +50,33 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
   if (error) return <ErrorAlert error={error} />;
   if (!data) return <Loading rows={6} />;
 
+  const scope = data.scope;
+  const territories = scope?.kind === 'TERRITORIES' ? scope.territories : null;
+
   const openExceptions =
     Number(data.exceptions.reconciliation_exceptions ?? 0) +
     Number(data.exceptions.open_fraud_flags ?? 0);
 
   return (
     <>
+      {territories && territories.length === 0 && (
+        <Alert kind="warning" title="No territory has been assigned to you">
+          <p style={{ margin: 0 }}>
+            These figures are empty because your account covers no territory yet, not because
+            nothing was collected. Ask an administrator to assign yours.
+          </p>
+        </Alert>
+      )}
+
+      {territories && territories.length > 0 && (
+        <Alert kind="info" title={`Showing ${territories.map((t) => t.name).join(', ')}`}>
+          <p style={{ margin: 0 }}>
+            Every figure on this page covers your {territories.length === 1 ? 'territory' : 'territories'} only,
+            not the whole state.
+          </p>
+        </Alert>
+      )}
+
       {openExceptions > 0 && (
         <Alert kind="warning" title={`${openExceptions} item(s) need attention`}>
           <p style={{ margin: 0 }}>

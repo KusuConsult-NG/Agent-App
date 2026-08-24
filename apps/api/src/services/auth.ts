@@ -10,7 +10,7 @@ import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
 import { permissionsForRole } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import {
   generateOtp,
@@ -814,6 +814,84 @@ export async function changeUserRole(params: {
         (sessionsEnded > 0
           ? `${sessionsEnded} open session${sessionsEnded === 1 ? '' : 's'} ended, so they must sign in again.`
           : 'They had no open sessions.'),
+    };
+  });
+}
+
+/**
+ * Assign or remove the territories an officer may see reports for.
+ *
+ * Audited, and for the same reason a role change is: this decides how much of
+ * the state's revenue somebody can see. It is a smaller lever than a role but
+ * it is the same kind of lever, and an unaudited widening of it would be
+ * invisible afterwards.
+ *
+ * Assignments are replaced wholesale rather than added one at a time, so the
+ * audit record is the officer's complete coverage after the change rather than
+ * a diff a reader has to reassemble.
+ */
+export async function setOfficerTerritories(params: {
+  targetUserId: string;
+  territoryIds: string[];
+  actorId: string;
+  actorRole: string;
+  reason: string;
+}) {
+  return withTransaction(async (client) => {
+    const target = await queryOne<{ id: string; full_name: string; role: string }>(
+      client,
+      'SELECT id, full_name, role FROM users WHERE id = $1',
+      [params.targetUserId],
+    );
+    if (!target) throw notFound('That officer');
+    if (target.role === 'agent') {
+      throw badRequest(
+        'Territories cannot be assigned to a field agent here. An agent’s territory follows their clearance record.',
+      );
+    }
+
+    const before = await query<{ territory_id: string }>(
+      client,
+      'SELECT territory_id FROM user_territories WHERE user_id = $1',
+      [params.targetUserId],
+    );
+
+    if (params.territoryIds.length > 0) {
+      const found = await query<{ id: string }>(
+        client,
+        `SELECT id FROM territories WHERE id = ANY($1::uuid[]) AND status = 'ACTIVE'`,
+        [params.territoryIds],
+      );
+      if (found.length !== new Set(params.territoryIds).size) {
+        throw badRequest('One of those territories does not exist or is not active.');
+      }
+    }
+
+    await query(client, 'DELETE FROM user_territories WHERE user_id = $1', [params.targetUserId]);
+    for (const territoryId of new Set(params.territoryIds)) {
+      await query(
+        client,
+        `INSERT INTO user_territories (user_id, territory_id, assigned_by) VALUES ($1,$2,$3)`,
+        [params.targetUserId, territoryId, params.actorId],
+      );
+    }
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'user.territories.change',
+      entityType: 'users',
+      entityId: params.targetUserId,
+      oldValue: { territoryIds: before.map((row) => row.territory_id) },
+      newValue: { territoryIds: [...new Set(params.territoryIds)] },
+      reason: params.reason,
+    });
+
+    return {
+      message:
+        params.territoryIds.length === 0
+          ? `${target.full_name} now covers no territory and will see no revenue figures.`
+          : `${target.full_name} now covers ${new Set(params.territoryIds).size} territory(ies).`,
     };
   });
 }
