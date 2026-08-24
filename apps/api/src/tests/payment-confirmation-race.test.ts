@@ -199,6 +199,11 @@ describe('many payments, confirmed at once', () => {
     // verifier could replay it afterwards — and that is the record the whole
     // platform rests on.
     const verification = await verifyAuditChain(pool, { fromSequence: 0, limit: 100_000 });
-    assert.equal(verification.valid, true, verification.message);
+    assert.equal(
+      verification.valid,
+      true,
+      `chain broken at ${verification.brokenAtSequence}: ${verification.detail}`,
+    );
+    assert.ok(verification.entriesChecked > 0, 'the chain was actually replayed, not skipped');
   });
 });
