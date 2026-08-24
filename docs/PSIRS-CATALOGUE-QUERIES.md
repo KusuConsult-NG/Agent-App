@@ -18,15 +18,15 @@ out below in the order we think they matter.
 **What amount should the platform charge for Development Levy, and under what
 authority?**
 
-It is currently configured at **₦2,000 per annum per individual**. We cannot
-find the instrument that sets that figure, and there is a federal provision
-that appears to cap it at ₦100. We would rather ask than guess: the figure
-goes on a government receipt.
+It is configured at **₦2,000 per annum per individual**, and it will stay
+there: with the ₦100 federal provision put to them, the platform owner
+confirmed ₦2,000 on 24 August 2026.
 
-This is the one item we have not corrected ourselves. Where the personal
-income tax bands are federal and could be applied on that authority, a state
-development levy is state law, and we are not going to change a figure on a
-government receipt by inference.
+**We are still asking under what authority.** The figure is settled; its source
+is not, and the two are different things. If there is a Plateau instrument
+setting ₦2,000 we would like to record the section against the item, so that
+what the platform charges rests on something better than a decision somebody
+made once.
 
 ### Why we are asking
 
@@ -84,9 +84,13 @@ These will need answering before the platform collects real money:
    We have entered the Fourth Schedule bands (nil to ₦800,000; 15% to ₦3m;
    18% to ₦12m; 21% to ₦25m; 23% to ₦50m; 25% above), with no minimum,
    because these rates are federal and are the ones PSIRS applies rather than
-   the ones PSIRS sets. **Please confirm them against the gazette**, which we
-   were not able to read directly, and tell us whatever transition guidance
-   governs a state assessment raised in 2026.
+   the ones PSIRS sets. They are in force in the platform as of 24 August
+   2026 — the alternative was leaving the repealed PITA figures in force,
+   which are certainly wrong.
+
+   **Please still confirm them against the gazette**, which we were not able
+   to read directly, and tell us whatever transition guidance governs a state
+   assessment raised in 2026.
 
    Withholding tax and stamp duty remain withdrawn. Neither is a single rate —
    withholding differs by what is being paid for and stamp duty by the
@@ -126,18 +130,26 @@ LGAs.
 
 **Does PSIRS collect these as agent for the Local Government Councils?** If
 so, whose rate applies — one rate agreed statewide, or each Council's own
-bye-law? The platform can hold a different rate per LGA; it currently does
-not, because we did not know it should.
+bye-law?
+
+The platform now holds **a rate per Council** for all eleven. Each is set to
+the figure we were already charging, so nothing a trader pays has changed —
+but the seventeen are now separately settable, and we can correct them one
+Council at a time as you tell us what each bye-law says. A Council whose rate
+we empty is refused rather than charged its neighbour's figure.
 
 Three carry an exclusion in the Act that we have no way to model:
 
 - **Street naming** excludes any street in the State Capital. Jos is the
-  capital, so on the face of it this is not chargeable in Jos North or Jos
-  South at all.
-- **Right of occupancy** on that list is rural land only. Ours is one flat
-  ₦50,000 with no rural qualifier.
-- **Market levies** exclude any market where state finance is involved. Which
-  markets in Plateau does that cover?
+  capital, so we have removed the rate in Jos North and Jos South and the
+  platform now refuses the item there. **Tell us if that is wrong** — it is
+  the one exclusion we have acted on rather than only asked about.
+- **Right of occupancy** on that list is rural land only, and ours was one
+  flat ₦50,000 with no rural qualifier. It is now per-Council, so **please
+  tell us which Councils are rural** and we will empty the rest.
+- **Market levies** exclude any market where state finance is involved. That
+  is a fact about a market rather than about a Council, and the catalogue
+  still has nowhere to record it. Which markets in Plateau does it cover?
 
 We are aware the Act's own constitutional standing is disputed, and we are not
 asking you to litigate it. We are asking what PSIRS's position is, because the
@@ -156,12 +168,20 @@ yours.
 
 ## What we have done in the meantime
 
-Nothing is being charged on a guess. Seven items carry no rate at all and the
-platform refuses to assess them. The thirty-one unverified figures are left
-exactly as they were seeded and are recorded in the repository as unverified,
-in a test that fails if anybody adds a forty-third price without saying where
-it came from. We have corrected only the personal income tax bands, and only
-because those are federal.
+Seven items carry no rate at all and the platform refuses to assess them. The
+unverified figures are left exactly as they were seeded and are recorded in
+the repository as unverified, in a test that fails if anybody adds a
+forty-third price without saying where it came from.
+
+Three things have changed since the first version of this document, and all
+three are recorded with who decided rather than dressed up as findings:
+
+1. The personal income tax bands are the Fourth Schedule, because those rates
+   are federal.
+2. The development levy stays at ₦2,000 on the owner's instruction, marked in
+   the repository as owner-directed rather than sourced.
+3. The eleven local government items are priced per Council instead of
+   statewide — same amounts, seventeen separately settable rows.
 
 ## Contact
 

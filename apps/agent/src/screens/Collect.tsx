@@ -138,7 +138,7 @@ export function CollectScreen({
         }
         inputs.baseAmountKobo = String(Math.round(naira * 100));
       }
-      setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs }));
+      setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);

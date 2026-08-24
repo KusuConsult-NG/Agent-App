@@ -77,6 +77,19 @@ const STATE_CATALOGUE: {
      * until somebody with the Schedule in front of them enters the figure.
      */
     awaitingSchedule?: boolean;
+    /**
+     * Local government revenue: a rate per Council, not one for the State.
+     *
+     * Part III of the Taxes and Levies Act puts these on the local government
+     * list, so the figure comes from a Council's bye-law and Plateau has
+     * seventeen Councils. Each is seeded with the figure the catalogue already
+     * carried — nothing charged today changes — but as seventeen rows a Council
+     * can correct one at a time rather than one number that could only be right
+     * for all of them by coincidence.
+     */
+    perLga?: boolean;
+    /** Councils where the item is not collectable at all, by name. */
+    excludeLgas?: string[];
   }[];
 }[] = [
   {
@@ -366,10 +379,10 @@ const STATE_CATALOGUE: {
     category: 'Land, Property and Occupancy',
     code: 'LAND',
     items: [
-      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF' },
+      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, },
       { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL' },
       { code: 'PROPERTY-TAX', name: 'Property Tax', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL' },
-      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF' },
+      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], },
       { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL' },
     ],
   },
@@ -377,10 +390,10 @@ const STATE_CATALOGUE: {
     category: 'Trade, Markets and Produce',
     code: 'TRADE',
     items: [
-      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY' },
+      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, },
       { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF' },
       { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF' },
-      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY' },
+      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, },
     ],
   },
   {
@@ -405,7 +418,7 @@ const STATE_CATALOGUE: {
     category: 'Advertising and Signage',
     code: 'ADVERT',
     items: [
-      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'] },
+      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, },
     ],
   },
 ];
@@ -415,12 +428,12 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
   category: 'Local Government Rates and Fees',
   code: 'LGR',
   items: [
-    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const },
-    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const },
-    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const },
-    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const },
-    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const },
-    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const },
+    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, },
+    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, },
+    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, },
+    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, },
+    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, },
+    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, },
   ],
 };
 
@@ -712,6 +725,19 @@ async function seedReferenceData(): Promise<void> {
         taxpayerTypes?: string[];
         selfAssessable?: boolean;
         awaitingSchedule?: boolean;
+        /**
+         * Local government revenue: a rate per Council, not one for the State.
+         *
+         * Part III of the Taxes and Levies Act puts these on the local government
+         * list, so the figure comes from a Council's bye-law and Plateau has
+         * seventeen Councils. Each is seeded with the figure the catalogue already
+         * carried — nothing charged today changes — but as seventeen rows a Council
+         * can correct one at a time rather than one number that could only be right
+         * for all of them by coincidence.
+         */
+        perLga?: boolean;
+        /** Councils where the item is not collectable at all, by name. */
+        excludeLgas?: string[];
       },
     ) => {
       const existing = await queryOne<{ id: string }>(
@@ -744,21 +770,57 @@ async function seedReferenceData(): Promise<void> {
       // inventing a figure to charge somebody.
       if (item.awaitingSchedule) return;
 
+      const values = [
+        item.rateType,
+        item.fixedNaira ? nairaToKobo(item.fixedNaira).toString() : null,
+        item.basisPoints ?? null,
+        item.tiers ? JSON.stringify(item.tiers) : null,
+        item.formula ?? null,
+        item.minimumNaira ? nairaToKobo(item.minimumNaira).toString() : null,
+        item.maximumNaira ? nairaToKobo(item.maximumNaira).toString() : null,
+      ];
+
+      /*
+       * A rate per Council, for the items a Council sets.
+       *
+       * These are on Part III of the Taxes and Levies Act — the local
+       * government list — and their rate comes from a Council's own bye-law.
+       * Seventeen Councils, seventeen bye-laws, and this repository knows what
+       * none of them say. What it can do is stop pretending one figure governs
+       * all of them.
+       *
+       * Each Council is seeded with the figure the catalogue already carried,
+       * so nothing charged today changes. What changes is that the figure is
+       * now seventeen rows a Council can correct one at a time, instead of one
+       * shared number that could only be right by coincidence — and that a
+       * Council with no row is refused rather than charged its neighbour's
+       * rate.
+       */
+      if (item.perLga) {
+        const lgas = await client.query<{ id: string; name: string }>(
+          `SELECT id, name FROM lgas WHERE status = 'ACTIVE' ORDER BY name`,
+        );
+        let version = 0;
+        for (const lga of lgas.rows) {
+          if (item.excludeLgas?.includes(lga.name)) continue;
+          version += 1;
+          await client.query(
+            `INSERT INTO revenue_item_rates
+               (revenue_item_id, lga_id, version, rate_type, fixed_amount_kobo, rate_basis_points,
+                tiers, formula, minimum_amount_kobo, maximum_amount_kobo, effective_from)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10, now())`,
+            [row!.id, lga.id, version, ...values],
+          );
+        }
+        return;
+      }
+
       await client.query(
         `INSERT INTO revenue_item_rates
            (revenue_item_id, version, rate_type, fixed_amount_kobo, rate_basis_points, tiers,
             formula, minimum_amount_kobo, maximum_amount_kobo, effective_from)
          VALUES ($1,1,$2,$3,$4,$5,$6,$7,$8, now())`,
-        [
-          row!.id,
-          item.rateType,
-          item.fixedNaira ? nairaToKobo(item.fixedNaira).toString() : null,
-          item.basisPoints ?? null,
-          item.tiers ? JSON.stringify(item.tiers) : null,
-          item.formula ?? null,
-          item.minimumNaira ? nairaToKobo(item.minimumNaira).toString() : null,
-          item.maximumNaira ? nairaToKobo(item.maximumNaira).toString() : null,
-        ],
+        [row!.id, ...values],
       );
     };
 

@@ -68,6 +68,38 @@ export function errorHandler(
     return;
   }
 
+  /*
+   * A body that is not JSON.
+   *
+   * body-parser raises a SyntaxError before any handler runs, and it arrived
+   * here as an unrecognised error — so a client sending malformed bytes was
+   * told "a problem on our side. No financial record has been changed", with
+   * a 500 behind it.
+   *
+   * Untrue, and expensively so. Nothing on our side went wrong, and a 500 on
+   * a government revenue platform is an alert: one handset with a broken
+   * request could page an on-call engineer repeatedly for its own typo, which
+   * is how a team learns to ignore its alerts. The money status was right by
+   * luck — nothing was debited because nothing was read — and is now stated
+   * on purpose.
+   */
+  if (
+    error instanceof SyntaxError &&
+    'body' in error &&
+    typeof (error as { status?: number }).status === 'number'
+  ) {
+    res.status(400).json(
+      new AppError({
+        statusCode: 400,
+        code: 'MALFORMED_BODY',
+        message: 'The request body could not be read. It is not valid JSON.',
+        moneyStatus: 'NOT_DEBITED',
+        nextStep: 'Check the request and send it again.',
+      }).toJSON(),
+    );
+    return;
+  }
+
   if (error instanceof ZodError) {
     res.status(422).json(
       validationFailed(

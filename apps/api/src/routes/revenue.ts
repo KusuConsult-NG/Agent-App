@@ -96,6 +96,16 @@ revenueRouter.post(
       effectiveFrom: z.string().datetime(),
       reason: z.string().min(10, 'Give a reason for the rate change'),
       approvalId: uuidSchema.optional(),
+      /*
+       * Whose rate this is.
+       *
+       * Eleven items are local government revenue whose figure comes from a
+       * Council's bye-law, so a rate change now names the Council it applies
+       * to. Omitted, it changes the statewide default — which is right for
+       * state revenue and wrong for a Part III item, so those carry no
+       * default for it to reach.
+       */
+      lgaId: uuidSchema.optional(),
     }),
     async (req, res, data) => {
       const effectiveFrom = new Date(data.effectiveFrom);
@@ -117,8 +127,18 @@ revenueRouter.post(
           client,
           `SELECT id, version FROM revenue_item_rates
             WHERE revenue_item_id = $1 AND effective_to IS NULL
+              AND lga_id IS NOT DISTINCT FROM $2
             ORDER BY version DESC LIMIT 1 FOR UPDATE`,
-          [req.params.id],
+          [req.params.id, data.lgaId ?? null],
+        );
+
+        // Version numbers count per item per Council, so a Council setting its
+        // first rate starts at 1 even where seventeen others already have one.
+        const highest = await queryOne<{ version: number }>(
+          client,
+          `SELECT COALESCE(MAX(version), 0) AS version FROM revenue_item_rates
+            WHERE revenue_item_id = $1 AND lga_id IS NOT DISTINCT FROM $2`,
+          [req.params.id, data.lgaId ?? null],
         );
 
         if (current) {
@@ -128,15 +148,17 @@ revenueRouter.post(
           ]);
         }
 
-        const version = (current?.version ?? 0) + 1;
+        const version = (highest?.version ?? 0) + 1;
         const inserted = await queryOne<{ id: string }>(
           client,
           `INSERT INTO revenue_item_rates
-             (revenue_item_id, version, rate_type, fixed_amount_kobo, rate_basis_points, tiers,
-              formula, minimum_amount_kobo, maximum_amount_kobo, effective_from, approval_id, created_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
+             (revenue_item_id, lga_id, version, rate_type, fixed_amount_kobo, rate_basis_points,
+              tiers, formula, minimum_amount_kobo, maximum_amount_kobo, effective_from,
+              approval_id, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
           [
             req.params.id,
+            data.lgaId ?? null,
             version,
             data.rateType,
             data.fixedAmountKobo?.toString() ?? null,
@@ -160,6 +182,7 @@ revenueRouter.post(
           oldValue: current ? { version: current.version } : null,
           newValue: {
             version,
+            lgaId: data.lgaId ?? null,
             rateType: data.rateType,
             fixedAmountKobo: data.fixedAmountKobo?.toString() ?? null,
             rateBasisPoints: data.rateBasisPoints ?? null,
@@ -250,9 +273,33 @@ revenueRouter.post(
     z.object({
       revenueItemId: uuidSchema,
       inputs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
+      /*
+       * The taxpayer, not the LGA.
+       *
+       * Eleven items now carry a rate per Local Government Area, so a quote
+       * has to know where the taxpayer is. It takes the taxpayer's id and
+       * looks the place up here rather than accepting an lgaId from the
+       * client — otherwise an agent could quote a trader at whichever
+       * Council's figure suited them, and the quote is what the trader is
+       * shown before they agree to pay.
+       *
+       * Optional, because the catalogue browser quotes with nothing in hand.
+       * Omitted, resolution finds the statewide default — and a Part III item
+       * has none, so it refuses rather than guessing a Council.
+       */
+      taxpayerId: uuidSchema.optional(),
     }),
     async (_req, res, data) => {
-      const result = await revenue.quote(pool, data);
+      const lgaId = data.taxpayerId
+        ? (
+            await queryOne<{ lga_id: string }>(
+              pool,
+              'SELECT lga_id FROM taxpayers WHERE id = $1',
+              [data.taxpayerId],
+            )
+          )?.lga_id ?? null
+        : null;
+      const result = await revenue.quote(pool, { ...data, lgaId });
       res.json({
         ...result,
         amountKobo: serialiseKobo(result.amountKobo),
