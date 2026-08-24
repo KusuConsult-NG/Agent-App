@@ -30,7 +30,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^26.2.0",
-    "@types/pdfkit": "^0.13.5",
+    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.5",
     "tsx": "^4.19.2",
