@@ -38,6 +38,8 @@ export interface RateVersion {
   maximum_amount_kobo: string | null;
   effective_from: Date;
   effective_to: Date | null;
+  /** The LGA this rate belongs to, or null for the statewide default. */
+  lga_id: string | null;
 }
 
 export interface ComputationTraceStep {

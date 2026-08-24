@@ -80,6 +80,8 @@ describe('rate engine', () => {
     id: 'rate-1',
     revenue_item_id: 'item-1',
     version: 1,
+    // Statewide: these fixtures exercise the arithmetic, not rate resolution.
+    lga_id: null,
     rate_type: 'FIXED',
     fixed_amount_kobo: null,
     rate_basis_points: null,

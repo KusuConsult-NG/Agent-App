@@ -24,7 +24,7 @@
     "verify:integrations": "node scripts/verify-integrations.mjs",
     "benchmark": "node scripts/benchmark-load.mjs",
     "audit:e2e": "node scripts/audit-e2e.mjs",
-    "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json",
+    "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json && tsc --noEmit -p apps/agent/tsconfig.json && tsc --noEmit -p apps/portal/tsconfig.json",
     "load-test": "npm run build --workspace @psirs/shared && tsx apps/api/src/db/load-test.ts",
     "test:browser": "bash scripts/browser-test.sh"
   },

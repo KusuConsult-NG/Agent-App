@@ -131,14 +131,20 @@ wrong for every transaction except whichever one it happened to match. They
 need a rate table and an input naming the kind, which is a change to the item
 rather than a number to fill in.
 
-### The gazette itself was not read
+### The gazette itself was not read, and the bands were accepted anyway
 
 The bands above are consistent across the published summaries of the Act and
 across the PAYE tables issued under it. They were not read from the gazette,
-which could not be reached from this environment. **That is what needs
-checking**, along with whatever transition guidance governs a state assessment
-raised in 2026, and whether Plateau's domestication of the reform alters
-anything.
+which could not be reached from this environment.
+
+**The platform owner accepted them on that basis on 24 August 2026**, and this
+records the decision rather than pretending it was a verification. What is
+known is that every source found agrees; what is not known is what the gazette
+says, what transition guidance governs a state assessment raised in 2026, and
+whether Plateau's domestication of the reform alters anything. Those are still
+worth asking and are still in the query to PSIRS — but the bands are in force
+in the platform, because the alternative was leaving the repealed PITA figures
+in force instead, and those are certainly wrong.
 
 ### What entering them exposed
 
@@ -178,12 +184,15 @@ platform currently refuses cleanly and stores nothing.
 List for Collection) Act provides for a development levy on individuals only,
 **"not more than ₦100 per annum"**. The 2015 Amendment Order kept the same
 ₦100 figure and was in any case declared null and void by the Federal High
-Court in 2020. If that cap still governs, the seeded figure is twenty times
-the statutory maximum. It has been left priced rather than changed, because
-whether the state development levy survives the 2025 reform in its old form is
-a question of state law rather than federal — the reason the Fourth Schedule
-could be entered does not extend to it. `PSIRS-CATALOGUE-QUERIES.md` asks
-it.
+Court in 2020.
+
+**The platform owner confirmed ₦2,000 on 24 August 2026**, with that cap put to
+them. The figure stands. What is recorded in
+`catalogue-provenance.test.ts` is `OWNER_DIRECTED` — weaker than
+`FEDERAL_STATUTE` and deliberately so: what is known is who decided, not which
+section says so. The instrument setting ₦2,000 has still not been seen here and
+the question to PSIRS stays open, so that a figure nobody can source remains
+distinguishable from one that was merely never questioned.
 
 ---
 
@@ -222,30 +231,44 @@ instruments executed by individuals. Part III is where the following sit:
 | `DOMESTIC-ANIMAL-LICENCE` | item 10, domestic animal licence fees |
 | `SIGNAGE-FEE` | signboard and advertisement permit fees |
 
-Six of these are already in a category called "Local Government Rates and
-Fees", so the platform half-knows. The other five are filed as though they
-were state revenue.
+The rate for any of them is set by a Local Government Council's bye-law, and
+Plateau has seventeen Councils. All eleven carried a single statewide figure:
+₦200 for a daily market stall in Jos North and in Wase alike, which cannot be
+right whatever the number is, because those are not the same market and no one
+bye-law governs both.
 
-**The rate for any of them is set by an LGA bye-law, and Plateau has
-seventeen LGAs.** None of the eleven is scoped with `applicable_lga_ids`, so
-each charges one figure across all seventeen. Whatever the right amount is
-for a daily market levy, ₦200 everywhere cannot be it — Jos North and Wase
-are not the same market.
+### What was done about it
 
-Three carry an exclusion the catalogue does not model at all:
+**Each of the eleven now carries a rate per Council** — migration 025 adds
+`revenue_item_rates.lga_id`, and resolution prefers a Council's own figure
+over the statewide default. Every Council is seeded with the amount the
+catalogue already held, so **nothing charged today changed**. What changed is
+that the amount is now seventeen rows a Council can correct one at a time,
+instead of one number that could only have been right for all of them by
+coincidence.
 
-- **`STREET-NAMING`** excludes streets in the State Capital, and Jos is the
-  capital. Charged through this platform in Jos North or Jos South it is a
-  fee the approved list does not authorise.
-- **`RIGHT-OCCUPANCY`** is a rural-land item on that list. It is seeded as one
-  flat ₦50,000 with no rural qualifier.
-- **`MARKET-LEVY`** excludes markets where state finance is involved, which is
-  a per-market fact the catalogue has nowhere to record.
+The amounts are no better sourced than they were. The structure no longer
+claims a single bye-law governs the state.
 
-None of this means PSIRS may not collect them. States commonly collect for
-LGAs by arrangement, and the Consolidation Law may provide for exactly that.
-**That is the question to ask** — and it is a different question from what the
-figure should be.
+Two consequences worth naming:
+
+- **"Not collectable here" is now expressible.** A Council with no rate row is
+  refused — `NO_EFFECTIVE_RATE` — rather than charged its neighbour's figure.
+  `STREET-NAMING` accordingly has no rate in Jos North or Jos South, because
+  Part III excludes the State Capital and Jos is the capital. The same
+  mechanism will express the rural-only restriction on `RIGHT-OCCUPANCY` once
+  PSIRS says which Councils are rural.
+- **A quote must now name the taxpayer.** The agent app quotes before it
+  assesses, and those are two calls. If only one knew the LGA, the screen
+  would show a trader one figure and the receipt would carry another. The
+  quote endpoint takes the taxpayer's id and looks up the place *server-side*
+  rather than accepting an LGA from the client, so an agent cannot quote at
+  whichever Council's figure suits them. `per-lga-rates.test.ts` holds that
+  the quote and the assessment agree.
+
+`MARKET-LEVY`'s exclusion — markets where state finance is involved — is a
+per-market fact, not a per-Council one, and the catalogue still has nowhere to
+record it. That one remains open.
 
 ### One item's legal basis is under challenge
 

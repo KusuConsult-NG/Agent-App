@@ -92,15 +92,38 @@ export async function listItems(
  * Historical assessments resolve against the date they were raised, so a rate
  * change never rewrites what was already owed (PRD §9).
  */
-export async function resolveRate(db: Db, revenueItemId: string, at: Date = new Date()) {
+/**
+ * The rate in force for one item, in one place, at one moment.
+ *
+ * Eleven catalogue items are local government revenue whose rate is set by a
+ * Council's own bye-law, and Plateau has seventeen Councils. A rate naming an
+ * LGA is therefore preferred over the statewide default, and an item with
+ * neither is refused rather than charged at some other Council's figure.
+ *
+ * `lgaId` is optional only so that callers with no taxpayer in hand — the
+ * catalogue browser, the rate-history report — still work. Anything that
+ * leads to money must pass it: a quote resolved without the LGA and an
+ * assessment resolved with it would show a trader one figure and charge
+ * another.
+ */
+export async function resolveRate(
+  db: Db,
+  revenueItemId: string,
+  at: Date = new Date(),
+  lgaId?: string | null,
+) {
   const rate = await queryOne<RateVersion>(
     db,
     `SELECT * FROM revenue_item_rates
       WHERE revenue_item_id = $1
         AND effective_from <= $2
         AND (effective_to IS NULL OR effective_to > $2)
-      ORDER BY effective_from DESC LIMIT 1`,
-    [revenueItemId, at],
+        AND (lga_id IS NULL OR lga_id = $3)
+      -- The specific beats the general: a Council that has set its own figure
+      -- uses it, and one that has not falls back to the statewide default.
+      ORDER BY (lga_id IS NOT NULL) DESC, effective_from DESC
+      LIMIT 1`,
+    [revenueItemId, at, lgaId ?? null],
   );
 
   if (!rate) {
@@ -135,7 +158,7 @@ export interface QuoteResult {
  */
 export async function quote(
   db: Db,
-  params: { revenueItemId: string; inputs: ComputationInputs; at?: Date },
+  params: { revenueItemId: string; inputs: ComputationInputs; at?: Date; lgaId?: string | null },
 ): Promise<QuoteResult> {
   const item = await queryOne<{
     id: string;
@@ -152,7 +175,7 @@ export async function quote(
 
   if (!item) throw notFound('That revenue item');
 
-  const rate = await resolveRate(db, params.revenueItemId, params.at);
+  const rate = await resolveRate(db, params.revenueItemId, params.at, params.lgaId);
   const computation = computeAmount(rate, params.inputs);
 
   // PRD §6: an official service charge is separate, explicit and displayed
@@ -269,7 +292,7 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
       throw forbidden(`"${item.name}" cannot be self-assessed.`);
     }
 
-    const rate = await resolveRate(client, params.revenueItemId);
+    const rate = await resolveRate(client, params.revenueItemId, new Date(), taxpayer.lga_id);
     const computation = computeAmount(rate, params.inputs);
 
     if (computation.amountKobo <= 0n) {

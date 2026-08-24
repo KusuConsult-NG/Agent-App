@@ -146,6 +146,17 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
         label: 'Revenue intelligence',
         permission: ['report:read:all', 'report:read:territory'],
       },
+      /*
+       * Between the dashboard's totals and the catalogue's price list there
+       * was no view of revenue by generating area or by the arm of government
+       * it belongs to — the two questions an administrator opens a revenue
+       * platform to ask.
+       */
+      {
+        path: '/revenue',
+        label: 'Revenue summary',
+        permission: ['report:read:all', 'report:read:territory'],
+      },
       { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
     ],
   },
