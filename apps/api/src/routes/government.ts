@@ -127,15 +127,39 @@ governmentRouter.get(
   '/home',
   asyncHandler(async (req, res) => {
     const role = req.auth!.role;
+    /*
+     * Counts and the work behind them, together.
+     *
+     * A screen that says "3 agents awaiting clearance" and sends the officer
+     * elsewhere to see which three is an index. The counts answer "is there
+     * anything"; the items answer "what", so the top of each queue can be
+     * acted on where it is found.
+     */
     const blocks =
       role === 'admin'
-        ? { role, admin: await reports.adminHome(pool) }
+        ? {
+            role,
+            admin: await reports.adminHome(pool),
+            work: await reports.adminWorkItems(pool),
+          }
         : role === 'revenue_officer'
-          ? { role, revenue: await reports.revenueOfficerHome(pool) }
+          ? {
+              role,
+              revenue: await reports.revenueOfficerHome(pool),
+              work: await reports.revenueOfficerWorkItems(pool),
+            }
           : role === 'finance_officer'
-            ? { role, finance: await reports.financeOfficerHome(pool) }
+            ? {
+                role,
+                finance: await reports.financeOfficerHome(pool),
+                work: await reports.financeOfficerWorkItems(pool),
+              }
             : role === 'auditor'
-              ? { role, audit: await reports.auditorHome(pool) }
+              ? {
+                  role,
+                  audit: await reports.auditorHome(pool),
+                  work: await reports.auditorWorkItems(pool),
+                }
               : { role };
     res.json(blocks);
   }),

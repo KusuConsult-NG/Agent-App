@@ -834,3 +834,127 @@ export async function auditorHome(db: Db) {
        (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers_on_record`,
   );
 }
+
+/**
+ * The actual work waiting, not a count of it.
+ *
+ * A home screen that reports "3 agents awaiting clearance" and sends the
+ * officer somewhere else to see which three is an index, not a workplace. The
+ * counts above answer "is there anything"; these answer "what", so the top of
+ * each queue can be acted on where it is found.
+ *
+ * Deliberately shallow — the first few of each. A home screen is not the queue
+ * screen and should not try to be; what it owes is the next thing to do.
+ */
+export async function adminWorkItems(db: Db) {
+  const [agents, devices, supervisors] = await Promise.all([
+    query(
+      db,
+      `SELECT a.id, a.agent_code, u.full_name, l.name AS lga, a.clearance_status,
+              to_char(a.updated_at, 'YYYY-MM-DD') AS waiting_since
+         FROM agents a JOIN users u ON u.id = a.user_id
+         LEFT JOIN lgas l ON l.id = a.lga_id
+        WHERE a.clearance_status = 'READY_FOR_REVIEW'
+        ORDER BY a.updated_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT d.id, d.device_identifier, d.device_name, u.full_name, a.agent_code,
+              to_char(d.registered_at, 'YYYY-MM-DD') AS registered
+         FROM agent_devices d
+         JOIN agents a ON a.id = d.agent_id
+         JOIN users u ON u.id = a.user_id
+        WHERE d.status = 'PENDING'
+        ORDER BY d.registered_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT u.id, u.full_name, u.phone
+         FROM users u
+        WHERE u.role = 'supervisor' AND u.status = 'ACTIVE'
+          AND NOT EXISTS (SELECT 1 FROM user_territories ut WHERE ut.user_id = u.id)
+        ORDER BY u.full_name LIMIT 5`,
+    ),
+  ]);
+  return { agents, devices, supervisors };
+}
+
+/** The taxpayers a revenue officer has to chase. */
+export async function revenueOfficerWorkItems(db: Db) {
+  const [failedTins, expiring] = await Promise.all([
+    query(
+      db,
+      `SELECT t.id, coalesce(t.business_name, t.first_name || ' ' || t.last_name) AS name,
+              t.phone, t.tin_status, t.tin_reason
+         FROM taxpayers t
+        WHERE t.tin_status = 'FAILED'
+        ORDER BY t.created_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT i.id, i.invoice_number, i.total_amount_kobo::text AS amount_kobo,
+              to_char(i.expires_at, 'YYYY-MM-DD') AS expires_on,
+              coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
+         FROM invoices i JOIN taxpayers tp ON tp.id = i.taxpayer_id
+        WHERE i.status = 'UNPAID' AND i.expires_at IS NOT NULL
+          AND i.expires_at BETWEEN now() AND now() + interval '7 days'
+        ORDER BY i.expires_at LIMIT 5`,
+    ),
+  ]);
+  return { failedTins, expiring };
+}
+
+/** What a finance officer settles today. */
+export async function financeOfficerWorkItems(db: Db) {
+  const [exceptions, payouts] = await Promise.all([
+    query(
+      db,
+      `SELECT r.id, r.status, r.gateway_reference, r.detail,
+              r.expected_amount_kobo::text AS expected_kobo,
+              r.received_amount_kobo::text AS received_kobo,
+              r.variance_kobo::text AS variance_kobo,
+              to_char(r.created_at, 'YYYY-MM-DD') AS raised
+         FROM reconciliation_records r
+        WHERE r.reconciled_at IS NULL
+          AND r.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION',
+                           'AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+        ORDER BY r.created_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT p.id, p.payout_reference, p.amount_kobo::text AS amount_kobo,
+              p.commission_count::text AS commissions, u.full_name AS agent,
+              to_char(p.requested_at, 'YYYY-MM-DD') AS requested
+         FROM commission_payouts p
+         JOIN agents a ON a.id = p.agent_id
+         JOIN users u ON u.id = a.user_id
+        WHERE p.status = 'REQUESTED'
+        ORDER BY p.requested_at LIMIT 5`,
+    ),
+  ]);
+  return { exceptions, payouts };
+}
+
+/** What an auditor would open first. Reads only. */
+export async function auditorWorkItems(db: Db) {
+  const [refusals, reversals] = await Promise.all([
+    query(
+      db,
+      `SELECT id, action, entity_type, actor_role, reason,
+              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at
+         FROM audit_logs
+        WHERE result = 'DENIED'
+        ORDER BY created_at DESC LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT t.transaction_reference, t.status, t.amount_kobo::text AS amount_kobo,
+              to_char(t.updated_at, 'YYYY-MM-DD') AS at,
+              coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
+         FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
+        WHERE t.status IN ('REVERSED','REFUNDED')
+        ORDER BY t.updated_at DESC LIMIT 5`,
+    ),
+  ]);
+  return { refusals, reversals };
+}

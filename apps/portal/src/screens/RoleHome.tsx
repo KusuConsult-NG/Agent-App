@@ -26,8 +26,8 @@
  * queue is the answer, and hiding it makes the screen look broken.
  */
 
-import { useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError, type User } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 
 type Counts = Record<string, string>;
@@ -38,6 +38,8 @@ interface Home {
   revenue?: Counts;
   finance?: Counts;
   audit?: Counts;
+  /** The work behind the counts, so the top of a queue can be worked here. */
+  work?: Record<string, Record<string, string>[]>;
 }
 
 /** A queue: what it is, where it goes, and when it deserves attention. */
@@ -52,6 +54,54 @@ interface Queue {
 }
 
 const nonZero = (value: number) => value > 0;
+
+/**
+ * Doing the thing, rather than linking to where it is done.
+ *
+ * A home screen that only counts and links is an index. What makes it a place
+ * of work is that the first item in each queue can be settled here — the same
+ * endpoint the queue screen calls, the same permission, the same audit entry.
+ * Anything needing more than a decision (choosing territories, writing a long
+ * resolution note) still goes to its own screen, because a cramped version of
+ * a considered decision is worse than a link to the room for it.
+ */
+function useAction(reload: () => void) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+
+  const act = useCallback(
+    async (key: string, run: () => Promise<unknown>, said: string) => {
+      setBusy(key);
+      setError(null);
+      setDone(null);
+      try {
+        await run();
+        setDone(said);
+        reload();
+      } catch (caught) {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      } finally {
+        setBusy(null);
+      }
+    },
+    [reload],
+  );
+
+  return { act, busy, error, done };
+}
+
+function Worked({ error, done }: { error: ApiError | null; done: string | null }) {
+  return (
+    <>
+      <ErrorAlert error={error} />
+      {done && <Alert kind="success">{done}</Alert>}
+    </>
+  );
+}
 
 const ADMIN_QUEUES: Queue[] = [
   {
@@ -261,7 +311,7 @@ export function RoleHomeScreen({
   const [data, setData] = useState<Home | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get<Home>('/government/home')
       .then(setData)
@@ -270,8 +320,13 @@ export function RoleHomeScreen({
       });
   }, []);
 
+  useEffect(load, [load]);
+  const action = useAction(load);
+
   if (error) return <ErrorAlert error={error} />;
   if (!data) return <Loading rows={5} />;
+
+  const work = data.work ?? {};
 
   if (data.admin) {
     const c = data.admin;
@@ -296,6 +351,137 @@ export function RoleHomeScreen({
             </p>
           </Alert>
         )}
+        <Worked error={action.error} done={action.done} />
+
+        {(work.agents ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Agents waiting on a decision
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Approving here does what the clearance screen does — same endpoint, same audit
+              entry. Asking for more information needs a reason, so that one opens the file.
+            </p>
+            <Table
+              columns={[
+                { key: 'agent_code', label: 'Agent' },
+                { key: 'full_name', label: 'Name' },
+                { key: 'lga', label: 'LGA' },
+                { key: 'waiting_since', label: 'Waiting since' },
+                {
+                  key: 'act',
+                  label: '',
+                  render: (row: Record<string, string>) => (
+                    <>
+                      <button
+                        type="button"
+                        className="small"
+                        disabled={action.busy !== null}
+                        onClick={() =>
+                          action.act(
+                            row.id!,
+                            () =>
+                              api.post(`/agents/${row.id}/review`, {
+                                decision: 'APPROVE',
+                                note: 'Approved from the administrator home screen.',
+                              }),
+                            `${row.full_name} approved.`,
+                          )
+                        }
+                      >
+                        Approve
+                      </button>{' '}
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => navigate('/agents')}
+                      >
+                        Open file
+                      </button>
+                    </>
+                  ),
+                },
+              ]}
+              rows={work.agents!}
+              empty=""
+            />
+          </div>
+        )}
+
+        {(work.devices ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Handsets waiting for approval
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              A cleared agent still cannot collect until the device in their hand is approved.
+            </p>
+            <Table
+              columns={[
+                { key: 'agent_code', label: 'Agent' },
+                { key: 'full_name', label: 'Name' },
+                { key: 'device_name', label: 'Device' },
+                { key: 'registered', label: 'Registered' },
+                {
+                  key: 'act',
+                  label: '',
+                  render: (row: Record<string, string>) => (
+                    <button
+                      type="button"
+                      className="small"
+                      disabled={action.busy !== null}
+                      onClick={() =>
+                        action.act(
+                          row.id!,
+                          () => api.post(`/agents/devices/${row.id}/approve`, {}),
+                          'Device approved.',
+                        )
+                      }
+                    >
+                      Approve
+                    </button>
+                  ),
+                },
+              ]}
+              rows={work.devices!}
+              empty=""
+            />
+          </div>
+        )}
+
+        {(work.supervisors ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Supervisors covering nothing
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              They see no revenue figures at all until a territory is assigned. Choosing which
+              needs the picker, so this one opens Officer access.
+            </p>
+            <Table
+              columns={[
+                { key: 'full_name', label: 'Officer' },
+                { key: 'phone', label: 'Phone' },
+                {
+                  key: 'act',
+                  label: '',
+                  render: () => (
+                    <button
+                      type="button"
+                      className="small secondary"
+                      onClick={() => navigate('/users')}
+                    >
+                      Assign territories
+                    </button>
+                  ),
+                },
+              ]}
+              rows={work.supervisors!}
+              empty=""
+            />
+          </div>
+        )}
+
         <div className="card card--flush">
           <QueueTable counts={c} queues={ADMIN_QUEUES} navigate={navigate} />
         </div>
@@ -328,6 +514,86 @@ export function RoleHomeScreen({
             hint="A taxpayer without one cannot be tracked across years"
           />
         </div>
+        <Worked error={action.error} done={action.done} />
+
+        {(work.failedTins ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              TIN applications the register refused
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              These taxpayers exist and have no TIN, so nothing can follow them across years.
+              Re-asking is safe: the platform sends the same application, and a TIN already
+              issued comes back rather than a second one being made.
+            </p>
+            <Table
+              columns={[
+                { key: 'name', label: 'Taxpayer' },
+                { key: 'phone', label: 'Phone' },
+                { key: 'tin_reason', label: 'Why it failed' },
+              ]}
+              rows={work.failedTins!}
+              empty=""
+            />
+            <div style={{ padding: '0 18px 16px' }}>
+              <button
+                type="button"
+                disabled={action.busy !== null}
+                onClick={() =>
+                  action.act(
+                    'tin-retry',
+                    () => api.post('/taxpayers/tin-retry', {}),
+                    'Re-asked the TIN register for everyone still waiting.',
+                  )
+                }
+              >
+                {action.busy === 'tin-retry' ? 'Asking…' : 'Ask the register again'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(work.expiring ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Invoices about to expire
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Raised, unpaid, and out of time within the week. After that the assessment has to
+              be raised again.
+            </p>
+            <Table
+              columns={[
+                { key: 'invoice_number', label: 'Invoice' },
+                { key: 'taxpayer', label: 'Taxpayer' },
+                {
+                  key: 'amount_kobo',
+                  label: 'Amount',
+                  render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
+                },
+                { key: 'expires_on', label: 'Expires' },
+              ]}
+              rows={work.expiring!}
+              empty=""
+            />
+            <div style={{ padding: '0 18px 16px' }}>
+              <button
+                type="button"
+                disabled={action.busy !== null}
+                onClick={() =>
+                  action.act(
+                    'remind',
+                    () => api.post('/government/reminders/send-due', {}),
+                    'Reminders sent to taxpayers with something due.',
+                  )
+                }
+              >
+                {action.busy === 'remind' ? 'Sending…' : 'Send payment reminders'}
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="card card--flush">
           <QueueTable counts={c} queues={REVENUE_QUEUES} navigate={navigate} />
         </div>
@@ -377,6 +643,94 @@ export function RoleHomeScreen({
             </p>
           </Alert>
         )}
+        <Worked error={action.error} done={action.done} />
+
+        {(work.exceptions ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Where the bank and the platform disagree
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Resolving an exception is a judgement with a note attached, so it happens on the
+              reconciliation screen where there is room to write one. This is what is waiting.
+            </p>
+            <Table
+              columns={[
+                { key: 'status', label: 'Kind' },
+                { key: 'gateway_reference', label: 'Gateway reference' },
+                {
+                  key: 'expected_kobo',
+                  label: 'Expected',
+                  render: (row: Record<string, string>) => <Money kobo={row.expected_kobo ?? '0'} />,
+                },
+                {
+                  key: 'received_kobo',
+                  label: 'Received',
+                  render: (row: Record<string, string>) => <Money kobo={row.received_kobo ?? '0'} />,
+                },
+                { key: 'raised', label: 'Raised' },
+              ]}
+              rows={work.exceptions!}
+              empty=""
+            />
+            <div style={{ padding: '0 18px 16px' }}>
+              <button type="button" className="secondary" onClick={() => navigate('/reconciliation')}>
+                Work the exception queue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(work.payouts ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Commission payouts requested
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Agents are waiting on these. Approving needs a fresh code, because it is the
+              action that moves money out.
+            </p>
+            <Table
+              columns={[
+                { key: 'agent', label: 'Agent' },
+                { key: 'payout_reference', label: 'Reference' },
+                {
+                  key: 'amount_kobo',
+                  label: 'Amount',
+                  render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
+                },
+                { key: 'commissions', label: 'Commissions' },
+                { key: 'requested', label: 'Requested' },
+                {
+                  key: 'act',
+                  label: '',
+                  render: (row: Record<string, string>) => (
+                    <button
+                      type="button"
+                      className="small"
+                      disabled={action.busy !== null}
+                      onClick={() =>
+                        action.act(
+                          row.id!,
+                          async () => {
+                            await stepUp('commission.payout.approve', user.phone);
+                            await api.post(`/government/commissions/payouts/${row.id}/approve`, {});
+                          },
+                          `Payout ${row.payout_reference} approved.`,
+                        )
+                      }
+                    >
+                      Approve
+                    </button>
+                  ),
+                },
+              ]}
+              rows={work.payouts!}
+              empty=""
+            />
+          </div>
+        )}
+
         <div className="card card--flush">
           <QueueTable counts={c} queues={FINANCE_QUEUES} navigate={navigate} />
         </div>
@@ -402,6 +756,55 @@ export function RoleHomeScreen({
           <Stat label="Reversed or refunded" value={c.reversed_or_refunded} hint="Money that came back out" />
           <Stat label="Fraud flags open" value={c.fraud_flags_open} hint="Raised and not yet reviewed" />
         </div>
+        {(work.refusals ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Actions the platform refused
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Somebody attempted something their role does not permit. Each is an audit entry
+              in its own right.
+            </p>
+            <Table
+              columns={[
+                { key: 'at', label: 'When' },
+                { key: 'actor_role', label: 'Role' },
+                { key: 'action', label: 'Attempted' },
+                { key: 'entity_type', label: 'Against' },
+              ]}
+              rows={work.refusals!}
+              empty=""
+            />
+          </div>
+        )}
+
+        {(work.reversals ?? []).length > 0 && (
+          <div className="card card--flush">
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+              Money that came back out
+            </h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>
+              Reversed or refunded after the fact. The first query worth running on any revenue
+              platform.
+            </p>
+            <Table
+              columns={[
+                { key: 'at', label: 'When' },
+                { key: 'transaction_reference', label: 'Transaction' },
+                { key: 'taxpayer', label: 'Taxpayer' },
+                {
+                  key: 'amount_kobo',
+                  label: 'Amount',
+                  render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
+                },
+                { key: 'status', label: 'Outcome' },
+              ]}
+              rows={work.reversals!}
+              empty=""
+            />
+          </div>
+        )}
+
         <div className="card card--flush">
           <QueueTable counts={c} queues={AUDIT_QUEUES} navigate={navigate} />
         </div>

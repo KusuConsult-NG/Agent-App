@@ -32,6 +32,7 @@ import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, type Role } from '@psirs/shared';
 import {
   MUTATING_PERMISSIONS,
+  availableGroups,
   availableItems,
   belongsInPortal,
   can,
@@ -58,138 +59,106 @@ describe('each role gets a distinct portal', () => {
     expect(belongsInPortal('agent')).toBe(false);
   });
 
+  /*
+   * These used to pin a flat ordered list per role, and the lists were nearly
+   * identical: one menu filtered by permission gives every officer the same
+   * shape with gaps in it. Eleven of fifteen items were common to the four
+   * back-office roles, and the header above called that "mostly deliberate"
+   * while noting it degrades quietly. It had degraded — a finance officer's
+   * menu led with agent clearance and an auditor's led with collections.
+   *
+   * Each role now has its own arrangement, so what is pinned is the shape: the
+   * group a role's menu opens with, which is what its job is, and the items it
+   * must have and must not.
+   */
+  const groupsFor = (role: Role) =>
+    availableGroups({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map(
+      (g) => g.group,
+    );
+  const menu = (role: Role) =>
+    availableItems({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map(
+      (i) => i.label,
+    );
+
+  it('opens each role’s menu with the work that role does', () => {
+    expect(groupsFor('admin')[0]).toBe('Administration');
+    expect(groupsFor('revenue_officer')[0]).toBe('The register');
+    expect(groupsFor('finance_officer')[0]).toBe('Settlement');
+    expect(groupsFor('auditor')[0]).toBe('Examination');
+    expect(groupsFor('supervisor')[0]).toBe('My territory');
+  });
+
+  it('gives no two roles the same arrangement', () => {
+    const shapes = (['admin', 'revenue_officer', 'finance_officer', 'auditor', 'supervisor'] as const)
+      .map((role) => groupsFor(role).join(' > '));
+    expect(new Set(shapes).size).toBe(shapes.length);
+  });
+
   it('gives the supervisor their territory, not the whole state', () => {
-    /*
-     * This test's name was right and its list was wrong. "Their territory,
-     * not the whole state" described the intention; what it actually froze
-     * was a menu with no analytics in it at all — no dashboard and no
-     * revenue intelligence — because both were gated on report:read:all and
-     * a supervisor holds report:read:territory instead.
-     *
-     * The menu is what `landingPath` reads, so the effect was that the role
-     * whose job is a territory signed in to a raw transaction list. Both
-     * screens are now offered, and the API narrows what they contain to the
-     * territories that officer is assigned.
-     */
-    expect(menu('supervisor')).toEqual([
-      'Home',
-      'Collections dashboard',
-      'Revenue intelligence',
-      'Revenue summary',
-      'Transactions',
-      'Agent performance',
-      'Commissions',
-      'Approvals',
-      'Fraud & leakage',
-      'Support desk',
-      'Outstanding work',
-      'Revenue catalogue',
-    ]);
+    const items = menu('supervisor');
+    expect(items).toContain('Home');
+    expect(items).toContain('Agent performance');
+    expect(items).toContain('Revenue summary');
+    // Territory-scoped, so no statewide administration and no settlement.
+    expect(items).not.toContain('Officer access');
+    expect(items).not.toContain('Reconciliation');
+    expect(items).not.toContain('Audit log');
   });
 
-  it('gives the revenue officer everything except settlement', () => {
-    expect(menu('revenue_officer')).toEqual([
-      'Home',
-      'Collections dashboard',
-      'Revenue intelligence',
-      'Revenue summary',
-      'Transactions',
-      'Agents & clearance',
-      'Referees',
-      'Agent performance',
-      'Commissions',
-      'Approvals',
-      'Fraud & leakage',
-      'Support desk',
-      'Outstanding work',
-      'Audit log',
-      'Product usage',
-      'Revenue catalogue',
-      'Social incentives',
-      'Groups & cooperatives',
-      'Taxpayer corrections',
-    ]);
+  it('gives the revenue officer the register, and not settlement', () => {
+    const items = menu('revenue_officer');
+    expect(items).toContain('Taxpayer corrections');
+    expect(items).toContain('Revenue catalogue');
+    expect(items).not.toContain('Reconciliation');
+    expect(items).not.toContain('Officer access');
   });
 
-  it('gives the finance officer settlement, and not the support desk', () => {
-    expect(menu('finance_officer')).toEqual([
-      'Home',
-      'Collections dashboard',
-      'Revenue intelligence',
-      'Revenue summary',
-      'Transactions',
-      'Agents & clearance',
-      'Referees',
-      'Agent performance',
-      'Reconciliation',
-      'Commissions',
-      'Approvals',
-      'Fraud & leakage',
-      'Outstanding work',
-      'Audit log',
-      'Product usage',
-      'Revenue catalogue',
-    ]);
+  it('gives the finance officer settlement first, and not the support desk', () => {
+    const items = menu('finance_officer');
+    expect(items).toContain('Reconciliation');
+    expect(items).toContain('Commissions');
+    // The support desk is the revenue officer's and the administrator's.
+    expect(items).not.toContain('Support desk');
+    expect(items).not.toContain('Officer access');
   });
 
   it('gives the auditor everything to read and no approvals', () => {
-    expect(menu('auditor')).toEqual([
-      'Home',
-      'Collections dashboard',
-      'Revenue intelligence',
-      'Revenue summary',
-      'Transactions',
-      'Agents & clearance',
-      'Referees',
-      'Agent performance',
-      'Reconciliation',
-      'Commissions',
-      'Fraud & leakage',
-      'Support desk',
-      'Outstanding work',
-      'Audit log',
-      'Product usage',
-      'Revenue catalogue',
-      'Social incentives',
-    ]);
+    const items = menu('auditor');
+    expect(items).toContain('Audit log');
+    expect(items).toContain('Reconciliation');
+    expect(items).not.toContain('Approvals');
+    expect(items).not.toContain('Officer access');
   });
 
   it('gives the admin administration, and neither settlement nor approvals', () => {
-    // Segregation of duties, and it is meant to look like this: an
-    // administrator manages accounts, devices and configuration. They do not
-    // sign off money. `report:financial` and `approval:review` are both absent
-    // from the role for that reason.
-    expect(menu('admin')).toEqual([
-      'Home',
-      'Collections dashboard',
-      'Revenue intelligence',
-      'Revenue summary',
-      'Transactions',
-      'Agents & clearance',
-      'Referees',
-      'Agent performance',
-      'Commissions',
-      'Fraud & leakage',
-      'Support desk',
-      'Outstanding work',
-      'Audit log',
-      'Product usage',
-      'Revenue catalogue',
-      'Social incentives',
-      'Groups & cooperatives',
-      'Taxpayer corrections',
-      'Officer access',
-    ]);
+    const items = menu('admin');
+    expect(items).toContain('Officer access');
+    expect(items).toContain('Agents & clearance');
+    expect(items).toContain('Revenue catalogue');
+    // An administrator manages access; they do not settle money or authorise
+    // their own approvals.
+    expect(items).not.toContain('Reconciliation');
+    expect(items).not.toContain('Approvals');
   });
 
-  /**
-   * Nobody signs in onto a permission error.
-   *
-   * A supervisor used to, because '/' renders the executive dashboard and they
-   * do not hold `report:read:all` — their first impression of the portal was
-   * "Your role (supervisor) is not permitted to perform this action", on a
-   * screen the menu had already decided not to offer them.
-   */
+  it('never offers a screen the role cannot open', () => {
+    // The arrangement decides what to offer; the permission decides what may
+    // be offered. A menu must not promise what the API refuses.
+    for (const role of PORTAL_ROLES) {
+      for (const item of availableItems({
+        id: 'u',
+        role,
+        permissions: ROLE_PERMISSIONS[role as Role],
+      } as never)) {
+        if (!item.permission) continue;
+        expect(
+          can({ id: 'u', role, permissions: ROLE_PERMISSIONS[role as Role] } as never, item.permission),
+          `${role} is offered ${item.label} without the permission for it`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it('lands every portal role on a screen in their own menu', () => {
     for (const role of PORTAL_ROLES) {
       const user = principal(role as Role);
