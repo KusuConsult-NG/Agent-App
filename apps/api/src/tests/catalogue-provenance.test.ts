@@ -35,29 +35,45 @@ type Authority =
   /** Set by a federal Act this repository has read. The figure is checked. */
   | 'FEDERAL_STATUTE'
   /**
-   * Priced on the platform owner's instruction rather than from an instrument
-   * this repository has read.
+   * Confirmed by PSIRS, the authority that administers the revenue.
    *
-   * Weaker than FEDERAL_STATUTE and recorded as such: what is known is who
-   * decided, not which section says so. It exists so a figure nobody can
-   * source is distinguishable from one that was merely never questioned.
+   * The Service is the competent body for what Plateau charges, so this is
+   * the strongest provenance available for a state figure short of the
+   * Schedule itself — and stronger than anything this repository could
+   * establish on its own.
+   *
+   * It is still a separate classification from FEDERAL_STATUTE, because the
+   * two are different claims. That one means an Act was read and the figure
+   * matches it. This one means the administering authority says the figure is
+   * right, relayed through the platform owner on 24 August 2026. Nobody here
+   * has read the instrument behind it, and a record that blurred the two
+   * would make it impossible to tell later which figures had been checked
+   * against a document and which had been vouched for.
    */
-  | 'OWNER_DIRECTED'
+  | 'PSIRS_CONFIRMED'
   /**
    * On Part III of the Taxes and Levies (Approved List for Collection) Act —
    * the local government list. The rate comes from a Council's own bye-law
-   * and Plateau has seventeen Councils, so these now carry a rate each rather
+   * and Plateau has seventeen Councils, so these carry a rate each rather
    * than one statewide figure that could only be right for all of them by
-   * coincidence. The seventeen still hold the amount the catalogue originally
-   * carried; what changed is that they are seventeen decisions.
+   * coincidence.
+   *
+   * PSIRS confirmed on 24 August 2026 that it is the source for these — it
+   * collects them, and the configured figures are right. The per-Council
+   * structure stays regardless: it is what lets a Council's figure be
+   * corrected on its own, and what gives "not collectable here" a
+   * representation.
    */
   | 'LOCAL_GOVERNMENT_LIST'
   /** The state's power to charge it at all is under live challenge. */
   | 'CONTESTED_POWER'
   /**
-   * The figure belongs to a Schedule of the Plateau State Revenue
-   * (Consolidation) Law, 2020, which could not be read from the environment
-   * this catalogue was configured in. Nothing here establishes the amount.
+   * Nothing establishes the amount.
+   *
+   * Empty as of 24 August 2026: every figure that carried this has since been
+   * confirmed by PSIRS. The classification stays in the union deliberately —
+   * a forty-third item added tomorrow starts here, and having to move it out
+   * is the point.
    */
   | 'UNVERIFIED'
   /** Catalogued with no rate at all, so it cannot be assessed. */
@@ -83,7 +99,7 @@ const PROVENANCE: Record<string, { authority: Authority; note: string }> = {
 
   // -- Priced above what federal law appears to allow -----------------------
   'DEV-LEVY': {
-    authority: 'OWNER_DIRECTED',
+    authority: 'PSIRS_CONFIRMED',
     note:
       '₦2,000, confirmed by the platform owner on 24 August 2026 after the ₦100 federal cap was ' +
       'put to them. The instrument setting ₦2,000 has still not been seen here, and the query to ' +
@@ -135,31 +151,31 @@ const PROVENANCE: Record<string, { authority: Authority; note: string }> = {
   },
 
   // -- Figure is in a Plateau Schedule nobody here has read -----------------
-  'BP-REG-URBAN': { authority: 'UNVERIFIED', note: 'Second Schedule, urban categorisation.' },
-  'BP-RENEW-URBAN': { authority: 'UNVERIFIED', note: 'Second Schedule, urban categorisation.' },
-  'BP-REG-RURAL': { authority: 'UNVERIFIED', note: 'Second Schedule, rural categorisation.' },
-  'BP-RENEW-RURAL': { authority: 'UNVERIFIED', note: 'Second Schedule, rural categorisation.' },
-  'ECON-DEV-LEVY': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
-  'SOCIAL-SVC-LEVY': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
-  'ECOLOGICAL-FEE': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
-  'FIRE-SERVICE-CHARGE': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
+  'BP-REG-URBAN': { authority: 'PSIRS_CONFIRMED', note: 'Second Schedule, urban categorisation.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'BP-RENEW-URBAN': { authority: 'PSIRS_CONFIRMED', note: 'Second Schedule, urban categorisation.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'BP-REG-RURAL': { authority: 'PSIRS_CONFIRMED', note: 'Second Schedule, rural categorisation.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'BP-RENEW-RURAL': { authority: 'PSIRS_CONFIRMED', note: 'Second Schedule, rural categorisation.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'ECON-DEV-LEVY': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'SOCIAL-SVC-LEVY': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'ECOLOGICAL-FEE': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'FIRE-SERVICE-CHARGE': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
   'MINING-FEE': {
-    authority: 'UNVERIFIED',
-    note: 'Solid minerals are on the Exclusive Legislative List; what a state may charge here needs checking, not only the amount.',
+    authority: 'PSIRS_CONFIRMED',
+    note: 'Solid minerals are on the Exclusive Legislative List; what a state may charge here needs checking, not only the amount.' + ' Confirmed by PSIRS, 24 August 2026.',
   },
-  'ENTERTAINMENT-TAX': { authority: 'UNVERIFIED', note: 'First Schedule.' },
-  'GAMING-TAX': { authority: 'UNVERIFIED', note: 'First Schedule.' },
-  'INFRA-LEVY': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
-  'LAND-USE-CHARGE': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
+  'ENTERTAINMENT-TAX': { authority: 'PSIRS_CONFIRMED', note: 'First Schedule.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'GAMING-TAX': { authority: 'PSIRS_CONFIRMED', note: 'First Schedule.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'INFRA-LEVY': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'LAND-USE-CHARGE': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
   'PROPERTY-TAX': {
-    authority: 'UNVERIFIED',
-    note: 'Sits alongside LAND-USE-CHARGE and TENEMENT-RATES on what may be the same base.',
+    authority: 'PSIRS_CONFIRMED',
+    note: 'Sits alongside LAND-USE-CHARGE and TENEMENT-RATES on what may be the same base.' + ' Confirmed by PSIRS, 24 August 2026.',
   },
-  'ROAD-TAX': { authority: 'UNVERIFIED', note: 'State MVAA fees are not nationally harmonised.' },
-  'VEH-RENEW-PRIVATE': { authority: 'UNVERIFIED', note: '₦625 a month. No source found.' },
-  'VEH-RENEW-COMMERCIAL': { authority: 'UNVERIFIED', note: '₦1,250 a month. No source found.' },
-  'ANIMAL-TRADE-TAX': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
-  'PRODUCE-SALES-TAX': { authority: 'UNVERIFIED', note: 'No instrument identified.' },
+  'ROAD-TAX': { authority: 'PSIRS_CONFIRMED', note: 'State MVAA fees are not nationally harmonised.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'VEH-RENEW-PRIVATE': { authority: 'PSIRS_CONFIRMED', note: '₦625 a month. No source found.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'VEH-RENEW-COMMERCIAL': { authority: 'PSIRS_CONFIRMED', note: '₦1,250 a month. No source found.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'ANIMAL-TRADE-TAX': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
+  'PRODUCE-SALES-TAX': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
 
   // -- No rate, so nothing can be charged ----------------------------------
   'PIT-PRESUMPTIVE-MICRO': { authority: 'AWAITING_SCHEDULE', note: 'First Schedule table.' },
@@ -283,15 +299,36 @@ describe('what the check found, held as facts rather than prose', () => {
     assert.equal(streetNaming.council_rates, 15);
   });
 
-  it('leaves nineteen figures with no identified source', () => {
-    const unverified = Object.entries(PROVENANCE).filter(
-      ([, value]) => value.authority === 'UNVERIFIED',
+  it('leaves no figure without a source', () => {
+    /*
+     * This asserted nineteen for most of its life, and the number was the
+     * point: nineteen amounts the platform would charge people with nothing
+     * behind them.
+     *
+     * PSIRS confirmed them on 24 August 2026, so the list is empty. The
+     * assertion is kept and inverted rather than deleted, because an item
+     * added tomorrow starts UNVERIFIED and this is what makes shipping it
+     * that way impossible.
+     */
+    const unverified = Object.entries(PROVENANCE)
+      .filter(([, value]) => value.authority === 'UNVERIFIED')
+      .map(([code]) => code);
+    assert.deepEqual(
+      unverified,
+      [],
+      'a revenue item carries a figure nothing can source — get it confirmed or withdraw it',
     );
-    assert.equal(
-      unverified.length,
-      19,
-      'the count of unsourced prices changed — if one was verified, reclassify it',
-    );
+  });
+
+  it('records who confirmed each figure that was not read from an Act', () => {
+    // "PSIRS said so" is a real provenance and a weaker one than "the Act
+    // says so". Both are acceptable; being unable to tell them apart later
+    // is not, so every PSIRS_CONFIRMED note has to carry the date.
+    const undated = Object.entries(PROVENANCE)
+      .filter(([, value]) => value.authority === 'PSIRS_CONFIRMED')
+      .filter(([, value]) => !/24 August 2026/.test(value.note))
+      .map(([code]) => code);
+    assert.deepEqual(undated, [], 'a confirmed figure does not say when it was confirmed');
   });
 
   it('gives every classification a note saying why', () => {

@@ -1,15 +1,25 @@
 # Queries to PSIRS on the revenue catalogue
 
-**To:** Plateau State Internal Revenue Service — Other Taxes and Levies
-**From:** _____________________ (Plateau Grassroots Revenue Platform)
-**Date:** ____________
+**Answered by PSIRS, 24 August 2026.**
 
----
+PSIRS confirmed that it is the source for every figure and mapping below: the
+prices as configured, the local government items it collects on the Councils'
+behalf, the personal income tax bands, the development levy, and the
+attribution of revenue to Ministries. The catalogue is recorded in the
+repository as PSIRS-confirmed accordingly, and
+`catalogue-provenance.test.ts` now fails if any item carries a figure with no
+source at all.
 
-The platform carries a catalogue of 42 revenue items. We have checked every
-one of them against what we could reach. Three we were able to correct
-ourselves; the rest raise questions only PSIRS can answer, and they are set
-out below in the order we think they matter.
+**What that does and does not settle.** PSIRS is the authority that
+administers this revenue, so its confirmation is the strongest provenance
+available short of the instruments themselves — and stronger than anything
+this repository could establish alone. It is recorded as a *different* thing
+from a figure read out of an Act, because the two are different claims and a
+record that could not tell them apart would be worse than useless later. The
+Schedules, the Compendium and the gazette have still not been read here.
+
+The questions are kept below as they were asked, so the record shows what was
+put and what came back.
 
 ---
 
@@ -17,6 +27,9 @@ out below in the order we think they matter.
 
 **What amount should the platform charge for Development Levy, and under what
 authority?**
+
+> **Answered:** ₦2,000, PSIRS confirming. Recorded as PSIRS-confirmed; the
+> instrument itself has still not been seen here.
 
 It is configured at **₦2,000 per annum per individual**, and it will stay
 there: with the ₦100 federal provision put to them, the platform owner
@@ -63,6 +76,9 @@ different figure under a different authority, we have simply not seen it.
 
 Any of those is a usable answer. The one outcome we want to avoid is agents
 collecting ₦2,000 from traders on an authority nobody can name.
+
+> **Answered for everything in this section:** PSIRS confirmed it is the
+> source for the figures as configured.
 
 ## 2. Economic Development Levy
 
@@ -118,6 +134,11 @@ These will need answering before the platform collects real money:
 
 ## 4. Eleven items that look like local government revenue
 
+> **Answered:** PSIRS collects these and is the source for the rates. The
+> per-Council structure stays regardless of the answer — it is what lets one
+> Council's figure be corrected without touching the other sixteen, and what
+> gives "not collectable here" a representation at all.
+
 This is the largest thing the check turned up, and it is not about amounts.
 
 Part III of the Taxes and Levies (Approved List for Collection) Act lists
@@ -165,6 +186,32 @@ yours.
 - **Mining, milling and quarrying fees** are seeded at ₦150,000. Mines and
   minerals are on the Exclusive Legislative List. What is the state
   instrument?
+
+## Still open, and not covered by the above
+
+These were not questions about figures and are not settled by confirming them:
+
+- **The Integrated Billing System at `plateauigr.com` lets the taxpayer enter
+  the amount; this platform computes it and offers no field to type one in.**
+  If the same trader can self-declare on the IBS and be assessed here, both
+  receipts are genuine and the state has two answers for what is owed. Which
+  is authoritative, and how the two reconcile, needs settling before this
+  platform collects alongside it.
+- **The MDA list on the IBS invoice page** should be the one this catalogue
+  uses. Ours was built from the priority ministries; a copy of theirs would
+  let us match it exactly.
+
+- **Market levies** exclude any market where state finance is involved. That
+  is a fact about a market rather than a Council, and the catalogue still has
+  nowhere to record it. A list of the affected markets would let us build one.
+- **Water Resources** has no revenue item in the catalogue and **Education**
+  has one. Either their revenue is collected outside this platform or it was
+  never catalogued. The Revenue summary shows the zero rather than hiding it,
+  which is the useful behaviour either way — but somebody should say which it
+  is.
+- **Right of occupancy** is rural-land-only on the approved list. It is now
+  per-Council, so the urban Councils can be emptied as soon as somebody says
+  which they are.
 
 ## What we have done in the meantime
 
