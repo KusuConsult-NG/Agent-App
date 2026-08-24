@@ -67,6 +67,16 @@ export function FraudScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('OPEN');
+  const [sweeping, setSweeping] = useState(false);
+  const [sweepResult, setSweepResult] = useState<string | null>(null);
+
+  /*
+   * `fraud:manage` is held by administrators and revenue officers only. A
+   * finance officer, an auditor and a supervisor all hold `fraud:read` — they
+   * look at flags, they do not raise them — so the control is not offered to
+   * them rather than being offered and refused.
+   */
+  const canSweep = can('fraud:manage');
 
   const load = useCallback(() => {
     api
@@ -115,6 +125,47 @@ export function FraudScreen() {
           Signals are raised for review, never acted on automatically. No transaction is deleted or
           blocked by a heuristic.
         </p>
+        {canSweep && (
+          <>
+            <p className="card__hint" style={{ marginTop: 12 }}>
+              The sweep re-runs every heuristic over the current data and raises what it finds. It
+              raises flags for a person to judge and changes no transaction, so running it is
+              safe — but it is a deliberate act rather than something that happens quietly, which
+              is why it is a button.
+            </p>
+            <div className="button-row">
+              <button
+                type="button"
+                disabled={sweeping}
+                onClick={async () => {
+                  setSweeping(true);
+                  setSweepResult(null);
+                  setError(null);
+                  try {
+                    const result = await api.post<{ flagsRaised?: number; raised?: number }>(
+                      '/government/fraud/sweep',
+                      {},
+                    );
+                    const raised = result.flagsRaised ?? result.raised ?? 0;
+                    setSweepResult(
+                      raised === 0
+                        ? 'Sweep complete. Nothing new was flagged.'
+                        : `Sweep complete. ${raised} flag(s) raised for review.`,
+                    );
+                    load();
+                  } catch (caught) {
+                    if (caught instanceof ApiRequestError) setError(caught.error);
+                  } finally {
+                    setSweeping(false);
+                  }
+                }}
+              >
+                {sweeping ? 'Sweeping…' : 'Run a fraud sweep now'}
+              </button>
+            </div>
+            {sweepResult && <Alert kind="success">{sweepResult}</Alert>}
+          </>
+        )}
       </div>
 
       {leakage && (

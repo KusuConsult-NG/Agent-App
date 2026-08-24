@@ -4,6 +4,75 @@
 
 ---
 
+## Answered
+
+**PSIRS confirmed on 24 August 2026 that it collects local government revenue
+on the Councils' behalf, and that it is the source for every figure and
+mapping in this catalogue** — the prices as configured, the local government
+items it collects on the Councils' behalf, the personal income tax bands, the
+development levy, and the attribution of revenue to Ministries.
+
+Everything below is the investigation that led to asking, kept because it
+records what was checked, what could not be reached, and why several things
+were built the way they were. Where it says a figure has no identified source,
+read it as the state before that confirmation.
+
+**What the confirmation does not change.** The Schedules to the Consolidation
+Law, the Compendium of Revenue and the Nigeria Tax Act gazette have still not
+been read from this environment. `catalogue-provenance.test.ts` therefore
+records a figure confirmed by PSIRS as a different thing from one read out of
+an Act — both are acceptable provenance, and being unable to tell them apart
+later would not be.
+
+That PSIRS collects for the Councils settles the largest question this
+document raised — and makes a new one first-class. Money collected for
+somebody must be attributable back to them, and nothing could say what any of
+the seventeen Councils was owed. `localGovernmentRemittance` now does, on the
+Revenue summary: only items whose rate a Council sets, attributed to the
+Council whose area they were collected in, counting only revenue a payment
+confirmed, and listing every Council including those that collected nothing.
+
+Three things in here were **not** questions about figures and are not settled
+by confirming them: the market-levy exclusion for markets where state finance
+is involved, which the catalogue still cannot express; the rural-only
+restriction on right of occupancy, which now needs only a list of which
+Councils are rural; and the fact that Water Resources has no revenue item and
+Education has one.
+
+## The system PSIRS already runs
+
+`plateauigr.com` is PSIRS's live Integrated Billing System. The domain is
+blocked from this environment, so what follows comes from search summaries of
+its FAQ rather than from the page — but three things in it bear directly on
+this catalogue.
+
+**It is MDA-first.** Generating an invoice there means validating a TIN,
+then *selecting the MDA to pay to*, then the revenue type. That is the same
+structure this platform now uses, and it settles that mapping revenue to a
+Ministry is not an embellishment — it is how PSIRS bills. **Our MDA list
+should be reconciled against theirs**, which is a dropdown on their invoice
+page and was not reachable from here.
+
+**A TIN is optional.** Taxpayers can register and pay on the IBS with or
+without one, which matches this platform's handling of a taxpayer who has no
+TIN yet rather than blocking them.
+
+**The taxpayer enters the amount.** On the IBS the payer fills in the figure
+themselves. This platform does the opposite on purpose: an agent selects an
+item and the amount is computed from the rate in force, with no field anyone
+can type a number into. That is the core of the design — the governing rule is
+that nobody can make a transaction appear successful without the payment
+infrastructure confirming it, and its counterpart is that nobody chooses what
+is owed.
+
+**That difference is a real question, not a detail.** If the same trader can
+self-declare ₦2,000 on the IBS and an agent's handset computes ₦3,000 here,
+both receipts are genuine and the state has two answers. Which system is
+authoritative for an amount, and how the two reconcile, is worth settling
+before this platform collects alongside the other.
+
+---
+
 ## Why this document exists
 
 The catalogue decides what an agent can charge a trader in a market. Every code

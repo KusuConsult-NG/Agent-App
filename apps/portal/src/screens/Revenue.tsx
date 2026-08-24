@@ -52,8 +52,17 @@ interface AgentRow {
   centre_longitude: string | null;
 }
 
+interface CouncilRow {
+  lga: string;
+  zone: string;
+  transactions: string;
+  amount_kobo: string;
+  items: { code: string; name: string; transactions: string; amount_kobo: string }[];
+}
+
 interface Summary {
   byMda: MdaRow[];
+  localGovernment: CouncilRow[];
   areas: AreaRow[];
   agents: AgentRow[];
   coverage: {
@@ -132,6 +141,20 @@ export function RevenueScreen() {
           hint="Arms of government with no catalogue item"
         />
         <Stat
+          label="Owed to Councils"
+          value={
+            <Money
+              kobo={String(
+                (data.localGovernment ?? []).reduce(
+                  (sum, row) => sum + BigInt(row.amount_kobo),
+                  0n,
+                ),
+              )}
+            />
+          }
+          hint="Collected on their behalf"
+        />
+        <Stat
           label="Placed on a map"
           value={total ? share(data.coverage.located, data.coverage.transactions) : '—'}
           hint="Collections with a recorded point"
@@ -178,6 +201,40 @@ export function RevenueScreen() {
           ]}
           rows={data.byMda}
           empty="No MDA is configured."
+        />
+      </div>
+
+      <div className="card card--flush">
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+          Owed to the Local Government Councils
+        </h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>
+          PSIRS collects this on the Councils' behalf, so it is theirs rather than the State's.
+          Only items whose rate a Council sets are counted — a State levy collected in a
+          Council's area is the State's. Every Council is listed, including those that collected
+          nothing, because a remittance run has to account for all seventeen.
+        </p>
+        <Table
+          columns={[
+            { key: 'lga', label: 'Council' },
+            { key: 'zone', label: 'Zone' },
+            {
+              key: 'amount_kobo',
+              label: 'Owed',
+              render: (row: CouncilRow) => <Money kobo={row.amount_kobo} />,
+            },
+            { key: 'transactions', label: 'Collections' },
+            {
+              key: 'items',
+              label: 'From',
+              render: (row: CouncilRow) =>
+                row.items.length === 0
+                  ? '—'
+                  : row.items.map((item) => item.name).join(', '),
+            },
+          ]}
+          rows={data.localGovernment ?? []}
+          empty="No local government revenue has been collected in this period."
         />
       </div>
 

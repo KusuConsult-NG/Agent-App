@@ -635,3 +635,326 @@ export async function collectionMappingCoverage(
     [from, to, statewide, territoryIds],
   );
 }
+
+/**
+ * What each Local Government Council is owed.
+ *
+ * PSIRS collects local government revenue on the Councils' behalf, which makes
+ * remittance a first-class question the platform could not answer: it knew
+ * what it had collected and had no view of any one Council's share.
+ * `settlements` tracks money arriving from the gateway into a government
+ * account and stops there.
+ *
+ * WHAT MAKES A COLLECTION A COUNCIL'S. An item whose rate is set per Council
+ * is a Council's revenue — that is what per-Council rating means, and it is a
+ * fact in the database rather than a list in code that would drift. A State
+ * item collected in a Council's area stays the State's: an infrastructure
+ * levy raised in Wase is not Wase's money, and counting it would overstate
+ * that Council's share by exactly what the State took there.
+ *
+ * WHICH COUNCIL. The LGA on the transaction, which comes from the taxpayer
+ * and is the same LGA the amount was priced on. Money collected in one
+ * Council's area is that Council's and never another's.
+ *
+ * EVERY COUNCIL APPEARS, including one that collected nothing. A remittance
+ * run has to account for all seventeen, and a Council missing from the list
+ * looks exactly like a Council nobody ran the report for.
+ */
+export async function localGovernmentRemittance(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return query(
+    db,
+    `WITH council_revenue AS (
+       SELECT t.lga_id, ri.id AS item_id, ri.code, ri.name,
+              count(t.id) AS transactions,
+              SUM(t.amount_kobo) AS amount_kobo
+         FROM transactions t
+         JOIN revenue_items ri ON ri.id = t.revenue_item_id
+        WHERE t.status IN ${REVENUE_STATES}
+          AND t.created_at BETWEEN $1 AND $2
+          AND ${transactionScopeSql('t', 3, 4)}
+          -- An item rated per Council is a Council's revenue. This is the
+          -- database's own record of the arrangement rather than a list here
+          -- that would drift away from the catalogue.
+          AND EXISTS (
+            SELECT 1 FROM revenue_item_rates r
+             WHERE r.revenue_item_id = ri.id AND r.lga_id IS NOT NULL
+          )
+        GROUP BY t.lga_id, ri.id, ri.code, ri.name
+     )
+     SELECT l.name AS lga, l.zone,
+            COALESCE(SUM(cr.transactions),0)::text AS transactions,
+            COALESCE(SUM(cr.amount_kobo),0)::text AS amount_kobo,
+            COALESCE(
+              json_agg(
+                json_build_object(
+                  'code', cr.code,
+                  'name', cr.name,
+                  'transactions', cr.transactions::text,
+                  'amount_kobo', cr.amount_kobo::text
+                ) ORDER BY cr.amount_kobo DESC
+              ) FILTER (WHERE cr.item_id IS NOT NULL),
+              '[]'::json
+            ) AS items
+       FROM lgas l
+       LEFT JOIN council_revenue cr ON cr.lga_id = l.id
+      GROUP BY l.name, l.zone
+      ORDER BY COALESCE(SUM(cr.amount_kobo),0) DESC, l.name`,
+    [from, to, statewide, territoryIds],
+  );
+}
+
+// ===========================================================================
+// Role homes.
+//
+// Every officer landed on the same executive dashboard. It is a good screen
+// and it is the wrong first screen for four of the five roles that saw it: an
+// auditor opening the platform does not need this morning's collections, and a
+// finance officer does not need the agent clearance queue. What each of them
+// needs is the work waiting for them.
+//
+// One query set per role rather than one screen with everything on it. A
+// dashboard that shows every role everything is how a finance officer learns
+// to scroll past the reconciliation exceptions.
+// ===========================================================================
+
+/** What is waiting for whoever runs the platform. */
+export async function adminHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM agents WHERE clearance_status = 'READY_FOR_REVIEW')
+         AS agents_awaiting_review,
+       (SELECT count(*)::text FROM agents WHERE clearance_status = 'REQUIRES_INFO')
+         AS agents_needing_information,
+       (SELECT count(*)::text FROM agent_devices WHERE status = 'PENDING')
+         AS devices_awaiting_approval,
+       (SELECT count(*)::text FROM users WHERE role <> 'agent' AND status = 'ACTIVE')
+         AS active_officers,
+       (SELECT count(*)::text FROM users u
+         WHERE u.role = 'supervisor' AND u.status = 'ACTIVE'
+           AND NOT EXISTS (SELECT 1 FROM user_territories ut WHERE ut.user_id = u.id))
+         AS supervisors_without_a_territory,
+       -- An item nobody has priced cannot be collected. This is the
+       -- administrator's queue, not a fault.
+       (SELECT count(*)::text FROM revenue_items ri
+         WHERE NOT EXISTS (SELECT 1 FROM revenue_item_rates r WHERE r.revenue_item_id = ri.id))
+         AS revenue_items_awaiting_a_rate,
+       (SELECT count(*)::text FROM mdas m
+         WHERE NOT EXISTS (SELECT 1 FROM revenue_items ri WHERE ri.mda_id = m.id))
+         AS mdas_with_no_revenue_item,
+       (SELECT count(*)::text FROM support_tickets WHERE status IN ('OPEN','ASSIGNED'))
+         AS open_tickets`,
+  );
+}
+
+/** The taxpayer register, which is the revenue officer's charge. */
+export async function revenueOfficerHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers,
+       (SELECT count(*)::text FROM taxpayers
+         WHERE status = 'ACTIVE' AND created_at >= date_trunc('week', CURRENT_DATE))
+         AS registered_this_week,
+       -- A taxpayer without a TIN cannot be tracked across years, so this is
+       -- the queue that matters most here.
+       (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('PENDING','FAILED'))
+         AS tins_outstanding,
+       (SELECT count(*)::text FROM taxpayers WHERE tin_status = 'FAILED') AS tins_failed,
+       (SELECT count(*)::text FROM approvals
+         WHERE status IN ('REQUESTED','REVIEWED') AND approval_type = 'TAXPAYER_CORRECTION')
+         AS corrections_awaiting_review,
+       (SELECT count(*)::text FROM invoices WHERE status = 'UNPAID' AND
+         (expires_at IS NULL OR expires_at > now())) AS invoices_unpaid,
+       (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,
+       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices WHERE status = 'UNPAID')
+         AS unpaid_kobo`,
+  );
+}
+
+/** Money in, money out, and money held for somebody else. */
+export async function financeOfficerHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM reconciliation_records
+         WHERE reconciled_at IS NULL AND status IN
+           ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT'))
+         AS reconciliation_exceptions,
+       (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
+       (SELECT COALESCE(SUM(expected_amount_kobo - received_amount_kobo),0)::text
+          FROM settlements WHERE reconciled_at IS NULL) AS settlement_variance_kobo,
+       (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
+         WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
+       (SELECT count(*)::text FROM commission_payouts WHERE status = 'REQUESTED')
+         AS payouts_awaiting_approval,
+       (SELECT count(*)::text FROM refunds WHERE status IN ('PENDING','APPROVED'))
+         AS refunds_outstanding,
+       -- Money the State is holding on somebody else's behalf. It belongs on
+       -- this screen more than on any other.
+       (SELECT COALESCE(SUM(t.amount_kobo),0)::text
+          FROM transactions t
+         WHERE t.status IN ${REVENUE_STATES}
+           AND EXISTS (SELECT 1 FROM revenue_item_rates r
+                        WHERE r.revenue_item_id = t.revenue_item_id AND r.lga_id IS NOT NULL))
+         AS owed_to_councils_kobo`,
+  );
+}
+
+/**
+ * What an auditor came to look at.
+ *
+ * Read-only by construction: every figure here is a count of something to
+ * examine, and nothing on this screen leads to an action that changes a
+ * record.
+ */
+export async function auditorHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM audit_logs) AS audit_entries,
+       (SELECT count(*)::text FROM audit_logs WHERE created_at >= CURRENT_DATE) AS entries_today,
+       (SELECT count(*)::text FROM audit_logs WHERE result = 'DENIED'
+          AND created_at >= CURRENT_DATE - interval '7 days') AS refused_this_week,
+       (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED'))
+         AS reversed_or_refunded,
+       (SELECT count(*)::text FROM fraud_flags WHERE status IN ('OPEN','UNDER_REVIEW'))
+         AS fraud_flags_open,
+       (SELECT count(*)::text FROM revenue_item_rates
+         WHERE created_at >= CURRENT_DATE - interval '30 days') AS rate_changes_this_month,
+       (SELECT count(*)::text FROM verification_attempts
+          WHERE created_at >= CURRENT_DATE - interval '7 days') AS receipt_checks_this_week,
+       (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers_on_record`,
+  );
+}
+
+/**
+ * The actual work waiting, not a count of it.
+ *
+ * A home screen that reports "3 agents awaiting clearance" and sends the
+ * officer somewhere else to see which three is an index, not a workplace. The
+ * counts above answer "is there anything"; these answer "what", so the top of
+ * each queue can be acted on where it is found.
+ *
+ * Deliberately shallow — the first few of each. A home screen is not the queue
+ * screen and should not try to be; what it owes is the next thing to do.
+ */
+export async function adminWorkItems(db: Db) {
+  const [agents, devices, supervisors] = await Promise.all([
+    query(
+      db,
+      `SELECT a.id, a.agent_code, u.full_name, l.name AS lga, a.clearance_status,
+              to_char(a.updated_at, 'YYYY-MM-DD') AS waiting_since
+         FROM agents a JOIN users u ON u.id = a.user_id
+         LEFT JOIN lgas l ON l.id = a.lga_id
+        WHERE a.clearance_status = 'READY_FOR_REVIEW'
+        ORDER BY a.updated_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT d.id, d.device_identifier, d.device_name, u.full_name, a.agent_code,
+              to_char(d.registered_at, 'YYYY-MM-DD') AS registered
+         FROM agent_devices d
+         JOIN agents a ON a.id = d.agent_id
+         JOIN users u ON u.id = a.user_id
+        WHERE d.status = 'PENDING'
+        ORDER BY d.registered_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT u.id, u.full_name, u.phone
+         FROM users u
+        WHERE u.role = 'supervisor' AND u.status = 'ACTIVE'
+          AND NOT EXISTS (SELECT 1 FROM user_territories ut WHERE ut.user_id = u.id)
+        ORDER BY u.full_name LIMIT 5`,
+    ),
+  ]);
+  return { agents, devices, supervisors };
+}
+
+/** The taxpayers a revenue officer has to chase. */
+export async function revenueOfficerWorkItems(db: Db) {
+  const [failedTins, expiring] = await Promise.all([
+    query(
+      db,
+      `SELECT t.id, coalesce(t.business_name, t.first_name || ' ' || t.last_name) AS name,
+              t.phone, t.tin_status, t.tin_reason
+         FROM taxpayers t
+        WHERE t.tin_status = 'FAILED'
+        ORDER BY t.created_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT i.id, i.invoice_number, i.total_amount_kobo::text AS amount_kobo,
+              to_char(i.expires_at, 'YYYY-MM-DD') AS expires_on,
+              coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
+         FROM invoices i JOIN taxpayers tp ON tp.id = i.taxpayer_id
+        WHERE i.status = 'UNPAID' AND i.expires_at IS NOT NULL
+          AND i.expires_at BETWEEN now() AND now() + interval '7 days'
+        ORDER BY i.expires_at LIMIT 5`,
+    ),
+  ]);
+  return { failedTins, expiring };
+}
+
+/** What a finance officer settles today. */
+export async function financeOfficerWorkItems(db: Db) {
+  const [exceptions, payouts] = await Promise.all([
+    query(
+      db,
+      `SELECT r.id, r.status, r.gateway_reference, r.detail,
+              r.expected_amount_kobo::text AS expected_kobo,
+              r.received_amount_kobo::text AS received_kobo,
+              r.variance_kobo::text AS variance_kobo,
+              to_char(r.created_at, 'YYYY-MM-DD') AS raised
+         FROM reconciliation_records r
+        WHERE r.reconciled_at IS NULL
+          AND r.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION',
+                           'AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+        ORDER BY r.created_at LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT p.id, p.payout_reference, p.amount_kobo::text AS amount_kobo,
+              p.commission_count::text AS commissions, u.full_name AS agent,
+              to_char(p.requested_at, 'YYYY-MM-DD') AS requested
+         FROM commission_payouts p
+         JOIN agents a ON a.id = p.agent_id
+         JOIN users u ON u.id = a.user_id
+        WHERE p.status = 'REQUESTED'
+        ORDER BY p.requested_at LIMIT 5`,
+    ),
+  ]);
+  return { exceptions, payouts };
+}
+
+/** What an auditor would open first. Reads only. */
+export async function auditorWorkItems(db: Db) {
+  const [refusals, reversals] = await Promise.all([
+    query(
+      db,
+      `SELECT id, action, entity_type, actor_role, reason,
+              to_char(created_at, 'YYYY-MM-DD HH24:MI') AS at
+         FROM audit_logs
+        WHERE result = 'DENIED'
+        ORDER BY created_at DESC LIMIT 5`,
+    ),
+    query(
+      db,
+      `SELECT t.transaction_reference, t.status, t.amount_kobo::text AS amount_kobo,
+              to_char(t.updated_at, 'YYYY-MM-DD') AS at,
+              coalesce(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer
+         FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
+        WHERE t.status IN ('REVERSED','REFUNDED')
+        ORDER BY t.updated_at DESC LIMIT 5`,
+    ),
+  ]);
+  return { refusals, reversals };
+}

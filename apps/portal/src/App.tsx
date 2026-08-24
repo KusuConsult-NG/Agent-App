@@ -25,6 +25,8 @@ import { UserAccessScreen } from './screens/UserAccess';
 import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
 import { PerformanceScreen } from './screens/Performance';
 import { RevenueScreen } from './screens/Revenue';
+import { AllocationsScreen } from './screens/Allocations';
+import { RoleHomeScreen } from './screens/RoleHome';
 import { UsageScreen } from './screens/Usage';
 import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
@@ -206,7 +208,25 @@ function Routes({
   const ticketMatch = matchRoute(route, '/support/:id');
   const roundMatch = matchRoute(route, '/allocations/:id');
 
-  if (matchRoute(route, '/')) return <DashboardScreen navigate={navigate} />;
+  if (matchRoute(route, '/')) {
+    /*
+     * The home screen depends on the job.
+     *
+     * Every officer used to land on the executive dashboard — this morning's
+     * collections, revenue by category, the daily trend. An auditor does not
+     * open the platform to see today's takings and a finance officer does not
+     * need the agent clearance queue.
+     *
+     * A supervisor keeps the dashboard: theirs is already narrowed to their
+     * own territories, which is exactly the screen their job wants.
+     */
+    return user.role === 'supervisor' ? (
+      <DashboardScreen navigate={navigate} />
+    ) : (
+      <RoleHomeScreen user={user} navigate={navigate} />
+    );
+  }
+  if (matchRoute(route, '/dashboard')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
   if (matchRoute(route, '/transactions')) return <TransactionsScreen />;
   if (matchRoute(route, '/agents')) return <AgentsScreen navigate={navigate} />;
@@ -214,6 +234,7 @@ function Routes({
   if (matchRoute(route, '/referees')) return <RefereesScreen />;
   if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
   if (matchRoute(route, '/revenue')) return <RevenueScreen />;
+  if (matchRoute(route, '/allocations')) return <AllocationsScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;

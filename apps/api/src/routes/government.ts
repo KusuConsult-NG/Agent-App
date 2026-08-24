@@ -97,15 +97,72 @@ governmentRouter.get(
         from: data.from ? new Date(data.from) : undefined,
         to: data.to ? new Date(data.to) : undefined,
       };
-      const [byMda, areas, agents, coverage] = await Promise.all([
+      const [byMda, areas, agents, coverage, localGovernment] = await Promise.all([
         reports.revenueByMda(pool, window, scope),
         reports.revenueGenerationAreas(pool, window, scope),
         reports.agentCollectionMap(pool, window, scope),
         reports.collectionMappingCoverage(pool, window, scope),
+        // PSIRS collects for the Councils, so what each is owed belongs on
+        // the same page as what was collected.
+        reports.localGovernmentRemittance(pool, window, scope),
       ]);
-      res.json({ byMda, areas, agents, coverage, scope });
+      res.json({ byMda, areas, agents, coverage, localGovernment, scope });
     },
   ),
+);
+
+/**
+ * The home screen for whoever is signed in.
+ *
+ * Every officer landed on the same executive dashboard. It is a good screen
+ * and the wrong first screen for four of the five roles that saw it — an
+ * auditor opening the platform does not need this morning's collections and a
+ * finance officer does not need the agent clearance queue.
+ *
+ * Dispatching on role rather than assembling everything and letting the client
+ * choose: the queries are different work, and a finance officer should not pay
+ * for the auditor's counts to be computed.
+ */
+governmentRouter.get(
+  '/home',
+  asyncHandler(async (req, res) => {
+    const role = req.auth!.role;
+    /*
+     * Counts and the work behind them, together.
+     *
+     * A screen that says "3 agents awaiting clearance" and sends the officer
+     * elsewhere to see which three is an index. The counts answer "is there
+     * anything"; the items answer "what", so the top of each queue can be
+     * acted on where it is found.
+     */
+    const blocks =
+      role === 'admin'
+        ? {
+            role,
+            admin: await reports.adminHome(pool),
+            work: await reports.adminWorkItems(pool),
+          }
+        : role === 'revenue_officer'
+          ? {
+              role,
+              revenue: await reports.revenueOfficerHome(pool),
+              work: await reports.revenueOfficerWorkItems(pool),
+            }
+          : role === 'finance_officer'
+            ? {
+                role,
+                finance: await reports.financeOfficerHome(pool),
+                work: await reports.financeOfficerWorkItems(pool),
+              }
+            : role === 'auditor'
+              ? {
+                  role,
+                  audit: await reports.auditorHome(pool),
+                  work: await reports.auditorWorkItems(pool),
+                }
+              : { role };
+    res.json(blocks);
+  }),
 );
 
 governmentRouter.get(

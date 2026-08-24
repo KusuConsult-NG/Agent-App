@@ -128,124 +128,212 @@ export interface NavItem {
   permission?: string | readonly string[];
 }
 
-export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
-  {
-    group: 'Overview',
-    items: [
-      /*
-       * Both accept report:read:territory as well, and it is the reason a
-       * supervisor now has any analytics at all. Gated on report:read:all
-       * alone, the menu hid the dashboard and the intelligence page from the
-       * one role whose job is a territory — so they signed in and landed on a
-       * raw transaction list. What a territory-scoped officer sees on these
-       * screens is narrowed by the API, not by whether the link is offered.
-       */
-      { path: '/', label: 'Dashboard', permission: ['report:read:all', 'report:read:territory'] },
-      {
-        path: '/intelligence',
-        label: 'Revenue intelligence',
-        permission: ['report:read:all', 'report:read:territory'],
-      },
-      /*
-       * Between the dashboard's totals and the catalogue's price list there
-       * was no view of revenue by generating area or by the arm of government
-       * it belongs to — the two questions an administrator opens a revenue
-       * platform to ask.
-       */
-      {
-        path: '/revenue',
-        label: 'Revenue summary',
-        permission: ['report:read:all', 'report:read:territory'],
-      },
-      { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
-    ],
+/**
+ * One catalogue of screens, so a path and a label are defined once.
+ *
+ * The menus below arrange these; they do not redefine them. A screen that
+ * changed its label in four places and not the fifth is the failure this
+ * avoids.
+ */
+const SCREEN: Record<string, NavItem> = {
+  home: { path: '/', label: 'Home', permission: ['report:read:all', 'report:read:territory'] },
+  dashboard: {
+    path: '/dashboard',
+    label: 'Collections dashboard',
+    permission: ['report:read:all', 'report:read:territory'],
   },
-  {
-    group: 'Agents',
-    items: [
-      { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
-      { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
-      // Either report permission, matching what GET /agents/performance
-      // accepts. A supervisor holds only report:read:territory and is the
-      // role this screen is most for, so gating on report:read:all alone
-      // would hide it from them.
-      {
-        path: '/performance',
-        label: 'Agent performance',
-        permission: ['report:read:all', 'report:read:territory'],
-      },
-    ],
+  intelligence: {
+    path: '/intelligence',
+    label: 'Revenue intelligence',
+    permission: ['report:read:all', 'report:read:territory'],
   },
-  {
-    group: 'Finance',
-    items: [
-      // report:financial, not payment:read:all. The screen is the settlement
-      // dashboard, and GET /government/settlements requires report:financial or
-      // payment:reconcile — neither of which an admin holds, because settlement
-      // figures are a finance and audit responsibility rather than an
-      // administrative one. Gating on the wider permission put the item in the
-      // admin's menu and then answered a 403 when they opened it.
-      { path: '/reconciliation', label: 'Reconciliation', permission: 'report:financial' },
-      { path: '/commissions', label: 'Commissions', permission: 'commission:read:all' },
-      { path: '/approvals', label: 'Approvals', permission: 'approval:review' },
-    ],
+  revenue: {
+    path: '/revenue',
+    label: 'Revenue summary',
+    permission: ['report:read:all', 'report:read:territory'],
   },
-  {
-    group: 'Oversight',
-    items: [
-      { path: '/fraud', label: 'Fraud & leakage', permission: 'fraud:read' },
-      // support:read:all, not support:manage. An auditor holds the first and
-      // not the second, and reading the support queue is exactly the kind of
-      // thing an auditor is for — the screen hides the reply and status
-      // controls from anyone who cannot use them.
-      { path: '/support', label: 'Support desk', permission: 'support:read:all' },
-      // payment:read:all, which every portal role holds, because the refund
-      // queue is the part of this screen everyone should be able to see. The
-      // TIN and vehicle-authority queues are guarded separately and the screen
-      // shows only the sections the officer may read, rather than the page
-      // answering 403 for whoever holds two of the three permissions.
-      { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
-      { path: '/audit', label: 'Audit log', permission: 'audit:read' },
-      /*
-       * Filed under Oversight rather than Overview, and the placement is the
-       * argument. This is about whether the software works, not about how much
-       * was collected — and keeping it away from the revenue dashboards makes
-       * it less likely somebody starts reading it as a productivity measure of
-       * the agents, which it deliberately cannot be.
-       */
-      { path: '/usage', label: 'Product usage', permission: 'report:read:all' },
-    ],
+  transactions: { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
+  agents: { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
+  referees: { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
+  performance: {
+    path: '/performance',
+    label: 'Agent performance',
+    permission: ['report:read:all', 'report:read:territory'],
   },
-  {
-    group: 'Configuration',
-    items: [
-      { path: '/catalogue', label: 'Revenue catalogue', permission: 'catalogue:read' },
-      { path: '/programmes', label: 'Social incentives', permission: 'incentive:read:all' },
-      // group:manage, not group:read:all. Agents hold the read permission
-      // because they register groups and record members — but they do that in
-      // the PWA, and this portal is for officers. Keying the menu on the read
-      // permission put a portal item in front of field agents, which the menu
-      // tests object to for the right reason.
-      { path: '/groups', label: 'Groups & cooperatives', permission: 'group:manage' },
-      // taxpayer:correct, not taxpayer:update. Agents hold the latter for the
-      // records they maintain in the field, and this is a portal for officers —
-      // gating on it put a menu item in an agent's portal that the API would
-      // have refused. The screen hides the identity-document fields from
-      // anyone without taxpayer:manage rather than the menu hiding it all.
-      {
-        path: '/taxpayer-records',
-        label: 'Taxpayer corrections',
-        permission: 'taxpayer:correct',
-      },
-      { path: '/users', label: 'Officer access', permission: 'user:manage' },
-    ],
+  reconciliation: { path: '/reconciliation', label: 'Reconciliation', permission: 'report:financial' },
+  commissions: { path: '/commissions', label: 'Commissions', permission: 'commission:read:all' },
+  approvals: { path: '/approvals', label: 'Approvals', permission: 'approval:review' },
+  fraud: { path: '/fraud', label: 'Fraud & leakage', permission: 'fraud:read' },
+  support: { path: '/support', label: 'Support desk', permission: 'support:read:all' },
+  outstanding: { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
+  audit: { path: '/audit', label: 'Audit log', permission: 'audit:read' },
+  usage: { path: '/usage', label: 'Product usage', permission: 'report:read:all' },
+  catalogue: { path: '/catalogue', label: 'Revenue catalogue', permission: 'catalogue:read' },
+  programmes: { path: '/programmes', label: 'Social incentives', permission: 'incentive:read:all' },
+  // group:manage, not group:read:all. Agents hold the read permission because
+  // they register groups in the field; managing them is an officer's job.
+  groups: { path: '/groups', label: 'Groups & cooperatives', permission: 'group:manage' },
+  taxpayerRecords: {
+    path: '/taxpayer-records',
+    label: 'Taxpayer corrections',
+    permission: 'taxpayer:correct',
   },
+  users: { path: '/users', label: 'Officer access', permission: 'user:manage' },
+  /*
+   * `allocation:manage`, held by administrators and revenue officers only. A
+   * finance officer settles money; they do not decide who gets fertiliser, and
+   * offering them a screen the API would refuse is worse than not offering it.
+   */
+  allocations: {
+    path: '/allocations',
+    label: 'Distribution rounds',
+    permission: 'allocation:manage',
+  },
+};
+
+type NavGroup = { group: string; items: readonly NavItem[] };
+
+/**
+ * A menu per role, not one menu with things taken out.
+ *
+ * Filtering a common menu by permission gives every officer the same shape
+ * with gaps in it — the same groups in the same order, headed "Overview",
+ * "Agents", "Finance", "Oversight", "Configuration", whichever of those the
+ * officer actually works in. A finance officer opened a menu that led with
+ * agent clearance and an auditor opened one that led with collections.
+ *
+ * These are arranged around the job instead. The first group is what the role
+ * does; the ones below are what it consults. The same screens appear in
+ * several menus and that is correct — an auditor reads reconciliation and a
+ * finance officer works it, and the difference is where it sits, not whether
+ * it is there.
+ *
+ * Permissions still filter the result. The arrangement decides what to offer
+ * and the permission decides what may be offered, so a menu can never promise
+ * a screen the API would refuse.
+ */
+const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
+  admin: [
+    {
+      group: 'Administration',
+      items: [SCREEN.home!, SCREEN.users!, SCREEN.agents!, SCREEN.referees!],
+    },
+    {
+      group: 'Configuration',
+      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!],
+    },
+    {
+      group: 'Oversight',
+      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!],
+    },
+    {
+      group: 'Revenue',
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!, SCREEN.transactions!,
+              SCREEN.performance!],
+    },
+  ],
+
+  revenue_officer: [
+    {
+      group: 'The register',
+      items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
+    },
+    {
+      group: 'Assessment',
+      items: [SCREEN.catalogue!, SCREEN.transactions!],
+    },
+    {
+      group: 'Revenue',
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!],
+    },
+    {
+      group: 'Agents and programmes',
+      items: [SCREEN.agents!, SCREEN.referees!, SCREEN.performance!, SCREEN.programmes!,
+              SCREEN.allocations!, SCREEN.groups!],
+    },
+    {
+      group: 'Oversight',
+      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.audit!, SCREEN.usage!],
+    },
+  ],
+
+  finance_officer: [
+    {
+      group: 'Settlement',
+      items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!,
+              SCREEN.approvals!],
+    },
+    {
+      group: 'Revenue',
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.transactions!, SCREEN.intelligence!],
+    },
+    {
+      group: 'Who collected it',
+      items: [SCREEN.performance!, SCREEN.agents!, SCREEN.referees!],
+    },
+    {
+      group: 'Oversight',
+      items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!],
+    },
+  ],
+
+  auditor: [
+    {
+      group: 'Examination',
+      items: [SCREEN.home!, SCREEN.audit!, SCREEN.fraud!, SCREEN.transactions!],
+    },
+    {
+      group: 'The money',
+      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!],
+    },
+    {
+      group: 'What was charged',
+      items: [SCREEN.catalogue!, SCREEN.revenue!, SCREEN.dashboard!, SCREEN.intelligence!],
+    },
+    {
+      group: 'Who did it',
+      items: [SCREEN.agents!, SCREEN.referees!, SCREEN.performance!, SCREEN.usage!,
+              SCREEN.support!, SCREEN.programmes!],
+    },
+  ],
+
+  supervisor: [
+    {
+      group: 'My territory',
+      items: [SCREEN.home!, SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
+    },
+    {
+      group: 'Revenue here',
+      items: [SCREEN.revenue!, SCREEN.intelligence!, SCREEN.transactions!, SCREEN.commissions!],
+    },
+    {
+      group: 'Oversight',
+      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!],
+    },
+  ],
+};
+
+/**
+ * Every screen, for a role with no arrangement of its own.
+ *
+ * A role added to the RBAC table and not to the menus above should still be
+ * able to work — permission-filtered and ungrouped is a worse menu than a
+ * designed one and a much better outcome than an empty portal.
+ */
+const NAV_FALLBACK: readonly NavGroup[] = [
+  { group: 'Everything you may open', items: Object.values(SCREEN) },
 ];
 
-/** The nav items this officer may open, in menu order. */
+export function navFor(role: string | undefined): readonly NavGroup[] {
+  return (role && NAV_BY_ROLE[role]) || NAV_FALLBACK;
+}
+
+/** Kept for anything that wants the flat catalogue rather than an arrangement. */
+export const NAV: readonly NavGroup[] = NAV_FALLBACK;
+
 export function availableItems(user: Principal | null): NavItem[] {
   if (!user) return [];
-  return NAV.flatMap((group) => group.items).filter(
+  return navFor(user?.role).flatMap((group) => group.items).filter(
     (item) => !item.permission || can(user, item.permission),
   );
 }
@@ -253,7 +341,7 @@ export function availableItems(user: Principal | null): NavItem[] {
 /** The nav groups this officer may open, with empty groups dropped. */
 export function availableGroups(user: Principal | null): { group: string; items: NavItem[] }[] {
   if (!user) return [];
-  return NAV.map((group) => ({
+  return navFor(user.role).map((group) => ({
     group: group.group,
     items: group.items.filter((item) => !item.permission || can(user, item.permission)),
   })).filter((group) => group.items.length > 0);

@@ -12,7 +12,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import { parseKobo, koboToNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
+import { parseKobo, formatNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
@@ -316,7 +316,7 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
       if (computation.declaredBaseKobo !== null && computation.declaredBaseKobo > 0n) {
         throw conflict(
           'NO_TAX_PAYABLE',
-          `No tax is payable on ₦${koboToNaira(computation.declaredBaseKobo)} under the rate in force for "${item.name}", so there is no invoice to raise.`,
+          `No tax is payable on ${formatNaira(computation.declaredBaseKobo)} under the rate in force for "${item.name}", so there is no invoice to raise.`,
           'The figures are not wrong — this taxpayer is below the threshold. Do not increase the amount to make the assessment go through.',
         );
       }
