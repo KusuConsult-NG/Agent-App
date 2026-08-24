@@ -182,8 +182,127 @@ Court in 2020. If that cap still governs, the seeded figure is twenty times
 the statutory maximum. It has been left priced rather than changed, because
 whether the state development levy survives the 2025 reform in its old form is
 a question of state law rather than federal — the reason the Fourth Schedule
-could be entered does not extend to it. `PSIRS-QUERY-DEVELOPMENT-LEVY.md` asks
+could be entered does not extend to it. `PSIRS-CATALOGUE-QUERIES.md` asks
 it.
+
+---
+
+## Checking the remaining thirty-one prices
+
+Of the forty-two items in the catalogue, seven carry no rate, three now carry
+the Fourth Schedule, and one — `DEV-LEVY` — is flagged above. The other
+thirty-one were checked. **Not one of their naira figures could be
+confirmed**, and the reason is the same for all of them: the amounts live in
+the First and Second Schedules to the Consolidation Law, and those documents
+are published at `plateaustate.gov.ng` and `piras.psirs.gov.ng`, both blocked
+by this environment's network policy.
+
+What the check did establish is that for eleven of the thirty-one, **the
+figure is the wrong question**.
+
+### Eleven items are local government revenue
+
+The Taxes and Levies (Approved List for Collection) Act divides collection
+three ways: Part I federal, Part II state, Part III local government. Part II
+is short — personal income tax under PAYE and direct assessment, withholding
+tax on individuals, capital gains tax on individuals, stamp duties on
+instruments executed by individuals. Part III is where the following sit:
+
+| Code | Part III |
+|---|---|
+| `SHOPS-KIOSKS` | item 1, shops and kiosks rates |
+| `TENEMENT-RATES` | item 2, tenement rates |
+| `SLAUGHTER-SLAB` | item 4, slaughter slab fees |
+| `ABATTOIR-FEE` | overlaps item 4 |
+| `MARRIAGE-REGISTRATION` | item 5, marriage, birth and death registration |
+| `STREET-NAMING` | item 6, **excluding any street in the State Capital** |
+| `RIGHT-OCCUPANCY` | item 7, **rural land only**, excluding what Federal and State collect |
+| `MARKET-LEVY` | item 8, **excluding any market where State finance is involved** |
+| `MOTOR-PARK-LEVY` | item 9, motor park levies |
+| `DOMESTIC-ANIMAL-LICENCE` | item 10, domestic animal licence fees |
+| `SIGNAGE-FEE` | signboard and advertisement permit fees |
+
+Six of these are already in a category called "Local Government Rates and
+Fees", so the platform half-knows. The other five are filed as though they
+were state revenue.
+
+**The rate for any of them is set by an LGA bye-law, and Plateau has
+seventeen LGAs.** None of the eleven is scoped with `applicable_lga_ids`, so
+each charges one figure across all seventeen. Whatever the right amount is
+for a daily market levy, ₦200 everywhere cannot be it — Jos North and Wase
+are not the same market.
+
+Three carry an exclusion the catalogue does not model at all:
+
+- **`STREET-NAMING`** excludes streets in the State Capital, and Jos is the
+  capital. Charged through this platform in Jos North or Jos South it is a
+  fee the approved list does not authorise.
+- **`RIGHT-OCCUPANCY`** is a rural-land item on that list. It is seeded as one
+  flat ₦50,000 with no rural qualifier.
+- **`MARKET-LEVY`** excludes markets where state finance is involved, which is
+  a per-market fact the catalogue has nowhere to record.
+
+None of this means PSIRS may not collect them. States commonly collect for
+LGAs by arrangement, and the Consolidation Law may provide for exactly that.
+**That is the question to ask** — and it is a different question from what the
+figure should be.
+
+### One item's legal basis is under challenge
+
+`CONSUMPTION-TAX` is seeded at 5% on hotels, restaurants and event centres.
+The Court of Appeal has held that VAT, as an existing federal law, covered the
+field on consumption and supersedes a state consumption tax law. VAT now sits
+inside the Nigeria Tax Act, 2025. Whether Plateau may charge this at all, and
+at what rate, is not a question this repository can settle.
+
+### And a caution about the instrument the eleven rest on
+
+The Taxes and Levies Act is itself a military decree whose constitutional
+validity is disputed. A Court of Appeal decision has already invalidated part
+of its operation, and commentary published in April 2026, following the
+Supreme Court in *A.G. Abia State v. Imo Trans. Co. Ltd.*, argues the Act is
+unconstitutional taken as a whole. So the Part III finding above is a
+well-founded reason to ask, not a settled conclusion — which is why nothing
+has been withdrawn on the strength of it.
+
+### The remaining nineteen
+
+`BP-REG-URBAN`, `BP-RENEW-URBAN`, `BP-REG-RURAL`, `BP-RENEW-RURAL`,
+`ECON-DEV-LEVY`, `SOCIAL-SVC-LEVY`, `ECOLOGICAL-FEE`, `FIRE-SERVICE-CHARGE`,
+`MINING-FEE`, `ENTERTAINMENT-TAX`, `GAMING-TAX`, `INFRA-LEVY`,
+`LAND-USE-CHARGE`, `PROPERTY-TAX`, `ROAD-TAX`, `VEH-RENEW-PRIVATE`,
+`VEH-RENEW-COMMERCIAL`, `ANIMAL-TRADE-TAX`, `PRODUCE-SALES-TAX`.
+
+Nothing was found for any of them. Two are worth a second look beyond the
+amount:
+
+- **`MINING-FEE`**, ₦150,000. Mines and minerals are on the Exclusive
+  Legislative List. What a state may charge in this area needs establishing
+  before the figure does.
+- **`PROPERTY-TAX`**, `LAND-USE-CHARGE` and `TENEMENT-RATES` may be three
+  charges on one base. Land use charges in other states were created by
+  consolidating tenement rates into a single charge precisely to stop that.
+
+Vehicle figures could not be cross-checked either: the ₦30,000 number plate
+fee is nationally uniform under the Joint Tax Board, but particulars renewal
+is administered by each state's motor vehicle agency and is not harmonised, so
+₦625 and ₦1,250 a month are Plateau's own and are in the Schedule with
+everything else.
+
+### How this is held
+
+`catalogue-provenance.test.ts` records the classification of all forty-two
+items and fails if the catalogue and the record disagree in either direction.
+Adding a forty-third item with a figure beside it requires saying where the
+figure came from, or the build fails. It does not make an unverified price
+correct — it makes one impossible to add silently.
+
+It also holds that **only an item whose rate was actually checked may be
+self-assessable.** Self-assessment puts the figure in front of the taxpayer
+with no officer in between; doing that with an amount nothing can source is
+the weakest position of the lot. `PIT-DIRECT` is the only self-assessable item
+and now rests on the Fourth Schedule, so the property holds today — the test
+is there to keep it holding.
 
 ---
 
@@ -195,30 +314,51 @@ from the environment this work was done in — `psirs.gov.ng`,
 policy. Everything above comes from secondary summaries of those documents.
 Before Phase 1:
 
-1. **Read the First Schedule** and enter the presumptive bands per trade.
-2. **Read the Second Schedule** and enter the semi-urban rates — and check the
-   urban and rural figures already seeded, which are **unverified**. They were
-   in the catalogue before this research and no source was found for them.
-3. **Reconcile the whole catalogue against the Compendium of Revenue.** Items
+1. **Read the First Schedule** and enter the presumptive bands per trade, and
+   the consumption, entertainment and gaming rates.
+2. **Read the Second Schedule** and enter the semi-urban business premises
+   rates — and check the urban and rural figures already seeded, which are
+   **unverified**.
+3. **Settle the eleven Part III items**: whether PSIRS collects them as agent
+   for the LGAs, and if so whose rate applies in which LGA.
+4. **Reconcile the whole catalogue against the Compendium of Revenue.** Items
    here that are absent from the Compendium are not collectable; items in the
    Compendium that are absent here cannot be collected through this platform.
    Neither direction has been checked.
 
-Point 2 deserves emphasis. Of the thirty-seven prices originally seeded, three
-have been replaced with the Fourth Schedule, two have been withdrawn pending a
-rate table, and one — `DEV-LEVY` — is flagged above as probably exceeding a
-statutory cap. **The remaining thirty-one have not been verified against
-anything.** Nothing in this repository establishes where ₦10,000 for urban
-business premises registration, or ₦200 for a daily market levy, or any of the
-others came from.
+Of the thirty-seven prices originally seeded, three have been replaced with
+the Fourth Schedule and two withdrawn pending a rate table. **Of the
+thirty-one that remain, none has been verified against a primary source**, and
+twelve have a question about them larger than their amount.
 
 ## Sources
 
-- Plateau State Revenue (Consolidation) Law, 2020 — published at
-  `plateaustate.gov.ng` and `piras.psirs.gov.ng`, and in the Plateau State Law
-  Library at `demo.plateau.ng.open.law/ng/plateau/justice/laws/2020/revenue`
-- PSIRS, *What we do* — `psirs.gov.ng/about/what-we-do`
-- Taxes and Levies (Approved List for Collection) Act — the federal instrument
-  the existing catalogue already tracks closely
+**Primary, and unread — all blocked by this environment's network policy:**
+
+- Plateau State Revenue (Consolidation) Law, 2020, First and Second Schedules
+  — `plateaustate.gov.ng/uploads/plateau-state-revenue-consolidation-law-2020.pdf`
+  and `piras.psirs.gov.ng/assets/Plateau State Law.pdf`
+- Plateau State Law Library — `demo.plateau.ng.open.law/ng/plateau/justice/laws/2020/revenue`
+- PSIRS — `psirs.gov.ng`
+- The Compendium of Revenue — location unknown
+
+**Secondary, and read:**
+
+- Nigeria Tax Act, 2025, Fourth Schedule — via the published texts at
+  `tat.gov.ng` and the Gombe State IRS mirror, and the KPMG, PwC, EY and
+  Baker Tilly analyses of the reform
+- Taxes and Levies (Approved List for Collection) Act, Parts II and III —
+  via CommonLII, PLAC and LawCare Nigeria
+- *Re-assessing the validity of the Taxes and Levies Act*, April 2026, on the
+  constitutional standing of that Act after *A.G. Abia State v. Imo Trans.
+  Co. Ltd.*
+- *VAT affirmed as the principal tax on goods and services in hotels,
+  restaurants and event centres* — KPMG Nigeria, on the consumption tax point
+- Joint Tax Board / FRSC harmonised vehicle fees, June 2025
+
+**Method.** Direct retrieval of any of these was blocked; they were reached
+through search, which returns summaries rather than documents. That is
+adequate for establishing that a question exists and inadequate for settling
+one. Every figure entered on this basis says so where it is entered.
 
 **Checked by:** ___________________________  **Date:** ____________

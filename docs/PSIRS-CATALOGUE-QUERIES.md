@@ -1,4 +1,4 @@
-# Query to PSIRS: the development levy amount
+# Queries to PSIRS on the revenue catalogue
 
 **To:** Plateau State Internal Revenue Service — Other Taxes and Levies
 **From:** _____________________ (Plateau Grassroots Revenue Platform)
@@ -6,7 +6,14 @@
 
 ---
 
-## The question
+The platform carries a catalogue of 42 revenue items. We have checked every
+one of them against what we could reach. Three we were able to correct
+ourselves; the rest raise questions only PSIRS can answer, and they are set
+out below in the order we think they matter.
+
+---
+
+## 1. The development levy amount
 
 **What amount should the platform charge for Development Levy, and under what
 authority?**
@@ -21,7 +28,7 @@ income tax bands are federal and could be applied on that authority, a state
 development levy is state law, and we are not going to change a figure on a
 government receipt by inference.
 
-## Why we are asking
+### Why we are asking
 
 The Taxes and Levies (Approved List for Collection) Act, Part II of the
 Schedule, provides for:
@@ -45,7 +52,7 @@ We have not been able to read the Plateau State Revenue (Consolidation) Law,
 2020 Schedules directly, so if that Law or the Compendium of Revenue sets a
 different figure under a different authority, we have simply not seen it.
 
-## What each answer means, so the shape of the reply is clear
+### What each answer means, so the shape of the reply is clear
 
 | If the answer is | We will |
 |---|---|
@@ -57,17 +64,16 @@ different figure under a different authority, we have simply not seen it.
 Any of those is a usable answer. The one outcome we want to avoid is agents
 collecting ₦2,000 from traders on an authority nobody can name.
 
-## A related item, while we have your attention
+## 2. Economic Development Levy
 
 **Economic Development Levy** is configured at ₦5,000 per annum on businesses.
 It is a different item from the one above and is not covered by the "individuals
 only" provision, but we have not identified its authority either. If it comes
 from the Consolidation Law or the Compendium, please point us at the section.
 
-## Two larger questions, if there is somebody who can take them
+## 3. The Schedules, the Fourth Schedule and the Compendium
 
-These are not urgent in the way the above is, but they will need answering
-before the platform collects real money:
+These will need answering before the platform collects real money:
 
 1. **The Fourth Schedule to the Nigeria Tax Act, 2025.** The platform's
    personal income tax items were configured against the Personal Income Tax
@@ -100,6 +106,62 @@ before the platform collects real money:
    or a pointer to the current version, would let us check both directions —
    items we carry that are not collectable, and collectable items we are
    missing.
+
+3. **The First and Second Schedules themselves.** We have checked all 42
+   items. Thirty-one carry a figure we cannot source, because the figures are
+   in those Schedules and we have not been able to read them. A copy of each
+   would close most of this document.
+
+## 4. Eleven items that look like local government revenue
+
+This is the largest thing the check turned up, and it is not about amounts.
+
+Part III of the Taxes and Levies (Approved List for Collection) Act lists
+shops and kiosks rates, tenement rates, slaughter slab fees, marriage, birth
+and death registration, street naming, right of occupancy on rural land,
+market taxes and levies, motor park levies, domestic animal licence fees, and
+signboard and advertisement permits as **local government** revenue. The
+platform carries all of them, at a single figure applied across all seventeen
+LGAs.
+
+**Does PSIRS collect these as agent for the Local Government Councils?** If
+so, whose rate applies — one rate agreed statewide, or each Council's own
+bye-law? The platform can hold a different rate per LGA; it currently does
+not, because we did not know it should.
+
+Three carry an exclusion in the Act that we have no way to model:
+
+- **Street naming** excludes any street in the State Capital. Jos is the
+  capital, so on the face of it this is not chargeable in Jos North or Jos
+  South at all.
+- **Right of occupancy** on that list is rural land only. Ours is one flat
+  ₦50,000 with no rural qualifier.
+- **Market levies** exclude any market where state finance is involved. Which
+  markets in Plateau does that cover?
+
+We are aware the Act's own constitutional standing is disputed, and we are not
+asking you to litigate it. We are asking what PSIRS's position is, because the
+platform has to charge somebody something and we would rather it matched
+yours.
+
+## 5. Consumption tax, and mining fees
+
+- **Consumption tax** is seeded at 5% on hotels, restaurants and event
+  centres. Given the Court of Appeal's holding that VAT covered the field, and
+  that VAT now sits in the Nigeria Tax Act, is PSIRS still assessing this? At
+  what rate?
+- **Mining, milling and quarrying fees** are seeded at ₦150,000. Mines and
+  minerals are on the Exclusive Legislative List. What is the state
+  instrument?
+
+## What we have done in the meantime
+
+Nothing is being charged on a guess. Seven items carry no rate at all and the
+platform refuses to assess them. The thirty-one unverified figures are left
+exactly as they were seeded and are recorded in the repository as unverified,
+in a test that fails if anybody adds a forty-third price without saying where
+it came from. We have corrected only the personal income tax bands, and only
+because those are federal.
 
 ## Contact
 
