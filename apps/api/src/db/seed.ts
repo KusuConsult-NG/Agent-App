@@ -65,12 +65,67 @@ const STATE_CATALOGUE: {
     frequency?: 'ONE_OFF' | 'DAILY' | 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
     taxpayerTypes?: ('INDIVIDUAL' | 'BUSINESS')[];
     selfAssessable?: boolean;
+    /**
+     * The item is in the catalogue but carries no rate, because the amount is
+     * fixed by a Schedule to the Revenue (Consolidation) Law and this seed is
+     * not the place to guess it.
+     *
+     * `revenue.ts` already refuses to assess such an item — NO_EFFECTIVE_RATE,
+     * "no approved rate in force… it cannot be assessed until government sets
+     * one" — which is exactly the outcome wanted. The item is visible to
+     * officers so they know it must be configured, and unusable by an agent
+     * until somebody with the Schedule in front of them enters the figure.
+     */
+    awaitingSchedule?: boolean;
   }[];
 }[] = [
   {
     category: 'Personal Income Tax',
     code: 'PIT',
     items: [
+      /*
+       * Presumptive Income Tax — Plateau State Revenue (Consolidation) Law,
+       * 2020, First Schedule.
+       *
+       * The instrument for the people this platform exists to serve. The law
+       * provides that an individual whose trade or business keeps no
+       * accounting records, or whose profit cannot practicably be
+       * ascertained, is assessed presumptively by enterprise category rather
+       * than on accounts that do not exist. The amount is set per trade,
+       * business, vocation and profession by the Administrative Table in the
+       * First Schedule; reported bands run from ₦2,500 to ₦100,000.
+       *
+       * No rate is seeded here, deliberately. The Administrative Table is the
+       * legal authority for the figure and it is not reproduced from memory:
+       * a wrong band means an agent collecting the wrong sum from a trader
+       * under colour of law. The items are catalogued so government can see
+       * they need configuring, and `revenue.ts` refuses to assess an item
+       * with no rate in force until somebody with the Schedule enters it.
+       */
+      {
+        code: 'PIT-PRESUMPTIVE-MICRO',
+        name: 'Presumptive Income Tax (micro enterprise)',
+        rateType: 'FIXED',
+        frequency: 'ANNUAL',
+        taxpayerTypes: ['INDIVIDUAL'],
+        awaitingSchedule: true,
+      },
+      {
+        code: 'PIT-PRESUMPTIVE-SMALL',
+        name: 'Presumptive Income Tax (small enterprise)',
+        rateType: 'FIXED',
+        frequency: 'ANNUAL',
+        taxpayerTypes: ['INDIVIDUAL'],
+        awaitingSchedule: true,
+      },
+      {
+        code: 'PIT-PRESUMPTIVE-MEDIUM',
+        name: 'Presumptive Income Tax (medium enterprise)',
+        rateType: 'FIXED',
+        frequency: 'ANNUAL',
+        taxpayerTypes: ['INDIVIDUAL'],
+        awaitingSchedule: true,
+      },
       {
         code: 'PIT-DIRECT',
         name: 'Direct Assessment / Self-Assessment',
@@ -143,6 +198,31 @@ const STATE_CATALOGUE: {
         fixedNaira: '5000',
         frequency: 'ANNUAL',
         taxpayerTypes: ['BUSINESS'],
+      },
+      /*
+       * The law categorises Local Government Areas as Urban, **Semi-Urban**
+       * and Rural, and consolidates rates and fees by that categorisation in
+       * the Second Schedule. The catalogue carried only the two ends, so a
+       * business in a semi-urban LGA had to be charged as though it were in
+       * Jos or as though it were in a village — and one of those is wrong.
+       *
+       * Rates await the Second Schedule for the same reason as above.
+       */
+      {
+        code: 'BP-REG-SEMI-URBAN',
+        name: 'Business Premises Registration (semi-urban)',
+        rateType: 'FIXED',
+        frequency: 'ONE_OFF',
+        taxpayerTypes: ['BUSINESS'],
+        awaitingSchedule: true,
+      },
+      {
+        code: 'BP-RENEW-SEMI-URBAN',
+        name: 'Business Premises Renewal (semi-urban)',
+        rateType: 'FIXED',
+        frequency: 'ANNUAL',
+        taxpayerTypes: ['BUSINESS'],
+        awaitingSchedule: true,
       },
       {
         code: 'BP-REG-RURAL',
@@ -566,6 +646,7 @@ async function seedReferenceData(): Promise<void> {
         frequency?: string;
         taxpayerTypes?: string[];
         selfAssessable?: boolean;
+        awaitingSchedule?: boolean;
       },
     ) => {
       const existing = await queryOne<{ id: string }>(
@@ -591,6 +672,12 @@ async function seedReferenceData(): Promise<void> {
           item.selfAssessable ?? false,
         ],
       );
+
+      // Catalogued, but with no rate in force: the amount belongs to a
+      // Schedule of the Revenue (Consolidation) Law, and until government
+      // enters it `revenue.ts` refuses to assess the item rather than
+      // inventing a figure to charge somebody.
+      if (item.awaitingSchedule) return;
 
       await client.query(
         `INSERT INTO revenue_item_rates
