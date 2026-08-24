@@ -118,7 +118,12 @@ export function CollectScreen({
     selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
 
   const getQuote = useCallback(async () => {
-    if (!selectedItem) return;
+    // The taxpayer as well as the item: eleven revenue items now carry a rate
+    // per Local Government Area, and the server resolves which from the
+    // taxpayer. Quoting without them would resolve the statewide default —
+    // which those items no longer have — so the guard is a real one, not a
+    // formality for the type checker.
+    if (!selectedItem || !taxpayer) return;
     setBusy(true);
     setError(null);
     try {
@@ -145,7 +150,7 @@ export function CollectScreen({
     } finally {
       setBusy(false);
     }
-  }, [selectedItem, needsBaseAmount, baseAmount]);
+  }, [selectedItem, taxpayer, needsBaseAmount, baseAmount]);
 
   async function createAndPay() {
     if (!taxpayer || !selectedItem) return;
