@@ -58,27 +58,77 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(
  * commission accrual use SERIALIZABLE where a phantom read would allow a
  * double credit.
  */
+/**
+ * Postgres codes that mean "this transaction lost a race; run it again".
+ *
+ * 40001 is a serialization failure and 40P01 a detected deadlock. Neither says
+ * the work was wrong — the database has already rolled the transaction back and
+ * is asking for a retry. Surfacing them to a caller turns a routine outcome of
+ * SERIALIZABLE into an error an agent reads as "the payment failed", at exactly
+ * the moment they are asking whether a payment went through.
+ */
+const RETRYABLE_CONFLICT_CODES = new Set(['40001', '40P01']);
+
+function isRetryableConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    RETRYABLE_CONFLICT_CODES.has(String((error as { code?: unknown }).code))
+  );
+}
+
 export async function withTransaction<T>(
   fn: (client: PoolClient) => Promise<T>,
-  options: { isolationLevel?: 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE' } = {},
+  options: {
+    isolationLevel?: 'READ COMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
+    /**
+     * Re-run the callback when the database reports a conflict.
+     *
+     * Off by default and deliberately opt-in: a retry runs `fn` a second time,
+     * which is only safe when everything it does is inside this transaction.
+     * A callback that also sends an SMS or writes a file would repeat that,
+     * and the caller is the only one who knows.
+     */
+    retryOnConflict?: boolean;
+  } = {},
 ): Promise<T> {
-  const client = await pool.connect();
-  try {
-    await client.query(
-      `BEGIN ISOLATION LEVEL ${options.isolationLevel ?? 'READ COMMITTED'}`,
-    );
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
+  // Ten, not three. Confirmation appends to the audit chain, and the chain is
+  // a hash of its predecessor: every concurrent confirmation reads the same
+  // tail and then writes past it, which is a read/write dependency SERIALIZABLE
+  // is obliged to abort. The chain's own advisory lock means the retries do
+  // make progress rather than colliding for ever — but with a dozen agents
+  // confirming at once, three attempts is not enough to get through them.
+  const attempts = options.retryOnConflict ? 10 : 1;
+
+  for (let attempt = 1; ; attempt += 1) {
+    const client = await pool.connect();
     try {
-      await client.query('ROLLBACK');
-    } catch (rollbackError) {
-      log.error('rollback failed', { component: 'db', error: rollbackError });
+      await client.query(`BEGIN ISOLATION LEVEL ${options.isolationLevel ?? 'READ COMMITTED'}`);
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await client.query('ROLLBACK');
+      } catch (rollbackError) {
+        log.error('rollback failed', { component: 'db', error: rollbackError });
+      }
+      if (attempt >= attempts || !isRetryableConflict(error)) throw error;
+      log.warn('transaction conflict, retrying', {
+        component: 'db',
+        attempt,
+        code: String((error as { code?: unknown }).code),
+      });
+      // Back off with jitter, so two transactions that just collided do not
+      // wake together and collide again.
+      // Capped: the wait only has to outlast the transaction ahead in the
+      // queue, and doubling unchecked would put a confirmation to sleep for
+      // seconds while an agent watches the screen.
+      const backoffMs = Math.min(250, 10 * 2 ** (attempt - 1)) * (1 + Math.random());
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    } finally {
+      client.release();
     }
-    throw error;
-  } finally {
-    client.release();
   }
 }
 

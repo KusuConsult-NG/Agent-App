@@ -398,6 +398,34 @@ async function verifyAndRecord(params: {
   actorId?: string | null;
   actorRole?: string | null;
 }): Promise<ConfirmationResult> {
+  /*
+   * Ask the gateway before opening the transaction, not inside it.
+   *
+   * `gateway.verify` is a call to somebody else's computer. Held inside this
+   * transaction it kept a pool connection and the payment's advisory lock for
+   * the whole round trip, which coupled how fast government can confirm
+   * revenue to how fast Remita answers — and, with the development gateway,
+   * deadlocked outright: that adapter reads its own table through the same
+   * pool, so every connection ended up inside a transaction waiting for a
+   * connection that could not be freed. At a concurrency of twelve against a
+   * pool of ten it never recovered.
+   *
+   * Nothing about the guarantee moves. The transaction below still takes the
+   * lock, still re-reads the payment under it, and still refuses to act on
+   * anything it does not find in a confirmable state — so a payment confirmed
+   * by another caller in the meantime is picked up there, exactly as before.
+   * What changes is that the lock is held across database work only.
+   */
+  const preRead = await queryOne<{ gateway_reference: string | null; status: PaymentState }>(
+    pool,
+    'SELECT gateway_reference, status FROM payments WHERE id = $1',
+    [params.paymentId],
+  );
+  const preVerified =
+    preRead?.gateway_reference && preRead.status !== 'FAILED' && preRead.status !== 'ABANDONED'
+      ? await gateway.verify(preRead.gateway_reference)
+      : null;
+
   return withTransaction(
     async (client) => {
       const payment = await queryOne<{
@@ -465,7 +493,10 @@ async function verifyAndRecord(params: {
       }
 
       // ---- The independent confirmation -----------------------------------
-      const verification = await gateway.verify(payment.gateway_reference);
+      // Normally answered before this transaction opened. The fallback covers
+      // the narrow race where the gateway reference was set between that read
+      // and this one; it is not the ordinary path.
+      const verification = preVerified ?? (await gateway.verify(payment.gateway_reference));
 
       if (verification.status === 'PENDING' || verification.status === 'UNKNOWN') {
         await client.query(
@@ -704,7 +735,9 @@ async function verifyAndRecord(params: {
     // SERIALIZABLE: verification reads the payment, the invoice and the
     // commission ledger and writes all three. A phantom under READ COMMITTED
     // could allow two concurrent confirmations to both accrue commission.
-    { isolationLevel: 'SERIALIZABLE' },
+    // Everything inside is now database work, so a conflict can simply be run
+    // again rather than handed to an agent as a failure.
+    { isolationLevel: 'SERIALIZABLE', retryOnConflict: true },
   );
 }
 
