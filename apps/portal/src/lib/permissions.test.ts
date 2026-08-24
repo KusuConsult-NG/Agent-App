@@ -72,7 +72,8 @@ describe('each role gets a distinct portal', () => {
      * territories that officer is assigned.
      */
     expect(menu('supervisor')).toEqual([
-      'Dashboard',
+      'Home',
+      'Collections dashboard',
       'Revenue intelligence',
       'Revenue summary',
       'Transactions',
@@ -88,7 +89,8 @@ describe('each role gets a distinct portal', () => {
 
   it('gives the revenue officer everything except settlement', () => {
     expect(menu('revenue_officer')).toEqual([
-      'Dashboard',
+      'Home',
+      'Collections dashboard',
       'Revenue intelligence',
       'Revenue summary',
       'Transactions',
@@ -111,7 +113,8 @@ describe('each role gets a distinct portal', () => {
 
   it('gives the finance officer settlement, and not the support desk', () => {
     expect(menu('finance_officer')).toEqual([
-      'Dashboard',
+      'Home',
+      'Collections dashboard',
       'Revenue intelligence',
       'Revenue summary',
       'Transactions',
@@ -131,7 +134,8 @@ describe('each role gets a distinct portal', () => {
 
   it('gives the auditor everything to read and no approvals', () => {
     expect(menu('auditor')).toEqual([
-      'Dashboard',
+      'Home',
+      'Collections dashboard',
       'Revenue intelligence',
       'Revenue summary',
       'Transactions',
@@ -156,7 +160,8 @@ describe('each role gets a distinct portal', () => {
     // sign off money. `report:financial` and `approval:review` are both absent
     // from the role for that reason.
     expect(menu('admin')).toEqual([
-      'Dashboard',
+      'Home',
+      'Collections dashboard',
       'Revenue intelligence',
       'Revenue summary',
       'Transactions',

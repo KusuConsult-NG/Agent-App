@@ -111,6 +111,36 @@ governmentRouter.get(
   ),
 );
 
+/**
+ * The home screen for whoever is signed in.
+ *
+ * Every officer landed on the same executive dashboard. It is a good screen
+ * and the wrong first screen for four of the five roles that saw it — an
+ * auditor opening the platform does not need this morning's collections and a
+ * finance officer does not need the agent clearance queue.
+ *
+ * Dispatching on role rather than assembling everything and letting the client
+ * choose: the queries are different work, and a finance officer should not pay
+ * for the auditor's counts to be computed.
+ */
+governmentRouter.get(
+  '/home',
+  asyncHandler(async (req, res) => {
+    const role = req.auth!.role;
+    const blocks =
+      role === 'admin'
+        ? { role, admin: await reports.adminHome(pool) }
+        : role === 'revenue_officer'
+          ? { role, revenue: await reports.revenueOfficerHome(pool) }
+          : role === 'finance_officer'
+            ? { role, finance: await reports.financeOfficerHome(pool) }
+            : role === 'auditor'
+              ? { role, audit: await reports.auditorHome(pool) }
+              : { role };
+    res.json(blocks);
+  }),
+);
+
 governmentRouter.get(
   '/kpis',
   requirePermission('report:read:all'),

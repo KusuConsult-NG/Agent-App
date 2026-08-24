@@ -709,3 +709,128 @@ export async function localGovernmentRemittance(
     [from, to, statewide, territoryIds],
   );
 }
+
+// ===========================================================================
+// Role homes.
+//
+// Every officer landed on the same executive dashboard. It is a good screen
+// and it is the wrong first screen for four of the five roles that saw it: an
+// auditor opening the platform does not need this morning's collections, and a
+// finance officer does not need the agent clearance queue. What each of them
+// needs is the work waiting for them.
+//
+// One query set per role rather than one screen with everything on it. A
+// dashboard that shows every role everything is how a finance officer learns
+// to scroll past the reconciliation exceptions.
+// ===========================================================================
+
+/** What is waiting for whoever runs the platform. */
+export async function adminHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM agents WHERE clearance_status = 'READY_FOR_REVIEW')
+         AS agents_awaiting_review,
+       (SELECT count(*)::text FROM agents WHERE clearance_status = 'REQUIRES_INFO')
+         AS agents_needing_information,
+       (SELECT count(*)::text FROM agent_devices WHERE status = 'PENDING')
+         AS devices_awaiting_approval,
+       (SELECT count(*)::text FROM users WHERE role <> 'agent' AND status = 'ACTIVE')
+         AS active_officers,
+       (SELECT count(*)::text FROM users u
+         WHERE u.role = 'supervisor' AND u.status = 'ACTIVE'
+           AND NOT EXISTS (SELECT 1 FROM user_territories ut WHERE ut.user_id = u.id))
+         AS supervisors_without_a_territory,
+       -- An item nobody has priced cannot be collected. This is the
+       -- administrator's queue, not a fault.
+       (SELECT count(*)::text FROM revenue_items ri
+         WHERE NOT EXISTS (SELECT 1 FROM revenue_item_rates r WHERE r.revenue_item_id = ri.id))
+         AS revenue_items_awaiting_a_rate,
+       (SELECT count(*)::text FROM mdas m
+         WHERE NOT EXISTS (SELECT 1 FROM revenue_items ri WHERE ri.mda_id = m.id))
+         AS mdas_with_no_revenue_item,
+       (SELECT count(*)::text FROM support_tickets WHERE status IN ('OPEN','ASSIGNED'))
+         AS open_tickets`,
+  );
+}
+
+/** The taxpayer register, which is the revenue officer's charge. */
+export async function revenueOfficerHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers,
+       (SELECT count(*)::text FROM taxpayers
+         WHERE status = 'ACTIVE' AND created_at >= date_trunc('week', CURRENT_DATE))
+         AS registered_this_week,
+       -- A taxpayer without a TIN cannot be tracked across years, so this is
+       -- the queue that matters most here.
+       (SELECT count(*)::text FROM taxpayers WHERE tin_status IN ('PENDING','FAILED'))
+         AS tins_outstanding,
+       (SELECT count(*)::text FROM taxpayers WHERE tin_status = 'FAILED') AS tins_failed,
+       (SELECT count(*)::text FROM approvals
+         WHERE status IN ('REQUESTED','REVIEWED') AND approval_type = 'TAXPAYER_CORRECTION')
+         AS corrections_awaiting_review,
+       (SELECT count(*)::text FROM invoices WHERE status = 'UNPAID' AND
+         (expires_at IS NULL OR expires_at > now())) AS invoices_unpaid,
+       (SELECT count(*)::text FROM invoices WHERE status = 'EXPIRED') AS invoices_expired,
+       (SELECT COALESCE(SUM(total_amount_kobo),0)::text FROM invoices WHERE status = 'UNPAID')
+         AS unpaid_kobo`,
+  );
+}
+
+/** Money in, money out, and money held for somebody else. */
+export async function financeOfficerHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM reconciliation_records
+         WHERE reconciled_at IS NULL AND status IN
+           ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT'))
+         AS reconciliation_exceptions,
+       (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
+       (SELECT COALESCE(SUM(expected_amount_kobo - received_amount_kobo),0)::text
+          FROM settlements WHERE reconciled_at IS NULL) AS settlement_variance_kobo,
+       (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
+         WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
+       (SELECT count(*)::text FROM commission_payouts WHERE status = 'REQUESTED')
+         AS payouts_awaiting_approval,
+       (SELECT count(*)::text FROM refunds WHERE status IN ('PENDING','APPROVED'))
+         AS refunds_outstanding,
+       -- Money the State is holding on somebody else's behalf. It belongs on
+       -- this screen more than on any other.
+       (SELECT COALESCE(SUM(t.amount_kobo),0)::text
+          FROM transactions t
+         WHERE t.status IN ${REVENUE_STATES}
+           AND EXISTS (SELECT 1 FROM revenue_item_rates r
+                        WHERE r.revenue_item_id = t.revenue_item_id AND r.lga_id IS NOT NULL))
+         AS owed_to_councils_kobo`,
+  );
+}
+
+/**
+ * What an auditor came to look at.
+ *
+ * Read-only by construction: every figure here is a count of something to
+ * examine, and nothing on this screen leads to an action that changes a
+ * record.
+ */
+export async function auditorHome(db: Db) {
+  return queryOne(
+    db,
+    `SELECT
+       (SELECT count(*)::text FROM audit_logs) AS audit_entries,
+       (SELECT count(*)::text FROM audit_logs WHERE created_at >= CURRENT_DATE) AS entries_today,
+       (SELECT count(*)::text FROM audit_logs WHERE result = 'DENIED'
+          AND created_at >= CURRENT_DATE - interval '7 days') AS refused_this_week,
+       (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED'))
+         AS reversed_or_refunded,
+       (SELECT count(*)::text FROM fraud_flags WHERE status IN ('OPEN','UNDER_REVIEW'))
+         AS fraud_flags_open,
+       (SELECT count(*)::text FROM revenue_item_rates
+         WHERE created_at >= CURRENT_DATE - interval '30 days') AS rate_changes_this_month,
+       (SELECT count(*)::text FROM verification_attempts
+          WHERE created_at >= CURRENT_DATE - interval '7 days') AS receipt_checks_this_week,
+       (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers_on_record`,
+  );
+}

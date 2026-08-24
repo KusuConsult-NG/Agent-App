@@ -140,7 +140,18 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
        * raw transaction list. What a territory-scoped officer sees on these
        * screens is narrowed by the API, not by whether the link is offered.
        */
-      { path: '/', label: 'Dashboard', permission: ['report:read:all', 'report:read:territory'] },
+      { path: '/', label: 'Home', permission: ['report:read:all', 'report:read:territory'] },
+      /*
+       * The executive dashboard keeps its own entry now that '/' is the role
+       * screen. It is still the right screen for the collections question —
+       * it is just no longer the first screen for everybody regardless of
+       * what their job is.
+       */
+      {
+        path: '/dashboard',
+        label: 'Collections dashboard',
+        permission: ['report:read:all', 'report:read:territory'],
+      },
       {
         path: '/intelligence',
         label: 'Revenue intelligence',
