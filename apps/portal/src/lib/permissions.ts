@@ -179,6 +179,16 @@ const SCREEN: Record<string, NavItem> = {
     permission: 'taxpayer:correct',
   },
   users: { path: '/users', label: 'Officer access', permission: 'user:manage' },
+  /*
+   * `allocation:manage`, held by administrators and revenue officers only. A
+   * finance officer settles money; they do not decide who gets fertiliser, and
+   * offering them a screen the API would refuse is worse than not offering it.
+   */
+  allocations: {
+    path: '/allocations',
+    label: 'Distribution rounds',
+    permission: 'allocation:manage',
+  },
 };
 
 type NavGroup = { group: string; items: readonly NavItem[] };
@@ -210,7 +220,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Configuration',
-      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.groups!],
+      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!],
     },
     {
       group: 'Oversight',
@@ -239,7 +249,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'Agents and programmes',
       items: [SCREEN.agents!, SCREEN.referees!, SCREEN.performance!, SCREEN.programmes!,
-              SCREEN.groups!],
+              SCREEN.allocations!, SCREEN.groups!],
     },
     {
       group: 'Oversight',

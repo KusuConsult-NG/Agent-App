@@ -572,6 +572,26 @@ export function RoleHomeScreen({
                   render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
                 },
                 { key: 'expires_on', label: 'Expires' },
+                {
+                  key: 'doc',
+                  label: '',
+                  render: (row: Record<string, string>) => (
+                    <button
+                      type="button"
+                      className="small secondary"
+                      disabled={action.busy !== null}
+                      onClick={() =>
+                        action.act(
+                          `doc-${row.id}`,
+                          () => api.post(`/revenue/invoices/${row.id}/document`, {}),
+                          `Invoice document ready for ${row.invoice_number}.`,
+                        )
+                      }
+                    >
+                      {action.busy === `doc-${row.id}` ? 'Preparing…' : 'Invoice document'}
+                    </button>
+                  ),
+                },
               ]}
               rows={work.expiring!}
               empty=""

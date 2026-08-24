@@ -25,6 +25,7 @@ import { UserAccessScreen } from './screens/UserAccess';
 import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
 import { PerformanceScreen } from './screens/Performance';
 import { RevenueScreen } from './screens/Revenue';
+import { AllocationsScreen } from './screens/Allocations';
 import { RoleHomeScreen } from './screens/RoleHome';
 import { UsageScreen } from './screens/Usage';
 import { TransactionsScreen } from './screens/Transactions';
@@ -233,6 +234,7 @@ function Routes({
   if (matchRoute(route, '/referees')) return <RefereesScreen />;
   if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
   if (matchRoute(route, '/revenue')) return <RevenueScreen />;
+  if (matchRoute(route, '/allocations')) return <AllocationsScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;
