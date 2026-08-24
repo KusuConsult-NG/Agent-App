@@ -20,7 +20,7 @@ import {
   applyBasisPoints,
   clampAmount,
   parseKobo,
-  koboToNaira,
+  formatNaira,
   type Kobo,
 } from '@psirs/shared';
 import { badRequest } from '../lib/errors';
@@ -155,7 +155,7 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
       bandAmount = parseKobo(tier.fixedAmountKobo);
       trace.push({
         step: `Band ${index + 1}`,
-        detail: `Flat charge for band up to ₦${ceiling === null ? '∞' : koboToNaira(ceiling)}`,
+        detail: `Flat charge for band up to ${ceiling === null ? '∞' : formatNaira(ceiling)}`,
         amount: bandAmount.toString(),
       });
     } else if (tier.basisPoints !== undefined) {
@@ -163,9 +163,9 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
       trace.push({
         step: `Band ${index + 1}`,
         detail:
-          `${(tier.basisPoints / 100).toFixed(2)}% of ₦${koboToNaira(portion)} ` +
-          `(portion between ₦${koboToNaira(previousCeiling)} and ` +
-          `₦${ceiling === null ? '∞' : koboToNaira(ceiling)})`,
+          `${(tier.basisPoints / 100).toFixed(2)}% of ${formatNaira(portion)} ` +
+          `(portion between ${formatNaira(previousCeiling)} and ` +
+          `${ceiling === null ? '∞' : formatNaira(ceiling)})`,
         amount: bandAmount.toString(),
       });
     } else {
@@ -352,7 +352,7 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
       amount = applyBasisPoints(base, basisPoints);
       trace.push({
         step: 'Percentage of assessable amount',
-        detail: `${(basisPoints / 100).toFixed(2)}% of ₦${koboToNaira(base)}`,
+        detail: `${(basisPoints / 100).toFixed(2)}% of ${formatNaira(base)}`,
         amount: amount.toString(),
       });
       break;
@@ -400,8 +400,8 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
       step: clamped > amount ? 'Minimum applied' : 'Maximum applied',
       detail:
         clamped > amount
-          ? `Below the statutory minimum of ₦${koboToNaira(minimum!)} — minimum charged`
-          : `Above the statutory maximum of ₦${koboToNaira(maximum!)} — capped`,
+          ? `Below the statutory minimum of ${formatNaira(minimum!)} — minimum charged`
+          : `Above the statutory maximum of ${formatNaira(maximum!)} — capped`,
       amount: clamped.toString(),
     });
   }
