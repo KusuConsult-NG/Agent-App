@@ -59,7 +59,21 @@ describe('each role gets a distinct portal', () => {
   });
 
   it('gives the supervisor their territory, not the whole state', () => {
+    /*
+     * This test's name was right and its list was wrong. "Their territory,
+     * not the whole state" described the intention; what it actually froze
+     * was a menu with no analytics in it at all — no dashboard and no
+     * revenue intelligence — because both were gated on report:read:all and
+     * a supervisor holds report:read:territory instead.
+     *
+     * The menu is what `landingPath` reads, so the effect was that the role
+     * whose job is a territory signed in to a raw transaction list. Both
+     * screens are now offered, and the API narrows what they contain to the
+     * territories that officer is assigned.
+     */
     expect(menu('supervisor')).toEqual([
+      'Dashboard',
+      'Revenue intelligence',
       'Transactions',
       'Agent performance',
       'Commissions',

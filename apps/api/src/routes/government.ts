@@ -22,6 +22,7 @@ import * as auth from '../services/auth';
 import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
+import { resolveReportScope, territoriesForOfficer } from '../services/report-scope';
 import * as incentives from '../services/incentives';
 import * as support from '../services/support';
 import * as commission from '../services/commission';
@@ -39,9 +40,14 @@ governmentRouter.use(authenticate);
 
 governmentRouter.get(
   '/dashboard',
-  requirePermission('dashboard:executive', 'report:read:all'),
-  asyncHandler(async (_req, res) => {
-    res.json(await reports.executiveDashboard(pool));
+  // report:read:territory is here because a supervisor holds it and held no
+  // other way in: this endpoint answered 403 for them and the portal menu hid
+  // it, so the role that runs a territory had no dashboard at all. What they
+  // get is narrowed by `resolveReportScope`, not by which endpoint they reach.
+  requirePermission('dashboard:executive', 'report:read:all', 'report:read:territory'),
+  asyncHandler(async (req, res) => {
+    const scope = await resolveReportScope(pool, req.auth!);
+    res.json(await reports.executiveDashboard(pool, scope));
   }),
 );
 
@@ -55,14 +61,15 @@ governmentRouter.get(
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
       res.json(
         await reports.geographicIntelligence(pool, {
           lgaId: data.lgaId,
           wardId: data.wardId,
           from: data.from ? new Date(data.from) : undefined,
           to: data.to ? new Date(data.to) : undefined,
-        }),
+        }, scope),
       );
     },
   ),
@@ -520,6 +527,67 @@ governmentRouter.post(
         await auth.changeUserRole({
           targetUserId: req.params.id,
           newRole: data.role,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          reason: data.reason,
+        }),
+      );
+    },
+  ),
+);
+
+/**
+ * The territories an officer sees reports for, and the list to choose from.
+ *
+ * Without this the scoping added in migration 023 would be inert: every
+ * supervisor would sit permanently unassigned, seeing nothing, with no way for
+ * an administrator to change it. A control that can only be exercised with
+ * `psql` is not a control.
+ */
+governmentRouter.get(
+  '/users/:id/territories',
+  requirePermission('user:manage'),
+  asyncHandler(async (req, res) => {
+    res.json({
+      assigned: await territoriesForOfficer(pool, req.params.id),
+      available: await query(
+        pool,
+        `SELECT t.id, t.name, t.code, l.name AS lga_name
+           FROM territories t JOIN lgas l ON l.id = t.lga_id
+          WHERE t.status = 'ACTIVE'
+          ORDER BY l.name, t.name`,
+      ),
+    });
+  }),
+);
+
+/**
+ * Set them.
+ *
+ * `user:manage` and a reason, the same as a role change, because this decides
+ * how much of the state's revenue an officer can see. It does not require
+ * step-up: a role change can manufacture any level of access from one
+ * compromised session, whereas this only moves an officer between territories
+ * they could already have been assigned to — a narrower lever, and one an
+ * administrator uses often enough that step-up on every reassignment would
+ * train them to approve prompts without reading them.
+ */
+governmentRouter.post(
+  '/users/:id/territories',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      territoryIds: z.array(uuidSchema),
+      reason: z
+        .string()
+        .trim()
+        .min(10, 'Say why this coverage is changing, in at least 10 characters'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await auth.setOfficerTerritories({
+          targetUserId: req.params.id,
+          territoryIds: data.territoryIds,
           actorId: req.auth!.userId,
           actorRole: req.auth!.role,
           reason: data.reason,

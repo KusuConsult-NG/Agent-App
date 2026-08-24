@@ -28,6 +28,7 @@ import * as agents from '../services/agents';
 import * as referees from '../services/referees';
 import * as kycDocuments from '../services/kyc-documents';
 import * as commission from '../services/commission';
+import { resolveReportScope } from '../services/report-scope';
 import { agentPerformance, agentToday } from '../services/reports';
 
 export const agentRouter = Router();
@@ -708,8 +709,11 @@ agentRouter.get(
   requirePermission('report:read:all', 'report:read:territory'),
   validateQuery(
     z.object({ agentId: uuidSchema.optional(), limit: z.coerce.number().int().max(200).default(50) }),
-    async (_req, res, data) => {
-      res.json(await agentPerformance(pool, data));
+    async (req, res, data) => {
+      // Same scope as the dashboard. A supervisor sees the agents working
+      // their territories; without this they saw every agent in the state,
+      // which is the same over-reach report:read:territory had everywhere.
+      res.json(await agentPerformance(pool, data, await resolveReportScope(pool, req.auth!)));
     },
   ),
 );

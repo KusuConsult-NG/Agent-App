@@ -14,11 +14,33 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
+import {
+  lgaScopeSql,
+  scopeParams,
+  transactionScopeSql,
+  type ReportScope,
+} from './report-scope';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
 const REVENUE_STATES = `('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')`;
 
-export async function executiveDashboard(db: Db) {
+/**
+ * The executive dashboard, narrowed to what the caller may see.
+ *
+ * `scope` defaults to statewide so existing statewide callers are unchanged,
+ * but every route that can be reached by a territory-scoped role passes one.
+ * The scope is returned in the payload as well as applied, because a figure of
+ * zero from an unassigned supervisor and a figure of zero from a quiet week
+ * look identical on screen and only one of them is somebody's configuration
+ * mistake.
+ */
+export async function executiveDashboard(
+  db: Db,
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, territoryIds, lgaIds } = scopeParams(scope);
+  const scoped = [statewide, territoryIds];
+  const tx = transactionScopeSql('t', 1, 2);
   const [totals, counts, byCategory, byLga, byAgent, byMda, trend, exceptions] = await Promise.all([
     queryOne(
       db,
@@ -28,23 +50,41 @@ export async function executiveDashboard(db: Db) {
          COALESCE(SUM(amount_kobo) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE)),0)::text AS month_kobo,
          COALESCE(SUM(amount_kobo) FILTER (WHERE created_at >= date_trunc('year', CURRENT_DATE)),0)::text AS ytd_kobo,
          COALESCE(SUM(amount_kobo),0)::text AS total_kobo
-       FROM transactions WHERE status IN ${REVENUE_STATES}`,
+       FROM transactions t WHERE status IN ${REVENUE_STATES} AND ${tx}`,
+      scoped,
     ),
     queryOne(
       db,
+      // Taxpayers and agents are counted through the LGAs a scope covers, and
+      // commissions through the transactions that earned them: a supervisor's
+      // commission liability is what their own territory has accrued, not the
+      // state's.
       `SELECT
-         (SELECT count(*)::text FROM taxpayers WHERE status = 'ACTIVE') AS taxpayers,
-         (SELECT count(*)::text FROM taxpayers
-           WHERE status = 'ACTIVE' AND created_at >= date_trunc('month', CURRENT_DATE)) AS new_taxpayers_this_month,
-         (SELECT count(*)::text FROM agents WHERE operational_status = 'ACTIVE') AS active_agents,
-         (SELECT count(*)::text FROM agents WHERE clearance_status = 'READY_FOR_REVIEW') AS agents_awaiting_review,
-         (SELECT count(*)::text FROM transactions) AS total_transactions,
-         (SELECT count(*)::text FROM transactions WHERE status IN ${REVENUE_STATES}) AS successful_transactions,
-         (SELECT count(*)::text FROM transactions WHERE status IN ('FAILED','CANCELLED','EXPIRED')) AS failed_transactions,
-         (SELECT count(*)::text FROM transactions WHERE status = 'RECONCILIATION_PENDING') AS pending_reconciliation,
-         (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-           WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
-         (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions WHERE status = 'PAID') AS commission_paid_kobo`,
+         (SELECT count(*)::text FROM taxpayers tp
+           WHERE tp.status = 'ACTIVE' AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS taxpayers,
+         (SELECT count(*)::text FROM taxpayers tp
+           WHERE tp.status = 'ACTIVE' AND tp.created_at >= date_trunc('month', CURRENT_DATE)
+             AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS new_taxpayers_this_month,
+         (SELECT count(*)::text FROM agents a
+           WHERE a.operational_status = 'ACTIVE'
+             AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS active_agents,
+         (SELECT count(*)::text FROM agents a
+           WHERE a.clearance_status = 'READY_FOR_REVIEW'
+             AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS agents_awaiting_review,
+         (SELECT count(*)::text FROM transactions t WHERE ${tx}) AS total_transactions,
+         (SELECT count(*)::text FROM transactions t
+           WHERE t.status IN ${REVENUE_STATES} AND ${tx}) AS successful_transactions,
+         (SELECT count(*)::text FROM transactions t
+           WHERE t.status IN ('FAILED','CANCELLED','EXPIRED') AND ${tx}) AS failed_transactions,
+         (SELECT count(*)::text FROM transactions t
+           WHERE t.status = 'RECONCILIATION_PENDING' AND ${tx}) AS pending_reconciliation,
+         (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
+           LEFT JOIN transactions t ON t.id = c.transaction_id
+           WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED') AND ${tx}) AS commission_liability_kobo,
+         (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
+           LEFT JOIN transactions t ON t.id = c.transaction_id
+           WHERE c.status = 'PAID' AND ${tx}) AS commission_paid_kobo`,
+      [statewide, territoryIds, lgaIds],
     ),
     query(
       db,
@@ -53,8 +93,9 @@ export async function executiveDashboard(db: Db) {
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
-        WHERE t.status IN ${REVENUE_STATES}
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
         GROUP BY rc.name ORDER BY SUM(t.amount_kobo) DESC`,
+      scoped,
     ),
     query(
       db,
@@ -62,7 +103,10 @@ export async function executiveDashboard(db: Db) {
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM lgas l
          LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES}
+              AND ${tx}
+        WHERE ${lgaScopeSql('l', 3, 4)}
         GROUP BY l.name, l.zone ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
+      [statewide, territoryIds, statewide, lgaIds],
     ),
     query(
       db,
@@ -71,9 +115,12 @@ export async function executiveDashboard(db: Db) {
          FROM agents a
          JOIN users u ON u.id = a.user_id
          LEFT JOIN transactions t ON t.agent_id = a.id AND t.status IN ${REVENUE_STATES}
+              AND ${tx}
         WHERE a.operational_status = 'ACTIVE'
+          AND ($1 OR a.territory_id = ANY($2::uuid[]))
         GROUP BY a.agent_code, u.full_name
         ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC LIMIT 20`,
+      scoped,
     ),
     query(
       db,
@@ -82,8 +129,9 @@ export async function executiveDashboard(db: Db) {
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          LEFT JOIN mdas m ON m.id = ri.mda_id
-        WHERE t.status IN ${REVENUE_STATES}
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
         GROUP BY m.name ORDER BY SUM(t.amount_kobo) DESC`,
+      scoped,
     ),
     query(
       db,
@@ -93,18 +141,24 @@ export async function executiveDashboard(db: Db) {
          FROM generate_series(CURRENT_DATE - interval '29 days', CURRENT_DATE, interval '1 day') AS day
          LEFT JOIN transactions t
                 ON t.created_at::date = day::date AND t.status IN ${REVENUE_STATES}
+               AND ${tx}
         GROUP BY day ORDER BY day`,
+      scoped,
     ),
     queryOne(
       db,
       `SELECT
-         (SELECT count(*)::text FROM fraud_flags WHERE status IN ('OPEN','UNDER_REVIEW')) AS open_fraud_flags,
+         (SELECT count(*)::text FROM fraud_flags f
+           LEFT JOIN agents a ON a.id = f.agent_id
+           WHERE f.status IN ('OPEN','UNDER_REVIEW')
+             AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS open_fraud_flags,
          (SELECT count(*)::text FROM reconciliation_records
            WHERE reconciled_at IS NULL
              AND status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT'))
            AS reconciliation_exceptions,
          (SELECT count(*)::text FROM approvals WHERE status IN ('REQUESTED','REVIEWED')) AS pending_approvals,
          (SELECT count(*)::text FROM support_tickets WHERE status IN ('OPEN','ASSIGNED','IN_PROGRESS')) AS open_tickets`,
+      scoped,
     ),
   ]);
 
@@ -117,6 +171,7 @@ export async function executiveDashboard(db: Db) {
     revenueByMda: byMda,
     dailyTrend: trend,
     exceptions,
+    scope,
   };
 }
 
@@ -124,9 +179,19 @@ export async function executiveDashboard(db: Db) {
 export async function geographicIntelligence(
   db: Db,
   params: { lgaId?: string; wardId?: string; from?: Date; to?: Date },
+  scope: ReportScope = { kind: 'STATEWIDE' },
 ) {
   const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
   const to = params.to ?? new Date();
+  const { statewide, territoryIds, lgaIds } = scopeParams(scope);
+
+  /*
+   * A drill-down is a filter the caller supplies, and a scope is a filter they
+   * do not get to supply. Asking for an LGA outside the scope must return that
+   * LGA's rows filtered to nothing rather than the LGA's real figures — which
+   * is what the territory predicate below does, and why it is applied to the
+   * ward and community branches too rather than only to the top level.
+   */
 
   if (params.wardId) {
     return query(
@@ -138,8 +203,9 @@ export async function geographicIntelligence(
          FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
         WHERE t.ward_id = $1 AND t.status IN ${REVENUE_STATES}
           AND t.created_at BETWEEN $2 AND $3
+          AND ${transactionScopeSql('t', 4, 5)}
         GROUP BY tp.community ORDER BY SUM(t.amount_kobo) DESC`,
-      [params.wardId, from, to],
+      [params.wardId, from, to, statewide, territoryIds],
     );
   }
 
@@ -153,9 +219,10 @@ export async function geographicIntelligence(
          FROM wards w
          LEFT JOIN transactions t ON t.ward_id = w.id AND t.status IN ${REVENUE_STATES}
               AND t.created_at BETWEEN $2 AND $3
-        WHERE w.lga_id = $1
+              AND ${transactionScopeSql('t', 4, 5)}
+        WHERE w.lga_id = $1 AND ($4 OR w.lga_id = ANY($6::uuid[]))
         GROUP BY w.name, w.id ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
-      [params.lgaId, from, to],
+      [params.lgaId, from, to, statewide, territoryIds, lgaIds],
     );
   }
 
@@ -169,13 +236,20 @@ export async function geographicIntelligence(
        FROM lgas l
        LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES}
             AND t.created_at BETWEEN $1 AND $2
+            AND ${transactionScopeSql('t', 3, 4)}
+      WHERE ${lgaScopeSql('l', 3, 5)}
       GROUP BY l.name, l.id, l.zone ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
-    [from, to],
+    [from, to, statewide, territoryIds, lgaIds],
   );
 }
 
 /** Agent performance (PRD §39). */
-export async function agentPerformance(db: Db, params: { agentId?: string; limit?: number } = {}) {
+export async function agentPerformance(
+  db: Db,
+  params: { agentId?: string; limit?: number } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, territoryIds } = scopeParams(scope);
   return query(
     db,
     `SELECT a.id AS agent_id, a.agent_code, u.full_name, l.name AS lga,
@@ -201,10 +275,11 @@ export async function agentPerformance(db: Db, params: { agentId?: string; limit
        LEFT JOIN lgas l ON l.id = a.lga_id
        LEFT JOIN transactions t ON t.agent_id = a.id
       WHERE ($1::uuid IS NULL OR a.id = $1)
+        AND ($3 OR a.territory_id = ANY($4::uuid[]))
       GROUP BY a.id, a.agent_code, u.full_name, l.name, a.operational_status
       ORDER BY COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES}),0) DESC
       LIMIT $2`,
-    [params.agentId ?? null, params.limit ?? 100],
+    [params.agentId ?? null, params.limit ?? 100, statewide, territoryIds],
   );
 }
 

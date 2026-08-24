@@ -464,9 +464,23 @@ describe('RBAC — every role checked against the API, not the UI', () => {
     },
     { path: '/government/fraud/flags', method: 'GET', accepts: ['fraud:read'] },
     {
+      /*
+       * report:read:territory is accepted here now, and the widening is
+       * deliberate. A supervisor holds it and held no other way in, so this
+       * endpoint answered 403 for the one role whose job is a territory and
+       * the portal menu hid the screen to match — they signed in to a raw
+       * transaction list and had no analytics at all.
+       *
+       * What changed is where the limit is enforced, not whether there is one.
+       * Access is no longer all-or-nothing at the door: a territory-scoped
+       * caller is admitted and then shown only their own territories, and a
+       * caller with no territory assigned is admitted and shown nothing.
+       * `territory-scoped-reporting.test.ts` holds that, including the
+       * fail-closed case, which is the assertion this row can no longer make.
+       */
       path: '/government/dashboard',
       method: 'GET',
-      accepts: ['dashboard:executive', 'report:read:all'],
+      accepts: ['dashboard:executive', 'report:read:all', 'report:read:territory'],
     },
     {
       path: '/government/leakage',
