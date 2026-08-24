@@ -127,76 +127,119 @@ const STATE_CATALOGUE: {
         awaitingSchedule: true,
       },
       /*
-       * The personal income taxes are unpriced, and this is the reason.
+       * The Fourth Schedule to the Nigeria Tax Act, 2025, in force since
+       * 1 January 2026.
        *
-       * They were seeded against the Personal Income Tax Act, the Capital
-       * Gains Tax Act and the Stamp Duties Act. All three were repealed and
-       * consolidated into the Nigeria Tax Act, 2025, which has been in force
-       * since 1 January 2026.
+       * What was here before was the old PITA schedule — 7% from the first
+       * naira, rising through 11/15/19/21 to 24%, with a ₦5,000 floor — and
+       * the Act that set it has been repealed, along with the Capital Gains
+       * Tax Act and the Stamp Duties Act. A trader on ₦300,000 owed 7% and a
+       * ₦5,000 minimum under those figures and owes nothing under the law.
        *
-       * The bands that were here — 7% from the first naira, rising through
-       * 11/15/19/21 to 24%, with a ₦5,000 floor — are the old PITA schedule.
-       * Under the Fourth Schedule to the NTA the first ₦800,000 of annual
-       * income is taxed at nothing at all. A trader on ₦300,000 owed 7% and a
-       * ₦5,000 minimum under the figures that were seeded here, and owes zero
-       * under the law. On a platform built to collect from the grassroots,
-       * the people that error reaches first are the ones the new law
-       * deliberately exempts.
+       * Note there is no minimum any more, and that is the point rather than
+       * an omission: the first ₦800,000 is exempt, and a floor would collect
+       * from exactly the people the exemption is for.
        *
-       * The correct bands are not written in from a summary. The Fourth
-       * Schedule is the authority, the Federal Government has issued
-       * transition guidance whose effect on a state's own assessments is not
-       * something to infer, and Plateau is among the states domesticating the
-       * reforms. Until somebody reads the Schedule and enters it, the
-       * platform refuses to assess these rather than charging a sum no law in
-       * force sets.
+       * These rates are federal. Personal income tax is administered by the
+       * states but its rates are set by the Act, so unlike the Plateau fee
+       * Schedules this is not a figure PSIRS chooses — it is the one PSIRS
+       * applies. The bands are consistent across KPMG, PwC, EY and the
+       * published PAYE tables; the gazette itself could not be reached from
+       * the environment this was configured in, which is recorded in
+       * REVENUE-CATALOGUE-SOURCES.md along with what still needs checking
+       * against it.
        */
       {
         code: 'PIT-DIRECT',
         name: 'Direct Assessment / Self-Assessment',
         rateType: 'TIERED',
+        tiers: {
+          tiers: [
+            { upToKobo: nairaToKobo('800000').toString(), basisPoints: 0 },
+            { upToKobo: nairaToKobo('3000000').toString(), basisPoints: 1500 },
+            { upToKobo: nairaToKobo('12000000').toString(), basisPoints: 1800 },
+            { upToKobo: nairaToKobo('25000000').toString(), basisPoints: 2100 },
+            { upToKobo: nairaToKobo('50000000').toString(), basisPoints: 2300 },
+            { upToKobo: null, basisPoints: 2500 },
+          ],
+        },
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
         selfAssessable: true,
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PAYE',
         name: 'Pay As You Earn (PAYE)',
         rateType: 'TIERED',
+        // The same schedule: PAYE is this tax collected at source, not a
+        // different one. It sat at a flat 7%, which was wrong before the
+        // reform too — a flat rate overcharges everyone in the lowest band
+        // and undercharges everyone above it.
+        tiers: {
+          tiers: [
+            { upToKobo: nairaToKobo('800000').toString(), basisPoints: 0 },
+            { upToKobo: nairaToKobo('3000000').toString(), basisPoints: 1500 },
+            { upToKobo: nairaToKobo('12000000').toString(), basisPoints: 1800 },
+            { upToKobo: nairaToKobo('25000000').toString(), basisPoints: 2100 },
+            { upToKobo: nairaToKobo('50000000').toString(), basisPoints: 2300 },
+            { upToKobo: null, basisPoints: 2500 },
+          ],
+        },
         frequency: 'MONTHLY',
         taxpayerTypes: ['BUSINESS'],
-        // Was a flat 7%, which was wrong before the reform as well: PAYE runs
-        // on the same progressive schedule as direct assessment, so a flat
-        // rate undercharged every earner above the first band and overcharged
-        // everyone below it.
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-WHT',
         name: 'Withholding Tax (individuals)',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
+        /*
+         * Left unpriced, and not for want of looking. Withholding is not one
+         * rate: it differs by what is being paid for — rent, dividends,
+         * professional fees, construction, ordinary contracts — and a single
+         * figure here would be wrong for every transaction except whichever
+         * one it happened to match. It needs the rate table and an input that
+         * says which kind of payment this is, which is a change to the item
+         * rather than a number to fill in.
+         */
         awaitingSchedule: true,
       },
       {
         code: 'PIT-CGT',
         name: 'Capital Gains Tax (individuals)',
-        rateType: 'PERCENTAGE',
+        rateType: 'TIERED',
+        /*
+         * The Nigeria Tax Act, 2025 repealed the flat 10% of the Capital
+         * Gains Tax Act and brought chargeable gains for individuals inside
+         * the personal income tax framework, so they are taxed at the same
+         * progressive rates.
+         */
+        tiers: {
+          tiers: [
+            { upToKobo: nairaToKobo('800000').toString(), basisPoints: 0 },
+            { upToKobo: nairaToKobo('3000000').toString(), basisPoints: 1500 },
+            { upToKobo: nairaToKobo('12000000').toString(), basisPoints: 1800 },
+            { upToKobo: nairaToKobo('25000000').toString(), basisPoints: 2100 },
+            { upToKobo: nairaToKobo('50000000').toString(), basisPoints: 2300 },
+            { upToKobo: null, basisPoints: 2500 },
+          ],
+        },
         frequency: 'ONE_OFF',
-        // Was a flat 10% under the Capital Gains Tax Act, which the Nigeria
-        // Tax Act, 2025 repealed and absorbed.
-        awaitingSchedule: true,
+        taxpayerTypes: ['INDIVIDUAL'],
       },
       {
         code: 'PIT-STAMP',
         name: 'Stamp Duties on instruments executed by individuals',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
-        // Was 0.75% with a ₦500 floor under the Stamp Duties Act, likewise
-        // repealed and consolidated. Stamp duty also varies by instrument
-        // rather than sitting at one rate, so the single figure was doing
-        // work it could not do even before the reform.
+        /*
+         * Also left unpriced, for the same reason as withholding rather than
+         * for want of a source. Stamp duty is set per instrument — a lease is
+         * not a receipt is not a share transfer — so the 0.75% that was here
+         * was wrong for nearly everything it would have been charged on, both
+         * before the Stamp Duties Act was repealed into the 2025 Act and
+         * after.
+         */
         awaitingSchedule: true,
       },
     ],

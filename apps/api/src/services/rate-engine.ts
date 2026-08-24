@@ -50,6 +50,20 @@ export interface RateComputation {
   amountKobo: Kobo;
   rateVersionId: string;
   trace: ComputationTraceStep[];
+  /**
+   * The assessable amount the operator declared, where the item has one.
+   *
+   * It is carried out of the computation so a caller can tell apart the two
+   * quite different things a result of zero can mean: a schedule that taxes
+   * the declared amount at nothing, and a form nobody filled in. Under the
+   * Fourth Schedule the first is the ordinary case for a grassroots trader
+   * and the second is a mistake, and they must not be reported alike.
+   *
+   * Null for FIXED and FORMULA items, which have no single declared base — a
+   * zero there is a rate configured at nothing or a formula that cancels, and
+   * neither is a statement about the taxpayer.
+   */
+  declaredBaseKobo: Kobo | null;
 }
 
 interface Tier {
@@ -316,6 +330,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
 export function computeAmount(rate: RateVersion, inputs: ComputationInputs): RateComputation {
   const trace: ComputationTraceStep[] = [];
   let amount: Kobo;
+  let declaredBase: Kobo | null = null;
 
   switch (rate.rate_type) {
     case 'FIXED': {
@@ -330,6 +345,7 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
 
     case 'PERCENTAGE': {
       const base = requireNumericInput(inputs, 'baseAmountKobo', 'Assessable amount');
+      declaredBase = base;
       const basisPoints = rate.rate_basis_points ?? 0;
       amount = applyBasisPoints(base, basisPoints);
       trace.push({
@@ -342,6 +358,7 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
 
     case 'TIERED': {
       const base = requireNumericInput(inputs, 'baseAmountKobo', 'Assessable amount');
+      declaredBase = base;
       const tiers = (rate.tiers as { tiers?: Tier[] } | Tier[] | null);
       const list = Array.isArray(tiers) ? tiers : (tiers?.tiers ?? []);
       if (list.length === 0) {
@@ -389,7 +406,7 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
 
   trace.push({ step: 'Payable', detail: 'Amount payable to government', amount: clamped.toString() });
 
-  return { amountKobo: clamped, rateVersionId: rate.id, trace };
+  return { amountKobo: clamped, rateVersionId: rate.id, trace, declaredBaseKobo: declaredBase };
 }
 
 export { evaluateFormula, computeTiered };

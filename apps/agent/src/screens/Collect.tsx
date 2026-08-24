@@ -308,13 +308,34 @@ export function CollectScreen({
 
       {quote && (
         <>
-          <div className="amount-confirm">
-            <p className="amount-confirm__label">You are about to collect</p>
-            <p className="amount-confirm__value">
-              <Money kobo={quote.totalKobo} />
-            </p>
-            <p className="amount-confirm__label">{quote.revenueItemName}</p>
-          </div>
+          {/*
+            * Zero is an answer, not a collection.
+            *
+            * Under the Fourth Schedule to the Nigeria Tax Act, 2025 the first
+            * ₦800,000 of annual income is exempt, so a nil liability is the
+            * ordinary result for a grassroots trader rather than a rare one.
+            * This screen used to announce it as "You are about to collect
+            * ₦0.00" and offer the payment button anyway; the API then refused
+            * the assessment, and at no point did anyone say the trader was
+            * exempt.
+            *
+            * The agent is paid commission on what they collect, and the only
+            * lever on this screen is the income figure they typed. A flow
+            * that dead-ends at a refusal points them straight back at it.
+            */}
+          {BigInt(quote.totalKobo) === 0n ? (
+            <Alert kind="info" title={t.noTaxPayable}>
+              <p style={{ margin: 0 }}>{t.noTaxPayableBody}</p>
+            </Alert>
+          ) : (
+            <div className="amount-confirm">
+              <p className="amount-confirm__label">You are about to collect</p>
+              <p className="amount-confirm__value">
+                <Money kobo={quote.totalKobo} />
+              </p>
+              <p className="amount-confirm__label">{quote.revenueItemName}</p>
+            </div>
+          )}
 
           <div className="card">
             <KeyValue
@@ -345,19 +366,32 @@ export function CollectScreen({
             </ul>
           </div>
 
-          <Alert kind="warning" title={t.neverCollectCash}>
-            <p style={{ margin: 0 }}>{t.cashChannelReminder}</p>
-          </Alert>
+          {/* The working stays on screen either way: an agent who cannot
+            * explain why the trader owes nothing is left saying the phone
+            * refused, which is how a lawful exemption turns into an argument. */}
+          {BigInt(quote.totalKobo) === 0n ? (
+            <div className="button-row">
+              <button type="button" className="secondary" onClick={() => setQuote(null)}>
+                Change
+              </button>
+            </div>
+          ) : (
+            <>
+              <Alert kind="warning" title={t.neverCollectCash}>
+                <p style={{ margin: 0 }}>{t.cashChannelReminder}</p>
+              </Alert>
 
-          <div className="button-row">
-            <button type="button" className="secondary" onClick={() => setQuote(null)}>
-              Change
-            </button>
-            <button type="button" disabled={busy} onClick={createAndPay}>
-              {busy ? <Spinner /> : null}
-              Confirm and proceed to payment
-            </button>
-          </div>
+              <div className="button-row">
+                <button type="button" className="secondary" onClick={() => setQuote(null)}>
+                  Change
+                </button>
+                <button type="button" disabled={busy} onClick={createAndPay}>
+                  {busy ? <Spinner /> : null}
+                  Confirm and proceed to payment
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
     </>
