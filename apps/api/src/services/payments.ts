@@ -735,9 +735,31 @@ async function verifyAndRecord(params: {
     // SERIALIZABLE: verification reads the payment, the invoice and the
     // commission ledger and writes all three. A phantom under READ COMMITTED
     // could allow two concurrent confirmations to both accrue commission.
-    // Everything inside is now database work, so a conflict can simply be run
-    // again rather than handed to an agent as a failure.
-    { isolationLevel: 'SERIALIZABLE', retryOnConflict: true },
+    /*
+     * READ COMMITTED, and the exclusion comes from locks that name what they
+     * protect.
+     *
+     * Two confirmations of one payment must not both issue a receipt. That is
+     * held by the advisory lock on the payment id taken above, and by the
+     * `FOR UPDATE OF p` on the row itself — both of which name the payment.
+     * SERIALIZABLE was a third guard over the top, and because it works on
+     * read/write dependencies rather than on identity, it also caught
+     * confirmations that had nothing to do with each other: every one appends
+     * to the audit chain, the chain hashes its predecessor, so twelve agents
+     * confirming twelve different payments all read one tail and write past
+     * it. Postgres is obliged to abort them.
+     *
+     * Measured, that was 83ms for a lone confirmation and 9.3 seconds at the
+     * median for thirty-two, one in six failing outright after ten retries —
+     * on a market day, the platform would stop confirming revenue. It bought
+     * no safety the two locks were not already providing, which is what the
+     * race tests in payment-confirmation-race.test.ts are there to hold: they
+     * passed before this line changed and must pass after it.
+     *
+     * The retry stays. READ COMMITTED still meets 40P01 occasionally, and a
+     * deadlock the database has already rolled back is not news for an agent.
+     */
+    { isolationLevel: 'READ COMMITTED', retryOnConflict: true },
   );
 }
 
