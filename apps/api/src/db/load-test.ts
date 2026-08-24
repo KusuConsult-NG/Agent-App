@@ -57,6 +57,7 @@ import { pool } from './pool';
 import { recordAuditStandalone } from '../services/audit';
 import { createAssessment } from '../services/revenue';
 import { confirmPayment, initiatePayment } from '../services/payments';
+import { runReconciliation } from '../services/reconciliation';
 
 /**
  * Sectors for the fixture: a deliberate spread, checked against the real list.
@@ -286,6 +287,102 @@ async function seedConfirmablePayments(count: number): Promise<string[]> {
   return paymentIds;
 }
 
+/**
+ * A day's settled traffic, for the sweep that decides whether agents get paid.
+ *
+ * Bulk-inserted rather than driven through the services, and the distinction
+ * from the confirmation fixture above is deliberate: there, the code under
+ * measurement was the thing that creates the rows, so building them by hand
+ * would have measured nothing. Here the code under measurement is
+ * `runReconciliation`, which only reads them. What it needs is a realistic
+ * number of realistically shaped rows, and forty thousand of those through
+ * the assessment service would take longer than the measurement.
+ *
+ * Each level is seeded into its own day so a run reconciles exactly its own
+ * traffic and not the level before it.
+ */
+async function seedSettledDay(count: number, daysAgo: number): Promise<{ from: Date; to: Date }> {
+  const template = await pool.query<{
+    taxpayer_id: string;
+    invoice_id: string;
+    assessment_id: string;
+    revenue_item_id: string;
+    lga_id: string;
+    created_by: string;
+  }>(
+    `SELECT taxpayer_id, invoice_id, assessment_id, revenue_item_id, lga_id, created_by
+       FROM transactions ORDER BY created_at LIMIT 1`,
+  );
+  if (template.rowCount === 0) throw new Error('no transaction to model the fixture on');
+  const t = template.rows[0]!;
+  const tag = `D${daysAgo}`;
+
+  await pool.query(
+    `INSERT INTO transactions
+       (transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+        lga_id, amount_kobo, total_amount_kobo, created_by, status, created_at)
+     SELECT 'RECON-' || $7 || '-' || g, $1, $2, $3, $4, $5, 200000, 200000, $6,
+            'SETTLED', now() - make_interval(days => $8)
+       FROM generate_series(1, $9) g`,
+    [t.taxpayer_id, t.invoice_id, t.assessment_id, t.revenue_item_id, t.lga_id, t.created_by,
+     tag, daysAgo, count],
+  );
+
+  await pool.query(
+    // verified_at and verified_by_source are not decoration: the schema refuses
+    // a VERIFIED payment without them, which is the same refusal that stops a
+    // receipt existing for money nothing confirmed. The fixture has to be as
+    // honest as a real one.
+    `INSERT INTO payments
+       (transaction_id, payment_reference, gateway, gateway_reference, amount_kobo,
+        status, verified_at, verified_by_source, created_at)
+     SELECT tx.id, 'RECONPAY-' || $1 || '-' || g, 'mock', 'RECONGW-' || $1 || '-' || g,
+            200000, 'VERIFIED', now() - make_interval(days => $2), 'WEBHOOK',
+            now() - make_interval(days => $2)
+       FROM generate_series(1, $3) g
+       JOIN transactions tx ON tx.transaction_reference = 'RECON-' || $1 || '-' || g`,
+    [tag, daysAgo, count],
+  );
+
+  // The gateway's side of the same day. Reconciliation compares the two.
+  await pool.query(
+    `INSERT INTO mock_gateway_transactions
+       (gateway_reference, payment_reference, amount_kobo, status, paid_at,
+        settlement_reference, created_at)
+     SELECT 'RECONGW-' || $1 || '-' || g, 'RECONPAY-' || $1 || '-' || g, 200000,
+            'SUCCESS', now() - make_interval(days => $2),
+            'SETL-' || $1, now() - make_interval(days => $2)
+       FROM generate_series(1, $3) g`,
+    [tag, daysAgo, count],
+  );
+
+  /*
+   * The third leg: government's own record that the money arrived in its
+   * account. Without it every line reconciles to PENDING_SETTLEMENT, which is
+   * correct — PRD §46 will not call money reconciled on the gateway's word
+   * alone — but it means the fixture never exercises the matching path, and
+   * matching is the work this section exists to time.
+   */
+  const settlement = await pool.query<{ id: string }>(
+    `INSERT INTO settlements
+       (settlement_reference, gateway, settlement_date, expected_amount_kobo)
+     VALUES ('SETL-' || $1, 'mock', now() - make_interval(days => $2), $3)
+     RETURNING id`,
+    [tag, daysAgo, String(200000 * count)],
+  );
+  await pool.query(
+    `UPDATE payments SET settlement_id = $1
+      WHERE payment_reference LIKE 'RECONPAY-' || $2 || '-%'`,
+    [settlement.rows[0]!.id, tag],
+  );
+
+  const day = new Date(Date.now() - daysAgo * 86_400_000);
+  return {
+    from: new Date(day.getTime() - 12 * 3_600_000),
+    to: new Date(day.getTime() + 12 * 3_600_000),
+  };
+}
+
 async function planFor(label: string, sql: string, params: unknown[] = []): Promise<void> {
   const { rows } = await pool.query<{ 'QUERY PLAN': string }>(
     `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${sql}`,
@@ -415,7 +512,59 @@ async function main(): Promise<void> {
   }
   table(confirmations);
 
-  console.log('\n5. Query plans on the paths that matter');
+  console.log('\n5. Reconciliation over a day of settled traffic');
+  /*
+   * The control that decides whether an agent is paid.
+   *
+   * `runReconciliation` writes one `reconciliation_records` row per payment,
+   * awaited one at a time inside a single transaction — so the sweep costs a
+   * round trip per payment and holds one transaction open for all of them.
+   * At demo scale that is a matched record and a shrug. Plateau State's
+   * seventeen LGAs will not be at demo scale, and if a day's reconciliation
+   * cannot finish inside a day, commission stops being payable.
+   *
+   * Watch the per-record cost across the levels rather than the totals: a
+   * flat figure means it scales linearly and the ceiling is arithmetic; a
+   * rising one means something in here is quadratic and the ceiling arrives
+   * sooner than the arithmetic suggests.
+   */
+  const officer = await pool.query<{ id: string }>(
+    `SELECT id FROM users WHERE role = 'revenue_officer' ORDER BY created_at LIMIT 1`,
+  );
+  const actorId = officer.rows[0]?.id ?? null;
+
+  console.log(
+    `  ${'payments in the day'.padEnd(24)}${'elapsed'.padStart(12)}${'per record'.padStart(14)}${'matched'.padStart(10)}${'exceptions'.padStart(12)}`,
+  );
+  console.log('  ' + '-'.repeat(70));
+  let daysAgo = 1;
+  for (const volume of [500, 2000, 8000]) {
+    const window = await seedSettledDay(volume, daysAgo);
+    daysAgo += 1;
+    const startedAt = process.hrtime.bigint();
+    const summary = await runReconciliation({
+      from: window.from,
+      to: window.to,
+      actorId,
+      actorRole: 'revenue_officer',
+    });
+    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    // Every payment in the window gets a record, whatever its outcome. Dividing
+    // by matched+exceptions alone reported 0.00 ms per record on a run that had
+    // just written eight thousand of them.
+    const written = await pool.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM reconciliation_records WHERE run_id = $1',
+      [summary.runId],
+    );
+    const checked = Number(written.rows[0]!.n);
+    console.log(
+      `  ${String(volume).padEnd(24)}${(elapsedMs.toFixed(0) + ' ms').padStart(12)}` +
+        `${((checked ? elapsedMs / checked : 0).toFixed(2) + ' ms').padStart(14)}` +
+        `${String(summary.matched).padStart(10)}${String(summary.exceptions).padStart(12)}`,
+    );
+  }
+
+  console.log('\n6. Query plans on the paths that matter');
   await planFor(
     'taxpayer by TIN',
     'SELECT id FROM taxpayers WHERE tin = $1',
@@ -436,7 +585,7 @@ async function main(): Promise<void> {
     "SELECT id FROM payments WHERE status = 'VERIFIED' LIMIT 100",
   );
 
-  console.log('\n6. Table sizes');
+  console.log('\n7. Table sizes');
   const sizes = await pool.query<{ relname: string; size: string; n: string }>(
     `SELECT c.relname,
             pg_size_pretty(pg_total_relation_size(c.oid)) AS size,
