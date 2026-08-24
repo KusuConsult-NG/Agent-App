@@ -52,8 +52,38 @@ process.env.IDENTITY_HASH_SECRET ??= 'load-test-identity-secret-long-enough-32';
 process.env.PAYMENT_WEBHOOK_SECRET ??= 'load-test-webhook-secret-long-enough-32';
 process.env.STORAGE_PATH ??= '/tmp/psirs-load-storage';
 
+import { ECONOMIC_SECTORS } from '@psirs/shared';
 import { pool } from './pool';
 import { recordAuditStandalone } from '../services/audit';
+import { createAssessment } from '../services/revenue';
+import { confirmPayment, initiatePayment } from '../services/payments';
+
+/**
+ * Sectors for the fixture: a deliberate spread, checked against the real list.
+ *
+ * The fixture named four sectors literally, and one of them —
+ * TRANSPORT_LOGISTICS — was dropped by migration 019, which split it into
+ * TRANSPORT_PASSENGER and TRANSPORT_HAULAGE. The check constraint then refused
+ * every insert, so this measurement could not seed a single taxpayer and had
+ * not run since.
+ *
+ * The spread still matters — four sectors from one industry would not exercise
+ * the filtered read below the way four unrelated ones do — so the codes are
+ * named rather than sliced off the front of the list. What has changed is that
+ * they are now verified against it at startup: the next vocabulary change
+ * fails here, immediately and by name, instead of ten thousand rows later
+ * inside a constraint violation.
+ */
+const FIXTURE_SECTORS = ['AGRICULTURE', 'RETAIL_TRADE', 'TRANSPORT_HAULAGE', 'ARTISAN_CRAFT'];
+
+for (const code of FIXTURE_SECTORS) {
+  if (!ECONOMIC_SECTORS.some((sector) => sector.code === code)) {
+    throw new Error(
+      `Fixture sector "${code}" is not in ECONOMIC_SECTORS. The vocabulary changed; ` +
+        'update FIXTURE_SECTORS to match, keeping the sectors unrelated to one another.',
+    );
+  }
+}
 
 interface Sample {
   label: string;
@@ -162,12 +192,12 @@ async function seedVolume(target: number): Promise<number> {
        SELECT 'INDIVIDUAL', 'Load', 'Fixture' || g,
               '+234' || lpad((700000000 + $2 + g)::text, 10, '0'),
               'Jos North', $1,
-              (ARRAY['AGRICULTURE','RETAIL_TRADE','TRANSPORT_LOGISTICS','ARTISAN_CRAFT'])[1 + (g % 4)],
+              ($4::text[])[1 + (g % 4)],
               'PL' || lpad((10000000 + $2 + g)::text, 8, '0'),
               'ASSIGNED', 'ACTIVE'
          FROM generate_series(1, $3) g
        ON CONFLICT DO NOTHING`,
-      [lga.rows[0]!.id, have + done, batch],
+      [lga.rows[0]!.id, have + done, batch, FIXTURE_SECTORS],
     );
   }
 
@@ -182,6 +212,80 @@ async function seedVolume(target: number): Promise<number> {
  * that exists and an index the planner chooses are different facts — and the
  * second is the one that decides whether an officer's dashboard returns.
  */
+/**
+ * Payments sitting unconfirmed, ready to be confirmed under contention.
+ *
+ * Built through `createAssessment` and `initiatePayment` rather than by
+ * INSERT, for the reason the audit probe learned the hard way: a fixture
+ * assembled by hand measures a code path nobody runs. These go through the
+ * same services an agent's tap goes through, and the mock gateway rows are
+ * then marked SUCCESS so that confirmation has something truthful to find.
+ *
+ * Each payment is confirmable exactly once — the second attempt is idempotent
+ * and returns without doing the work — so the measurement needs one payment
+ * per iteration rather than one payment hit repeatedly.
+ */
+async function seedConfirmablePayments(count: number): Promise<string[]> {
+  const officer = await pool.query<{ id: string }>(
+    `INSERT INTO users (full_name, phone, email, password_hash, role, status)
+     VALUES ('Load Fixture Officer', '+2348099000001', 'load@psirs.invalid',
+             'not-a-usable-hash', 'revenue_officer', 'ACTIVE')
+     ON CONFLICT (phone) DO UPDATE SET full_name = EXCLUDED.full_name
+     RETURNING id`,
+  );
+  const actorId = officer.rows[0]!.id;
+
+  const item = await pool.query<{ id: string }>(
+    `SELECT ri.id FROM revenue_items ri
+       JOIN revenue_item_rates r ON r.revenue_item_id = ri.id
+      WHERE r.rate_type = 'FIXED'
+        AND ri.status = 'ACTIVE'
+        AND 'INDIVIDUAL' = ANY (ri.applicable_taxpayer_types)
+        AND (r.effective_to IS NULL OR r.effective_to > now())
+      ORDER BY ri.code LIMIT 1`,
+  );
+  if (item.rowCount === 0) throw new Error('no fixed-rate revenue item — run the seed first');
+  const revenueItemId = item.rows[0]!.id;
+
+  const taxpayers = await pool.query<{ id: string }>(
+    `SELECT id FROM taxpayers WHERE last_name LIKE 'Fixture%' ORDER BY created_at LIMIT $1`,
+    [count],
+  );
+  if (taxpayers.rowCount! < count) {
+    throw new Error(`only ${taxpayers.rowCount} fixture taxpayers for ${count} payments`);
+  }
+
+  console.log(`  preparing ${count} unconfirmed payments…`);
+  const paymentIds: string[] = [];
+  for (const row of taxpayers.rows) {
+    const assessment = await createAssessment({
+      taxpayerId: row.id,
+      revenueItemId,
+      inputs: {},
+      actorId,
+      actorRole: 'revenue_officer',
+      channel: 'OFFICER',
+    });
+    const payment = await initiatePayment({
+      transactionId: assessment.transactionId,
+      actorId,
+      actorRole: 'revenue_officer',
+    });
+    paymentIds.push(payment.paymentId);
+  }
+
+  // The gateway says these were paid. Confirmation still has to go and ask.
+  await pool.query(
+    `UPDATE mock_gateway_transactions
+        SET status = 'SUCCESS', paid_at = now(), payment_method = 'CARD'
+      WHERE payment_reference IN (
+        SELECT payment_reference FROM payments WHERE id = ANY($1::uuid[]))`,
+    [paymentIds],
+  );
+
+  return paymentIds;
+}
+
 async function planFor(label: string, sql: string, params: unknown[] = []): Promise<void> {
   const { rows } = await pool.query<{ 'QUERY PLAN': string }>(
     `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${sql}`,
@@ -281,7 +385,37 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\n4. Query plans on the paths that matter');
+  console.log('\n4. Payment confirmation under contention (ms)');
+  /*
+   * The property this file was written for, and the one it never measured.
+   *
+   * `confirmPayment` runs at SERIALIZABLE behind an advisory lock, because
+   * two confirmations of one payment must not both issue a receipt. That is
+   * correct, and it is also where latency goes when a market fills up and
+   * thirty agents tap "check payment status" at once. A p99 that is fine
+   * alone and terrible at 32 is a market-day incident, and until now nothing
+   * would have said so.
+   *
+   * Read the movement, not the absolute figures: what matters is whether
+   * confirmation degrades gracefully as agents pile on, or falls off a cliff.
+   */
+  const confirmations: Sample[] = [];
+  const perLevel = 60;
+  const levels = [1, 8, 32];
+  const confirmable = await seedConfirmablePayments(perLevel * levels.length);
+  let taken = 0;
+  for (const concurrency of levels) {
+    const slice = confirmable.slice(taken, taken + perLevel);
+    taken += perLevel;
+    confirmations.push(
+      await drive(`payment confirmation, c=${concurrency}`, slice.length, concurrency, async (i) => {
+        await confirmPayment({ paymentId: slice[i]!, source: 'POLL', actorRole: 'system' });
+      }),
+    );
+  }
+  table(confirmations);
+
+  console.log('\n5. Query plans on the paths that matter');
   await planFor(
     'taxpayer by TIN',
     'SELECT id FROM taxpayers WHERE tin = $1',
@@ -302,7 +436,7 @@ async function main(): Promise<void> {
     "SELECT id FROM payments WHERE status = 'VERIFIED' LIMIT 100",
   );
 
-  console.log('\n5. Table sizes');
+  console.log('\n6. Table sizes');
   const sizes = await pool.query<{ relname: string; size: string; n: string }>(
     `SELECT c.relname,
             pg_size_pretty(pg_total_relation_size(c.oid)) AS size,
