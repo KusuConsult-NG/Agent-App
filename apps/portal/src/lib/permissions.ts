@@ -195,6 +195,14 @@ export const NAV: readonly { group: string; items: readonly NavItem[] }[] = [
       // answering 403 for whoever holds two of the three permissions.
       { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
       { path: '/audit', label: 'Audit log', permission: 'audit:read' },
+      /*
+       * Filed under Oversight rather than Overview, and the placement is the
+       * argument. This is about whether the software works, not about how much
+       * was collected — and keeping it away from the revenue dashboards makes
+       * it less likely somebody starts reading it as a productivity measure of
+       * the agents, which it deliberately cannot be.
+       */
+      { path: '/usage', label: 'Product usage', permission: 'report:read:all' },
     ],
   },
   {

@@ -10,7 +10,7 @@
  * submitting, and the queued draft syncs later (PRD §30).
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { birthDateMessage, birthDateProblem } from '@psirs/shared';
 import {
   ApiRequestError,
@@ -21,6 +21,7 @@ import {
 } from '../lib/api';
 import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
+import { startFlow, track } from '../lib/usage';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
@@ -168,6 +169,33 @@ export function RegisterTaxpayerScreen({
   const [result, setResult] = useState<{ taxpayerId: string; tin: string | null } | null>(null);
   const [savedOffline, setSavedOffline] = useState(false);
 
+  /*
+   * Follow this attempt.
+   *
+   * Registration is the step everything else depends on and the one nothing
+   * could see failing: an abandoned registration creates no taxpayer, so a
+   * form agents cannot get through looks exactly like a form nobody opens.
+   * The flow is settled once — completed, queued offline, or abandoned when
+   * the screen goes away — and carries no identity, only which step it
+   * reached.
+   */
+  const flow = useRef<ReturnType<typeof startFlow> | null>(null);
+  if (flow.current === null) flow.current = startFlow('taxpayer.registration', 'step-0');
+
+  useEffect(() => {
+    flow.current?.step(`step-${step}`);
+  }, [step]);
+
+  useEffect(
+    () => () => {
+      // Unmounting without having settled is somebody walking away from the
+      // form. `startFlow` ignores a second settlement, so a completed
+      // registration is not double-counted here.
+      flow.current?.abandon();
+    },
+    [],
+  );
+
   // Sector taxonomy fetched once on mount.
   const [sectors, setSectors] = useState<{
     code: string;
@@ -294,8 +322,13 @@ export function RegisterTaxpayerScreen({
       );
 
       if (outcome.sent) {
+        flow.current?.complete(`step-${step}`);
         setResult(outcome.result);
       } else {
+        // Queued, not lost — and a distinct outcome from finishing online,
+        // because the agent's experience of the two is not the same.
+        flow.current?.complete('queued-offline');
+        track('draft.queued', { step: 'taxpayer.registration' });
         // No signal. The capture stays on the phone rather than being lost, and
         // the agent is told plainly what has and has not happened.
         setSavedOffline(true);
@@ -303,6 +336,12 @@ export function RegisterTaxpayerScreen({
     } catch (caught) {
       if (caught instanceof ApiRequestError) {
         setError(caught.error);
+        // Not settled: a refusal is something the agent can correct and try
+        // again, so the attempt is still running.
+        track('taxpayer.registration', {
+          flowId: flow.current?.flowId,
+          step: `refused-${caught.error.code}`,
+        });
         if (caught.error.code === 'POSSIBLE_DUPLICATE_TAXPAYER') {
           // Fetch the actual matches so the agent can look at them rather than
           // guessing what the warning refers to (PRD §11).
@@ -332,6 +371,8 @@ export function RegisterTaxpayerScreen({
 
   async function saveForLater() {
     await saveDraft('TAXPAYER_REGISTRATION', payload());
+    flow.current?.complete('saved-for-later');
+    track('draft.queued', { step: 'taxpayer.registration' });
     setSavedOffline(true);
   }
 

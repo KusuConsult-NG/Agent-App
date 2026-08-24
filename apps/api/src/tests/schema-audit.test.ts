@@ -109,6 +109,17 @@ const DELIBERATELY_MUTABLE = new Set([
   'ticket_messages',
   'users',
   /*
+   * Telemetry about the software, not evidence about a person.
+   *
+   * `audit_logs` is the evidentiary chain: hash-linked, append-only, tied to
+   * somebody and to a record. This table is the opposite by design — it holds
+   * no identity at all and is deleted on a schedule, because raw usage rows
+   * are a means to an aggregate rather than something anybody is entitled to
+   * years later. Protecting it from deletion would make a disposable table
+   * permanent, which is the failure mode rather than the safeguard here.
+   */
+  'usage_events',
+  /*
    * An assignment, not a record. Changing which territories an officer covers
    * replaces the rows wholesale, so the table always states current coverage
    * and nothing else. The history that matters — who widened whose view of the

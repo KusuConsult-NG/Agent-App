@@ -10,7 +10,8 @@
  * as pending, in the language of PRD §60.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { startFlow, track } from '../lib/usage';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
 import { bluetoothPrinter } from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
@@ -74,6 +75,24 @@ export function CollectScreen({
   const [selectedItem, setSelectedItem] = useState<RevenueItem | null>(null);
   const [baseAmount, setBaseAmount] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
+
+  /*
+   * Follow one collection, start to receipt.
+   *
+   * The money path is measured by transactions already; what is not is how
+   * long the interface takes and where an agent gives up. A trader waiting at
+   * a stall is the constraint this platform actually operates under, and
+   * nothing recorded it.
+   */
+  const flow = useRef<ReturnType<typeof startFlow> | null>(null);
+  if (flow.current === null) flow.current = startFlow('collection', 'find-taxpayer');
+
+  useEffect(
+    () => () => {
+      flow.current?.abandon();
+    },
+    [],
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -120,6 +139,7 @@ export function CollectScreen({
         inputs.baseAmountKobo = String(Math.round(naira * 100));
       }
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs }));
+      flow.current?.step('amount-calculated');
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -149,9 +169,20 @@ export function CollectScreen({
         newIdempotencyKey('payment'),
       );
 
+      // Handed off to payment. Completed here rather than at the receipt,
+      // because what this measures is the part of the collection the agent
+      // drives — after this the taxpayer's bank has it.
+      flow.current?.complete('payment-initiated');
       navigate(`/transactions/${assessment.transactionReference}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      if (caught instanceof ApiRequestError) {
+        setError(caught.error);
+        // A nil liability is not a failed collection — it is the correct
+        // answer, and counting it as failure would make the exempt look like
+        // a bug in the funnel.
+        if (caught.error.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
+        else flow.current?.fail(`refused-${caught.error.code}`);
+      }
     } finally {
       setBusy(false);
     }

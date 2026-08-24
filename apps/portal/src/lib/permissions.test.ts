@@ -99,6 +99,7 @@ describe('each role gets a distinct portal', () => {
       'Support desk',
       'Outstanding work',
       'Audit log',
+      'Product usage',
       'Revenue catalogue',
       'Social incentives',
       'Groups & cooperatives',
@@ -120,6 +121,7 @@ describe('each role gets a distinct portal', () => {
       'Fraud & leakage',
       'Outstanding work',
       'Audit log',
+      'Product usage',
       'Revenue catalogue',
     ]);
   });
@@ -138,6 +140,7 @@ describe('each role gets a distinct portal', () => {
       'Support desk',
       'Outstanding work',
       'Audit log',
+      'Product usage',
       'Revenue catalogue',
       'Social incentives',
     ]);
@@ -160,6 +163,7 @@ describe('each role gets a distinct portal', () => {
       'Support desk',
       'Outstanding work',
       'Audit log',
+      'Product usage',
       'Revenue catalogue',
       'Social incentives',
       'Groups & cooperatives',
