@@ -273,9 +273,25 @@ export async function registerTaxpayer(params: {
     let tinReason: string | null = null;
 
     if (input.existingTin) {
+      /*
+       * Normalise before looking it up.
+       *
+       * PSIRS prints a TIN with separators and people write them as they read
+       * them — `12345678-0001`, `1234 5678 90`. Sent to the register exactly
+       * as typed, those matched nothing and came back NOT_FOUND, so a
+       * taxpayer holding a perfectly good TIN could not be registered against
+       * it and the agent was told the number could not be found when the
+       * number was fine.
+       *
+       * Only punctuation and spacing are removed. Nothing here decides what a
+       * TIN looks like — that is the register's job, and inventing a format
+       * check would refuse valid numbers the register would have accepted.
+       */
+      const normalisedTin = input.existingTin.replace(/[\s-]/g, '').toUpperCase();
+
       // An agent supplying an existing TIN does not get to assert it: it is
       // checked against the authoritative service first (PRD §11, §82).
-      const lookup = await tinService.lookup(input.existingTin);
+      const lookup = await tinService.lookup(normalisedTin);
 
       if (lookup.outcome === 'UNAVAILABLE') {
         // The old message told the agent to "register the taxpayer as a new TIN
@@ -296,11 +312,29 @@ export async function registerTaxpayer(params: {
       }
 
       if (lookup.outcome === 'NOT_FOUND') {
-        throw badRequest(
-          `TIN ${input.existingTin} could not be found in the PSIRS TIN service. ` +
-            'Check the number, or register the taxpayer as a new TIN applicant.',
-          [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
-        );
+        /*
+         * The advice here used to be "Check the number, or register the
+         * taxpayer as a new TIN applicant" — which is the instruction that
+         * mints a second TIN for somebody who already has one, and the exact
+         * outcome the UNAVAILABLE branch above goes out of its way to
+         * prevent. A duplicate in a UNIQUE column on an undeletable row is
+         * permanent.
+         *
+         * The order matters: check the number first, because a mistyped digit
+         * is far likelier than a taxpayer who has a TIN nobody has heard of.
+         * Registering as new stays reachable, and is named as the answer only
+         * to the question it actually answers.
+         */
+        throw new AppError({
+          statusCode: 400,
+          code: 'INVALID_REQUEST',
+          message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
+          nextStep:
+            'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
+            'the usual cause. Only if they have never had a TIN, go back and register them ' +
+            'without one; the platform will apply for a new TIN for them.',
+          details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
+        });
       }
 
       tin = lookup.tin ?? null;
