@@ -41,6 +41,7 @@ import {
 } from './lib/metrics';
 import { citizenRouter } from './routes/citizen';
 import { pushRouter } from './routes/push';
+import { usageRouter } from './routes/usage';
 import { allocationRouter, groupAttestationRouter, groupRouter } from './routes/groups';
 
 export function createApp(): Express {
@@ -198,6 +199,7 @@ export function createApp(): Express {
   api.use('/groups', groupRouter);
   api.use('/allocations', allocationRouter);
   api.use('/push', pushRouter);
+  api.use('/usage', usageRouter);
 
   // Public, unauthenticated surfaces.
   api.use('/reference', referenceRouter);

@@ -9,6 +9,7 @@
  *     rather than at the moment money is about to move.
  */
 
+import { configureUsage, flush as flushUsage, track } from './lib/usage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   APP_VERSION,
@@ -60,6 +61,41 @@ export function App() {
   const [session, setSession] = useState<Session['user'] | null>(getUser());
   const [restoring, setRestoring] = useState(hasStoredSession());
   const [connection, setConnection] = useState<ConnectionState>(detectConnectionState);
+
+  /*
+   * Keep the usage context current.
+   *
+   * Language and connection travel on every event because they are the two
+   * things most likely to explain a difference — a flow abandoned on a slow
+   * connection and one abandoned on a good one are different problems, and
+   * until now nothing recorded which had happened.
+   */
+  useEffect(() => {
+    configureUsage({ language: lang, connection });
+  }, [lang, connection]);
+
+  /** Opened. The denominator for everything else. */
+  useEffect(() => {
+    track('app.opened');
+  }, []);
+
+  /** Which screens are reached, and which never are. */
+  useEffect(() => {
+    track('screen.viewed', { step: route });
+  }, [route]);
+
+  /*
+   * Send what is queued when the connection returns.
+   *
+   * After the draft sync above, never before it: a queued registration is
+   * work and telemetry is not, and they must not compete for the first
+   * request on a connection that has just come back.
+   */
+  useEffect(() => {
+    if (connection === 'OFFLINE') return;
+    const timer = setTimeout(() => void flushUsage(), 3000);
+    return () => clearTimeout(timer);
+  }, [connection, route]);
   const [version, setVersion] = useState<VersionState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -187,7 +223,13 @@ export function App() {
         type="button"
         className="ghost"
         style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}
-        onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
+        onClick={() => {
+          // The Hausa dictionary, its review sheet and its tests are a large
+          // investment, and nothing anywhere reported whether one agent had
+          // ever switched to it.
+          track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
+          setLanguage(lang === 'en' ? 'ha' : 'en');
+        }}
         aria-label="Switch language"
       >
         {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
@@ -221,7 +263,13 @@ export function App() {
             type="button"
             className="ghost"
             style={{ color: '#fff', width: 'auto', padding: '4px 8px', fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', marginRight: '6px' }}
-            onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
+            onClick={() => {
+          // The Hausa dictionary, its review sheet and its tests are a large
+          // investment, and nothing anywhere reported whether one agent had
+          // ever switched to it.
+          track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
+          setLanguage(lang === 'en' ? 'ha' : 'en');
+        }}
             aria-label="Switch Language"
           >
             {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
