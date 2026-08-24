@@ -467,3 +467,171 @@ export function toCsv(rows: Record<string, unknown>[]): string {
     ...rows.map((row) => headers.map((header) => escape(row[header])).join(',')),
   ].join('\n');
 }
+
+// ===========================================================================
+// Revenue summary: where the money comes from, and whose it is.
+//
+// The executive dashboard reports totals and a few breakdowns. What an
+// administrator could not see was the two questions government actually asks
+// of a revenue platform: which arm of government a naira belongs to, and
+// which places produce it.
+//
+// The first was unanswerable because every catalogue item was mapped to
+// PSIRS-HQ — true of who collects the money and useless for who it is
+// collected for. The second was unanswerable because no collection had ever
+// recorded where it happened: the column existed, the endpoint accepted it,
+// and no client had ever sent one.
+// ===========================================================================
+
+/**
+ * Revenue by the MDA it is collected for.
+ *
+ * Includes MDAs with nothing against them, deliberately. An arm of government
+ * collecting nothing through this platform is a finding — it means either its
+ * revenue is being collected outside the system or its items were never
+ * catalogued — and it is visible only if the MDA appears with a zero rather
+ * than being absent from the list.
+ */
+export async function revenueByMda(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return query(
+    db,
+    `SELECT m.name AS mda, m.code,
+            count(DISTINCT ri.id)::text AS revenue_items,
+            count(t.id)::text AS transactions,
+            COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
+       FROM mdas m
+       LEFT JOIN revenue_items ri ON ri.mda_id = m.id
+       LEFT JOIN transactions t ON t.revenue_item_id = ri.id
+            AND t.status IN ${REVENUE_STATES}
+            AND t.created_at BETWEEN $1 AND $2
+            AND ${transactionScopeSql('t', 3, 4)}
+      GROUP BY m.name, m.code
+      ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC, m.name`,
+    [from, to, statewide, territoryIds],
+  );
+}
+
+/**
+ * Where revenue is generated, down to the community.
+ *
+ * `geographicIntelligence` drills one level at a time from a click. This is
+ * the flat answer to "show me the generating areas" — every ward that has
+ * produced anything, with the agents and collection points behind it — which
+ * is the shape an administrator reads rather than navigates.
+ */
+export async function revenueGenerationAreas(
+  db: Db,
+  params: { from?: Date; to?: Date; limit?: number } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return query(
+    db,
+    `SELECT l.name AS lga, l.zone,
+            COALESCE(w.name, 'Ward not recorded') AS ward,
+            count(t.id)::text AS transactions,
+            COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
+            count(DISTINCT t.agent_id)::text AS agents,
+            count(DISTINCT t.taxpayer_id)::text AS taxpayers,
+            -- How much of this was collected somewhere the platform can put
+            -- on a map. A ward earning well with no located collections is
+            -- not suspicious; it is unmapped, and the two must not be read
+            -- as the same thing.
+            count(t.latitude)::text AS located_transactions
+       FROM transactions t
+       JOIN lgas l ON l.id = t.lga_id
+       LEFT JOIN wards w ON w.id = t.ward_id
+      WHERE t.status IN ${REVENUE_STATES}
+        AND t.created_at BETWEEN $1 AND $2
+        AND ${transactionScopeSql('t', 3, 4)}
+      GROUP BY l.name, l.zone, w.name
+      ORDER BY SUM(t.amount_kobo) DESC
+      LIMIT $5`,
+    [from, to, statewide, territoryIds, params.limit ?? 100],
+  );
+}
+
+/**
+ * Each agent, and the ground they actually cover.
+ *
+ * `agentPerformance` answers how much an agent collected. This answers where
+ * — which LGAs and wards, and how far apart the collection points are — so an
+ * administrator can see the shape of a round rather than only its total.
+ *
+ * The spread is reported because it is useful for planning: an agent working
+ * one market and an agent covering forty kilometres of road are doing
+ * different jobs on the same commission, and nothing distinguished them.
+ */
+export async function agentCollectionMap(
+  db: Db,
+  params: { from?: Date; to?: Date; limit?: number } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return query(
+    db,
+    `SELECT a.agent_code, u.full_name,
+            COALESCE(ter.name, 'No territory') AS territory,
+            count(t.id)::text AS transactions,
+            COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
+            count(DISTINCT t.lga_id)::text AS lgas_worked,
+            count(DISTINCT t.ward_id)::text AS wards_worked,
+            count(t.latitude)::text AS located_transactions,
+            ROUND(AVG(t.latitude)::numeric, 5)::text AS centre_latitude,
+            ROUND(AVG(t.longitude)::numeric, 5)::text AS centre_longitude
+       FROM transactions t
+       JOIN agents a ON a.id = t.agent_id
+       JOIN users u ON u.id = a.user_id
+       LEFT JOIN territories ter ON ter.id = t.territory_id
+      WHERE t.status IN ${REVENUE_STATES}
+        AND t.created_at BETWEEN $1 AND $2
+        AND ${transactionScopeSql('t', 3, 4)}
+      GROUP BY a.agent_code, u.full_name, ter.name
+      ORDER BY SUM(t.amount_kobo) DESC
+      LIMIT $5`,
+    [from, to, statewide, territoryIds, params.limit ?? 100],
+  );
+}
+
+/**
+ * How much revenue can be put on a map at all.
+ *
+ * Worth its own figure rather than being inferred from a table: until the
+ * agent application began sending coordinates, this was zero for every
+ * transaction ever taken, and a mapping feature that silently reports on
+ * nothing is worse than one that says it has nothing to report.
+ */
+export async function collectionMappingCoverage(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+  const { statewide, territoryIds } = scopeParams(scope);
+  return queryOne(
+    db,
+    `SELECT count(*)::text AS transactions,
+            count(latitude)::text AS located,
+            count(*) FILTER (WHERE ward_id IS NOT NULL)::text AS ward_known,
+            COALESCE(SUM(amount_kobo) FILTER (WHERE latitude IS NOT NULL),0)::text
+              AS located_amount_kobo,
+            COALESCE(SUM(amount_kobo),0)::text AS total_amount_kobo
+       FROM transactions t
+      WHERE t.status IN ${REVENUE_STATES}
+        AND t.created_at BETWEEN $1 AND $2
+        AND ${transactionScopeSql('t', 3, 4)}`,
+    [from, to, statewide, territoryIds],
+  );
+}

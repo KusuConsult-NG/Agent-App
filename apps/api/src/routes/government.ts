@@ -75,6 +75,39 @@ governmentRouter.get(
   ),
 );
 
+/**
+ * The revenue summary an administrator opens.
+ *
+ * One call rather than five, because these are read together: what was
+ * collected, whose it is, where it came from, who collected it, and how much
+ * of it can be placed on a map at all. Scoped like every other report — a
+ * supervisor sees their territories.
+ */
+governmentRouter.get(
+  '/revenue/summary',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      from: z.string().datetime().optional(),
+      to: z.string().datetime().optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      const window = {
+        from: data.from ? new Date(data.from) : undefined,
+        to: data.to ? new Date(data.to) : undefined,
+      };
+      const [byMda, areas, agents, coverage] = await Promise.all([
+        reports.revenueByMda(pool, window, scope),
+        reports.revenueGenerationAreas(pool, window, scope),
+        reports.agentCollectionMap(pool, window, scope),
+        reports.collectionMappingCoverage(pool, window, scope),
+      ]);
+      res.json({ byMda, areas, agents, coverage, scope });
+    },
+  ),
+);
+
 governmentRouter.get(
   '/kpis',
   requirePermission('report:read:all'),

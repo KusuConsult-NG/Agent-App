@@ -24,6 +24,7 @@ import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agent
 import { UserAccessScreen } from './screens/UserAccess';
 import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
 import { PerformanceScreen } from './screens/Performance';
+import { RevenueScreen } from './screens/Revenue';
 import { UsageScreen } from './screens/Usage';
 import { TransactionsScreen } from './screens/Transactions';
 import { ApprovalsScreen, CommissionsScreen, ReconciliationScreen } from './screens/Finance';
@@ -212,6 +213,7 @@ function Routes({
   if (agentMatch) return <AgentDetailScreen agentId={agentMatch.id!} user={user} navigate={navigate} />;
   if (matchRoute(route, '/referees')) return <RefereesScreen />;
   if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
+  if (matchRoute(route, '/revenue')) return <RevenueScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;
   if (matchRoute(route, '/commissions')) return <CommissionsScreen />;

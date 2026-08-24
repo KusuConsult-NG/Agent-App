@@ -90,6 +90,15 @@ const STATE_CATALOGUE: {
     perLga?: boolean;
     /** Councils where the item is not collectable at all, by name. */
     excludeLgas?: string[];
+    /**
+     * The MDA this revenue belongs to, by code.
+     *
+     * PSIRS collects it; this says who it is collected *for*. Defaults to
+     * PSIRS-HQ, which is right for the taxes the Service levies in its own
+     * name and wrong for a fee that exists because another ministry
+     * regulates something.
+     */
+    mda?: string;
   }[];
 }[] = [
   {
@@ -263,6 +272,7 @@ const STATE_CATALOGUE: {
     items: [
       {
         code: 'BP-REG-URBAN',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Registration (urban)',
         rateType: 'FIXED',
         fixedNaira: '10000',
@@ -271,6 +281,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'BP-RENEW-URBAN',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (urban)',
         rateType: 'FIXED',
         fixedNaira: '5000',
@@ -288,6 +299,7 @@ const STATE_CATALOGUE: {
        */
       {
         code: 'BP-REG-SEMI-URBAN',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Registration (semi-urban)',
         rateType: 'FIXED',
         frequency: 'ONE_OFF',
@@ -296,6 +308,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'BP-RENEW-SEMI-URBAN',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (semi-urban)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
@@ -304,6 +317,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'BP-REG-RURAL',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Registration (rural)',
         rateType: 'FIXED',
         fixedNaira: '2000',
@@ -312,6 +326,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'BP-RENEW-RURAL',
+        mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (rural)',
         rateType: 'FIXED',
         fixedNaira: '1000',
@@ -336,6 +351,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'SOCIAL-SVC-LEVY',
+        mda: 'MDA-EDU',
         name: 'Social Services Contribution Levy',
         rateType: 'PERCENTAGE',
         basisPoints: 50,
@@ -350,6 +366,7 @@ const STATE_CATALOGUE: {
     items: [
       {
         code: 'VEH-RENEW-PRIVATE',
+        mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (private)',
         rateType: 'FORMULA',
         // Monthly rate scaled by the requested period. renewalPeriodMonths is
@@ -360,6 +377,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'VEH-RENEW-COMMERCIAL',
+        mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (commercial)',
         rateType: 'FORMULA',
         formula: '1250 * renewalPeriodMonths * 100',
@@ -368,6 +386,7 @@ const STATE_CATALOGUE: {
       },
       {
         code: 'ROAD-TAX',
+        mda: 'MDA-TRANS',
         name: 'Road Taxes',
         rateType: 'FIXED',
         fixedNaira: '7500',
@@ -379,46 +398,46 @@ const STATE_CATALOGUE: {
     category: 'Land, Property and Occupancy',
     code: 'LAND',
     items: [
-      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, },
-      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL' },
-      { code: 'PROPERTY-TAX', name: 'Property Tax', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL' },
-      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], },
-      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL' },
+      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
+      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'PROPERTY-TAX', name: 'Property Tax', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
+      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
     ],
   },
   {
     category: 'Trade, Markets and Produce',
     code: 'TRADE',
     items: [
-      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, },
-      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF' },
-      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF' },
-      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, },
+      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
+      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
     ],
   },
   {
     category: 'Hospitality, Entertainment and Gaming',
     code: 'HOSP',
     items: [
-      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'] },
-      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF' },
-      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'] },
+      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
+      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
     ],
   },
   {
     category: 'Environment, Mining and Safety',
     code: 'ENV',
     items: [
-      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL' },
-      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'] },
-      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL' },
+      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
+      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
     ],
   },
   {
     category: 'Advertising and Signage',
     code: 'ADVERT',
     items: [
-      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, },
+      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, mda: 'MDA-COMMERCE', },
     ],
   },
 ];
@@ -428,12 +447,12 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
   category: 'Local Government Rates and Fees',
   code: 'LGR',
   items: [
-    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, },
-    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, },
-    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, },
-    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, },
-    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, },
-    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, },
+    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
+    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
+    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
+    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
   ],
 };
 
@@ -696,6 +715,44 @@ async function seedReferenceData(): Promise<void> {
       [stateAuthority!.id, config.branding.agencyName],
     );
 
+    /*
+     * The Ministries, Departments and Agencies revenue is collected for.
+     *
+     * Every one of the forty-two items was mapped to PSIRS-HQ, so the
+     * dashboard's "revenue by MDA" was one row saying the Internal Revenue
+     * Service collects all of the state's revenue. True of who *collects* it
+     * and useless for the question government actually asks, which is which
+     * arm of government a naira belongs to — PSIRS is the collector, not the
+     * beneficiary.
+     *
+     * Five are named here as priorities. They are seeded whether or not the
+     * catalogue has anything for them yet, because an MDA with no revenue
+     * item is itself the finding: it means nothing is being collected on its
+     * behalf through this platform, and that is visible only if the MDA
+     * exists to show a zero against.
+     */
+    const MDAS = [
+      { code: 'MDA-EDU', name: 'Ministry of Education' },
+      { code: 'MDA-LANDS', name: 'Ministry of Lands, Survey and Town Planning' },
+      { code: 'MDA-TRANS', name: 'Ministry of Transport' },
+      { code: 'MDA-HEALTH', name: 'Ministry of Health' },
+      { code: 'MDA-WATER', name: 'Ministry of Water Resources and Energy' },
+      { code: 'MDA-ENV', name: 'Ministry of Environment' },
+      { code: 'MDA-COMMERCE', name: 'Ministry of Commerce and Industry' },
+      { code: 'MDA-LG', name: 'Local Government Councils' },
+    ] as const;
+
+    const mdaByCode = new Map<string, string>([['PSIRS-HQ', mda!.id]]);
+    for (const entry of MDAS) {
+      const row = await queryOne<{ id: string }>(
+        client,
+        `INSERT INTO mdas (authority_id, name, code) VALUES ($1,$2,$3)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+        [entry.code === 'MDA-LG' ? lgAuthority!.id : stateAuthority!.id, entry.name, entry.code],
+      );
+      mdaByCode.set(entry.code, row!.id);
+    }
+
     const seedCategory = async (
       authorityId: string,
       definition: { category: string; code: string; items: unknown[] },
@@ -738,6 +795,15 @@ async function seedReferenceData(): Promise<void> {
         perLga?: boolean;
         /** Councils where the item is not collectable at all, by name. */
         excludeLgas?: string[];
+        /**
+         * The MDA this revenue belongs to, by code.
+         *
+         * PSIRS collects it; this says who it is collected *for*. Defaults to
+         * PSIRS-HQ, which is right for the taxes the Service levies in its own
+         * name and wrong for a fee that exists because another ministry
+         * regulates something.
+         */
+        mda?: string;
       },
     ) => {
       const existing = await queryOne<{ id: string }>(
@@ -755,7 +821,7 @@ async function seedReferenceData(): Promise<void> {
          VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE') RETURNING id`,
         [
           categoryId,
-          mda!.id,
+          mdaByCode.get(item.mda ?? 'PSIRS-HQ') ?? mda!.id,
           item.code,
           item.name,
           item.taxpayerTypes ?? ['INDIVIDUAL', 'BUSINESS'],

@@ -10,6 +10,7 @@
  * as pending, in the language of PRD §60.
  */
 
+import { whereAmI } from '../lib/location';
 import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
@@ -162,9 +163,25 @@ export function CollectScreen({
         inputs.baseAmountKobo = String(Math.round(Number.parseFloat(baseAmount.replace(/,/g, '')) * 100));
       }
 
+      /*
+       * Where this is being collected.
+       *
+       * Asked for at the moment of collection and nowhere else — this is a
+       * map of where the state's revenue comes from, not a track of where
+       * the agent goes. `whereAmI` never rejects and gives up after a few
+       * seconds, because a trader is waiting and a collection must not fail
+       * for want of a satellite.
+       */
+      const point = await whereAmI();
+
       const assessment = await api.post<{ transactionId: string; transactionReference: string }>(
         '/revenue/assessments',
-        { taxpayerId: taxpayer.id, revenueItemId: selectedItem.id, inputs },
+        {
+          taxpayerId: taxpayer.id,
+          revenueItemId: selectedItem.id,
+          inputs,
+          ...(point ? { latitude: point.latitude, longitude: point.longitude } : {}),
+        },
         newIdempotencyKey('assessment'),
       );
 

@@ -74,6 +74,7 @@ describe('each role gets a distinct portal', () => {
     expect(menu('supervisor')).toEqual([
       'Dashboard',
       'Revenue intelligence',
+      'Revenue summary',
       'Transactions',
       'Agent performance',
       'Commissions',
@@ -89,6 +90,7 @@ describe('each role gets a distinct portal', () => {
     expect(menu('revenue_officer')).toEqual([
       'Dashboard',
       'Revenue intelligence',
+      'Revenue summary',
       'Transactions',
       'Agents & clearance',
       'Referees',
@@ -111,6 +113,7 @@ describe('each role gets a distinct portal', () => {
     expect(menu('finance_officer')).toEqual([
       'Dashboard',
       'Revenue intelligence',
+      'Revenue summary',
       'Transactions',
       'Agents & clearance',
       'Referees',
@@ -130,6 +133,7 @@ describe('each role gets a distinct portal', () => {
     expect(menu('auditor')).toEqual([
       'Dashboard',
       'Revenue intelligence',
+      'Revenue summary',
       'Transactions',
       'Agents & clearance',
       'Referees',
@@ -154,6 +158,7 @@ describe('each role gets a distinct portal', () => {
     expect(menu('admin')).toEqual([
       'Dashboard',
       'Revenue intelligence',
+      'Revenue summary',
       'Transactions',
       'Agents & clearance',
       'Referees',
