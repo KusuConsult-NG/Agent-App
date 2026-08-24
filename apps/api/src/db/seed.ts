@@ -126,56 +126,78 @@ const STATE_CATALOGUE: {
         taxpayerTypes: ['INDIVIDUAL'],
         awaitingSchedule: true,
       },
+      /*
+       * The personal income taxes are unpriced, and this is the reason.
+       *
+       * They were seeded against the Personal Income Tax Act, the Capital
+       * Gains Tax Act and the Stamp Duties Act. All three were repealed and
+       * consolidated into the Nigeria Tax Act, 2025, which has been in force
+       * since 1 January 2026.
+       *
+       * The bands that were here — 7% from the first naira, rising through
+       * 11/15/19/21 to 24%, with a ₦5,000 floor — are the old PITA schedule.
+       * Under the Fourth Schedule to the NTA the first ₦800,000 of annual
+       * income is taxed at nothing at all. A trader on ₦300,000 owed 7% and a
+       * ₦5,000 minimum under the figures that were seeded here, and owes zero
+       * under the law. On a platform built to collect from the grassroots,
+       * the people that error reaches first are the ones the new law
+       * deliberately exempts.
+       *
+       * The correct bands are not written in from a summary. The Fourth
+       * Schedule is the authority, the Federal Government has issued
+       * transition guidance whose effect on a state's own assessments is not
+       * something to infer, and Plateau is among the states domesticating the
+       * reforms. Until somebody reads the Schedule and enters it, the
+       * platform refuses to assess these rather than charging a sum no law in
+       * force sets.
+       */
       {
         code: 'PIT-DIRECT',
         name: 'Direct Assessment / Self-Assessment',
         rateType: 'TIERED',
-        // Nigerian PIT bands applied to taxable income supplied as
-        // baseAmountKobo. Progressive: each band taxes only its own portion.
-        tiers: {
-          tiers: [
-            { upToKobo: nairaToKobo('300000').toString(), basisPoints: 700 },
-            { upToKobo: nairaToKobo('600000').toString(), basisPoints: 1100 },
-            { upToKobo: nairaToKobo('1100000').toString(), basisPoints: 1500 },
-            { upToKobo: nairaToKobo('1600000').toString(), basisPoints: 1900 },
-            { upToKobo: nairaToKobo('3200000').toString(), basisPoints: 2100 },
-            { upToKobo: null, basisPoints: 2400 },
-          ],
-        },
-        minimumNaira: '5000',
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
         selfAssessable: true,
+        awaitingSchedule: true,
       },
       {
         code: 'PIT-PAYE',
         name: 'Pay As You Earn (PAYE)',
-        rateType: 'PERCENTAGE',
-        basisPoints: 700,
+        rateType: 'TIERED',
         frequency: 'MONTHLY',
         taxpayerTypes: ['BUSINESS'],
+        // Was a flat 7%, which was wrong before the reform as well: PAYE runs
+        // on the same progressive schedule as direct assessment, so a flat
+        // rate undercharged every earner above the first band and overcharged
+        // everyone below it.
+        awaitingSchedule: true,
       },
       {
         code: 'PIT-WHT',
         name: 'Withholding Tax (individuals)',
         rateType: 'PERCENTAGE',
-        basisPoints: 500,
         frequency: 'ONE_OFF',
+        awaitingSchedule: true,
       },
       {
         code: 'PIT-CGT',
         name: 'Capital Gains Tax (individuals)',
         rateType: 'PERCENTAGE',
-        basisPoints: 1000,
         frequency: 'ONE_OFF',
+        // Was a flat 10% under the Capital Gains Tax Act, which the Nigeria
+        // Tax Act, 2025 repealed and absorbed.
+        awaitingSchedule: true,
       },
       {
         code: 'PIT-STAMP',
         name: 'Stamp Duties on instruments executed by individuals',
         rateType: 'PERCENTAGE',
-        basisPoints: 75,
-        minimumNaira: '500',
         frequency: 'ONE_OFF',
+        // Was 0.75% with a ₦500 floor under the Stamp Duties Act, likewise
+        // repealed and consolidated. Stamp duty also varies by instrument
+        // rather than sitting at one rate, so the single figure was doing
+        // work it could not do even before the reform.
+        awaitingSchedule: true,
       },
     ],
   },

@@ -73,6 +73,52 @@ government sets one"* — so the items are visible to officers who need to
 configure them and unusable by agents until somebody with the Schedule open
 enters the figure. `catalogue-awaiting-schedule.test.ts` holds that property.
 
+## The catalogue was priced against repealed law
+
+Checking the thirty-seven existing prices turned up something larger than any
+of them.
+
+**The Nigeria Tax Act, 2025 has been in force since 1 January 2026.** It
+repealed and consolidated the Personal Income Tax Act, the Capital Gains Tax
+Act and the Stamp Duties Act, among others. Every `PIT-*` item in this
+catalogue was priced against those Acts.
+
+The seeded direct-assessment bands were the old PITA schedule — 7% from the
+first naira, rising through 11 / 15 / 19 / 21 to 24%, with a ₦5,000 floor.
+Under the Fourth Schedule to the NTA **the first ₦800,000 of annual income is
+taxed at nothing at all**, the band above it at 15%, and the top rate is 25%.
+
+A trader on ₦300,000 a year owed 7% and a ₦5,000 minimum under the figures
+that were in this repository, and owes nothing under the law. On a platform
+built to collect from the grassroots, the people that error reaches first are
+the ones the reform deliberately exempts.
+
+Five items are now unpriced for that reason — `PIT-DIRECT`, `PIT-PAYE`,
+`PIT-WHT`, `PIT-CGT`, `PIT-STAMP` — and the platform refuses to assess them.
+`PIT-PAYE` was additionally wrong before the reform: it sat at a flat 7% when
+PAYE runs on the same progressive schedule as direct assessment, so it
+overcharged everyone in the lowest band and undercharged everyone above it.
+
+The correct bands are not written in here from a summary. The Fourth Schedule
+is the authority, the Federal Government has issued transition guidance whose
+effect on a state's own assessments is not something to infer, and Plateau is
+among the states domesticating the reforms. **Somebody has to read the
+Schedule.**
+
+### One other price to check first
+
+`DEV-LEVY` is seeded at **₦2,000 per annum**. The Taxes and Levies (Approved
+List for Collection) Act provides for a development levy on individuals only,
+**"not more than ₦100 per annum"**. The 2015 Amendment Order kept the same
+₦100 figure and was in any case declared null and void by the Federal High
+Court in 2020. If that cap still governs, the seeded figure is twenty times
+the statutory maximum. It has been left priced rather than changed, because
+whether the state development levy survives the 2025 reform in its old form is
+exactly the question this document says not to answer by inference — but it
+should be the first one asked.
+
+---
+
 ## What could not be checked, and should be
 
 The primary sources are all published by Plateau State and were unreachable
@@ -90,10 +136,12 @@ Before Phase 1:
    Compendium that are absent here cannot be collected through this platform.
    Neither direction has been checked.
 
-Point 2 deserves emphasis. This work added five unpriced items and verified
-that unpriced items cannot be charged. It did **not** verify the thirty-seven
-prices already present, and nothing in this repository establishes where those
-figures came from.
+Point 2 deserves emphasis. Of the thirty-seven prices originally seeded, five
+have since been withdrawn as resting on repealed Acts and one — `DEV-LEVY` —
+is flagged above as probably exceeding a statutory cap. **The remaining
+thirty-one have not been verified against anything.** Nothing in this
+repository establishes where ₦10,000 for urban business premises registration,
+or ₦200 for a daily market levy, or any of the others came from.
 
 ## Sources
 

@@ -29,6 +29,15 @@ const AWAITING_SCHEDULE = [
   'PIT-PRESUMPTIVE-MEDIUM',
   'BP-REG-SEMI-URBAN',
   'BP-RENEW-SEMI-URBAN',
+  // Repealed by the Nigeria Tax Act, 2025, in force since 1 January 2026:
+  // PITA, the Capital Gains Tax Act and the Stamp Duties Act. The figures
+  // that were seeded against them charged tax the current law does not levy,
+  // including on the first ₦800,000 of income, which it exempts entirely.
+  'PIT-DIRECT',
+  'PIT-PAYE',
+  'PIT-WHT',
+  'PIT-CGT',
+  'PIT-STAMP',
 ];
 
 /**
@@ -40,7 +49,7 @@ const AWAITING_SCHEDULE = [
  * the platform refuses a business item for an individual first, and correctly,
  * which is not the refusal this test is about.
  */
-const BUSINESS_ITEMS = new Set(['BP-REG-SEMI-URBAN', 'BP-RENEW-SEMI-URBAN']);
+const BUSINESS_ITEMS = new Set(['BP-REG-SEMI-URBAN', 'BP-RENEW-SEMI-URBAN', 'PIT-PAYE']);
 
 before(async () => {
   await resetDatabase();
