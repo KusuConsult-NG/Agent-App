@@ -106,8 +106,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       <header className="screen-head">
         <h1>Groups and cooperatives</h1>
         <p>
-          Register a body you have met in the field. An officer approves it before members can
-          be added.
+          The groups you registered, and any an officer recorded for you to work. Another
+          agent’s cooperatives are not listed here.
         </p>
       </header>
 

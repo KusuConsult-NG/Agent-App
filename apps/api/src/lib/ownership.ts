@@ -64,3 +64,34 @@ export function assertOwnRecord(
   const agentId = callerAgentId(req);
   if (!agentId || ownerAgentId !== agentId) throw notFound(what);
 }
+
+/**
+ * The user this request is acting as.
+ *
+ * Distinct from `callerAgentId` because not every ownership column names an
+ * agent. `taxpayer_groups.registered_by` names the *user* who recorded the
+ * group, which is right — an officer can register one too, and there is no
+ * agent row to point at when they do.
+ */
+export function callerUserId(req: RouteRequest): string | null {
+  return req.auth?.userId ?? null;
+}
+
+/**
+ * Refuse a row recorded by somebody else.
+ *
+ * The same narrowing as `assertOwnRecord`, against a column that holds a user
+ * id rather than an agent id. `notFound` for the same reason: a 403 confirms
+ * to anyone who guesses an id that the record is there.
+ */
+export function assertOwnUserRecord(
+  req: RouteRequest,
+  all: Permission,
+  ownerUserId: string | null,
+  what: string,
+): void {
+  if (seesEverything(req, all)) return;
+
+  const userId = callerUserId(req);
+  if (!userId || ownerUserId !== userId) throw notFound(what);
+}
