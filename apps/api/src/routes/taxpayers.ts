@@ -20,7 +20,8 @@ import {
   validateBody,
   validateQuery,
 } from '../middleware/validate';
-import { badRequest, forbidden } from '../lib/errors';
+import { AppError, badRequest, forbidden } from '../lib/errors';
+import { log } from '../lib/logger';
 import * as taxpayers from '../services/taxpayers';
 import * as vehicles from '../services/vehicles';
 import * as obligations from '../services/obligations';
@@ -436,7 +437,8 @@ draftRouter.use(authenticate);
 /**
  * Accept captures taken without a connection (PRD §30; Addendum §23).
  *
- * Three rules govern this endpoint, and all of them are about what it refuses.
+ * Four rules govern this endpoint. Three are about what it refuses; the
+ * fourth is about what it is allowed to claim.
  *
  * First, the draft types. Every one is a record of something the agent
  * observed; none of them moves money. There is no payment draft type, and the
@@ -455,6 +457,14 @@ draftRouter.use(authenticate);
  * a binding every other agent write enforces — and left the audit entry with
  * no device against it, so the record could not afterwards be traced to a
  * handset at all. A queued capture is not a lesser capture.
+ *
+ * Fourth, an answer about a draft has to be an answer about that draft. The
+ * phone acts on what this endpoint says — deleting a capture it is told was
+ * synchronised, keeping one it is told was refused — so "already
+ * synchronised" for a draft that was rejected, or for one still waiting to be
+ * processed, does not merely mislead: it erases the only remaining copy. Each
+ * stored state gets its own reply, and the state that means "not finished" is
+ * finished rather than reported as though it had been.
  */
 const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE'] as const;
 
@@ -488,51 +498,32 @@ draftRouter.post(
       }[] = [];
 
       for (const draft of data.drafts) {
-        // The client reference is the idempotency key: replaying a sync after a
-        // dropped connection cannot create the record twice.
-        const existing = await queryOne<{
-          id: string;
-          status: string;
-          result_entity_type: string | null;
-          result_entity_id: string | null;
-        }>(
-          pool,
-          `SELECT id, status, result_entity_type, result_entity_id
-             FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
-          [agentId, draft.clientReference],
-        );
-
-        if (existing) {
-          results.push({
-            clientReference: draft.clientReference,
-            status: 'DUPLICATE',
-            entityType: existing.result_entity_type ?? undefined,
-            entityId: existing.result_entity_id ?? undefined,
-            message: 'This draft was already synchronised. It has not been duplicated.',
-          });
-          continue;
-        }
-
-        const stored = await queryOne<{ id: string }>(
-          pool,
-          `INSERT INTO offline_drafts
-             (agent_id, device_id, client_reference, draft_type, payload, captured_at)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            agentId,
-            req.agent?.deviceId ?? null,
-            draft.clientReference,
-            draft.draftType,
-            JSON.stringify(draft.payload),
-            draft.capturedAt,
-          ],
-        );
+        /*
+         * One bad capture must not take the batch down with it.
+         *
+         * Storing the payload is a database write like any other, and a draft
+         * carrying something the column will not hold — a NUL byte left in a
+         * name by a mis-scanned document, say — used to throw from outside
+         * this try, answering the whole request with a 500. Every other draft
+         * in the batch went unanswered, the phone kept all of them, and the
+         * next sync died on the same one: an agent's entire queue held shut by
+         * a single corrupt capture, with no way for them to see which.
+         *
+         * The whole of one draft's handling therefore sits inside the catch,
+         * including its own storage. A draft that cannot even be stored is
+         * refused by name, and the other forty-nine go through.
+         */
+        let storedId: string | null = null;
 
         const reject = async (message: string) => {
-          await pool.query(
-            `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
-            [stored!.id, message],
-          );
+          // A draft that failed before it could be stored has no row to mark;
+          // the agent is still told, by name, that this one was refused.
+          if (storedId) {
+            await pool.query(
+              `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
+              [storedId, message],
+            );
+          }
           results.push({ clientReference: draft.clientReference, status: 'REJECTED', message });
         };
 
@@ -542,7 +533,7 @@ draftRouter.post(
                 SET status = 'SYNCED', synced_at = now(),
                     result_entity_type = $3, result_entity_id = $2
               WHERE id = $1`,
-            [stored!.id, entityId, entityType],
+            [storedId, entityId, entityType],
           );
           results.push({
             clientReference: draft.clientReference,
@@ -554,6 +545,85 @@ draftRouter.post(
         };
 
         try {
+          /*
+           * The client reference is the idempotency key: replaying a sync after
+           * a dropped connection cannot create the record twice.
+           *
+           * What the replay is told, though, has to be about this draft. Any
+           * existing row used to answer "already synchronised", and the phone
+           * acts on that by deleting its copy — so a draft the server had
+           * *rejected*, re-sent because the agent never saw the reply, was
+           * reported as done and then erased along with the reason the agent
+           * needed to fix it. A row still in PENDING_SYNC — what a crash between
+           * the insert and the handler leaves behind — was answered the same
+           * way, and the capture existed nowhere afterwards.
+           *
+           * So each stored state gets its own answer, and the one state that
+           * means "not finished" is finished now rather than reported as though
+           * it had been.
+           */
+          const existing = await queryOne<{
+            id: string;
+            status: string;
+            result_entity_type: string | null;
+            result_entity_id: string | null;
+            rejection_reason: string | null;
+          }>(
+            pool,
+            `SELECT id, status, result_entity_type, result_entity_id, rejection_reason
+               FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
+            [agentId, draft.clientReference],
+          );
+
+          if (existing && existing.status !== 'PENDING_SYNC') {
+            if (existing.status === 'REJECTED') {
+              results.push({
+                clientReference: draft.clientReference,
+                status: 'REJECTED',
+                message:
+                  existing.rejection_reason ??
+                  'This draft was refused earlier and has not been stored as a record.',
+              });
+            } else {
+              results.push({
+                clientReference: draft.clientReference,
+                status: 'DUPLICATE',
+                entityType: existing.result_entity_type ?? undefined,
+                entityId: existing.result_entity_id ?? undefined,
+                message: 'This draft was already synchronised. It has not been duplicated.',
+              });
+            }
+            continue;
+          }
+
+          storedId = (
+            existing
+            ? await queryOne<{ id: string }>(
+                pool,
+                // Resuming: the phone still holds this capture, so what it is
+                // sending now is what the record should be made from, and the
+                // row should say so rather than keeping a payload that produced
+                // nothing.
+                `UPDATE offline_drafts SET payload = $2, device_id = COALESCE($3, device_id)
+                  WHERE id = $1 RETURNING id`,
+                [existing.id, JSON.stringify(draft.payload), req.agent?.deviceId ?? null],
+              )
+            : await queryOne<{ id: string }>(
+                pool,
+                `INSERT INTO offline_drafts
+                   (agent_id, device_id, client_reference, draft_type, payload, captured_at)
+                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+                [
+                  agentId,
+                  req.agent?.deviceId ?? null,
+                  draft.clientReference,
+                  draft.draftType,
+                  JSON.stringify(draft.payload),
+                  draft.capturedAt,
+                ],
+              )
+          )!.id;
+
           if (draft.draftType === 'TAXPAYER_REGISTRATION') {
             const parsed = taxpayerInputSchema.safeParse(draft.payload);
             if (!parsed.success) {
@@ -571,7 +641,22 @@ draftRouter.post(
               actorRole: req.auth!.role,
               agentId,
               source: 'AGENT',
-              acknowledgeDuplicates: parsed.data.acknowledgeDuplicates,
+              /*
+               * A duplicate acknowledgement cannot travel in the queue.
+               *
+               * The flag means a person looked at the matches the server
+               * offered and said none of them is this citizen. A phone with no
+               * signal has no duplicate list to have looked at, so the only
+               * way it reaches the queue is an attempt made online, refused,
+               * acknowledged, resubmitted — and then cut off before its reply
+               * arrived. Which is the one case where the acknowledgement is
+               * certainly wrong: the record it waves past is the one that
+               * attempt created.
+               *
+               * So the check runs against the register as it stands now, and
+               * the agent decides with the current record in front of them.
+               */
+              acknowledgeDuplicates: false,
               ipAddress: req.clientIp,
               // The same fields the online route records. A capture that
               // arrived through the queue is audited no differently from one
@@ -621,7 +706,30 @@ draftRouter.post(
               'It has not been discarded — quote this reference to support.',
           );
         } catch (error) {
-          await reject(error instanceof Error ? error.message : 'Unknown error');
+          /*
+           * A refusal the platform composed is worth showing; a fault is not.
+           *
+           * This used to reject with `error.message`, whatever it happened to
+           * be, and store it for good. "This person is already registered as
+           * Rifkatu Bala (TIN 481...)" is exactly what an agent needs. `duplicate
+           * key value violates unique constraint "taxpayers_tin_key"` is not:
+           * it tells them nothing they can act on, and tells anyone reading
+           * over their shoulder the names of our tables.
+           */
+          if (error instanceof AppError) {
+            await reject(error.message);
+          } else {
+            log.error('offline draft could not be processed', {
+              component: 'drafts',
+              draftId: storedId,
+              clientReference: draft.clientReference,
+              error,
+            });
+            await reject(
+              'This capture could not be processed. It is still on your phone — quote ' +
+                `reference ${draft.clientReference} to support.`,
+            );
+          }
         }
       }
 

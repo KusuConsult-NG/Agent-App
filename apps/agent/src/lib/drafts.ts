@@ -151,9 +151,26 @@ export interface SyncOutcome {
 }
 
 /**
+ * How many drafts may travel in one request.
+ *
+ * `POST /drafts/sync` refuses a body carrying more than this — the whole body,
+ * not the surplus. Sending the queue in one post therefore worked until an
+ * agent captured the fifty-first, and from then on every sync was refused for
+ * all of them at once: the queue could not drain, and the only way to make
+ * progress was to stop capturing. A day in a market without signal reaches
+ * fifty easily.
+ */
+const SYNC_BATCH = 50;
+
+/**
  * Push queued drafts to the server, which assigns the real identifiers
  * (PRD §30: "Offline records must receive server-generated IDs after
  * synchronization").
+ *
+ * Batches are delivered in order and each is settled before the next is sent,
+ * so a connection that dies partway leaves the delivered ones gone from the
+ * phone and the rest still queued. The failure is rethrown: a sync that did
+ * not finish must never look like one that did.
  */
 export async function syncDrafts(
   poster: (drafts: Pick<Draft, 'clientReference' | 'draftType' | 'payload' | 'capturedAt'>[]) => Promise<{
@@ -166,34 +183,37 @@ export async function syncDrafts(
   }>,
 ): Promise<SyncOutcome> {
   const queued = await pendingDrafts();
-  if (queued.length === 0) return { synced: 0, rejected: 0, duplicates: 0, messages: [] };
-
-  const response = await poster(
-    queued.map(({ clientReference, draftType, payload, capturedAt }) => ({
-      clientReference,
-      draftType,
-      payload,
-      capturedAt,
-    })),
-  );
-
   const outcome: SyncOutcome = { synced: 0, rejected: 0, duplicates: 0, messages: [] };
+  if (queued.length === 0) return outcome;
 
-  for (const result of response.results) {
-    const draft = queued.find((item) => item.clientReference === result.clientReference);
-    if (!draft) continue;
+  for (let start = 0; start < queued.length; start += SYNC_BATCH) {
+    const batch = queued.slice(start, start + SYNC_BATCH);
 
-    if (result.status === 'SYNCED') {
-      outcome.synced += 1;
-      await removeDraft(draft.clientReference);
-    } else if (result.status === 'DUPLICATE') {
-      outcome.duplicates += 1;
-      await removeDraft(draft.clientReference);
-    } else if (result.status === 'REJECTED') {
-      outcome.rejected += 1;
-      await updateDraft({ ...draft, status: 'REJECTED', message: result.message });
+    const response = await poster(
+      batch.map(({ clientReference, draftType, payload, capturedAt }) => ({
+        clientReference,
+        draftType,
+        payload,
+        capturedAt,
+      })),
+    );
+
+    for (const result of response.results) {
+      const draft = batch.find((item) => item.clientReference === result.clientReference);
+      if (!draft) continue;
+
+      if (result.status === 'SYNCED') {
+        outcome.synced += 1;
+        await removeDraft(draft.clientReference);
+      } else if (result.status === 'DUPLICATE') {
+        outcome.duplicates += 1;
+        await removeDraft(draft.clientReference);
+      } else if (result.status === 'REJECTED') {
+        outcome.rejected += 1;
+        await updateDraft({ ...draft, status: 'REJECTED', message: result.message });
+      }
+      outcome.messages.push(result.message);
     }
-    outcome.messages.push(result.message);
   }
 
   return outcome;
