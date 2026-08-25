@@ -308,6 +308,63 @@ describe('syncing what the phone kept', () => {
     expect(await pendingDrafts()).toHaveLength(1);
   });
 
+  /**
+   * A day in a market with no signal.
+   *
+   * The server takes at most fifty drafts in one request and refuses the whole
+   * body above that. This function sent every pending draft in a single post,
+   * so an agent who captured a fifty-first was refused — not for that capture,
+   * but for all of them, on every sync from then on. The queue could not
+   * drain, and the only way out was to stop capturing.
+   */
+  it('sends a long queue in batches the server will accept', async () => {
+    for (let index = 0; index < 128; index += 1) {
+      await saveDraft('TAXPAYER_REGISTRATION', { ...TAXPAYER, phone: `+23480370006${index}` });
+    }
+
+    const batchSizes: number[] = [];
+    const outcome = await syncDrafts(async (drafts) => {
+      batchSizes.push(drafts.length);
+      return {
+        results: drafts.map((draft) => ({
+          clientReference: draft.clientReference,
+          status: 'SYNCED',
+          message: 'Registered.',
+        })),
+      };
+    });
+
+    expect(Math.max(...batchSizes)).toBeLessThanOrEqual(50);
+    expect(batchSizes.reduce((total, size) => total + size, 0)).toBe(128);
+    expect(outcome.synced).toBe(128);
+    expect(await pendingDrafts()).toHaveLength(0);
+  });
+
+  it('keeps what it has not sent when a later batch cannot be delivered', async () => {
+    for (let index = 0; index < 60; index += 1) {
+      await saveDraft('TAXPAYER_REGISTRATION', { ...TAXPAYER, phone: `+23480370007${index}` });
+    }
+
+    let posts = 0;
+    await expect(
+      syncDrafts(async (drafts) => {
+        posts += 1;
+        if (posts > 1) throw offlineError();
+        return {
+          results: drafts.map((draft) => ({
+            clientReference: draft.clientReference,
+            status: 'SYNCED',
+            message: 'Registered.',
+          })),
+        };
+      }),
+    ).rejects.toThrow();
+
+    // The first batch really did land, so those are gone; the rest are still
+    // the phone's to deliver.
+    expect(await pendingDrafts()).toHaveLength(10);
+  });
+
   it('does nothing when there is nothing to send', async () => {
     let called = false;
     const outcome = await syncDrafts(async () => {

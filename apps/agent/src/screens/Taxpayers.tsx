@@ -308,8 +308,18 @@ export function RegisterTaxpayerScreen({
     setBusy(true);
     setError(null);
     try {
-      // One idempotency key per attempt, reused if this ends up queued: syncing
-      // a draft that in fact reached the server cannot register them twice.
+      /*
+       * One idempotency key per attempt, which covers a retry of *this*
+       * request and nothing further. It does not travel into the queue: a
+       * draft is a separate operation, posted later to a different endpoint,
+       * and the key would not match there.
+       *
+       * What stops the awkward case — the request reached PSIRS, the reply did
+       * not, and the capture was queued — is the duplicate check at sync time,
+       * which the server runs against the register as it stands and which a
+       * queued capture cannot wave aside. The record the first attempt created
+       * is precisely the match it finds.
+       */
       const idempotencyKey = newIdempotencyKey('taxpayer');
       const body = payload(acknowledgeDuplicates);
 
