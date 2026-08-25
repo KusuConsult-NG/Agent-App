@@ -835,7 +835,8 @@ export async function getTaxpayerProfile(
       ? Promise.resolve([])
       : query(
           db,
-          `SELECT p.id, p.name, p.benefit_type, p.benefit_description, e.eligible, e.reasons
+          `SELECT p.id, p.name, p.benefit_type, p.benefit_description, p.linkage_mode,
+                  e.eligible, e.reasons, e.benefit_tier
              FROM programme_eligibility e
              JOIN incentive_programmes p ON p.id = e.programme_id
             WHERE e.taxpayer_id = $1 AND p.status = 'ACTIVE'`,

@@ -54,7 +54,9 @@ export async function computeComplianceScore(
        COALESCE((SELECT SUM(total_amount_kobo - amount_paid_kobo) FROM invoices
                   WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')), 0)::text
          AS outstanding_kobo,
-       count(DISTINCT a.period_label)::text AS distinct_periods,
+       count(DISTINCT a.period_label) FILTER (
+         WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING')
+       )::text AS distinct_periods,
        max(t.verified_at) AS last_payment_at,
        count(*) FILTER (WHERE t.status IN ('REVERSED','REFUNDED'))::text AS reversed_count
      FROM transactions t
@@ -97,6 +99,17 @@ export async function computeComplianceScore(
     });
   }
 
+  /*
+   * A compliant period is one that was paid for.
+   *
+   * This counted every distinct period the taxpayer had ever had a transaction
+   * in, with no filter on status, while describing them to the taxpayer as
+   * "settled". Four assessments raised across four periods and none of them
+   * paid earned the full twenty points for compliance — and
+   * `minimum_compliance_periods`, which gates programme eligibility, was
+   * satisfied by them. The filter is on the same statuses `paid_count` already
+   * uses, which are the ones that mean money arrived.
+   */
   const periods = Number.parseInt(stats?.distinct_periods ?? '0', 10);
   const periodPoints = Math.min(20, periods * 5);
   score += periodPoints;
@@ -600,6 +613,10 @@ export async function listProgrammes(db: Db, options: { status?: string } = {}) 
     `SELECT p.id, p.name, p.code, p.description, p.benefit_type, p.benefit_description,
             p.minimum_score, p.minimum_compliance_periods, p.requires_no_arrears,
             p.start_date, p.end_date, p.approval_authority, p.status,
+            -- Whether a programme denies on tax grounds is the PRD §40 decision
+            -- about it. It was recorded, enforced and audited, and left out of
+            -- the list an officer administers these from.
+            p.linkage_mode,
             (SELECT count(*) FROM programme_eligibility e
               WHERE e.programme_id = p.id AND e.eligible) AS eligible_taxpayers
        FROM incentive_programmes p
@@ -615,7 +632,14 @@ export async function getTaxpayerIncentives(db: Db, taxpayerId: string) {
     query(
       db,
       `SELECT p.id, p.name, p.benefit_type, p.benefit_description, p.approval_authority,
-              e.eligible, e.reasons, e.score_at_evaluation, e.evaluated_at
+              p.linkage_mode,
+              e.eligible, e.reasons, e.score_at_evaluation, e.evaluated_at,
+              -- BASE or FULL. Computed, stored and unit-tested since the
+              -- additive mode was added, and returned to nobody: a citizen on
+              -- an additive programme was told eligible, which is what a gated
+              -- programme says too, and the difference between them is the
+              -- entire PRD 40 safeguard.
+              e.benefit_tier
          FROM incentive_programmes p
          LEFT JOIN programme_eligibility e
                 ON e.programme_id = p.id AND e.taxpayer_id = $1
