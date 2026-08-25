@@ -520,6 +520,44 @@ governmentRouter.post(
          * for a change that did not happen.
          */
         let applied: { accountNumberMasked: string; bankName: string } | null = null;
+
+        /*
+         * A commission payout is carried out here too, for the reason the
+         * comment above gives: deciding and doing are one act or they are a
+         * discrepancy waiting to be found.
+         *
+         * This branch did not exist. A rejection marked the approval REJECTED
+         * and left everything requestPayout had done standing — the
+         * commissions APPROVED against a payout that would never happen, where
+         * nothing could ever pick them up again, and the agent's clawback
+         * written off against a payment that was never made.
+         */
+        if (approval.approval_type === 'COMMISSION_PAYOUT') {
+          const payout = await queryOne<{ id: string; status: string }>(
+            client,
+            'SELECT id, status FROM commission_payouts WHERE approval_id = $1 FOR UPDATE',
+            [req.params.id],
+          );
+          if (!payout) throw notFound('The payout this approval belongs to');
+
+          if (nextStatus === 'REJECTED') {
+            await commission.refusePayout(client, {
+              payoutId: payout.id,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              reason: data.reason,
+            });
+          } else if (nextStatus === 'APPROVED') {
+            // So the two routes that can approve a payout agree about it.
+            await client.query(
+              `UPDATE commission_payouts
+                  SET status = 'APPROVED', approved_by = $2, approved_at = now()
+                WHERE id = $1 AND status = 'REQUESTED'`,
+              [payout.id, req.auth!.userId],
+            );
+          }
+        }
+
         if (approval.approval_type === 'BANK_ACCOUNT_CHANGE') {
           if (nextStatus === 'APPROVED') {
             applied = await agents.executeBankAccountChange(client, {
@@ -781,14 +819,47 @@ governmentRouter.post(
     z.object({ reason: z.string().min(5, 'Give a reason for the approval') }),
     async (req, res, data) => {
       await withTransaction(async (client) => {
-        const payout = await queryOne<{ id: string; approval_id: string | null; requested_by: string | null }>(
+        const payout = await queryOne<{
+          id: string;
+          status: string;
+          approval_id: string | null;
+          requested_by: string | null;
+        }>(
           client,
-          'SELECT id, approval_id, requested_by FROM commission_payouts WHERE id = $1 FOR UPDATE',
+          'SELECT id, status, approval_id, requested_by FROM commission_payouts WHERE id = $1 FOR UPDATE',
           [req.params.id],
         );
         if (!payout) throw notFound('That payout');
         if (payout.requested_by === req.auth!.userId) {
           throw forbidden('You cannot approve a payout you requested yourself.');
+        }
+
+        /*
+         * The approval this payout belongs to has the last word.
+         *
+         * This route wrote APPROVED without ever reading it, so a refusal
+         * another officer had already recorded through /approvals/:id/decide
+         * could be stepped over by calling this one — and the payout carried no
+         * trace of the refusal for the second officer to notice.
+         */
+        if (payout.status !== 'REQUESTED') {
+          throw conflict(
+            'PAYOUT_NOT_APPROVABLE',
+            `This payout is already ${payout.status.toLowerCase()}.`,
+          );
+        }
+        if (payout.approval_id) {
+          const approval = await queryOne<{ status: string }>(
+            client,
+            'SELECT status FROM approvals WHERE id = $1 FOR UPDATE',
+            [payout.approval_id],
+          );
+          if (approval && !['REQUESTED', 'REVIEWED'].includes(approval.status)) {
+            throw conflict(
+              'APPROVAL_ALREADY_DECIDED',
+              `The approval for this payout is already ${approval.status.toLowerCase()}.`,
+            );
+          }
         }
 
         await client.query(

@@ -601,6 +601,89 @@ export async function requestPayout(params: {
 }
 
 /**
+ * Undo everything a payout request did, because it was refused.
+ *
+ * `requestPayout` does a great deal before anybody has agreed to pay: it moves
+ * every eligible commission to APPROVED against the payout, and marks any
+ * commission that was paid and later reversed as recovered, netting the
+ * agent's debt off the amount requested. All of that is right on the way to
+ * being paid, and all of it has to come back if the payment is refused.
+ *
+ * Nothing did. The approval was marked REJECTED and the rest was left standing,
+ * which went wrong in both directions at once: the commissions stayed APPROVED
+ * where `requestPayout` — which selects only ELIGIBLE — could never pick them
+ * up again, so the agent could not be paid what they had earned; and the
+ * clawback stayed written off, so money the agent held and did not own stopped
+ * being recoverable.
+ */
+export async function refusePayout(
+  client: PoolClient,
+  params: { payoutId: string; actorId: string; actorRole: string; reason: string },
+): Promise<{ returnedToEligible: number; clawbackRestored: number }> {
+  const payout = await queryOne<{ id: string; status: string; agent_id: string }>(
+    client,
+    'SELECT id, status, agent_id FROM commission_payouts WHERE id = $1 FOR UPDATE',
+    [params.payoutId],
+  );
+  if (!payout) throw notFound('That payout');
+  if (payout.status !== 'REQUESTED') {
+    throw conflict(
+      'PAYOUT_NOT_REFUSABLE',
+      `This payout is already ${payout.status.toLowerCase()} and cannot be refused.`,
+    );
+  }
+
+  await client.query(
+    `UPDATE commission_payouts SET status = 'REJECTED' WHERE id = $1`,
+    [params.payoutId],
+  );
+
+  const included = await query<{ id: string }>(
+    client,
+    `SELECT id FROM commissions WHERE payout_id = $1 AND status = 'APPROVED' FOR UPDATE`,
+    [params.payoutId],
+  );
+  for (const commission of included) {
+    await transitionCommission(client, {
+      commissionId: commission.id,
+      to: 'ELIGIBLE',
+      reason: `Payout refused: ${params.reason}`,
+      actorId: params.actorId,
+    });
+  }
+  // The payout is no longer the one this commission belongs to. Left set, the
+  // wallet and the payout listing both go on associating money with a refusal.
+  await client.query(
+    `UPDATE commissions SET payout_id = NULL, approved_at = NULL, approved_by = NULL
+      WHERE payout_id = $1 AND status = 'ELIGIBLE'`,
+    [params.payoutId],
+  );
+
+  const restored = await query<{ id: string }>(
+    client,
+    `UPDATE commissions SET recovered_at = NULL, recovered_by_payout_id = NULL
+      WHERE recovered_by_payout_id = $1
+      RETURNING id`,
+    [params.payoutId],
+  );
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    action: 'commission.payout_refused',
+    entityType: 'commission_payout',
+    entityId: params.payoutId,
+    newValue: {
+      returnedToEligible: included.length,
+      clawbackRestored: restored.length,
+    },
+    reason: params.reason,
+  });
+
+  return { returnedToEligible: included.length, clawbackRestored: restored.length };
+}
+
+/**
  * Complete an approved payout by recording the bank transfer reference.
  * PRD §28: no commission is marked paid without one.
  */
