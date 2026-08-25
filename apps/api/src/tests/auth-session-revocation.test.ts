@@ -17,6 +17,13 @@
  *                           replayable OTP is a bypass of the control that
  *                           protects rate changes, reversals and payouts.
  *
+ * That second route is gone: verifying a code consumes it, so a route that
+ * verified without granting anything could only destroy a code, and it took
+ * the destination from an unauthenticated body — five wrong guesses from
+ * anyone who knew an officer's number burned that officer's live code. The
+ * properties it was covering are properties of the code itself, so they are
+ * checked here where the code is actually redeemed, at POST /auth/step-up.
+ *
  * `revokeAllSessions` is used elsewhere and works. What was untested is the
  * route: that it is authenticated, that it revokes every session rather than
  * the caller's, and that the revocation actually takes effect on the next
@@ -30,11 +37,14 @@ import {
   createGovernmentUser,
   get,
   loginAs,
+  pool,
   post,
   resetDatabase,
   startTestServer,
   stopTestServer,
 } from './helpers';
+import { config } from '../config';
+import { sha256 } from '../lib/crypto';
 
 const PHONE = '+2348088000001';
 const PASSWORD = 'Password123';
@@ -141,6 +151,13 @@ describe('Signing out of every device', () => {
 
 // ===========================================================================
 describe('One-time codes are one-time', () => {
+  const redeem = (destination: string, code: string, token: string) =>
+    post(
+      '/auth/step-up',
+      { action: 'catalogue.rate.change', destination, code },
+      { token },
+    );
+
   it('accepts a code once and refuses the replay', async () => {
     const phone = await freshUser();
     const session = await loginAs(phone, PASSWORD, 'otp-device');
@@ -154,58 +171,44 @@ describe('One-time codes are one-time', () => {
     const code = (requested.body as { developmentCode?: string }).developmentCode;
     assert.ok(code, 'the development build should return the code so tests can use it');
 
-    const first = await post('/auth/otp/verify', {
-      destination: phone,
-      purpose: 'STEP_UP',
-      code,
-    });
-    assert.equal(first.status, 200, `first verification should succeed: ${JSON.stringify(first.body)}`);
+    const first = await redeem(phone, code, session.accessToken);
+    assert.equal(first.status, 200, `first redemption should succeed: ${JSON.stringify(first.body)}`);
 
-    const replay = await post('/auth/otp/verify', {
-      destination: phone,
-      purpose: 'STEP_UP',
-      code,
-    });
+    const replay = await redeem(phone, code, session.accessToken);
     assert.notEqual(
       replay.status,
       200,
-      'the same code verified twice — a captured code could be reused against a step-up action',
+      'the same code redeemed twice — a captured code could be reused against a step-up action',
     );
   });
 
   it('refuses a code that was never issued', async () => {
     const phone = await freshUser();
-    const response = await post('/auth/otp/verify', {
-      destination: phone,
-      purpose: 'STEP_UP',
-      code: '000000',
-    });
+    const session = await loginAs(phone, PASSWORD, 'guess-device');
+    const response = await redeem(phone, '0'.repeat(config.auth.otpLength), session.accessToken);
     assert.notEqual(response.status, 200, 'a guessed code was accepted');
   });
 
   /**
    * A code issued for one purpose must not satisfy another.
    *
-   * Otherwise a login code — the easiest to obtain, since anyone can ask for
-   * one — would satisfy the step-up that guards a payment reversal.
+   * Codes for the other purposes can no longer be requested — the route offers
+   * only STEP_UP — so this one is written straight into the table, which is
+   * what a login flow would do if the platform grew one. A LOGIN code must not
+   * satisfy the step-up that guards a payment reversal.
    */
   it('refuses a code issued for a different purpose', async () => {
     const phone = await freshUser();
     const session = await loginAs(phone, PASSWORD, 'purpose-device');
 
-    const requested = await post(
-      '/auth/otp/request',
-      { destination: phone, purpose: 'LOGIN' },
-      { token: session.accessToken },
+    const code = '3'.repeat(config.auth.otpLength);
+    await pool.query(
+      `INSERT INTO otp_codes (destination, purpose, code_hash, expires_at)
+       VALUES ($1, 'LOGIN', $2, now() + interval '10 minutes')`,
+      [phone, sha256(code)],
     );
-    const code = (requested.body as { developmentCode?: string }).developmentCode;
-    assert.ok(code);
 
-    const crossed = await post('/auth/otp/verify', {
-      destination: phone,
-      purpose: 'STEP_UP',
-      code,
-    });
+    const crossed = await redeem(phone, code, session.accessToken);
     assert.notEqual(
       crossed.status,
       200,

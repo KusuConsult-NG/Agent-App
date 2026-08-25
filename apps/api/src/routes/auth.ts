@@ -75,35 +75,44 @@ authRouter.post(
   }),
 );
 
+/**
+ * One-time codes, for the one thing the platform does with them.
+ *
+ * `otp_codes.purpose` names five kinds of code and this route used to accept
+ * all five, unauthenticated, for any Nigerian number typed into the body. Only
+ * `STEP_UP` was ever consumed by anything: there is no self-registration, no
+ * password reset flow and no OTP sign-in, so the other four sent a real SMS,
+ * on the State's account, carrying a code that no endpoint could ever redeem —
+ * to whichever number the caller named. The purposes stay in the column, ready
+ * for the flows that would use them; the route offers only the one that exists.
+ *
+ * A step-up code belongs to a session that already exists, so unlike signing
+ * in, asking for one is an authenticated act — and `requestOtp` then refuses
+ * any destination but the number that account is registered under.
+ *
+ * There is no companion `/otp/verify`. Verifying a code consumes it, so a
+ * route that verified without granting anything could only ever destroy a code
+ * — and taking the destination from an unauthenticated body, it destroyed
+ * other people's: five wrong guesses from anyone who knew an officer's phone
+ * number burned that officer's live code, and with it the officer's ability to
+ * approve a reversal or a payout for as long as somebody kept it up. The code
+ * is presented once, to `/auth/step-up`, by the session it authorises.
+ */
 authRouter.post(
   '/otp/request',
+  authenticate,
   validateBody(
     z.object({
       destination: phoneSchema,
-      purpose: z.enum(['LOGIN', 'REGISTRATION', 'STEP_UP', 'PASSWORD_RESET', 'REFEREE_VERIFY']),
+      purpose: z.literal('STEP_UP'),
     }),
     async (req, res, data) => {
       const result = await auth.requestOtp({
         destination: data.destination,
         purpose: data.purpose,
-        userId: req.auth?.userId ?? null,
+        userId: req.auth!.userId,
       });
       res.json(result);
-    },
-  ),
-);
-
-authRouter.post(
-  '/otp/verify',
-  validateBody(
-    z.object({
-      destination: phoneSchema,
-      purpose: z.enum(['LOGIN', 'REGISTRATION', 'STEP_UP', 'PASSWORD_RESET', 'REFEREE_VERIFY']),
-      code: z.string().length(config.auth.otpLength, 'Enter the full code'),
-    }),
-    async (_req, res, data) => {
-      const result = await auth.verifyOtp(data);
-      res.json({ verified: true, ...result });
     },
   ),
 );
