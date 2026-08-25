@@ -46,6 +46,7 @@ import {
 } from './screens/More';
 import { VerifyScreen } from './screens/Verify';
 import { CollectionScreen } from './screens/Collection';
+import { GroupsScreen, GroupScreen, RegisterGroupScreen } from './screens/Groups';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
@@ -362,6 +363,7 @@ function Routes({
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
   const ticketMatch = matchRoute(route, '/support/:id');
+  const groupMatch = matchRoute(route, '/groups/:id');
 
   if (matchRoute(route, '/')) return <HomeScreen navigate={navigate} />;
   if (matchRoute(route, '/application')) return <ApplicationScreen navigate={navigate} />;
@@ -378,6 +380,10 @@ function Routes({
   if (matchRoute(route, '/receipts')) return <ReceiptsScreen />;
   if (matchRoute(route, '/verify')) return <VerifyScreen connection={connection} />;
   if (matchRoute(route, '/collections')) return <CollectionScreen />;
+  if (matchRoute(route, '/groups')) return <GroupsScreen navigate={navigate} />;
+  if (matchRoute(route, '/groups/new')) return <RegisterGroupScreen navigate={navigate} />;
+  // After /groups/new, so the literal route is not swallowed by the pattern.
+  if (groupMatch) return <GroupScreen groupId={groupMatch.id!} />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
   if (matchRoute(route, '/bank')) return <BankAccountScreen navigate={navigate} />;
