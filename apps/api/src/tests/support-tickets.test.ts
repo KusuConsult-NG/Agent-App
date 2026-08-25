@@ -261,7 +261,15 @@ describe('The auditor reads and does not speak', () => {
 describe('Closing a ticket is final', () => {
   it('refuses a reply to a closed ticket, and says what to do instead', async () => {
     const created = await raise(agentToken);
-    await post(`/support/tickets/${created.body.id}/update`, { status: 'CLOSED' }, { token: officer });
+    // Closed the way a ticket is actually closed: with what was done about it
+    // on the record. This used to pass `{ status: 'CLOSED' }` alone, which the
+    // service accepted — the subject of this test is the refused reply, and it
+    // was reaching that state by a route that should never have existed.
+    await post(
+      `/support/tickets/${created.body.id}/update`,
+      { status: 'CLOSED', resolution: 'Gateway confirmed the payment; receipt reissued.' },
+      { token: officer },
+    );
 
     const attempt = await post(
       `/support/tickets/${created.body.id}/messages`,

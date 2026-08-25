@@ -67,6 +67,32 @@ export interface RaiseTicketInput {
   priority?: 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
 }
 
+/**
+ * Was this person part of that transaction?
+ *
+ * The agent who took it, the taxpayer it was for, or a member of support staff
+ * — who may legitimately file on someone's behalf, and can already read every
+ * transaction anyway, so nothing is disclosed to them that was not already.
+ */
+async function raiserIsPartyTo(
+  client: PoolClient,
+  transaction: { agent_id: string | null; taxpayer_id: string },
+  viewer: Viewer,
+): Promise<boolean> {
+  if (canSeeEverything(viewer)) return true;
+
+  const match = await queryOne<{ ok: boolean }>(
+    client,
+    `SELECT EXISTS (
+       SELECT 1 FROM agents a WHERE a.id = $1 AND a.user_id = $3
+       UNION ALL
+       SELECT 1 FROM taxpayers t WHERE t.id = $2 AND t.user_id = $3
+     ) AS ok`,
+    [transaction.agent_id, transaction.taxpayer_id, viewer.userId],
+  );
+  return match?.ok === true;
+}
+
 export async function raiseTicket(params: {
   input: RaiseTicketInput;
   viewer: Viewer;
@@ -84,7 +110,29 @@ export async function raiseTicket(params: {
         'SELECT id, agent_id, taxpayer_id FROM transactions WHERE transaction_reference = $1',
         [input.transactionReference],
       );
-      if (!transaction) {
+
+      /*
+       * Citing a transaction has to mean the raiser was part of it.
+       *
+       * The lookup refused a reference that does not exist and then attached
+       * whichever one did, without asking whose it was. Transaction references
+       * run in sequence — TXN-2026-000123 — so that was two things at once.
+       * `ticketDetail` hands the cited transaction's reference and total amount
+       * back to the raiser, which made any signed-in person able to read the
+       * amount of any collection in the state, one ticket at a time. And the
+       * ticket is stamped with that transaction's agent, so a complaint filed
+       * under AGENT_MISCONDUCT landed against an agent who had never met the
+       * complainant, in the record staff read when judging whether an agent has
+       * a pattern.
+       *
+       * The refusal is worded identically to a reference that does not exist,
+       * for the reason `ticketDetail` answers 404 rather than 403: telling
+       * someone their guess was a real reference is most of what they wanted.
+       */
+      const connected =
+        transaction !== null && (await raiserIsPartyTo(client, transaction, viewer));
+
+      if (!transaction || !connected) {
         throw badRequest(`No transaction found with reference ${input.transactionReference}.`);
       }
       transactionId = transaction.id;
@@ -319,12 +367,41 @@ export async function updateTicket(params: {
   }
 
   await withTransaction(async (client) => {
-    const ticket = await queryOne<{ id: string; status: string; raised_by: string; ticket_number: string }>(
+    const ticket = await queryOne<{
+      id: string;
+      status: string;
+      raised_by: string;
+      ticket_number: string;
+      resolution: string | null;
+    }>(
       client,
-      'SELECT id, status, raised_by, ticket_number FROM support_tickets WHERE id = $1 FOR UPDATE',
+      `SELECT id, status, raised_by, ticket_number, resolution
+         FROM support_tickets WHERE id = $1 FOR UPDATE`,
       [params.ticketId],
     );
     if (!ticket) throw notFound('That ticket');
+
+    /*
+     * CLOSED is further along the same path as RESOLVED, and had no such check.
+     *
+     * So the requirement to record how an issue was resolved was avoidable by
+     * skipping the step it guarded: OPEN straight to CLOSED, with nothing
+     * written down. And because `addMessage` refuses to add to a closed ticket,
+     * the person who raised it could not ask why — they were told to raise a
+     * new one. For a channel that carries AGENT_MISCONDUCT and
+     * UNAUTHORISED_CHARGE, a complaint that can be shut in silence is the
+     * failure mode that matters.
+     *
+     * A resolution already on the record satisfies this: the ordinary path is
+     * RESOLVED with a reason, then CLOSED once the raiser has had their chance
+     * to disagree.
+     */
+    if (params.status === 'CLOSED' && !params.resolution && !ticket.resolution) {
+      throw badRequest(
+        'Record what was done about this ticket before closing it. ' +
+          'A complaint closed with nothing written down leaves the person who raised it no answer.',
+      );
+    }
 
     await client.query(
       `UPDATE support_tickets
