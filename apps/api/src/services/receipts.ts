@@ -176,6 +176,14 @@ export interface PublicVerificationResult {
  * Accepts a receipt number, a document number or a verification code. Beyond
  * checking the record exists, it recomputes the stored PDF's checksum so a
  * doctored file is reported as invalid even though the record is genuine.
+ *
+ * A receipt is two rows — the receipt and the PDF registered beside it — and
+ * only the receipt row carries the validity that reversal changes. So the
+ * receipt lookup matches the paired document's number as well, and a receipt
+ * answers with its own status whichever of its three handles is presented.
+ * Reversal revokes the document row too; this is the belt to that brace, so
+ * that a future issuing path which forgets to revoke cannot resurrect a
+ * reversed receipt by its document number.
  */
 export async function verifyPublicly(
   db: Db,
@@ -183,6 +191,12 @@ export async function verifyPublicly(
 ): Promise<PublicVerificationResult> {
   const raw = input.trim();
   const normalised = normaliseVerificationCode(raw);
+  // Receipt and document numbers are generated upper case, so comparing the
+  // typed value upper-cased is both case-insensitive and still index-friendly.
+  // Verification codes were normalised from the start; the numbers beside them
+  // were matched byte-for-byte, and a citizen who typed their own receipt
+  // number in lower case was told it had not been issued by PSIRS.
+  const typed = raw.toUpperCase();
 
   const receipt = await queryOne<{
     receipt_number: string;
@@ -205,15 +219,16 @@ export async function verifyPublicly(
        JOIN lgas l ON l.id = t.lga_id
        LEFT JOIN documents d ON d.id = r.document_id
       WHERE r.receipt_number = $1
+         OR d.document_number = $1
          OR replace(upper(r.verification_code), '-', '') = $2`,
-    [raw, normalised],
+    [typed, normalised],
   );
 
   if (receipt) {
-    const integrityConfirmed =
+    const integrity =
       receipt.storage_reference && receipt.checksum
         ? await verifyDocumentIntegrity(receipt.storage_reference, receipt.checksum)
-        : undefined;
+        : 'UNAVAILABLE';
 
     if (receipt.status !== 'VALID') {
       return {
@@ -230,7 +245,7 @@ export async function verifyPublicly(
       };
     }
 
-    if (integrityConfirmed === false) {
+    if (integrity === 'MISMATCHED') {
       return {
         status: 'INVALID',
         receiptNumber: receipt.receipt_number,
@@ -250,8 +265,12 @@ export async function verifyPublicly(
       amountKobo: receipt.amount_kobo,
       issuedAt: receipt.issued_at.toISOString(),
       lga: receipt.lga_name,
-      integrityConfirmed: integrityConfirmed ?? undefined,
-      message: 'This is a genuine government receipt issued by PSIRS.',
+      integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+      message:
+        integrity === 'MATCHED'
+          ? 'This is a genuine government receipt issued by PSIRS.'
+          : 'This is a genuine government receipt issued by PSIRS. The stored copy could not be ' +
+            'checked just now, so its fingerprint has not been confirmed on this attempt.',
     };
   }
 
@@ -271,7 +290,7 @@ export async function verifyPublicly(
        FROM documents
       WHERE document_number = $1
          OR replace(upper(verification_code), '-', '') = $2`,
-    [raw, normalised],
+    [typed, normalised],
   );
 
   if (!document) {
@@ -283,7 +302,7 @@ export async function verifyPublicly(
     };
   }
 
-  const integrityConfirmed = await verifyDocumentIntegrity(
+  const integrity = await verifyDocumentIntegrity(
     document.storage_reference,
     document.checksum,
   );
@@ -300,17 +319,29 @@ export async function verifyPublicly(
 
   const expired = document.expires_at !== null && document.expires_at.getTime() < Date.now();
 
+  if (integrity === 'MISMATCHED') {
+    return {
+      status: 'INVALID',
+      documentNumber: document.document_number,
+      documentType: document.document_type,
+      issuedAt: document.issued_at.toISOString(),
+      integrityConfirmed: false,
+      message: 'The stored document does not match its original fingerprint. Report this to PSIRS.',
+    };
+  }
+
   return {
-    status: expired || !integrityConfirmed ? 'INVALID' : 'VALID',
+    status: expired ? 'INVALID' : 'VALID',
     documentNumber: document.document_number,
     documentType: document.document_type,
     issuedAt: document.issued_at.toISOString(),
-    integrityConfirmed,
-    message: !integrityConfirmed
-      ? 'The stored document does not match its original fingerprint. Report this to PSIRS.'
-      : expired
-        ? `This document expired on ${document.expires_at!.toISOString().slice(0, 10)}.`
-        : 'This is a genuine government document issued by PSIRS.',
+    integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+    message: expired
+      ? `This document expired on ${document.expires_at!.toISOString().slice(0, 10)}.`
+      : integrity === 'MATCHED'
+        ? 'This is a genuine government document issued by PSIRS.'
+        : 'This is a genuine government document issued by PSIRS. The stored copy could not be ' +
+          'checked just now, so its fingerprint has not been confirmed on this attempt.',
   };
 }
 

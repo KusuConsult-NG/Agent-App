@@ -990,6 +990,40 @@ async function recordReversal(params: {
       [transactionId, approval.payload.reason ?? 'Payment reversed', params.actorId],
     );
 
+    // Marking the receipt row is not enough. Every issued document is a second
+    // record of the same claim, with its own number that public verification
+    // will answer to, and `documents.status` had never been written by any
+    // code path — so a reversed receipt looked up by document number, and
+    // vehicle papers looked up by any handle at all, went on reporting
+    // "This is a genuine government document issued by PSIRS" for as long as
+    // they existed. §95 in reverse: a reversed transaction must not still be
+    // able to appear successful.
+    //
+    // Only documents that assert payment succeeded are revoked. An invoice is
+    // a demand notice, not evidence of payment, and the reversal puts the
+    // invoice back to UNPAID — it remains a legitimate thing to present.
+    await client.query(
+      `UPDATE documents d
+          SET status = 'REVOKED'
+        WHERE d.status <> 'REVOKED'
+          AND ((d.entity_type = 'receipt'
+                AND d.entity_id IN (SELECT id FROM receipts WHERE transaction_id = $1))
+            OR (d.entity_type = 'vehicle_renewal'
+                AND d.entity_id IN (SELECT id FROM vehicle_renewals WHERE transaction_id = $1)))`,
+      [transactionId],
+    );
+
+    // A renewal whose payment was returned is not COMPLETED. The vehicle's
+    // recorded expiry and the notification already sent to the authority are a
+    // separate question — the registry is the source of truth for both and the
+    // platform cannot unsend either — but the renewal's own status is ours.
+    await client.query(
+      `UPDATE vehicle_renewals
+          SET status = 'CANCELLED', updated_at = now()
+        WHERE transaction_id = $1 AND status <> 'CANCELLED'`,
+      [transactionId],
+    );
+
     await client.query(
       `UPDATE invoices i
           SET amount_paid_kobo = 0, status = 'UNPAID'

@@ -504,18 +504,32 @@ export async function registerDocument(
   };
 }
 
+/** What a checksum comparison can honestly conclude. */
+export type IntegrityOutcome = 'MATCHED' | 'MISMATCHED' | 'UNAVAILABLE';
+
 /**
  * Confirm a stored document still matches the checksum recorded at issuance.
  * A mismatch means the bytes were changed after issue (PRD §23).
+ *
+ * Three outcomes, not two. This returned a boolean, and the storage driver
+ * throws when a bucket is unreachable exactly as readily as when a file has
+ * been altered — so every failure to *reach* the bytes was reported as a
+ * failure to *match* them. A storage outage told every citizen in the state
+ * that their genuine receipt did not match its fingerprint and to report it to
+ * PSIRS. UNAVAILABLE is not a lesser MISMATCHED; it is the absence of a
+ * comparison, and the caller has to say so rather than allege one.
  */
 export async function verifyDocumentIntegrity(
   storageReference: string,
   expectedChecksum: string,
-): Promise<boolean> {
+): Promise<IntegrityOutcome> {
+  let bytes: Buffer;
   try {
-    const bytes = await storage.get(storageReference);
-    return createHash('sha256').update(bytes).digest('hex') === expectedChecksum;
+    bytes = await storage.get(storageReference);
   } catch {
-    return false;
+    return 'UNAVAILABLE';
   }
+  return createHash('sha256').update(bytes).digest('hex') === expectedChecksum
+    ? 'MATCHED'
+    : 'MISMATCHED';
 }
