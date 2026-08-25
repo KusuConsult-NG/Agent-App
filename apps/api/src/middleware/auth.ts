@@ -338,9 +338,13 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
 
       const blockers = activationBlockers(flags);
       if (blockers.length > 0) {
-        // Defence in depth: the DB CHECK constraint should make an active agent
-        // with unmet requirements unreachable, but such an agent must be
-        // stopped rather than trusted.
+        // Defence in depth, and worth keeping for a reason the previous wording
+        // got wrong. The CHECK constraint on `agents` covers four of the seven
+        // gates — it cannot see agent_clearance, where the agreement, the bank
+        // account and the device live. Migration 029 covers those three with a
+        // trigger, so the database now refuses all seven; this stays because an
+        // agent already ACTIVE when a flag is withdrawn must stop collecting on
+        // their next request, which no constraint on the write can do.
         throw notCleared(blockers);
       }
 
