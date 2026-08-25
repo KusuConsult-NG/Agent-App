@@ -118,9 +118,16 @@ approval payload and in the audit log.
 | `POST` | `/auth/login` | Phone + password; binds device when `X-Device-Id` present |
 | `POST` | `/auth/refresh` | Rotates the refresh token |
 | `POST` | `/auth/logout` · `/auth/logout-all` | Revoke this session / all sessions |
-| `POST` | `/auth/otp/request` · `/auth/otp/verify` | One-time codes |
-| `POST` | `/auth/step-up` | Grant for one high-risk action, consumed on use |
+| `POST` | `/auth/otp/request` | A one-time code for a step-up, sent to the caller's own registered number |
+| `POST` | `/auth/step-up` | Redeems that code for a grant covering one high-risk action, consumed on use |
 | `GET` | `/auth/me` | Current identity and permissions |
+
+`STEP_UP` is the only purpose the code table's five are offered for: there is no
+self-registration, no password reset and no OTP sign-in, so the other four would
+have sent a real SMS carrying a code no endpoint could redeem. There is no
+`/auth/otp/verify`, either — verifying a code consumes it, so a route that
+verified without granting anything could only destroy one, and other people's at
+that. A code is redeemed once, at `/auth/step-up`, by the session it authorises.
 
 There is no self-registration endpoint. Citizens hold no account: an authorised
 agent approaches them to onboard them or to help them remit. Agents enter through

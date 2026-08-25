@@ -579,6 +579,37 @@ export async function revokeAllSessions(
   return result.rowCount ?? 0;
 }
 
+/**
+ * A step-up code goes to the account, not to whoever asked for it.
+ *
+ * Both `/auth/otp/request` and `/auth/step-up` take the destination from the
+ * request body, and the body is written by whoever holds the token. That was
+ * the whole gate: somebody with a captured access token asked for the code to
+ * be sent to their own phone, read it there, and confirmed it against the
+ * account the token belongs to. The second factor then proved possession of
+ * the attacker's own handset, and the audit trail recorded the account holder
+ * as the person who confirmed it.
+ *
+ * So a step-up code is only ever requested by, and only ever confirmed
+ * against, the number the account is registered under. Where the code goes is
+ * decided here from the user record, never by the caller.
+ */
+async function ownRegisteredNumber(userId: string | null, destination: string): Promise<string> {
+  if (!userId) {
+    throw unauthorised('Sign in before requesting a code for a high-risk action.');
+  }
+  const owner = await queryOne<{ phone: string }>(pool, 'SELECT phone FROM users WHERE id = $1', [
+    userId,
+  ]);
+  if (!owner || owner.phone !== destination) {
+    throw forbidden(
+      'A verification code for this action can only be sent to the number this account is registered under.',
+      'If that number has changed, ask an administrator to update it before trying again.',
+    );
+  }
+  return owner.phone;
+}
+
 export async function requestOtp(params: {
   destination: string;
   purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
@@ -597,6 +628,10 @@ export async function requestOtp(params: {
   codeLength: number;
   developmentCode?: string;
 }> {
+  if (params.purpose === 'STEP_UP') {
+    await ownRegisteredNumber(params.userId ?? null, params.destination);
+  }
+
   const code = generateOtp();
   const expiresAt = new Date(Date.now() + config.auth.otpTtlSeconds * 1000);
 
@@ -632,12 +667,35 @@ export async function requestOtp(params: {
   };
 }
 
+type OtpOutcome =
+  | { kind: 'OK'; userId: string | null }
+  | { kind: 'MISSING' }
+  | { kind: 'EXPIRED' }
+  | { kind: 'EXHAUSTED' }
+  | { kind: 'WRONG'; remaining: number };
+
+/**
+ * Check a one-time code, and record the attempt whether or not it was right.
+ *
+ * The counting and the refusing are deliberately separated. Every refusal here
+ * is also a write — a wrong guess increments `attempts`, and the guess that
+ * exhausts the budget consumes the code — so a refusal thrown from inside the
+ * transaction takes its own evidence down with it on the rollback. That is
+ * what used to happen: `attempts` never left zero, `max_attempts` was
+ * unreachable, and the message under the entry box told every caller, on every
+ * wrong guess, that they had four attempts left. A six-digit code with no
+ * attempt limit is a six-digit code that can be guessed, and this one
+ * authorises reversals, payouts and rate changes.
+ *
+ * So the transaction decides and writes; the throwing happens after it has
+ * committed.
+ */
 export async function verifyOtp(params: {
   destination: string;
   purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
   code: string;
 }): Promise<{ userId: string | null }> {
-  return withTransaction(async (client) => {
+  const outcome = await withTransaction<OtpOutcome>(async (client) => {
     const otp = await queryOne<{
       id: string;
       user_id: string | null;
@@ -655,27 +713,40 @@ export async function verifyOtp(params: {
       [params.destination, params.purpose],
     );
 
-    if (!otp) {
-      throw badRequest('No verification code was requested for this number, or it has already been used.');
-    }
-    if (otp.expires_at.getTime() < Date.now()) {
-      throw badRequest('That verification code has expired. Request a new one.');
-    }
+    if (!otp) return { kind: 'MISSING' };
+    if (otp.expires_at.getTime() < Date.now()) return { kind: 'EXPIRED' };
+
     if (otp.attempts >= otp.max_attempts) {
       await client.query('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [otp.id]);
-      throw badRequest('Too many incorrect attempts. Request a new verification code.');
+      return { kind: 'EXHAUSTED' };
     }
 
     if (sha256(params.code) !== otp.code_hash) {
+      const remaining = otp.max_attempts - otp.attempts - 1;
       await client.query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1', [otp.id]);
-      throw badRequest(
-        `That code is not correct. You have ${otp.max_attempts - otp.attempts - 1} attempt(s) left.`,
-      );
+      return { kind: 'WRONG', remaining };
     }
 
     await client.query('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [otp.id]);
-    return { userId: otp.user_id };
+    return { kind: 'OK', userId: otp.user_id };
   });
+
+  switch (outcome.kind) {
+    case 'OK':
+      return { userId: outcome.userId };
+    case 'MISSING':
+      throw badRequest(
+        'No verification code was requested for this number, or it has already been used.',
+      );
+    case 'EXPIRED':
+      throw badRequest('That verification code has expired. Request a new one.');
+    case 'EXHAUSTED':
+      throw badRequest('Too many incorrect attempts. Request a new verification code.');
+    case 'WRONG':
+      throw outcome.remaining > 0
+        ? badRequest(`That code is not correct. You have ${outcome.remaining} attempt(s) left.`)
+        : badRequest('Too many incorrect attempts. Request a new verification code.');
+  }
 }
 
 /** Grant a step-up window after successful OTP verification (PRD §35). */
@@ -685,7 +756,8 @@ export async function grantStepUp(params: {
   destination: string;
   code: string;
 }): Promise<{ expiresAt: Date }> {
-  await verifyOtp({ destination: params.destination, purpose: 'STEP_UP', code: params.code });
+  const destination = await ownRegisteredNumber(params.userId, params.destination);
+  await verifyOtp({ destination, purpose: 'STEP_UP', code: params.code });
 
   const expiresAt = new Date(Date.now() + config.auth.stepUpTtlSeconds * 1000);
 

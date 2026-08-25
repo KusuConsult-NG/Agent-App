@@ -140,6 +140,38 @@ export function requireRole(...roles: Role[]) {
 }
 
 /**
+ * Spend one step-up grant, or report that there was none to spend (PRD §35).
+ *
+ * Selecting an unspent grant and then marking it spent are two statements, and
+ * two requests arriving between them both read the same unspent row and both
+ * pass — one code, two high-risk actions, which is exactly what the step-up
+ * gate exists to prevent. So the choosing and the spending are one statement:
+ * the inner SELECT takes a write lock on the grant it picks, and the outer
+ * UPDATE spends that same locked row. Whoever gets the `RETURNING` row is the
+ * one caller that grant authorises; everyone else gets nothing.
+ *
+ * `SKIP LOCKED` rather than plain `FOR UPDATE`, so the arithmetic stays honest
+ * in both directions: a second caller passes over the grant already being
+ * spent and takes the next unspent one if the user holds one. One code buys
+ * one action, and two codes buy two — including when both are spent at once.
+ */
+export async function consumeStepUpGrant(userId: string, action: StepUpAction): Promise<boolean> {
+  const consumed = await queryOne<{ id: string }>(
+    pool,
+    `UPDATE step_up_grants SET consumed_at = now()
+      WHERE id = (
+        SELECT id FROM step_up_grants
+         WHERE user_id = $1 AND action = $2 AND consumed_at IS NULL AND expires_at > now()
+         ORDER BY granted_at DESC LIMIT 1
+         FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id`,
+    [userId, action],
+  );
+  return consumed !== null;
+}
+
+/**
  * Consume a step-up authentication grant (PRD §35).
  *
  * The grant is consumed, not merely checked, so one OTP authorises exactly one
@@ -151,15 +183,7 @@ export function requireStepUp(action: StepUpAction) {
     try {
       if (!req.auth) throw unauthorised();
 
-      const grant = await queryOne<{ id: string }>(
-        pool,
-        `SELECT id FROM step_up_grants
-          WHERE user_id = $1 AND action = $2 AND consumed_at IS NULL AND expires_at > now()
-          ORDER BY granted_at DESC LIMIT 1`,
-        [req.auth.userId, action],
-      );
-
-      if (!grant) {
+      if (!(await consumeStepUpGrant(req.auth.userId, action))) {
         throw new AppError({
           statusCode: 403,
           code: 'STEP_UP_REQUIRED',
@@ -169,7 +193,6 @@ export function requireStepUp(action: StepUpAction) {
         });
       }
 
-      await pool.query('UPDATE step_up_grants SET consumed_at = now() WHERE id = $1', [grant.id]);
       next();
     } catch (error) {
       next(error);
