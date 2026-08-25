@@ -368,6 +368,32 @@ allocationRouter.post(
   }),
 );
 
+/**
+ * Release a share that was awarded and never collected, back into the round.
+ *
+ * Under `allocation:manage` rather than `allocation:collect`: the agent at the
+ * store hands goods over, but deciding that a beneficiary has forfeited theirs
+ * — and putting public property back on the shelf for someone else — is the
+ * officer's call, and it is recorded with a reason.
+ */
+allocationRouter.post(
+  '/awards/:id/forfeit',
+  requirePermission('allocation:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(10).max(500) }),
+    async (req, res, data) => {
+      res.json(
+        await allocations.forfeitAward({
+          awardId: req.params.id,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
 /** At the collection point: somebody presents their code and takes their share. */
 allocationRouter.post(
   '/collections',

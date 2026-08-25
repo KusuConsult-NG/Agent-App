@@ -26,6 +26,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 
 interface Round {
@@ -125,6 +126,31 @@ export function AllocationsScreen() {
       setAwards([]);
       if (caught instanceof ApiRequestError) setError(caught.error);
     }
+  }
+
+  /**
+   * Release a share nobody came for, back into the round.
+   *
+   * A reason is required and recorded: this is public property being taken off
+   * one person's name and put back on the shelf for somebody else, and the
+   * round's arithmetic changes as a result. Refusals — an award already
+   * collected, most of all — reach the officer rather than dying silently,
+   * which is what `withJustification` exists for.
+   */
+  async function release(round: Round, awardRow: Award) {
+    await withJustification({
+      question: `Why is ${awardRow.taxpayer_name ?? 'this beneficiary'}'s ${awardRow.quantity} forfeited?`,
+      minimum: 10,
+      tooShort: 'Give at least ten characters saying why this share is being released.',
+      run: async (reason) => {
+        await api.post(`/allocations/awards/${awardRow.id}/forfeit`, { reason });
+      },
+      onSuccess: `Released. The ${awardRow.quantity} is back in ${round.name} for another beneficiary.`,
+      setError,
+      setMessage,
+    });
+    await openAwards(round);
+    load();
   }
 
   /** What is stopping this being created, in the words the officer needs. */
@@ -342,6 +368,20 @@ export function AllocationsScreen() {
                   label: 'Collected',
                   render: (row: Award) =>
                     row.collected_at ? formatDateTime(row.collected_at) : 'Not yet',
+                },
+                {
+                  key: 'release',
+                  label: '',
+                  render: (row: Award) =>
+                    row.status === 'AWARDED' ? (
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => release(awardsFor, row)}
+                      >
+                        Release
+                      </button>
+                    ) : null,
                 },
               ]}
               rows={awards}
