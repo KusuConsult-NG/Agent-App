@@ -329,7 +329,29 @@ export async function initiateRenewal(params: {
     longitude: params.longitude ?? null,
   });
 
-  const periodStart = new Date();
+  /*
+   * An early renewal carries the unexpired time forward.
+   *
+   * This used to be `new Date()` unconditionally, so the period always began
+   * the day it was paid for. A motorist renewing a month before their papers
+   * ran out lost that month: twelve months paid, eleven received. It compounds
+   * over a vehicle's life, and it falls hardest on the owners who did the right
+   * thing — renewing before expiry is exactly what this platform's own
+   * reminders ask them to do.
+   *
+   * `current_expiry_date` was already selected here and simply never read.
+   *
+   * A vehicle that has lapsed, or that this platform has never renewed, still
+   * starts today. There is nothing to carry forward, and back-dating cover
+   * across a period the vehicle was driving unlicensed would be a worse answer
+   * than starting now.
+   */
+  const now = new Date();
+  const unexpired =
+    vehicle.current_expiry_date && vehicle.current_expiry_date.getTime() > now.getTime()
+      ? new Date(vehicle.current_expiry_date)
+      : null;
+  const periodStart = unexpired ?? now;
   const expiryDate = new Date(periodStart);
   expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
 
