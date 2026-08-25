@@ -66,6 +66,7 @@ export const PERMISSIONS = [
    */
   'group:register',
   'group:read:all',
+  'group:read:own',
   'group:manage',
   'allocation:read:all',
   'allocation:manage',
@@ -176,7 +177,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'taxpayer:create',
     'taxpayer:update',
     'group:register',
-    'group:read:all',
+    'group:read:own',
     'allocation:collect',
     'catalogue:read',
     'assessment:create',

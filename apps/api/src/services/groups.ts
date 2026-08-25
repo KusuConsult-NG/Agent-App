@@ -457,6 +457,29 @@ export async function attestedGroupsFor(db: Db, taxpayerId: string) {
   );
 }
 
+/**
+ * Who recorded this group, or null if there is no such group.
+ *
+ * Used by the routes that act on a single group so an agent can be narrowed to
+ * their own before anything is written, rather than after.
+ */
+export async function groupVisibility(
+  db: Db,
+  groupId: string,
+  userId: string | null,
+): Promise<'MISSING' | 'VISIBLE' | 'ANOTHER_AGENTS'> {
+  const row = await queryOne<{ registered_by: string | null; by_an_agent: boolean }>(
+    db,
+    `SELECT g.registered_by,
+            EXISTS (SELECT 1 FROM agents a WHERE a.user_id = g.registered_by) AS by_an_agent
+       FROM taxpayer_groups g WHERE g.id = $1`,
+    [groupId],
+  );
+  if (!row) return 'MISSING';
+  if (!row.by_an_agent) return 'VISIBLE';
+  return row.registered_by === userId ? 'VISIBLE' : 'ANOTHER_AGENTS';
+}
+
 export async function groupDetail(db: Db, groupId: string) {
   const group = await queryOne(
     db,
@@ -477,7 +500,30 @@ export async function groupDetail(db: Db, groupId: string) {
 
 export async function listGroups(
   db: Db,
-  options: { status?: string; lgaId?: string; sector?: string; limit?: number } = {},
+  options: {
+    status?: string;
+    lgaId?: string;
+    sector?: string;
+    limit?: number;
+    /**
+     * Narrow to what one field user may see.
+     *
+     * Set for a caller holding `group:read:own` rather than `group:read:all` —
+     * an agent, who registers cooperatives in the field and has no business
+     * reading the State's whole register of them.
+     *
+     * "Theirs" is not simply `registered_by = them`. An officer may record a
+     * large cooperative centrally, from a ministry register, and hand it to an
+     * agent to enrol the members — a handoff `group-device-binding.test.ts`
+     * already documents, and which strict ownership breaks: the agent cannot
+     * even see the group they were told to work.
+     *
+     * So the rule is: mine, or nobody's in particular. What an agent may not
+     * see is *another agent's*, which is the disclosure that matters — every
+     * row carries the group leader's name and phone number.
+     */
+    registeredBy?: string | null;
+  } = {},
 ) {
   return query(
     db,
@@ -490,8 +536,19 @@ export async function listGroups(
       WHERE ($1::text IS NULL OR g.status = $1)
         AND ($2::uuid IS NULL OR g.lga_id = $2)
         AND ($3::text IS NULL OR g.economic_sector = $3)
+        AND (
+          $5::uuid IS NULL
+          OR g.registered_by = $5
+          OR NOT EXISTS (SELECT 1 FROM agents a WHERE a.user_id = g.registered_by)
+        )
       ORDER BY g.created_at DESC
       LIMIT $4`,
-    [options.status ?? null, options.lgaId ?? null, options.sector ?? null, options.limit ?? 100],
+    [
+      options.status ?? null,
+      options.lgaId ?? null,
+      options.sector ?? null,
+      options.limit ?? 100,
+      options.registeredBy ?? null,
+    ],
   );
 }

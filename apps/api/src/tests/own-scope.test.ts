@@ -254,6 +254,12 @@ describe('A new :own route has to declare what it does about scope', () => {
     'revenue.ts POST /invoices/:id/document': 'scoped',
     // Serving a walk-up taxpayer requires knowing what they owe — see above.
     'revenue.ts GET /taxpayers/:id/obligations': 'open',
+
+    // Both narrow by `taxpayer_groups.registered_by`, which holds a user id
+    // rather than an agent id — an officer can register a group too, and there
+    // is no agent row to point at when they do.
+    'groups.ts GET /': 'scoped',
+    'groups.ts GET /:id': 'scoped',
   };
 
   it('has an entry for every route guarded by a :own permission', () => {

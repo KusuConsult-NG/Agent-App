@@ -139,6 +139,7 @@ export const READ_ONLY_PERMISSIONS = [
   'taxpayer:read:assigned',
   'taxpayer:read:all',
   'group:read:all',
+  'group:read:own',
   'allocation:read:all',
   'catalogue:read',
   'assessment:read:own',
