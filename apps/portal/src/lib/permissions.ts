@@ -100,6 +100,73 @@ export const MUTATING_PERMISSIONS = [
   'approval:authorise',
   'system:configure',
   'user:manage',
+  /*
+   * Added 25 August 2026. All six were treated as read-only by omission.
+   *
+   * `taxpayer:obligation:waive` is the serious one: it is the authority to
+   * cancel obligations already on file, so it decides what a taxpayer stops
+   * owing. `taxpayer:correct` amends the register. The group and allocation
+   * pair register cooperatives, run distribution rounds, and record what was
+   * handed out.
+   *
+   * No role was described wrongly at the time — the auditor holds none of them
+   * — but `isReadOnly` is meant to be a property of the permission set, and it
+   * was reading from a set that had six writes missing from it.
+   */
+  'taxpayer:correct',
+  'taxpayer:obligation:waive',
+  'group:register',
+  'group:manage',
+  'allocation:manage',
+  'allocation:collect',
+] as const;
+
+/**
+ * Every permission that only ever looks.
+ *
+ * Stated rather than derived as "whatever is not mutating", and that is the
+ * whole point. The test guarding this pair used to build the read-only set by
+ * subtracting the mutating one and then assert nothing fell outside both — a
+ * condition that is false for every permission, so it could never fail. Six
+ * writes had accumulated behind that guard, including
+ * `taxpayer:obligation:waive`, which cancels obligations already on file: the
+ * authority to forgive what somebody owes the State, counted as a read.
+ *
+ * With both lists stated, a new permission belongs to neither until somebody
+ * puts it in one, and the test says so by name.
+ */
+export const READ_ONLY_PERMISSIONS = [
+  'taxpayer:read:assigned',
+  'taxpayer:read:all',
+  'group:read:all',
+  'allocation:read:all',
+  'catalogue:read',
+  'assessment:read:own',
+  'assessment:read:all',
+  'invoice:read:own',
+  'invoice:read:all',
+  'payment:read:own',
+  'payment:read:all',
+  'receipt:read:own',
+  'receipt:read:all',
+  'document:read:own',
+  'document:read:all',
+  'vehicle:read:all',
+  'agent:read:own',
+  'agent:read:assigned',
+  'agent:read:all',
+  'commission:read:own',
+  'commission:read:all',
+  'report:read:own',
+  'report:read:territory',
+  'report:read:all',
+  'report:financial',
+  'dashboard:executive',
+  'fraud:read',
+  'audit:read',
+  'support:read:own',
+  'support:read:all',
+  'incentive:read:all',
 ] as const;
 
 /**
