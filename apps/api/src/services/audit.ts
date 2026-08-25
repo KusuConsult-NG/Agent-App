@@ -52,7 +52,7 @@ function canonicalJson(value: unknown): unknown {
     }, {});
 }
 
-function computeHash(entry: {
+export function computeHash(entry: {
   sequenceNo: number;
   actorId: string | null;
   action: string;
@@ -63,10 +63,17 @@ function computeHash(entry: {
   result: string;
   createdAt: string;
   prevHash: string | null;
-}): string {
+  actorRole?: string | null;
+  reason?: string | null;
+  ipAddress?: string | null;
+  deviceId?: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
+  requestId?: string | null;
+}, version: HashVersion = CURRENT_HASH_VERSION): string {
   // Field order is fixed and values are canonically encoded so the digest is
   // reproducible by any independent verifier reading the same rows.
-  const canonical = JSON.stringify([
+  const base = [
     entry.sequenceNo,
     entry.actorId,
     entry.action,
@@ -77,8 +84,49 @@ function computeHash(entry: {
     entry.result,
     entry.createdAt,
     entry.prevHash,
-  ]);
+  ];
+
+  /*
+   * Version 2 covers the rest of the row: the authority somebody claimed, the
+   * reason they gave, and where and on what they were when they gave it.
+   *
+   * Numbers are normalised through Number() on both sides because postgres
+   * returns NUMERIC(9,6) as the string "9.896500" while the value written was
+   * 9.8965. Hashing either form directly would make every entry carrying a
+   * coordinate fail its own verification.
+   */
+  const canonical =
+    version === 1
+      ? JSON.stringify(base)
+      : JSON.stringify([
+          ...base,
+          canonicalField(entry.actorRole),
+          canonicalField(entry.reason),
+          canonicalField(entry.ipAddress),
+          canonicalField(entry.deviceId),
+          canonicalField(entry.latitude),
+          canonicalField(entry.longitude),
+          canonicalField(entry.requestId),
+        ]);
+
   return createHash('sha256').update(canonical).digest('hex');
+}
+
+export type HashVersion = 1 | 2;
+
+/** The digest new entries are written with. */
+export const CURRENT_HASH_VERSION: HashVersion = 2;
+
+/** One field, in a form both the writer and a later reader agree on. */
+function canonicalField(value: unknown): string | number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') return value;
+  const text = String(value);
+  // A postgres NUMERIC arrives as a string; compare it as the number it is.
+  const asNumber = Number(text);
+  return text.trim() !== '' && Number.isFinite(asNumber) && /^-?\d*\.?\d+$/.test(text.trim())
+    ? asNumber
+    : text;
 }
 
 /**
@@ -117,6 +165,13 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
     result: entry.result ?? 'SUCCESS',
     createdAt,
     prevHash,
+    actorRole: entry.actorRole ?? null,
+    reason: entry.reason ?? null,
+    ipAddress: entry.ipAddress ?? null,
+    deviceId: entry.deviceId ?? null,
+    latitude: entry.latitude ?? null,
+    longitude: entry.longitude ?? null,
+    requestId: entry.requestId ?? null,
   });
 
   const row = await queryOne<{ id: string }>(
@@ -124,8 +179,8 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
     `INSERT INTO audit_logs (
        sequence_no, actor_id, actor_role, action, entity_type, entity_id,
        old_value, new_value, reason, result, ip_address, device_id,
-       latitude, longitude, request_id, prev_hash, hash, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+       latitude, longitude, request_id, prev_hash, hash, created_at, hash_version
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      RETURNING id`,
     [
       sequenceNo,
@@ -146,6 +201,7 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
       prevHash,
       hash,
       createdAt,
+      CURRENT_HASH_VERSION,
     ],
   );
 
@@ -186,16 +242,60 @@ export async function verifyAuditChain(
     created_at: Date;
     prev_hash: string | null;
     hash: string;
+    hash_version: number;
+    actor_role: string | null;
+    reason: string | null;
+    ip_address: string | null;
+    device_id: string | null;
+    latitude: string | null;
+    longitude: string | null;
+    request_id: string | null;
   }>(
     db,
     `SELECT sequence_no, actor_id, action, entity_type, entity_id, old_value,
-            new_value, result, created_at, prev_hash, hash
+            new_value, result, created_at, prev_hash, hash, hash_version,
+            actor_role, reason, ip_address, device_id, latitude, longitude, request_id
        FROM audit_logs
       WHERE sequence_no >= $1
       ORDER BY sequence_no ASC
       LIMIT $2`,
     [options.fromSequence ?? 0, options.limit ?? 10_000],
   );
+
+  /*
+   * THE GENESIS ENTRY, BEFORE ANYTHING ELSE.
+   *
+   * The loop below starts by adopting the first row's own prev_hash as what it
+   * expects to see — which it has to, because a caller may verify a window
+   * beginning anywhere. The cost is that deleting the head of the chain is
+   * invisible: remove entries 1 to N and the remainder links to itself
+   * perfectly, and the auditor is told the log is intact.
+   *
+   * So the oldest surviving entry is checked separately, whatever window was
+   * asked for. Only the first entry ever written has no predecessor; if the
+   * oldest row now claims one, the entries it pointed at are gone.
+   *
+   * Sequence numbers are deliberately NOT checked for continuity. They come
+   * from a BIGSERIAL read inside the transaction that writes the entry, so a
+   * rolled-back action leaves a gap that is entirely legitimate, and treating
+   * that as tampering would cry wolf on the one control nobody can afford to
+   * start ignoring.
+   */
+  const genesis = await queryOne<{ sequence_no: string; prev_hash: string | null }>(
+    db,
+    'SELECT sequence_no, prev_hash FROM audit_logs ORDER BY sequence_no ASC LIMIT 1',
+  );
+
+  if (genesis && genesis.prev_hash !== null) {
+    return {
+      valid: false,
+      entriesChecked: 0,
+      brokenAtSequence: Number.parseInt(genesis.sequence_no, 10),
+      detail:
+        'The oldest entry in the log names a predecessor that is not there: ' +
+        'the beginning of the chain has been removed.',
+    };
+  }
 
   let expectedPrev: string | null = rows.length > 0 ? rows[0]!.prev_hash : null;
   let checked = 0;
@@ -210,18 +310,28 @@ export async function verifyAuditChain(
       };
     }
 
-    const recomputed = computeHash({
-      sequenceNo: Number.parseInt(row.sequence_no, 10),
-      actorId: row.actor_id,
-      action: row.action,
-      entityType: row.entity_type,
-      entityId: row.entity_id,
-      oldValue: row.old_value,
-      newValue: row.new_value,
-      result: row.result,
-      createdAt: row.created_at.toISOString(),
-      prevHash: row.prev_hash,
-    });
+    const recomputed = computeHash(
+      {
+        sequenceNo: Number.parseInt(row.sequence_no, 10),
+        actorId: row.actor_id,
+        action: row.action,
+        entityType: row.entity_type,
+        entityId: row.entity_id,
+        oldValue: row.old_value,
+        newValue: row.new_value,
+        result: row.result,
+        createdAt: row.created_at.toISOString(),
+        prevHash: row.prev_hash,
+        actorRole: row.actor_role,
+        reason: row.reason,
+        ipAddress: row.ip_address,
+        deviceId: row.device_id,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        requestId: row.request_id,
+      },
+      row.hash_version === 2 ? 2 : 1,
+    );
 
     if (recomputed !== row.hash) {
       return {
