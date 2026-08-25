@@ -219,11 +219,33 @@ export async function promoteEligibleCommissions(options: { now?: Date } = {}): 
           AND t.status = 'SETTLED'
           AND t.settled_at IS NOT NULL
           AND t.settled_at + make_interval(hours => p.hold_period_hours) <= $1
-          -- An open fraud investigation freezes the incentive (PRD §28).
+          -- A fraud investigation freezes the incentive (PRD §28).
+          --
+          -- CONFIRMED counts. It used to read OPEN and UNDER_REVIEW only, so
+          -- the strongest signal the platform has — an investigation that was
+          -- carried out and upheld — was the one state no guard tested for.
+          -- The protection rested entirely on the hold placed at the moment of
+          -- confirmation, and that hold only catches the PENDING and ELIGIBLE
+          -- rows existing at that instant: commission earned afterwards was
+          -- new PENDING, and this query made it payable.
+          --
+          -- There is no resolution state between CONFIRMED and DISMISSED, so
+          -- treating CONFIRMED as blocking is what the lifecycle already
+          -- means: held until an officer clears it.
+          --
+          -- Matched on agent_id rather than entity_type = 'AGENT'. Every rule
+          -- populates that column, and DEVICE_VELOCITY — one handset past
+          -- forty transactions in an hour, the signal most likely to mean a
+          -- phone is being run by somebody it was not issued to — is raised
+          -- against the DEVICE, so it never reached this guard at all.
           AND NOT EXISTS (
             SELECT 1 FROM fraud_flags f
-             WHERE f.status IN ('OPEN', 'UNDER_REVIEW')
-               AND (f.transaction_id = t.id OR (f.entity_type = 'AGENT' AND f.entity_id = c.agent_id))
+             WHERE f.status IN ('OPEN', 'UNDER_REVIEW', 'CONFIRMED')
+               AND (
+                 f.transaction_id = t.id
+                 OR f.agent_id = c.agent_id
+                 OR (f.entity_type = 'AGENT' AND f.entity_id = c.agent_id)
+               )
                AND f.severity IN ('HIGH', 'CRITICAL')
           )
         FOR UPDATE OF c`,
@@ -452,17 +474,26 @@ export async function requestPayout(params: {
       );
     }
 
+    /*
+     * The same rule as `promoteEligibleCommissions`, and for the same reasons:
+     * CONFIRMED is a blocking state, and a flag is this agent's if it names
+     * them in `agent_id` — not only if its entity happens to be the agent.
+     */
     const fraudHold = await queryOne<{ count: string }>(
       client,
       `SELECT count(*)::text AS count FROM fraud_flags
-        WHERE entity_type = 'AGENT' AND entity_id = $1
-          AND status IN ('OPEN','UNDER_REVIEW') AND severity IN ('HIGH','CRITICAL')`,
+        WHERE (agent_id = $1 OR (entity_type = 'AGENT' AND entity_id = $1))
+          AND status IN ('OPEN','UNDER_REVIEW','CONFIRMED')
+          AND severity IN ('HIGH','CRITICAL')`,
       [params.agentId],
     );
     if (Number.parseInt(fraudHold?.count ?? '0', 10) > 0) {
+      // Worded to be true whether the review is outstanding or has been
+      // upheld. Which of the two it is, is not the agent's to read off an
+      // error message.
       throw conflict(
         'FRAUD_HOLD_ACTIVE',
-        'Commission payout is on hold while a review of your account is completed.',
+        'Commission payout is on hold pending a review of your account.',
         'Your supervisor can tell you more.',
       );
     }
