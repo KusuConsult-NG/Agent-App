@@ -32,6 +32,7 @@ import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, type Role } from '@psirs/shared';
 import {
   MUTATING_PERMISSIONS,
+  READ_ONLY_PERMISSIONS,
   availableGroups,
   availableItems,
   belongsInPortal,
@@ -203,15 +204,37 @@ describe('the auditor is read-only, observably', () => {
    * being able to change something. The failure message names the offender.
    */
   it('classifies every permission in the shared list as read or write', () => {
-    const READ_ONLY_PERMISSIONS = PERMISSIONS.filter(
-      (permission) => !(MUTATING_PERMISSIONS as readonly string[]).includes(permission),
-    );
+    /*
+     * This test used to derive the read-only set as "everything not in
+     * MUTATING_PERMISSIONS", then assert that nothing was in neither list.
+     * That is `!m && !(!m)` — false for every permission, so `unclassified`
+     * was empty by construction and the assertion could not fail. The guard
+     * against a new permission being silently treated as read-only was itself
+     * the thing that let it happen: six writes had accumulated behind it.
+     *
+     * The read-only set is now stated rather than derived, so a permission has
+     * to be named in one list or the other to pass.
+     */
+    const mutating = MUTATING_PERMISSIONS as readonly string[];
+    const readOnly = READ_ONLY_PERMISSIONS as readonly string[];
+
     const unclassified = PERMISSIONS.filter(
-      (permission) =>
-        !(MUTATING_PERMISSIONS as readonly string[]).includes(permission) &&
-        !READ_ONLY_PERMISSIONS.includes(permission),
+      (permission) => !mutating.includes(permission) && !readOnly.includes(permission),
     );
-    expect(unclassified).toEqual([]);
+    expect(
+      unclassified,
+      `unclassified permission(s) — add to MUTATING_PERMISSIONS or READ_ONLY_PERMISSIONS: ${unclassified.join(', ')}`,
+    ).toEqual([]);
+
+    const both = PERMISSIONS.filter(
+      (permission) => mutating.includes(permission) && readOnly.includes(permission),
+    );
+    expect(both, `classified as both read and write: ${both.join(', ')}`).toEqual([]);
+
+    const staleReads = readOnly.filter(
+      (permission) => !(PERMISSIONS as readonly string[]).includes(permission),
+    );
+    expect(staleReads, `no longer real permissions: ${staleReads.join(', ')}`).toEqual([]);
 
     // And nothing in the mutating list has been removed from the shared one.
     const stale = (MUTATING_PERMISSIONS as readonly string[]).filter(
