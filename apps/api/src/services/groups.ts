@@ -405,13 +405,33 @@ export async function submitAttestation(params: {
       [invitation.group_id, params.confirmedMemberIds, invitation.leader_name],
     );
 
+    /*
+     * Outstanding questions only, exactly as the confirm above.
+     *
+     * `ATTESTED` used to be on this line, which meant a confirmation could be
+     * taken back through the link at any point in its fourteen days by anybody
+     * holding it. The invitation is deliberately reusable — a cooperative
+     * grows and the leader answers about whoever is new — so it never becomes
+     * spent, and these arrive by SMS to a village chairman's handset where a
+     * forwarded message is a forwarded capability. `openAttestation` hands out
+     * every member's id, so no guessing was needed either.
+     *
+     * `allocations.ts` awards only to a member whose status is ATTESTED, so
+     * flipping somebody back removed their claim on fertiliser and farm
+     * inputs — and the audit entry named the leader as the person who did it,
+     * because the token is all this endpoint has to go on.
+     *
+     * A leader who confirmed somebody in error goes through PSIRS, as a
+     * referee withdrawing a response does. A recorded decision is not undone
+     * through a public endpoint by whoever kept the message.
+     */
     const rejected = await query<{ id: string }>(
       client,
       `UPDATE taxpayer_group_members
           SET status = 'REJECTED', attested_at = now(), attested_by_name = $3,
               rejection_reason = $4
         WHERE group_id = $1 AND id = ANY($2::uuid[])
-          AND status IN ('PENDING_ATTESTATION', 'ATTESTED')
+          AND status = 'PENDING_ATTESTATION'
         RETURNING id`,
       [
         invitation.group_id,
