@@ -170,6 +170,20 @@ export function RefereePortalScreen({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
 
+  /**
+   * Declining is a two-step action, in the page rather than in a browser dialog.
+   *
+   * It is single-use and irreversible from the referee's side — the service
+   * writes REJECTED and spends the token — and there is no account to sign back
+   * into and undo it. The screen used `window.prompt` for the optional reason
+   * and declined on whatever came back, so Cancel declined. It also arrives by
+   * SMS and is opened in whichever in-app browser read the message; several
+   * suppress prompts, and a suppressed prompt returns null immediately, so the
+   * button refused the applicant on the first tap with no dialog at all.
+   */
+  const [confirmingDecline, setConfirmingDecline] = useState(false);
+  const [declineReason, setDeclineReason] = useState('');
+
   const [declarations, setDeclarations] = useState([false, false, false, false]);
   const [identityType, setIdentityType] = useState('NIN');
   const [identityNumber, setIdentityNumber] = useState('');
@@ -207,10 +221,12 @@ export function RefereePortalScreen({ token }: { token: string }) {
   }
 
   async function decline() {
-    const reason = window.prompt('You may give a reason (optional):') ?? undefined;
     setBusy(true);
+    setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(`/referee/${token}/decline`, { reason });
+      const result = await api.publicPost<{ message: string }>(`/referee/${token}/decline`, {
+        reason: declineReason.trim() || undefined,
+      });
       setOutcome(result.message);
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -258,6 +274,62 @@ export function RefereePortalScreen({ token }: { token: string }) {
   }
 
   if (!invitation) return null;
+
+  if (confirmingDecline) {
+    return (
+      <div className="public">
+        <div className="public__card">
+          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+            <img src="/icon.svg" alt="" width={48} height={48} />
+            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>
+              Decline to act as referee?
+            </h1>
+          </div>
+
+          <ErrorAlert error={error} />
+
+          <p style={{ fontSize: '0.9rem' }}>
+            You are about to tell PSIRS that you cannot vouch for{' '}
+            <strong>{invitation.applicantName}</strong>. Their application to collect government
+            revenue will not go forward on your word.
+          </p>
+          <p style={{ fontSize: '0.9rem' }}>
+            This cannot be undone from this page, and the link cannot be used again.
+          </p>
+
+          <div className="field" style={{ marginTop: 16 }}>
+            <label htmlFor="decline-reason">Reason (optional)</label>
+            <textarea
+              id="decline-reason"
+              rows={3}
+              value={declineReason}
+              onChange={(event) => setDeclineReason(event.target.value)}
+            />
+            <p className="field__hint">
+              If you simply do not know this person well enough, saying so is enough.
+            </p>
+          </div>
+
+          <div className="button-row" style={{ marginTop: 8 }}>
+            <button type="button" className="secondary" disabled={busy} onClick={decline}>
+              {busy ? 'Sending…' : 'Yes, decline'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setConfirmingDecline(false);
+                setDeclineReason('');
+                setError(null);
+              }}
+            >
+              No, go back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const allConfirmed = declarations.every(Boolean);
 
@@ -360,7 +432,12 @@ export function RefereePortalScreen({ token }: { token: string }) {
           <button type="button" disabled={busy || !allConfirmed} onClick={respond}>
             {busy ? 'Submitting…' : 'Confirm and submit'}
           </button>
-          <button type="button" className="secondary" disabled={busy} onClick={decline}>
+          <button
+            type="button"
+            className="secondary"
+            disabled={busy}
+            onClick={() => setConfirmingDecline(true)}
+          >
             I cannot act as referee
           </button>
         </div>
