@@ -221,11 +221,33 @@ failure mode B-4 exists to prevent.
 whatever the repository secrets point at, so the answer is never more than a day
 old.
 
-**Until the secrets are set it reports *skipped*, naming what is missing.** Not
-failed, because a red cross every morning for a condition nobody can fix that
-morning teaches people to ignore red crosses. Not passed either — a green tick
-would assert the integrations were verified. "Not checked" must not be able to
-look like "checked".
+**Until it is enabled the run reports *skipped*.** Not failed, because a red
+cross every morning for a condition nobody can fix that morning teaches people
+to ignore red crosses. Not passed either — a green tick would assert the
+integrations were verified. "Not checked" must not be able to look like
+"checked".
+
+To enable it: set the secrets listed above, then set the repository variable
+`INTEGRATION_VERIFICATION` to `enabled`. The variable is separate from the
+secrets because a job-level `if` cannot read secrets, and because it is the
+honest place for the claim being made — somebody has declared these sandboxes
+ready to be asked.
+
+Once enabled, a missing secret **fails** the run instead of skipping it. At
+that point somebody has said the check should work, and skipping quietly would
+be the same false assurance in a smaller form.
+
+Two ways that guarantee was broken until 25 August 2026, both worth naming
+because they are the same mistake in different clothing:
+
+- The gate was a *step*, and a job whose steps are all skipped completes
+  `success`. Every night the run called "Ask each provider one real question"
+  carried a green tick, having contacted nobody. It is now the job's own `if`,
+  so an unconfigured run is `skipped` — grey, not green.
+- The harness was piped into `tee`. GitHub's default `run:` shell is `bash -e`
+  without `pipefail`, so the pipeline's exit status was `tee`'s and always 0 —
+  a provider whose answer the platform could not read would not have failed the
+  step. The step now sets `pipefail` explicitly.
 
 ### Secrets to add
 
