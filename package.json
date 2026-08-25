@@ -21,7 +21,7 @@
     "dev:portal": "npm run dev --workspace @psirs/portal",
     "test": "npm run build --workspace @psirs/shared && npm run test --workspace @psirs/api && npm run test --workspace @psirs/agent && npm run test --workspace @psirs/portal",
     "test:concurrency": "npm run build --workspace @psirs/shared && npm run test:concurrency --workspace @psirs/api",
-    "verify:integrations": "node scripts/verify-integrations.mjs",
+    "verify:integrations": "npm run build --workspace @psirs/shared && tsx apps/api/src/db/verify-integrations.ts",
     "benchmark": "node scripts/benchmark-load.mjs",
     "audit:e2e": "node scripts/audit-e2e.mjs",
     "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json && tsc --noEmit -p apps/agent/tsconfig.json && tsc --noEmit -p apps/portal/tsconfig.json",
