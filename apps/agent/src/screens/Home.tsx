@@ -31,6 +31,10 @@ const QUICK_ACTIONS = [
   // a distribution is a season's work for an agent rather than a daily one —
   // but reachable, which the Profile screen was not until somebody looked.
   { href: '#/collections', label: 'Hand out allocation', icon: Icons.check },
+  // Registering a cooperative is how a whole market reaches the register at
+  // once. The endpoint was written for an agent on a bound handset and had no
+  // screen behind it at all.
+  { href: '#/groups', label: 'Groups', icon: Icons.people },
 ];
 
 function greeting(): string {
