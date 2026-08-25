@@ -25,7 +25,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { readdirSync, statSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
@@ -33,6 +33,7 @@ import pg from 'pg';
 const TESTS_DIR = 'src/tests';
 const BASE_URL =
   process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/psirs_test';
+const BASE_STORAGE = process.env.STORAGE_PATH ?? '/tmp/psirs-test-storage';
 
 const shardCount = Math.max(
   1,
@@ -57,6 +58,26 @@ function packShards(paths, count) {
     lightest.weight += statSync(path).size;
   }
   return shards.filter((shard) => shard.files.length > 0);
+}
+
+/*
+ * Each shard needs its own document store as well as its own database.
+ *
+ * Storage keys are built from the document number — receipt/2026/
+ * PSIRS-RCT-2026-000015.pdf — and document numbers come from
+ * document_number_seq, which lives in the database. Give every shard its own
+ * database and every shard's sequence starts at 1, so shard 1 and shard 3
+ * produce the same document number, which is the same path in the one storage
+ * directory every test process shared. They overwrite each other's PDFs, and a
+ * test that renames a stored file to prove verification survives an unreadable
+ * copy renames somebody else's.
+ *
+ * That is what the intermittent cancellations were: not a database race, a
+ * filesystem one, and only visible when two shards reached the same sequence
+ * number at the same moment.
+ */
+function storageFor(index) {
+  return join(BASE_STORAGE, `s${index}`);
 }
 
 function databaseFor(index) {
@@ -117,7 +138,11 @@ function runShard(shard, index) {
       'npx',
       ['tsx', '--test', '--test-concurrency=1', ...shard.files],
       {
-        env: { ...process.env, DATABASE_URL: databaseFor(index) },
+        env: {
+          ...process.env,
+          DATABASE_URL: databaseFor(index),
+          STORAGE_PATH: storageFor(index),
+        },
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
@@ -154,6 +179,14 @@ function countsFrom(output) {
 
 const shards = packShards(files, shardCount);
 await ensureDatabases(shards.length);
+
+// Emptied rather than kept: the databases are worth reusing because migrating
+// them is the expensive part, but stored documents are rebuilt by whichever
+// test needs them and stale ones only make a later checksum harder to trust.
+for (let index = 1; index <= shards.length; index += 1) {
+  rmSync(storageFor(index), { recursive: true, force: true });
+  mkdirSync(storageFor(index), { recursive: true });
+}
 
 console.log(
   `Running ${files.length} test files across ${shards.length} shard(s), one database each.`,
