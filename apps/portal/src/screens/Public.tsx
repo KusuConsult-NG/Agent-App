@@ -180,6 +180,18 @@ export function VerifyScreen({ code }: { code?: string }) {
             </p>
           </div>
         )}
+
+        {/*
+          The only way into the citizen screen from inside the portal. Its
+          route existed and nothing linked to it, so the one entrance was the
+          reminder SMS — which, until this change, carried a URL the portal
+          could not route. Outside the results block on purpose: somebody who
+          has come to check a receipt should be able to reach their own status
+          without checking one first.
+        */}
+        <p style={{ fontSize: '0.8rem', marginTop: 14, textAlign: 'center' }}>
+          <a href="#/citizen">{t.pubCitizenTitle} →</a>
+        </p>
       </div>
     </div>
   );

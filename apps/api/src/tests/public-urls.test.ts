@@ -33,8 +33,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { refereeInvitationUrl,
+import { citizenPortalUrl, refereeInvitationUrl,
   groupAttestationUrl, verificationUrl } from '../lib/public-urls';
+import { readdirSync, statSync } from 'node:fs';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 const PORTAL_ROUTER = join(REPO_ROOT, 'apps', 'portal', 'src', 'router.tsx');
@@ -81,6 +82,71 @@ describe('Public links resolve in the portal that receives them', () => {
     const params = matchRoute(route, '/verify/:code');
     assert.ok(params, `${route} does not match the portal's /verify/:code route`);
     assert.equal(params!.code, 'T7C72-QTUDN');
+  });
+
+  /**
+   * The reminder is the only one of these a taxpayer receives unprompted.
+   *
+   * `reminders.ts` built its own link — `https://.../citizen`, no hash —
+   * rather than using this module, which exists because exactly this went
+   * wrong twice before. So the SMS telling somebody what they owe sent them to
+   * the government staff sign-in page, in the one channel aimed at ordinary
+   * citizens rather than at agents or officers.
+   */
+  it('sends a taxpayer chasing a reminder to their status, not to sign-in', () => {
+    const url = citizenPortalUrl();
+    const route = routeFor(url);
+
+    assert.notEqual(route, '/', `${url} resolves to the sign-in screen`);
+    assert.ok(
+      matchRoute(route, '/citizen'),
+      `${route} does not match the portal's /citizen route`,
+    );
+  });
+
+  /**
+   * The guard that would have caught this one.
+   *
+   * A test per link only ever covers the links somebody remembered to add to
+   * it. What was missing was the rule: nothing outside this module may build a
+   * URL for the public portal, because a hand-built one has no hash and
+   * nothing notices.
+   */
+  it('is the only place a public portal link is built', () => {
+    const apiSrc = join(REPO_ROOT, 'apps', 'api', 'src');
+    const offenders: string[] = [];
+
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir)) {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) {
+          if (entry !== 'tests') walk(full);
+          continue;
+        }
+        if (!/\.ts$/.test(entry)) continue;
+        if (full.endsWith(join('lib', 'public-urls.ts'))) continue;
+        // config.ts holds VERIFICATION_BASE_URL, which is the origin these
+        // links are built *from* and is documented with `/verify` on the end.
+        // `portalOrigin()` strips it back off deliberately, so the base is not
+        // a hand-built link — it is the input to the one place that builds them.
+        if (full.endsWith(join('src', 'config.ts'))) continue;
+
+        const source = readFileSync(full, 'utf8');
+        // A portal-looking URL assembled anywhere but here.
+        for (const m of source.matchAll(/['"`](https?:\/\/[^'"`\s]*\/(?:citizen|verify|referee|group-attestation)[^'"`\s]*)['"`]/g)) {
+          if (!m[1]!.includes('/#/')) offenders.push(`${full}: ${m[1]}`);
+        }
+      }
+    };
+    walk(apiSrc);
+
+    assert.deepEqual(
+      offenders,
+      [],
+      'these build a public portal link without the hash the portal routes on. ' +
+        'Use lib/public-urls.ts, which exists so the hash cannot be remembered ' +
+        'in one place and forgotten in another:\n  ' + offenders.join('\n  '),
+    );
   });
 
   it('sends a referee to their invitation, not to sign-in', () => {

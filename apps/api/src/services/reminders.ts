@@ -27,9 +27,16 @@ import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, withTransaction } from '../db/pool';
 import { queueNotification } from './notifications';
+import { citizenPortalUrl } from '../lib/public-urls';
 import type { NotificationEvent } from './notifications';
 
-const PORTAL_URL = process.env.PUBLIC_PORTAL_URL ?? 'https://psirs.plateaustate.gov.ng/citizen';
+/*
+ * The portal link is built by `lib/public-urls.ts` rather than here.
+ *
+ * This line used to be its own hand-rolled URL with no hash on it, which is
+ * the mistake that module exists to prevent — and this is the only public link
+ * a taxpayer receives without having asked for it.
+ */
 
 interface ReminderWindow {
   event: NotificationEvent;
@@ -124,7 +131,7 @@ async function processWindow(
             amount: invoice.total_amount_kobo,
             revenueItem: invoice.revenue_item_name,
             tinNumber: invoice.tin ?? 'Pending',
-            portalUrl: PORTAL_URL,
+            portalUrl: citizenPortalUrl(),
           },
           entityType: 'invoice',
           entityId: invoice.id,
