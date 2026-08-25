@@ -141,6 +141,102 @@ export interface TranslationDictionary {
   scanHelp: string;
   civicDutyThanks: string;
   paymentSuccess: string;
+
+  /**
+   * The account-free public portals.
+   *
+   * A referee, a cooperative chairman and a citizen checking their own standing
+   * all reach this platform through a link with no session behind it, and all
+   * three are being asked to do something with a consequence. The agent
+   * application has carried Hausa since it was built; these screens did not,
+   * which put the declarations a referee actually puts their name to in a
+   * language they may not read by preference.
+   *
+   * The declaration strings below are the tier that must never be left in
+   * English. `POST /referee/:token/respond` records four booleans; what the
+   * referee understood themselves to be agreeing to is whatever this screen
+   * showed them.
+   */
+  pubService: string;
+  pubLanguage: string;
+  pubEnglish: string;
+  pubHausa: string;
+  pubThankYou: string;
+  pubVerifyTitle: string;
+  pubVerifyField: string;
+  pubVerifyAction: string;
+  pubVerifyChecking: string;
+  pubVerifyReceiptNumber: string;
+  pubVerifyRevenueType: string;
+  pubVerifyAmount: string;
+  pubVerifyIssued: string;
+  pubVerifyLga: string;
+  pubVerifyFingerprint: string;
+  pubVerifyMatches: string;
+  pubVerifyNoMatch: string;
+  pubVerifyPrivacy: string;
+  pubRefereeTitle: string;
+  pubRefereeIntro: string;
+  pubRefereeApplicant: string;
+  pubRefereeYouAre: string;
+  pubRefereeRelationship: string;
+  pubRefereeCategory: string;
+  pubRefereeRespondBefore: string;
+  pubRefereeConfirmEach: string;
+  pubDeclarationKnows: string;
+  pubDeclarationAccurate: string;
+  pubDeclarationWilling: string;
+  pubDeclarationConsequences: string;
+  pubRefereeIdType: string;
+  pubRefereeIdNumber: string;
+  pubRefereeIdHint: string;
+  pubRefereeOccupation: string;
+  pubIdNin: string;
+  pubIdBvn: string;
+  pubIdPassport: string;
+  pubIdLicence: string;
+  pubIdVoters: string;
+  pubRefereeSubmit: string;
+  pubRefereeSubmitting: string;
+  pubRefereeDecline: string;
+  pubRefereeNoAccount: string;
+  pubDeclineTitle: string;
+  pubDeclineBody1a: string;
+  pubDeclineBody1b: string;
+  pubDeclineBody2: string;
+  pubDeclineReason: string;
+  pubDeclineReasonHint: string;
+  pubDeclineYes: string;
+  pubDeclineNo: string;
+  pubDeclineSending: string;
+  pubAttestTitle: string;
+  pubAttestIntro: string;
+  pubAttestGroup: string;
+  pubAttestAlready: string;
+  pubAttestNothingTitle: string;
+  pubAttestNothingBody: string;
+  pubAttestQuestion: string;
+  pubAttestYes: string;
+  pubAttestNo: string;
+  pubAttestAnswerAll: string;
+  pubAttestSubmit: string;
+  pubCitizenTitle: string;
+  pubCitizenByTin: string;
+  pubCitizenByPhone: string;
+  pubCitizenByName: string;
+  pubCitizenTooMany: string;
+  pubCitizenStatusHeading: string;
+  pubCitizenCompliant: string;
+  pubCitizenArrears: string;
+  pubCitizenAttention: string;
+  pubCitizenNotAssessed: string;
+  pubCitizenTinStatus: string;
+  pubCitizenOutstanding: string;
+  pubCitizenOutstandingYes: string;
+  pubCitizenNone: string;
+  pubCitizenFooter: string;
+  pubCitizenAlso: string;
+  pubCitizenVerifyLink: string;
 }
 
 export const translations: Record<Language, TranslationDictionary> = {
@@ -243,6 +339,86 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanHelp: 'Align the receipt QR code or vehicle license inside the frame.',
     civicDutyThanks: 'Thank you for fulfilling your civic duty.',
     paymentSuccess: 'Payment Successful',
+    pubService: 'Plateau State Internal Revenue Service',
+    pubLanguage: 'Language',
+    pubEnglish: 'English',
+    pubHausa: 'Hausa',
+    pubThankYou: 'THANK YOU',
+    pubVerifyTitle: 'Verify a government receipt',
+    pubVerifyField: 'Receipt number or verification code',
+    pubVerifyAction: 'Verify',
+    pubVerifyChecking: 'Checking…',
+    pubVerifyReceiptNumber: 'Receipt number',
+    pubVerifyRevenueType: 'Revenue type',
+    pubVerifyAmount: 'Amount',
+    pubVerifyIssued: 'Issued',
+    pubVerifyLga: 'Local Government Area',
+    pubVerifyFingerprint: 'Document fingerprint',
+    pubVerifyMatches: 'Matches the original',
+    pubVerifyNoMatch: 'Does not match the original',
+    pubVerifyPrivacy: 'For privacy, taxpayer names, phone numbers and TINs are never shown on this page.',
+    pubRefereeTitle: 'Agent verification request',
+    pubRefereeIntro: 'has applied to become an authorised revenue agent. PSIRS needs someone who knows them to confirm their identity and suitability.',
+    pubRefereeApplicant: 'Applicant',
+    pubRefereeYouAre: 'You are recorded as',
+    pubRefereeRelationship: 'Stated relationship',
+    pubRefereeCategory: 'Referee category',
+    pubRefereeRespondBefore: 'Respond before',
+    pubRefereeConfirmEach: 'Please confirm each of the following:',
+    pubDeclarationKnows: 'I know this person.',
+    pubDeclarationAccurate: 'The information presented is reasonably accurate.',
+    pubDeclarationWilling: 'I am willing to act as referee.',
+    pubDeclarationConsequences: 'I understand that providing false information may have consequences.',
+    pubRefereeIdType: 'Your identification type',
+    pubRefereeIdNumber: 'Your identification number',
+    pubRefereeIdHint: 'Stored securely and never shown in full. If you leave this blank, a PSIRS officer will review your response manually.',
+    pubRefereeOccupation: 'Your occupation',
+    pubIdNin: 'National Identification Number',
+    pubIdBvn: 'Bank Verification Number',
+    pubIdPassport: 'International passport',
+    pubIdLicence: 'Driver’s licence',
+    pubIdVoters: 'Voter’s card',
+    pubRefereeSubmit: 'Confirm and submit',
+    pubRefereeSubmitting: 'Submitting…',
+    pubRefereeDecline: 'I cannot act as referee',
+    pubRefereeNoAccount: 'You do not need an account. This link can be used once and expires on',
+    pubDeclineTitle: 'Decline to act as referee?',
+    pubDeclineBody1a: 'You are about to tell PSIRS that you cannot vouch for',
+    pubDeclineBody1b: 'Their application to collect government revenue will not go forward on your word.',
+    pubDeclineBody2: 'This cannot be undone from this page, and the link cannot be used again.',
+    pubDeclineReason: 'Reason (optional)',
+    pubDeclineReasonHint: 'If you simply do not know this person well enough, saying so is enough.',
+    pubDeclineYes: 'Yes, decline',
+    pubDeclineNo: 'No, go back',
+    pubDeclineSending: 'Sending…',
+    pubAttestTitle: 'Group membership check',
+    pubAttestIntro: 'PSIRS needs you to confirm which of these people really are members. Government support is offered to members, so confirming somebody who is not one takes it from somebody who is.',
+    pubAttestGroup: 'Group',
+    pubAttestAlready: 'Already confirmed',
+    pubAttestNothingTitle: 'Nothing waiting',
+    pubAttestNothingBody: 'Every member on this list has already been confirmed. There is nothing for you to do.',
+    pubAttestQuestion: 'Is each of these people a member of your group?',
+    pubAttestYes: 'Member',
+    pubAttestNo: 'Not a member',
+    pubAttestAnswerAll: 'Please answer for every person before sending.',
+    pubAttestSubmit: 'Send my answers',
+    pubCitizenTitle: 'Check your tax status',
+    pubCitizenByTin: 'Tax Identification Number (TIN)',
+    pubCitizenByPhone: 'Registered phone number',
+    pubCitizenByName: 'Full name or business name',
+    pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    pubCitizenStatusHeading: 'Tax compliance status',
+    pubCitizenCompliant: 'Compliant',
+    pubCitizenArrears: 'Has arrears',
+    pubCitizenAttention: 'Needs attention',
+    pubCitizenNotAssessed: 'Not yet assessed',
+    pubCitizenTinStatus: 'TIN status',
+    pubCitizenOutstanding: 'Outstanding obligations',
+    pubCitizenOutstandingYes: 'Yes — please contact PSIRS',
+    pubCitizenNone: 'None',
+    pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
+    pubCitizenAlso: 'Also available:',
+    pubCitizenVerifyLink: 'Verify a payment receipt',
   },
   ha: {
     appName: 'Hukumar Haraji ta Jihar Filato (PSIRS)',
@@ -350,6 +526,86 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanHelp: 'Sanya lambar QR ta rasit din a tsakiyar akwatin.',
     civicDutyThanks: 'Mun gode da kuka sauke nauyin da ya rataya a wuyanku.',
     paymentSuccess: 'An Biyar da Kudi Cikin Nasara',
+    pubService: 'Hukumar Karbar Haraji ta Jihar Filato',
+    pubLanguage: 'Harshe',
+    pubEnglish: 'Turanci',
+    pubHausa: 'Hausa',
+    pubThankYou: 'NA GODE',
+    pubVerifyTitle: 'Tantance rasitin gwamnati',
+    pubVerifyField: 'Lambar rasit ko lambar tantancewa',
+    pubVerifyAction: 'Tantance',
+    pubVerifyChecking: 'Ana bincike…',
+    pubVerifyReceiptNumber: 'Lambar rasit',
+    pubVerifyRevenueType: 'Nau’in haraji',
+    pubVerifyAmount: 'Adadi',
+    pubVerifyIssued: 'Ranar bayarwa',
+    pubVerifyLga: 'Karamar Hukuma',
+    pubVerifyFingerprint: 'Hatimin takardar',
+    pubVerifyMatches: 'Ya yi daidai da na asali',
+    pubVerifyNoMatch: 'Bai yi daidai da na asali ba',
+    pubVerifyPrivacy: 'Domin sirri, ba a taba nuna sunan mai biyan haraji, lambar waya ko TIN a wannan shafi ba.',
+    pubRefereeTitle: 'Bukatar tantance wakili',
+    pubRefereeIntro: 'ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa.',
+    pubRefereeApplicant: 'Mai neman',
+    pubRefereeYouAre: 'An rubuta ka a matsayin',
+    pubRefereeRelationship: 'Alakar da aka bayyana',
+    pubRefereeCategory: 'Nau’in mai shaida',
+    pubRefereeRespondBefore: 'Ka amsa kafin',
+    pubRefereeConfirmEach: 'Da fatan za ka tabbatar da kowanne daga cikin wadannan:',
+    pubDeclarationKnows: 'Na san wannan mutumin.',
+    pubDeclarationAccurate: 'Bayanan da aka gabatar daidai ne gwargwadon saninna.',
+    pubDeclarationWilling: 'Na yarda in tsaya masa a matsayin mai shaida.',
+    pubDeclarationConsequences: 'Na fahimci cewa bayar da bayanan karya na iya haifar da hukunci.',
+    pubRefereeIdType: 'Nau’in shaidarka',
+    pubRefereeIdNumber: 'Lambar shaidarka',
+    pubRefereeIdHint: 'Ana adana ta cikin tsaro kuma ba a taba nuna ta gaba daya ba. Idan ka bar wannan a fade, jami’in PSIRS zai duba amsarka da hannu.',
+    pubRefereeOccupation: 'Sana’arka',
+    pubIdNin: 'Lambar Shaidar Kasa (NIN)',
+    pubIdBvn: 'Lambar Tantancewar Banki (BVN)',
+    pubIdPassport: 'Fasfo na kasashen waje',
+    pubIdLicence: 'Lasisin tuki',
+    pubIdVoters: 'Katin zabe',
+    pubRefereeSubmit: 'Tabbatar da aikawa',
+    pubRefereeSubmitting: 'Ana aikawa…',
+    pubRefereeDecline: 'Ba zan iya tsayawa a matsayin mai shaida ba',
+    pubRefereeNoAccount: 'Ba ka bukatar asusu. Ana amfani da wannan mahadin sau daya kuma zai kare a',
+    pubDeclineTitle: 'Ka ki tsayawa a matsayin mai shaida?',
+    pubDeclineBody1a: 'Za ka gaya wa PSIRS cewa ba za ka iya tsayawa wa',
+    pubDeclineBody1b: 'ba. Bukatarsa ta karbar harajin gwamnati ba za ta ci gaba ba bisa maganarka.',
+    pubDeclineBody2: 'Ba za a iya soke wannan daga wannan shafi ba, kuma ba za a sake amfani da mahadin ba.',
+    pubDeclineReason: 'Dalili (na zabi)',
+    pubDeclineReasonHint: 'Idan kawai ba ka san wannan mutumin sosai ba, fadin haka ya isa.',
+    pubDeclineYes: 'Eh, na ki',
+    pubDeclineNo: 'A’a, kada a ci gaba',
+    pubDeclineSending: 'Ana aikawa…',
+    pubAttestTitle: 'Tantance mambobin kungiya',
+    pubAttestIntro: 'PSIRS na bukatar ka tabbatar da wadanne daga cikin wadannan mutane ne mambobi da gaske. Ana ba mambobi tallafin gwamnati, don haka tabbatar da wanda ba mamba ba yana kwace shi daga wanda yake mamba.',
+    pubAttestGroup: 'Kungiya',
+    pubAttestAlready: 'An riga an tabbatar',
+    pubAttestNothingTitle: 'Babu abin da ake jira',
+    pubAttestNothingBody: 'An riga an tabbatar da kowane mamba a wannan jerin. Babu abin da za ka yi.',
+    pubAttestQuestion: 'Shin kowane daya daga cikin wadannan mutane mamba ne a kungiyarka?',
+    pubAttestYes: 'Mamba',
+    pubAttestNo: 'Ba mamba ba',
+    pubAttestAnswerAll: 'Da fatan za ka amsa game da kowane mutum kafin aikawa.',
+    pubAttestSubmit: 'Aika amsoshina',
+    pubCitizenTitle: 'Duba matsayin harajinka',
+    pubCitizenByTin: 'Lambar Shaidar Haraji (TIN)',
+    pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
+    pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
+    pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    pubCitizenStatusHeading: 'Matsayin bin ka’idar haraji',
+    pubCitizenCompliant: 'Ya bi ka’ida',
+    pubCitizenArrears: 'Yana da bashin haraji',
+    pubCitizenAttention: 'Yana bukatar kulawa',
+    pubCitizenNotAssessed: 'Ba a kimanta ba tukuna',
+    pubCitizenTinStatus: 'Matsayin TIN',
+    pubCitizenOutstanding: 'Harajin da ake bin ka',
+    pubCitizenOutstandingYes: 'Eh — da fatan za ka tuntubi PSIRS',
+    pubCitizenNone: 'Babu',
+    pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
+    pubCitizenAlso: 'Akwai kuma:',
+    pubCitizenVerifyLink: 'Tantance rasitin biyan kudi',
   },
 };
 
