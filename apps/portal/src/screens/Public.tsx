@@ -10,6 +10,7 @@
 
 import React, { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { usePublicI18n } from '../lib/i18n';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
 
 interface VerificationResult {
@@ -25,7 +26,41 @@ interface VerificationResult {
   message: string;
 }
 
+/**
+ * The language toggle these screens carry.
+ *
+ * On the screen rather than in a menu: the people who need it have no account,
+ * no settings page and no second visit. It is rendered before anything else on
+ * the card so that somebody who cannot read the heading can still change the
+ * heading.
+ */
+function LanguageToggle() {
+  const { lang, t, setLanguage } = usePublicI18n();
+  return (
+    <div
+      className="public__lang"
+      role="group"
+      aria-label={t.pubLanguage}
+      style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}
+    >
+      {(['en', 'ha'] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          className={lang === option ? '' : 'secondary'}
+          aria-pressed={lang === option}
+          onClick={() => setLanguage(option)}
+          style={{ padding: '4px 12px', fontSize: '0.76rem' }}
+        >
+          {option === 'en' ? t.pubEnglish : t.pubHausa}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function VerifyScreen({ code }: { code?: string }) {
+  const { t } = usePublicI18n();
   const [input, setInput] = useState(code ?? '');
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,11 +104,12 @@ export function VerifyScreen({ code }: { code?: string }) {
   return (
     <div className="public">
       <div className="public__card">
+          <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <img src="/icon.svg" alt="" width={48} height={48} />
-          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>Verify a government receipt</h1>
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubVerifyTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Plateau State Internal Revenue Service
+            {t.pubService}
           </p>
         </div>
 
@@ -84,7 +120,7 @@ export function VerifyScreen({ code }: { code?: string }) {
           }}
         >
           <div className="field">
-            <label htmlFor="code">Receipt number or verification code</label>
+            <label htmlFor="code">{t.pubVerifyField}</label>
             <input
               id="code"
               value={input}
@@ -94,7 +130,7 @@ export function VerifyScreen({ code }: { code?: string }) {
             />
           </div>
           <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-            {busy ? 'Checking…' : 'Verify'}
+            {busy ? t.pubVerifyChecking : t.pubVerifyAction}
           </button>
         </form>
 
@@ -122,25 +158,25 @@ export function VerifyScreen({ code }: { code?: string }) {
             {(result.receiptNumber || result.documentNumber) && (
               <KeyValue
                 items={[
-                  ['Receipt number', result.receiptNumber ?? result.documentNumber ?? '—'],
-                  ['Revenue type', result.revenueType ?? result.documentType ?? '—'],
+                  [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
+                  [t.pubVerifyRevenueType, result.revenueType ?? result.documentType ?? '—'],
                   ['Amount', result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
-                  ['Issued', formatDate(result.issuedAt)],
-                  ['Local Government Area', result.lga ?? '—'],
+                  [t.pubVerifyIssued, formatDate(result.issuedAt)],
+                  [t.pubVerifyLga, result.lga ?? '—'],
                   [
                     'Document fingerprint',
                     result.integrityConfirmed === undefined
                       ? '—'
                       : result.integrityConfirmed
-                        ? 'Matches the original'
-                        : 'Does not match the original',
+                        ? t.pubVerifyMatches
+                        : t.pubVerifyNoMatch,
                   ],
                 ]}
               />
             )}
 
             <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 14 }}>
-              For privacy, taxpayer names, phone numbers and TINs are never shown on this page.
+              {t.pubVerifyPrivacy}
             </p>
           </div>
         )}
@@ -163,7 +199,29 @@ interface Invitation {
   declarations: string[];
 }
 
+/**
+ * The four declarations, in the referee's language.
+ *
+ * `GET /referee/:token` returns these as English sentences and the screen used
+ * to render whatever came back. That put the only part of this page with a
+ * stated legal consequence — "I understand that providing false information
+ * may have consequences" — permanently in English, whatever the reader chose.
+ *
+ * `POST /referee/:token/respond` records four booleans and nothing about the
+ * words; what the referee understood themselves to be agreeing to is exactly
+ * what this screen showed them. So the wording is rendered from the dictionary
+ * in the order the API sends it, and `referee-declarations.test.ts` pins that
+ * order against the API's own list so the two cannot drift apart.
+ */
+const DECLARATION_KEYS = [
+  'pubDeclarationKnows',
+  'pubDeclarationAccurate',
+  'pubDeclarationWilling',
+  'pubDeclarationConsequences',
+] as const;
+
 export function RefereePortalScreen({ token }: { token: string }) {
+  const { t } = usePublicI18n();
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -239,6 +297,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <Loading rows={4} />
         </div>
       </div>
@@ -249,9 +308,10 @@ export function RefereePortalScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <div className="verdict verdict--valid">
             <p className="verdict__mark">✓</p>
-            <p className="verdict__label">THANK YOU</p>
+            <p className="verdict__label">{t.pubThankYou}</p>
           </div>
           <p style={{ fontSize: '0.9rem' }}>{outcome}</p>
         </div>
@@ -263,9 +323,10 @@ export function RefereePortalScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
             <img src="/icon.svg" alt="" width={48} height={48} />
-            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>Agent verification request</h1>
+            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubRefereeTitle}</h1>
           </div>
           <ErrorAlert error={error} />
         </div>
@@ -279,26 +340,24 @@ export function RefereePortalScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
             <img src="/icon.svg" alt="" width={48} height={48} />
-            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>
-              Decline to act as referee?
-            </h1>
+            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubDeclineTitle}</h1>
           </div>
 
           <ErrorAlert error={error} />
 
           <p style={{ fontSize: '0.9rem' }}>
-            You are about to tell PSIRS that you cannot vouch for{' '}
-            <strong>{invitation.applicantName}</strong>. Their application to collect government
-            revenue will not go forward on your word.
+            {t.pubDeclineBody1a} <strong>{invitation.applicantName}</strong>{' '}
+            {t.pubDeclineBody1b}
           </p>
           <p style={{ fontSize: '0.9rem' }}>
-            This cannot be undone from this page, and the link cannot be used again.
+            {t.pubDeclineBody2}
           </p>
 
           <div className="field" style={{ marginTop: 16 }}>
-            <label htmlFor="decline-reason">Reason (optional)</label>
+            <label htmlFor="decline-reason">{t.pubDeclineReason}</label>
             <textarea
               id="decline-reason"
               rows={3}
@@ -306,13 +365,13 @@ export function RefereePortalScreen({ token }: { token: string }) {
               onChange={(event) => setDeclineReason(event.target.value)}
             />
             <p className="field__hint">
-              If you simply do not know this person well enough, saying so is enough.
+              {t.pubDeclineReasonHint}
             </p>
           </div>
 
           <div className="button-row" style={{ marginTop: 8 }}>
             <button type="button" className="secondary" disabled={busy} onClick={decline}>
-              {busy ? 'Sending…' : 'Yes, decline'}
+              {busy ? t.pubDeclineSending : t.pubDeclineYes}
             </button>
             <button
               type="button"
@@ -323,7 +382,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
                 setError(null);
               }}
             >
-              No, go back
+              {t.pubDeclineNo}
             </button>
           </div>
         </div>
@@ -336,41 +395,41 @@ export function RefereePortalScreen({ token }: { token: string }) {
   return (
     <div className="public">
       <div className="public__card">
+          <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <img src="/icon.svg" alt="" width={48} height={48} />
-          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>Agent verification request</h1>
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubRefereeTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Plateau State Internal Revenue Service · {invitation.referenceCode}
+            {t.pubService} · {invitation.referenceCode}
           </p>
         </div>
 
         <Alert kind="info" title={`${invitation.applicantName} has named you as their referee`}>
           <p style={{ margin: 0 }}>
-            They have applied to become an authorised revenue agent
-            {invitation.applicantLga ? ` in ${invitation.applicantLga}` : ''}. PSIRS needs someone who
-            knows them to confirm their identity and suitability.
+            {invitation.applicantLga ? `${invitation.applicantLga} — ` : ''}
+            {t.pubRefereeIntro}
           </p>
         </Alert>
 
         <KeyValue
           items={[
-            ['Applicant', invitation.applicantName],
-            ['You are recorded as', invitation.refereeName],
-            ['Stated relationship', invitation.relationship],
-            ['Referee category', invitation.category.replace(/_/g, ' ').toLowerCase()],
-            ['Respond before', formatDate(invitation.expiresAt)],
+            [t.pubRefereeApplicant, invitation.applicantName],
+            [t.pubRefereeYouAre, invitation.refereeName],
+            [t.pubRefereeRelationship, invitation.relationship],
+            [t.pubRefereeCategory, invitation.category.replace(/_/g, ' ').toLowerCase()],
+            [t.pubRefereeRespondBefore, formatDate(invitation.expiresAt)],
           ]}
         />
 
         <ErrorAlert error={error} />
 
         <p className="card__hint" style={{ marginTop: 18, fontWeight: 650, color: 'var(--ink)' }}>
-          Please confirm each of the following:
+          {t.pubRefereeConfirmEach}
         </p>
 
-        {invitation.declarations.map((declaration, index) => (
+        {DECLARATION_KEYS.map((key, index) => (
           <label
-            key={declaration}
+            key={key}
             style={{
               display: 'flex',
               gap: 10,
@@ -390,23 +449,23 @@ export function RefereePortalScreen({ token }: { token: string }) {
                 setDeclarations(next);
               }}
             />
-            <span>{declaration}</span>
+            <span>{t[key]}</span>
           </label>
         ))}
 
         <div className="field" style={{ marginTop: 16 }}>
-          <label htmlFor="id-type">Your identification type</label>
+          <label htmlFor="id-type">{t.pubRefereeIdType}</label>
           <select id="id-type" value={identityType} onChange={(event) => setIdentityType(event.target.value)}>
-            <option value="NIN">National Identification Number</option>
-            <option value="BVN">Bank Verification Number</option>
-            <option value="PASSPORT">International passport</option>
-            <option value="DRIVERS_LICENCE">Driver's licence</option>
-            <option value="VOTERS_CARD">Voter's card</option>
+            <option value="NIN">{t.pubIdNin}</option>
+            <option value="BVN">{t.pubIdBvn}</option>
+            <option value="PASSPORT">{t.pubIdPassport}</option>
+            <option value="DRIVERS_LICENCE">{t.pubIdLicence}</option>
+            <option value="VOTERS_CARD">{t.pubIdVoters}</option>
           </select>
         </div>
 
         <div className="field">
-          <label htmlFor="id-number">Your identification number</label>
+          <label htmlFor="id-number">{t.pubRefereeIdNumber}</label>
           <input
             id="id-number"
             inputMode="numeric"
@@ -414,13 +473,12 @@ export function RefereePortalScreen({ token }: { token: string }) {
             onChange={(event) => setIdentityNumber(event.target.value)}
           />
           <p className="field__hint">
-            Stored securely and never shown in full. If you leave this blank, a PSIRS officer will
-            review your response manually.
+            {t.pubRefereeIdHint}
           </p>
         </div>
 
         <div className="field">
-          <label htmlFor="occupation">Your occupation</label>
+          <label htmlFor="occupation">{t.pubRefereeOccupation}</label>
           <input
             id="occupation"
             value={occupation}
@@ -438,13 +496,12 @@ export function RefereePortalScreen({ token }: { token: string }) {
             disabled={busy}
             onClick={() => setConfirmingDecline(true)}
           >
-            I cannot act as referee
+            {t.pubRefereeDecline}
           </button>
         </div>
 
         <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
-          You do not need an account. This link can be used once and expires on{' '}
-          {formatDate(invitation.expiresAt)}.
+          {t.pubRefereeNoAccount} {formatDate(invitation.expiresAt)}.
         </p>
       </div>
     </div>
@@ -515,6 +572,7 @@ interface AttestationView {
  * the people who are new.
  */
 export function GroupAttestationScreen({ token }: { token: string }) {
+  const { t } = usePublicI18n();
   const [view, setView] = useState<AttestationView | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -560,6 +618,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <Loading rows={4} />
         </div>
       </div>
@@ -570,9 +629,10 @@ export function GroupAttestationScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <div className="verdict verdict--valid">
             <p className="verdict__mark">✓</p>
-            <p className="verdict__label">THANK YOU</p>
+            <p className="verdict__label">{t.pubThankYou}</p>
           </div>
           <p style={{ fontSize: '0.9rem' }}>{outcome}</p>
         </div>
@@ -584,9 +644,10 @@ export function GroupAttestationScreen({ token }: { token: string }) {
     return (
       <div className="public">
         <div className="public__card">
+          <LanguageToggle />
           <div style={{ textAlign: 'center', marginBottom: 18 }}>
             <img src="/icon.svg" alt="" width={48} height={48} />
-            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>Group membership check</h1>
+            <h1 style={{ fontSize: '1rem', margin: '10px 0 0' }}>{t.pubAttestTitle}</h1>
           </div>
           <ErrorAlert error={error} />
         </div>
@@ -597,28 +658,27 @@ export function GroupAttestationScreen({ token }: { token: string }) {
   return (
     <div className="public">
       <div className="public__card">
+          <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <img src="/icon.svg" alt="" width={48} height={48} />
-          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>Group membership check</h1>
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.pubAttestTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Plateau State Internal Revenue Service · {view.groupCode}
+            {t.pubService} · {view.groupCode}
           </p>
         </div>
 
         <Alert kind="info" title={`${view.groupName}`}>
           <p style={{ margin: 0 }}>
-            You are recorded as the leader of this group in {view.lga}. PSIRS needs you to confirm
-            which of these people really are members. Government support is offered to members, so
-            confirming somebody who is not one takes it from somebody who is.
+            {view.lga} — {t.pubAttestIntro}
           </p>
         </Alert>
 
         <KeyValue
           items={[
-            ['Group', view.groupName],
-            ['You are recorded as', view.leaderName],
-            ['Local Government Area', view.lga],
-            ['Already confirmed', String(alreadyConfirmed.length)],
+            [t.pubAttestGroup, view.groupName],
+            [t.pubRefereeYouAre, view.leaderName],
+            [t.pubVerifyLga, view.lga],
+            [t.pubAttestAlready, String(alreadyConfirmed.length)],
           ]}
         />
 
@@ -627,13 +687,13 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         {pending.length === 0 ? (
           <Alert kind="success" title="Nothing waiting">
             <p style={{ margin: 0 }}>
-              Every member on this list has already been confirmed. There is nothing for you to do.
+              {t.pubAttestNothingBody}
             </p>
           </Alert>
         ) : (
           <>
             <p className="card__hint" style={{ marginTop: 18, fontWeight: 650, color: 'var(--ink)' }}>
-              Is each of these people a member of your group? ({answered} of {pending.length}{' '}
+              {t.pubAttestQuestion} ({answered} of {pending.length}{' '}
               answered)
             </p>
 
@@ -670,7 +730,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
                     aria-pressed={answers[member.id] === 'YES'}
                     onClick={() => setAnswers((prev) => ({ ...prev, [member.id]: 'YES' }))}
                   >
-                    Member
+                    {t.pubAttestYes}
                   </button>
                   <button
                     type="button"
@@ -679,7 +739,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
                     aria-pressed={answers[member.id] === 'NO'}
                     onClick={() => setAnswers((prev) => ({ ...prev, [member.id]: 'NO' }))}
                   >
-                    Not a member
+                    {t.pubAttestNo}
                   </button>
                 </div>
               </div>
@@ -691,11 +751,11 @@ export function GroupAttestationScreen({ token }: { token: string }) {
               style={{ width: '100%', justifyContent: 'center', marginTop: 18 }}
               onClick={() => void submit()}
             >
-              {busy ? 'Sending…' : 'Send my answers to PSIRS'}
+              {busy ? t.pubDeclineSending : t.pubAttestSubmit}
             </button>
             {!allAnswered && (
               <p className="card__hint" style={{ marginTop: 8 }}>
-                Please answer for every person before sending.
+                {t.pubAttestAnswerAll}
               </p>
             )}
           </>
@@ -706,6 +766,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
 }
 
 export function CitizenPortalScreen() {
+  const { t } = usePublicI18n();
   const [mode, setMode] = useState<SearchMode>('tin');
   const [input, setInput] = useState('');
   const [result, setResult] = useState<CitizenStatusResult | null>(null);
@@ -740,13 +801,14 @@ export function CitizenPortalScreen() {
   return (
     <div className="public">
       <div className="public__card">
+          <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <img src="/icon.svg" alt="" width={48} height={48} />
           <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>
-            Check your tax status
+            {t.pubCitizenTitle}
           </h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Plateau State Internal Revenue Service
+            {t.pubService}
           </p>
         </div>
 
@@ -768,9 +830,9 @@ export function CitizenPortalScreen() {
         <form onSubmit={(e) => void search(e)}>
           <div className="field">
             <label htmlFor="citizen-input">
-              {mode === 'tin' ? 'Tax Identification Number (TIN)' :
-               mode === 'phone' ? 'Registered phone number' :
-               'Full name or business name'}
+              {mode === 'tin' ? t.pubCitizenByTin :
+               mode === 'phone' ? t.pubCitizenByPhone :
+               t.pubCitizenByName}
             </label>
             <input
               id="citizen-input"
@@ -796,7 +858,7 @@ export function CitizenPortalScreen() {
             <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
             {result.count !== undefined && result.count > 1 && (
               <p style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                Use your TIN or exact phone number for a precise result.
+                {t.pubCitizenTooMany}
               </p>
             )}
           </div>
@@ -834,17 +896,17 @@ export function CitizenPortalScreen() {
               marginBottom: 14,
               textAlign: 'center',
             }}>
-              <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--muted)' }}>Tax compliance status</p>
+              <p style={{ margin: '0 0 4px', fontSize: '0.78rem', color: 'var(--muted)' }}>{t.pubCitizenStatusHeading}</p>
               <p style={{
                 margin: 0,
                 fontWeight: 700,
                 fontSize: '1.05rem',
                 color: STATUS_COLORS[result.complianceStatus ?? ''] ?? 'var(--muted)',
               }}>
-                {result.complianceStatus === 'COMPLIANT' ? '✓ Compliant' :
-                 result.complianceStatus === 'HAS_ARREARS' ? '⚠ Has Arrears' :
-                 result.complianceStatus === 'NEEDS_ATTENTION' ? '! Needs Attention' :
-                 'Not yet assessed'}
+                {result.complianceStatus === 'COMPLIANT' ? `✓ ${t.pubCitizenCompliant}` :
+                 result.complianceStatus === 'HAS_ARREARS' ? `⚠ ${t.pubCitizenArrears}` :
+                 result.complianceStatus === 'NEEDS_ATTENTION' ? `! ${t.pubCitizenAttention}` :
+                 t.pubCitizenNotAssessed}
               </p>
             </div>
 
@@ -852,23 +914,26 @@ export function CitizenPortalScreen() {
 
             <KeyValue
               items={[
-                ['TIN status', result.tinStatus ?? '—'],
-                ['Outstanding obligations', result.hasOutstanding ? 'Yes — please contact PSIRS' : 'None'],
+                [t.pubCitizenTinStatus, result.tinStatus ?? '—'],
+                [
+                t.pubCitizenOutstanding,
+                result.hasOutstanding ? t.pubCitizenOutstandingYes : t.pubCitizenNone,
+              ],
               ]}
             />
 
             <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
               {result.detail ??
-                'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.'}
+                t.pubCitizenFooter}
             </p>
           </div>
         )}
 
         <div style={{ marginTop: 20, borderTop: '1px solid var(--border, #e0e0e0)', paddingTop: 14, textAlign: 'center' }}>
           <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '0 0 8px' }}>
-            Also available:
+            {t.pubCitizenAlso}
           </p>
-          <a href="#/verify" style={{ fontSize: '0.8rem' }}>Verify a payment receipt →</a>
+          <a href="#/verify" style={{ fontSize: '0.8rem' }}>{t.pubCitizenVerifyLink} →</a>
         </div>
       </div>
     </div>

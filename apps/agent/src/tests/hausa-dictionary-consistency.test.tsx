@@ -54,9 +54,23 @@ describe('the Hausa dictionary holds together', () => {
    */
   const AWAITING_REVIEW = ['navProfile'];
 
+  /**
+   * Words that are the same in both languages because they are the same word.
+   *
+   * Kept apart from AWAITING_REVIEW on purpose: that list is a debt, and an
+   * entry on it should eventually be deleted by somebody translating the
+   * string. These never will be. "Hausa" is what the language is called in
+   * Hausa, and the toggle offering it has to be readable to somebody who
+   * cannot yet read the page.
+   */
+  const SAME_IN_BOTH = ['pubHausa'];
+
   it('passes no English off as Hausa', () => {
     const copied = keys.filter(
-      (k) => en[k].trim() === ha[k].trim() && !AWAITING_REVIEW.includes(k),
+      (k) =>
+        en[k].trim() === ha[k].trim() &&
+        !AWAITING_REVIEW.includes(k) &&
+        !SAME_IN_BOTH.includes(k),
     );
     expect(copied).toEqual([]);
   });
