@@ -118,7 +118,15 @@ export const COMMISSION_TRANSITIONS: Record<CommissionState, readonly Commission
   // usual eligibility test again. Releasing straight to ELIGIBLE would declare
   // it payable without checking that its transaction ever settled.
   ON_HOLD: ['PENDING', 'ELIGIBLE', 'REVERSED', 'CANCELLED'],
-  APPROVED: ['PAID', 'ON_HOLD', 'REVERSED'],
+  // ELIGIBLE is the destination when a requested payout is refused, and only
+  // then. It is not the same move the ON_HOLD note above warns against: to
+  // reach APPROVED this commission was ELIGIBLE moments earlier, so the
+  // settlement and hold tests have already been passed and nothing new is
+  // being declared payable. Without it a refused payout stranded the money —
+  // requestPayout only ever selects ELIGIBLE, so an APPROVED commission
+  // belonging to a payout that will never happen could never be requested
+  // again, and the agent was told they had no commission.
+  APPROVED: ['PAID', 'ON_HOLD', 'REVERSED', 'ELIGIBLE'],
   PAID: ['REVERSED'],
   REVERSED: [],
   CANCELLED: [],
