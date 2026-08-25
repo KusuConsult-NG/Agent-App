@@ -280,6 +280,62 @@ describe('an unconfigured supervisor', () => {
     );
   });
 
+  /*
+   * The exceptions block was exempt from all of this.
+   *
+   * `executiveDashboard` scopes its revenue, its counts, its LGA and agent
+   * breakdowns, its trend and its fraud flags — and then answers three
+   * questions statewide regardless of scope. Two of those are defensible: a
+   * supervisor holds approval:review and support:read:all, so the approval
+   * queue and the ticket queue really are theirs to see whole.
+   *
+   * Reconciliation is not. A supervisor holds no reconciliation permission at
+   * all, so the figure was both unscoped and un-actionable — a statewide
+   * number sitting in a block whose siblings are territorial, on a dashboard
+   * that names the scope it is showing. And an unassigned supervisor, whose
+   * whole dashboard is zeros by design, was shown a live count.
+   */
+  it('counts only the reconciliation exceptions its own territory produced', async () => {
+    const exceptionOn = async (reference: string) => {
+      await pool.query(
+        `INSERT INTO reconciliation_records
+           (run_id, transaction_id, expected_amount_kobo, received_amount_kobo,
+            variance_kobo, status)
+         SELECT gen_random_uuid(), t.id, t.amount_kobo, 0, t.amount_kobo, 'MISSING_PAYMENT'
+           FROM transactions t WHERE t.transaction_reference = $1`,
+        [reference],
+      );
+    };
+    await exceptionOn('SCOPE-INSIDE-00001');
+    await exceptionOn('SCOPE-OUTSIDE-00002');
+
+    const supervisor = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: scopedSupervisorToken },
+    );
+    assert.equal(
+      supervisor.body.exceptions.reconciliation_exceptions,
+      '1',
+      'a supervisor was shown exceptions from a territory they do not hold',
+    );
+
+    const unassigned = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: unassignedSupervisorToken },
+    );
+    assert.equal(
+      unassigned.body.exceptions.reconciliation_exceptions,
+      '0',
+      'the account nobody has configured must see nothing here either',
+    );
+
+    const admin = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: adminToken },
+    );
+    assert.equal(admin.body.exceptions.reconciliation_exceptions, '2', 'the state still sees both');
+  });
+
   it('gets no geography either', async () => {
     const response = await get<GeoRow[]>('/government/intelligence/geography', {
       token: unassignedSupervisorToken,
