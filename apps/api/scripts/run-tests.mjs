@@ -24,7 +24,7 @@
  * timing file to go stale.
  */
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readdirSync, statSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
@@ -73,13 +73,41 @@ async function ensureDatabases(count) {
     for (let index = 1; index <= count; index += 1) {
       const name = new URL(databaseFor(index)).pathname.slice(1);
       const { rowCount } = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
-      // Migrations run on first use inside startTestServer: 357ms on an empty
-      // database, 4ms once they are applied, so a shard database is worth
-      // keeping between runs rather than dropping.
+      // Kept between runs rather than dropped: migrating an empty database
+      // costs 357ms, re-running settled migrations costs 4ms.
       if (rowCount === 0) await admin.query(`CREATE DATABASE "${name}"`);
     }
   } finally {
     await admin.end();
+  }
+
+  /*
+   * MIGRATE EACH SHARD DATABASE BEFORE ANY TEST PROCESS STARTS.
+   *
+   * Twelve test files call resetDatabase() in `before` ahead of
+   * startTestServer(), which is what runs the migrations — so they empty a
+   * schema that does not exist yet. They have always done this and it has
+   * always worked, because psirs_test was migrated long before any of them ran:
+   * by CI's own migrate step, or by whatever ran last on a developer's machine.
+   *
+   * Fresh per-shard databases removed that assumption without anyone noticing,
+   * and the first shard to run one of those files on an unmigrated database
+   * lost the whole file — twelve tests reported as cancelled rather than
+   * failed, which is a real failure that looks like nothing much in a summary
+   * line. Migrating up front restores the precondition those files were
+   * written against, rather than editing twelve files to say what CI already
+   * says for the database they were built on.
+   */
+  for (let index = 1; index <= count; index += 1) {
+    const migrated = spawnSync('npx', ['tsx', 'src/db/migrate.ts'], {
+      env: { ...process.env, DATABASE_URL: databaseFor(index) },
+      encoding: 'utf8',
+    });
+    if (migrated.status !== 0) {
+      console.error(`Could not migrate shard ${index}:`);
+      console.error(migrated.stdout, migrated.stderr);
+      process.exit(1);
+    }
   }
 }
 
@@ -100,12 +128,28 @@ function runShard(shard, index) {
   });
 }
 
+/*
+ * Cancelled is counted, and counted as a failure.
+ *
+ * node:test reports a test as `cancelled` when it never finished — its file's
+ * hook threw, or the process died under it. That is a whole file's worth of
+ * coverage silently absent, and it does not appear in `# fail`, so a summary
+ * that reports only passes and failures says "0 failed" about a run that lost
+ * twelve tests. Whatever else this runner does, it must never be the reason
+ * nobody noticed.
+ */
 function countsFrom(output) {
   const read = (label) => {
-    const match = output.match(new RegExp(`^# ${label} (\\d+)$`, 'm'));
-    return match ? Number(match[1]) : 0;
+    // Several summaries can appear in one shard's output; every one counts.
+    const matches = output.matchAll(new RegExp(`^# ${label} (\\d+)$`, 'gm'));
+    return [...matches].reduce((total, match) => total + Number(match[1]), 0);
   };
-  return { tests: read('tests'), pass: read('pass'), fail: read('fail') };
+  return {
+    tests: read('tests'),
+    pass: read('pass'),
+    fail: read('fail'),
+    cancelled: read('cancelled'),
+  };
 }
 
 const shards = packShards(files, shardCount);
@@ -122,22 +166,39 @@ const startedAt = Date.now();
 const results = await Promise.all(shards.map((shard, i) => runShard(shard, i + 1)));
 const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
 
-const totals = { tests: 0, pass: 0, fail: 0 };
+const totals = { tests: 0, pass: 0, fail: 0, cancelled: 0 };
 for (const result of results.sort((a, b) => a.index - b.index)) {
   process.stdout.write(result.output);
   const counts = countsFrom(result.output);
+  result.counts = counts;
   totals.tests += counts.tests;
   totals.pass += counts.pass;
   totals.fail += counts.fail;
+  totals.cancelled += counts.cancelled;
 }
 
-const failedShards = results.filter((result) => result.code !== 0);
-console.log(
-  `\n${totals.pass}/${totals.tests} passed, ${totals.fail} failed, in ${seconds}s ` +
-    `across ${shards.length} shard(s).`,
+const failedShards = results.filter(
+  (result) => result.code !== 0 || result.counts.fail > 0 || result.counts.cancelled > 0,
 );
-if (failedShards.length > 0) {
-  console.log(`Shards that failed: ${failedShards.map((r) => r.index).join(', ')}`);
+
+console.log(
+  `\n${totals.pass}/${totals.tests} passed, ${totals.fail} failed, ` +
+    `${totals.cancelled} cancelled, in ${seconds}s across ${shards.length} shard(s).`,
+);
+
+for (const shard of failedShards) {
+  const { fail, cancelled } = shard.counts;
+  console.log(
+    `  shard ${shard.index}: exit ${shard.code}, ${fail} failed, ${cancelled} cancelled` +
+      (cancelled > 0
+        ? ' — cancelled means a file did not run to completion, so those tests were never checked'
+        : ''),
+  );
+  if (cancelled > 0) {
+    // Name the files the shard was given, because the cancelled tests are the
+    // ones whose names never got printed.
+    console.log(`    files: ${shards[shard.index - 1].files.join(' ')}`);
+  }
 }
 
 // Set the code and let the process end on its own. `process.exit` here
