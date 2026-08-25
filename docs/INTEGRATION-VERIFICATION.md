@@ -167,6 +167,34 @@ Send a real message to a real handset and confirm it arrives, with the right
 sender ID and readable content — `--sms` is deliberately excluded from `--all`
 because it has a side effect.
 
+## What has been exercised without credentials
+
+A live call needs a credential and a network route, and neither belongs in a
+repository. What does not need either is proving the adapter speaks the
+provider's protocol correctly through the whole platform, rather than in
+isolation — which is where the untested seam actually was.
+
+Three runs now boot the real app on a real adapter against a server speaking
+that provider's wire protocol over TCP. Each one fails if its adapter is
+switched back to the mock, so none of them can quietly become a mock test
+again:
+
+| Run | Adapter | What it takes the whole way |
+|---|---|---|
+| `remita-live-path.test.ts` | `RemitaGateway` | RRR generated at Remita, an unconfirmed poll, a notification that does not move the money state, verification, receipt, reconciliation |
+| `tin-live-path.test.ts` | `HttpTinService` | an existing TIN confirmed and stored as the register spells it, an unknown one refused, an outage registering nothing |
+| `kyc-live-path.test.ts` | `HttpKycProvider` | a clearance, an unrecognised status that cannot clear anybody, an outage that is not a refusal |
+
+The unit boundary is checked end to end in the first of these: the platform
+sends Naira where it holds kobo, and the amount on the receipt is the amount
+Remita reported. A hundredfold error there would look like an ordinary number
+all the way to the taxpayer.
+
+This is not a substitute for the sign-off below. It proves the adapters are
+correct against the protocol as documented; it cannot prove PSIRS's own
+merchant configuration, status vocabulary or credentials are what the adapters
+expect. That still takes one real call.
+
 ## Sign-off
 
 This blocker closes when:
