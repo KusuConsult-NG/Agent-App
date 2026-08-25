@@ -64,7 +64,15 @@ and this is deliberate:
 - **Gateway `PENDING`/`UNKNOWN`** — what an unmapped status code becomes. Safe,
   and it means that reference can never be confirmed.
 
-Running it against mocks tells you nothing, and it says so in its own output.
+A third outcome is reported the same way, for the same reason:
+
+- **Any provider still on `mock`** — the check is printed as `MOCK` rather than
+  `ok` and the run exits 1. A mock answers whatever it was written to answer, so
+  a run whose subjects were mocks is not evidence about any real provider and
+  must not be filed as though it were. Until 25 August 2026 this was only a note
+  in the output: mock checks printed `ok`, and a run against six mocks ended
+  "every answer was understood by the platform. Record this output against the
+  go-live checklist" and exited 0.
 
 ## What must be confirmed, per provider
 
