@@ -109,13 +109,39 @@ export async function stopTestServer(): Promise<void> {
  * (that is the point of them), and TRUNCATE does not fire row-level triggers.
  * Reference data is preserved and reseeded separately.
  *
- * Every integration file calls this, and they share one database — so the test
- * script runs with `--test-concurrency=1`. Node's runner parallelises files by
- * default, and two suites resetting the same database mid-run destroy each
- * other's fixtures.
+ * Every integration file calls this, and the files within one shard share a
+ * database — so each shard runs with `--test-concurrency=1`. Node's runner
+ * parallelises files by default, and two suites resetting the same database
+ * mid-run destroy each other's fixtures. `scripts/run-tests.mjs` gets the
+ * parallelism back by giving each shard a database of its own rather than by
+ * relaxing this rule.
+ *
+ * ONLY THE TABLES THAT HOLD ANYTHING.
+ *
+ * TRUNCATE takes an ACCESS EXCLUSIVE lock and rewrites the relation whether or
+ * not there is a row in it, so emptying all forty-nine of these cost about
+ * 140ms even when every one was already empty — measured, not assumed. Asking
+ * which of them hold a row costs 3ms in a single round trip, and most tests
+ * touch a handful. The `EXISTS` probe is built once from the same list, so the
+ * two cannot drift apart.
+ *
+ * What gets truncated is unchanged: a table with rows is emptied exactly as
+ * before, and a table without rows is already in the state TRUNCATE would put
+ * it in. The only thing not preserved is the identity-sequence restart on an
+ * untouched table, which nothing depends on — sequences here feed reference
+ * numbers that are asserted by shape, never by value.
  */
+const NON_EMPTY_PROBE = TRANSACTIONAL_TABLES.map(
+  (table) => `SELECT '${table}' AS t WHERE EXISTS (SELECT 1 FROM ${table})`,
+).join(' UNION ALL ');
+
 export async function resetDatabase(): Promise<void> {
-  await pool.query(`TRUNCATE ${TRANSACTIONAL_TABLES.join(', ')} RESTART IDENTITY CASCADE`);
+  const { rows } = await pool.query<{ t: string }>(NON_EMPTY_PROBE);
+  if (rows.length > 0) {
+    await pool.query(
+      `TRUNCATE ${rows.map((row) => row.t).join(', ')} RESTART IDENTITY CASCADE`,
+    );
+  }
   await pool.query(`DELETE FROM users WHERE phone LIKE '+234%'`);
 }
 

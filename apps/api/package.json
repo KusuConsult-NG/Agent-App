@@ -10,11 +10,12 @@
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
-    "test": "tsx --test --test-concurrency=1 src/tests/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "test:concurrency": "tsx --test --test-concurrency=1 src/tests/concurrency/*.test.ts",
     "pretest": "npm run build --workspace @psirs/shared",
     "verify:integrations": "tsx src/db/verify-integrations.ts",
-    "load-test": "tsx src/db/load-test.ts"
+    "load-test": "tsx src/db/load-test.ts",
+    "test:serial": "tsx --test --test-concurrency=1 src/tests/*.test.ts"
   },
   "dependencies": {
     "@psirs/shared": "*",
