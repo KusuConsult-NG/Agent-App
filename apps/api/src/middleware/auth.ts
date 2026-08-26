@@ -335,13 +335,36 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        if (device.status === 'REVOKED' || device.status === 'SUSPENDED') {
+        /*
+         * Revoked and suspended stop collection alike and mean opposite things
+         * to the person holding the phone. Both answered DEVICE_REVOKED —
+         * "this device has been revoked and can no longer be used" — so an
+         * agent whose handset had been paused for a fortnight while it was
+         * looked for was being told to go and get another one, which costs
+         * them a phone and an officer an approval for a handset that was
+         * always coming back.
+         */
+        if (device.status === 'REVOKED') {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_REVOKED',
             message:
               'This device has been revoked and can no longer be used for revenue collection. ' +
               'Contact your supervisor.',
+            nextStep:
+              'A revoked handset cannot be registered again. Register the replacement handset ' +
+              'and ask your supervisor to approve it.',
+          });
+        }
+
+        if (device.status === 'SUSPENDED') {
+          throw new AppError({
+            statusCode: 403,
+            code: 'DEVICE_SUSPENDED',
+            message:
+              'Collection on this device has been paused. It has not been taken away, and it ' +
+              'can be put back.',
+            nextStep: 'Your supervisor can tell you why, and restore it.',
           });
         }
 

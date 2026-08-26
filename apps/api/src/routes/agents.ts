@@ -512,10 +512,18 @@ agentRouter.post(
       });
       res.status(201).json({
         ...result,
+        /*
+         * Registering a handset the platform already holds returns the row it
+         * has, whatever state it is in — so an already-suspended handset was
+         * being reported as "registered and active", which is the one thing it
+         * is not.
+         */
         message:
           result.status === 'PENDING'
             ? 'Device registered and awaiting approval by your supervisor.'
-            : 'Device registered and active.',
+            : result.status === 'SUSPENDED'
+              ? 'This device is registered but suspended. Your supervisor can restore it.'
+              : 'Device registered and active.',
       });
     },
   ),
@@ -851,6 +859,51 @@ agentRouter.post(
  * carried `approved_by`, which answers the question if you already know to ask
  * it about this device; the trail is where an auditor looks when they do not.
  */
+/**
+ * Stop a handset, and start it again (Addendum §21).
+ *
+ * The reversible half of the pair. Revoking is for a handset that must never
+ * work again; suspending is for one that must not work now — mislaid, in for
+ * repair, or under a fraud flag somebody wants to look at before collection
+ * continues. Both stop collection at once; only one of them is a decision.
+ */
+agentRouter.post(
+  '/devices/:deviceId/suspend',
+  requirePermission('device:manage', 'agent:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(5, 'Give a reason for suspending the device') }),
+    async (req, res, data) => {
+      await agents.suspendDevice({
+        deviceId: req.params.deviceId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        suspended: true,
+        message: 'The device is suspended and its sessions have ended. It can be restored.',
+      });
+    },
+  ),
+);
+
+agentRouter.post(
+  '/devices/:deviceId/restore',
+  requirePermission('device:manage', 'agent:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(5, 'Say what changed before restoring the device') }),
+    async (req, res, data) => {
+      await agents.restoreDevice({
+        deviceId: req.params.deviceId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({ restored: true, message: 'The device is active again.' });
+    },
+  ),
+);
+
 agentRouter.post(
   '/devices/:deviceId/approve',
   requirePermission('device:manage', 'agent:manage'),

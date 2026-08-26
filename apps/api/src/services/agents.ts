@@ -1040,6 +1040,128 @@ export async function approveDevice(params: {
   });
 }
 
+/**
+ * Stop a handset without ending it (Addendum §21).
+ *
+ * Revocation was the only lever, and it is final in both directions: the
+ * device dies, its sessions end, and that handset can never be registered to
+ * that agent again. Right for a stolen phone; wrong for most of the reasons an
+ * officer reaches for it. A handset mislaid for a week, a DEVICE_VELOCITY flag
+ * somebody wants to look at before collection continues, a phone in for
+ * repair — in all of those the choice was to ban a working handset for good or
+ * do nothing, and the cost of the first falls on the agent, so in practice the
+ * answer tended to be nothing.
+ *
+ * A suspension stops collection exactly as hard: sessions end at once, the
+ * clearance flag drops, and `requireActiveAgent` refuses. What it does not do
+ * is decide anything permanently.
+ *
+ * Reversible by one officer, deliberately. The lever that needs no undo is the
+ * one next to it, and making the common case — a phone that turned up — take
+ * two people would push officers back to using neither.
+ */
+export async function suspendDevice(params: {
+  deviceId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<void> {
+  await withTransaction(async (client) => {
+    const device = await queryOne<{ id: string; status: string; agent_id: string }>(
+      client,
+      'SELECT id, status, agent_id FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status === 'REVOKED') {
+      throw conflict(
+        'DEVICE_ALREADY_REVOKED',
+        'This device has been revoked. There is nothing left to suspend.',
+      );
+    }
+    if (device.status === 'SUSPENDED') {
+      throw conflict('DEVICE_ALREADY_SUSPENDED', 'This device is already suspended.');
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'SUSPENDED', revocation_reason = $2 WHERE id = $1`,
+      [params.deviceId, params.reason],
+    );
+
+    // The same immediacy revocation has. A pause that waits for a token to
+    // expire is not a pause.
+    await client.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Device suspended'
+        WHERE device_id = $1 AND revoked_at IS NULL`,
+      [params.deviceId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_suspended',
+      entityType: 'agent_device',
+      entityId: params.deviceId,
+      oldValue: { status: device.status },
+      newValue: { status: 'SUSPENDED' },
+      reason: params.reason,
+    });
+  });
+}
+
+/**
+ * Put a suspended handset back to work.
+ *
+ * Only from SUSPENDED. A revoked device is not restored here or anywhere: the
+ * whole point of the two levers being different is that one of them cannot be
+ * walked back, and an officer who wants that outcome undone is asking for a
+ * decision somebody else made to be reversed by a route rather than by them.
+ */
+export async function restoreDevice(params: {
+  deviceId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<void> {
+  await withTransaction(async (client) => {
+    const device = await queryOne<{ id: string; status: string; agent_id: string }>(
+      client,
+      'SELECT id, status, agent_id FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status !== 'SUSPENDED') {
+      throw conflict(
+        'DEVICE_NOT_SUSPENDED',
+        device.status === 'REVOKED'
+          ? 'This device was revoked, not suspended, and a revoked device cannot be brought back.'
+          : `This device is ${device.status.toLowerCase()}, so there is nothing to restore.`,
+        device.status === 'REVOKED'
+          ? 'The agent registers a replacement handset, which an officer then approves.'
+          : undefined,
+      );
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'ACTIVE', revocation_reason = NULL WHERE id = $1`,
+      [params.deviceId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_restored',
+      entityType: 'agent_device',
+      entityId: params.deviceId,
+      oldValue: { status: 'SUSPENDED' },
+      newValue: { status: 'ACTIVE' },
+      reason: params.reason,
+    });
+  });
+}
+
 export async function revokeDevice(params: {
   deviceId: string;
   reason: string;
