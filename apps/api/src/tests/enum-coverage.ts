@@ -124,6 +124,21 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
    * type — which is why `a-state-nothing-writes.test.ts` is satisfied by them
    * and always was. Nothing produces any of them.
    */
+  /*
+   * Withdrawing a request one raised oneself.
+   *
+   * A pending approval is taken off the queue by a second officer rejecting
+   * it with a reason, and that is the better record: it says who decided the
+   * request should not stand, which "the requester changed their mind" does
+   * not. It also keeps the unwinding in one place. Deciding a COMMISSION_PAYOUT
+   * or a BANK_ACCOUNT_CHANGE carries out real work in the same transaction —
+   * a rejected payout releases the commissions it had claimed — and a cancel
+   * path that skipped those branches would leave exactly the orphaned rows
+   * the rejection branch was written to prevent.
+   */
+  'approvals.status: CANCELLED':
+    'A pending request is withdrawn by a second officer rejecting it, which keeps the unwinding in the one branch that does it.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -210,24 +225,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'app_versions.app: PORTAL':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'approvals.approval_type: AGENT_ACTIVATION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: AGENT_SUSPENSION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: COMMISSION_ADJUSTMENT':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: MANUAL_CORRECTION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: REFUND':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: REVENUE_RATE_CHANGE':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: TAXPAYER_ADJUSTMENT':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'approvals.status: REVIEWED':
-    'Reachable from a path the suite does not walk.',
   'assessments.assessment_type: SELF_ASSESSMENT':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'assessments.status: CANCELLED':
@@ -278,18 +275,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Reachable from a path the suite does not walk.',
   'kyc_document_access_logs.access_type: DOWNLOAD':
     'Reachable from a path the suite does not walk.',
-  'kyc_documents.capture_source: FILE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'kyc_documents.document_type: ADDITIONAL_IDENTIFICATION':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: PASSPORT_PHOTOGRAPH':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: PROOF_OF_ADDRESS':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: SELFIE':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: SUPPORTING_DOCUMENT':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
   'lgas.status: INACTIVE':
     'Reachable from a path the suite does not walk.',
   'mdas.status: INACTIVE':
@@ -370,8 +355,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Reachable from a path the suite does not walk.',
   'referees.status: UNDER_REVIEW':
     'Reachable from a path the suite does not walk.',
-  'refunds.attributable_to: GATEWAY':
-    'Reachable from a path the suite does not walk.',
   'revenue_authorities.status: INACTIVE':
     'Reachable from a path the suite does not walk.',
   'revenue_categories.status: INACTIVE':
@@ -380,24 +363,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'revenue_items.status: DRAFT':
     'Reachable from a path the suite does not walk.',
-  'support_tickets.category: INCORRECT_ASSESSMENT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: RECEIPT_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TAXPAYER_COMPLAINT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TECHNICAL_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TIN_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: VEHICLE_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.priority: LOW':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.priority: URGENT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.status: ASSIGNED':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
   'taxpayer_groups.status: SUSPENDED':
     'Reachable from a path the suite does not walk.',
   'taxpayer_tax_obligations.source: AUTO_RECOMMENDATION':

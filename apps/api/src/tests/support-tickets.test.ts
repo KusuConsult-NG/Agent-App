@@ -298,3 +298,139 @@ describe('A ticket about a transaction finds it', () => {
     assert.match(attempt.body.error.message, /No transaction found/);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('The categories PRD §78 lists are all usable', () => {
+  /**
+   * Three of the nine categories were ever raised — the two about agent
+   * conduct and the one about a payment — and the desk's own filter runs on
+   * this column. A category that has never been stored is a filter nobody has
+   * ever seen return a row, which is how a queue comes to look empty on the
+   * day somebody finally files under it.
+   */
+  const REMAINING = [
+    ['TIN_ISSUE', 'TIN has not been issued', 'The taxpayer registered three weeks ago and still has no TIN against the record.'],
+    ['VEHICLE_ISSUE', 'Plate number rejected at renewal', 'The registry returns nothing for a plate the owner has papers for.'],
+    ['RECEIPT_ISSUE', 'Receipt will not verify', 'The QR code on the printed receipt reports that no such document exists.'],
+    ['TECHNICAL_ISSUE', 'Application will not sync', 'Six collections have sat in the outbox since Tuesday and will not go up.'],
+    ['TAXPAYER_COMPLAINT', 'Charged for a stall she does not hold', 'The trader says the kiosk assessed to her was given up two years ago.'],
+    ['INCORRECT_ASSESSMENT', 'Rate applied is for the wrong band', 'A lock-up shop has been assessed at the supermarket rate for this quarter.'],
+  ] as const;
+
+  it('files a ticket under each of them, and the desk can filter to it', async () => {
+    for (const [category, subject, description] of REMAINING) {
+      const created = await raise(agentToken, { category, subject, description });
+      assert.equal(created.status, 201, `${category} was refused: ${JSON.stringify(created.body)}`);
+
+      const stored = await queryOne<{ category: string }>(
+        pool,
+        'SELECT category FROM support_tickets WHERE id = $1',
+        [created.body.id],
+      );
+      assert.equal(stored?.category, category);
+
+      const filtered = await get(`/support/tickets?category=${category}`, { token: officer });
+      assert.equal(filtered.status, 200, JSON.stringify(filtered.body));
+      assert.equal(filtered.body.length, 1, `the desk's ${category} filter returned nothing`);
+      assert.equal(filtered.body[0].subject, subject);
+    }
+  });
+
+  it('refuses a category the platform does not have', async () => {
+    const refused = await raise(agentToken, { category: 'LAND_DISPUTE' });
+    assert.equal(refused.status, 422, JSON.stringify(refused.body));
+  });
+});
+
+describe('The desk sees the urgent ones first', () => {
+  /**
+   * Only NORMAL and HIGH had ever been stored, so the two ends of the scale —
+   * the ones that decide what a desk officer opens first thing on Monday —
+   * were ordering rules nothing had exercised. Raising them in the reverse of
+   * the order they should come back in is the point: sorting by arrival alone
+   * would put the newest first and pass a weaker test.
+   */
+  it('orders by priority rather than by arrival', async () => {
+    const urgent = await raise(agentToken, {
+      priority: 'URGENT',
+      subject: 'Money taken and no receipt',
+      description: 'The taxpayer was debited twice at the POS and has no receipt for either.',
+    });
+    const low = await raise(agentToken, {
+      priority: 'LOW',
+      subject: 'Spelling of a ward name',
+      description: 'The ward is spelled two different ways on the assessment and the receipt.',
+    });
+    const normal = await raise(agentToken, {
+      priority: 'NORMAL',
+      subject: 'Slow confirmation at the market',
+      description: 'Confirmations take about five minutes at the Terminus market on Fridays.',
+    });
+    assert.equal(urgent.status, 201);
+    assert.equal(low.status, 201);
+    assert.equal(normal.status, 201);
+
+    const queue = await get('/support/tickets', { token: officer });
+    assert.equal(queue.status, 200, JSON.stringify(queue.body));
+    assert.deepEqual(
+      queue.body.map((row: { priority: string }) => row.priority),
+      ['URGENT', 'NORMAL', 'LOW'],
+      'newest-first ordering would have given NORMAL, LOW, URGENT',
+    );
+
+    const stored = await queryOne<{ priority: string }>(
+      pool,
+      'SELECT priority FROM support_tickets WHERE id = $1',
+      [low.body.id],
+    );
+    assert.equal(stored?.priority, 'LOW');
+  });
+});
+
+describe('A ticket can be put on somebody’s desk', () => {
+  /**
+   * ASSIGNED is the state that says a named officer has picked a ticket up.
+   * The endpoint accepted it and the queue had an `assignedToMe` filter built
+   * on it, and nothing had ever written it — so the filter every desk officer
+   * would reach for first had never returned a row in its life.
+   */
+  it('names the officer it is assigned to, and they can find it', async () => {
+    const raised = await raise(agentToken);
+    const deskOfficerId = (
+      await queryOne<{ id: string }>(pool, 'SELECT id FROM users WHERE phone = $1', [
+        '+2348000000041',
+      ])
+    )!.id;
+
+    const assigned = await post(
+      `/support/tickets/${raised.body.id}/update`,
+      { status: 'ASSIGNED', assignedTo: deskOfficerId },
+      { token: officer },
+    );
+    assert.equal(assigned.status, 200, JSON.stringify(assigned.body));
+
+    const stored = await queryOne<{ status: string; assigned_to: string }>(
+      pool,
+      'SELECT status, assigned_to FROM support_tickets WHERE id = $1',
+      [raised.body.id],
+    );
+    assert.equal(stored?.status, 'ASSIGNED');
+    assert.equal(stored?.assigned_to, deskOfficerId);
+
+    const mine = await get('/support/tickets?assignedToMe=true', { token: officer });
+    assert.equal(mine.status, 200, JSON.stringify(mine.body));
+    assert.equal(mine.body.length, 1);
+    assert.equal(mine.body[0].id, raised.body.id);
+    assert.equal(mine.body[0].assigned_to_name, 'Desk Officer');
+
+    // And the assignment joins the conversation, so the agent who raised it
+    // can see it has been picked up rather than watching a silent queue.
+    const detail = await get(`/support/tickets/${raised.body.id}`, { token: agentToken });
+    assert.equal(detail.body.status, 'ASSIGNED');
+    assert.ok(
+      detail.body.messages.some((m: { body: string }) => /assigned/i.test(m.body)),
+      `the thread should say it was assigned: ${JSON.stringify(detail.body.messages)}`,
+    );
+  });
+});

@@ -39,6 +39,7 @@ import {
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
+import { computeComplianceScore } from '../services/incentives';
 
 let agent: { token: string; device: string; id: string };
 let requester = '';
@@ -116,6 +117,7 @@ async function collect(suffix: string) {
     auth,
   );
   return {
+    taxpayerId: taxpayer.body.taxpayerId as string,
     transactionId: assessment.body.transactionId as string,
     reference: assessment.body.transactionReference as string,
     gatewayReference: initiated.body.gatewayReference as string,
@@ -123,14 +125,19 @@ async function collect(suffix: string) {
 }
 
 /** Request, approve and execute a reversal — the three-person path. */
-async function reverse(transactionId: string) {
+async function reverse(transactionId: string, payload: Record<string, unknown> = {}) {
   const request = await post(
     '/government/approvals',
     {
       approvalType: 'PAYMENT_REVERSAL',
       entityType: 'transaction',
       entityId: transactionId,
-      payload: { amountKobo: '300000', reason: 'Taxpayer charged in error', refundType: 'REVERSAL' },
+      payload: {
+        amountKobo: '300000',
+        reason: 'Taxpayer charged in error',
+        refundType: 'REVERSAL',
+        ...payload,
+      },
       reason: 'Duplicate assessment for the same premises in this period.',
     },
     { token: requester },
@@ -394,5 +401,91 @@ describe('A reversal needs three people', () => {
     );
     assert.equal(selfExecute.status, 409);
     assert.equal(selfExecute.body.error.code, 'SEGREGATION_OF_DUTIES');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('A reversal says whose doing it was', () => {
+  /**
+   * `refunds.attributable_to` was added so the compliance score would stop
+   * charging a citizen for the State's own double charges, and it defaults to
+   * GOVERNMENT for that reason. But nothing on any path ever set it to
+   * anything else, so the half of the rule that was still meant to bite — a
+   * payment the taxpayer's own bank pulled back — could not bite either. The
+   * column had one reachable value, which is not a classification, and the
+   * score's reversal component was dead in both directions at once.
+   */
+  async function scoreFor(taxpayerId: string) {
+    const client = await pool.connect();
+    try {
+      return await computeComplianceScore(client, taxpayerId);
+    } finally {
+      client.release();
+    }
+  }
+
+  const reversalPenalty = (breakdown: { components: { factor: string; points: number }[] }) =>
+    breakdown.components.find((c) => c.factor.toLowerCase().includes('revers'))?.points ?? 0;
+
+  it('costs the citizen nothing when nobody said, and nothing when the gateway did it', async () => {
+    const unclassified = await collect('7');
+    assert.equal((await reverse(unclassified.transactionId)).status, 200);
+    const unsaid = await queryOne<{ attributable_to: string }>(
+      pool,
+      'SELECT attributable_to FROM refunds WHERE transaction_id = $1',
+      [unclassified.transactionId],
+    );
+    assert.equal(unsaid?.attributable_to, 'GOVERNMENT', 'silence is not an accusation');
+
+    const gatewayFault = await collect('8');
+    const executed = await reverse(gatewayFault.transactionId, { attributableTo: 'GATEWAY' });
+    assert.equal(executed.status, 200, JSON.stringify(executed.body));
+    const blamed = await queryOne<{ attributable_to: string }>(
+      pool,
+      'SELECT attributable_to FROM refunds WHERE transaction_id = $1',
+      [gatewayFault.transactionId],
+    );
+    assert.equal(blamed?.attributable_to, 'GATEWAY');
+
+    // Neither costs a point. The citizen did nothing in either case.
+    assert.equal(reversalPenalty(await scoreFor(unclassified.taxpayerId)), 0);
+    assert.equal(reversalPenalty(await scoreFor(gatewayFault.taxpayerId)), 0);
+  });
+
+  it('costs the citizen when the payment was recalled on their side', async () => {
+    const recalled = await collect('9');
+    const before = await scoreFor(recalled.taxpayerId);
+    const executed = await reverse(recalled.transactionId, { attributableTo: 'TAXPAYER' });
+    assert.equal(executed.status, 200, JSON.stringify(executed.body));
+
+    const blamed = await queryOne<{ attributable_to: string }>(
+      pool,
+      'SELECT attributable_to FROM refunds WHERE transaction_id = $1',
+      [recalled.transactionId],
+    );
+    assert.equal(blamed?.attributable_to, 'TAXPAYER');
+
+    const after = await scoreFor(recalled.taxpayerId);
+    assert.ok(
+      reversalPenalty(after) < 0,
+      `a reversal the taxpayer caused should cost points: ${JSON.stringify(after.components)}`,
+    );
+    assert.ok(after.score < before.score, 'and the score they are judged on should fall');
+  });
+
+  it('refuses an attribution it does not recognise rather than guessing', async () => {
+    const collected = await collect('10');
+    const refused = await reverse(collected.transactionId, { attributableTo: 'THE_WEATHER' });
+    assert.equal(refused.status, 409, JSON.stringify(refused.body));
+    assert.equal(refused.body.error?.code, 'REVERSAL_ATTRIBUTION_UNKNOWN');
+
+    // And nothing was carried out on the strength of it.
+    const refund = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM refunds WHERE transaction_id = $1',
+      [collected.transactionId],
+    );
+    assert.equal(refund, null, 'no refund is recorded for a reversal that was refused');
   });
 });
