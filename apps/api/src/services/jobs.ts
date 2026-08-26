@@ -96,6 +96,26 @@ export const BACKGROUND_JOBS = {
     intervalMs: 6 * 60 * 60_000,
     purpose: 'Warns taxpayers before an invoice lapses.',
   },
+  /*
+   * The two tables nothing pruned.
+   *
+   * `idempotency_keys` gains a row carrying a full response body on every
+   * taxpayer registration, assessment, payment initiation and vehicle renewal,
+   * and nothing had ever deleted one — on the busiest write path in the system,
+   * in a database whose running out of space stops collection statewide.
+   * `usage_events` had a retention function and an endpoint to call it, and no
+   * schedule, so telemetry was pruned only when somebody remembered to press a
+   * button. Daily is right for both: neither is urgent, and both are
+   * unbounded.
+   */
+  'idempotency-sweep': {
+    intervalMs: 24 * 60 * 60_000,
+    purpose: 'Deletes settled idempotency keys past their retention window.',
+  },
+  'usage-retention': {
+    intervalMs: 24 * 60 * 60_000,
+    purpose: 'Deletes product telemetry past its ninety-day retention window.',
+  },
 } as const;
 
 export type JobName = keyof typeof BACKGROUND_JOBS;
