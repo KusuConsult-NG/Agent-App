@@ -201,6 +201,148 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
   'referee_risk_flags.severity: MEDIUM':
     'Same: every referee rule is HIGH or CRITICAL by what it detects.',
 
+  /*
+   * Assessment states the platform's own shape does not produce.
+   *
+   * An assessment and its invoice are created in one call, so the row is
+   * INVOICED the moment it exists and there is no draft to leave behind.
+   * Nothing cancels one — a lapsed invoice EXPIRES and a paid one is settled
+   * on the invoice and the transaction, which are the rows every report reads.
+   */
+  'assessments.status: DRAFT':
+    'An assessment is created together with its invoice, so it is INVOICED from the first instant and never a draft.',
+  'assessments.status: CANCELLED':
+    'An assessment lapses (EXPIRED) or is superseded by a reversal; nothing cancels one.',
+  'assessments.status: SETTLED':
+    'Settlement is recorded on the invoice and the transaction, which is what the reports read; the assessment keeps the figure it assessed.',
+
+  /* Seeded once, like the agreement's own RETIRED above: nothing drafts a
+   * second version because no endpoint publishes one. */
+  'agreement_versions.status: DRAFT':
+    'Agreement versions are seeded active; no endpoint drafts a replacement.',
+
+  /* The other two inert members of the schedule vocabulary, for the reason
+   * given against FORTNIGHTLY above: nothing reads settlement_schedule. */
+  'commission_policies.settlement_schedule: DAILY':
+    'No scheduler reads settlement_schedule; payouts are requested and approved, never timed.',
+  'commission_policies.settlement_schedule: MONTHLY':
+    'No scheduler reads settlement_schedule; payouts are requested and approved, never timed.',
+
+  /*
+   * A commission is reversed, held, approved or paid. Nothing cancels one:
+   * the transition function names CANCELLED in one CASE arm and no caller has
+   * ever passed it.
+   */
+  'commissions.status: CANCELLED':
+    'A commission follows its transaction; when that is reversed the commission is REVERSED, and nothing else ends one.',
+
+  /*
+   * Documents the platform does not issue.
+   *
+   * It generates three: a receipt, an invoice and vehicle papers. An
+   * assessment notice, a TIN confirmation letter and a separate piece of
+   * payment evidence are named in the type because they are the obvious next
+   * ones to produce, and none of them exists yet.
+   */
+  'documents.document_type: ASSESSMENT':
+    'The platform issues receipts, invoices and vehicle papers; there is no assessment notice document.',
+  'documents.document_type: PAYMENT_EVIDENCE':
+    'The receipt is the evidence of payment; nothing issues a second document for it.',
+  'documents.document_type: TIN_CONFIRMATION':
+    'A TIN is shown on the citizen status page and the receipt; no confirmation letter is generated.',
+  'documents.owner_type: AGENT':
+    'Every document the platform issues belongs to a taxpayer; an agent’s agreement is a record, not an issued document.',
+
+  /*
+   * Fraud subjects with nothing that raises them.
+   *
+   * `raiseFlag` is called against a transaction, an agent, a device or a
+   * taxpayer. Referee patterns have a table of their own — `referee_risk_flags`
+   * — because they need the referee's own identity and phone alongside them,
+   * and no rule looks at a commission on its own: commission risk is caught
+   * through the agent it belongs to.
+   */
+  'fraud_flags.entity_type: REFEREE':
+    'Referee patterns are raised in referee_risk_flags, which carries the referee’s own details.',
+  'fraud_flags.entity_type: COMMISSION':
+    'Commission risk is raised against the agent it belongs to; no rule flags a commission by itself.',
+
+  /*
+   * Part-payment.
+   *
+   * `POST /payments/initiate` takes a transaction, not an amount, so a payment
+   * is always the whole of what is owed and the CASE that would write
+   * PARTIALLY_PAID cannot take its other arm. Nothing cancels an invoice
+   * either: an unpaid one EXPIRES at its deadline and a reversed one goes back
+   * to UNPAID, because a demand notice that was wrongly paid is still owed.
+   */
+  'invoices.status: PARTIALLY_PAID':
+    'A payment is initiated against a transaction, never an amount, so it always settles the invoice in full.',
+  'invoices.status: CANCELLED':
+    'An unpaid invoice expires at its deadline; a reversed one returns to UNPAID because the demand still stands.',
+
+  /*
+   * The whole payment came back, and every row that records it says REVERSED.
+   *
+   * `transactions.status` keeps the distinction — a FULL refund is REFUNDED
+   * and a REVERSAL is REVERSED — because that is the row the reports count.
+   * The payment and the receipt take REVERSED either way, and both readers of
+   * those columns treat the two words as one thing.
+   */
+  'payments.status: REFUNDED':
+    'The reversal cascade writes REVERSED on the payment whichever kind of refund it was; the transaction carries the distinction.',
+  'receipts.status: REFUNDED':
+    'Same: a returned payment voids its receipt as REVERSED, and public verification reads the two words identically.',
+
+  /*
+   * A webhook delivered twice.
+   *
+   * `payment_webhook_events` is unique on (gateway, event_id), so a
+   * redelivery inserts nothing and there is no second row for DUPLICATE to
+   * describe. Overwriting the first row with it would lose the outcome that
+   * matters — that the payment was processed — and redeliveries are counted
+   * in the webhook metric instead.
+   */
+  'payment_webhook_events.processing_status: DUPLICATE':
+    'The (gateway, event_id) key means a redelivery inserts no row; the first row keeps its own outcome and the metric counts the repeat.',
+
+  /*
+   * Codes for flows that do not exist. `/auth/otp/request` accepts STEP_UP and
+   * nothing else, on purpose and with the reasoning recorded on the route:
+   * there is no self-registration, no password reset and no OTP sign-in, and a
+   * referee is verified by the link they were sent rather than by a code. The
+   * purposes stay in the column ready for the flows that would use them.
+   */
+  'otp_codes.purpose: PASSWORD_RESET':
+    'There is no password reset flow; the route offers STEP_UP alone.',
+  'otp_codes.purpose: REGISTRATION':
+    'There is no self-registration; an agent applies and an officer creates every other account.',
+  'otp_codes.purpose: REFEREE_VERIFY':
+    'A referee is verified by the invitation link they were sent, not by a code.',
+
+  /*
+   * An obligation the platform worked out for itself. Every obligation on the
+   * register was put there by an agent at onboarding or by an officer
+   * reviewing the record; `obligations.ts` names AUTO_RECOMMENDATION for the
+   * derivation that has not been built.
+   */
+  'taxpayer_tax_obligations.source: AUTO_RECOMMENDATION':
+    'Nothing derives an obligation automatically; every one is recorded by an agent or an officer.',
+
+  /*
+   * Transaction states nothing reaches.
+   *
+   * The transaction row is created already INVOICE_GENERATED, because the
+   * assessment and the invoice are made together — ASSESSMENT_CREATED is real
+   * as an event in `transaction_events` and is written there, and is never a
+   * resting state. And nothing cancels a transaction: it expires, fails,
+   * is abandoned, or is reversed.
+   */
+  'transactions.status: ASSESSMENT_CREATED':
+    'Recorded as an event in transaction_events; the row itself is INVOICE_GENERATED from creation.',
+  'transactions.status: CANCELLED':
+    'A transaction expires, fails, is abandoned or is reversed; nothing cancels one.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -249,38 +391,10 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Reachable from a path the suite does not walk.',
   'agents.kyc_status: SUSPENDED':
     'Reachable from a path the suite does not walk.',
-  'agreement_versions.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
   'app_versions.app: AGENT_PWA':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'app_versions.app: PORTAL':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'assessments.assessment_type: SELF_ASSESSMENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'assessments.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'assessments.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'assessments.status: SETTLED':
-    'Reachable from a path the suite does not walk.',
-  'commission_policies.settlement_schedule: DAILY':
-    'Reachable from a path the suite does not walk.',
-  'commission_policies.settlement_schedule: MONTHLY':
-    'Reachable from a path the suite does not walk.',
-  'commissions.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'documents.document_type: ASSESSMENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.document_type: PAYMENT_EVIDENCE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.document_type: TIN_CONFIRMATION':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.owner_type: AGENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'fraud_flags.entity_type: COMMISSION':
-    'Reachable from a path the suite does not walk.',
-  'fraud_flags.entity_type: REFEREE':
-    'Reachable from a path the suite does not walk.',
   'fraud_flags.severity: LOW':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'group_attestation_invitations.status: EXPIRED':
@@ -299,10 +413,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
   'incentive_allocation_rounds.unit: UNIT':
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'invoices.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'invoices.status: PARTIALLY_PAID':
-    'Reachable from a path the suite does not walk.',
   'lgas.status: INACTIVE':
     'Reachable from a path the suite does not walk.',
   'mdas.status: INACTIVE':
@@ -312,34 +422,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'notifications.channel: EMAIL':
     'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'offline_drafts.status: DUPLICATE':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: PASSWORD_RESET':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: REFEREE_VERIFY':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: REGISTRATION':
-    'Reachable from a path the suite does not walk.',
-  'payment_webhook_events.processing_status: DUPLICATE':
-    'Reachable from a path the suite does not walk.',
-  'payment_webhook_events.processing_status: IGNORED':
-    'Reachable from a path the suite does not walk.',
-  'payments.payment_method: ACCOUNT_TRANSFER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.payment_method: BANK_TRANSFER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.payment_method: USSD':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.status: ABANDONED':
-    'Reachable from a path the suite does not walk.',
-  'payments.status: REFUNDED':
-    'Reachable from a path the suite does not walk.',
-  'receipts.status: REFUNDED':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_records.status: PENDING':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_records.status: REVERSED':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_runs.status: FAILED':
     'Reachable from a path the suite does not walk.',
   'revenue_authorities.status: INACTIVE':
     'Reachable from a path the suite does not walk.',
@@ -351,12 +433,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
     'Reachable from a path the suite does not walk.',
   'taxpayer_groups.status: SUSPENDED':
     'Reachable from a path the suite does not walk.',
-  'taxpayer_tax_obligations.source: AUTO_RECOMMENDATION':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'taxpayers.gender: FEMALE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'taxpayers.gender: MALE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
   'taxpayers.status: CLOSED':
     'Reachable from a path the suite does not walk.',
   'taxpayers.status: DRAFT':
@@ -364,10 +440,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'taxpayers.status: SUSPENDED':
     'Reachable from a path the suite does not walk.',
   'territories.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'transactions.status: ASSESSMENT_CREATED':
-    'Reachable from a path the suite does not walk.',
-  'transactions.status: CANCELLED':
     'Reachable from a path the suite does not walk.',
   'usage_events.connection: LIMITED':
     'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',

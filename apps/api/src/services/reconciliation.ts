@@ -25,6 +25,7 @@ import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
 import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
+import { log } from '../lib/logger';
 
 export interface ReconciliationSummary {
   runId: string;
@@ -164,6 +165,64 @@ export async function runReconciliation(params: {
     );
   }
 
+  /*
+   * A run that could not finish says so, in the table runs are read from.
+   *
+   * The run row is written inside the same transaction as the matching, which
+   * is right — a half-matched period must not be left looking reconciled. But
+   * it meant that a run which threw part way rolled its own row back with
+   * everything else, so a crashed run left no trace at all: the officer saw no
+   * run for the period, which reads exactly like nobody having started one.
+   * That is the same blindness `ABORTED` exists to prevent, and ABORTED was
+   * only ever reached when the gateway declined to send a statement.
+   *
+   * So the failure is recorded afterwards, in a transaction of its own, and
+   * the error goes on to the caller unchanged.
+   */
+  try {
+    return await runMatching();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Reconciliation failed';
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO reconciliation_runs
+           (id, period_start, period_end, gateway, started_by, status,
+            statement_source, statement_line_count, abort_reason, completed_at)
+         VALUES ($1,$2,$3,$4,$5,'FAILED',$6,$7,$8,now())`,
+        [
+          runId,
+          params.from,
+          params.to,
+          gateway.name,
+          params.actorId,
+          statement.source,
+          statement.lines.length,
+          reason,
+        ],
+      );
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'reconciliation.failed',
+        entityType: 'reconciliation_run',
+        entityId: runId,
+        newValue: { reason, gateway: gateway.name },
+      });
+    }).catch((recordingError) =>
+      // The original failure is what the caller needs; losing it behind a
+      // second one would be the worse trade. Logged so a run that could not
+      // even record its own failure is still visible somewhere.
+      log.error('reconciliation failure could not be recorded', {
+        component: 'reconciliation',
+        runId,
+        reason,
+        recordingError: String(recordingError),
+      }),
+    );
+    throw error;
+  }
+
+  async function runMatching(): Promise<ReconciliationSummary> {
   return withTransaction(async (client) => {
     await client.query(
       `INSERT INTO reconciliation_runs
@@ -386,6 +445,7 @@ export async function runReconciliation(params: {
       statementLines: statement.lines.length,
     };
   });
+  }
 }
 
 /**
