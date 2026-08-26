@@ -458,6 +458,45 @@ export function AgentDetailScreen({
                           Approve
                         </button>
                       )}
+                      {/*
+                        * Pausing sits before revoking, and reads as the lesser
+                        * thing, because it is: a mislaid handset, a phone in for
+                        * repair, or one under a fraud flag somebody wants to look
+                        * at. Revoking is final — that handset can never be
+                        * registered to this agent again — and was for a long time
+                        * the only lever here, so the choice was to ban a working
+                        * phone or do nothing.
+                        */}
+                      {(row.status === 'ACTIVE' || row.status === 'APPROVED') && (
+                        <button
+                          type="button"
+                          className="small secondary"
+                          disabled={busy || reason.trim().length < 5}
+                          onClick={() =>
+                            act(async () => {
+                              await api.post(`/agents/devices/${row.id}/suspend`, { reason });
+                              return 'Device suspended and its sessions ended. It can be restored.';
+                            })
+                          }
+                        >
+                          Suspend
+                        </button>
+                      )}
+                      {row.status === 'SUSPENDED' && (
+                        <button
+                          type="button"
+                          className="small"
+                          disabled={busy || reason.trim().length < 5}
+                          onClick={() =>
+                            act(async () => {
+                              await api.post(`/agents/devices/${row.id}/restore`, { reason });
+                              return 'Device restored. The agent can collect from it again.';
+                            })
+                          }
+                        >
+                          Restore
+                        </button>
+                      )}
                       {row.status !== 'REVOKED' && (
                         <button
                           type="button"
