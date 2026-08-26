@@ -46,10 +46,21 @@ export async function listCategories(db: Db, options: { authorityId?: string } =
  * Filtering by taxpayer type and LGA here is what stops an agent from being
  * offered, say, a hotel consumption tax for an individual farmer — the
  * catalogue decides what is applicable, not the agent (PRD §9).
+ *
+ * ACTIVE items only, because everybody who calls this is deciding what can be
+ * sold. `includeWithdrawn` is for the one screen that needs the rest — the
+ * officer configuring the catalogue, who cannot restore a suspended item they
+ * are unable to see.
  */
 export async function listItems(
   db: Db,
-  options: { categoryId?: string; taxpayerType?: string; lgaId?: string; search?: string } = {},
+  options: {
+    categoryId?: string;
+    taxpayerType?: string;
+    lgaId?: string;
+    search?: string;
+    includeWithdrawn?: boolean;
+  } = {},
 ) {
   return query(
     db,
@@ -58,7 +69,8 @@ export async function listItems(
             rc.name AS category_name, rc.id AS category_id,
             m.name AS mda_name, ra.name AS authority_name,
             r.id AS rate_id, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
-            r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version
+            r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version,
+            ri.status, ri.status_reason, ri.status_changed_at
        FROM revenue_items ri
        JOIN revenue_categories rc ON rc.id = ri.category_id
        JOIN revenue_authorities ra ON ra.id = rc.authority_id
@@ -70,7 +82,7 @@ export async function listItems(
             AND (rr.effective_to IS NULL OR rr.effective_to > now())
           ORDER BY rr.effective_from DESC LIMIT 1
        ) r ON true
-      WHERE ri.status = 'ACTIVE'
+      WHERE ($5::boolean OR ri.status = 'ACTIVE')
         AND ($1::uuid IS NULL OR ri.category_id = $1)
         AND ($2::text IS NULL OR $2 = ANY(ri.applicable_taxpayer_types))
         AND ($3::uuid IS NULL OR cardinality(ri.applicable_lga_ids) = 0
@@ -82,6 +94,7 @@ export async function listItems(
       options.taxpayerType ?? null,
       options.lgaId ?? null,
       options.search ?? null,
+      options.includeWithdrawn ?? false,
     ],
   );
 }
@@ -630,4 +643,86 @@ export async function getObligations(db: Db, taxpayerId: string) {
       ORDER BY i.issued_at DESC`,
     [taxpayerId],
   );
+}
+
+/**
+ * Withdraw a revenue item from the catalogue, or put it back (PRD §8).
+ *
+ * The catalogue is the legal basis for collection: an agent may take money for
+ * an item because the state says that item is collectable. `revenue_items`
+ * has always declared four statuses and every reader already honours them —
+ * `listItems` and `getItem` both require ACTIVE, and `createAssessment` reads
+ * through `getItem`, so a non-ACTIVE item cannot be assessed against. Nothing
+ * wrote them. An item created in error, a levy a court struck down, a fee the
+ * House repealed: all of them stayed collectable for as long as the platform
+ * ran, because the only status the code could produce was the ACTIVE it was
+ * inserted with.
+ *
+ * Withdrawal is forward-looking, deliberately. Invoices already raised stay
+ * payable and receipts already issued stay valid — the money was owed under
+ * the rule in force when it was assessed, and cancelling those is a separate
+ * decision an officer makes invoice by invoice. What stops is *new* liability.
+ *
+ * SUSPENDED and RETIRED differ in whether anyone expects to come back:
+ * suspension is a pause pending an answer, retirement is the end of the item.
+ * Retirement is therefore terminal — a levy brought back after being retired
+ * is a new levy, with its own code, its own rate and its own authority.
+ */
+export async function setRevenueItemStatus(params: {
+  itemId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'RETIRED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ code: string; name: string; from: string; to: string }> {
+  return withTransaction(async (client) => {
+    const item = await queryOne<{ code: string; name: string; status: string }>(
+      client,
+      'SELECT code, name, status FROM revenue_items WHERE id = $1 FOR UPDATE',
+      [params.itemId],
+    );
+    if (!item) throw notFound('That revenue item');
+
+    if (item.status === params.status) {
+      throw conflict(
+        'ITEM_STATUS_UNCHANGED',
+        `${item.name} is already ${params.status.toLowerCase()}.`,
+      );
+    }
+
+    if (item.status === 'RETIRED') {
+      throw conflict(
+        'ITEM_RETIRED',
+        `${item.name} has been retired and cannot be brought back. Publish a new revenue item ` +
+          'with its own code and rate if the charge is being reintroduced.',
+      );
+    }
+
+    if (item.status === 'DRAFT' && params.status !== 'ACTIVE') {
+      throw conflict(
+        'ITEM_NOT_PUBLISHED',
+        `${item.name} has never been published, so there is nothing to withdraw.`,
+      );
+    }
+
+    await client.query(
+      `UPDATE revenue_items
+          SET status = $2, status_reason = $3, status_changed_at = now(),
+              status_changed_by = $4, updated_at = now()
+        WHERE id = $1`,
+      [params.itemId, params.status, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: params.status === 'ACTIVE' ? 'catalogue.item_restored' : 'catalogue.item_withdrawn',
+      entityType: 'revenue_item',
+      entityId: params.itemId,
+      oldValue: { status: item.status },
+      newValue: { status: params.status, reason: params.reason },
+    });
+
+    return { code: item.code, name: item.name, from: item.status, to: params.status };
+  });
 }

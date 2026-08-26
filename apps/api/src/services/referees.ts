@@ -169,13 +169,26 @@ export async function nominateReferee(params: {
     });
 
     await client.query(
+      /*
+       * A replacement is a different event from a first nomination. §29 keeps
+       * the superseded referee rather than overwriting them, precisely so the
+       * substitution is visible; journalling both as REFEREE_INVITED with only
+       * the reason text to tell them apart threw that away, and an applicant
+       * cycling through referees until one cleared looked like an applicant
+       * who nominated once.
+       */
       `INSERT INTO agent_clearance_events (agent_id, event_type, reason, actor_id, metadata)
-       VALUES ($1,'REFEREE_INVITED',$2,$3,$4)`,
+       VALUES ($1,$2,$3,$4,$5)`,
       [
         params.agentId,
+        params.replacesRefereeId ? 'REFEREE_REPLACED' : 'REFEREE_INVITED',
         params.replacesRefereeId ? 'Replacement referee nominated' : 'Referee nominated',
         params.actorId,
-        JSON.stringify({ referenceCode, category: input.category }),
+        JSON.stringify({
+          referenceCode,
+          category: input.category,
+          replaces: params.replacesRefereeId ?? null,
+        }),
       ],
     );
 

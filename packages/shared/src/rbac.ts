@@ -114,6 +114,13 @@ export const PERMISSIONS = [
    * told.
    */
   'vehicle:authority_sync',
+  /**
+   * Take a vehicle out of service and put it back. Separate from
+   * `vehicle:renew`, which an agent holds: an agent sells particulars, and
+   * deciding a vehicle has been scrapped or that its plate is under
+   * investigation is not a decision made at the point of sale.
+   */
+  'vehicle:manage',
 
   // Agents
   'agent:read:own',
@@ -237,6 +244,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'document:read:all',
     'vehicle:read:all',
     'vehicle:authority_sync',
+    'vehicle:manage',
     'agent:read:all',
     'agent:suspend',
     'commission:read:all',
@@ -313,6 +321,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'document:read:all',
     'vehicle:read:all',
     'vehicle:authority_sync',
+    'vehicle:manage',
     'agent:read:all',
     'agent:manage',
     'agent:approve',

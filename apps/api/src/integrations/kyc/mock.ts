@@ -42,6 +42,26 @@ export class MockKycProvider implements KycProvider {
       return kycUnavailable('mock', 'Identity provider could not be reached (development stub).');
     }
 
+    /*
+     * "We need more from you" — the outcome the mock could not produce.
+     *
+     * `KycVerificationStatus` has declared VERIFICATION_REQUIRED from the
+     * start and the HTTP adapter maps vendor words onto it, but every
+     * development and test run goes through this provider, so the branch that
+     * handles it was never once exercised locally. It was wrong: it journalled
+     * the applicant as having merely submitted, while the notification told
+     * them action was required.
+     */
+    if (last === '7') {
+      return {
+        status: 'VERIFICATION_REQUIRED',
+        reference,
+        livenessResult: 'MANUAL_REVIEW',
+        failureReason: 'The photograph of the identity document was too dark to read.',
+        provider: 'mock',
+      };
+    }
+
     if (last === '0') {
       return {
         status: 'UNDER_REVIEW',

@@ -518,6 +518,36 @@ export async function groupDetail(db: Db, groupId: string) {
   return group;
 }
 
+/**
+ * Who is in a group, and who is no longer.
+ *
+ * Departed members stay on the list rather than vanishing from it. A group
+ * whose members silently disappear cannot be audited: an allocation awarded
+ * last season to somebody who is not on today's list reads as an award to a
+ * non-member, when in fact they were one at the time.
+ */
+export async function listMembers(db: Db, groupId: string) {
+  return query(
+    db,
+    `SELECT m.id, m.status, m.member_reference, m.joined_on, m.attested_at,
+            m.rejection_reason, m.left_at, m.left_reason,
+            tp.id AS taxpayer_id, tp.tin,
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', tp.first_name, tp.last_name)), ''),
+                     tp.business_name) AS member_name
+       FROM taxpayer_group_members m
+       JOIN taxpayers tp ON tp.id = m.taxpayer_id
+      WHERE m.group_id = $1
+      ORDER BY CASE m.status
+                 WHEN 'PENDING_ATTESTATION' THEN 0
+                 WHEN 'ATTESTED' THEN 1
+                 WHEN 'REJECTED' THEN 2
+                 ELSE 3
+               END,
+               member_name`,
+    [groupId],
+  );
+}
+
 export async function listGroups(
   db: Db,
   options: {
@@ -571,4 +601,102 @@ export async function listGroups(
       options.registeredBy ?? null,
     ],
   );
+}
+
+/**
+ * Record that a member has left the group (PRD §33).
+ *
+ * Membership decides who gets things. `allocations.ts` awards a subsidised
+ * benefit only to a taxpayer whose membership is ATTESTED, and `incentives.ts`
+ * gates a programme requiring group membership on the same status. Both were
+ * right; what neither could survive was that membership never ended. A trader
+ * who left the market association, a farmer who moved to another LGA, a member
+ * expelled by the cooperative — all of them stayed ATTESTED for as long as the
+ * row existed, and kept a claim on fertiliser meant for the people still in
+ * the group. `LEFT` was in the constraint from the first migration and nothing
+ * has ever written it.
+ *
+ * The row is updated, never deleted, and this matters more than it looks: the
+ * person *was* a member when the allocations they already collected were
+ * awarded, and an award whose justification has been deleted is an award that
+ * looks fraudulent to the next auditor who reads it.
+ *
+ * An officer records this, not the group's leader. The attestation link is a
+ * forwardable SMS — the same reasoning that keeps a leader from un-confirming
+ * a member through it keeps them from removing one.
+ */
+export async function recordMemberDeparture(params: {
+  groupId: string;
+  membershipId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ memberName: string; groupName: string; from: string }> {
+  return withTransaction(async (client) => {
+    const member = await queryOne<{
+      status: string;
+      group_name: string;
+      member_name: string;
+    }>(
+      client,
+      `SELECT m.status, g.name AS group_name,
+              COALESCE(NULLIF(TRIM(CONCAT_WS(' ', tp.first_name, tp.last_name)), ''),
+                       tp.business_name, 'This member') AS member_name
+         FROM taxpayer_group_members m
+         JOIN taxpayer_groups g ON g.id = m.group_id
+         JOIN taxpayers tp ON tp.id = m.taxpayer_id
+        WHERE m.id = $1 AND m.group_id = $2
+        FOR UPDATE OF m`,
+      [params.membershipId, params.groupId],
+    );
+    // Scoped to the group in the query rather than checked afterwards, so a
+    // membership id belonging to another group reads as absent rather than as
+    // a membership this officer may act on.
+    if (!member) throw notFound('That membership');
+
+    if (member.status === 'LEFT') {
+      throw conflict(
+        'MEMBER_ALREADY_LEFT',
+        `${member.member_name} is already recorded as having left ${member.group_name}.`,
+      );
+    }
+
+    /*
+     * A rejected claim is not a departure. The leader answered that this
+     * person was never a member of the group, and overwriting that with LEFT
+     * would turn a denial into a membership that ended — which is the version
+     * the person themselves would prefer, and is not what was attested.
+     */
+    if (member.status === 'REJECTED') {
+      throw conflict(
+        'MEMBERSHIP_REJECTED',
+        `${member.group_name}'s leader did not confirm ${member.member_name} as a member, so ` +
+          'there is no membership to end.',
+      );
+    }
+
+    await client.query(
+      `UPDATE taxpayer_group_members
+          SET status = 'LEFT', left_at = now(), left_reason = $2,
+              recorded_left_by = $3, updated_at = now()
+        WHERE id = $1`,
+      [params.membershipId, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'group.member_left',
+      entityType: 'group_member',
+      entityId: params.membershipId,
+      oldValue: { status: member.status },
+      newValue: { status: 'LEFT', reason: params.reason, groupId: params.groupId },
+    });
+
+    return {
+      memberName: member.member_name,
+      groupName: member.group_name,
+      from: member.status,
+    };
+  });
 }

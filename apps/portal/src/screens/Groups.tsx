@@ -37,6 +37,17 @@ interface GroupRow {
   attested_members: string;
 }
 
+interface MemberRow {
+  id: string;
+  member_name: string | null;
+  tin: string | null;
+  status: string;
+  attested_at: string | null;
+  rejection_reason: string | null;
+  left_at: string | null;
+  left_reason: string | null;
+}
+
 const readable = (value: string | null) =>
   value ? value.replace(/_/g, ' ').toLowerCase() : '—';
 
@@ -49,6 +60,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
   const [attestationLink, setAttestationLink] = useState<{ name: string; url: string } | null>(null);
+  const [members, setMembers] = useState<{ group: GroupRow; rows: MemberRow[] } | null>(null);
+  const [departureReason, setDepartureReason] = useState('');
 
   const load = useCallback(() => {
     api
@@ -69,12 +82,14 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
   useEffect(load, [load]);
 
-  async function act(fn: () => Promise<string>) {
+  async function act(fn: () => Promise<string | null>) {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      setMessage(await fn());
+      const note = await fn();
+      // Opening a panel is not news; only say something when something changed.
+      if (note) setMessage(note);
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -258,6 +273,82 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
           </div>
         </div>
 
+      {members && (
+        <div className="card card--flush">
+          <div style={{ padding: '18px 18px 0' }}>
+            <div className="card__header">
+              <div>
+                <h2 className="card__title">Members — {members.group.name}</h2>
+                <p className="card__hint">
+                  Only confirmed members count towards allocations and group-based programmes.
+                  Somebody who has left stays on this list: they were a member when whatever they
+                  already collected was awarded.
+                </p>
+              </div>
+              <button type="button" className="small secondary" onClick={() => setMembers(null)}>
+                Close
+              </button>
+            </div>
+
+            {can('group:manage') && (
+              <div className="field">
+                <label htmlFor="departure-reason">Reason a membership ended</label>
+                <textarea
+                  id="departure-reason"
+                  rows={2}
+                  value={departureReason}
+                  onChange={(event) => setDepartureReason(event.target.value)}
+                  placeholder="Moved his stall to Bukuru market and left the association."
+                />
+              </div>
+            )}
+          </div>
+
+          <Table
+            columns={[
+              { key: 'member_name', label: 'Member', render: (row) => row.member_name ?? '—' },
+              { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
+              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              {
+                key: 'left_reason',
+                label: 'Note',
+                render: (row) => row.left_reason ?? row.rejection_reason ?? '—',
+              },
+              {
+                key: 'action',
+                label: '',
+                render: (row) =>
+                  can('group:manage') && (row.status === 'ATTESTED' || row.status === 'PENDING_ATTESTATION') ? (
+                    <button
+                      type="button"
+                      className="small danger"
+                      disabled={busy || departureReason.trim().length < 5}
+                      onClick={() =>
+                        act(async () => {
+                          const result = await api.post<{ message: string }>(
+                            `/groups/${members.group.id}/members/${row.id}/departure`,
+                            { reason: departureReason },
+                          );
+                          const refreshed = await api.get<MemberRow[]>(
+                            `/groups/${members.group.id}/members`,
+                          );
+                          setMembers({ group: members.group, rows: refreshed });
+                          setDepartureReason('');
+                          return result.message;
+                        })
+                      }
+                    >
+                      Record departure
+                    </button>
+                  ) : null,
+              },
+            ]}
+            rows={members.rows}
+            empty="Nobody has been recorded in this group yet."
+          />
+        </div>
+      )}
+
         <Table
           columns={[
             { key: 'code', label: 'Code' },
@@ -267,6 +358,26 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             { key: 'lga_name', label: 'LGA' },
             { key: 'attested_members', label: 'Confirmed members' },
             { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+            {
+              key: 'members',
+              label: '',
+              render: (row) =>
+                can('group:read:all') || can('group:read:own') ? (
+                  <button
+                    type="button"
+                    className="small secondary"
+                    onClick={() =>
+                      act(async () => {
+                        const rows = await api.get<MemberRow[]>(`/groups/${row.id}/members`);
+                        setMembers({ group: row, rows });
+                        return null;
+                      })
+                    }
+                  >
+                    Members
+                  </button>
+                ) : null,
+            },
             {
               key: 'attest',
               label: '',

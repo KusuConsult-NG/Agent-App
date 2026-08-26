@@ -289,16 +289,41 @@ export async function initiateRenewal(params: {
       taxpayer_id: string | null;
       owner_name: string;
       current_expiry_date: Date | null;
+      status: string;
+      status_reason: string | null;
     }>(
       client,
       `SELECT id, registration_number, vehicle_type, vehicle_class, taxpayer_id,
-              owner_name, current_expiry_date
+              owner_name, current_expiry_date, status, status_reason
          FROM vehicles WHERE id = $1`,
       [params.vehicleId],
     ),
   );
 
   if (!vehicle) throw notFound('That vehicle');
+
+  /*
+   * A vehicle that is out of service cannot have its particulars renewed.
+   *
+   * `vehicles.status` has declared ACTIVE, SUSPENDED and ARCHIVED since the
+   * table was created, and until `setVehicleStatus` there was no way to leave
+   * ACTIVE — so this check had nothing to catch and the column was decoration.
+   * Both halves had to arrive together: a status nothing writes is a state
+   * that never happens, and a status nothing reads is a state that means
+   * nothing when it does.
+   */
+  if (vehicle.status !== 'ACTIVE') {
+    throw conflict(
+      'VEHICLE_NOT_IN_SERVICE',
+      vehicle.status === 'ARCHIVED'
+        ? `${vehicle.registration_number} has been taken off the register` +
+          `${vehicle.status_reason ? ` — ${vehicle.status_reason}` : ''}. Papers cannot be ` +
+          'renewed for it. Register the vehicle again if it is back on the road.'
+        : `${vehicle.registration_number} is suspended` +
+          `${vehicle.status_reason ? ` — ${vehicle.status_reason}` : ''}. PSIRS has to lift the ` +
+          'suspension before its particulars can be renewed.',
+    );
+  }
 
   // PRD §22 step 3: verify owner. The vehicle must belong to the taxpayer who
   // is paying, so one person cannot renew another's papers by accident.
@@ -729,3 +754,72 @@ export async function vehiclesAwaitingAuthority(db: Db, limit = 100) {
 }
 
 export { parseKobo };
+
+/**
+ * Take a vehicle out of service, or put it back (PRD §21).
+ *
+ * A vehicle record outlives the vehicle. It is sold and re-registered to
+ * somebody else, it is written off in an accident, it is scrapped; or the
+ * plate turns up on two chassis and PSIRS needs it frozen while that is
+ * looked into. `vehicles.status` named all three situations — ACTIVE,
+ * SUSPENDED, ARCHIVED — from the first migration, and nothing could move a
+ * vehicle out of ACTIVE, so every vehicle ever captured was renewable for
+ * ever. The owner of a car that no longer exists could still be sold
+ * particulars for it.
+ *
+ * SUSPENDED is a hold: the vehicle is real and somebody will decide. ARCHIVED
+ * is the end of this record. Neither touches the renewals already issued —
+ * papers valid until next March stay valid until next March, because the
+ * money for them was taken for a period, not for a record.
+ *
+ * Archiving is reversible here rather than terminal, unlike retiring a revenue
+ * item, and the asymmetry is deliberate: a levy brought back is a new law with
+ * a new rate, but a car wrongly written off is the same car.
+ */
+export async function setVehicleStatus(params: {
+  vehicleId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ registrationNumber: string; from: string; to: string }> {
+  return withTransaction(async (client) => {
+    const vehicle = await queryOne<{ registration_number: string; status: string }>(
+      client,
+      'SELECT registration_number, status FROM vehicles WHERE id = $1 FOR UPDATE',
+      [params.vehicleId],
+    );
+    if (!vehicle) throw notFound('That vehicle');
+
+    if (vehicle.status === params.status) {
+      throw conflict(
+        'VEHICLE_STATUS_UNCHANGED',
+        `${vehicle.registration_number} is already ${params.status.toLowerCase()}.`,
+      );
+    }
+
+    await client.query(
+      `UPDATE vehicles
+          SET status = $2, status_reason = $3, status_changed_at = now(),
+              status_changed_by = $4, updated_at = now()
+        WHERE id = $1`,
+      [params.vehicleId, params.status, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: params.status === 'ACTIVE' ? 'vehicle.returned_to_service' : 'vehicle.taken_out_of_service',
+      entityType: 'vehicle',
+      entityId: params.vehicleId,
+      oldValue: { status: vehicle.status },
+      newValue: { status: params.status, reason: params.reason },
+    });
+
+    return {
+      registrationNumber: vehicle.registration_number,
+      from: vehicle.status,
+      to: params.status,
+    };
+  });
+}
