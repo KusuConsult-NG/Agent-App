@@ -120,6 +120,17 @@ const DELIBERATELY_MUTABLE = new Set([
    */
   'usage_events',
   /*
+   * Current state of the machinery, not evidence about the money.
+   *
+   * One row per background job, overwritten on every run — it is a reading, not
+   * a record, which is the opposite of `reconciliation_runs` beside it in this
+   * work. And deleting from it fails safe in the direction that matters: a job
+   * whose row is gone reads as NEVER RUN, the loudest state on the board, so
+   * removal cannot be used to make a stopped control look like a running one.
+   * It can only raise an alarm, never silence it.
+   */
+  'background_jobs',
+  /*
    * An assignment, not a record. Changing which territories an officer covers
    * replaces the rows wholesale, so the table always states current coverage
    * and nothing else. The history that matters — who widened whose view of the

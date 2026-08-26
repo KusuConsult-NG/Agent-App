@@ -338,6 +338,17 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/audit?format=json\|csv` | `audit:read` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
+| `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |
+
+`GET /government/workers` answers for every declared background job: when it
+last started, when it last *succeeded* — the reading that separates a job
+throwing since Tuesday from a healthy one — how many times in a row it has
+failed, and one of six states. `NEVER_RUN` and `OVERDUE` are the ones with no
+evidence anywhere else in the platform: a job that is not running produces
+nothing to look at. `STALLED` means a run started and never returned, which the
+next run infers from finding the row still at `RUNNING` under the advisory lock.
+It is `audit:read` rather than an administrator's permission because whether the
+reconciliation sweep operated is an audit fact.
 | `GET`/`POST` | `/government/programmes` | `incentive:*` |
 | `GET` | `/government/reference/territories` | `agent:read:*` |
 | `GET` | `/government/platform/integrations` | source-of-truth map |

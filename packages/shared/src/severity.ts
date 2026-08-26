@@ -38,6 +38,11 @@ const GOOD = [
   'SUCCESS',
   'SUCCESSFUL',
   'SYNCED',
+  // A background job running on schedule. Added with the four below it, when
+  // the platform gained a board showing whether its unattended controls are
+  // running: every job state rendered in the grey reserved for a status nobody
+  // needs to act on, including the ones that mean a control has stopped.
+  'HEALTHY',
 ];
 
 /** It went wrong, it was refused, or it is not to be trusted. */
@@ -68,6 +73,22 @@ const BAD = [
   // neutral grey, which is the colour of a status nobody needs to do anything
   // about.
   'BLOCKED',
+  // A scheduled job that is throwing, that started and never came back, or
+  // whose timer has stopped. Each is a control not operating, which is the
+  // strongest reason this platform has to put something in front of a person.
+  'FAILING',
+  'STALLED',
+  'OVERDUE',
+  /*
+   * NEVER, as in NEVER_RUN: a control that has not operated once.
+   *
+   * It also appears in the negation list below, and that is deliberate rather
+   * than an oversight — BAD is tested first, so a state named for something
+   * never having happened lands on danger instead of merely being kept out of
+   * the success branch. In this domain a "never" state is always an absence
+   * somebody has to act on, never a neutral fact.
+   */
+  'NEVER',
 ];
 
 /** Somebody still has to do something. */
@@ -87,6 +108,8 @@ const WAITING = [
   // has been paid in part is still outstanding for the rest.
   'UNPAID',
   'PARTIALLY',
+  // A background job mid-run. Nobody needs to do anything; it is working.
+  'RUNNING',
 ];
 
 /*
