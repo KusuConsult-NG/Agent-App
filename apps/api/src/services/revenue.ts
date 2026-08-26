@@ -14,7 +14,7 @@
 import type { PoolClient } from 'pg';
 import { parseKobo, formatNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import {
@@ -474,6 +474,95 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
  * Every state change in the platform goes through here so the legality check
  * and the event journal can never be skipped independently.
  */
+/**
+ * Retire invoices whose deadline has passed (PRD §14).
+ *
+ * Every invoice carries an `expires_at`, and the payment path honours it: an
+ * attempt to pay a lapsed invoice is refused with INVOICE_EXPIRED. Nothing
+ * acted on it anywhere else. `invoices.status` allows EXPIRED,
+ * `assessments.status` allows EXPIRED, and `INVOICE_GENERATED -> EXPIRED` is a
+ * legal transaction move — three states, all legal, none ever written. A
+ * lapsed invoice stayed UNPAID for the life of the deployment, and everything
+ * reading UNPAID believed it: the State's outstanding revenue figure climbed by
+ * every invoice that was never going to be paid, the taxpayer's own list showed
+ * a bill the platform would refuse to take, and their compliance score — which
+ * decides incentive eligibility — went on counting it against them.
+ *
+ * The sweep is the enforcement, not the deadline itself. Nothing here decides
+ * whether an invoice may be paid; that is settled at the payment path against
+ * `expires_at`, exactly as before. What this does is make the record agree with
+ * the answer the payment path was already giving.
+ *
+ * PARTIALLY_PAID is left alone. Money has been taken against it, and what
+ * happens to a part-paid bill that lapses is a decision about somebody's money
+ * — a refund of the part, or an extension — and not one a sweep should take at
+ * three in the morning.
+ */
+export async function expireLapsedInvoices(params: {
+  actorId: string | null;
+  actorRole: string;
+  limit?: number;
+}): Promise<{ expired: number }> {
+  const lapsed = await query<{ id: string; assessment_id: string; invoice_number: string }>(
+    pool,
+    `SELECT id, assessment_id, invoice_number FROM invoices
+      WHERE status = 'UNPAID' AND expires_at IS NOT NULL AND expires_at < now()
+      ORDER BY expires_at
+      LIMIT $1`,
+    [params.limit ?? 500],
+  );
+
+  let expired = 0;
+  for (const invoice of lapsed) {
+    await withTransaction(async (client) => {
+      // Re-read under the lock: a payment may have landed between the scan and
+      // now, and an invoice that has just been paid is not lapsed.
+      const current = await queryOne<{ status: string }>(
+        client,
+        'SELECT status FROM invoices WHERE id = $1 FOR UPDATE',
+        [invoice.id],
+      );
+      if (!current || current.status !== 'UNPAID') return;
+
+      await client.query(`UPDATE invoices SET status = 'EXPIRED' WHERE id = $1`, [invoice.id]);
+      await client.query(
+        `UPDATE assessments SET status = 'EXPIRED' WHERE id = $1 AND status IN ('ACTIVE','INVOICED')`,
+        [invoice.assessment_id],
+      );
+
+      const transactions = await query<{ id: string }>(
+        client,
+        `SELECT id FROM transactions
+          WHERE invoice_id = $1 AND status IN ('ASSESSMENT_CREATED','INVOICE_GENERATED')`,
+        [invoice.id],
+      );
+      for (const transaction of transactions) {
+        await transitionTransaction(client, {
+          transactionId: transaction.id,
+          to: 'EXPIRED',
+          reason: `Invoice ${invoice.invoice_number} passed its payment deadline`,
+          actorId: params.actorId,
+          source: 'SYSTEM',
+        });
+      }
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'invoice.expired',
+        entityType: 'invoice',
+        entityId: invoice.id,
+        oldValue: { status: 'UNPAID' },
+        newValue: { status: 'EXPIRED' },
+        reason: `Payment deadline passed without payment (${invoice.invoice_number})`,
+      });
+      expired += 1;
+    });
+  }
+
+  return { expired };
+}
+
 export async function transitionTransaction(
   client: PoolClient,
   params: {

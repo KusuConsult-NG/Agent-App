@@ -392,10 +392,29 @@ export function AuditScreen() {
             type="button"
             className="secondary"
             onClick={async () => {
-              const result = await api.get<{ valid: boolean; message: string; entriesChecked: number }>(
-                '/government/audit/verify',
-              );
-              setVerification(result);
+              // The one control this role exists to operate. It was the only
+              // request on this screen with nothing to catch it: a refusal or
+              // an outage left the auditor pressing a button that did nothing
+              // and saying nothing — which reads exactly like a trail that has
+              // no answer, rather than a check that did not run.
+              setError(null);
+              setVerification(null);
+              try {
+                setVerification(
+                  await api.get<{ valid: boolean; message: string; entriesChecked: number }>(
+                    '/government/audit/verify',
+                  ),
+                );
+              } catch (caught) {
+                if (caught instanceof ApiRequestError) setError(caught.error);
+                else
+                  setError({
+                    code: 'VERIFICATION_UNAVAILABLE',
+                    message:
+                      'The audit trail could not be checked just now. This is not a finding ' +
+                      'about the trail — try again, and tell support if it persists.',
+                  } as ApiError);
+              }
             }}
           >
             Verify chain integrity
