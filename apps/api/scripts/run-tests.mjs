@@ -234,7 +234,28 @@ for (const shard of failedShards) {
   }
 }
 
+/*
+ * What the suite never wrote.
+ *
+ * Runs here rather than as a test file because no single shard sees more than
+ * a quarter of the suite, and the question is about the whole of it: which of
+ * the states the schema allows did nothing produce, across every shard
+ * together. The triggers that recorded it are installed by `startTestServer`.
+ *
+ * Skipped when a shard failed. A shard that stopped early wrote less than it
+ * would have, so every state its files would have reached looks unreached —
+ * which would bury a real failure under a page of noise about coverage.
+ */
+let coverageFailed = false;
+if (failedShards.length === 0) {
+  const urls = shards.map((_, index) => databaseFor(index + 1));
+  const check = spawnSync('npx', ['tsx', 'scripts/check-enum-coverage.ts', ...urls], {
+    stdio: 'inherit',
+  });
+  coverageFailed = check.status !== 0;
+}
+
 // Set the code and let the process end on its own. `process.exit` here
 // truncates the shard output above it whenever stdout is a pipe — which is
 // every CI run, and is how this script first appeared to lose a whole shard.
-process.exitCode = failedShards.length > 0 ? 1 : 0;
+process.exitCode = failedShards.length > 0 || coverageFailed ? 1 : 0;

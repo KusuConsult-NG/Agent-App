@@ -15,6 +15,7 @@ import type { AddressInfo } from 'node:net';
 import { createApp } from '../app';
 import { pool, closePool, queryOne } from '../db/pool';
 import { runMigrations } from '../db/migrate';
+import { installEnumObservers } from './enum-observation';
 import { hashPassword } from '../lib/crypto';
 import { seedReferenceData } from '../db/seed';
 
@@ -78,6 +79,9 @@ export async function startTestServer(): Promise<string> {
   if (server) return baseUrl;
 
   await runMigrations({ silent: true });
+  // Watch what the suite writes to every enum column. Test-only, in its own
+  // schema, and installed once per shard database.
+  await installEnumObservers();
   await resetDatabase();
   await seedReferenceData();
 

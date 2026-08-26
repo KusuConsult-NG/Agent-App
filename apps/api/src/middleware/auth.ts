@@ -25,7 +25,8 @@ import {
   type StepUpAction,
 } from '@psirs/shared';
 import { config } from '../config';
-import { pool, queryOne } from '../db/pool';
+import { pool, queryOne, withTransaction } from '../db/pool';
+import { recordAudit } from '../services/audit';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
 import {
   issueAccessToken,
@@ -114,10 +115,43 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 }
 
 export function requirePermission(...permissions: Permission[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) return next(unauthorised());
     const granted = permissions.some((permission) => roleHasPermission(req.auth!.role, permission));
     if (!granted) {
+      /*
+       * A refusal is a thing that happened.
+       *
+       * `audit_logs.result` has always allowed DENIED, `recordAudit` has
+       * always accepted it, and the executive dashboard counts it as
+       * "refused this week" — and nothing ever wrote one. So an officer
+       * looking at that figure has always seen zero, on a platform that
+       * refuses things constantly. Somebody probing what their role can reach
+       * left no trace at all, which is the opposite of what an audit log on a
+       * revenue platform is for.
+       *
+       * Awaited, and the failure swallowed. An audit entry written on a
+       * best-effort basis is not much of an audit entry — and not awaiting it
+       * meant the write could land after the request had been answered, which
+       * in the suite arrived after a reset had emptied the table the row
+       * pointed into. A refusal is rare enough to afford one insert; a failure
+       * to record it must still never turn a 403 into a 500.
+       */
+      const { userId, role } = req.auth;
+      await withTransaction((client) =>
+        recordAudit(client, {
+          actorId: userId,
+          actorRole: role,
+          action: 'access.denied',
+          entityType: 'permission',
+          entityId: permissions.join(','),
+          result: 'DENIED',
+          newValue: { method: req.method, path: req.originalUrl.split('?')[0] },
+          ipAddress: req.clientIp ?? null,
+          requestId: req.requestId ?? null,
+        }),
+      ).catch(() => undefined);
+
       return next(
         forbidden(
           `Your role (${req.auth.role}) is not permitted to perform this action.`,

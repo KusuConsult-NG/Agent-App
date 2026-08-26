@@ -77,6 +77,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pool, resetDatabase, startTestServer, stopTestServer } from './helpers';
+import { DELIBERATELY_UNREACHABLE } from './enum-coverage';
 
 before(async () => {
   await resetDatabase();
@@ -86,115 +87,6 @@ before(async () => {
 after(async () => {
   await stopTestServer();
 });
-
-/**
- * States nothing writes, on purpose, with the reason each one stays.
- *
- * Keyed `table.column: VALUE`. Adding a line here is a statement that the
- * platform is not meant to reach this state — not a way to silence the check.
- */
-const DELIBERATELY_UNREACHABLE: Record<string, string> = {
-  /*
-   * Reference data nobody can publish a second version of.
-   *
-   * All four tables are seeded once and never edited through an API: there is
-   * no screen that writes an agreement, a commission policy or a training
-   * module, so there is never an older version to retire. The day one is
-   * added, retiring its predecessor is part of adding it, and this line goes.
-   */
-  'agreement_versions.status: RETIRED':
-    'Agreement versions are seeded; no endpoint publishes a second one to supersede the first.',
-  'commission_policies.status: RETIRED':
-    'Commission policies are seeded; no endpoint publishes a replacement policy.',
-  'training_modules.status: RETIRED':
-    'Training modules are seeded; no endpoint publishes a replacement module.',
-
-  /*
-   * A column that describes rather than decides. Nothing reads
-   * `settlement_schedule` — a payout is requested by the agent and approved by
-   * an officer, not produced by a scheduler — so every one of its four values
-   * is equally inert, and WEEKLY only appears because the seed writes it.
-   */
-  'commission_policies.settlement_schedule: FORTNIGHTLY':
-    'No scheduler reads settlement_schedule; payouts are requested and approved, never timed.',
-
-  /*
-   * Public verification is logged, in a better place.
-   *
-   * `verification_attempts` records every lookup with its result, including —
-   * and this is the reason it is the right table — the ones that resolve to no
-   * document at all. Somebody typing receipt numbers until one answers is the
-   * pattern worth seeing, and a log keyed on `document_id` cannot hold it.
-   * Writing VERIFY here as well would duplicate the row that matters and lose
-   * the ones that matter more.
-   */
-  'document_access_logs.access_type: VERIFY':
-    'Public verification is recorded in verification_attempts, which also holds the lookups that find nothing.',
-
-  /* Nothing shares a document. Access is download or public verification. */
-  'document_access_logs.access_type: SHARE':
-    'The platform has no document sharing; a taxpayer forwards the PDF itself, off-platform.',
-
-  /*
-   * Delivery receipts the providers do not send us. The SMS and email adapters
-   * report acceptance, which is SENT; neither has a delivery-report callback
-   * wired, and nothing in the platform can observe a person reading an SMS.
-   * DELIVERED becomes reachable the day a provider callback lands; READ never
-   * does through SMS or email.
-   */
-  'notifications.status: DELIVERED':
-    'No provider delivery-report callback is wired; the adapters report acceptance only.',
-  'notifications.status: READ':
-    'Neither SMS nor email can tell us a message was read.',
-
-  /*
-   * Draft kinds the agent application does not queue. It captures a taxpayer
-   * registration and a vehicle; a service request is made online against a
-   * live catalogue, and a document is captured inside the registration it
-   * belongs to rather than as a draft of its own.
-   */
-  'offline_drafts.draft_type: SERVICE_REQUEST':
-    'The agent app queues registrations and vehicles; a service request needs the live catalogue.',
-  'offline_drafts.draft_type: DOCUMENT_CAPTURE':
-    'Documents are captured inside the registration draft that carries them, not as a draft.',
-
-  /*
-   * Refused deliberately, one pass ago. `recordReversal` requires the refund
-   * to equal the payment exactly, because a partial refund against an
-   * integer-kobo payment has no verified remainder — the gateway confirms the
-   * whole reversal or none of it. The value stays in the constraint so that
-   * enabling partial refunds is a schema-free change; the refusal is in code
-   * and is tested by name.
-   */
-  'refunds.refund_type: PARTIAL':
-    'Partial refunds are refused in recordReversal; a refund must equal its payment.',
-
-  /* PSIRS collects state and local government revenue. Federal is the FIRS. */
-  'revenue_authorities.tier: FEDERAL':
-    'Federal revenue is the FIRS, not PSIRS; the tier exists for completeness of the taxonomy.',
-
-  /*
-   * Taxpayers and vehicles this platform did not create. There is no importer
-   * and no PSIRS feed: every record here was captured by an agent. Both
-   * columns exist for the migration that has not happened.
-   */
-  'taxpayers.source: MIGRATION':
-    'No bulk importer exists; every taxpayer on the platform was captured by an agent.',
-  'taxpayers.source: PSIRS_SYNC':
-    'No PSIRS feed is connected; the integration is TIN issuance, not record sync.',
-  'vehicles.source: MIGRATION':
-    'No bulk importer exists; every vehicle was captured by an agent or an authority lookup.',
-
-  /*
-   * Merging duplicate taxpayers. `existing-tin.test.ts` covers refusing a
-   * duplicate at the door, which is the control that matters; reconciling two
-   * records that already exist means moving assessments, invoices, payments,
-   * receipts and commission between them, and doing that safely is its own
-   * piece of work rather than a line in this pass.
-   */
-  'taxpayers.status: MERGED':
-    'Duplicates are refused at registration; no merge tool exists to move money between records.',
-};
 
 function workspaceRoot(): string {
   let directory = process.cwd();
@@ -315,55 +207,19 @@ describe('a state nothing writes', () => {
     );
   });
 
-  it('does not carry an excuse for a state that has since become reachable', async () => {
-    const repoRoot = workspaceRoot();
-    const files = SOURCE_ROOTS.flatMap((root) => sourceFiles(join(repoRoot, root))).map((path) => ({
-      path,
-      text: readFileSync(path, 'utf8'),
-    }));
-
-    /*
-     * This half reads narrower than the half above, and on purpose.
-     *
-     * Above, a value counts as reachable if the word appears anywhere, because
-     * a false alarm there is a defect report against working code and gets
-     * answered with an allowlist entry — the exact outcome this file exists to
-     * prevent. Here the risk runs the other way: the question is whether an
-     * excuse has outlived what it excused, and answering "yes" on the strength
-     * of the same word turning up in an unrelated part of the platform would
-     * retire a true statement.
-     *
-     * `setRevenueItemStatus` is why this is not hypothetical. It made
-     * `revenue_items.status = 'RETIRED'` reachable, and by doing so put the
-     * word RETIRED into the source — which, read globally, claimed that
-     * agreement versions, commission policies and training modules could now
-     * be retired too. None of them can. So an excuse is stale only when its
-     * value appears in a file that names its own table.
-     */
-    const defaults = await columnDefaults();
-    const declared = new Map<string, boolean>();
-    for (const { table, column, values } of await enumColumns()) {
-      const touching = files.filter((file) => file.text.includes(table));
-      for (const value of values) {
-        const reachable =
-          defaults.get(`${table}.${column}`) === value ||
-          touching.some((file) => new RegExp(`['"\`]${value}['"\`]`).test(file.text));
-        declared.set(`${table}.${column}: ${value}`, reachable);
-      }
-    }
-
-    /*
-     * An excuse outlives the thing it excused. A line saying nothing writes
-     * MERGED, left behind after the merge tool ships, reads as a decision that
-     * was never revisited — and the next person believes it.
-     */
-    const stale: string[] = [];
-    for (const state of Object.keys(DELIBERATELY_UNREACHABLE)) {
-      const reachable = declared.get(state);
-      if (reachable === undefined) stale.push(`${state} — no longer declared by the schema`);
-      else if (reachable) stale.push(`${state} — something writes this now`);
-    }
-
-    assert.deepEqual(stale, [], `DELIBERATELY_UNREACHABLE is out of date:\n  ${stale.join('\n  ')}`);
-  });
+  /*
+   * The staleness half of this moved out, and had to.
+   *
+   * It used to fail when a value listed as unreachable turned out to be
+   * mentioned in a file naming its table. That is word-matching, and it cannot
+   * tell a mention from a write — so the moment the runtime observation added
+   * `refunds.status: PROCESSING` and friends to the list, this reported all of
+   * them as "something writes this now" when nothing does. The check was
+   * asserting the exact confusion it exists to prevent.
+   *
+   * `scripts/check-enum-coverage.ts` owns the question instead, and answers it
+   * from evidence: a state listed as unreachable that the suite actually wrote
+   * is a stale excuse, and nothing else is. It cannot make this mistake because
+   * it is not reading words.
+   */
 });
