@@ -12,6 +12,7 @@ import { LoginScreen, ApplyScreen } from '../screens/Auth';
 import { HomeScreen } from '../screens/Home';
 import { VerifyScreen } from '../screens/Verify';
 import { api } from '../lib/api';
+import { Badge } from '../ui';
 import { getTranslation } from '@psirs/shared';
 
 describe('1. Authentication UI Screens (Login & Application)', () => {
@@ -125,5 +126,50 @@ describe('4. Grassroots Localisation (Hausa & English i18n)', () => {
     expect(en.receiptNumber).toBe('Receipt Number');
     expect(en.taxpayerTin).toBe('Tax Identification Number (TIN)');
     expect(en.verify).toBe('Verify Receipt');
+  });
+});
+
+/**
+ * The status chip on the handset of the person collecting the money.
+ *
+ * This app carried its own copy of the portal's classifier and its own copy
+ * of the portal's bug: the colour was chosen by asking whether the status
+ * *contained* a good-news word, so INACTIVE contained ACTIVE and UNPAID
+ * contained PAID. An agent looking at an unpaid invoice saw the colour the
+ * app uses for a settled one.
+ *
+ * Both now go through `statusSeverity` in @psirs/shared, which matches whole
+ * words. This holds the agent's end of it — the property itself is tested
+ * once, with the function, in the portal suite.
+ */
+describe('5. A status chip in the colour of what happened', () => {
+  beforeEach(() => cleanup());
+
+  it('does not render a negated status as its own opposite', () => {
+    render(
+      <>
+        <Badge status="UNPAID" />
+        <Badge status="INACTIVE" />
+        <Badge status="UNVERIFIED" />
+      </>,
+    );
+
+    expect(screen.getByText('UNPAID').className).toContain('badge--pending');
+    expect(screen.getByText('INACTIVE').className).toContain('badge--danger');
+    expect(screen.getByText('UNVERIFIED').className).toContain('badge--danger');
+  });
+
+  it('still renders the good news as good news', () => {
+    render(
+      <>
+        <Badge status="PAID" />
+        <Badge status="SYNCED" />
+        <Badge status="PENDING_SYNC" />
+      </>,
+    );
+
+    expect(screen.getByText('PAID').className).toContain('badge--success');
+    expect(screen.getByText('SYNCED').className).toContain('badge--success');
+    expect(screen.getByText('PENDING SYNC').className).toContain('badge--pending');
   });
 });
