@@ -23,5 +23,6 @@ process.env.RATE_LIMIT_MAX ??= '5000';
 // default of 5 per hour.
 process.env.AGENT_APPLY_RATE_LIMIT_MAX ??= '100';
 process.env.GROUP_ATTESTATION_RATE_LIMIT_MAX ??= '2000';
+process.env.REFEREE_RATE_LIMIT_MAX ??= '2000';
 
 export {};

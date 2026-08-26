@@ -175,6 +175,32 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
   'kyc_document_access_logs.access_type: DOWNLOAD':
     'Identity documents are served inline and never offered as a download, so no read is recorded as one.',
 
+  /*
+   * An invitation that goes by email and not by telephone.
+   *
+   * A referee record cannot exist without a phone number — the column is NOT
+   * NULL and the nomination form requires it — so every invitation goes out by
+   * SMS, and by both when an email address is given as well. There is no
+   * referee for EMAIL alone to describe.
+   */
+  'referee_invitations.channel: EMAIL':
+    'Every referee has a phone number, so an invitation is SMS or BOTH; EMAIL would mean a referee with no telephone.',
+
+  /*
+   * Referee risk at a severity worth ignoring.
+   *
+   * The four rules are one person vouching for a crowd of applicants, a
+   * referee using the applicant's own phone number, and one identity behind
+   * several referees. Each of those is HIGH or CRITICAL by its nature; there
+   * is no low-severity way to be a referee who is not who they say they are.
+   * The two values stay in the constraint because the severity vocabulary is
+   * shared with fraud_flags, which does use them.
+   */
+  'referee_risk_flags.severity: LOW':
+    'None of the four referee rules is a minor observation; the shared severity vocabulary carries the value for fraud_flags.',
+  'referee_risk_flags.severity: MEDIUM':
+    'Same: every referee rule is HIGH or CRITICAL by what it detects.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -218,8 +244,6 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
  */
 export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'agent_clearance_events.event_type: OVERRIDE_APPLIED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: REFEREE_FAILED':
     'Reachable from a path the suite does not walk.',
   'agents.account_status: CLOSED':
     'Reachable from a path the suite does not walk.',
@@ -316,48 +340,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'reconciliation_records.status: REVERSED':
     'Reachable from a path the suite does not walk.',
   'reconciliation_runs.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referee_invitations.channel: EMAIL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referee_invitations.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'referee_kyc.identity_type: BVN':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: DRIVERS_LICENCE':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: OTHER':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: PASSPORT':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: VOTERS_CARD':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.verification_status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referee_kyc.verification_status: UNDER_REVIEW':
-    'Reachable from a path the suite does not walk.',
-  'referee_risk_flags.severity: HIGH':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.severity: LOW':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.severity: MEDIUM':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: CONFIRMED':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: DISMISSED':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: UNDER_REVIEW':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referees.category: EMPLOYER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.category: RECOGNISED_PROFESSIONAL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.category: TRADITIONAL_AUTHORITY':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'referees.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referees.status: UNDER_REVIEW':
     'Reachable from a path the suite does not walk.',
   'revenue_authorities.status: INACTIVE':
     'Reachable from a path the suite does not walk.',
