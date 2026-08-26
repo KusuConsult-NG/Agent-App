@@ -715,6 +715,103 @@ export async function refusePayout(
 }
 
 /**
+ * Record that the bank did not make an approved transfer.
+ *
+ * `commission_payouts.status` allows FAILED and PROCESSING, and nothing wrote
+ * either. `completePayout` took a bank reference and marked the payout PAID,
+ * so an approved payout the bank refused — a closed account, a name mismatch,
+ * a rejected batch — had exactly two homes: left APPROVED for good, where the
+ * commissions in it stay APPROVED and `requestPayout`, which selects only
+ * ELIGIBLE, can never pick them up again; or marked PAID, which says a bank
+ * transfer happened when it did not.
+ *
+ * Neither is acceptable, and the second is the one somebody under pressure
+ * would choose. So a refused transfer says so: the payout is FAILED with the
+ * bank's reason on it, and the commissions go back to ELIGIBLE with any
+ * clawback restored, exactly as a payout an officer refused does. What the
+ * agent earned is payable again, and what they owe is owed again.
+ *
+ * PROCESSING stays unwritten, and deliberately: it describes a transfer handed
+ * to a bank and not yet confirmed, and this platform has no payout integration
+ * to hand one to. An officer makes the transfer and records the reference. A
+ * state for a machine that does not exist would be a state nothing could ever
+ * move out of.
+ */
+export async function failPayout(params: {
+  payoutId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ returnedToEligible: number; clawbackRestored: number }> {
+  return withTransaction(async (client) => {
+    const payout = await queryOne<{ id: string; status: string }>(
+      client,
+      'SELECT id, status FROM commission_payouts WHERE id = $1 FOR UPDATE',
+      [params.payoutId],
+    );
+    if (!payout) throw notFound('That payout');
+    if (payout.status !== 'APPROVED') {
+      throw conflict(
+        'PAYOUT_NOT_IN_FLIGHT',
+        `This payout is ${payout.status.toLowerCase()}, so there is no transfer to have failed.`,
+        payout.status === 'PAID'
+          ? 'A payout that was paid and then reversed by the bank is a reversal, not a failure.'
+          : undefined,
+      );
+    }
+
+    await client.query(
+      `UPDATE commission_payouts SET status = 'FAILED', failure_reason = $2 WHERE id = $1`,
+      [params.payoutId, params.reason],
+    );
+
+    const included = await query<{ id: string }>(
+      client,
+      `SELECT id FROM commissions WHERE payout_id = $1 AND status = 'APPROVED' FOR UPDATE`,
+      [params.payoutId],
+    );
+    for (const commission of included) {
+      await transitionCommission(client, {
+        commissionId: commission.id,
+        to: 'ELIGIBLE',
+        reason: `Bank transfer failed: ${params.reason}`,
+        actorId: params.actorId,
+      });
+    }
+    await client.query(
+      `UPDATE commissions SET payout_id = NULL, approved_at = NULL, approved_by = NULL
+        WHERE payout_id = $1 AND status = 'ELIGIBLE'`,
+      [params.payoutId],
+    );
+
+    const restored = await query<{ id: string }>(
+      client,
+      `UPDATE commissions SET recovered_at = NULL, recovered_by_payout_id = NULL
+        WHERE recovered_by_payout_id = $1
+        RETURNING id`,
+      [params.payoutId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'commission.payout_failed',
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
+      oldValue: { status: 'APPROVED' },
+      newValue: {
+        status: 'FAILED',
+        returnedToEligible: included.length,
+        clawbackRestored: restored.length,
+      },
+      reason: params.reason,
+    });
+
+    return { returnedToEligible: included.length, clawbackRestored: restored.length };
+  });
+}
+
+/**
  * Complete an approved payout by recording the bank transfer reference.
  * PRD §28: no commission is marked paid without one.
  */
