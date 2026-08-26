@@ -29,6 +29,22 @@ export function ReconciliationScreen() {
     from: new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
     to: new Date().toISOString().slice(0, 10),
   });
+  /*
+   * Recording a settlement had no way in.
+   *
+   * `POST /government/settlements` is the entry point to the whole settlement
+   * path — it is what moves a day's collections to SETTLED, and SETTLED is
+   * what the commission ledger waits for — and no screen called it. Nothing
+   * caught that: the reachability check compares a write endpoint against the
+   * portal's source, and this screen already mentioned `/government/settlements`
+   * to read the figures, so the POST looked reached.
+   */
+  const [entry, setEntry] = useState({
+    settlementDate: new Date().toISOString().slice(0, 10),
+    gatewayReferences: '',
+    receivedNaira: '',
+    bankReference: '',
+  });
 
   const load = useCallback(() => {
     api
@@ -49,6 +65,93 @@ export function ReconciliationScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Naira as an officer types it, kobo as the API takes it. */
+  function toKobo(naira: string): string | null {
+    const trimmed = naira.trim().replace(/,/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+    const [whole, fraction = ''] = trimmed.split('.');
+    return `${BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0'))}`;
+  }
+
+  async function record() {
+    const receivedAmountKobo = toKobo(entry.receivedNaira);
+    if (!receivedAmountKobo) {
+      setError({ code: 'INVALID_AMOUNT', message: 'Enter the credited amount in naira, for example 1250000.00.' } as ApiError);
+      return;
+    }
+    const gatewayReferences = entry.gatewayReferences
+      .split(/[\s,]+/)
+      .map((reference) => reference.trim())
+      .filter(Boolean);
+    if (gatewayReferences.length === 0) {
+      setError({ code: 'NO_REFERENCES', message: 'List the gateway references this credit covers.' } as ApiError);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{
+        settlementReference: string;
+        status: 'RECONCILED' | 'DISPUTED';
+        transactionsSettled: number;
+        varianceKobo: string;
+      }>('/government/settlements', {
+        settlementDate: entry.settlementDate,
+        gatewayReferences,
+        receivedAmountKobo,
+        bankReference: entry.bankReference,
+      });
+      setMessage(
+        result.status === 'RECONCILED'
+          ? `${result.settlementReference} recorded. ${result.transactionsSettled} collection(s) settled.`
+          : `${result.settlementReference} recorded and disputed: the credit does not match the ` +
+            'collections it covers, so none of them have been settled. Close the dispute once the ' +
+            'rest of the money is accounted for.',
+      );
+      setEntry({ ...entry, gatewayReferences: '', receivedNaira: '', bankReference: '' });
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function closeDispute(row: any) {
+    const receivedAmountKobo = toKobo(
+      window.prompt(
+        `Total now credited against ${row.settlement_reference}, in naira. ` +
+          'It has to account for the collections in the batch in full.',
+        '',
+      ) ?? '',
+    );
+    if (!receivedAmountKobo) return;
+    const bankReference = window.prompt('Bank reference for the credit that settles it', '') ?? '';
+    if (!bankReference.trim()) return;
+    const note = window.prompt('What the variance turned out to be', '') ?? '';
+    if (note.trim().length < 10) return;
+
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ settlementReference: string; transactionsSettled: number }>(
+        `/government/settlements/${row.id}/reconcile`,
+        { receivedAmountKobo, bankReference: bankReference.trim(), note: note.trim() },
+      );
+      setMessage(
+        `${result.settlementReference} closed. ${result.transactionsSettled} collection(s) settled.`,
+      );
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -203,6 +306,60 @@ export function ReconciliationScreen() {
         </div>
       )}
 
+      {can('payment:reconcile') && (
+        <div className="card">
+          <h2 className="card__title">Record a settlement</h2>
+          <p className="card__hint">
+            What the gateway paid into the government account, and the collections it covers. The
+            platform adds up those collections itself; if the credit does not match, the batch is
+            recorded as disputed and none of it is settled.
+          </p>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="settlement-date">Value date</label>
+              <input
+                id="settlement-date"
+                type="date"
+                value={entry.settlementDate}
+                onChange={(event) => setEntry({ ...entry, settlementDate: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settlement-bank">Bank reference</label>
+              <input
+                id="settlement-bank"
+                value={entry.bankReference}
+                placeholder="As it appears on the statement"
+                onChange={(event) => setEntry({ ...entry, bankReference: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settlement-amount">Credited (₦)</label>
+              <input
+                id="settlement-amount"
+                inputMode="decimal"
+                value={entry.receivedNaira}
+                placeholder="1250000.00"
+                onChange={(event) => setEntry({ ...entry, receivedNaira: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="settlement-references">Gateway references</label>
+            <textarea
+              id="settlement-references"
+              rows={3}
+              value={entry.gatewayReferences}
+              placeholder="One per line, or separated by commas"
+              onChange={(event) => setEntry({ ...entry, gatewayReferences: event.target.value })}
+            />
+          </div>
+          <button type="button" disabled={busy} onClick={record}>
+            Record settlement
+          </button>
+        </div>
+      )}
+
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
           <h2 className="card__title">Exception queue</h2>
@@ -313,10 +470,31 @@ export function ReconciliationScreen() {
                 render: (row) => <Money kobo={row.received_amount_kobo} />,
               },
               { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              {
+                key: 'id',
+                label: '',
+                render: (row) =>
+                  row.status === 'DISPUTED' && can('payment:reconcile') ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => closeDispute(row)}
+                    >
+                      Close dispute
+                    </button>
+                  ) : null,
+              },
             ]}
             rows={settlements.recentSettlements}
             empty="No settlements recorded."
           />
+          <p className="field__hint" style={{ padding: '0 18px 18px' }}>
+            A settlement whose credit does not match the collections it covers settles none of
+            them: the money has not arrived, so the commission on it is not payable. Closing the
+            dispute needs a second finance officer and a credit that accounts for the batch in
+            full.
+          </p>
         </div>
       )}
     </>

@@ -72,6 +72,16 @@ export const FRAUD_RULES = [
   'UNUSUAL_VOLUME',
   'RAPID_SUCCESSION',
   'COMMISSION_ANOMALY',
+  /*
+   * The gateway paid in less — or more — than the collections it was settling.
+   *
+   * Raised against the settlement itself rather than any one collection: the
+   * variance is a fact about the batch, and which of the day's transactions it
+   * belongs to is exactly what nobody knows yet. It was being raised under
+   * this name already, from a direct insert, with a rule string no list here
+   * knew about and an entity type that said 'TRANSACTION'.
+   */
+  'SETTLEMENT_VARIANCE',
 ] as const;
 export type FraudRule = (typeof FRAUD_RULES)[number];
 

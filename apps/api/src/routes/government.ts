@@ -345,6 +345,39 @@ governmentRouter.post(
   ),
 );
 
+/**
+ * Close a disputed settlement (PRD §47).
+ *
+ * A settlement whose figures did not match settles none of its collections, so
+ * this is the way out: state what finally arrived and the bank reference that
+ * proves it. `reconcileSettlement` refuses it unless the money now accounts
+ * for the batch, and refuses the officer who recorded the settlement in the
+ * first place.
+ */
+governmentRouter.post(
+  '/settlements/:id/reconcile',
+  requirePermission('payment:reconcile'),
+  validateBody(
+    z.object({
+      receivedAmountKobo: koboSchema,
+      bankReference: z.string().min(3).max(80),
+      note: z.string().min(10, 'Record what the variance turned out to be'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await reconciliation.reconcileSettlement({
+          settlementId: req.params.id,
+          receivedAmountKobo: data.receivedAmountKobo,
+          bankReference: data.bankReference,
+          note: data.note,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
 // ---------------------------------------------------------------------------
 // Maker-checker approvals (PRD §69, §70)
 // ---------------------------------------------------------------------------

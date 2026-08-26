@@ -162,3 +162,38 @@ describe('the five that had no way in', () => {
     });
   }
 });
+
+/**
+ * The two the stem check could not see.
+ *
+ * The check above compares a write endpoint against the portal's source and
+ * asks whether the path appears anywhere. That cannot tell a read from a
+ * write, so an endpoint whose path the portal already mentions in order to
+ * *read* something looks reached. `POST /government/settlements` sat behind
+ * exactly that: the reconciliation screen fetched `/government/settlements`
+ * for the figures, and the endpoint that records one — the entry point to the
+ * whole settlement path, and the only thing that moves a day's collections to
+ * SETTLED — had no caller anywhere and was never reported.
+ *
+ * These two are asserted on the write call rather than the path, which is what
+ * the general check cannot do without flagging every endpoint whose portal
+ * caller builds its URL from a template literal.
+ */
+describe('recording and closing a settlement', () => {
+  const portal = portalSource();
+
+  it('can be recorded from a screen', () => {
+    assert.ok(
+      /api\.post<[^>]*>\(\s*'\/government\/settlements'/.test(portal) ||
+        portal.includes("api.post('/government/settlements'"),
+      'nothing in the portal records a settlement, so nothing would ever be settled',
+    );
+  });
+
+  it('can be closed from a screen once it is disputed', () => {
+    assert.ok(
+      portal.includes('/government/settlements/${'),
+      'a disputed settlement holds its collections back, so there has to be a way to close it',
+    );
+  });
+});
