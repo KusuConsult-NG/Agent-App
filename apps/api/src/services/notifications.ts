@@ -39,6 +39,18 @@ export type NotificationEvent =
   | 'AGENT_BANK_CHANGE_REQUESTED'
   | 'AGENT_BANK_CHANGE_APPLIED'
   | 'AGENT_BANK_CHANGE_REFUSED'
+  /*
+   * The two nobody was ever sent.
+   *
+   * There is an event for a payment that succeeded, one for a payment that
+   * failed, and three for an agent whose bank account somebody asked to
+   * change — and there was none for the money the State took, reversed, and
+   * either did or did not give back. A citizen's receipt was voided and their
+   * transaction marked reversed with nothing sent to them at all; they found
+   * out when a verification told them their receipt was no good.
+   */
+  | 'PAYMENT_REVERSED'
+  | 'REFUND_COMPLETED'
   | 'TAXPAYER_RECORD_CORRECTED'
   | 'USER_ROLE_CHANGED'
   | 'SUPPORT_TICKET_UPDATED'

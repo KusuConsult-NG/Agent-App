@@ -23,6 +23,7 @@ import { recordAudit } from './audit';
 import { confirmPayment } from './payments';
 import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
+import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
 
 export interface ReconciliationSummary {
@@ -952,6 +953,10 @@ export async function attemptRefund(params: {
 
   if (result.outcome === 'ACCEPTED') {
     await markRefund(params.refundReference, 'COMPLETED', null, result.reference ?? null);
+    // The second half of what the taxpayer was promised at the reversal. The
+    // gap between "your money is coming back" and it arriving is the part they
+    // cannot see for themselves, and it is the part that can take days.
+    await announceRefundCompleted(params.refundReference, params.amountKobo);
     return { status: 'COMPLETED', message: 'The gateway has returned the money to the taxpayer.' };
   }
 
@@ -969,6 +974,30 @@ export async function attemptRefund(params: {
         : 'The gateway could not be reached, so the taxpayer has NOT been refunded yet. ' +
           'This refund stays in the outstanding queue and will be retried.',
   };
+}
+
+async function announceRefundCompleted(refundReference: string, amountKobo: Kobo): Promise<void> {
+  await withTransaction(async (client) => {
+    const owed = await queryOne<{ taxpayer_id: string; transaction_reference: string; transaction_id: string }>(
+      client,
+      `SELECT t.taxpayer_id, t.transaction_reference, t.id AS transaction_id
+         FROM refunds r JOIN transactions t ON t.id = r.transaction_id
+        WHERE r.refund_reference = $1`,
+      [refundReference],
+    );
+    if (!owed) return;
+    await queueNotification(client, {
+      event: 'REFUND_COMPLETED',
+      taxpayerId: owed.taxpayer_id,
+      entityType: 'transaction',
+      entityId: owed.transaction_id,
+      variables: {
+        amount: amountKobo.toString(),
+        reference: owed.transaction_reference,
+        refundReference,
+      },
+    });
+  });
 }
 
 async function markRefund(
@@ -1165,9 +1194,10 @@ async function recordReversal(params: {
     );
     if (!transaction) throw notFound('That transaction');
 
-    const payment = await queryOne<{ id: string; gateway_reference: string | null }>(
+    const payment = await queryOne<{ id: string; gateway_reference: string | null; amount_kobo: string }>(
       client,
-      `SELECT id, gateway_reference FROM payments WHERE transaction_id = $1 AND status = 'VERIFIED'`,
+      `SELECT id, gateway_reference, amount_kobo FROM payments
+        WHERE transaction_id = $1 AND status = 'VERIFIED'`,
       [transactionId],
     );
     if (!payment) {
@@ -1177,8 +1207,52 @@ async function recordReversal(params: {
       );
     }
 
+    /*
+     * A reversal returns the payment, and the whole of it.
+     *
+     * The amount reaches this point through `approvals.payload`, which is a
+     * free-form JSON column: whatever the requesting officer typed, unchecked
+     * by anything between there and here. Nothing compared it to the payment,
+     * so a request naming ten million naira against a two thousand naira
+     * collection was well formed, and the State recorded that it owed the money
+     * and asked the gateway to return it.
+     *
+     * Requiring the exact payment rather than merely a smaller one is the same
+     * rule the rest of this function already follows without saying so.
+     * Everything downstream is all-or-nothing — the receipt is voided, every
+     * document revoked, the transaction reversed, the whole commission clawed
+     * back — so a reversal that returned part of a payment would leave the
+     * State holding the rest of money it had just declared reversed, with a
+     * voided receipt as the only record that it was ever paid.
+     *
+     * PARTIAL is the type for that case and this path cannot honour it, so it
+     * is refused in the officer's face rather than carried out as a full
+     * reversal that happens to return less.
+     */
+    const paid = parseKobo(payment.amount_kobo);
+    const refundType = approval.payload.refundType ?? 'REVERSAL';
+
+    if (refundType !== 'FULL' && refundType !== 'REVERSAL') {
+      throw conflict(
+        'REFUND_TYPE_NOT_SUPPORTED',
+        `This platform cannot carry out a ${String(refundType).toLowerCase()} refund. Reversing a ` +
+          'payment voids its receipt, revokes its documents and reverses the whole commission, ' +
+          'so it returns the whole payment or nothing.',
+        'Reverse the payment in full and raise a fresh assessment for what is actually owed.',
+      );
+    }
+
+    const amount = parseKobo(approval.payload.amountKobo ?? payment.amount_kobo);
+    if (amount !== paid) {
+      throw conflict(
+        'REFUND_AMOUNT_MISMATCH',
+        `This reversal is for ${amount.toString()} kobo against a payment of ${paid.toString()} ` +
+          'kobo. A reversal returns the payment it reverses, in full.',
+        'Correct the amount on the approval, or reverse the payment in full and re-assess.',
+      );
+    }
+
     const refundReference = await nextRefundReference(client);
-    const amount = parseKobo(approval.payload.amountKobo ?? transaction.amount_kobo);
 
     // PENDING, not COMPLETED. The gateway has not been asked yet, and it is
     // asked after this transaction commits — a network call must not be made
@@ -1195,7 +1269,7 @@ async function recordReversal(params: {
         transactionId,
         payment.id,
         amount.toString(),
-        approval.payload.refundType ?? 'REVERSAL',
+        refundType,
         approval.payload.reason ?? 'Approved reversal',
         approval.id,
         approval.requested_by,
@@ -1210,11 +1284,38 @@ async function recordReversal(params: {
 
     await transitionTransaction(client, {
       transactionId,
-      to: approval.payload.refundType === 'FULL' ? 'REFUNDED' : 'REVERSED',
+      to: refundType === 'FULL' ? 'REFUNDED' : 'REVERSED',
       reason: approval.payload.reason ?? 'Approved reversal',
       actorId: params.actorId,
       source: 'OFFICER',
       metadata: { refundReference, approvalId: approval.id },
+    });
+
+    /*
+     * And tell the person whose payment it was.
+     *
+     * Their receipt is about to stop being valid and their money is on its way
+     * back, and until now nothing said so: they found out when a verification
+     * told them the receipt was no good. Sent inside this transaction, so a
+     * reversal that rolls back does not leave a citizen holding a message
+     * about something that did not happen.
+     */
+    await queueNotification(client, {
+      event: 'PAYMENT_REVERSED',
+      taxpayerId: (
+        await queryOne<{ taxpayer_id: string }>(
+          client,
+          'SELECT taxpayer_id FROM transactions WHERE id = $1',
+          [transactionId],
+        )
+      )?.taxpayer_id,
+      entityType: 'transaction',
+      entityId: transactionId,
+      variables: {
+        amount: amount.toString(),
+        reference: transaction.transaction_reference,
+        reason: approval.payload.reason ?? 'Approved reversal',
+      },
     });
 
     // The receipt stays in existence — it is evidence that a payment was once
