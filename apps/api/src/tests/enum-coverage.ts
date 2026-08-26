@@ -139,6 +139,42 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
   'approvals.status: CANCELLED':
     'A pending request is withdrawn by a second officer rejecting it, which keeps the unwinding in the one branch that does it.',
 
+  /*
+   * A module nobody opens, only sits.
+   *
+   * There is no "start the module" endpoint: the applicant reads the material
+   * and submits a score, so a progress row is written for the first time when
+   * an attempt is made and is already COMPLETED or FAILED when it lands.
+   * `agents.training_status` derives its own IN_PROGRESS from the presence of
+   * any progress row, which is the state an officer actually reads.
+   */
+  'agent_training_progress.status: IN_PROGRESS':
+    'Nothing starts a module; a progress row is first written by an attempt, which is already passed or failed.',
+
+  /*
+   * A KYC outcome the provider contract does not have.
+   *
+   * `agents.kyc_status` is written straight from the verification result, and
+   * `KycOutcome` is CLEARED, FAILED, UNDER_REVIEW, VERIFICATION_REQUIRED or
+   * UNAVAILABLE — the last of which is deliberately never recorded, because it
+   * is a statement about the provider rather than a verdict on the person.
+   * There is nowhere for SUBMITTED to come from.
+   */
+  'agents.kyc_status: SUBMITTED':
+    'kyc_status is written from the provider verdict, and the provider contract has no SUBMITTED outcome.',
+
+  /*
+   * Taking a copy of somebody's identity papers.
+   *
+   * Both routes that serve a KYC document send it inline under
+   * `cache-control: private, no-store`, and neither offers it as a download.
+   * That is the point: a reviewer needs to look at a citizen's identity card,
+   * not to end up holding a copy of it on a laptop. The value stays in the
+   * constraint because an export path, if one is ever built, must log it.
+   */
+  'kyc_document_access_logs.access_type: DOWNLOAD':
+    'Identity documents are served inline and never offered as a download, so no read is recorded as one.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -181,41 +217,11 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
  * path to this state and no test walks it.
  */
 export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
-  'agent_clearance.clearance_status: ACTION_REQUIRED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance.clearance_status: REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: GOVERNMENT_REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: INFO_REQUESTED':
-    'Reachable from a path the suite does not walk.',
   'agent_clearance_events.event_type: OVERRIDE_APPLIED':
     'Reachable from a path the suite does not walk.',
   'agent_clearance_events.event_type: REFEREE_FAILED':
     'Reachable from a path the suite does not walk.',
-  'agent_kyc.identity_type: BVN':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: DRIVERS_LICENCE':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: OTHER':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: PASSPORT':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: VOTERS_CARD':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.liveness_result: PASSED':
-    'Reachable from a path the suite does not walk.',
-  'agent_training_progress.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'agent_training_progress.status: IN_PROGRESS':
-    'Reachable from a path the suite does not walk.',
   'agents.account_status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'agents.clearance_status: ACTION_REQUIRED':
-    'Reachable from a path the suite does not walk.',
-  'agents.clearance_status: REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agents.kyc_status: SUBMITTED':
     'Reachable from a path the suite does not walk.',
   'agents.kyc_status: SUSPENDED':
     'Reachable from a path the suite does not walk.',
@@ -272,8 +278,6 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'invoices.status: CANCELLED':
     'Reachable from a path the suite does not walk.',
   'invoices.status: PARTIALLY_PAID':
-    'Reachable from a path the suite does not walk.',
-  'kyc_document_access_logs.access_type: DOWNLOAD':
     'Reachable from a path the suite does not walk.',
   'lgas.status: INACTIVE':
     'Reachable from a path the suite does not walk.',

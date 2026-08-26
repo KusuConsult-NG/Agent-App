@@ -78,6 +78,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
 
       <div className="stat-grid">
         <Stat label="KYC pending" value={counts.kyc_pending} />
+        {/* Waiting on the applicant, not on us: these need chasing, not reviewing. */}
+        <Stat
+          label="Awaiting applicant"
+          value={counts.kyc_action_required}
+          variant={Number(counts.kyc_action_required) > 0 ? 'alert' : undefined}
+        />
         <Stat label="KYC cleared" value={counts.kyc_cleared} />
         <Stat label="Referee pending" value={counts.referee_pending} />
         <Stat label="Referee failed" value={counts.referee_failed} />
