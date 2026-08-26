@@ -57,6 +57,7 @@ import { seedDemoAgent } from '../db/seed-agent';
 import { promoteEligibleCommissions } from '../services/commission';
 
 let officerToken = '';
+let secondOfficerToken = '';
 let agentId = '';
 let agent: { token: string; device: string };
 let agentPhone = '';
@@ -74,6 +75,8 @@ beforeEach(async () => {
   await seedReferenceData();
   await createGovernmentUser({ role: 'admin', phone: '+2348030000160', fullName: 'Fraud Admin' });
   officerToken = (await loginAs('+2348030000160')).accessToken;
+  await createGovernmentUser({ role: 'admin', phone: '+2348030000161', fullName: 'Second Fraud Admin' });
+  secondOfficerToken = (await loginAs('+2348030000161')).accessToken;
 
   const demo = await seedDemoAgent();
   agentId = demo!.agentId;
@@ -152,11 +155,17 @@ async function flag(severity: string, entityType: string, entityId: string): Pro
   return row!.id;
 }
 
+/**
+ * Dismissing a confirmation takes a second officer, because releasing the
+ * money a confirmation froze is not a decision one person makes alone. That
+ * rule is exercised where it lives; here the second officer is fixture, so
+ * these tests stay about the money and not about who signed for it.
+ */
 const review = (flagId: string, decision: string) =>
   post(
     `/government/fraud/flags/${flagId}/review`,
     { decision, note: 'Investigated the flagged pattern and reached a decision.' },
-    { token: officerToken },
+    { token: decision === 'DISMISSED' ? secondOfficerToken : officerToken },
   );
 
 const statusOf = async (id: string) =>

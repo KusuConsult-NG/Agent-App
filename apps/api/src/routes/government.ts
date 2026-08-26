@@ -953,12 +953,44 @@ governmentRouter.post(
     }),
     async (req, res, data) => {
       await withTransaction(async (client) => {
-        const flag = await queryOne<{ id: string; status: string; agent_id: string | null }>(
+        const flag = await queryOne<{
+          id: string;
+          status: string;
+          agent_id: string | null;
+          reviewed_by: string | null;
+        }>(
           client,
-          'SELECT id, status, agent_id FROM fraud_flags WHERE id = $1',
+          'SELECT id, status, agent_id, reviewed_by FROM fraud_flags WHERE id = $1',
           [req.params.id],
         );
         if (!flag) throw notFound('That fraud flag');
+
+        /*
+         * Reversing an upheld investigation takes a second officer.
+         *
+         * Confirming freezes the agent's commission and dismissing hands it
+         * back, and both sat behind one permission and one person — so the
+         * officer who upheld an investigation could, at any later moment,
+         * release everything it was holding on their own say-so. Every
+         * comparable release here already asks for somebody else: an officer
+         * cannot change their own role, approve the bank account change they
+         * requested, or authorise their own payout.
+         *
+         * Only the reversal is restricted. The same officer may still reopen
+         * the flag for review, so the way to a second opinion stays open, and
+         * a flag nobody has upheld is theirs to dismiss as before.
+         */
+        if (
+          data.decision === 'DISMISSED' &&
+          flag.status === 'CONFIRMED' &&
+          flag.reviewed_by === req.auth!.userId
+        ) {
+          throw forbidden(
+            'You confirmed this flag, so another officer has to be the one to dismiss it. ' +
+              'Dismissing it releases the commission your confirmation froze.',
+            'Reopen it for review with your findings, and ask a colleague to close it.',
+          );
+        }
 
         await client.query(
           `UPDATE fraud_flags SET status = $2, resolution_note = $3, reviewed_by = $4, reviewed_at = now()
