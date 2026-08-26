@@ -233,157 +233,174 @@ export async function registerTaxpayer(params: {
     );
   }
 
-  return withTransaction(async (client) => {
-    /*
-     * A ward has to be in the LGA it is filed under.
-     *
-     * The column took any ward id the caller sent. A foreign key made it a real
-     * ward, and nothing made it a ward of this taxpayer's LGA — so a stale
-     * selection left over from a changed LGA would file the registration, and
-     * every subsequent collection, in the wrong place on the State → LGA →
-     * Ward drill-down. Revenue attributed confidently to the wrong ward is
-     * worse than the nothing that tier showed before.
-     */
-    if (input.wardId) {
-      const ward = await queryOne<{ lga_id: string; name: string }>(
-        client,
-        'SELECT lga_id, name FROM wards WHERE id = $1',
-        [input.wardId],
-      );
-      if (!ward) {
-        throw badRequest('That ward does not exist.', [
-          { field: 'wardId', issue: 'Unknown ward' },
-        ]);
-      }
-      if (ward.lga_id !== input.lgaId) {
-        throw badRequest(
-          `${ward.name} is not a ward of the selected Local Government Area. ` +
-            'Choose the ward again after changing the LGA.',
-          [{ field: 'wardId', issue: 'Ward belongs to a different LGA' }],
-        );
-      }
-    }
-
-    const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
-    const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
-
-    let tin: string | null = null;
-    let tinStatus = 'NOT_REQUESTED';
-    let tinReference: string | null = null;
-    let tinReason: string | null = null;
-
-    if (input.existingTin) {
-      /*
-       * Normalise before looking it up.
-       *
-       * PSIRS prints a TIN with separators and people write them as they read
-       * them — `12345678-0001`, `1234 5678 90`. Sent to the register exactly
-       * as typed, those matched nothing and came back NOT_FOUND, so a
-       * taxpayer holding a perfectly good TIN could not be registered against
-       * it and the agent was told the number could not be found when the
-       * number was fine.
-       *
-       * Only punctuation and spacing are removed. Nothing here decides what a
-       * TIN looks like — that is the register's job, and inventing a format
-       * check would refuse valid numbers the register would have accepted.
-       */
-      const normalisedTin = input.existingTin.replace(/[\s-]/g, '').toUpperCase();
-
-      // An agent supplying an existing TIN does not get to assert it: it is
-      // checked against the authoritative service first (PRD §11, §82).
-      const lookup = await tinService.lookup(normalisedTin);
-
-      if (lookup.outcome === 'UNAVAILABLE') {
-        // The old message told the agent to "register the taxpayer as a new TIN
-        // applicant" — advice that mints a duplicate TIN for someone who
-        // already has one. During an outage that would happen to every existing
-        // taxpayer an agent touched, and a duplicate in a UNIQUE column on an
-        // undeletable row is permanent. So this stops instead.
-        throw new AppError({
-          statusCode: 503,
-          code: 'TIN_SERVICE_UNAVAILABLE',
-          message:
-            'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. ' +
-            'Nothing has been registered.',
-          nextStep:
-            'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — ' +
-            'that would create a second TIN for someone who already has one.',
-        });
-      }
-
-      if (lookup.outcome === 'NOT_FOUND') {
-        /*
-         * The advice here used to be "Check the number, or register the
-         * taxpayer as a new TIN applicant" — which is the instruction that
-         * mints a second TIN for somebody who already has one, and the exact
-         * outcome the UNAVAILABLE branch above goes out of its way to
-         * prevent. A duplicate in a UNIQUE column on an undeletable row is
-         * permanent.
-         *
-         * The order matters: check the number first, because a mistyped digit
-         * is far likelier than a taxpayer who has a TIN nobody has heard of.
-         * Registering as new stays reachable, and is named as the answer only
-         * to the question it actually answers.
-         */
-        throw new AppError({
-          statusCode: 400,
-          code: 'INVALID_REQUEST',
-          message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
-          nextStep:
-            'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
-            'the usual cause. Only if they have never had a TIN, go back and register them ' +
-            'without one; the platform will apply for a new TIN for them.',
-          details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
-        });
-      }
-
-      tin = lookup.tin ?? null;
-      tinStatus = 'EXISTING';
-    } else {
-      const lgaRow = await queryOne<{ name: string }>(client, 'SELECT name FROM lgas WHERE id = $1', [
-        input.lgaId,
+  /*
+   * Everything that has to be settled before a row is written.
+   *
+   * Validating the ward, and resolving the TIN with the authoritative service,
+   * both used to happen inside the transaction that inserts the taxpayer — so
+   * the busiest write path on the platform held a pooled connection open for
+   * as long as the PSIRS TIN service took to answer. An agent registering
+   * somebody in a market was holding a database connection hostage to a third
+   * party's latency, and a queue of agents doing the same is how a pool runs
+   * dry.
+   *
+   * The order is load-bearing and unchanged: the ward is checked first,
+   * because a TIN minted for a registration that then fails validation is a
+   * duplicate in a UNIQUE column on a row nobody can delete. Read-only work,
+   * so it needs no transaction of its own — and the insert below is a single
+   * statement, which is atomic without one being held open across the call.
+   */
+  /*
+   * A ward has to be in the LGA it is filed under.
+   *
+   * The column took any ward id the caller sent. A foreign key made it a real
+   * ward, and nothing made it a ward of this taxpayer's LGA — so a stale
+   * selection left over from a changed LGA would file the registration, and
+   * every subsequent collection, in the wrong place on the State → LGA →
+   * Ward drill-down. Revenue attributed confidently to the wrong ward is
+   * worse than the nothing that tier showed before.
+   */
+  if (input.wardId) {
+    const ward = await queryOne<{ lga_id: string; name: string }>(
+      pool,
+      'SELECT lga_id, name FROM wards WHERE id = $1',
+      [input.wardId],
+    );
+    if (!ward) {
+      throw badRequest('That ward does not exist.', [
+        { field: 'wardId', issue: 'Unknown ward' },
       ]);
-      if (!lgaRow) throw badRequest('The selected Local Government Area is not valid.');
+    }
+    if (ward.lga_id !== input.lgaId) {
+      throw badRequest(
+        `${ward.name} is not a ward of the selected Local Government Area. ` +
+          'Choose the ward again after changing the LGA.',
+        [{ field: 'wardId', issue: 'Ward belongs to a different LGA' }],
+      );
+    }
+  }
 
-      const registration = await tinService.register({
-        taxpayerType: input.taxpayerType,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        businessName: input.businessName,
-        phone: input.phone,
-        email: input.email ?? null,
-        dateOfBirth: input.dateOfBirth ?? null,
-        address: input.address,
-        lgaName: lgaRow.name,
-        identityType: input.identityType ?? null,
-        identityNumber: input.identityNumber ?? null,
+  const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
+  const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
+
+  let tin: string | null = null;
+  let tinStatus = 'NOT_REQUESTED';
+  let tinReference: string | null = null;
+  let tinReason: string | null = null;
+
+  if (input.existingTin) {
+    /*
+     * Normalise before looking it up.
+     *
+     * PSIRS prints a TIN with separators and people write them as they read
+     * them — `12345678-0001`, `1234 5678 90`. Sent to the register exactly
+     * as typed, those matched nothing and came back NOT_FOUND, so a
+     * taxpayer holding a perfectly good TIN could not be registered against
+     * it and the agent was told the number could not be found when the
+     * number was fine.
+     *
+     * Only punctuation and spacing are removed. Nothing here decides what a
+     * TIN looks like — that is the register's job, and inventing a format
+     * check would refuse valid numbers the register would have accepted.
+     */
+    const normalisedTin = input.existingTin.replace(/[\s-]/g, '').toUpperCase();
+
+    // An agent supplying an existing TIN does not get to assert it: it is
+    // checked against the authoritative service first (PRD §11, §82).
+    const lookup = await tinService.lookup(normalisedTin);
+
+    if (lookup.outcome === 'UNAVAILABLE') {
+      // The old message told the agent to "register the taxpayer as a new TIN
+      // applicant" — advice that mints a duplicate TIN for someone who
+      // already has one. During an outage that would happen to every existing
+      // taxpayer an agent touched, and a duplicate in a UNIQUE column on an
+      // undeletable row is permanent. So this stops instead.
+      throw new AppError({
+        statusCode: 503,
+        code: 'TIN_SERVICE_UNAVAILABLE',
+        message:
+          'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. ' +
+          'Nothing has been registered.',
+        nextStep:
+          'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — ' +
+          'that would create a second TIN for someone who already has one.',
       });
-
-      tinReference = registration.reference || null;
-      tinReason = registration.message;
-
-      // The registration itself is not blocked by an unreachable TIN service.
-      // The taxpayer is real, the agent is standing in front of them, and the
-      // taxpayer record is a fact this platform owns — unlike the TIN. An
-      // assessment does not require a TIN, so they can be served today and the
-      // number chased afterwards by `retryOutstandingTins`.
-      //
-      // What matters is that an outage lands in REQUESTED and not FAILED:
-      // FAILED means the service considered this applicant and declined, which
-      // is a dead end nothing retries.
-      switch (registration.outcome) {
-        case 'ASSIGNED':
-          tin = registration.tin ?? null;
-          tinStatus = tin ? 'ASSIGNED' : 'REQUESTED';
-          break;
-        case 'REJECTED':
-          tinStatus = 'FAILED';
-          break;
-        default:
-          tinStatus = 'REQUESTED';
-      }
     }
 
+    if (lookup.outcome === 'NOT_FOUND') {
+      /*
+       * The advice here used to be "Check the number, or register the
+       * taxpayer as a new TIN applicant" — which is the instruction that
+       * mints a second TIN for somebody who already has one, and the exact
+       * outcome the UNAVAILABLE branch above goes out of its way to
+       * prevent. A duplicate in a UNIQUE column on an undeletable row is
+       * permanent.
+       *
+       * The order matters: check the number first, because a mistyped digit
+       * is far likelier than a taxpayer who has a TIN nobody has heard of.
+       * Registering as new stays reachable, and is named as the answer only
+       * to the question it actually answers.
+       */
+      throw new AppError({
+        statusCode: 400,
+        code: 'INVALID_REQUEST',
+        message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
+        nextStep:
+          'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
+          'the usual cause. Only if they have never had a TIN, go back and register them ' +
+          'without one; the platform will apply for a new TIN for them.',
+        details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
+      });
+    }
+
+    tin = lookup.tin ?? null;
+    tinStatus = 'EXISTING';
+  } else {
+    const lgaRow = await queryOne<{ name: string }>(pool, 'SELECT name FROM lgas WHERE id = $1', [
+      input.lgaId,
+    ]);
+    if (!lgaRow) throw badRequest('The selected Local Government Area is not valid.');
+
+    const registration = await tinService.register({
+      taxpayerType: input.taxpayerType,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      businessName: input.businessName,
+      phone: input.phone,
+      email: input.email ?? null,
+      dateOfBirth: input.dateOfBirth ?? null,
+      address: input.address,
+      lgaName: lgaRow.name,
+      identityType: input.identityType ?? null,
+      identityNumber: input.identityNumber ?? null,
+    });
+
+    tinReference = registration.reference || null;
+    tinReason = registration.message;
+
+    // The registration itself is not blocked by an unreachable TIN service.
+    // The taxpayer is real, the agent is standing in front of them, and the
+    // taxpayer record is a fact this platform owns — unlike the TIN. An
+    // assessment does not require a TIN, so they can be served today and the
+    // number chased afterwards by `retryOutstandingTins`.
+    //
+    // What matters is that an outage lands in REQUESTED and not FAILED:
+    // FAILED means the service considered this applicant and declined, which
+    // is a dead end nothing retries.
+    switch (registration.outcome) {
+      case 'ASSIGNED':
+        tin = registration.tin ?? null;
+        tinStatus = tin ? 'ASSIGNED' : 'REQUESTED';
+        break;
+      case 'REJECTED':
+        tinStatus = 'FAILED';
+        break;
+      default:
+        tinStatus = 'REQUESTED';
+    }
+  }
+
+  return withTransaction(async (client) => {
     const taxpayer = await queryOne<{ id: string }>(
       client,
       `INSERT INTO taxpayers (
@@ -525,45 +542,90 @@ export async function requestTin(params: {
   actorId: string | null;
   actorRole: string;
 }): Promise<{ tin: string | null; tinStatus: string }> {
+  /*
+   * Read, ask, then write — in that order, with nothing held open in between.
+   *
+   * All three used to happen inside one transaction, so every TIN request held
+   * a pooled connection for as long as the PSIRS TIN service took to answer.
+   * Splitting it opens a window in which somebody else could assign this
+   * taxpayer a TIN: `retryOutstandingTins` sweeps in the background and calls
+   * straight back into here. The write below re-reads `FOR UPDATE` and refuses
+   * to overwrite a TIN that arrived while we were asking — which is a
+   * guarantee the single transaction never actually made, because its read
+   * took no lock either.
+   */
+  const taxpayer = await queryOne<{
+    id: string;
+    tin: string | null;
+    tin_status: string;
+    taxpayer_type: TaxpayerType;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string | null;
+    phone: string;
+    email: string | null;
+    date_of_birth: Date | null;
+    address: string;
+    lga_name: string;
+  }>(
+    pool,
+    `SELECT t.id, t.tin, t.tin_status, t.taxpayer_type, t.first_name, t.last_name,
+            t.business_name, t.phone, t.email, t.date_of_birth, t.address, l.name AS lga_name
+       FROM taxpayers t JOIN lgas l ON l.id = t.lga_id
+      WHERE t.id = $1`,
+    [params.taxpayerId],
+  );
+
+  if (!taxpayer) throw notFound('That taxpayer');
+  if (taxpayer.tin) {
+    return { tin: taxpayer.tin, tinStatus: taxpayer.tin_status };
+  }
+
+  const registration = await tinService.register({
+    taxpayerType: taxpayer.taxpayer_type,
+    firstName: taxpayer.first_name ?? undefined,
+    lastName: taxpayer.last_name ?? undefined,
+    businessName: taxpayer.business_name ?? undefined,
+    phone: taxpayer.phone,
+    email: taxpayer.email,
+    dateOfBirth: taxpayer.date_of_birth?.toISOString().slice(0, 10) ?? null,
+    address: taxpayer.address,
+    lgaName: taxpayer.lga_name,
+  });
+
   return withTransaction(async (client) => {
-    const taxpayer = await queryOne<{
-      id: string;
-      tin: string | null;
-      tin_status: string;
-      taxpayer_type: TaxpayerType;
-      first_name: string | null;
-      last_name: string | null;
-      business_name: string | null;
-      phone: string;
-      email: string | null;
-      date_of_birth: Date | null;
-      address: string;
-      lga_name: string;
-    }>(
+    /*
+     * Somebody may have got there while we were asking.
+     *
+     * The TIN column can only ever be filled from the authoritative service,
+     * and it is a UNIQUE column — so overwriting one that arrived in the
+     * meantime would either lose a real number or fail on the constraint. The
+     * number we were just handed is recorded in the audit entry instead, so it
+     * can be reconciled with the register rather than quietly dropped.
+     */
+    const current = await queryOne<{ tin: string | null; tin_status: string }>(
       client,
-      `SELECT t.id, t.tin, t.tin_status, t.taxpayer_type, t.first_name, t.last_name,
-              t.business_name, t.phone, t.email, t.date_of_birth, t.address, l.name AS lga_name
-         FROM taxpayers t JOIN lgas l ON l.id = t.lga_id
-        WHERE t.id = $1`,
+      'SELECT tin, tin_status FROM taxpayers WHERE id = $1 FOR UPDATE',
       [params.taxpayerId],
     );
+    if (!current) throw notFound('That taxpayer');
 
-    if (!taxpayer) throw notFound('That taxpayer');
-    if (taxpayer.tin) {
-      return { tin: taxpayer.tin, tinStatus: taxpayer.tin_status };
+    if (current.tin) {
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'taxpayer.tin_request_superseded',
+        entityType: 'taxpayer',
+        entityId: params.taxpayerId,
+        oldValue: { tin: current.tin },
+        newValue: {
+          discardedOutcome: registration.outcome,
+          discardedReference: registration.reference || null,
+          provider: registration.provider,
+        },
+      });
+      return { tin: current.tin, tinStatus: current.tin_status };
     }
-
-    const registration = await tinService.register({
-      taxpayerType: taxpayer.taxpayer_type,
-      firstName: taxpayer.first_name ?? undefined,
-      lastName: taxpayer.last_name ?? undefined,
-      businessName: taxpayer.business_name ?? undefined,
-      phone: taxpayer.phone,
-      email: taxpayer.email,
-      dateOfBirth: taxpayer.date_of_birth?.toISOString().slice(0, 10) ?? null,
-      address: taxpayer.address,
-      lgaName: taxpayer.lga_name,
-    });
 
     // Only a REJECTED registration is a dead end. An unreachable service — and
     // an "assigned" reply carrying no usable number — stay REQUESTED, so

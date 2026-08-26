@@ -21,6 +21,7 @@ import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
 import { queueNotification } from './notifications';
+import { log } from '../lib/logger';
 
 export interface VehicleLookup {
   /**
@@ -446,7 +447,7 @@ export async function completeRenewal(params: {
   actorId: string | null;
   actorRole: string;
 }): Promise<{ documentId: string; documentNumber: string; verificationCode: string; expiryDate: Date }> {
-  return withTransaction(async (client) => {
+  const completed = await withTransaction(async (client) => {
     const renewal = await queryOne<{
       id: string;
       vehicle_id: string;
@@ -490,11 +491,15 @@ export async function completeRenewal(params: {
         'SELECT document_number, verification_code FROM documents WHERE id = $1',
         [renewal.document_id],
       );
+      // Already issued: this call is a repeat, so there is nothing new to
+      // tell the authority. If the original announcement never landed, the
+      // renewal is still not ACCEPTED and the sweep will carry it.
       return {
         documentId: renewal.document_id,
         documentNumber: doc!.document_number,
         verificationCode: doc!.verification_code,
         expiryDate: renewal.expiry_date,
+        announce: null,
       };
     }
 
@@ -553,35 +558,6 @@ export async function completeRenewal(params: {
       renewal.expiry_date,
     ]);
 
-    // Tell the authoritative registry the renewal happened — the platform
-    // records the service, the authority remains the source of truth (§82).
-    //
-    // The taxpayer has paid and is entitled to the document either way, so a
-    // failure here does not fail the renewal. It is written down instead:
-    // an unacknowledged renewal is a fact the government has to chase, and
-    // `retryAuthorityNotifications` below is how it gets chased.
-    const notification = await vehicleRegistry.recordRenewal({
-      registrationNumber: renewal.registration_number,
-      expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
-      documentNumber: document.documentNumber,
-    });
-
-    await client.query(
-      `UPDATE vehicle_renewals
-          SET authority_notification_status = $2,
-              authority_notification_reference = $3,
-              authority_notification_reason = $4,
-              authority_notification_attempts = authority_notification_attempts + 1,
-              authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
-        WHERE id = $1`,
-      [
-        renewal.id,
-        notification.accepted ? 'ACCEPTED' : 'FAILED',
-        notification.reference || null,
-        notification.reason ?? null,
-      ],
-    );
-
     await recordAudit(client, {
       actorId: params.actorId,
       actorRole: params.actorRole,
@@ -592,8 +568,6 @@ export async function completeRenewal(params: {
         documentNumber: document.documentNumber,
         expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
         registrationNumber: renewal.registration_number,
-        authorityNotified: notification.accepted,
-        authorityNotificationReason: notification.reason ?? null,
       },
     });
 
@@ -615,8 +589,112 @@ export async function completeRenewal(params: {
       documentNumber: document.documentNumber,
       verificationCode: document.verificationCode,
       expiryDate: renewal.expiry_date,
+      // Carried out of the transaction so the authority can be told once the
+      // renewal is durably recorded, rather than while its rows are locked.
+      announce: {
+        renewalId: renewal.id,
+        registrationNumber: renewal.registration_number,
+      },
     };
   });
+
+  /*
+   * Tell the authoritative registry, after the renewal is committed.
+   *
+   * The platform records the service; the authority remains the source of
+   * truth (§82). This used to happen inside the transaction above, which meant
+   * a paid renewal held its row locks — and a pooled connection — for as long
+   * as the vehicle authority took to answer.
+   *
+   * Moving it out changes what a crash costs, and changes it for the better.
+   * Before, a failure between the document and the acknowledgement rolled the
+   * whole renewal back: the taxpayer had paid and had nothing. Now the renewal
+   * stands and only the acknowledgement is outstanding — which is a state the
+   * platform already knows how to finish, because `authority_notification_status`
+   * starts as PENDING and `retryAuthorityNotifications` sweeps for anything
+   * that is not ACCEPTED. A renewal nobody managed to announce is a fact the
+   * government has to chase, and there was already a way to chase it.
+   */
+  if (completed.announce) {
+    await announceRenewal({
+      renewalId: completed.announce.renewalId,
+      registrationNumber: completed.announce.registrationNumber,
+      expiryDate: completed.expiryDate,
+      documentNumber: completed.documentNumber,
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+    });
+  }
+
+  return {
+    documentId: completed.documentId,
+    documentNumber: completed.documentNumber,
+    verificationCode: completed.verificationCode,
+    expiryDate: completed.expiryDate,
+  };
+}
+
+/**
+ * Record the authority's answer about one renewal.
+ *
+ * Its own transaction, and deliberately forgiving: the taxpayer has paid and
+ * is entitled to their papers whatever the registry says or fails to say. A
+ * throw here would turn an unacknowledged renewal into a failed request for a
+ * document the citizen has already bought.
+ */
+async function announceRenewal(params: {
+  renewalId: string;
+  registrationNumber: string;
+  expiryDate: Date;
+  documentNumber: string;
+  actorId: string | null;
+  actorRole: string;
+}): Promise<void> {
+  try {
+    const notification = await vehicleRegistry.recordRenewal({
+      registrationNumber: params.registrationNumber,
+      expiryDate: params.expiryDate.toISOString().slice(0, 10),
+      documentNumber: params.documentNumber,
+    });
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE vehicle_renewals
+            SET authority_notification_status = $2,
+                authority_notification_reference = $3,
+                authority_notification_reason = $4,
+                authority_notification_attempts = authority_notification_attempts + 1,
+                authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
+          WHERE id = $1`,
+        [
+          params.renewalId,
+          notification.accepted ? 'ACCEPTED' : 'FAILED',
+          notification.reference || null,
+          notification.reason ?? null,
+        ],
+      );
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'vehicle.authority_notified',
+        entityType: 'vehicle_renewal',
+        entityId: params.renewalId,
+        newValue: {
+          accepted: notification.accepted,
+          reason: notification.reason ?? null,
+          reference: notification.reference || null,
+        },
+      });
+    });
+  } catch (error) {
+    // Left PENDING for the sweep, which is what PENDING is for.
+    log.warn('authority could not be told about a renewal', {
+      component: 'vehicles',
+      renewalId: params.renewalId,
+      error,
+    });
+  }
 }
 
 /** Renewals awaiting document issue once their payment lands. */

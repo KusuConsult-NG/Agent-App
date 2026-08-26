@@ -26,7 +26,7 @@ import {
   type ApplicationState,
 } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
@@ -456,27 +456,78 @@ export async function submitKyc(params: {
   selfieDocumentId?: string | null;
   ipAddress?: string | null;
 }): Promise<{ status: string; applicationState: ApplicationState; failureReason?: string }> {
-  return withTransaction(async (client) => {
-    const agent = await queryOne<{
-      id: string;
-      full_name: string;
-      phone: string;
-      date_of_birth: Date | null;
-      kyc_status: string;
-    }>(
-      client,
-      `SELECT a.id, u.full_name, u.phone, a.date_of_birth, a.kyc_status
-         FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
-      [params.agentId],
+  /*
+   * Ask first, write once.
+   *
+   * The provider call used to sit in the middle of this transaction, between
+   * superseding the previous attempt and recording the new one — so an
+   * applicant's KYC submission held a pooled connection for as long as the
+   * identity provider took, which is the slowest external call the platform
+   * makes.
+   *
+   * The guarantee the old shape leaned on survives by a shorter route. It
+   * superseded the last attempt and then relied on a throw to roll that back
+   * when the provider could not be reached; now nothing is written until there
+   * is an answer to write, so an unreachable provider leaves the applicant's
+   * record untouched because it was never touched.
+   */
+  const agent = await queryOne<{
+    id: string;
+    full_name: string;
+    phone: string;
+    date_of_birth: Date | null;
+    kyc_status: string;
+  }>(
+    pool,
+    `SELECT a.id, u.full_name, u.phone, a.date_of_birth, a.kyc_status
+       FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
+    [params.agentId],
+  );
+  if (!agent) throw notFound('That agent');
+
+  if (agent.kyc_status === 'CLEARED') {
+    throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
+  }
+
+  let selfieChecksum: string | null = null;
+  if (params.selfieDocumentId) {
+    const doc = await queryOne<{ checksum: string }>(
+      pool,
+      'SELECT checksum FROM kyc_documents WHERE id = $1 AND agent_id = $2',
+      [params.selfieDocumentId, params.agentId],
     );
-    if (!agent) throw notFound('That agent');
+    selfieChecksum = doc?.checksum ?? null;
+  }
 
-    if (agent.kyc_status === 'CLEARED') {
-      throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
-    }
+  const nameParts = agent.full_name.trim().split(/\s+/);
+  const verification = await kycProvider.verify({
+    identityType: params.identityType,
+    identityNumber: params.identityNumber,
+    firstName: nameParts[0] ?? agent.full_name,
+    lastName: nameParts[nameParts.length - 1] ?? agent.full_name,
+    dateOfBirth: agent.date_of_birth?.toISOString().slice(0, 10) ?? null,
+    phone: agent.phone,
+    selfieChecksum,
+  });
 
+  if (verification.status === 'UNAVAILABLE') {
+    // Nothing has been written, so there is nothing to undo: the applicant's
+    // existing submission is untouched because it was never superseded.
+    throw new AppError({
+      statusCode: 503,
+      code: 'KYC_PROVIDER_UNAVAILABLE',
+      message:
+        'Your identity could not be checked because the verification service could not be ' +
+        'reached. This is not a problem with your details and nothing has been recorded ' +
+        'against your application.',
+      nextStep: 'Try again in a few minutes. Your application is unchanged.',
+    });
+  }
+
+  return withTransaction(async (client) => {
     // Resubmission supersedes rather than overwrites, so a failed attempt stays
-    // in the record (Addendum §28).
+    // in the record (Addendum §28). Numbered in the same transaction that
+    // supersedes, so two submissions racing cannot claim one attempt number.
     await client.query(
       `UPDATE agent_kyc SET superseded_at = now() WHERE agent_id = $1 AND superseded_at IS NULL`,
       [params.agentId],
@@ -487,42 +538,6 @@ export async function submitKyc(params: {
       `SELECT (COALESCE(MAX(attempt_number),0) + 1)::text AS next FROM agent_kyc WHERE agent_id = $1`,
       [params.agentId],
     );
-
-    let selfieChecksum: string | null = null;
-    if (params.selfieDocumentId) {
-      const doc = await queryOne<{ checksum: string }>(
-        client,
-        'SELECT checksum FROM kyc_documents WHERE id = $1 AND agent_id = $2',
-        [params.selfieDocumentId, params.agentId],
-      );
-      selfieChecksum = doc?.checksum ?? null;
-    }
-
-    const nameParts = agent.full_name.trim().split(/\s+/);
-    const verification = await kycProvider.verify({
-      identityType: params.identityType,
-      identityNumber: params.identityNumber,
-      firstName: nameParts[0] ?? agent.full_name,
-      lastName: nameParts[nameParts.length - 1] ?? agent.full_name,
-      dateOfBirth: agent.date_of_birth?.toISOString().slice(0, 10) ?? null,
-      phone: agent.phone,
-      selfieChecksum,
-    });
-
-    if (verification.status === 'UNAVAILABLE') {
-      // Nothing is recorded and nothing is decided. Throwing here rolls the
-      // supersede back with it, so the applicant's existing submission — if
-      // they had one — survives untouched.
-      throw new AppError({
-        statusCode: 503,
-        code: 'KYC_PROVIDER_UNAVAILABLE',
-        message:
-          'Your identity could not be checked because the verification service could not be ' +
-          'reached. This is not a problem with your details and nothing has been recorded ' +
-          'against your application.',
-        nextStep: 'Try again in a few minutes. Your application is unchanged.',
-      });
-    }
 
     await client.query(
       `INSERT INTO agent_kyc
@@ -754,23 +769,21 @@ export interface BankVerificationResult {
  * redirecting a payout cannot supply — so it has to be obtained while the
  * proposal is still a proposal, not after it is in use.
  */
-async function verifyAccountRow(
-  client: PoolClient,
-  params: { accountId: string; agentId: string; actorId: string },
-): Promise<BankVerificationResult> {
-  const account = await queryOne<{
-    id: string;
-    bank_code: string | null;
-    account_number: string;
-    account_name: string;
-  }>(
-    client,
-    `SELECT id, bank_code, account_number, account_name FROM bank_accounts WHERE id = $1`,
-    [params.accountId],
-  );
-  if (!account) throw notFound('That bank account');
-
-  if (!account.bank_code) {
+/**
+ * Ask the bank, outside any transaction.
+ *
+ * Split from the recording below so the network call never happens with a
+ * transaction open. Every caller has the three things a bank needs — the
+ * code, the number and the name it is expected to resolve to — before it
+ * opens one: two read them from an existing row, and the third is proposing
+ * the account and has them in the request.
+ */
+async function askTheBank(account: {
+  bankCode: string | null;
+  accountNumber: string;
+  accountName: string;
+}) {
+  if (!account.bankCode) {
     // Our own data is incomplete; there is nothing to ask the bank yet. Say
     // so before making a call that could only fail confusingly.
     throw badRequest(
@@ -780,12 +793,37 @@ async function verifyAccountRow(
     );
   }
 
-  const result = await bankVerification.verify({
-    bankCode: account.bank_code,
-    accountNumber: account.account_number,
-    expectedName: account.account_name,
+  return bankVerification.verify({
+    bankCode: account.bankCode,
+    accountNumber: account.accountNumber,
+    expectedName: account.accountName,
   });
+}
 
+/**
+ * Record what the bank said about one account row.
+ *
+ * The resolved account name is the strongest control in the change flow — the
+ * one thing somebody redirecting a payout cannot supply — so it is written in
+ * the same transaction as whatever decision depends on it.
+ */
+async function recordBankAnswer(
+  client: PoolClient,
+  params: {
+    accountId: string;
+    agentId: string;
+    actorId: string;
+    result: Awaited<ReturnType<typeof askTheBank>>;
+  },
+): Promise<BankVerificationResult> {
+  const account = await queryOne<{ id: string }>(
+    client,
+    `SELECT id FROM bank_accounts WHERE id = $1`,
+    [params.accountId],
+  );
+  if (!account) throw notFound('That bank account');
+
+  const result = params.result;
   const verified = result.outcome === 'VERIFIED';
   const status = verified ? 'VERIFIED' : result.outcome === 'UNAVAILABLE' ? 'PENDING' : 'FAILED';
 
@@ -846,25 +884,32 @@ export async function verifyBankAccount(params: {
   agentId: string;
   actorId: string;
 }): Promise<BankVerificationResult> {
-  return withTransaction(async (client) => {
-    const account = await queryOne<{
-      id: string;
-      bank_code: string | null;
-      account_number: string;
-      account_name: string;
-    }>(
-      client,
-      `SELECT b.id, b.bank_code, b.account_number, b.account_name
-         FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id
-        WHERE a.id = $1 AND b.status = 'ACTIVE'`,
-      [params.agentId],
-    );
-    if (!account) throw notFound('A bank account for this agent');
+  const account = await queryOne<{
+    id: string;
+    bank_code: string | null;
+    account_number: string;
+    account_name: string;
+  }>(
+    pool,
+    `SELECT b.id, b.bank_code, b.account_number, b.account_name
+       FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id
+      WHERE a.id = $1 AND b.status = 'ACTIVE'`,
+    [params.agentId],
+  );
+  if (!account) throw notFound('A bank account for this agent');
 
-    const result = await verifyAccountRow(client, {
+  const answer = await askTheBank({
+    bankCode: account.bank_code,
+    accountNumber: account.account_number,
+    accountName: account.account_name,
+  });
+
+  return withTransaction(async (client) => {
+    const result = await recordBankAnswer(client, {
       accountId: account.id,
       agentId: params.agentId,
       actorId: params.actorId,
+      result: answer,
     });
     await refreshClearance(client, params.agentId);
     return result;
@@ -1669,6 +1714,26 @@ export async function requestBankAccountChange(params: {
   accountNumber: string;
   reason: string;
 }): Promise<BankAccountChange> {
+  /*
+   * Ask the bank before the transaction, not inside it.
+   *
+   * The three things a bank needs to resolve a name are all in the request, so
+   * nothing is lost by asking first — and asking inside meant a change request
+   * held a pooled connection and a lock on the agent's account row while a
+   * bank thought about it.
+   *
+   * The order does change one thing: the bank is now asked before the
+   * validation below rules the request out, so an invalid request can cost one
+   * wasted enquiry. That is acceptable here in a way it is not for a TIN — a
+   * name enquiry reads, and creates nothing that has to be lived with
+   * afterwards.
+   */
+  const answer = await askTheBank({
+    bankCode: params.bankCode.trim(),
+    accountNumber: params.accountNumber.trim(),
+    accountName: params.accountName.trim(),
+  });
+
   return withTransaction(async (client) => {
     const agent = await queryOne<{
       id: string;
@@ -1782,12 +1847,15 @@ export async function requestBankAccountChange(params: {
       approval!.id,
     ]);
 
-    // Ask the bank now, while it is still only a proposal. An officer should
-    // never be the first person to find out the name does not match.
-    const verification = await verifyAccountRow(client, {
+    // Recorded now, while it is still only a proposal. An officer should never
+    // be the first person to find out the name does not match, and the
+    // resolved name lands in the same transaction as the approval that will
+    // be judged against it.
+    const verification = await recordBankAnswer(client, {
       accountId: proposed!.id,
       agentId: params.agentId,
       actorId: params.actorId,
+      result: answer,
     });
 
     await recordAudit(client, {
@@ -2027,25 +2095,41 @@ export async function reverifyProposedAccount(params: {
   approvalId: string;
   actorId: string;
 }): Promise<BankVerificationResult> {
-  return withTransaction(async (client) => {
-    const proposed = await queryOne<{ id: string; owner_id: string; status: string }>(
-      client,
-      `SELECT id, owner_id, status FROM bank_accounts WHERE change_approval_id = $1`,
-      [params.approvalId],
+  const proposed = await queryOne<{
+    id: string;
+    owner_id: string;
+    status: string;
+    bank_code: string | null;
+    account_number: string;
+    account_name: string;
+  }>(
+    pool,
+    `SELECT id, owner_id, status, bank_code, account_number, account_name
+       FROM bank_accounts WHERE change_approval_id = $1`,
+    [params.approvalId],
+  );
+  if (!proposed) throw notFound('The account this approval refers to');
+  if (proposed.status !== 'PROPOSED') {
+    throw conflict(
+      'BANK_CHANGE_ALREADY_SETTLED',
+      `This change has already been ${proposed.status.toLowerCase()}.`,
     );
-    if (!proposed) throw notFound('The account this approval refers to');
-    if (proposed.status !== 'PROPOSED') {
-      throw conflict(
-        'BANK_CHANGE_ALREADY_SETTLED',
-        `This change has already been ${proposed.status.toLowerCase()}.`,
-      );
-    }
-    return verifyAccountRow(client, {
+  }
+
+  const answer = await askTheBank({
+    bankCode: proposed.bank_code,
+    accountNumber: proposed.account_number,
+    accountName: proposed.account_name,
+  });
+
+  return withTransaction(async (client) =>
+    recordBankAnswer(client, {
       accountId: proposed.id,
       agentId: proposed.owner_id,
       actorId: params.actorId,
-    });
-  });
+      result: answer,
+    }),
+  );
 }
 
 /** The proposal outstanding for one agent, if there is one. */
