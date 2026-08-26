@@ -78,23 +78,33 @@ const WAITING = [
   'OPENED',
   'MEDIUM',
   'AWAITING',
-  // An invoice nobody has paid yet is outstanding, not failed.
+  // An invoice nobody has paid yet is outstanding, not failed — and one that
+  // has been paid in part is still outstanding for the rest.
   'UNPAID',
+  'PARTIALLY',
 ];
 
 /*
- * Words that turn the sentence around, kept apart from BAD on purpose:
- * NOT_STARTED is not a bad outcome, it is merely not a good one. All this
- * list may do is stop the success branch being reached through a negation.
+ * Words that stop a good word being the whole story.
+ *
+ * Two kinds, and they are kept together because they do the same job here:
+ * NOT / NO / NON / NEVER reverse what follows, and PARTIALLY qualifies it —
+ * PARTIALLY_PAID contains PAID and read as settled, which is the same
+ * overstatement as UNPAID reading as paid, only quieter. Half the money is
+ * still owed and somebody still has to collect it.
+ *
+ * Kept apart from BAD on purpose: NOT_STARTED is not a bad outcome, it is
+ * merely not a good one, and an invoice paid in part is not a failure. All
+ * this list may do is stop the success branch being reached.
  */
-const NEGATORS = ['NOT', 'NO', 'NON', 'NEVER'];
+const NOT_THE_WHOLE_STORY = ['NOT', 'NO', 'NON', 'NEVER', 'PARTIALLY'];
 
 export function statusSeverity(status: string): Severity {
   const words = status.toUpperCase().split('_');
   const has = (list: string[]) => words.some((word) => list.includes(word));
 
   if (has(BAD)) return 'danger';
-  if (has(GOOD) && !has(NEGATORS)) return 'success';
+  if (has(GOOD) && !has(NOT_THE_WHOLE_STORY)) return 'success';
   if (has(WAITING)) return 'pending';
   return 'neutral';
 }
