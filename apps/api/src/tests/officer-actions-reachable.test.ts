@@ -54,6 +54,23 @@ const AGENT_APPLICATION_ONLY = new Set([
    * should not try.
    */
   '/allocations/collections',
+  /*
+   * Registering a taxpayer, getting them a TIN, capturing a vehicle and
+   * selling a renewal. All four are the field job — an agent in a market with
+   * the person in front of them — and all four became visible here only when
+   * the check started matching paths segment by segment. An officer correcting
+   * a record does it through `/taxpayers/:id/identity`, which is on a screen.
+   */
+  '/taxpayers/',
+  '/taxpayers/:id/tin',
+  '/vehicles/',
+  '/vehicles/:id/renew',
+  /*
+   * Neither an officer nor an agent: the group leader answering by SMS link,
+   * with no account at all. The officer's side of it — asking for the link —
+   * is `/groups/:id/attestation-request`, which the Groups screen calls.
+   */
+  '/groups/:token/confirm',
   '/payments/:paymentId/confirm',
   '/payments/initiate',
   '/payments/payments',
@@ -65,6 +82,36 @@ const AGENT_APPLICATION_ONLY = new Set([
   '/government/tickets',
   '/government/tickets/:id/messages',
   '/government/tickets/:id/update',
+]);
+
+/**
+ * Officer endpoints that deliberately have no button, with the reason each one
+ * stays. Separate from the agent-application list above because these *are*
+ * officer actions — they are simply reached another way, or not at all.
+ */
+const OFFICER_WITHOUT_A_SCREEN = new Set([
+  /*
+   * An officer raising a bank-account change on an agent's behalf. The agent
+   * does this themselves from the PWA, and the officer's side of it — verifying
+   * the change somebody requested — is `/agents/bank-changes/:approvalId/verify`,
+   * which the Agents screen calls. This exists for an agent who cannot act for
+   * themselves, and it carries step-up; putting it on a screen would make an
+   * officer changing where an agent's commission is paid an ordinary click.
+   */
+  '/agents/:agentId/bank/change',
+  /*
+   * Evaluating one taxpayer against one programme. The screen offers
+   * `/evaluate-all`, which is the decision an officer actually makes, and a
+   * single taxpayer is re-evaluated automatically whenever they check their own
+   * status through the citizen page.
+   */
+  '/government/programmes/:id/evaluate',
+  /*
+   * Re-issuing a renewal document. Normally automatic on payment confirmation;
+   * this is the recovery path for an interrupted session, used by the agent who
+   * was serving the motorist rather than by an officer at a desk.
+   */
+  '/vehicles/renewals/:renewalId/document',
 ]);
 
 /** Run by a scheduler rather than by a person. */
@@ -115,14 +162,80 @@ function writeEndpoints(): string[] {
   return [...new Set(found)];
 }
 
+/**
+ * A path, in the pieces that have to line up.
+ *
+ * Query string dropped, `${...}` and `:param` both reduced to a wildcard, so
+ * `/vehicles/${id}/status` and `/vehicles/:vehicleId/status` are the same
+ * three segments and `/vehicles/renewals/authority-outstanding` is not.
+ */
+function segments(path: string): string[] {
+  return path
+    .replace(/\?.*$/, '')
+    .replace(/\$\{[^}]*\}/g, '*')
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .map((segment) => (segment.startsWith(':') ? '*' : segment));
+}
+
+function samePath(a: string[], b: string[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((segment, index) => segment === '*' || b[index] === '*' || segment === b[index])
+  );
+}
+
+/**
+ * Every path the portal names, and whether it was only ever read.
+ *
+ * Two passes, because the portal reaches the API both ways. Some screens call
+ * `api.post` with the path inline; others hand a path to a helper that calls
+ * it later, so a rule that only understood direct calls would report a
+ * hundred false positives and be useless. The `api.get(` pass exists to mark
+ * the reads, which is what makes a write endpoint sharing a path with a read
+ * endpoint visible rather than absorbed.
+ */
+function portalPaths(): { path: string[]; read: boolean }[] {
+  const source = portalSource();
+  const found: { path: string[]; read: boolean }[] = [];
+  for (const match of source.matchAll(/api\.get(?:<[^>]*>)?\(\s*[`'"](\/[^`'"]*)/g)) {
+    found.push({ path: segments(match[1]), read: true });
+  }
+  for (const match of source.matchAll(/[`'"](\/[a-z][a-z-]*(?:\/[^`'"\s]*)?)[`'"]/gi)) {
+    found.push({ path: segments(match[1]), read: false });
+  }
+  return found;
+}
+
 describe('the portal can reach every officer action', () => {
+  /*
+   * Matched segment by segment, and a read is not a write.
+   *
+   * This used to ask whether the portal's source *contained* the endpoint's
+   * static stem. `/vehicles/:vehicleId/status` reduced to `/vehicles/`, which
+   * the portal certainly contains — it fetches `/vehicles/renewals/...` — so
+   * every write endpoint sitting under a path the portal reads was reported as
+   * reachable without anybody having built a way in. Two settlement endpoints
+   * had to be pinned by hand below because of it, and the general case was
+   * still open: a new officer endpoint under an existing path passed silently,
+   * which is the one thing this file exists to prevent.
+   */
   it('leaves no officer endpoint without a caller', () => {
-    const portal = portalSource();
+    const paths = portalPaths();
     const orphans = writeEndpoints()
-      .filter((path) => !AGENT_APPLICATION_ONLY.has(path) && !SCHEDULED_ONLY.has(path))
-      // Compare on the static stem: the portal builds these with template
-      // literals, so `/agents/${id}/review` contains `/agents/`.
-      .filter((path) => !portal.includes(path.split('/:')[0]!));
+      .filter(
+        (path) =>
+          !AGENT_APPLICATION_ONLY.has(path) &&
+          !SCHEDULED_ONLY.has(path) &&
+          !OFFICER_WITHOUT_A_SCREEN.has(path),
+      )
+      .filter((path) => {
+        const want = segments(path);
+        const hits = paths.filter((candidate) => samePath(want, candidate.path));
+        // Named only inside an `api.get` is a read of the same path, not a
+        // caller for the write.
+        return !hits.some((hit) => !hit.read);
+      });
 
     assert.deepEqual(
       orphans,

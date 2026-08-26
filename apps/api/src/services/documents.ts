@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
 import { nextDocumentNumber } from '../lib/references';
-import { storage } from './storage';
+import { storage, storageKey } from './storage';
 
 const COLOURS = {
   ink: '#12211a',
@@ -465,10 +465,11 @@ export async function registerDocument(
 ): Promise<{ documentId: string; documentNumber: string; verificationCode: string; checksum: string }> {
   const documentNumber = await nextDocumentNumber(client, params.numberPrefix);
   const verificationCode = params.verificationCode ?? generateVerificationCode();
-  const key = `${params.documentType.toLowerCase()}/${new Date().getUTCFullYear()}/${documentNumber.replace(
-    /[/]/g,
-    '-',
-  )}.pdf`;
+  const key = storageKey(
+    params.documentType.toLowerCase(),
+    String(new Date().getUTCFullYear()),
+    `${documentNumber.replace(/[/]/g, '-')}.pdf`,
+  );
 
   const stored = await storage.put(key, params.bytes, 'application/pdf');
 

@@ -24,7 +24,7 @@
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors';
-import { storage } from './storage';
+import { storage, storageKey } from './storage';
 import { recordAudit } from './audit';
 
 /** What a document can be. Kept small: each one is asked for by name. */
@@ -140,7 +140,12 @@ export async function storeKycDocument(params: {
     );
   }
 
-  const key = `kyc/${owner.column === 'agent_id' ? 'agents' : 'referees'}/${owner.id}/${params.documentType.toLowerCase()}-${Date.now()}.${declared.extension}`;
+  const key = storageKey(
+    'kyc',
+    owner.column === 'agent_id' ? 'agents' : 'referees',
+    owner.id,
+    `${params.documentType.toLowerCase()}-${Date.now()}.${declared.extension}`,
+  );
   // Throws if the bytes are not durably stored, so no row is written for a
   // document that cannot be opened.
   const stored = await storage.put(key, params.bytes, declared.contentType);

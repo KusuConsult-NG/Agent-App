@@ -58,7 +58,21 @@ export async function computeComplianceScore(
          WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING')
        )::text AS distinct_periods,
        max(t.verified_at) AS last_payment_at,
-       count(*) FILTER (WHERE t.status IN ('REVERSED','REFUNDED'))::text AS reversed_count
+       /*
+        * Only reversals the taxpayer is answerable for.
+        *
+        * This counted every reversal, and most of them are the state
+        * correcting itself — a double charge, an assessment raised against
+        * the wrong record. The score gates incentive eligibility, so counting
+        * those took a farmer's fertiliser away as a penalty for PSIRS's own
+        * clerical error. refunds.attributable_to defaults to GOVERNMENT, so
+        * a reversal nobody classified costs the citizen nothing.
+        */
+       count(*) FILTER (
+         WHERE t.status IN ('REVERSED','REFUNDED')
+           AND EXISTS (SELECT 1 FROM refunds r
+                        WHERE r.transaction_id = t.id AND r.attributable_to = 'TAXPAYER')
+       )::text AS reversed_count
      FROM transactions t
      JOIN invoices i ON i.id = t.invoice_id
      JOIN assessments a ON a.id = t.assessment_id
@@ -142,7 +156,7 @@ export async function computeComplianceScore(
     components.push({
       factor: 'Reversed transactions',
       points: -penalty,
-      detail: `${reversed} transaction(s) reversed or refunded`,
+      detail: `${reversed} payment(s) reversed for a reason attributable to the taxpayer`,
     });
   }
 

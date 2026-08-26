@@ -291,10 +291,133 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
         </div>
       )}
 
+      {chosen && can('taxpayer:obligation:waive') && <Obligations taxpayerId={chosen.id} />}
+
       {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
     </>
   );
 }
+
+interface ObligationRow {
+  id: string;
+  revenueItemId: string;
+  code: string;
+  name: string;
+  categoryName: string;
+  frequency: string;
+  source: string;
+  status: string;
+}
+
+/**
+ * What this taxpayer is liable for, and cancelling what they are not.
+ *
+ * `taxpayer:obligation:waive` is deliberately separate from `taxpayer:update`,
+ * which agents hold — removing what a citizen owes government is a revenue
+ * decision, not a correction. But no screen exercised it, so the separation
+ * protected a permission nobody could use: an obligation recorded in error at
+ * onboarding stayed on the record, kept the taxpayer in arrears, and kept
+ * dragging their compliance score down.
+ *
+ * The endpoint takes the list that should remain, and waives whatever is
+ * missing from it — so this sends the current set minus the one being removed,
+ * rather than a delete.
+ */
+function Obligations({ taxpayerId }: { taxpayerId: string }) {
+  const [rows, setRows] = useState<ObligationRow[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api
+      .get<ObligationRow[]>(`/taxpayers/${taxpayerId}/obligations`)
+      .then(setRows)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, [taxpayerId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function waive(row: ObligationRow) {
+    if (!rows) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const remaining = rows
+        .filter((r) => r.status === 'ACTIVE' && r.revenueItemId !== row.revenueItemId)
+        .map((r) => r.revenueItemId);
+      const result = await api.put<{ message: string }>(
+        `/taxpayers/${taxpayerId}/obligations`,
+        { itemIds: remaining, source: 'OFFICER_REVIEW' },
+      );
+      setMessage(result.message);
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      else if (caught instanceof Error) {
+        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!rows) return null;
+
+  return (
+    <div className="card card--flush">
+      <div style={{ padding: '18px 18px 0' }}>
+        <h2 className="card__title">What this taxpayer is liable for</h2>
+        <p className="card__hint">
+          Waiving an obligation stops future assessments against it. Invoices already raised stay
+          payable — cancelling those is a separate decision, invoice by invoice.
+        </p>
+      </div>
+
+      <ErrorAlert error={error} />
+      {message && <Alert kind="success">{message}</Alert>}
+
+      <Table
+        columns={[
+          { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
+          { key: 'name', label: 'Revenue item' },
+          { key: 'categoryName', label: 'Category' },
+          { key: 'source', label: 'Recorded by', render: (row) => readableSource(row.source) },
+          { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+          {
+            key: 'action',
+            label: '',
+            render: (row) =>
+              row.status === 'ACTIVE' ? (
+                <button
+                  type="button"
+                  className="small danger"
+                  disabled={busy}
+                  onClick={() => void waive(row)}
+                >
+                  Waive
+                </button>
+              ) : null,
+          },
+        ]}
+        rows={rows}
+        empty="No obligations are recorded against this taxpayer."
+      />
+    </div>
+  );
+}
+
+const readableSource = (source: string) =>
+  source === 'AGENT_ONBOARDING'
+    ? 'Agent, at registration'
+    : source === 'AUTO_RECOMMENDATION'
+      ? 'Suggested by sector'
+      : 'Officer review';
 
 interface VehicleRow {
   id: string;

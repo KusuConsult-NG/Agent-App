@@ -177,7 +177,7 @@ export function activationBlockers(flags: AgentClearanceFlags): string[] {
   if (!flags.trainingCompleted) blockers.push('Mandatory training is not complete');
   if (!flags.bankVerified) blockers.push('Commission bank account has not been verified');
   if (!flags.agreementAccepted) blockers.push('The agent agreement has not been accepted');
-  if (!flags.deviceRegistered) blockers.push('No approved device has been registered');
+  if (!flags.deviceRegistered) blockers.push('No active device has been registered');
   return blockers;
 }
 

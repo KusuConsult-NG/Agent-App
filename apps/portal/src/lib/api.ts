@@ -219,6 +219,12 @@ async function request<T>(
 export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body?: unknown) => request<T>(path, { method: 'POST', body }),
+  /**
+   * The API uses PUT for one thing: replacing a taxpayer's set of obligations
+   * with the set that should remain. The endpoint existed before this did, and
+   * so had no caller.
+   */
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   /** Unauthenticated calls, for the public verification and referee portals. */
   publicGet: <T>(path: string) => raw<T>(path, { authenticated: false }),
   publicPost: <T>(path: string, body?: unknown) =>

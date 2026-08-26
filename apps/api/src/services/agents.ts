@@ -230,7 +230,7 @@ async function refreshClearance(
        EXISTS (SELECT 1 FROM agent_agreements WHERE agent_id = $1)
          AS agreement_accepted,
        EXISTS (SELECT 1 FROM agent_devices
-                WHERE agent_id = $1 AND status IN ('APPROVED','ACTIVE'))
+                WHERE agent_id = $1 AND status = 'ACTIVE')
          AS device_registered`,
     [agentId],
   );
@@ -914,7 +914,7 @@ export async function registerDevice(params: {
      * (Addendum §21).
      *
      * "First" has to mean the agent has never had one, not that they have none
-     * right now. This counted only devices that were APPROVED or ACTIVE, and a
+     * right now. This counted only devices that were approved or active, and a
      * revoked device is neither — so an agent whose only handset had just been
      * revoked *for cause* counted as having none, their replacement was treated
      * as their first, and it was collecting revenue before anybody had looked
@@ -1487,7 +1487,7 @@ export async function suspend(params: {
     );
     await client.query(
       `UPDATE agent_devices SET status = 'SUSPENDED'
-        WHERE agent_id = $1 AND status IN ('ACTIVE','APPROVED','PENDING')`,
+        WHERE agent_id = $1 AND status IN ('ACTIVE','PENDING')`,
       [params.agentId],
     );
 
