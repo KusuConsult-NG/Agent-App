@@ -40,8 +40,32 @@
  *     where erring towards silence is the safe direction.
  *   - A value that is read but never written passes either way, because
  *     reading it mentions it. That is precisely what RECONCILED and FAILED
- *     were above, and nothing here would have caught them. Finding those still
- *     takes somebody following a path end to end.
+ *     were above, and nothing here would have caught them.
+ *
+ * THE THIRD ONE WAS TRIED PROPERLY, AND DOES NOT WORK FROM SOURCE. Written
+ * down so the next person does not spend the day rediscovering it:
+ *
+ *   - *Scope the search to files naming the table.* Reports 70 more; every one
+ *     sampled was a value the platform writes through a validated payload,
+ *     which no file names next to its table.
+ *   - *Scope it, and treat a shared enum or option list as a write.* Brings it
+ *     to 22 — and re-masks `agent_devices.APPROVED`, the motivating case,
+ *     because APPROVED is a legitimate value of `approvals.status` elsewhere.
+ *     A rule that misses the thing it was built for is not a rule.
+ *   - *Invert the question: is every value the code compares against one it
+ *     can also set?* This is the right question and it reports 81, of which
+ *     roughly seventy are wrong — a value written through a ternary, a helper
+ *     parameter or a column default reads as compare-only. Tightening the
+ *     write detection to fix those is what re-masks the true positives again.
+ *
+ * So the honest position is that this file catches the first half of the class
+ * and not the second. `agent_devices.APPROVED` — read by three queries,
+ * written by nothing, reached for by three test fixtures because it looked
+ * legitimate — was found by reading the device path, and its successor will be
+ * found the same way. Runtime observation would close it: record what the
+ * suite actually writes to every enum column and compare. That is a real piece
+ * of work, it slows the suite, and it conflates "nothing writes this" with
+ * "no test covers this" unless the two lists are kept apart.
  *
  * A value the column *defaults* to is written by the database on every insert
  * that omits it, so defaults are excluded before anything is reported.
