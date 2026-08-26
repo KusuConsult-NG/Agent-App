@@ -1138,3 +1138,148 @@ export async function changeTaxpayerIdentity(input: IdentityChangeInput): Promis
     };
   });
 }
+
+/**
+ * Ending, pausing or reopening a taxpayer record (migration 038).
+ *
+ * The one thing this must not become is a write-off. An invoice raised before
+ * the record closed is still owed and still counted in what the State is due;
+ * closing stops the future, not the past. So nothing here touches an invoice,
+ * a transaction or a balance, and the check below is deliberately absent:
+ * closing a record with arrears is *allowed*, because refusing it would mean a
+ * deceased taxpayer's record can never be closed at all. What stops that being
+ * a quiet way to park a debt is `taxpayersEndedWithArrears`, which puts every
+ * such record in front of an officer.
+ *
+ * Reversible in both directions, unlike closing an officer's account. A closed
+ * account is replaced by making another one; a taxpayer record cannot be,
+ * because the TIN is UNIQUE, duplicate detection refuses a second record for
+ * the same person, and the compliance history that gates fertiliser and seed
+ * eligibility lives on the row. Terminal here would mean closing in error
+ * forces a duplicate — the outcome the rest of this platform works hardest to
+ * prevent.
+ */
+export async function setTaxpayerStatus(params: {
+  taxpayerId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  status: string;
+  previousStatus: string;
+  outstandingKobo: string;
+  message: string;
+}> {
+  return withTransaction(async (client) => {
+    const taxpayer = await queryOne<{
+      id: string;
+      status: string;
+      display_name: string;
+    }>(
+      client,
+      `SELECT id, status,
+              COALESCE(business_name, first_name || ' ' || COALESCE(last_name, '')) AS display_name
+         FROM taxpayers WHERE id = $1 FOR UPDATE`,
+      [params.taxpayerId],
+    );
+    if (!taxpayer) throw notFound('That taxpayer record');
+
+    if (taxpayer.status === 'MERGED') {
+      throw conflict(
+        'TAXPAYER_MERGED',
+        'This record was merged into another one, so its status follows the record it was merged into.',
+      );
+    }
+    if (taxpayer.status === params.status) {
+      throw badRequest(`This record is already ${params.status.toLowerCase()}.`);
+    }
+
+    await client.query(
+      `UPDATE taxpayers
+          SET status = $2,
+              status_reason = $3,
+              status_changed_at = now(),
+              status_changed_by = $4
+        WHERE id = $1`,
+      [params.taxpayerId, params.status, params.reason, params.actorId],
+    );
+
+    // Read rather than decided: what is still owed is a fact about the
+    // invoices, and it is reported back so the officer closing a record sees
+    // the debt they are leaving behind at the moment they leave it.
+    const owed = await queryOne<{ outstanding: string }>(
+      client,
+      `SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo), 0)::text AS outstanding
+         FROM invoices i
+        WHERE i.taxpayer_id = $1 AND i.status IN ('UNPAID', 'PARTIALLY_PAID')`,
+      [params.taxpayerId],
+    );
+    const outstandingKobo = owed?.outstanding ?? '0';
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'taxpayer.status_changed',
+      entityType: 'taxpayer',
+      entityId: params.taxpayerId,
+      oldValue: { status: taxpayer.status },
+      newValue: { status: params.status, outstandingKobo },
+      reason: params.reason,
+    });
+
+    const stillOwed = BigInt(outstandingKobo) > 0n;
+
+    return {
+      status: params.status,
+      previousStatus: taxpayer.status,
+      outstandingKobo,
+      message:
+        params.status === 'ACTIVE'
+          ? `${taxpayer.display_name.trim()} is on the register again and can be assessed.`
+          : `${taxpayer.display_name.trim()} is ${params.status.toLowerCase()}. No new assessment can be ` +
+            'raised and reminders stop. ' +
+            (stillOwed
+              ? 'What is already owed remains owed, and this record now appears in the queue of ' +
+                'ended records with arrears.'
+              : 'Nothing was outstanding.'),
+    };
+  });
+}
+
+/**
+ * Records taken off the register while they still owed something.
+ *
+ * The counterpart to allowing a record to be closed with arrears. Without this
+ * the debt is still on the books and in every total, but it is nobody's job —
+ * and a debt that is nobody's job is indistinguishable from one that was
+ * written off by somebody who had no authority to write anything off.
+ */
+export async function taxpayersEndedWithArrears(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT t.id, t.tin, t.status, t.status_reason, t.status_changed_at,
+            COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name, '')) AS name,
+            t.phone, l.name AS lga_name,
+            u.full_name AS ended_by,
+            SUM(i.total_amount_kobo - i.amount_paid_kobo)::text AS outstanding_kobo,
+            count(i.id)::int AS unpaid_invoices
+       FROM taxpayers t
+       -- An inner join, and that is what selects the queue: a record with no
+       -- unpaid invoice has no row to join to and never appears. A HAVING
+       -- clause on the same sum stood here as well and could not change the
+       -- result of any query this platform can produce — an invoice's status
+       -- and its paid amount are written in one statement, so UNPAID with
+       -- nothing left to pay does not occur. It went, rather than staying as a
+       -- guard nobody could reach: an unreachable branch in a report is where
+       -- a wrong belief about the report hides.
+       JOIN invoices i ON i.taxpayer_id = t.id AND i.status IN ('UNPAID', 'PARTIALLY_PAID')
+       LEFT JOIN lgas l ON l.id = t.lga_id
+       LEFT JOIN users u ON u.id = t.status_changed_by
+      WHERE t.status IN ('SUSPENDED', 'CLOSED')
+      GROUP BY t.id, l.name, u.full_name
+      ORDER BY SUM(i.total_amount_kobo - i.amount_paid_kobo) DESC
+      LIMIT $1`,
+    [limit],
+  );
+}

@@ -56,6 +56,20 @@ interface AuthorityRenewal {
   created_at: string;
 }
 
+interface EndedWithArrears {
+  id: string;
+  name: string;
+  tin: string | null;
+  phone: string;
+  status: string;
+  status_reason: string | null;
+  status_changed_at: string;
+  ended_by: string | null;
+  lga_name: string | null;
+  outstanding_kobo: string;
+  unpaid_invoices: number;
+}
+
 interface AwaitingAuthority {
   id: string;
   registration_number: string;
@@ -83,6 +97,7 @@ export function OutstandingScreen() {
   const [tins, setTins] = useState<AwaitingTin[] | null>(null);
   const [renewals, setRenewals] = useState<AuthorityRenewal[] | null>(null);
   const [vehicles, setVehicles] = useState<AwaitingAuthority[] | null>(null);
+  const [ended, setEnded] = useState<EndedWithArrears[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<{ text: string; resolved: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -90,6 +105,7 @@ export function OutstandingScreen() {
   const readsRefunds = can('payment:read:all');
   const readsTins = can('taxpayer:tin_sync');
   const readsVehicles = can('vehicle:authority_sync');
+  const readsTaxpayers = can('taxpayer:read:all');
 
   const load = useCallback(() => {
     if (readsRefunds) {
@@ -103,6 +119,12 @@ export function OutstandingScreen() {
         .get<{ taxpayers: AwaitingTin[] }>('/taxpayers/tin-outstanding')
         .then((data) => setTins(data.taxpayers))
         .catch(() => setTins([]));
+    }
+    if (readsTaxpayers) {
+      api
+        .get<{ taxpayers: EndedWithArrears[] }>('/taxpayers/ended-with-arrears')
+        .then((data) => setEnded(data.taxpayers))
+        .catch(() => setEnded([]));
     }
     if (readsVehicles) {
       api
@@ -118,7 +140,7 @@ export function OutstandingScreen() {
           setVehicles([]);
         });
     }
-  }, [readsRefunds, readsTins, readsVehicles]);
+  }, [readsRefunds, readsTins, readsVehicles, readsTaxpayers]);
 
   useEffect(load, [load]);
 
@@ -361,6 +383,59 @@ export function OutstandingScreen() {
             empty="None."
           />
         </div>
+      )}
+
+      {/*
+        * Records taken off the register while they still owed something.
+        *
+        * The counterpart to letting a record be closed at all. Refusing to
+        * close one with arrears would mean a deceased taxpayer's record can
+        * never be closed, so the pairing is surfaced instead of prevented —
+        * the debt stays in every total, and stays somebody's job until it is
+        * paid or the record is put back.
+        */}
+      {!readsTaxpayers ? (
+        <NotYours what="Ended records that still owe" permission="taxpayer:read:all" />
+      ) : (
+        ended && (
+          <div className="card card--flush">
+            <div style={{ padding: '18px 18px 0' }}>
+              <h2 className="card__title">Ended records that still owe</h2>
+              <p className="card__hint">
+                Closed or suspended while money was outstanding. Nothing has been written off — the
+                reminder sweep has stopped chasing these, so they are worked by hand until they are
+                paid or the record goes back on the register.
+              </p>
+            </div>
+            <Table
+              columns={[
+                { key: 'name', label: 'Taxpayer' },
+                { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
+                { key: 'status', label: 'State', render: (row) => <Badge status={row.status} /> },
+                {
+                  key: 'outstanding_kobo',
+                  label: 'Owed',
+                  numeric: true,
+                  render: (row) => <Money kobo={row.outstanding_kobo} />,
+                },
+                { key: 'unpaid_invoices', label: 'Invoices', numeric: true },
+                {
+                  key: 'status_reason',
+                  label: 'Why it ended',
+                  render: (row) => row.status_reason ?? '—',
+                },
+                {
+                  key: 'status_changed_at',
+                  label: 'Ended',
+                  render: (row) =>
+                    `${formatDate(row.status_changed_at)}${row.ended_by ? ` · ${row.ended_by}` : ''}`,
+                },
+              ]}
+              rows={ended}
+              empty="No ended record owes anything."
+            />
+          </div>
+        )
       )}
     </>
   );

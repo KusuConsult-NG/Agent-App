@@ -448,22 +448,13 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
     'A repeat sync returns the first result and stores nothing; DUPLICATE is what the response says, not what the row becomes.',
 
   /*
-   * A taxpayer record that is closed, suspended or half-written.
-   *
-   * A record is created ACTIVE by an agent in the field and never changes
-   * state afterwards: there is no draft registration, and no path closes or
-   * suspends a record when a business shuts or a person dies. That is a
-   * capability the platform does not have rather than a state it avoids — the
-   * consequence is that a closed business keeps its obligations and keeps
-   * being reminded — and building it means deciding what happens to what it
-   * still owes, which is a decision for PSIRS and not for a test.
+   * A half-written taxpayer record. Registration is a single act — the offline
+   * queue holds an unsent capture in `offline_drafts` rather than as a partial
+   * taxpayer — so there is no draft to leave behind. SUSPENDED and CLOSED were
+   * here too until migration 038 gave a record an end.
    */
   'taxpayers.status: DRAFT':
-    'Registration is a single act; there is no partially-captured record to leave behind.',
-  'taxpayers.status: SUSPENDED':
-    'No path suspends a taxpayer record. Building one means deciding what happens to outstanding obligations.',
-  'taxpayers.status: CLOSED':
-    'No path closes a taxpayer record when a business shuts or a person dies. Same decision to make first.',
+    'Registration is a single act; an unsent capture waits in offline_drafts, not as a partial record.',
 
   /*
    * Renewal states the cascade passes straight through.
