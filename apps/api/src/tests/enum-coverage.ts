@@ -521,16 +521,6 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
  * path to this state and no test walks it.
  */
 export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
-  /*
-   * Written by `seedReferenceData`, and only on a database that does not
-   * already have the row. The shard databases are kept between runs — an empty
-   * migration costs 357ms and re-running settled ones costs 4ms — so a repeat
-   * run seeds nothing and the observers see nothing. On a fresh database, as
-   * in CI, it is written.
-   */
-  'app_versions.app: AGENT_PWA':
-    'Seeded once per database; the shard databases outlive a run, so a repeat run does not write it.',
-
   'incentive_allocation_rounds.unit: BAG_25KG':
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
 };

@@ -2,13 +2,12 @@
 
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
-import { REFEREE_CATEGORIES, formatNaira, serialiseKobo } from '@psirs/shared';
+import { REFEREE_CATEGORIES, compareVersions, formatNaira, serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { config } from '../config';
 import {
   authenticate,
-  compareVersions,
   requireActiveAgent,
   requirePermission,
   requireStepUp,
@@ -527,6 +526,68 @@ agentRouter.post(
       });
     },
   ),
+);
+
+/**
+ * Move the version gate.
+ *
+ * `system:configure`, which only an administrator holds: this decides whether
+ * a handset in a market can collect money at all, and getting it wrong stops
+ * every agent in the state. Deliberately not `agent:manage` — suspending one
+ * agent and stopping all of them are different sizes of decision.
+ *
+ * Declared before `/app-version` reads it, and before the parametrised
+ * routes, so the path is not read as an agent id.
+ */
+agentRouter.post(
+  '/app-version',
+  requirePermission('system:configure'),
+  validateBody(
+    z.object({
+      minimumVersion: z
+        .string()
+        .trim()
+        .regex(/^\d+(\.\d+){0,3}$/, 'A version is digits separated by dots, like 1.4.0'),
+      recommendedVersion: z
+        .string()
+        .trim()
+        .regex(/^\d+(\.\d+){0,3}$/, 'A version is digits separated by dots, like 1.4.0'),
+      notes: z
+        .string()
+        .trim()
+        .min(10, 'Say why the minimum is moving — it is what an agent locked out will be shown'),
+      effectiveFrom: z.string().datetime().optional(),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await agents.publishAppVersion({
+          minimumVersion: data.minimumVersion,
+          recommendedVersion: data.recommendedVersion,
+          notes: data.notes,
+          effectiveFrom: data.effectiveFrom ? new Date(data.effectiveFrom) : null,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+/**
+ * What the gate has been set to, and what the fleet is running.
+ *
+ * Separate from the agent-facing `/app-version` above, which answers "may this
+ * handset collect" and is deliberately readable by anyone signed in. This one
+ * shows the whole record and the fleet spread, so an administrator can see how
+ * many handsets a new minimum would stop before publishing it rather than
+ * after.
+ */
+agentRouter.get(
+  '/app-version/history',
+  requirePermission('system:configure'),
+  asyncHandler(async (_req, res) => {
+    res.json(await agents.appVersionHistory());
+  }),
 );
 
 /** PWA version gate (Addendum §43). Callable before any transaction. */

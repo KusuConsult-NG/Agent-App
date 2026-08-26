@@ -34,6 +34,7 @@ import { AuditScreen, FraudScreen } from './screens/Oversight';
 import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
+import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
 
@@ -247,6 +248,7 @@ function Routes({
   if (matchRoute(route, '/users')) return <UserAccessScreen user={user} />;
   if (matchRoute(route, '/taxpayer-records')) return <TaxpayerRecordsScreen user={user} />;
   if (matchRoute(route, '/catalogue')) return <CatalogueScreen user={user} />;
+  if (matchRoute(route, '/field-app')) return <FieldAppScreen />;
   if (matchRoute(route, '/programmes')) return <ProgrammesScreen />;
   if (matchRoute(route, '/groups')) return <GroupsScreen navigate={navigate} />;
   if (roundMatch) return <AllocationRoundScreen roundId={roundMatch.id!} />;

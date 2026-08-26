@@ -18,6 +18,7 @@
 import type { PoolClient } from 'pg';
 import {
   activationBlockers,
+  compareVersions,
   deriveAccessStage,
   deriveApplicationState,
   TRAINING_MODULES,
@@ -27,6 +28,7 @@ import {
 } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { config } from '../config';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
@@ -2251,4 +2253,224 @@ export async function pendingBankAccountChanges(db: Db): Promise<
         }
       : null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// The version gate an administrator can actually move
+// ---------------------------------------------------------------------------
+
+/**
+ * Publish a new minimum and recommended version for the field application.
+ *
+ * `requireSupportedAppVersion` refuses a collection from a build below the
+ * minimum, answering 426 with `moneyStatus: NOT_DEBITED` — it is the lever for
+ * a release found to be getting money wrong. It reads the newest `app_versions`
+ * row and falls back to config only when there is none, and the seed inserts a
+ * row only when the table is empty. So on the first deploy config decided the
+ * minimum, and from that moment nothing could change it: raising
+ * `PWA_MINIMUM_AGENT_VERSION` in the environment had no effect on a database
+ * that already had a row, and no endpoint wrote a second one. A gate whose
+ * threshold is frozen at whatever shipped on day one cannot lock out the build
+ * it exists to lock out.
+ *
+ * Appended rather than updated, because `app_versions` is ordered by
+ * `effective_from` and read newest-first: the history of what was required
+ * when is worth keeping, and a row that has already refused somebody's
+ * collection should not be editable afterwards.
+ *
+ * WHAT IT REFUSES, AND WHAT IT ONLY WARNS ABOUT. A minimum above the
+ * recommended version is refused: it would lock out every handset including
+ * one that had just updated to the newest build, which is never what anybody
+ * means. Locking out handsets that exist is *not* refused — that is the whole
+ * purpose when a release is miscomputing money — but the count comes back with
+ * the answer, so the administrator finds out from the platform rather than
+ * from a market.
+ */
+export async function publishAppVersion(params: {
+  minimumVersion: string;
+  recommendedVersion: string;
+  notes: string;
+  effectiveFrom?: Date | null;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  minimumVersion: string;
+  recommendedVersion: string;
+  effectiveFrom: Date;
+  previousMinimum: string;
+  devicesLockedOut: number;
+  activeDevices: number;
+  message: string;
+}> {
+  if (compareVersions(params.minimumVersion, params.recommendedVersion) > 0) {
+    throw badRequest(
+      `A minimum of ${params.minimumVersion} is above the recommended ${params.recommendedVersion}, ` +
+        'so even a handset on the newest build would be refused.',
+    );
+  }
+
+  return withTransaction(async (client) => {
+    const current = await queryOne<{ minimum_version: string; effective_from: Date }>(
+      client,
+      `SELECT minimum_version, effective_from FROM app_versions
+        WHERE app = 'AGENT_PWA' ORDER BY effective_from DESC LIMIT 1`,
+    );
+    const previousMinimum = current?.minimum_version ?? config.pwa.minimumAgentVersion;
+    const effectiveFrom = params.effectiveFrom ?? new Date();
+
+    /*
+     * A row the gate would never read is not a publication.
+     *
+     * The gate takes the newest row with `effective_from <= now()`. Dating a
+     * new one at or before the row already in force means it is never
+     * selected, and the call would answer as though the threshold had moved
+     * when nothing had — the quietest possible way for a safety control to be
+     * left where it was.
+     */
+    if (current && effectiveFrom <= current.effective_from) {
+      throw conflict(
+        'APP_VERSION_NOT_LATER',
+        'That effective date is not after the version currently in force, so the gate would ' +
+          'never read it and the minimum would not change.',
+        'Publish it with a later date, or leave the date out to take effect now.',
+      );
+    }
+
+    await client.query(
+      `INSERT INTO app_versions
+         (app, minimum_version, recommended_version, notes, effective_from, created_by)
+       VALUES ('AGENT_PWA', $1, $2, $3, $4, $5)`,
+      [
+        params.minimumVersion,
+        params.recommendedVersion,
+        params.notes,
+        effectiveFrom,
+        params.actorId,
+      ],
+    );
+
+    /*
+     * How many handsets this stops, counted rather than estimated.
+     *
+     * Compared in TypeScript because the comparison is semantic, not
+     * lexicographic — '1.10.0' is above '1.9.0' and a text comparison in SQL
+     * says the opposite, which would under-report exactly the case where the
+     * count matters. A device that has never reported a version counts as
+     * locked out, because the gate treats a missing version as unsupported.
+     */
+    const devices = await query<{ pwa_version: string | null }>(
+      client,
+      `SELECT pwa_version FROM agent_devices WHERE status = 'ACTIVE'`,
+    );
+    const devicesLockedOut = devices.filter(
+      (device) =>
+        !device.pwa_version || compareVersions(device.pwa_version, params.minimumVersion) < 0,
+    ).length;
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'app_version.published',
+      entityType: 'app_version',
+      entityId: 'AGENT_PWA',
+      oldValue: { minimumVersion: previousMinimum },
+      newValue: {
+        minimumVersion: params.minimumVersion,
+        recommendedVersion: params.recommendedVersion,
+        effectiveFrom: effectiveFrom.toISOString(),
+        devicesLockedOut,
+      },
+      reason: params.notes,
+    });
+
+    return {
+      minimumVersion: params.minimumVersion,
+      recommendedVersion: params.recommendedVersion,
+      effectiveFrom,
+      previousMinimum,
+      devicesLockedOut,
+      activeDevices: devices.length,
+      message:
+        devicesLockedOut === 0
+          ? `Minimum version is now ${params.minimumVersion}. No active handset is below it.`
+          : `Minimum version is now ${params.minimumVersion}. ${devicesLockedOut} of ` +
+            `${devices.length} active handset${devices.length === 1 ? '' : 's'} cannot collect ` +
+            'until they update.',
+    };
+  });
+}
+
+/**
+ * What has been required of the field application, and what is out there now.
+ *
+ * The decision the administrator is about to make is "how many handsets does
+ * this stop", and the only honest way to answer it before publishing is to show
+ * the fleet as it stands. Counted with the same comparison the publish path
+ * uses, so the screen and the answer cannot disagree; a handset that has never
+ * reported a version is listed under `null` rather than dropped, because it is
+ * the one the gate refuses outright.
+ */
+export async function appVersionHistory(): Promise<{
+  minimumVersion: string;
+  recommendedVersion: string;
+  published: Array<{
+    minimumVersion: string;
+    recommendedVersion: string;
+    notes: string | null;
+    effectiveFrom: Date;
+    inForce: boolean;
+    publishedBy: string | null;
+  }>;
+  fleet: Array<{ version: string | null; devices: number; belowMinimum: boolean }>;
+  activeDevices: number;
+}> {
+  const rows = await query<{
+    minimum_version: string;
+    recommended_version: string;
+    notes: string | null;
+    effective_from: Date;
+    published_by: string | null;
+  }>(
+    pool,
+    `SELECT v.minimum_version, v.recommended_version, v.notes, v.effective_from,
+            u.full_name AS published_by
+       FROM app_versions v
+       LEFT JOIN users u ON u.id = v.created_by
+      WHERE v.app = 'AGENT_PWA'
+      ORDER BY v.effective_from DESC`,
+  );
+
+  // The row the gate reads: newest already in effect. A future-dated row is
+  // shown but is not in force, which is the distinction a screen listing them
+  // all in date order would otherwise lose.
+  const now = new Date();
+  const inForce = rows.find((row) => row.effective_from <= now);
+  const minimumVersion = inForce?.minimum_version ?? config.pwa.minimumAgentVersion;
+
+  const devices = await query<{ pwa_version: string | null; devices: string }>(
+    pool,
+    `SELECT pwa_version, COUNT(*)::text AS devices FROM agent_devices
+      WHERE status = 'ACTIVE' GROUP BY pwa_version`,
+  );
+
+  return {
+    minimumVersion,
+    recommendedVersion: inForce?.recommended_version ?? config.pwa.recommendedAgentVersion,
+    published: rows.map((row) => ({
+      minimumVersion: row.minimum_version,
+      recommendedVersion: row.recommended_version,
+      notes: row.notes,
+      effectiveFrom: row.effective_from,
+      inForce: row === inForce,
+      publishedBy: row.published_by,
+    })),
+    fleet: devices
+      .map((row) => ({
+        version: row.pwa_version,
+        devices: Number(row.devices),
+        belowMinimum: !row.pwa_version || compareVersions(row.pwa_version, minimumVersion) < 0,
+      }))
+      .sort((a, b) => compareVersions(a.version ?? '0', b.version ?? '0')),
+    activeDevices: devices.reduce((total, row) => total + Number(row.devices), 0),
+  };
 }
