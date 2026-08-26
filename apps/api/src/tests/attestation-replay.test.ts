@@ -221,3 +221,38 @@ describe('a reused membership link cannot take a confirmation back', () => {
     assert.equal(await statusOf(newlyPending!.id), 'REJECTED');
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('a membership link nobody opened in time', () => {
+  /**
+   * The refusal reached the leader and left nothing behind, so the row went on
+   * saying the link had been sent and was awaiting an answer. An officer
+   * chasing an attestation could not tell a leader who is ignoring the message
+   * from one whose link died before they opened it, and those are different
+   * things to do about. Referee invitations have always marked their own
+   * expiry; this is the same rule in the other place it applies.
+   */
+  it('says so on the record, so the officer knows to send another', async () => {
+    const { token, memberId } = await groupWithPendingMember('9');
+
+    await pool.query(
+      `UPDATE group_attestation_invitations SET expires_at = now() - interval '1 day'
+        WHERE invitation_token_hash IS NOT NULL AND status <> 'RESPONDED'`,
+    );
+
+    const late = await get(`/group-attestation/${token}`);
+    assert.equal(late.status, 410, JSON.stringify(late.body));
+    assert.equal(late.body.error.code, 'ATTESTATION_EXPIRED');
+
+    const invitation = await queryOne<{ status: string }>(
+      pool,
+      `SELECT status FROM group_attestation_invitations ORDER BY created_at DESC LIMIT 1`,
+    );
+    assert.equal(invitation?.status, 'EXPIRED');
+
+    // Nothing the leader had already said is lost, and the member is still
+    // waiting rather than rejected.
+    assert.equal(await statusOf(memberId), 'PENDING_ATTESTATION');
+  });
+});

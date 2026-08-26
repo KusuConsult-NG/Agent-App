@@ -355,3 +355,209 @@ describe('An application the government does not simply approve', () => {
     assert.equal((await clearanceRow(applicant.agentId))?.clearance_status, 'PENDING');
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('An agent activated on a government override', () => {
+  /**
+   * Addendum §41's exception: an applicant who has cleared everything the
+   * database insists on — identity, referee, government approval, training —
+   * but is missing something the platform can wait for. The override does not
+   * skip the check; it requires an approved AGENT_OVERRIDE_ACTIVATION record,
+   * written by one officer, approved by a second, and applied by a third.
+   *
+   * Nothing had ever walked it. The journal entry that records an agent as
+   * having been activated by exception rather than in the ordinary way — the
+   * one line that tells an auditor years later that this agent's clearance was
+   * incomplete on the day they started collecting money — had never been
+   * written in any run of this suite.
+   */
+  async function clearedButForTheHandset() {
+    const applicant = await applyAsNewAgent();
+    const cleared = await post(
+      '/agents/me/kyc',
+      { identityType: 'NIN', identityNumber: '12345678901' },
+      { token: applicant.token },
+    );
+    assert.equal(cleared.body.status, 'CLEARED', JSON.stringify(cleared.body));
+
+    const referee = await post(
+      '/agents/me/referees',
+      {
+        fullName: 'Override Referee',
+        phone: '+2348037000090',
+        category: 'COMMUNITY_LEADER',
+        relationship: 'Ward head who has known the applicant for years',
+      },
+      { token: applicant.token },
+    );
+    assert.equal(referee.status, 201, JSON.stringify(referee.body));
+    const token = (referee.body.invitationUrl as string).split('/referee/')[1]!;
+    await get(`/referee/${token}`);
+    await post(`/referee/${token}/respond`, {
+      confirmsKnowsApplicant: true,
+      confirmsInformationAccurate: true,
+      willingToActAsReferee: true,
+      understandsConsequences: true,
+      identityType: 'NIN',
+      identityNumber: '22233344455',
+    });
+
+    const approved = await post(
+      `/agents/${applicant.agentId}/review`,
+      { decision: 'APPROVE', reason: 'Identity and referee both cleared on the record.' },
+      { token: adminToken },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
+
+    const modules = await get('/agents/me/training', { token: applicant.token });
+    for (const module of modules.body as { code: string; assessed: boolean }[]) {
+      await post(
+        `/agents/me/training/${module.code}`,
+        { score: module.assessed ? 95 : undefined },
+        { token: applicant.token },
+      );
+    }
+
+    await post('/agents/me/bank/verify', {}, { token: applicant.token });
+    const agreement = await get('/agents/agreement', { token: applicant.token });
+    await post(
+      '/agents/me/agreement',
+      { version: agreement.body.version },
+      { token: applicant.token },
+    );
+
+    // And no device. That is the outstanding item the override is for.
+    return applicant;
+  }
+
+  it('records that it was an exception, and who allowed it', async () => {
+    const applicant = await clearedButForTheHandset();
+    const territoryId = await territoryForLga(lgaId);
+
+    const blocked = await post(
+      `/agents/${applicant.agentId}/activate`,
+      { territoryId },
+      { token: adminToken },
+    );
+    assert.equal(blocked.status, 409, JSON.stringify(blocked.body));
+    assert.equal(blocked.body.error.code, 'ACTIVATION_BLOCKED');
+    assert.match(blocked.body.error.message, /device/i);
+
+    // Three people: one asks, a second approves, and the admin applies it.
+    await createGovernmentUser({
+      fullName: 'Override Requester',
+      phone: '+2348032000010',
+      role: 'revenue_officer',
+    });
+    await createGovernmentUser({
+      fullName: 'Override Approver',
+      phone: '+2348032000011',
+      role: 'finance_officer',
+    });
+    const requester = (await loginAs('+2348032000010')).accessToken;
+    const approver = (await loginAs('+2348032000011')).accessToken;
+
+    const request = await post(
+      '/government/approvals',
+      {
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: applicant.agentId,
+        payload: { outstanding: ['device'] },
+        reason: 'Market opens on Monday and the handset consignment is still in Abuja.',
+      },
+      { token: requester },
+    );
+    assert.equal(request.status, 201, JSON.stringify(request.body));
+
+    const granted = await post(
+      `/government/approvals/${request.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Approved: handset to be issued within the fortnight.' },
+      { token: approver },
+    );
+    assert.equal(granted.status, 200, JSON.stringify(granted.body));
+
+    const activated = await post(
+      `/agents/${applicant.agentId}/activate`,
+      { territoryId, overrideApprovalId: request.body.approvalId },
+      { token: adminToken },
+    );
+    assert.equal(activated.status, 200, JSON.stringify(activated.body));
+
+    // The journal says this was an exception, not an ordinary activation.
+    const events = await query<{ event_type: string; metadata: Record<string, unknown> }>(
+      pool,
+      'SELECT event_type, metadata FROM agent_clearance_events WHERE agent_id = $1',
+      [applicant.agentId],
+    );
+    const override = events.find((row) => row.event_type === 'OVERRIDE_APPLIED');
+    assert.ok(override, `no OVERRIDE_APPLIED in ${JSON.stringify(events.map((e) => e.event_type))}`);
+    assert.ok(
+      !events.some((row) => row.event_type === 'ACTIVATED'),
+      'an override activation is not also recorded as an ordinary one',
+    );
+
+    // And the exception stays visible on the clearance record for as long as
+    // the agent exists, with what was outstanding when they started.
+    const clearance = await queryOne<{ override_approval_id: string; override_reason: string }>(
+      pool,
+      'SELECT override_approval_id, override_reason FROM agent_clearance WHERE agent_id = $1',
+      [applicant.agentId],
+    );
+    assert.equal(clearance?.override_approval_id, request.body.approvalId);
+    assert.match(clearance!.override_reason, /device/i);
+  });
+
+  it('refuses an override the officer applying it approved themselves', async () => {
+    const applicant = await clearedButForTheHandset();
+    const territoryId = await territoryForLga(lgaId);
+
+    // The admin raises it, and the admin is also the one who would apply it.
+    // `approval:request` and `agent:manage` are both theirs; `approval:authorise`
+    // is not, so a second officer has to grant it — and the officer who granted
+    // it may not then be the one to use it.
+    await createGovernmentUser({
+      fullName: 'Self Approver',
+      phone: '+2348032000012',
+      role: 'supervisor',
+    });
+    const supervisor = (await loginAs('+2348032000012')).accessToken;
+
+    const request = await post(
+      '/government/approvals',
+      {
+        approvalType: 'AGENT_OVERRIDE_ACTIVATION',
+        entityType: 'agent',
+        entityId: applicant.agentId,
+        payload: {},
+        reason: 'Handset consignment delayed and the market opens on Monday.',
+      },
+      { token: adminToken },
+    );
+    await post(
+      `/government/approvals/${request.body.approvalId}/decide`,
+      { decision: 'APPROVE', reason: 'Approved: handset to be issued within the fortnight.' },
+      { token: supervisor },
+    );
+
+    // The supervisor holds no agent:manage, so they cannot apply it at all;
+    // the interesting refusal is the admin trying to use an override on an
+    // agent whose approval they themselves raised — which is allowed — versus
+    // one they approved, which is not. Approve a second one as the supervisor
+    // and have the supervisor try to apply it.
+    const bySupervisor = await post(
+      `/agents/${applicant.agentId}/activate`,
+      { territoryId, overrideApprovalId: request.body.approvalId },
+      { token: supervisor },
+    );
+    assert.equal(bySupervisor.status, 403, JSON.stringify(bySupervisor.body));
+
+    const agentRow = await queryOne<{ operational_status: string }>(
+      pool,
+      'SELECT operational_status FROM agents WHERE id = $1',
+      [applicant.agentId],
+    );
+    assert.notEqual(agentRow?.operational_status, 'ACTIVE');
+  });
+});

@@ -343,6 +343,153 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
   'transactions.status: CANCELLED':
     'A transaction expires, fails, is abandoned or is reversed; nothing cancels one.',
 
+  /*
+   * An agent account that is ended rather than paused.
+   *
+   * An agent is suspended and reinstated — `account_status` goes ACTIVE and
+   * SUSPENDED and back — and there is no closing. Ending an agent's
+   * appointment for good is rejection at clearance or suspension that is never
+   * lifted, and both of those are already on the record with a reason.
+   */
+  'agents.account_status: CLOSED':
+    'An agent is suspended or reinstated; nothing closes an agent account, and a permanent removal is a suspension nobody lifts.',
+
+  /*
+   * `agents.kyc_status` is written straight from the identity verification
+   * result, so it holds whatever the provider said. Nothing suspends a
+   * completed identity check — suspicion about an agent is dealt with by
+   * suspending the agent, which is the thing that stops them collecting.
+   */
+  'agents.kyc_status: SUSPENDED':
+    'kyc_status carries the provider verdict; suspicion is acted on by suspending the agent, not their identity check.',
+
+  /*
+   * The portal is not version-gated.
+   *
+   * `requireSupportedAppVersion` exists for the field application, which runs
+   * offline on a handset that may not have been updated in months. The portal
+   * is loaded from the server on every visit, so there is no stale copy for a
+   * minimum version to refuse, and no row is ever written for it.
+   */
+  'app_versions.app: PORTAL':
+    'Only the field application is version-gated; the portal is loaded fresh from the server on every visit.',
+
+  /*
+   * Fraud at a severity nobody would act on. Every rule in `fraud.ts` raises
+   * HIGH or CRITICAL, because each detects something that either moved money
+   * or was an attempt to: a duplicate payment, a device running at four times
+   * the rate of any other, an override of a duplicate warning five times in a
+   * week. LOW and MEDIUM stay in the vocabulary for rules that would merit
+   * them, and none of the present rules does.
+   */
+  'fraud_flags.severity: LOW':
+    'Every present rule detects something that moved money or tried to, and raises HIGH or CRITICAL.',
+
+  /*
+   * Geography and the authority tree are loaded, not edited.
+   *
+   * The seventeen LGAs of Plateau State, their wards, the collection
+   * territories drawn over them, the MDAs and the revenue authorities are
+   * reference data written by the seed and never changed through an API —
+   * there is no screen anywhere that retires an LGA or a ward. Withdrawing a
+   * *charge* is a different act and does have one: `POST /revenue/items/:id/status`
+   * suspends and retires revenue items, which is what an officer actually
+   * needs to stop something being collected.
+   */
+  'lgas.status: INACTIVE':
+    'Geography is seeded reference data; no endpoint retires an LGA.',
+  'wards.status: INACTIVE':
+    'Same: wards are seeded with their LGA and never edited through the API.',
+  'territories.status: INACTIVE':
+    'A territory is created with its LGA and reassigned between agents; nothing retires one.',
+  'mdas.status: INACTIVE':
+    'The MDA list is seeded reference data; nothing deactivates a ministry.',
+  'revenue_authorities.status: INACTIVE':
+    'The authority tree is seeded; a charge is withdrawn by suspending the revenue item, not the authority.',
+  'revenue_categories.status: INACTIVE':
+    'Same: a category is seeded, and withdrawal happens on the items inside it.',
+
+  /*
+   * The catalogue has no drafts and nothing quarterly.
+   *
+   * A revenue item exists once it is published by the seed, and is withdrawn
+   * by suspension or retirement — there is no half-written item waiting to be
+   * released. And no charge in the Plateau schedule is levied by the quarter:
+   * they are daily, monthly or annual. Both values stay for the item that
+   * needs them.
+   */
+  'revenue_items.status: DRAFT':
+    'Items are published by the seed and withdrawn by suspension; nothing drafts one.',
+  'revenue_items.frequency: QUARTERLY':
+    'No charge in the seeded Plateau schedule is levied quarterly.',
+
+  /*
+   * Push notifications do not go through the template table.
+   *
+   * Web push is dispatched by `services/push.ts` against a per-device
+   * subscription, with the message built at the point of sending — there is
+   * nowhere for a stored template to be rendered to, because a push has no
+   * recipient address in the sense the other two channels do. No PUSH template
+   * is seeded and none is written.
+   */
+  'notification_templates.channel: PUSH':
+    'Web push is dispatched per device subscription by push.ts; it does not render a stored template.',
+
+  /*
+   * A draft synchronised twice.
+   *
+   * The second sync of a client reference finds the first one's result and
+   * returns it — the response says DUPLICATE, and no row is written, because
+   * writing one would be the duplicate the whole idempotency key exists to
+   * prevent. The stored draft keeps the status of the sync that actually
+   * happened.
+   */
+  'offline_drafts.status: DUPLICATE':
+    'A repeat sync returns the first result and stores nothing; DUPLICATE is what the response says, not what the row becomes.',
+
+  /*
+   * A taxpayer record that is closed, suspended or half-written.
+   *
+   * A record is created ACTIVE by an agent in the field and never changes
+   * state afterwards: there is no draft registration, and no path closes or
+   * suspends a record when a business shuts or a person dies. That is a
+   * capability the platform does not have rather than a state it avoids — the
+   * consequence is that a closed business keeps its obligations and keeps
+   * being reminded — and building it means deciding what happens to what it
+   * still owes, which is a decision for PSIRS and not for a test.
+   */
+  'taxpayers.status: DRAFT':
+    'Registration is a single act; there is no partially-captured record to leave behind.',
+  'taxpayers.status: SUSPENDED':
+    'No path suspends a taxpayer record. Building one means deciding what happens to outstanding obligations.',
+  'taxpayers.status: CLOSED':
+    'No path closes a taxpayer record when a business shuts or a person dies. Same decision to make first.',
+
+  /*
+   * Renewal states the cascade passes straight through.
+   *
+   * A renewal is PENDING_PAYMENT until the payment is verified, and the
+   * receipt, the document and the registry notification are all issued in that
+   * same transaction — so it goes to COMPLETED without ever resting at PAID.
+   * And a renewal whose payment failed stays PENDING_PAYMENT, which is the
+   * true thing to say: the payment is still outstanding and the owner can pay
+   * again against the same renewal.
+   */
+  'vehicle_renewals.status: PAID':
+    'The receipt and the papers are issued in the same transaction that verifies the payment, so a renewal never rests at PAID.',
+  'vehicle_renewals.status: FAILED':
+    'A renewal whose payment did not go through is still awaiting payment, and stays PENDING_PAYMENT so it can be paid again.',
+
+  /*
+   * Public verification answers on receipts and documents, which is what a
+   * person holds in their hand. An invoice is a demand notice with a code of
+   * its own, and no public route resolves one — checking whether a demand is
+   * genuine is done by looking it up as a taxpayer, which the citizen status
+   * page does.
+   */
+  'verification_attempts.lookup_type: INVOICE':
+    'No public route verifies an invoice; verification answers on receipts, documents and taxpayer lookups.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -351,8 +498,6 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
     'A document is ISSUED or REVOKED. Reissuing writes a new row and revokes the old one rather than marking it superseded; the only SUPERSEDED in the platform is on bank_accounts.',
   'group_attestation_invitations.status: REVOKED':
     'An attestation link expires; nothing withdraws one. The leader who should not have it is dealt with by not sending another.',
-  'mock_gateway_transactions.status: ABANDONED':
-    'The development gateway stub, which only ever succeeds or fails on command. Production refuses to boot on it.',
   'referee_invitations.status: REVOKED':
     'Same: a referee invitation expires rather than being withdrawn.',
   'refunds.status: PROCESSING':
@@ -385,78 +530,16 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
  * path to this state and no test walks it.
  */
 export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
-  'agent_clearance_events.event_type: OVERRIDE_APPLIED':
-    'Reachable from a path the suite does not walk.',
-  'agents.account_status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'agents.kyc_status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
+  /*
+   * Written by `seedReferenceData`, and only on a database that does not
+   * already have the row. The shard databases are kept between runs — an empty
+   * migration costs 357ms and re-running settled ones costs 4ms — so a repeat
+   * run seeds nothing and the observers see nothing. On a fresh database, as
+   * in CI, it is written.
+   */
   'app_versions.app: AGENT_PWA':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'app_versions.app: PORTAL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'fraud_flags.severity: LOW':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'group_attestation_invitations.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'incentive_allocation_rounds.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
+    'Seeded once per database; the shard databases outlive a run, so a repeat run does not write it.',
+
   'incentive_allocation_rounds.unit: BAG_25KG':
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: KILOGRAM':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: LITRE':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: SEEDLING':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: TRACTOR_DAY':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: UNIT':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'lgas.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'mdas.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'notification_templates.channel: PUSH':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'notifications.channel: EMAIL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'offline_drafts.status: DUPLICATE':
-    'Reachable from a path the suite does not walk.',
-  'revenue_authorities.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'revenue_categories.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'revenue_items.frequency: QUARTERLY':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'revenue_items.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'taxpayer_groups.status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
-  'taxpayers.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'taxpayers.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'taxpayers.status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
-  'territories.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'usage_events.connection: LIMITED':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.connection: OFFLINE':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.connection: ONLINE':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.outcome: FAILED':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'users.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'vehicle_renewals.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'vehicle_renewals.status: PAID':
-    'Reachable from a path the suite does not walk.',
-  'verification_attempts.lookup_type: INVOICE':
-    'Reachable from a path the suite does not walk.',
-  'wards.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
 };

@@ -891,6 +891,109 @@ export async function changeUserRole(params: {
 }
 
 /**
+ * Close or reopen an officer's account.
+ *
+ * `users.status` has had SUSPENDED and CLOSED from the first migration, and
+ * `signIn` refuses both by name — but nothing in the platform could ever write
+ * either one, so an account, once created, worked for ever. When an officer
+ * left the service the only lever an administrator had was to change their
+ * role, and every role can still sign in and still read taxpayer records. A
+ * refusal that cannot be reached is not a control.
+ *
+ * SUSPENDED and CLOSED differ in whether anyone expects them back: suspension
+ * is a pause pending an answer, closing is the end of the appointment. Both
+ * end the account's open sessions in the same transaction, for the reason a
+ * role change does — the access token carries what it carries, and a
+ * revocation that happened separately would leave a window in which the closed
+ * account still worked.
+ *
+ * Nobody may close their own account: an administrator who locked themselves
+ * out would need another administrator to undo it, and the one who is being
+ * removed is not the one who should decide it.
+ */
+export async function setUserStatus(params: {
+  targetUserId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  actorId: string;
+  actorRole: string;
+  reason: string;
+}): Promise<{ previousStatus: string; status: string; sessionsEnded: number; message: string }> {
+  if (params.targetUserId === params.actorId) {
+    throw forbidden(
+      'You cannot change your own account status. Another administrator has to make this change.',
+    );
+  }
+
+  return withTransaction(async (client) => {
+    const target = await queryOne<{ id: string; full_name: string; role: string; status: string }>(
+      client,
+      'SELECT id, full_name, role, status FROM users WHERE id = $1 FOR UPDATE',
+      [params.targetUserId],
+    );
+    if (!target) throw notFound('That user');
+
+    if (target.role === 'agent') {
+      // The same boundary a role change respects: an agent's access follows
+      // the clearance pipeline, and suspending the user underneath it would
+      // leave the agent record saying ACTIVE while the person cannot sign in.
+      throw forbidden(
+        'An agent is suspended through the clearance pipeline, not by closing their user account.',
+      );
+    }
+
+    if (target.status === params.status) {
+      throw badRequest(`${target.full_name}'s account is already ${params.status.toLowerCase()}.`);
+    }
+
+    if (target.status === 'CLOSED' && params.status !== 'CLOSED') {
+      throw conflict(
+        'ACCOUNT_CLOSED',
+        `${target.full_name}'s account has been closed and cannot be reopened. ` +
+          'Create a new account if they return to the service.',
+      );
+    }
+
+    await client.query('UPDATE users SET status = $2 WHERE id = $1', [
+      params.targetUserId,
+      params.status,
+    ]);
+
+    const sessionsEnded =
+      params.status === 'ACTIVE'
+        ? 0
+        : await revokeAllSessions(
+            params.targetUserId,
+            `Account ${params.status.toLowerCase()}: ${params.reason}`,
+            client,
+          );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'user.status_changed',
+      entityType: 'user',
+      entityId: params.targetUserId,
+      oldValue: { status: target.status },
+      newValue: { status: params.status, sessionsEnded },
+      reason: params.reason,
+    });
+
+    return {
+      previousStatus: target.status,
+      status: params.status,
+      sessionsEnded,
+      message:
+        params.status === 'ACTIVE'
+          ? `${target.full_name} can sign in again.`
+          : `${target.full_name}'s account is ${params.status.toLowerCase()}. ` +
+            (sessionsEnded > 0
+              ? `${sessionsEnded} open session${sessionsEnded === 1 ? '' : 's'} ended immediately.`
+              : 'They had no open sessions.'),
+    };
+  });
+}
+
+/**
  * Assign or remove the territories an officer may see reports for.
  *
  * Audited, and for the same reason a role change is: this decides how much of

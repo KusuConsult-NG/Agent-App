@@ -304,6 +304,22 @@ export async function openAttestation(db: Db, token: string) {
     });
   }
   if (invitation.expires_at.getTime() < Date.now()) {
+    /*
+     * Marked, not merely refused.
+     *
+     * The refusal reached the leader and left nothing behind, so the row went
+     * on saying the link had been sent and was awaiting an answer. An officer
+     * chasing an attestation could not tell a leader who is ignoring the
+     * message from one whose link died before they opened it, and those are
+     * different things to do about. The referee invitations have always marked
+     * their own expiry; this is the same rule in the other place it applies.
+     */
+    await query(
+      db,
+      `UPDATE group_attestation_invitations SET status = 'EXPIRED'
+        WHERE id = $1 AND status <> 'RESPONDED'`,
+      [invitation.id],
+    );
     throw new AppError({
       statusCode: 410,
       code: 'ATTESTATION_EXPIRED',
@@ -376,6 +392,16 @@ export async function submitAttestation(params: {
       });
     }
     if (invitation.expires_at.getTime() < Date.now()) {
+      /*
+       * Not marked here, unlike the read above, and deliberately.
+       *
+       * This runs inside the transaction that holds `FOR UPDATE OF i`, and the
+       * refusal below rolls that transaction back — so a mark written here
+       * would be undone on its way out, and writing it on a second connection
+       * would wait for a lock this transaction is still holding. Opening the
+       * link is what marks it, and a leader who reaches this branch reached it
+       * through a page that had already been opened.
+       */
       throw new AppError({
         statusCode: 410,
         code: 'ATTESTATION_EXPIRED',

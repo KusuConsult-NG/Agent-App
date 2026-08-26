@@ -477,3 +477,191 @@ describe('a fertiliser programme, and the bags behind it', () => {
     assert.equal(response.status, 409, JSON.stringify(response.body));
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('a round in every unit a distribution is measured in', () => {
+  /**
+   * One of the seven units had ever been stored. The rest are not
+   * interchangeable: a round of 400 says nothing on its own, and the
+   * difference between four hundred litres of herbicide, four hundred
+   * seedlings and four hundred tractor-days is the difference between a
+   * distribution that adds up at the collection point and one that does not.
+   * The unit is on the award the farmer is shown and on the report the
+   * ministry signs off.
+   *
+   * A round is also closed here. CLOSED is what stops a distribution being
+   * topped up without a fresh decision on the record, and the refusal to
+   * reopen one had never been reached because no round had ever been closed.
+   */
+  async function programme(code: string): Promise<string> {
+    const created = await post(
+      '/government/programmes',
+      {
+        name: `Input Support ${code}`,
+        code: `INP-${code}`,
+        benefitType: 'AGRICULTURAL_SUBSIDY',
+        benefitDescription: 'Subsidised farm inputs for compliant farmers in cooperatives.',
+        targetSectors: ['AGRICULTURE'],
+        requiresGroupMembership: true,
+        targetGroupTypes: ['FARMERS_COOPERATIVE'],
+        minimumScore: 0,
+        requiresNoArrears: false,
+        startDate: '2026-01-01',
+        approvalAuthority: 'Plateau State Ministry of Agriculture',
+      },
+      { token: officerToken },
+    );
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = (created.body.programmeId ?? created.body.id) as string;
+    await post(`/government/programmes/${id}/status`, { status: 'ACTIVE' }, { token: officerToken });
+    return id;
+  }
+
+  const UNITS = ['LITRE', 'KILOGRAM', 'TRACTOR_DAY', 'SEEDLING', 'UNIT'] as const;
+
+  it('records each one as what the store will actually hand over', async () => {
+    for (const [index, unit] of UNITS.entries()) {
+      const programmeId = await programme(`${unit}-${index}`);
+      const created = await post(
+        '/allocations/rounds',
+        {
+          programmeId,
+          name: `2026 ${unit.toLowerCase().replace('_', ' ')} round`,
+          unit,
+          totalQuantity: 400,
+          quantityPerBeneficiary: 4,
+          collectionPoint: 'Bokkos LGA agricultural store',
+          opensAt: new Date(Date.now() - 3600_000).toISOString(),
+        },
+        { token: officerToken },
+      );
+      assert.equal(created.status, 201, `${unit} was refused: ${JSON.stringify(created.body)}`);
+
+      const stored = await queryOne<{ unit: string; status: string }>(
+        pool,
+        'SELECT unit, status FROM incentive_allocation_rounds WHERE id = $1',
+        [created.body.roundId],
+      );
+      assert.equal(stored?.unit, unit);
+    }
+  });
+
+  it('closes a round, and refuses to reopen it', async () => {
+    const programmeId = await programme('CLOSE');
+    const created = await post(
+      '/allocations/rounds',
+      {
+        programmeId,
+        name: '2026 seedling round',
+        unit: 'SEEDLING',
+        totalQuantity: 200,
+        quantityPerBeneficiary: 10,
+        collectionPoint: 'Mangu LGA nursery',
+        opensAt: new Date(Date.now() - 3600_000).toISOString(),
+      },
+      { token: officerToken },
+    );
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const roundId = created.body.roundId as string;
+
+    await post(`/allocations/rounds/${roundId}/status`, { status: 'OPEN' }, { token: officerToken });
+    const closed = await post(
+      `/allocations/rounds/${roundId}/status`,
+      { status: 'CLOSED' },
+      { token: officerToken },
+    );
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    assert.equal(
+      (
+        await queryOne<{ status: string }>(
+          pool,
+          'SELECT status FROM incentive_allocation_rounds WHERE id = $1',
+          [roundId],
+        )
+      )?.status,
+      'CLOSED',
+    );
+
+    // Reopening would let a distribution be topped up without a new decision.
+    const reopened = await post(
+      `/allocations/rounds/${roundId}/status`,
+      { status: 'OPEN' },
+      { token: officerToken },
+    );
+    assert.equal(reopened.status, 409, JSON.stringify(reopened.body));
+    assert.equal(reopened.body.error.code, 'ROUND_CLOSED');
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('a cooperative that turns out to be a front', () => {
+  /**
+   * `POST /groups/:id/review` has accepted SUSPEND from the beginning and
+   * nothing had ever sent it, so the status it writes had never been stored.
+   * It is not a label: both eligibility and the award path require
+   * `g.status = 'ACTIVE'`, so suspending a group is what stops its members
+   * collecting fertiliser today rather than rejecting them one at a time.
+   */
+  it('is suspended, and its members stop being eligible that moment', async () => {
+    const created = await post(
+      '/groups',
+      {
+        name: 'Front Cooperative',
+        groupType: 'FARMERS_COOPERATIVE',
+        lgaId,
+        leaderName: 'Absent Chairman',
+        leaderPhone: '+2348030000099',
+      },
+      { token: officerToken, idempotencyKey: 'front-group' },
+    );
+    assert.equal(created.status, 201, JSON.stringify(created.body));
+    const id = created.body.groupId as string;
+
+    await post(
+      `/groups/${id}/review`,
+      { decision: 'APPROVE', reason: 'Verified against the ministry register of cooperatives.' },
+      { token: officerToken },
+    );
+    assert.equal(
+      (await queryOne<{ status: string }>(pool, 'SELECT status FROM taxpayer_groups WHERE id = $1', [id]))
+        ?.status,
+      'ACTIVE',
+    );
+
+    const suspended = await post(
+      `/groups/${id}/review`,
+      {
+        decision: 'SUSPEND',
+        reason: 'None of the eleven names on the list farms in this ward, or anywhere else.',
+      },
+      { token: officerToken },
+    );
+    assert.equal(suspended.status, 200, JSON.stringify(suspended.body));
+
+    const row = await queryOne<{ status: string; suspension_reason: string | null }>(
+      pool,
+      'SELECT status, suspension_reason FROM taxpayer_groups WHERE id = $1',
+      [id],
+    );
+    assert.equal(row?.status, 'SUSPENDED');
+    assert.match(row!.suspension_reason!, /farms in this ward/);
+
+    // And reinstating it clears the reason rather than leaving an accusation
+    // standing against a group that has been cleared.
+    const reinstated = await post(
+      `/groups/${id}/review`,
+      { decision: 'APPROVE', reason: 'Membership confirmed by the district head after enquiry.' },
+      { token: officerToken },
+    );
+    assert.equal(reinstated.status, 200, JSON.stringify(reinstated.body));
+    const after = await queryOne<{ status: string; suspension_reason: string | null }>(
+      pool,
+      'SELECT status, suspension_reason FROM taxpayer_groups WHERE id = $1',
+      [id],
+    );
+    assert.equal(after?.status, 'ACTIVE');
+    assert.equal(after?.suspension_reason, null);
+  });
+});

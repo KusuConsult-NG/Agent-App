@@ -698,6 +698,39 @@ governmentRouter.post(
 );
 
 /**
+ * Close, suspend or reopen an officer's account.
+ *
+ * Step-up alongside `user:manage`, for the same reason a role change asks for
+ * it: this is the lever that decides whether a person can sign in at all, and
+ * one compromised administrator session should not be enough to work it.
+ */
+governmentRouter.post(
+  '/users/:id/status',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'CLOSED']),
+      reason: z
+        .string()
+        .trim()
+        .min(10, 'Say why this account is changing, in at least 10 characters'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await auth.setUserStatus({
+          targetUserId: req.params.id,
+          status: data.status,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          reason: data.reason,
+        }),
+      );
+    },
+  ),
+);
+
+/**
  * The territories an officer sees reports for, and the list to choose from.
  *
  * Without this the scoping added in migration 023 would be inert: every
