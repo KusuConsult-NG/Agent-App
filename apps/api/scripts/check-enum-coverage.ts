@@ -25,6 +25,27 @@
  * suite, and writing it into the first list would launder it into a decision
  * nobody made. Anything in neither is reported.
  *
+ * WHAT "OBSERVED" MEANS, AND WHAT IT DOES NOT. The triggers see writes, not
+ * who made them. A test process and the server it starts share one pool
+ * against one database, so a fixture that inserts a row directly is
+ * indistinguishable here from the platform producing the state through a real
+ * path — and both come back as covered.
+ *
+ * Two states in the current suite are covered on that basis alone.
+ * `otp_codes.purpose: LOGIN` is written by one line of
+ * `auth-session-revocation.test.ts`, deliberately, because it is testing that a
+ * code issued for one purpose cannot satisfy another and no route issues LOGIN
+ * codes. `refunds.attributable_to: TAXPAYER` is written by a fixture in
+ * `the-carried-forward-items.test.ts`. Neither fixture is wrong; both are the
+ * only way to reach what they are testing. But the figure this script prints
+ * counts them, so it is an upper bound on what the platform can do, not a
+ * measure of it.
+ *
+ * There is no cheap fix: the observers would have to know which connection a
+ * write came from, and the test process is the server. The honest thing is to
+ * say so here, so that a state added to a fixture to make a number move is
+ * recognised for what it is.
+ *
  * Run by `scripts/run-tests.mjs` once every shard has finished, because no
  * single shard sees more than a quarter of the suite.
  */
@@ -145,8 +166,8 @@ async function main() {
 
   const covered = [...declared.values()].reduce((n, v) => n + v.length, 0);
   console.log(
-    `enum coverage: ${observed.size} of ${covered} declared states written by the suite ` +
-      `across ${urls.length} shard(s).`,
+    `enum coverage: ${observed.size} of ${covered} declared states written during the suite ` +
+      `across ${urls.length} shard(s) — including any a fixture wrote directly.`,
   );
 
   if (staleExcuses.length > 0) {
