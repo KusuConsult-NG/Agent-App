@@ -942,6 +942,34 @@ governmentRouter.post(
   ),
 );
 
+/**
+ * Record that the bank did not make the transfer (PRD §28).
+ *
+ * The other half of completing a payout. Without it an approved payout the
+ * bank refused could only be left APPROVED for good — where the commissions in
+ * it can never be picked up again — or marked paid, which says a transfer
+ * happened when it did not.
+ */
+governmentRouter.post(
+  '/commissions/payouts/:id/fail',
+  requirePermission('commission:manage'),
+  validateBody(
+    z.object({
+      reason: z.string().min(10, 'Record what the bank said, so the agent can be told'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await commission.failPayout({
+          payoutId: req.params.id,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
 // ---------------------------------------------------------------------------
 // Fraud (PRD §32, §72)
 // ---------------------------------------------------------------------------

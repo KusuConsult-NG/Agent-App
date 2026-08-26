@@ -638,6 +638,34 @@ export function CommissionsScreen() {
                         Record payment
                       </button>
                     )}
+                    {row.status === 'APPROVED' && can('commission:manage') && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() =>
+                          void withJustification({
+                            question: 'What did the bank say? (at least 10 characters)',
+                            minimum: 10,
+                            tooShort:
+                              'Record what the bank said. The agent has to be told why they were not paid, and the next attempt depends on knowing.',
+                            run: async (reason) => {
+                              await api.post(
+                                `/government/commissions/payouts/${row.id}/fail`,
+                                { reason },
+                              );
+                              load();
+                            },
+                            onSuccess:
+                              'Recorded as failed. The commission in it is payable again, and ' +
+                              'any clawback it had netted off is owed again.',
+                            setError,
+                            setMessage,
+                          })
+                        }
+                      >
+                        Transfer failed
+                      </button>
+                    )}
                   </div>
                 ),
               },
