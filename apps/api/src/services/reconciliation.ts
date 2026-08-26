@@ -25,6 +25,7 @@ import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
 import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
+import { log } from '../lib/logger';
 
 export interface ReconciliationSummary {
   runId: string;
@@ -164,6 +165,64 @@ export async function runReconciliation(params: {
     );
   }
 
+  /*
+   * A run that could not finish says so, in the table runs are read from.
+   *
+   * The run row is written inside the same transaction as the matching, which
+   * is right — a half-matched period must not be left looking reconciled. But
+   * it meant that a run which threw part way rolled its own row back with
+   * everything else, so a crashed run left no trace at all: the officer saw no
+   * run for the period, which reads exactly like nobody having started one.
+   * That is the same blindness `ABORTED` exists to prevent, and ABORTED was
+   * only ever reached when the gateway declined to send a statement.
+   *
+   * So the failure is recorded afterwards, in a transaction of its own, and
+   * the error goes on to the caller unchanged.
+   */
+  try {
+    return await runMatching();
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'Reconciliation failed';
+    await withTransaction(async (client) => {
+      await client.query(
+        `INSERT INTO reconciliation_runs
+           (id, period_start, period_end, gateway, started_by, status,
+            statement_source, statement_line_count, abort_reason, completed_at)
+         VALUES ($1,$2,$3,$4,$5,'FAILED',$6,$7,$8,now())`,
+        [
+          runId,
+          params.from,
+          params.to,
+          gateway.name,
+          params.actorId,
+          statement.source,
+          statement.lines.length,
+          reason,
+        ],
+      );
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'reconciliation.failed',
+        entityType: 'reconciliation_run',
+        entityId: runId,
+        newValue: { reason, gateway: gateway.name },
+      });
+    }).catch((recordingError) =>
+      // The original failure is what the caller needs; losing it behind a
+      // second one would be the worse trade. Logged so a run that could not
+      // even record its own failure is still visible somewhere.
+      log.error('reconciliation failure could not be recorded', {
+        component: 'reconciliation',
+        runId,
+        reason,
+        recordingError: String(recordingError),
+      }),
+    );
+    throw error;
+  }
+
+  async function runMatching(): Promise<ReconciliationSummary> {
   return withTransaction(async (client) => {
     await client.query(
       `INSERT INTO reconciliation_runs
@@ -386,6 +445,7 @@ export async function runReconciliation(params: {
       statementLines: statement.lines.length,
     };
   });
+  }
 }
 
 /**
@@ -1168,7 +1228,7 @@ async function recordReversal(params: {
       id: string;
       status: string;
       entity_id: string;
-      payload: { amountKobo?: string; reason?: string; refundType?: string };
+      payload: { amountKobo?: string; reason?: string; refundType?: string; attributableTo?: string };
       requested_by: string;
       approved_by: string | null;
     }>(
@@ -1254,6 +1314,32 @@ async function recordReversal(params: {
       );
     }
 
+    /*
+     * Whose doing the reversal was, recorded when it is carried out.
+     *
+     * `refunds.attributable_to` was added so that the compliance score would
+     * stop penalising a citizen for the State's own double charges, and it
+     * defaults to GOVERNMENT for exactly that reason. But nothing ever wrote
+     * anything else, so the half of the rule that still meant to bite — a
+     * payment the taxpayer's own bank recalled — never bit either. A column
+     * with one reachable value is not a classification, and the score's
+     * reversal component was dead in both directions.
+     *
+     * The officer executing the reversal is the one who knows which it was,
+     * so it comes in on the approval payload alongside the amount and the
+     * type, and is checked here with them. An unrecognised value is refused
+     * rather than quietly treated as GOVERNMENT: silently absolving the
+     * taxpayer is still the platform deciding something it was told.
+     */
+    const attributableTo = (approval.payload.attributableTo ?? 'GOVERNMENT') as Attributable;
+    if (!ATTRIBUTABLE.includes(attributableTo)) {
+      throw conflict(
+        'REVERSAL_ATTRIBUTION_UNKNOWN',
+        `"${String(attributableTo)}" is not something a reversal can be attributed to.`,
+        `Say who the reversal is down to: ${ATTRIBUTABLE.join(', ')}.`,
+      );
+    }
+
     const amount = parseKobo(approval.payload.amountKobo ?? payment.amount_kobo);
     if (amount !== paid) {
       throw conflict(
@@ -1274,8 +1360,8 @@ async function recordReversal(params: {
     await client.query(
       `INSERT INTO refunds
          (refund_reference, transaction_id, payment_id, amount_kobo, refund_type, reason,
-          approval_id, requested_by, approved_by, approved_at, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),'PENDING')`,
+          approval_id, requested_by, approved_by, approved_at, status, attributable_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),'PENDING',$10)`,
       [
         refundReference,
         transactionId,
@@ -1286,6 +1372,7 @@ async function recordReversal(params: {
         approval.id,
         approval.requested_by,
         approval.approved_by,
+        attributableTo,
       ],
     );
 

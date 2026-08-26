@@ -454,6 +454,11 @@ export const config = {
     // low because this is a public, token-addressed surface, and configurable
     // because a test suite exercising the flow is not the shape of real use.
     groupAttestationRateLimitMax: int('GROUP_ATTESTATION_RATE_LIMIT_MAX', 20),
+    // The referee portal is unauthenticated and its token is a bearer
+    // credential, so guessing is throttled hard. Configurable for the same
+    // reason the others are: the suite walks more referees in a minute than a
+    // real LGA does in a week.
+    refereeRateLimitMax: int('REFEREE_RATE_LIMIT_MAX', 20),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())

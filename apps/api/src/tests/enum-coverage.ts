@@ -124,6 +124,372 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
    * type — which is why `a-state-nothing-writes.test.ts` is satisfied by them
    * and always was. Nothing produces any of them.
    */
+  /*
+   * Withdrawing a request one raised oneself.
+   *
+   * A pending approval is taken off the queue by a second officer rejecting
+   * it with a reason, and that is the better record: it says who decided the
+   * request should not stand, which "the requester changed their mind" does
+   * not. It also keeps the unwinding in one place. Deciding a COMMISSION_PAYOUT
+   * or a BANK_ACCOUNT_CHANGE carries out real work in the same transaction —
+   * a rejected payout releases the commissions it had claimed — and a cancel
+   * path that skipped those branches would leave exactly the orphaned rows
+   * the rejection branch was written to prevent.
+   */
+  'approvals.status: CANCELLED':
+    'A pending request is withdrawn by a second officer rejecting it, which keeps the unwinding in the one branch that does it.',
+
+  /*
+   * A module nobody opens, only sits.
+   *
+   * There is no "start the module" endpoint: the applicant reads the material
+   * and submits a score, so a progress row is written for the first time when
+   * an attempt is made and is already COMPLETED or FAILED when it lands.
+   * `agents.training_status` derives its own IN_PROGRESS from the presence of
+   * any progress row, which is the state an officer actually reads.
+   */
+  'agent_training_progress.status: IN_PROGRESS':
+    'Nothing starts a module; a progress row is first written by an attempt, which is already passed or failed.',
+
+  /*
+   * A KYC outcome the provider contract does not have.
+   *
+   * `agents.kyc_status` is written straight from the verification result, and
+   * `KycOutcome` is CLEARED, FAILED, UNDER_REVIEW, VERIFICATION_REQUIRED or
+   * UNAVAILABLE — the last of which is deliberately never recorded, because it
+   * is a statement about the provider rather than a verdict on the person.
+   * There is nowhere for SUBMITTED to come from.
+   */
+  'agents.kyc_status: SUBMITTED':
+    'kyc_status is written from the provider verdict, and the provider contract has no SUBMITTED outcome.',
+
+  /*
+   * Taking a copy of somebody's identity papers.
+   *
+   * Both routes that serve a KYC document send it inline under
+   * `cache-control: private, no-store`, and neither offers it as a download.
+   * That is the point: a reviewer needs to look at a citizen's identity card,
+   * not to end up holding a copy of it on a laptop. The value stays in the
+   * constraint because an export path, if one is ever built, must log it.
+   */
+  'kyc_document_access_logs.access_type: DOWNLOAD':
+    'Identity documents are served inline and never offered as a download, so no read is recorded as one.',
+
+  /*
+   * An invitation that goes by email and not by telephone.
+   *
+   * A referee record cannot exist without a phone number — the column is NOT
+   * NULL and the nomination form requires it — so every invitation goes out by
+   * SMS, and by both when an email address is given as well. There is no
+   * referee for EMAIL alone to describe.
+   */
+  'referee_invitations.channel: EMAIL':
+    'Every referee has a phone number, so an invitation is SMS or BOTH; EMAIL would mean a referee with no telephone.',
+
+  /*
+   * Referee risk at a severity worth ignoring.
+   *
+   * The four rules are one person vouching for a crowd of applicants, a
+   * referee using the applicant's own phone number, and one identity behind
+   * several referees. Each of those is HIGH or CRITICAL by its nature; there
+   * is no low-severity way to be a referee who is not who they say they are.
+   * The two values stay in the constraint because the severity vocabulary is
+   * shared with fraud_flags, which does use them.
+   */
+  'referee_risk_flags.severity: LOW':
+    'None of the four referee rules is a minor observation; the shared severity vocabulary carries the value for fraud_flags.',
+  'referee_risk_flags.severity: MEDIUM':
+    'Same: every referee rule is HIGH or CRITICAL by what it detects.',
+
+  /*
+   * Assessment states the platform's own shape does not produce.
+   *
+   * An assessment and its invoice are created in one call, so the row is
+   * INVOICED the moment it exists and there is no draft to leave behind.
+   * Nothing cancels one — a lapsed invoice EXPIRES and a paid one is settled
+   * on the invoice and the transaction, which are the rows every report reads.
+   */
+  'assessments.status: DRAFT':
+    'An assessment is created together with its invoice, so it is INVOICED from the first instant and never a draft.',
+  'assessments.status: CANCELLED':
+    'An assessment lapses (EXPIRED) or is superseded by a reversal; nothing cancels one.',
+  'assessments.status: SETTLED':
+    'Settlement is recorded on the invoice and the transaction, which is what the reports read; the assessment keeps the figure it assessed.',
+
+  /* Seeded once, like the agreement's own RETIRED above: nothing drafts a
+   * second version because no endpoint publishes one. */
+  'agreement_versions.status: DRAFT':
+    'Agreement versions are seeded active; no endpoint drafts a replacement.',
+
+  /* The other two inert members of the schedule vocabulary, for the reason
+   * given against FORTNIGHTLY above: nothing reads settlement_schedule. */
+  'commission_policies.settlement_schedule: DAILY':
+    'No scheduler reads settlement_schedule; payouts are requested and approved, never timed.',
+  'commission_policies.settlement_schedule: MONTHLY':
+    'No scheduler reads settlement_schedule; payouts are requested and approved, never timed.',
+
+  /*
+   * A commission is reversed, held, approved or paid. Nothing cancels one:
+   * the transition function names CANCELLED in one CASE arm and no caller has
+   * ever passed it.
+   */
+  'commissions.status: CANCELLED':
+    'A commission follows its transaction; when that is reversed the commission is REVERSED, and nothing else ends one.',
+
+  /*
+   * Documents the platform does not issue.
+   *
+   * It generates three: a receipt, an invoice and vehicle papers. An
+   * assessment notice, a TIN confirmation letter and a separate piece of
+   * payment evidence are named in the type because they are the obvious next
+   * ones to produce, and none of them exists yet.
+   */
+  'documents.document_type: ASSESSMENT':
+    'The platform issues receipts, invoices and vehicle papers; there is no assessment notice document.',
+  'documents.document_type: PAYMENT_EVIDENCE':
+    'The receipt is the evidence of payment; nothing issues a second document for it.',
+  'documents.document_type: TIN_CONFIRMATION':
+    'A TIN is shown on the citizen status page and the receipt; no confirmation letter is generated.',
+  'documents.owner_type: AGENT':
+    'Every document the platform issues belongs to a taxpayer; an agent’s agreement is a record, not an issued document.',
+
+  /*
+   * Fraud subjects with nothing that raises them.
+   *
+   * `raiseFlag` is called against a transaction, an agent, a device or a
+   * taxpayer. Referee patterns have a table of their own — `referee_risk_flags`
+   * — because they need the referee's own identity and phone alongside them,
+   * and no rule looks at a commission on its own: commission risk is caught
+   * through the agent it belongs to.
+   */
+  'fraud_flags.entity_type: REFEREE':
+    'Referee patterns are raised in referee_risk_flags, which carries the referee’s own details.',
+  'fraud_flags.entity_type: COMMISSION':
+    'Commission risk is raised against the agent it belongs to; no rule flags a commission by itself.',
+
+  /*
+   * Part-payment.
+   *
+   * `POST /payments/initiate` takes a transaction, not an amount, so a payment
+   * is always the whole of what is owed and the CASE that would write
+   * PARTIALLY_PAID cannot take its other arm. Nothing cancels an invoice
+   * either: an unpaid one EXPIRES at its deadline and a reversed one goes back
+   * to UNPAID, because a demand notice that was wrongly paid is still owed.
+   */
+  'invoices.status: PARTIALLY_PAID':
+    'A payment is initiated against a transaction, never an amount, so it always settles the invoice in full.',
+  'invoices.status: CANCELLED':
+    'An unpaid invoice expires at its deadline; a reversed one returns to UNPAID because the demand still stands.',
+
+  /*
+   * The whole payment came back, and every row that records it says REVERSED.
+   *
+   * `transactions.status` keeps the distinction — a FULL refund is REFUNDED
+   * and a REVERSAL is REVERSED — because that is the row the reports count.
+   * The payment and the receipt take REVERSED either way, and both readers of
+   * those columns treat the two words as one thing.
+   */
+  'payments.status: REFUNDED':
+    'The reversal cascade writes REVERSED on the payment whichever kind of refund it was; the transaction carries the distinction.',
+  'receipts.status: REFUNDED':
+    'Same: a returned payment voids its receipt as REVERSED, and public verification reads the two words identically.',
+
+  /*
+   * A webhook delivered twice.
+   *
+   * `payment_webhook_events` is unique on (gateway, event_id), so a
+   * redelivery inserts nothing and there is no second row for DUPLICATE to
+   * describe. Overwriting the first row with it would lose the outcome that
+   * matters — that the payment was processed — and redeliveries are counted
+   * in the webhook metric instead.
+   */
+  'payment_webhook_events.processing_status: DUPLICATE':
+    'The (gateway, event_id) key means a redelivery inserts no row; the first row keeps its own outcome and the metric counts the repeat.',
+
+  /*
+   * Codes for flows that do not exist. `/auth/otp/request` accepts STEP_UP and
+   * nothing else, on purpose and with the reasoning recorded on the route:
+   * there is no self-registration, no password reset and no OTP sign-in, and a
+   * referee is verified by the link they were sent rather than by a code. The
+   * purposes stay in the column ready for the flows that would use them.
+   */
+  'otp_codes.purpose: PASSWORD_RESET':
+    'There is no password reset flow; the route offers STEP_UP alone.',
+  'otp_codes.purpose: REGISTRATION':
+    'There is no self-registration; an agent applies and an officer creates every other account.',
+  'otp_codes.purpose: REFEREE_VERIFY':
+    'A referee is verified by the invitation link they were sent, not by a code.',
+
+  /*
+   * An obligation the platform worked out for itself. Every obligation on the
+   * register was put there by an agent at onboarding or by an officer
+   * reviewing the record; `obligations.ts` names AUTO_RECOMMENDATION for the
+   * derivation that has not been built.
+   */
+  'taxpayer_tax_obligations.source: AUTO_RECOMMENDATION':
+    'Nothing derives an obligation automatically; every one is recorded by an agent or an officer.',
+
+  /*
+   * Transaction states nothing reaches.
+   *
+   * The transaction row is created already INVOICE_GENERATED, because the
+   * assessment and the invoice are made together — ASSESSMENT_CREATED is real
+   * as an event in `transaction_events` and is written there, and is never a
+   * resting state. And nothing cancels a transaction: it expires, fails,
+   * is abandoned, or is reversed.
+   */
+  'transactions.status: ASSESSMENT_CREATED':
+    'Recorded as an event in transaction_events; the row itself is INVOICE_GENERATED from creation.',
+  'transactions.status: CANCELLED':
+    'A transaction expires, fails, is abandoned or is reversed; nothing cancels one.',
+
+  /*
+   * An agent account that is ended rather than paused.
+   *
+   * An agent is suspended and reinstated — `account_status` goes ACTIVE and
+   * SUSPENDED and back — and there is no closing. Ending an agent's
+   * appointment for good is rejection at clearance or suspension that is never
+   * lifted, and both of those are already on the record with a reason.
+   */
+  'agents.account_status: CLOSED':
+    'An agent is suspended or reinstated; nothing closes an agent account, and a permanent removal is a suspension nobody lifts.',
+
+  /*
+   * `agents.kyc_status` is written straight from the identity verification
+   * result, so it holds whatever the provider said. Nothing suspends a
+   * completed identity check — suspicion about an agent is dealt with by
+   * suspending the agent, which is the thing that stops them collecting.
+   */
+  'agents.kyc_status: SUSPENDED':
+    'kyc_status carries the provider verdict; suspicion is acted on by suspending the agent, not their identity check.',
+
+  /*
+   * The portal is not version-gated.
+   *
+   * `requireSupportedAppVersion` exists for the field application, which runs
+   * offline on a handset that may not have been updated in months. The portal
+   * is loaded from the server on every visit, so there is no stale copy for a
+   * minimum version to refuse, and no row is ever written for it.
+   */
+  'app_versions.app: PORTAL':
+    'Only the field application is version-gated; the portal is loaded fresh from the server on every visit.',
+
+  /*
+   * Fraud at a severity nobody would act on. Every rule in `fraud.ts` raises
+   * HIGH or CRITICAL, because each detects something that either moved money
+   * or was an attempt to: a duplicate payment, a device running at four times
+   * the rate of any other, an override of a duplicate warning five times in a
+   * week. LOW and MEDIUM stay in the vocabulary for rules that would merit
+   * them, and none of the present rules does.
+   */
+  'fraud_flags.severity: LOW':
+    'Every present rule detects something that moved money or tried to, and raises HIGH or CRITICAL.',
+
+  /*
+   * Geography and the authority tree are loaded, not edited.
+   *
+   * The seventeen LGAs of Plateau State, their wards, the collection
+   * territories drawn over them, the MDAs and the revenue authorities are
+   * reference data written by the seed and never changed through an API —
+   * there is no screen anywhere that retires an LGA or a ward. Withdrawing a
+   * *charge* is a different act and does have one: `POST /revenue/items/:id/status`
+   * suspends and retires revenue items, which is what an officer actually
+   * needs to stop something being collected.
+   */
+  'lgas.status: INACTIVE':
+    'Geography is seeded reference data; no endpoint retires an LGA.',
+  'wards.status: INACTIVE':
+    'Same: wards are seeded with their LGA and never edited through the API.',
+  'territories.status: INACTIVE':
+    'A territory is created with its LGA and reassigned between agents; nothing retires one.',
+  'mdas.status: INACTIVE':
+    'The MDA list is seeded reference data; nothing deactivates a ministry.',
+  'revenue_authorities.status: INACTIVE':
+    'The authority tree is seeded; a charge is withdrawn by suspending the revenue item, not the authority.',
+  'revenue_categories.status: INACTIVE':
+    'Same: a category is seeded, and withdrawal happens on the items inside it.',
+
+  /*
+   * The catalogue has no drafts and nothing quarterly.
+   *
+   * A revenue item exists once it is published by the seed, and is withdrawn
+   * by suspension or retirement — there is no half-written item waiting to be
+   * released. And no charge in the Plateau schedule is levied by the quarter:
+   * they are daily, monthly or annual. Both values stay for the item that
+   * needs them.
+   */
+  'revenue_items.status: DRAFT':
+    'Items are published by the seed and withdrawn by suspension; nothing drafts one.',
+  'revenue_items.frequency: QUARTERLY':
+    'No charge in the seeded Plateau schedule is levied quarterly.',
+
+  /*
+   * Push notifications do not go through the template table.
+   *
+   * Web push is dispatched by `services/push.ts` against a per-device
+   * subscription, with the message built at the point of sending — there is
+   * nowhere for a stored template to be rendered to, because a push has no
+   * recipient address in the sense the other two channels do. No PUSH template
+   * is seeded and none is written.
+   */
+  'notification_templates.channel: PUSH':
+    'Web push is dispatched per device subscription by push.ts; it does not render a stored template.',
+
+  /*
+   * A draft synchronised twice.
+   *
+   * The second sync of a client reference finds the first one's result and
+   * returns it — the response says DUPLICATE, and no row is written, because
+   * writing one would be the duplicate the whole idempotency key exists to
+   * prevent. The stored draft keeps the status of the sync that actually
+   * happened.
+   */
+  'offline_drafts.status: DUPLICATE':
+    'A repeat sync returns the first result and stores nothing; DUPLICATE is what the response says, not what the row becomes.',
+
+  /*
+   * A taxpayer record that is closed, suspended or half-written.
+   *
+   * A record is created ACTIVE by an agent in the field and never changes
+   * state afterwards: there is no draft registration, and no path closes or
+   * suspends a record when a business shuts or a person dies. That is a
+   * capability the platform does not have rather than a state it avoids — the
+   * consequence is that a closed business keeps its obligations and keeps
+   * being reminded — and building it means deciding what happens to what it
+   * still owes, which is a decision for PSIRS and not for a test.
+   */
+  'taxpayers.status: DRAFT':
+    'Registration is a single act; there is no partially-captured record to leave behind.',
+  'taxpayers.status: SUSPENDED':
+    'No path suspends a taxpayer record. Building one means deciding what happens to outstanding obligations.',
+  'taxpayers.status: CLOSED':
+    'No path closes a taxpayer record when a business shuts or a person dies. Same decision to make first.',
+
+  /*
+   * Renewal states the cascade passes straight through.
+   *
+   * A renewal is PENDING_PAYMENT until the payment is verified, and the
+   * receipt, the document and the registry notification are all issued in that
+   * same transaction — so it goes to COMPLETED without ever resting at PAID.
+   * And a renewal whose payment failed stays PENDING_PAYMENT, which is the
+   * true thing to say: the payment is still outstanding and the owner can pay
+   * again against the same renewal.
+   */
+  'vehicle_renewals.status: PAID':
+    'The receipt and the papers are issued in the same transaction that verifies the payment, so a renewal never rests at PAID.',
+  'vehicle_renewals.status: FAILED':
+    'A renewal whose payment did not go through is still awaiting payment, and stays PENDING_PAYMENT so it can be paid again.',
+
+  /*
+   * Public verification answers on receipts and documents, which is what a
+   * person holds in their hand. An invoice is a demand notice with a code of
+   * its own, and no public route resolves one — checking whether a demand is
+   * genuine is done by looking it up as a taxpayer, which the citizen status
+   * page does.
+   */
+  'verification_attempts.lookup_type: INVOICE':
+    'No public route verifies an invoice; verification answers on receipts, documents and taxpayer lookups.',
+
   'bank_accounts.status: BLOCKED':
     'An account is ACTIVE, PROPOSED or SUPERSEDED. Nothing blocks one — an agent with a suspect account is suspended, which stops the money at the agent rather than at the account.',
   'commission_payouts.status: PROCESSING':
@@ -132,8 +498,6 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
     'A document is ISSUED or REVOKED. Reissuing writes a new row and revokes the old one rather than marking it superseded; the only SUPERSEDED in the platform is on bank_accounts.',
   'group_attestation_invitations.status: REVOKED':
     'An attestation link expires; nothing withdraws one. The leader who should not have it is dealt with by not sending another.',
-  'mock_gateway_transactions.status: ABANDONED':
-    'The development gateway stub, which only ever succeeds or fails on command. Production refuses to boot on it.',
   'referee_invitations.status: REVOKED':
     'Same: a referee invitation expires rather than being withdrawn.',
   'refunds.status: PROCESSING':
@@ -166,274 +530,16 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
  * path to this state and no test walks it.
  */
 export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
-  'agent_clearance.clearance_status: ACTION_REQUIRED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance.clearance_status: REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: GOVERNMENT_REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: INFO_REQUESTED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: OVERRIDE_APPLIED':
-    'Reachable from a path the suite does not walk.',
-  'agent_clearance_events.event_type: REFEREE_FAILED':
-    'Reachable from a path the suite does not walk.',
-  'agent_kyc.identity_type: BVN':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: DRIVERS_LICENCE':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: OTHER':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: PASSPORT':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.identity_type: VOTERS_CARD':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'agent_kyc.liveness_result: PASSED':
-    'Reachable from a path the suite does not walk.',
-  'agent_training_progress.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'agent_training_progress.status: IN_PROGRESS':
-    'Reachable from a path the suite does not walk.',
-  'agents.account_status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'agents.clearance_status: ACTION_REQUIRED':
-    'Reachable from a path the suite does not walk.',
-  'agents.clearance_status: REJECTED':
-    'Reachable from a path the suite does not walk.',
-  'agents.kyc_status: SUBMITTED':
-    'Reachable from a path the suite does not walk.',
-  'agents.kyc_status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
-  'agreement_versions.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
+  /*
+   * Written by `seedReferenceData`, and only on a database that does not
+   * already have the row. The shard databases are kept between runs — an empty
+   * migration costs 357ms and re-running settled ones costs 4ms — so a repeat
+   * run seeds nothing and the observers see nothing. On a fresh database, as
+   * in CI, it is written.
+   */
   'app_versions.app: AGENT_PWA':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'app_versions.app: PORTAL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'approvals.approval_type: AGENT_ACTIVATION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: AGENT_SUSPENSION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: COMMISSION_ADJUSTMENT':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: MANUAL_CORRECTION':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: REFUND':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: REVENUE_RATE_CHANGE':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.approval_type: TAXPAYER_ADJUSTMENT':
-    'Every approval type is created by the same endpoint with a validated enum; the suite exercises the money-moving ones and leaves the rest.',
-  'approvals.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'approvals.status: REVIEWED':
-    'Reachable from a path the suite does not walk.',
-  'assessments.assessment_type: SELF_ASSESSMENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'assessments.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'assessments.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'assessments.status: SETTLED':
-    'Reachable from a path the suite does not walk.',
-  'commission_policies.settlement_schedule: DAILY':
-    'Reachable from a path the suite does not walk.',
-  'commission_policies.settlement_schedule: MONTHLY':
-    'Reachable from a path the suite does not walk.',
-  'commissions.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'documents.document_type: ASSESSMENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.document_type: PAYMENT_EVIDENCE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.document_type: TIN_CONFIRMATION':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'documents.owner_type: AGENT':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'fraud_flags.entity_type: COMMISSION':
-    'Reachable from a path the suite does not walk.',
-  'fraud_flags.entity_type: REFEREE':
-    'Reachable from a path the suite does not walk.',
-  'fraud_flags.severity: LOW':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'group_attestation_invitations.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'incentive_allocation_rounds.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
+    'Seeded once per database; the shard databases outlive a run, so a repeat run does not write it.',
+
   'incentive_allocation_rounds.unit: BAG_25KG':
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: KILOGRAM':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: LITRE':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: SEEDLING':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: TRACTOR_DAY':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'incentive_allocation_rounds.unit: UNIT':
-    'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
-  'invoices.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'invoices.status: PARTIALLY_PAID':
-    'Reachable from a path the suite does not walk.',
-  'kyc_document_access_logs.access_type: DOWNLOAD':
-    'Reachable from a path the suite does not walk.',
-  'kyc_documents.capture_source: FILE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'kyc_documents.document_type: ADDITIONAL_IDENTIFICATION':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: PASSPORT_PHOTOGRAPH':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: PROOF_OF_ADDRESS':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: SELFIE':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'kyc_documents.document_type: SUPPORTING_DOCUMENT':
-    'The suite uploads the one document type the clearance checklist requires; the rest are optional captures no test exercises.',
-  'lgas.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'mdas.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'notification_templates.channel: PUSH':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'notifications.channel: EMAIL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'offline_drafts.status: DUPLICATE':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: PASSWORD_RESET':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: REFEREE_VERIFY':
-    'Reachable from a path the suite does not walk.',
-  'otp_codes.purpose: REGISTRATION':
-    'Reachable from a path the suite does not walk.',
-  'payment_webhook_events.processing_status: DUPLICATE':
-    'Reachable from a path the suite does not walk.',
-  'payment_webhook_events.processing_status: IGNORED':
-    'Reachable from a path the suite does not walk.',
-  'payments.payment_method: ACCOUNT_TRANSFER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.payment_method: BANK_TRANSFER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.payment_method: USSD':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'payments.status: ABANDONED':
-    'Reachable from a path the suite does not walk.',
-  'payments.status: REFUNDED':
-    'Reachable from a path the suite does not walk.',
-  'receipts.status: REFUNDED':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_records.status: PENDING':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_records.status: REVERSED':
-    'Reachable from a path the suite does not walk.',
-  'reconciliation_runs.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referee_invitations.channel: EMAIL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referee_invitations.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'referee_kyc.identity_type: BVN':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: DRIVERS_LICENCE':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: OTHER':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: PASSPORT':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.identity_type: VOTERS_CARD':
-    'The applicant chooses their document type and the suite always uses a NIN. Every value here is accepted input, validated by a shared enum.',
-  'referee_kyc.verification_status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referee_kyc.verification_status: UNDER_REVIEW':
-    'Reachable from a path the suite does not walk.',
-  'referee_risk_flags.severity: HIGH':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.severity: LOW':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.severity: MEDIUM':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: CONFIRMED':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: DISMISSED':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referee_risk_flags.status: UNDER_REVIEW':
-    'Referee risk flags are raised and read; no test drives one through review, so the severities and decisions below it are unexercised.',
-  'referees.category: EMPLOYER':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.category: RECOGNISED_PROFESSIONAL':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.category: TRADITIONAL_AUTHORITY':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'referees.status: EXPIRED':
-    'Reachable from a path the suite does not walk.',
-  'referees.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'referees.status: UNDER_REVIEW':
-    'Reachable from a path the suite does not walk.',
-  'refunds.attributable_to: GATEWAY':
-    'Reachable from a path the suite does not walk.',
-  'revenue_authorities.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'revenue_categories.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'revenue_items.frequency: QUARTERLY':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'revenue_items.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'support_tickets.category: INCORRECT_ASSESSMENT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: RECEIPT_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TAXPAYER_COMPLAINT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TECHNICAL_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: TIN_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.category: VEHICLE_ISSUE':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.priority: LOW':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.priority: URGENT':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'support_tickets.status: ASSIGNED':
-    'Support tickets are exercised on one category, one priority and the open-to-resolved path. The other values are reachable from the same screen and no test picks them.',
-  'taxpayer_groups.status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
-  'taxpayer_tax_obligations.source: AUTO_RECOMMENDATION':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'taxpayers.gender: FEMALE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'taxpayers.gender: MALE':
-    'Accepted input, validated where it enters. The suite exercises one value of the set and this is one of the others.',
-  'taxpayers.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'taxpayers.status: DRAFT':
-    'Reachable from a path the suite does not walk.',
-  'taxpayers.status: SUSPENDED':
-    'Reachable from a path the suite does not walk.',
-  'territories.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
-  'transactions.status: ASSESSMENT_CREATED':
-    'Reachable from a path the suite does not walk.',
-  'transactions.status: CANCELLED':
-    'Reachable from a path the suite does not walk.',
-  'usage_events.connection: LIMITED':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.connection: OFFLINE':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.connection: ONLINE':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'usage_events.outcome: FAILED':
-    'Usage analytics are posted by the agent PWA with whatever connection it had. The suite posts from one shape of session.',
-  'users.status: CLOSED':
-    'Reachable from a path the suite does not walk.',
-  'vehicle_renewals.status: FAILED':
-    'Reachable from a path the suite does not walk.',
-  'vehicle_renewals.status: PAID':
-    'Reachable from a path the suite does not walk.',
-  'verification_attempts.lookup_type: INVOICE':
-    'Reachable from a path the suite does not walk.',
-  'wards.status: INACTIVE':
-    'Reachable from a path the suite does not walk.',
 };

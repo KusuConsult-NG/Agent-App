@@ -8,6 +8,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
+import { config } from '../config';
 import { pool } from '../db/pool';
 import { rateLimit } from '../middleware/security';
 import { validateBody } from '../middleware/validate';
@@ -16,7 +17,14 @@ import * as referees from '../services/referees';
 export const refereeRouter = Router();
 
 // A token is a bearer credential, so guessing attempts are rate limited hard.
-refereeRouter.use(rateLimit({ max: 20, windowMs: 60_000, keyPrefix: 'referee', keyBy: 'ip' }));
+refereeRouter.use(
+  rateLimit({
+    max: config.security.refereeRateLimitMax,
+    windowMs: 60_000,
+    keyPrefix: 'referee',
+    keyBy: 'ip',
+  }),
+);
 
 refereeRouter.get('/:token', async (req, res, next) => {
   try {

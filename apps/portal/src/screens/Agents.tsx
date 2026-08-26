@@ -78,6 +78,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
 
       <div className="stat-grid">
         <Stat label="KYC pending" value={counts.kyc_pending} />
+        {/* Waiting on the applicant, not on us: these need chasing, not reviewing. */}
+        <Stat
+          label="Awaiting applicant"
+          value={counts.kyc_action_required}
+          variant={Number(counts.kyc_action_required) > 0 ? 'alert' : undefined}
+        />
         <Stat label="KYC cleared" value={counts.kyc_cleared} />
         <Stat label="Referee pending" value={counts.referee_pending} />
         <Stat label="Referee failed" value={counts.referee_failed} />
@@ -713,8 +719,13 @@ export function AgentDetailScreen({
 export function RefereesScreen() {
   const [data, setData] = useState<any | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [reviewing, setReviewing] = useState<any | null>(null);
+  const [decision, setDecision] = useState<'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED'>('UNDER_REVIEW');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     api
       .get('/agents/referee-dashboard')
       .then(setData)
@@ -723,11 +734,54 @@ export function RefereesScreen() {
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(load, [load]);
+
+  /**
+   * Closing a flag, which is what makes the queue readable.
+   *
+   * The flags were raised and nothing could ever move them, so the list only
+   * grew — and a queue that only grows is a queue that stops being read.
+   * Confirming one is not a note either: a referee with an upheld flag against
+   * them cannot be cleared until an officer dismisses it on the record.
+   */
+  async function submitReview() {
+    if (!reviewing || note.trim().length < 10) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.post(`/agents/referees/flags/${reviewing.id}/review`, {
+        decision,
+        note: note.trim(),
+      });
+      setMessage(
+        decision === 'CONFIRMED'
+          ? 'Flag upheld. This referee cannot be cleared until it is dismissed.'
+          : decision === 'DISMISSED'
+            ? 'Flag dismissed. The referee can be cleared as normal.'
+            : 'Flag marked as under review.',
+      );
+      setReviewing(null);
+      setNote('');
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (error && !data) return <ErrorAlert error={error} />;
   if (!data) return <Loading rows={5} />;
 
   return (
     <>
+      {error && <ErrorAlert error={error} />}
+      {message && (
+        <Alert kind="success">
+          <p style={{ margin: 0 }}>{message}</p>
+        </Alert>
+      )}
       <div className="stat-grid">
         <Stat label="Total referees" value={data.counts.total} />
         <Stat label="Pending" value={data.counts.pending} />
@@ -743,8 +797,9 @@ export function RefereesScreen() {
         <div style={{ padding: '18px 18px 0' }}>
           <h2 className="card__title">Referee risk flags</h2>
           <p className="card__hint">
-            Patterns that suggest a referee relationship is not genuine. Flags are for review — they
-            do not block anyone automatically.
+            Patterns that suggest a referee relationship is not genuine. Nothing is blocked while a
+            flag is merely open — but a flag you uphold stops that referee being cleared until
+            somebody dismisses it with their findings.
           </p>
         </div>
         <Table
@@ -760,11 +815,80 @@ export function RefereesScreen() {
                 <span className="mono">{JSON.stringify(row.detail)}</span>
               ),
             },
+            {
+              key: 'action',
+              label: '',
+              render: (row) =>
+                can('fraud:manage') ? (
+                  <button
+                    type="button"
+                    className="small secondary"
+                    onClick={() => {
+                      setReviewing(row);
+                      setDecision(row.status === 'UNDER_REVIEW' ? 'CONFIRMED' : 'UNDER_REVIEW');
+                      setNote('');
+                      setMessage(null);
+                    }}
+                  >
+                    Review
+                  </button>
+                ) : null,
+            },
           ]}
           rows={data.suspiciousReferees}
           empty="No referee risk flags are open."
         />
       </div>
+
+      {reviewing && (
+        <div className="card">
+          <h2 className="card__title">Risk flag — {reviewing.full_name}</h2>
+          <p className="card__hint">
+            {String(reviewing.rule).replace(/_/g, ' ').toLowerCase()}. Record what you found: it is
+            the only account of why this flag was left open, upheld or set aside.
+          </p>
+
+          <div className="field">
+            <label htmlFor="flag-decision">What you found</label>
+            <select
+              id="flag-decision"
+              value={decision}
+              onChange={(event) => setDecision(event.target.value as typeof decision)}
+            >
+              <option value="UNDER_REVIEW">Looking into it</option>
+              <option value="CONFIRMED">Upheld — this referee cannot be relied on</option>
+              <option value="DISMISSED">Dismissed — the pattern is innocent</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="flag-note">What you found</label>
+            <textarea
+              id="flag-note"
+              value={note}
+              rows={3}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Called all six applicants; four have never met him."
+            />
+          </div>
+
+          <div className="button-row">
+            <button type="button" disabled={busy || note.trim().length < 10} onClick={submitReview}>
+              {busy ? 'Saving…' : 'Record this'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setReviewing(null);
+                setNote('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>

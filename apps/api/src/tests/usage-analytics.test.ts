@@ -325,3 +325,89 @@ describe('telemetry is disposable, and says so', () => {
     assert.equal(after_!.n, before!.n);
   });
 });
+
+// ---------------------------------------------------------------------------
+
+describe('what the field actually reports', () => {
+  /**
+   * `connection` and `outcome` are the two columns that make this table worth
+   * keeping. Whether a collection was completed on a good connection, a poor
+   * one or none at all is the difference between "the form is too long" and
+   * "the mast is down" — the same abandonment rate meaning two different
+   * things to do about it. Every event the suite had ever recorded left both
+   * columns null, so neither had ever held a value.
+   */
+  it('records how the connection was and how the flow ended', async () => {
+    await query(pool, 'DELETE FROM usage_events');
+
+    const reported = await post(
+      '/usage',
+      {
+        surface: 'AGENT_PWA',
+        events: [
+          {
+            event: 'collection',
+            occurredAt: new Date().toISOString(),
+            step: 'confirm',
+            outcome: 'COMPLETED',
+            connection: 'ONLINE',
+            durationMs: 42_000,
+          },
+          {
+            event: 'collection',
+            occurredAt: new Date().toISOString(),
+            step: 'payment',
+            outcome: 'FAILED',
+            connection: 'LIMITED',
+            durationMs: 180_000,
+          },
+          {
+            event: 'draft.queued',
+            occurredAt: new Date().toISOString(),
+            step: 'queue',
+            outcome: 'STARTED',
+            connection: 'OFFLINE',
+          },
+        ],
+      },
+      { token: adminToken },
+    );
+    assert.equal(reported.status, 202, JSON.stringify(reported.body));
+    assert.equal(reported.body.accepted, 3);
+
+    const rows = await query<{ connection: string | null; outcome: string | null }>(
+      pool,
+      'SELECT connection, outcome FROM usage_events ORDER BY id',
+    );
+    assert.deepEqual(
+      rows.map((row) => `${row.connection}/${row.outcome}`),
+      ['ONLINE/COMPLETED', 'LIMITED/FAILED', 'OFFLINE/STARTED'],
+    );
+  });
+
+  it('drops a connection state it does not recognise, rather than storing it', async () => {
+    await query(pool, 'DELETE FROM usage_events');
+    const refused = await post(
+      '/usage',
+      {
+        surface: 'AGENT_PWA',
+        events: [
+          {
+            event: 'collection',
+            occurredAt: new Date().toISOString(),
+            outcome: 'COMPLETED',
+            connection: 'ROAMING',
+          },
+        ],
+      },
+      { token: adminToken },
+    );
+    assert.equal(refused.status, 422, JSON.stringify(refused.body));
+
+    const count = await queryOne<{ n: string }>(
+      pool,
+      'SELECT count(*)::text AS n FROM usage_events',
+    );
+    assert.equal(count?.n, '0');
+  });
+});

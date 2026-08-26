@@ -534,12 +534,33 @@ export async function submitRefereeResponse(params: {
       );
     }
 
-    const refereeStatus =
+    let refereeStatus =
       verificationStatus === 'CLEARED'
         ? 'CLEARED'
         : verificationStatus === 'FAILED'
           ? 'FAILED'
           : 'UNDER_REVIEW';
+
+    /*
+     * A flag an officer has upheld holds the response back from clearing on
+     * its own.
+     *
+     * The referee's identity matching is not an answer to the pattern the flag
+     * is about, and this is the path that would otherwise walk round the check
+     * on the officer's decision entirely: a confirmed flag, and then a
+     * matching NIN clears the referee that afternoon with nobody deciding
+     * anything. So it lands with the officers instead, carrying the reason,
+     * and the referee is neither cleared nor accused.
+     */
+    if (refereeStatus === 'CLEARED') {
+      const upheld = await upheldRiskFlag(client, invitation.referee_id);
+      if (upheld) {
+        refereeStatus = 'UNDER_REVIEW';
+        failureReason =
+          `Identity confirmed, but a risk flag against this referee has been upheld ` +
+          `(${ruleInWords(upheld)}). A government officer must decide.`;
+      }
+    }
 
     await client.query(
       `UPDATE referees
@@ -638,6 +659,85 @@ export async function declineInvitation(params: {
   });
 }
 
+/**
+ * The rule of an upheld flag against this referee, if there is one.
+ *
+ * Both places a referee can become CLEARED consult it, and they have to: a
+ * check that lived only on the officer's decision would be walked round by the
+ * ordinary path, where a matching identity number clears the referee by
+ * itself. An identity that matches is not an answer to "four of the six people
+ * he vouched for have never met him".
+ */
+async function upheldRiskFlag(client: PoolClient, refereeId: string): Promise<string | null> {
+  const flag = await queryOne<{ rule: string }>(
+    client,
+    `SELECT rule FROM referee_risk_flags
+      WHERE referee_id = $1 AND status = 'CONFIRMED' LIMIT 1`,
+    [refereeId],
+  );
+  return flag?.rule ?? null;
+}
+
+/** The rule name as it reads in a sentence to an officer or a referee. */
+const ruleInWords = (rule: string) => rule.replace(/_/g, ' ').toLowerCase();
+
+/**
+ * An officer's triage of a referee risk flag (Addendum §30, §46).
+ *
+ * The flags were raised and nothing could ever move them. Every one of the
+ * four rules writes OPEN, the referee dashboard lists OPEN and UNDER_REVIEW,
+ * and there was no path to any other status — so the queue only ever grew,
+ * which is how a queue stops being read. An officer who looked into a pattern
+ * and found it innocent had no way to say so, and the flag they had cleared
+ * sat above the next one for ever.
+ *
+ * CONFIRMED is not merely a note. A referee with an upheld flag against them
+ * cannot be cleared until the flag is dealt with — see `reviewReferee` — so
+ * upholding one is a decision with a consequence rather than a tidy-up.
+ */
+export async function reviewRefereeRiskFlag(params: {
+  flagId: string;
+  decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED';
+  note: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ refereeId: string; refereeStatus: string }> {
+  return withTransaction(async (client) => {
+    const flag = await queryOne<{ id: string; status: string; referee_id: string }>(
+      client,
+      'SELECT id, status, referee_id FROM referee_risk_flags WHERE id = $1 FOR UPDATE',
+      [params.flagId],
+    );
+    if (!flag) throw notFound('That referee risk flag');
+
+    await client.query(
+      `UPDATE referee_risk_flags
+          SET status = $2, resolution_note = $3, reviewed_by = $4, reviewed_at = now()
+        WHERE id = $1`,
+      [params.flagId, params.decision, params.note, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'referee.risk_flag_reviewed',
+      entityType: 'referee_risk_flag',
+      entityId: params.flagId,
+      oldValue: { status: flag.status },
+      newValue: { status: params.decision },
+      reason: params.note,
+    });
+
+    const referee = await queryOne<{ status: string }>(
+      client,
+      'SELECT status FROM referees WHERE id = $1',
+      [flag.referee_id],
+    );
+
+    return { refereeId: flag.referee_id, refereeStatus: referee?.status ?? 'UNKNOWN' };
+  });
+}
+
 /** Officer decision on a referee under review (§13, §15). */
 export async function reviewReferee(params: {
   refereeId: string;
@@ -657,6 +757,29 @@ export async function reviewReferee(params: {
       [params.refereeId],
     );
     if (!referee) throw notFound('That referee');
+
+    /*
+     * An upheld risk flag has to be dealt with before the referee it is about
+     * can be cleared.
+     *
+     * Otherwise confirming a flag is a note in a file: one officer upholds
+     * "this person has vouched for nine applicants" and another clears the
+     * referee that afternoon without ever seeing it. Dismissing the flag is
+     * still open — that is the officer saying, on the record and with a
+     * reason, that the pattern does not disqualify this referee — and only
+     * then does the clearance go through.
+     */
+    if (params.decision === 'CLEAR') {
+      const upheld = await upheldRiskFlag(client, params.refereeId);
+      if (upheld) {
+        throw conflict(
+          'REFEREE_RISK_FLAG_UPHELD',
+          `A risk flag against this referee has been upheld (${ruleInWords(upheld)}), ` +
+            'so they cannot be cleared while it stands.',
+          'Dismiss the flag with your findings if it does not disqualify them, then clear the referee.',
+        );
+      }
+    }
 
     await client.query(
       `UPDATE referees

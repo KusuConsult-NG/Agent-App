@@ -71,7 +71,7 @@ beforeEach(async () => {
 });
 
 /** A complete collection: registration, assessment, payment, verification. */
-async function collect(suffix: string) {
+async function collect(suffix: string, extra: Record<string, unknown> = {}) {
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
     '/taxpayers',
@@ -84,6 +84,7 @@ async function collect(suffix: string) {
       lgaId: await firstLgaId(),
       consentGiven: true,
       declarationAccepted: true,
+      ...extra,
     },
     { ...auth, idempotencyKey: `tp-${suffix}` },
   );
@@ -215,5 +216,51 @@ describe('an amount a citizen is shown', () => {
       [],
       'only a variable named "amount" is converted from kobo to naira; these would print kobo',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('a taxpayer who gave an email address', () => {
+  /**
+   * The catalogue of templates has carried an email confirmation for a
+   * successful payment from the beginning, and no notification in any run of
+   * this suite had ever been queued on the email channel — because no taxpayer
+   * the suite registered had ever given an address. So the branch that picks
+   * the email recipient rather than the phone, and the subject line that only
+   * the email template has, had never once run.
+   *
+   * It matters more than a channel count. An SMS carries a receipt number; the
+   * email is the only message that carries the whole confirmation, and it is
+   * what a trader forwards to whoever keeps their books.
+   */
+  it('is sent the confirmation by email as well as by text', async () => {
+    await collect('40', { email: 'ledger.keeper@example.com' });
+
+    const queued = await query<{ channel: string; recipient: string; subject: string | null }>(
+      pool,
+      `SELECT channel, recipient, subject FROM notifications
+        WHERE event = 'PAYMENT_SUCCESSFUL' ORDER BY channel`,
+    );
+    const channels = queued.map((row) => row.channel);
+    assert.ok(channels.includes('EMAIL'), `only ${JSON.stringify(channels)} were queued`);
+    assert.ok(channels.includes('SMS'), 'the text message still goes; the email does not replace it');
+
+    const email = queued.find((row) => row.channel === 'EMAIL')!;
+    assert.equal(email.recipient, 'ledger.keeper@example.com', 'to the address, not the phone');
+    assert.ok(email.subject, 'an email has a subject line and an SMS does not');
+    assert.match(email.subject!, /receipt/i);
+  });
+
+  it('gets the text message alone when there is no address to send to', async () => {
+    await collect('41');
+
+    const channels = (
+      await query<{ channel: string }>(
+        pool,
+        `SELECT channel FROM notifications WHERE event = 'PAYMENT_SUCCESSFUL'`,
+      )
+    ).map((row) => row.channel);
+    assert.deepEqual(channels, ['SMS'], 'no empty email is queued against a missing address');
   });
 });

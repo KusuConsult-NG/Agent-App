@@ -637,16 +637,32 @@ export async function completeTrainingModule(params: {
   score?: number;
   actorId: string;
 }): Promise<{ status: string; trainingCompleted: boolean }> {
-  return withTransaction(async (client) => {
-    const module = await queryOne<{ id: string; assessed: boolean; pass_mark: number; title: string }>(
-      client,
-      `SELECT id, assessed, pass_mark, title FROM training_modules
-        WHERE code = $1 AND status = 'ACTIVE'`,
-      [params.moduleCode],
-    );
-    if (!module) throw notFound('That training module');
+  const module = await queryOne<{ id: string; assessed: boolean; pass_mark: number; title: string }>(
+    pool,
+    `SELECT id, assessed, pass_mark, title FROM training_modules
+      WHERE code = $1 AND status = 'ACTIVE'`,
+    [params.moduleCode],
+  );
+  if (!module) throw notFound('That training module');
 
-    if (module.assessed && (params.score === undefined || params.score < module.pass_mark)) {
+  /*
+   * A failed attempt is recorded, and then the applicant is told.
+   *
+   * Both halves used to sit inside one transaction: the FAILED row was
+   * written and `badRequest` was thrown immediately after it, so the throw
+   * rolled the row straight back out again. Nothing was ever recorded. The
+   * `attempts` counter this table keeps could not leave nought, and
+   * `refreshClearance` derives `agents.training_status` from the presence of
+   * any progress row — so an applicant who had sat an assessed module three
+   * times and failed it three times appeared on the officer's list as one who
+   * had never opened it. That is the applicant most worth seeing.
+   *
+   * So the attempt is committed in a transaction of its own, and the refusal
+   * is raised afterwards, outside it, where it can no longer undo the record
+   * of what happened.
+   */
+  if (module.assessed && (params.score === undefined || params.score < module.pass_mark)) {
+    await withTransaction(async (client) => {
       await client.query(
         `INSERT INTO agent_training_progress (agent_id, module_id, status, score, attempts, started_at)
          VALUES ($1,$2,'FAILED',$3,1,now())
@@ -654,12 +670,16 @@ export async function completeTrainingModule(params: {
            SET status = 'FAILED', score = EXCLUDED.score, attempts = agent_training_progress.attempts + 1`,
         [params.agentId, module.id, params.score ?? null],
       );
-      throw badRequest(
-        `You scored ${params.score ?? 0}% on "${module.title}". ` +
-          `You need at least ${module.pass_mark}% to pass. Review the module and try again.`,
-      );
-    }
+      await refreshClearance(client, params.agentId);
+    });
 
+    throw badRequest(
+      `You scored ${params.score ?? 0}% on "${module.title}". ` +
+        `You need at least ${module.pass_mark}% to pass. Review the module and try again.`,
+    );
+  }
+
+  return withTransaction(async (client) => {
     await client.query(
       `INSERT INTO agent_training_progress
          (agent_id, module_id, status, score, attempts, started_at, completed_at)
@@ -1570,7 +1590,20 @@ export async function kycDashboard(db: Db, filters: { lgaId?: string; reviewerId
     db,
     `SELECT
        count(*) FILTER (WHERE a.application_submitted_at IS NOT NULL)::text AS applications_received,
-       count(*) FILTER (WHERE a.kyc_status IN ('NOT_STARTED','SUBMITTED','UNDER_REVIEW'))::text AS kyc_pending,
+       /*
+        * VERIFICATION_REQUIRED belongs here, and was in none of these three.
+        *
+        * It is the outcome that says the provider needs something more from
+        * the applicant — a clearer photograph of the document, usually — and
+        * it was left out of pending, cleared and failed alike. So an applicant
+        * waiting to be chased was counted nowhere on the officer's dashboard,
+        * and the three figures did not add up to the applications received.
+        * It gets a count of its own as well, because "waiting on us" and
+        * "waiting on them" are different queues of work.
+        */
+       count(*) FILTER (WHERE a.kyc_status IN
+         ('NOT_STARTED','SUBMITTED','UNDER_REVIEW','VERIFICATION_REQUIRED'))::text AS kyc_pending,
+       count(*) FILTER (WHERE a.kyc_status = 'VERIFICATION_REQUIRED')::text AS kyc_action_required,
        count(*) FILTER (WHERE a.kyc_status = 'CLEARED')::text AS kyc_cleared,
        count(*) FILTER (WHERE a.kyc_status = 'FAILED')::text AS kyc_failed,
        count(*) FILTER (WHERE a.referee_status = 'PENDING')::text AS referee_pending,

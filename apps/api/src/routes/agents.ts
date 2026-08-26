@@ -918,6 +918,35 @@ agentRouter.post(
   }),
 );
 
+/**
+ * Triage of a referee risk flag.
+ *
+ * `fraud:manage` rather than `agent:approve`: this is the same act as
+ * reviewing a fraud flag and belongs to the same people, and it deliberately
+ * is not the officer who clears referees — upholding a flag and clearing the
+ * referee it is about should not be one person's afternoon.
+ */
+agentRouter.post(
+  '/referees/flags/:id/review',
+  requirePermission('fraud:manage'),
+  validateBody(
+    z.object({
+      decision: z.enum(['UNDER_REVIEW', 'CONFIRMED', 'DISMISSED']),
+      note: z.string().min(10, 'Record what was found'),
+    }),
+    async (req, res, data) => {
+      const result = await referees.reviewRefereeRiskFlag({
+        flagId: req.params.id,
+        decision: data.decision,
+        note: data.note,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({ reviewed: true, ...result });
+    },
+  ),
+);
+
 agentRouter.post(
   '/referees/:refereeId/review',
   requirePermission('agent:approve', 'agent:manage'),

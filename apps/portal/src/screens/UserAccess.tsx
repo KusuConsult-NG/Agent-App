@@ -46,6 +46,8 @@ const ASSIGNABLE = ['admin', 'supervisor', 'revenue_officer', 'finance_officer',
 
 const readable = (role: string) => role.replace(/_/g, ' ');
 
+type AccountStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+
 interface Territory {
   id: string;
   name: string;
@@ -78,6 +80,9 @@ export function UserAccessScreen({ user }: { user: User }) {
   } | null>(null);
   const [chosenTerritories, setChosenTerritories] = useState<string[]>([]);
   const [coverageReason, setCoverageReason] = useState('');
+  const [closing, setClosing] = useState<PortalUser | null>(null);
+  const [chosenStatus, setChosenStatus] = useState<AccountStatus>('SUSPENDED');
+  const [statusReason, setStatusReason] = useState('');
 
   const load = useCallback(() => {
     api
@@ -120,6 +125,39 @@ export function UserAccessScreen({ user }: { user: User }) {
       setEditing(null);
       setChosenRole('');
       setReason('');
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      else if (caught instanceof Error) {
+        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Closing an account, which is the half a role change could never cover.
+   *
+   * Every role can still sign in, so moving a departed officer to auditor left
+   * them reading taxpayer records for as long as they kept the password. This
+   * is the control that stops the sign-in itself, and it asks for the same
+   * fresh code a role change does.
+   */
+  async function submitStatus() {
+    if (!closing || statusReason.trim().length < 10) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await stepUp('user.role.change', user.phone);
+      const result = await api.post<{ message: string }>(
+        `/government/users/${closing.id}/status`,
+        { status: chosenStatus, reason: statusReason.trim() },
+      );
+      setMessage(result.message);
+      setClosing(null);
+      setStatusReason('');
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -241,6 +279,74 @@ export function UserAccessScreen({ user }: { user: User }) {
                 setEditing(null);
                 setChosenRole('');
                 setReason('');
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {closing && (
+        <div className="card">
+          <h2 className="card__title">Account — {closing.full_name}</h2>
+          <p className="card__hint">
+            Suspending or closing an account signs the officer out everywhere and stops them
+            signing in again. Suspension is a pause pending an answer; closing is the end of the
+            appointment and cannot be undone — create a new account if they return.
+          </p>
+
+          <div className="field">
+            <label htmlFor="new-status">New account status</label>
+            <select
+              id="new-status"
+              value={chosenStatus}
+              onChange={(event) => setChosenStatus(event.target.value as AccountStatus)}
+            >
+              <option value="SUSPENDED">Suspended — pending an enquiry</option>
+              <option value="CLOSED">Closed — they have left the service</option>
+              <option value="ACTIVE">Active — lift a suspension</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="status-reason">Why this is changing</label>
+            <textarea
+              id="status-reason"
+              value={statusReason}
+              rows={3}
+              onChange={(event) => setStatusReason(event.target.value)}
+              placeholder="Left the service at the end of the quarter."
+            />
+          </div>
+
+          {chosenStatus === 'CLOSED' && (
+            <Alert kind="warning" title="This cannot be undone">
+              <p style={{ margin: 0 }}>
+                A closed account can never be reopened. If {closing.full_name} returns to the
+                service they will need a new account.
+              </p>
+            </Alert>
+          )}
+
+          <div className="button-row">
+            <button
+              type="button"
+              disabled={busy || statusReason.trim().length < 10}
+              onClick={submitStatus}
+            >
+              {busy
+                ? 'Saving…'
+                : chosenStatus === 'ACTIVE'
+                  ? 'Let them sign in again'
+                  : 'Sign them out and stop the account'}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setClosing(null);
+                setStatusReason('');
               }}
             >
               Cancel
@@ -383,6 +489,20 @@ export function UserAccessScreen({ user }: { user: User }) {
                         onClick={() => openCoverage(row as PortalUser)}
                       >
                         Territories
+                      </button>
+                    )}{' '}
+                    {row.status !== 'CLOSED' && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => {
+                          setClosing(row as PortalUser);
+                          setChosenStatus(row.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED');
+                          setStatusReason('');
+                          setMessage(null);
+                        }}
+                      >
+                        Account
                       </button>
                     )}
                   </>
