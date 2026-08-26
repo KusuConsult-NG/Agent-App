@@ -28,11 +28,33 @@ import * as support from '../services/support';
 import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
 import { integrationStatus } from '../integrations';
+import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
 
 export const governmentRouter = Router();
 
 governmentRouter.use(authenticate);
+
+// ---------------------------------------------------------------------------
+// Whether the unattended work is running
+// ---------------------------------------------------------------------------
+
+/**
+ * The state of every background job, whether or not it has ever run.
+ *
+ * `audit:read` rather than `system:configure`. Fixing a stopped sweep is an
+ * administrator's job, but whether the reconciliation control actually operated
+ * is an audit fact — an auditor who cannot see it is being asked to take the
+ * platform's word for the one thing they are there to check. The four roles
+ * that hold the permission are the four that have a reason to ask.
+ */
+governmentRouter.get(
+  '/workers',
+  requirePermission('audit:read'),
+  asyncHandler(async (_req, res) => {
+    res.json(await jobHealth());
+  }),
+);
 
 // ---------------------------------------------------------------------------
 // Dashboards and intelligence

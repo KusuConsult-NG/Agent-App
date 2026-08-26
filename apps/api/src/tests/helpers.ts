@@ -24,6 +24,15 @@ let baseUrl = '';
 
 /** Tables holding transactional state, cleared between suites. */
 const TRANSACTIONAL_TABLES = [
+  /*
+   * Operational state, not reference data.
+   *
+   * One row per background job, written by whichever instance ran it. A row
+   * left behind makes the next file's health assertions read a run from
+   * somebody else's test — and because the shard databases outlive a run, it
+   * would read one from yesterday.
+   */
+  'background_jobs',
   'document_access_logs',
   'verification_attempts',
   'reconciliation_records',

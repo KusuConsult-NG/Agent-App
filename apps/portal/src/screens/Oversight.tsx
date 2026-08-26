@@ -355,6 +355,107 @@ const AUDIT_QUERIES: AuditQuery[] = [
   },
 ];
 
+/**
+ * Whether the unattended work is actually running.
+ *
+ * Nine jobs run on timers with nobody watching them, and until this existed
+ * eight of them left no trace at all — a sweep that ran and found nothing to do
+ * wrote exactly as many rows as a sweep that never ran. That absence is the
+ * thing this panel exists to remove, so it is deliberately loudest about the
+ * states that have no other evidence anywhere: a job that has never run once,
+ * and a job whose timer has stopped. Both look like silence everywhere else in
+ * the platform.
+ *
+ * It sits on the audit screen rather than a settings page because whether the
+ * reconciliation sweep operated is an audit fact — the auditor checking that
+ * the State's money was proved against the gateway statement should not have to
+ * take the platform's word for it that the check ran.
+ */
+interface JobReport {
+  name: string;
+  purpose: string;
+  intervalMs: number;
+  state: 'NEVER_RUN' | 'HEALTHY' | 'RUNNING' | 'OVERDUE' | 'FAILING' | 'STALLED';
+  lastStartedAt: string | null;
+  lastSucceededAt: string | null;
+  lastDetail: string | null;
+  consecutiveFailures: number;
+  runsTotal: number;
+  failuresTotal: number;
+  message: string;
+}
+
+/** Every-30-seconds and every-6-hours both have to read at a glance. */
+function readInterval(ms: number): string {
+  if (ms < 60_000) return `every ${Math.round(ms / 1000)}s`;
+  if (ms < 60 * 60_000) return `every ${Math.round(ms / 60_000)} min`;
+  return `every ${Math.round(ms / (60 * 60_000))} h`;
+}
+
+export function BackgroundWorkPanel() {
+  const [health, setHealth] = useState<{
+    jobs: JobReport[];
+    healthy: boolean;
+    needingAttention: number;
+  } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    api
+      .get<{ jobs: JobReport[]; healthy: boolean; needingAttention: number }>('/government/workers')
+      .then(setHealth)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, []);
+
+  if (error) return <ErrorAlert error={error} />;
+  if (!health) return <Loading rows={3} />;
+
+  return (
+    <div className="card">
+      <h2 className="card__title">Unattended work</h2>
+      <p className="card__hint">
+        {health.healthy
+          ? 'Every scheduled job has run recently and succeeded.'
+          : `${health.needingAttention} of ${health.jobs.length} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.`}
+      </p>
+      <Table
+        columns={[
+          {
+            key: 'name',
+            label: 'Job',
+            render: (row: JobReport) => (
+              <>
+                <strong>{row.name.replace(/-/g, ' ')}</strong>
+                <br />
+                <span className="table__sub">{row.purpose}</span>
+              </>
+            ),
+          },
+          { key: 'intervalMs', label: 'Runs', render: (row: JobReport) => readInterval(row.intervalMs) },
+          {
+            key: 'state',
+            label: 'State',
+            render: (row: JobReport) => <Badge status={row.state} />,
+          },
+          {
+            key: 'lastSucceededAt',
+            // Not "last run". A job throwing since Tuesday has a recent run and
+            // no recent success, and that is the distinction worth a column.
+            label: 'Last succeeded',
+            render: (row: JobReport) =>
+              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : 'Never',
+          },
+          { key: 'message', label: 'What that means' },
+        ]}
+        rows={health.jobs}
+        empty="No background jobs are declared."
+      />
+    </div>
+  );
+}
+
 export function AuditScreen() {
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -430,6 +531,8 @@ export function AuditScreen() {
           </Alert>
         )}
       </div>
+
+      <BackgroundWorkPanel />
 
       <div className="card">
         <h2 className="card__title">Standard audit questions</h2>
