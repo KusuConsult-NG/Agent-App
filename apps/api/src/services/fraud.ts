@@ -15,6 +15,7 @@ import type { PoolClient } from 'pg';
 import type { FraudRule, FraudSeverity } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
+import { log } from '../lib/logger';
 
 interface FlagInput {
   rule: FraudRule | 'AMOUNT_MISMATCH';
@@ -26,17 +27,82 @@ interface FlagInput {
   detail: Record<string, unknown>;
 }
 
-async function raiseFlag(client: PoolClient, input: FlagInput): Promise<void> {
+/**
+ * How long an officer's decision covers.
+ *
+ * A flag asks for a human decision, and the sweep that raises it runs every
+ * fifteen minutes. Declining to duplicate a flag that is still OPEN was not
+ * enough: a flag that had been *decided* did not count, so an officer who
+ * investigated a signal, found the explanation and dismissed it — releasing
+ * the agent's frozen commission — was overruled minutes later by the same rule
+ * reading the same unchanged evidence. The agent's money froze again, a fresh
+ * flag appeared looking like a new detection, and the only way to make the
+ * decision hold was to keep making it.
+ *
+ * So a decision covers the window of evidence it was made about. While the
+ * rule is still looking at what the officer looked at, the answer is the one
+ * they gave; once the window has rolled past, what the rule sees is new and
+ * worth asking about again. A dismissal silences a signal for a stated period,
+ * never for good.
+ *
+ * The windows are each rule's own, with one exception. RAPID_SUCCESSION reads
+ * twenty seconds, and a decision that expires before the officer has closed
+ * the page is not a decision; what they are judging is the agent's burst
+ * pattern over the shift, so it takes the hour that the other velocity rules
+ * do. The two standing conditions — several taxpayers on one phone, duplicate
+ * details — are not windows at all but facts about a register that a human has
+ * looked at and accepted, and they hold until there is reason to look again.
+ *
+ * Typed against the full rule set so that a rule added without a window fails
+ * to compile rather than quietly inheriting somebody else's.
+ */
+const DECISION_HOLDS: Record<FraudRule | 'AMOUNT_MISMATCH', string> = {
+  DEVICE_VELOCITY: '1 hour',
+  UNUSUAL_VOLUME: '1 hour',
+  RAPID_SUCCESSION: '1 hour',
+  REPEATED_FAILED_PAYMENTS: '1 hour',
+  OUT_OF_TERRITORY: '1 hour',
+  REVERSAL_PATTERN: '30 days',
+  COMMISSION_ANOMALY: '30 days',
+  AMOUNT_MISMATCH: '30 days',
+  SHARED_PHONE_NUMBER: '90 days',
+  DUPLICATE_TAXPAYER_DETAILS: '90 days',
+};
+
+type RaiseOutcome = 'RAISED' | 'ALREADY_OPEN' | 'ALREADY_DECIDED';
+
+export async function raiseFlag(client: PoolClient, input: FlagInput): Promise<RaiseOutcome> {
   // Re-raising an identical open flag adds noise without adding information,
-  // so an existing open flag for the same rule and entity is left alone.
-  const existing = await queryOne<{ id: string }>(
+  // so an existing open flag for the same rule and entity is left alone — and
+  // so is one an officer has already decided about this same evidence.
+  const existing = await queryOne<{ id: string; status: string; decided: boolean }>(
     client,
-    `SELECT id FROM fraud_flags
+    `SELECT id, status, (status NOT IN ('OPEN', 'UNDER_REVIEW')) AS decided
+       FROM fraud_flags
       WHERE rule = $1 AND entity_type = $2 AND entity_id = $3
-        AND status IN ('OPEN', 'UNDER_REVIEW')`,
-    [input.rule, input.entityType, input.entityId],
+        AND (
+          status IN ('OPEN', 'UNDER_REVIEW')
+          OR (reviewed_at IS NOT NULL AND reviewed_at > now() - $4::interval)
+        )
+      ORDER BY created_at DESC LIMIT 1`,
+    [input.rule, input.entityType, input.entityId, DECISION_HOLDS[input.rule]],
   );
-  if (existing) return;
+
+  if (existing?.decided) {
+    // Said out loud, because a rule that fires and leaves no flag is otherwise
+    // indistinguishable from a rule that never fired.
+    log.info('fraud signal deferred to an existing decision', {
+      component: 'fraud',
+      rule: input.rule,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      flagId: existing.id,
+      decision: existing.status,
+      holdsFor: DECISION_HOLDS[input.rule],
+    });
+    return 'ALREADY_DECIDED';
+  }
+  if (existing) return 'ALREADY_OPEN';
 
   await client.query(
     `INSERT INTO fraud_flags
@@ -52,6 +118,7 @@ async function raiseFlag(client: PoolClient, input: FlagInput): Promise<void> {
       JSON.stringify(input.detail),
     ],
   );
+  return 'RAISED';
 }
 
 /** Thresholds, kept together so government can tune them in one place. */

@@ -46,7 +46,7 @@ import { accrueCommission } from './commission';
 import { issueReceipt } from './receipts';
 import { completeRenewal } from './vehicles';
 import { transitionTransaction } from './revenue';
-import { evaluateTransactionRisk } from './fraud';
+import { evaluateTransactionRisk, raiseFlag } from './fraud';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { metrics } from '../lib/metrics';
@@ -426,7 +426,22 @@ async function verifyAndRecord(params: {
       ? await gateway.verify(preRead.gateway_reference)
       : null;
 
-  return withTransaction(
+  /*
+   * A refusal still has to be recorded.
+   *
+   * The amount-mismatch branch below writes three things — the transaction
+   * goes UNDER_REVIEW, a CRITICAL fraud flag is raised against it, and the
+   * discrepancy goes on the audit trail — and then refused the caller by
+   * throwing. The throw rolled all three back. What survived was the metric
+   * and the alert, neither of which is a record: the agent was told the
+   * transaction had been placed under review when it had not, the flag queue
+   * an officer works from stayed empty, and the one anomaly this platform
+   * treats as urgent left less behind than an ordinary failed payment.
+   *
+   * So the transaction decides and writes, and hands back what it decided; the
+   * refusal is raised afterwards, once the evidence has committed.
+   */
+  const outcome = await withTransaction<ConfirmationResult | AmountMismatch>(
     async (client) => {
       const payment = await queryOne<{
         id: string;
@@ -549,37 +564,47 @@ async function verifyAndRecord(params: {
       // ₦100,000 assessment.
       const expected = parseKobo(payment.amount_kobo);
       if (verification.amountKobo === null || verification.amountKobo !== expected) {
-        await transitionTransaction(client, {
+        /*
+         * Only if it is not already there.
+         *
+         * The refusal tells the agent not to collect payment again; it does
+         * not stop them, or support, pressing Confirm again. The second press
+         * came back through here, tried to move an UNDER_REVIEW transaction to
+         * UNDER_REVIEW, and answered with "Transaction cannot move from
+         * UNDER_REVIEW to UNDER_REVIEW" — a sentence about our state machine
+         * in place of the one fact that matters, which is that the gateway
+         * named a different amount and no receipt exists.
+         */
+        if (payment.transaction_status !== 'UNDER_REVIEW') {
+          await transitionTransaction(client, {
+            transactionId: payment.transaction_id,
+            to: 'UNDER_REVIEW',
+            reason: `Gateway amount ${verification.amountKobo ?? 'unknown'} does not match expected ${expected}`,
+            actorId: params.actorId ?? null,
+            source: 'SYSTEM',
+          });
+        }
+        /*
+         * Raised the same way every other flag is.
+         *
+         * This one was inserted straight into the table, which was invisible
+         * while the insert was being rolled back anyway. Committing it makes
+         * the difference matter: a second Confirm on the same refused payment
+         * — which the agent is told not to make, and support will make anyway
+         * — would file a second identical CRITICAL flag. `raiseFlag` is where
+         * the platform decides whether a signal is new, and there is no reason
+         * for the most serious one to be the exception.
+         */
+        await raiseFlag(client, {
+          rule: 'AMOUNT_MISMATCH',
+          severity: 'CRITICAL',
+          entityType: 'TRANSACTION',
+          entityId: payment.transaction_id,
           transactionId: payment.transaction_id,
-          to: 'UNDER_REVIEW',
-          reason: `Gateway amount ${verification.amountKobo ?? 'unknown'} does not match expected ${expected}`,
-          actorId: params.actorId ?? null,
-          source: 'SYSTEM',
-        });
-        await client.query(
-          `INSERT INTO fraud_flags (rule, severity, entity_type, entity_id, transaction_id, detail)
-           VALUES ('AMOUNT_MISMATCH','CRITICAL','TRANSACTION',$1,$1,$2)`,
-          [
-            payment.transaction_id,
-            JSON.stringify({
-              expectedKobo: expected.toString(),
-              gatewayKobo: verification.amountKobo?.toString() ?? null,
-              gatewayReference: payment.gateway_reference,
-            }),
-          ],
-        );
-        metrics.amountMismatch();
-        metrics.paymentConfirmed('FAILED', params.source);
-        // A gateway confirming a different amount than the invoice is either a
-        // gateway fault or an attack. Either way a person needs to look today.
-        reportError({
-          message: 'Gateway confirmed a payment for an amount that does not match the invoice',
-          severity: 'error',
-          component: 'payments',
-          context: {
-            transactionReference: payment.transaction_reference,
+          detail: {
             expectedKobo: expected.toString(),
             gatewayKobo: verification.amountKobo?.toString() ?? null,
+            gatewayReference: payment.gateway_reference,
           },
         });
 
@@ -596,16 +621,12 @@ async function verifyAndRecord(params: {
           },
         });
 
-        throw new AppError({
-          statusCode: 409,
-          code: 'PAYMENT_AMOUNT_MISMATCH',
-          message:
-            'The amount confirmed by the payment gateway does not match this invoice. ' +
-            'The transaction has been placed under review and no receipt has been issued. ' +
-            'Do not collect payment again.',
-          moneyStatus: 'UNCONFIRMED',
-          reference: payment.transaction_reference,
-        });
+        return {
+          amountMismatch: true,
+          transactionReference: payment.transaction_reference,
+          expectedKobo: expected.toString(),
+          gatewayKobo: verification.amountKobo?.toString() ?? null,
+        };
       }
 
       // ---- Confirmed: advance the money states ----------------------------
@@ -761,6 +782,44 @@ async function verifyAndRecord(params: {
      */
     { isolationLevel: 'READ COMMITTED', retryOnConflict: true },
   );
+
+  if ('amountMismatch' in outcome) {
+    metrics.amountMismatch();
+    metrics.paymentConfirmed('FAILED', params.source);
+    // A gateway confirming a different amount than the invoice is either a
+    // gateway fault or an attack. Either way a person needs to look today.
+    reportError({
+      message: 'Gateway confirmed a payment for an amount that does not match the invoice',
+      severity: 'error',
+      component: 'payments',
+      context: {
+        transactionReference: outcome.transactionReference,
+        expectedKobo: outcome.expectedKobo,
+        gatewayKobo: outcome.gatewayKobo,
+      },
+    });
+
+    throw new AppError({
+      statusCode: 409,
+      code: 'PAYMENT_AMOUNT_MISMATCH',
+      message:
+        'The amount confirmed by the payment gateway does not match this invoice. ' +
+        'The transaction has been placed under review and no receipt has been issued. ' +
+        'Do not collect payment again.',
+      moneyStatus: 'UNCONFIRMED',
+      reference: outcome.transactionReference,
+    });
+  }
+
+  return outcome;
+}
+
+/** What the transaction hands back when the gateway named a different amount. */
+interface AmountMismatch {
+  amountMismatch: true;
+  transactionReference: string;
+  expectedKobo: string;
+  gatewayKobo: string | null;
 }
 
 async function taxpayerIdFor(client: PoolClient, transactionId: string): Promise<string> {
