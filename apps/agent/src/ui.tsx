@@ -2,7 +2,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { formatNaira } from '@psirs/shared';
+import { formatNaira, statusSeverity } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 
 export function Money({ kobo, className }: { kobo: string | bigint | null | undefined; className?: string }) {
@@ -146,23 +146,16 @@ export function Field({
 }
 
 export function Badge({ status }: { status: string }) {
-  const normalised = status.toUpperCase();
-  const kind =
-    ['CLEARED', 'ACTIVE', 'COMPLETED', 'PAID', 'VALID', 'SETTLED', 'VERIFIED', 'APPROVED', 'SYNCED'].some(
-      (value) => normalised.includes(value),
-    )
-      ? 'success'
-      : ['FAILED', 'REJECTED', 'REVERSED', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'CANCELLED'].some((value) =>
-            normalised.includes(value),
-          )
-        ? 'danger'
-        : ['PENDING', 'REVIEW', 'SUBMITTED', 'INVITED', 'PROGRESS', 'AWAITING'].some((value) =>
-              normalised.includes(value),
-            )
-          ? 'pending'
-          : 'neutral';
-
-  return <span className={`badge badge--${kind}`}>{status.replace(/_/g, ' ')}</span>;
+  /*
+   * The classification is in @psirs/shared, and it used to be here.
+   *
+   * This app and the portal each carried their own copy of the same fifteen
+   * lines, and both had the same bug: they asked whether the status
+   * *contained* a good-news word, so INACTIVE contained ACTIVE and an UNPAID
+   * invoice was rendered in the colour of a paid one — on the handset of the
+   * person collecting the money.
+   */
+  return <span className={`badge badge--${statusSeverity(status)}`}>{status.replace(/_/g, ' ')}</span>;
 }
 
 export function Spinner() {

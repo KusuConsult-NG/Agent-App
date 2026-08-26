@@ -1,7 +1,7 @@
 /** Shared presentation components for the government portal. */
 
 import type { ReactNode } from 'react';
-import { formatNaira } from '@psirs/shared';
+import { formatNaira, statusSeverity } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 
 export function Money({ kobo }: { kobo: string | number | bigint | null | undefined }) {
@@ -35,23 +35,11 @@ export function Stat({
 
 export function Badge({ status }: { status: string | null | undefined }) {
   if (!status) return <>—</>;
-  const value = status.toUpperCase();
-  const kind = [
-    'CLEARED', 'ACTIVE', 'COMPLETED', 'PAID', 'VALID', 'SETTLED', 'VERIFIED',
-    'APPROVED', 'MATCHED', 'RESOLVED', 'SUCCESS',
-  ].some((token) => value.includes(token))
-    ? 'success'
-    : ['FAILED', 'REJECTED', 'REVERSED', 'SUSPENDED', 'REVOKED', 'EXPIRED', 'CANCELLED',
-       'MISSING', 'MISMATCH', 'DUPLICATE', 'DISPUTED', 'CRITICAL', 'HIGH'].some((token) =>
-        value.includes(token),
-      )
-      ? 'danger'
-      : ['PENDING', 'REVIEW', 'SUBMITTED', 'INVITED', 'PROGRESS', 'REQUESTED', 'OPEN',
-         'MEDIUM', 'AWAITING'].some((token) => value.includes(token))
-        ? 'pending'
-        : 'neutral';
-
-  return <span className={`badge badge--${kind}`}>{status.replace(/_/g, ' ')}</span>;
+  // `statusSeverity` lives in @psirs/shared because both front ends had their
+  // own copy of it and both had the same bug: INACTIVE contains ACTIVE.
+  return (
+    <span className={`badge badge--${statusSeverity(status)}`}>{status.replace(/_/g, ' ')}</span>
+  );
 }
 
 export function Alert({

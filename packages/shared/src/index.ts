@@ -1,6 +1,7 @@
 export * from './money';
 export * from './rbac';
 export * from './state';
+export * from './severity';
 export * from './reference';
 export * from './identity';
 export * from './agent-lifecycle';
