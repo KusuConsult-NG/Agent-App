@@ -19,8 +19,40 @@ import { pool, queryOne } from '../db/pool';
 import { rateLimit } from '../middleware/security';
 import { validateQuery } from '../middleware/validate';
 import { syncTaxpayerComplianceAndIncentives } from '../services/incentives';
+import { logVerificationAttempt } from '../services/receipts';
 
 export const citizenRouter = Router();
+
+/**
+ * Record that somebody asked, and what they got.
+ *
+ * This endpoint answers, without a login, what a named person owes. The rate
+ * limit stops it being hammered from one address; it does not leave anything
+ * behind, so a patient enumeration across addresses was invisible. Receipt
+ * verification has always recorded every attempt including the misses, for
+ * exactly this reason, and a TIN is far more guessable than a receipt number.
+ *
+ * The value is hashed rather than stored. Repetition stays visible — the same
+ * TIN probed two hundred times is two hundred identical hashes — and the log
+ * does not become somewhere a taxpayer's phone number sits in the clear.
+ *
+ * A failure to write the log must never fail the citizen's lookup: this is
+ * evidence, not a control, and refusing to tell somebody what they owe because
+ * an audit insert failed would be the wrong trade.
+ */
+async function recordLookup(
+  ipAddress: string | null | undefined,
+  value: string,
+  result: 'VALID' | 'NOT_FOUND',
+): Promise<void> {
+  await logVerificationAttempt(pool, {
+    lookupType: 'TAXPAYER',
+    lookupValue: value,
+    result,
+    ipAddress: ipAddress ?? null,
+    hashValue: true,
+  }).catch(() => undefined);
+}
 
 // Strict rate limit — 10 per minute per IP — to prevent TIN/phone enumeration.
 citizenRouter.use(rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'citizen-status', keyBy: 'ip' }));
@@ -33,7 +65,7 @@ const citizenQuerySchema = z.object({
 
 citizenRouter.get(
   '/',
-  validateQuery(citizenQuerySchema, async (_req, res, data) => {
+  validateQuery(citizenQuerySchema, async (req, res, data) => {
     const { tin, phone, name } = data;
 
     if (!tin && !phone && !name) {
@@ -57,6 +89,7 @@ citizenRouter.get(
         [`%${name}%`],
       );
       const count = Number.parseInt(result?.cnt ?? '0', 10);
+      await recordLookup(req.clientIp, name, count > 0 ? 'VALID' : 'NOT_FOUND');
       res.json({
         found: count > 0,
         count,
@@ -94,6 +127,7 @@ citizenRouter.get(
     }
 
     if (!taxpayer) {
+      await recordLookup(req.clientIp, (tin ?? phone)!, 'NOT_FOUND');
       res.json({
         found: false,
         message: tin
@@ -102,6 +136,8 @@ citizenRouter.get(
       });
       return;
     }
+
+    await recordLookup(req.clientIp, (tin ?? phone)!, 'VALID');
 
     // Refresh compliance score and active incentive programme eligibility live.
     await syncTaxpayerComplianceAndIncentives(pool, taxpayer.id);

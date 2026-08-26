@@ -138,8 +138,24 @@ export async function upsertVehicle(params: {
 }): Promise<VehicleCaptureResult> {
   const normalised = params.input.registrationNumber.trim().toUpperCase().replace(/\s+/g, '');
 
+  /*
+   * Asked before the transaction opens, not inside it.
+   *
+   * This call used to be the first statement in the transaction below, which
+   * meant every capture held a pooled connection and an open transaction for
+   * as long as the vehicle authority took to answer — up to the registry
+   * timeout, on a service the platform does not control. Under a slow registry
+   * that is how a pool runs out of connections and a queue of agents in
+   * markets stops being able to do anything at all.
+   *
+   * Nothing in the transaction feeds this call, so it simply moves out. Where
+   * a call genuinely does depend on rows read inside a transaction, the fix is
+   * the one `attemptRefund` uses — commit, then call — and it is a larger
+   * change than moving a line.
+   */
+  const authority = await vehicleRegistry.lookup(normalised);
+
   return withTransaction(async (client) => {
-    const authority = await vehicleRegistry.lookup(normalised);
     const found = authority.outcome === 'FOUND';
     const record = authority.vehicle;
     const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';

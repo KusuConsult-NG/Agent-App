@@ -12,7 +12,7 @@ import type { PoolClient } from 'pg';
 import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { queryOne, query } from '../db/pool';
-import { generateVerificationCode, normaliseVerificationCode } from '../lib/crypto';
+import { generateVerificationCode, hashIdentityNumber, normaliseVerificationCode } from '../lib/crypto';
 import { nextReceiptNumber } from '../lib/references';
 import { notFound } from '../lib/errors';
 import { registerDocument, renderReceiptPdf, verifyDocumentIntegrity } from './documents';
@@ -349,16 +349,31 @@ export async function verifyPublicly(
 export async function logVerificationAttempt(
   db: Db,
   params: {
-    lookupType: 'RECEIPT' | 'DOCUMENT' | 'INVOICE';
+    lookupType: 'RECEIPT' | 'DOCUMENT' | 'INVOICE' | 'TAXPAYER';
     lookupValue: string;
     result: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
     ipAddress?: string | null;
+    /**
+     * Hash the value instead of storing it.
+     *
+     * A receipt number is not personal data. A TIN or a phone number is, and a
+     * log of who asked about whom would be a new place for it to sit. Hashing
+     * keeps the thing this log exists for — the same identifier probed over
+     * and over is still the same hash — and makes the log itself worthless to
+     * anybody who takes a copy.
+     */
+    hashValue?: boolean;
   },
 ): Promise<void> {
+  const value = params.hashValue
+    ? hashIdentityNumber(params.lookupValue.trim().toUpperCase())
+    : params.lookupValue.slice(0, 128);
+
   await query(
     db,
-    `INSERT INTO verification_attempts (lookup_type, lookup_value, result, ip_address)
-     VALUES ($1,$2,$3,$4)`,
-    [params.lookupType, params.lookupValue.slice(0, 128), params.result, params.ipAddress ?? null],
+    `INSERT INTO verification_attempts
+       (lookup_type, lookup_value, result, ip_address, lookup_value_hashed)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [params.lookupType, value, params.result, params.ipAddress ?? null, params.hashValue === true],
   );
 }

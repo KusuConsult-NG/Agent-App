@@ -95,6 +95,22 @@ export const config = {
         : 'postgres://postgres:postgres@localhost:5432/psirs'),
     poolSize: int('DB_POOL_SIZE', 10),
     statementTimeoutMs: int('DB_STATEMENT_TIMEOUT_MS', 15_000),
+
+    /**
+     * How long a transaction may sit open with nothing running.
+     *
+     * `statement_timeout` bounds a slow query. It does nothing about a
+     * transaction that is open while the application waits on somebody else —
+     * and several services still call an external provider mid-transaction, so
+     * the row locks they hold are released only when a third party answers.
+     * From PostgreSQL's side that session is idle, which is exactly what this
+     * timeout is for.
+     *
+     * Set above the longest provider timeout so no legitimate call is cut
+     * short, and far below "forever" so a provider that hangs cannot hold a
+     * pooled connection and a row lock until somebody notices.
+     */
+    idleInTransactionTimeoutMs: int('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', 60_000),
   },
 
   auth: {
@@ -350,6 +366,25 @@ export const config = {
     localPath: process.env.STORAGE_PATH ?? './storage',
     bucket: process.env.STORAGE_BUCKET ?? '',
     signedUrlTtlSeconds: int('SIGNED_URL_TTL_SECONDS', 900),
+
+    /**
+     * Which deployment owns the keys in the bucket.
+     *
+     * Document keys were `receipt/2026/PSIRS-RCT-2026-000123.pdf` and nothing
+     * more. Document numbers come from a sequence in *this* database, so a
+     * staging environment restored from a production backup — or simply
+     * pointed at the same bucket by a copied `.env` — issues the same numbers
+     * again and writes over the production receipt at that key. The row keeps
+     * its checksum, so the overwrite is not silent: public verification starts
+     * answering that a genuine receipt has been tampered with.
+     *
+     * Prefixing every key with the deployment name makes two environments
+     * sharing a bucket harmless. Set it per environment; the default keeps a
+     * developer's machine out of anybody else's prefix.
+     */
+    keyPrefix: (process.env.STORAGE_KEY_PREFIX ?? process.env.NODE_ENV ?? 'development')
+      .trim()
+      .replace(/^\/+|\/+$/g, ''),
 
     /**
      * S3-compatible object storage.

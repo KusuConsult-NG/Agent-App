@@ -1139,6 +1139,18 @@ export async function retryOutstandingRefunds(params: {
   return { attempted: due.length, completed, stillOutstanding: due.length - completed };
 }
 
+/**
+ * Who a reversal is attributable to.
+ *
+ * TAXPAYER is the only one that costs compliance points: the payment failed on
+ * their side after the fact — a chargeback, a bank recall, an instrument that
+ * did not clear. GOVERNMENT is PSIRS or its agent correcting its own error and
+ * GATEWAY is the payment infrastructure settling something it should not have;
+ * neither is the citizen's doing.
+ */
+const ATTRIBUTABLE = ['TAXPAYER', 'GOVERNMENT', 'GATEWAY'] as const;
+type Attributable = (typeof ATTRIBUTABLE)[number];
+
 async function recordReversal(params: {
   approvalId: string;
   actorId: string;

@@ -624,6 +624,53 @@ export function AgentDetailScreen({
             </>
           )}
 
+          {/*
+            * Moving a working agent to another territory.
+            *
+            * The selector above sets a territory at activation and there was
+            * nothing that could change it afterwards, so `agent:assign_territory`
+            * was a permission with no way to exercise it: an agent who moved
+            * markets stayed attributed to the one they left, and every
+            * collection they made went on the wrong LGA's figures. Historical
+            * attribution is not rewritten — transactions keep the territory
+            * they were collected under (PRD §74).
+            */}
+          {detail.canCollectRevenue && can('agent:assign_territory') && (
+            <div className="field">
+              <label htmlFor="reassign-territory">Move to another territory</label>
+              <select
+                id="reassign-territory"
+                value={territoryId}
+                onChange={(event) => setTerritoryId(event.target.value)}
+              >
+                <option value="">Select a territory</option>
+                {territories.map((territory) => (
+                  <option key={territory.id} value={territory.id}>
+                    {territory.name} ({territory.lga_name})
+                  </option>
+                ))}
+              </select>
+              <p className="field__hint">
+                Collections already made keep the territory they were collected under. This decides
+                where the next ones are attributed.
+              </p>
+              <button
+                type="button"
+                className="secondary"
+                disabled={busy || !territoryId}
+                onClick={() =>
+                  act(async () => {
+                    await api.post(`/agents/${agentId}/territory`, { territoryId });
+                    setTerritoryId('');
+                    return 'Territory reassigned. Future collections are attributed to it.';
+                  })
+                }
+              >
+                Reassign territory
+              </button>
+            </div>
+          )}
+
           {detail.canCollectRevenue && can('agent:suspend') && (
             <button
               type="button"

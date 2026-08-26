@@ -23,6 +23,10 @@ export const pool = new Pool({
   connectionString: config.database.url,
   max: config.database.poolSize,
   statement_timeout: config.database.statementTimeoutMs,
+  // A backstop, not a licence: several services still call an external
+  // provider with a transaction open, and this is what stops one that never
+  // answers from holding its row locks indefinitely.
+  idle_in_transaction_session_timeout: config.database.idleInTransactionTimeoutMs,
   application_name: 'psirs-revenue-platform',
 });
 

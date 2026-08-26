@@ -2104,10 +2104,10 @@ describe('A persisted refresh token is bound to its device', () => {
     });
     agentId = application.body.agentId;
 
-    // A device must exist and be approved for the session to bind to it.
+    // A device must exist and be active for the session to bind to it.
     await pool.query(
       `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
-       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+       VALUES ($1, $2, 'Test handset', 'ACTIVE', now())`,
       [agentId, device],
     );
 
@@ -2193,7 +2193,7 @@ describe('A session chain ends on a fixed date', () => {
     assert.equal(application.status, 201, JSON.stringify(application.body));
     await pool.query(
       `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
-       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+       VALUES ($1, $2, 'Test handset', 'ACTIVE', now())`,
       [application.body.agentId, device],
     );
 
