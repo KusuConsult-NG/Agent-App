@@ -35,6 +35,12 @@ describe('a badge in the colour of what happened', () => {
     expect(statusSeverity('UNPAID')).toBe('pending');
   });
 
+  it('does not call an invoice settled when half of it is still owed', () => {
+    // PARTIALLY_PAID contains PAID, so it read as settled — quieter than the
+    // four above, and the same overstatement: there is money still to collect.
+    expect(statusSeverity('PARTIALLY_PAID')).toBe('pending');
+  });
+
   it('still reads the words themselves as good news', () => {
     expect(statusSeverity('ACTIVE')).toBe('success');
     expect(statusSeverity('VALID')).toBe('success');
@@ -51,12 +57,14 @@ describe('a badge in the colour of what happened', () => {
    * The property, not the four instances.
    *
    * Someone adding a word to the good list should not have to remember that
-   * its negation exists somewhere in the schema. Every prefix here turns a
-   * word into its opposite, and none of them may produce the success colour.
+   * its negation exists somewhere in the schema. Every prefix here either
+   * reverses the word or qualifies it, and neither may produce the colour
+   * that means the whole thing went well.
    */
-  it('never colours a negation of a good word as success', () => {
+  it('never colours a negation or a part-measure of a good word as success', () => {
     for (const word of GOOD_STATUS_WORDS) {
-      for (const negated of [`UN${word}`, `IN${word}`, `NON_${word}`, `NOT_${word}`, `NO_${word}`]) {
+      for (const negated of [`UN${word}`, `IN${word}`, `NON_${word}`, `NOT_${word}`, `NO_${word}`,
+                             `PARTIALLY_${word}`]) {
         expect(statusSeverity(negated), `${negated} must not read as success`).not.toBe('success');
       }
     }
