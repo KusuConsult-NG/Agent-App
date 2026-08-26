@@ -12,16 +12,18 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { parseKobo, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { gateway } from '../integrations/gateway';
-import { conflict, notFound } from '../lib/errors';
+import { conflict, forbidden, notFound } from '../lib/errors';
 import { nextRefundReference, nextSettlementReference } from '../lib/references';
 import { recordAudit } from './audit';
 import { confirmPayment } from './payments';
 import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
+import { raiseFlag } from './fraud';
 
 export interface ReconciliationSummary {
   runId: string;
@@ -427,7 +429,76 @@ export async function recoverUnverifiedPayments(params: {
   return { attempted: candidates.length, verified, failures };
 }
 
-/** Record a government settlement and mark its transactions SETTLED (PRD §47). */
+/**
+ * Move the collections a settlement paid for to SETTLED.
+ *
+ * Shared by the two moments a settlement can be complete: recorded with the
+ * figures already matching, and disputed and later accounted for. Both must
+ * settle the same collections in the same way, or the second route becomes a
+ * quieter version of the first.
+ *
+ * Only a collection in RECEIPT_GENERATED or RECONCILIATION_PENDING moves. One
+ * that has been reversed, refunded or put under review since the credit landed
+ * is not settled by this batch arriving, and stepping over it here is what
+ * keeps the two paths from disagreeing about which states are settleable.
+ */
+async function settleLinkedTransactions(
+  client: PoolClient,
+  params: {
+    settlementId: string;
+    settlementReference: string;
+    bankReference: string | null;
+    actorId: string;
+  },
+): Promise<number> {
+  const linked = await query<{ transaction_id: string; status: string }>(
+    client,
+    `SELECT DISTINCT p.transaction_id, t.status
+       FROM payments p JOIN transactions t ON t.id = p.transaction_id
+      WHERE p.settlement_id = $1`,
+    [params.settlementId],
+  );
+
+  let settled = 0;
+  for (const row of linked) {
+    if (!['RECEIPT_GENERATED', 'RECONCILIATION_PENDING'].includes(row.status)) continue;
+    await transitionTransaction(client, {
+      transactionId: row.transaction_id,
+      to: 'SETTLED',
+      reason: `Settled under ${params.settlementReference}`,
+      actorId: params.actorId,
+      source: 'RECONCILIATION',
+      metadata: {
+        settlementReference: params.settlementReference,
+        bankReference: params.bankReference,
+      },
+    });
+    settled += 1;
+  }
+  return settled;
+}
+
+/**
+ * Record a government settlement, and settle what it actually paid for
+ * (PRD §47).
+ *
+ * SETTLED is the state the commission ledger waits for: an agent is paid for
+ * work that settled and for no other work. This marked the whole batch SETTLED
+ * first and compared the figures afterwards, so a gateway that paid ₦900,000
+ * against ₦1,000,000 of confirmed collections left every transaction recorded
+ * as settled and every commission on them payable. The variance was noticed —
+ * a HIGH flag was raised beside it — but the flag carried neither an agent nor
+ * a transaction, which are the two columns the commission guard reads, so it
+ * held nothing back.
+ *
+ * That is the third inviolable rule read backwards. "No verified transaction,
+ * no commission" exists so the State does not pay for money it did not
+ * receive, and a batch that came up short is money the State did not receive.
+ *
+ * So a settlement that does not match settles nothing. It is recorded and
+ * disputed, the collections in it stay where they are, and `reconcileSettlement`
+ * is where a dispute goes once somebody has found the rest of the money.
+ */
 export async function recordSettlement(params: {
   settlementDate: Date;
   gatewayReferences: string[];
@@ -436,9 +507,43 @@ export async function recordSettlement(params: {
   governmentAccountId?: string | null;
   actorId: string;
   actorRole: string;
-}): Promise<{ settlementId: string; settlementReference: string; transactionsSettled: number }> {
+}): Promise<{
+  settlementId: string;
+  settlementReference: string;
+  status: 'RECONCILED' | 'DISPUTED';
+  transactionsSettled: number;
+  varianceKobo: string;
+}> {
   return withTransaction(async (client) => {
     const settlementReference = await nextSettlementReference(client);
+
+    /*
+     * A collection settles once.
+     *
+     * `payments.settlement_id` records which batch banked a collection, and
+     * nothing checked it: naming the same gateway references in a second
+     * settlement re-counted every one of them, overwrote the link to the first
+     * batch, and left the State's books showing the same money banked twice.
+     * The second reference is usually a typo or a re-run of the same import,
+     * and either way the answer is to refuse it and say which batch already
+     * holds it.
+     */
+    const alreadySettled = await queryOne<{ gateway_reference: string; settlement_reference: string }>(
+      client,
+      `SELECT p.gateway_reference, s.settlement_reference
+         FROM payments p JOIN settlements s ON s.id = p.settlement_id
+        WHERE p.gateway_reference = ANY($1::text[])
+        ORDER BY p.gateway_reference LIMIT 1`,
+      [params.gatewayReferences],
+    );
+    if (alreadySettled) {
+      throw conflict(
+        'PAYMENT_ALREADY_SETTLED',
+        `Payment ${alreadySettled.gateway_reference} was already banked under settlement ` +
+          `${alreadySettled.settlement_reference}. Recording it again would count the same money twice.`,
+        'Check the bank statement against that settlement, and record only the collections it does not cover.',
+      );
+    }
 
     const payments = await query<{ id: string; transaction_id: string; amount_kobo: string }>(
       client,
@@ -448,13 +553,15 @@ export async function recordSettlement(params: {
     );
 
     const expected = payments.reduce((sum, row) => sum + parseKobo(row.amount_kobo), 0n);
+    const matched = params.receivedAmountKobo === expected;
 
     const settlement = await queryOne<{ id: string }>(
       client,
       `INSERT INTO settlements
          (settlement_reference, gateway, bank_reference, government_account_id, settlement_date,
-          expected_amount_kobo, received_amount_kobo, transaction_count, status, received_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'RECEIVED',now()) RETURNING id`,
+          expected_amount_kobo, received_amount_kobo, transaction_count, status, received_at,
+          reconciled_at, reconciled_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now(),$10,$11) RETURNING id`,
       [
         settlementReference,
         gateway.name,
@@ -464,48 +571,45 @@ export async function recordSettlement(params: {
         expected.toString(),
         params.receivedAmountKobo.toString(),
         payments.length,
+        matched ? 'RECONCILED' : 'DISPUTED',
+        matched ? new Date() : null,
+        matched ? params.actorId : null,
       ],
     );
 
+    // The batch is linked whether or not it matched: which collections this
+    // credit was meant to cover is exactly what an officer needs in order to
+    // work out where the rest of it went.
     for (const payment of payments) {
       await client.query('UPDATE payments SET settlement_id = $2 WHERE id = $1', [
         payment.id,
         settlement!.id,
       ]);
-      const current = await queryOne<{ status: string }>(
-        client,
-        'SELECT status FROM transactions WHERE id = $1',
-        [payment.transaction_id],
-      );
-      if (current && ['RECEIPT_GENERATED', 'RECONCILIATION_PENDING'].includes(current.status)) {
-        await transitionTransaction(client, {
-          transactionId: payment.transaction_id,
-          to: 'SETTLED',
-          reason: `Settled under ${settlementReference}`,
-          actorId: params.actorId,
-          source: 'RECONCILIATION',
-          metadata: { settlementReference, bankReference: params.bankReference },
-        });
-      }
     }
 
-    // A settlement that does not match what was expected is a dispute, not a
-    // rounding note.
-    if (params.receivedAmountKobo !== expected) {
-      await client.query(`UPDATE settlements SET status = 'DISPUTED' WHERE id = $1`, [settlement!.id]);
-      await client.query(
-        `INSERT INTO fraud_flags (rule, severity, entity_type, entity_id, detail)
-         VALUES ('SETTLEMENT_VARIANCE','HIGH','TRANSACTION',$1,$2)`,
-        [
-          settlement!.id,
-          JSON.stringify({
-            settlementReference,
-            expectedKobo: expected.toString(),
-            receivedKobo: params.receivedAmountKobo.toString(),
-            varianceKobo: (params.receivedAmountKobo - expected).toString(),
-          }),
-        ],
-      );
+    let transactionsSettled = 0;
+    if (matched) {
+      transactionsSettled = await settleLinkedTransactions(client, {
+        settlementId: settlement!.id,
+        settlementReference,
+        bankReference: params.bankReference,
+        actorId: params.actorId,
+      });
+    } else {
+      // A settlement that does not match what was expected is a dispute, not a
+      // rounding note — and a dispute settles nothing.
+      await raiseFlag(client, {
+        rule: 'SETTLEMENT_VARIANCE',
+        severity: 'HIGH',
+        entityType: 'SETTLEMENT',
+        entityId: settlement!.id,
+        detail: {
+          settlementReference,
+          expectedKobo: expected.toString(),
+          receivedKobo: params.receivedAmountKobo.toString(),
+          varianceKobo: (params.receivedAmountKobo - expected).toString(),
+        },
+      });
     }
 
     await recordAudit(client, {
@@ -520,13 +624,144 @@ export async function recordSettlement(params: {
         expectedKobo: expected.toString(),
         receivedKobo: params.receivedAmountKobo.toString(),
         transactions: payments.length,
+        status: matched ? 'RECONCILED' : 'DISPUTED',
       },
     });
 
     return {
       settlementId: settlement!.id,
       settlementReference,
-      transactionsSettled: payments.length,
+      status: matched ? ('RECONCILED' as const) : ('DISPUTED' as const),
+      transactionsSettled,
+      varianceKobo: (params.receivedAmountKobo - expected).toString(),
+    };
+  });
+}
+
+/**
+ * Close a disputed settlement once the money is accounted for.
+ *
+ * `settlements.status` offered RECONCILED and `reconciled_at`/`reconciled_by`
+ * sat beside it, and nothing in the platform wrote any of the three. The
+ * settlement dashboard counted PENDING, RECONCILED and DISPUTED — two states
+ * nothing produced and one it did — so every clean settlement showed as
+ * nothing at all, and the finance officer's home screen, which counts
+ * `reconciled_at IS NULL`, reported every settlement ever recorded as
+ * outstanding. A dispute had nowhere to go: DISPUTED was terminal by absence.
+ *
+ * Now that a variance holds its collections back, that absence stops being a
+ * cosmetic problem and becomes the thing standing between an agent and their
+ * commission, so the way out has to exist and has to be narrow.
+ *
+ * It is narrow in three ways. The officer states the total now received and
+ * the bank reference that proves it, and the figures have to agree — this
+ * closes a dispute where the money turned up, and refuses to paper over one
+ * where it did not. It cannot be the officer who recorded the settlement:
+ * settling a batch makes its commission payable, and the platform asks for a
+ * second person everywhere else money is released. And the note is required,
+ * because a year later the only question anyone will ask about this row is
+ * what the first figure was doing wrong.
+ */
+export async function reconcileSettlement(params: {
+  settlementId: string;
+  receivedAmountKobo: Kobo;
+  bankReference: string;
+  note: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  settlementReference: string;
+  transactionsSettled: number;
+  receivedAmountKobo: string;
+}> {
+  return withTransaction(async (client) => {
+    const settlement = await queryOne<{
+      id: string;
+      settlement_reference: string;
+      status: string;
+      expected_amount_kobo: string;
+      received_amount_kobo: string;
+      recorded_by: string | null;
+    }>(
+      client,
+      `SELECT s.id, s.settlement_reference, s.status, s.expected_amount_kobo,
+              s.received_amount_kobo,
+              (SELECT a.actor_id FROM audit_logs a
+                WHERE a.entity_type = 'settlement' AND a.entity_id = s.id::text
+                  AND a.action = 'settlement.recorded'
+                ORDER BY a.created_at ASC LIMIT 1) AS recorded_by
+         FROM settlements s WHERE s.id = $1
+         FOR UPDATE`,
+      [params.settlementId],
+    );
+    if (!settlement) throw notFound('That settlement');
+
+    if (settlement.status !== 'DISPUTED') {
+      throw conflict(
+        'SETTLEMENT_NOT_DISPUTED',
+        `Settlement ${settlement.settlement_reference} is ${settlement.status.toLowerCase()}, ` +
+          'so there is no variance to account for.',
+      );
+    }
+
+    if (settlement.recorded_by === params.actorId) {
+      throw forbidden(
+        'You recorded this settlement, so another officer has to be the one to close it. ' +
+          'Closing it releases the commission on every collection in the batch.',
+        'Ask a colleague in the finance office to check the statement and close it.',
+      );
+    }
+
+    const expected = parseKobo(settlement.expected_amount_kobo);
+    if (params.receivedAmountKobo !== expected) {
+      const variance = params.receivedAmountKobo - expected;
+      throw conflict(
+        'SETTLEMENT_STILL_SHORT',
+        `The batch is still out by ${variance.toString()} kobo: the collections in it come to ` +
+          `${expected.toString()} and this closes it at ${params.receivedAmountKobo.toString()}. ` +
+          'A settlement is closed when the money is accounted for, not when the difference is accepted.',
+        'Record the missing credit with the gateway, or reverse the collections it never covered.',
+      );
+    }
+
+    await client.query(
+      `UPDATE settlements
+          SET status = 'RECONCILED', received_amount_kobo = $2, bank_reference = $3,
+              reconciled_at = now(), reconciled_by = $4
+        WHERE id = $1`,
+      [settlement.id, params.receivedAmountKobo.toString(), params.bankReference, params.actorId],
+    );
+
+    const transactionsSettled = await settleLinkedTransactions(client, {
+      settlementId: settlement.id,
+      settlementReference: settlement.settlement_reference,
+      bankReference: params.bankReference,
+      actorId: params.actorId,
+    });
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'settlement.reconciled',
+      entityType: 'settlement',
+      entityId: settlement.id,
+      oldValue: {
+        status: settlement.status,
+        receivedKobo: settlement.received_amount_kobo,
+      },
+      newValue: {
+        status: 'RECONCILED',
+        receivedKobo: params.receivedAmountKobo.toString(),
+        bankReference: params.bankReference,
+        transactionsSettled,
+      },
+      reason: params.note,
+    });
+
+    return {
+      settlementReference: settlement.settlement_reference,
+      transactionsSettled,
+      receivedAmountKobo: params.receivedAmountKobo.toString(),
     };
   });
 }
@@ -1086,7 +1321,7 @@ export async function settlementDashboard(db: Db) {
     ),
     query(
       db,
-      `SELECT settlement_reference, gateway, bank_reference, settlement_date,
+      `SELECT id, settlement_reference, gateway, bank_reference, settlement_date,
               expected_amount_kobo, received_amount_kobo,
               (received_amount_kobo - expected_amount_kobo)::text AS variance_kobo,
               transaction_count, status, received_at

@@ -20,7 +20,14 @@ import { log } from '../lib/logger';
 interface FlagInput {
   rule: FraudRule | 'AMOUNT_MISMATCH';
   severity: FraudSeverity;
-  entityType: 'TRANSACTION' | 'AGENT' | 'TAXPAYER' | 'DEVICE' | 'REFEREE' | 'COMMISSION';
+  entityType:
+    | 'TRANSACTION'
+    | 'AGENT'
+    | 'TAXPAYER'
+    | 'DEVICE'
+    | 'REFEREE'
+    | 'COMMISSION'
+    | 'SETTLEMENT';
   entityId: string;
   agentId?: string | null;
   transactionId?: string | null;
@@ -66,6 +73,9 @@ const DECISION_HOLDS: Record<FraudRule | 'AMOUNT_MISMATCH', string> = {
   COMMISSION_ANOMALY: '30 days',
   AMOUNT_MISMATCH: '30 days',
   SHARED_PHONE_NUMBER: '90 days',
+  // A settlement is a single banking event: once an officer has accounted for
+  // its variance, the same batch never produces new evidence.
+  SETTLEMENT_VARIANCE: '90 days',
   DUPLICATE_TAXPAYER_DETAILS: '90 days',
 };
 
