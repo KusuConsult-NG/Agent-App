@@ -14,7 +14,7 @@
 import type { PoolClient } from 'pg';
 import type { RefereeCategory } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { generateToken, hashIdentityNumber, maskIdentityNumber, sha256 } from '../lib/crypto';
 import { badRequest, conflict, notFound, AppError } from '../lib/errors';
 import { nextRefereeCode } from '../lib/references';
@@ -363,6 +363,39 @@ function assertInvitationOpen(invitation: { status: string; expires_at: Date }):
   }
 }
 
+/**
+ * Check a referee's identity, outside any transaction.
+ *
+ * Resolves the referee from the invitation token with a plain read, because
+ * the provider needs a name and a phone number and nothing else. The caller's
+ * transaction re-reads the invitation under a lock and decides what to do; a
+ * token that resolves to nothing here simply means no check was run, and the
+ * response lands as UNDER_REVIEW exactly as an unreachable provider would.
+ */
+async function verifyRefereeIdentity(
+  token: string,
+  identityType: string,
+  identityNumber: string,
+) {
+  const referee = await queryOne<{ referee_name: string; referee_phone: string }>(
+    pool,
+    `SELECT r.full_name AS referee_name, r.phone AS referee_phone
+       FROM referee_invitations i JOIN referees r ON r.id = i.referee_id
+      WHERE i.invitation_token_hash = $1`,
+    [sha256(token)],
+  );
+  if (!referee) return null;
+
+  const nameParts = referee.referee_name.trim().split(/\s+/);
+  return kycProvider.verify({
+    identityType,
+    identityNumber,
+    firstName: nameParts[0] ?? referee.referee_name,
+    lastName: nameParts[nameParts.length - 1] ?? referee.referee_name,
+    phone: referee.referee_phone,
+  });
+}
+
 export async function submitRefereeResponse(params: {
   token: string;
   input: RefereeResponseInput;
@@ -381,6 +414,27 @@ export async function submitRefereeResponse(params: {
         'If you cannot confirm them, decline the request instead.',
     );
   }
+
+  /*
+   * Ask the identity provider before the transaction opens.
+   *
+   * The call used to sit between marking the invitation spent and recording
+   * what the provider said, so a referee filling in a form held a pooled
+   * connection and a lock on their invitation row for as long as the provider
+   * took to answer.
+   *
+   * It needs only the referee's name and phone, which the token already
+   * identifies, so it is resolved here against a read that takes no lock. The
+   * transaction below still selects `FOR UPDATE` and re-checks everything —
+   * this read decides nothing. Its one cost is a wasted provider call when an
+   * invitation turns out to be spent or expired in between, which is rare and
+   * harmless; the alternative was holding the row while a third party thought
+   * about it.
+   */
+  const identity =
+    input.identityNumber && input.identityType
+      ? await verifyRefereeIdentity(params.token, input.identityType!, input.identityNumber!)
+      : null;
 
   return withTransaction(async (client) => {
     const invitation = await queryOne<{
@@ -422,15 +476,10 @@ export async function submitRefereeResponse(params: {
     let failureReason: string | null = null;
     let reference: string | null = null;
 
-    if (input.identityNumber && input.identityType) {
-      const nameParts = invitation.referee_name.trim().split(/\s+/);
-      const result = await kycProvider.verify({
-        identityType: input.identityType,
-        identityNumber: input.identityNumber,
-        firstName: nameParts[0] ?? invitation.referee_name,
-        lastName: nameParts[nameParts.length - 1] ?? invitation.referee_name,
-        phone: invitation.referee_phone,
-      });
+    // The same condition as before; `identity` simply carries the answer the
+    // provider already gave, outside the transaction.
+    if (identity && input.identityNumber && input.identityType) {
+      const result = identity;
 
       // An UNAVAILABLE provider goes to UNDER_REVIEW, not FAILED. Unlike an
       // agent's own KYC, this is not rolled back: the referee has filled the
