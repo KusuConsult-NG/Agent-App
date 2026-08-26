@@ -843,24 +843,24 @@ agentRouter.post(
   ),
 );
 
+/**
+ * Let a handset start collecting government revenue (Addendum §21).
+ *
+ * Revoking a device was on the audit trail and approving one was not, though
+ * only one of the two starts money being taken in somebody's name. The row
+ * carried `approved_by`, which answers the question if you already know to ask
+ * it about this device; the trail is where an auditor looks when they do not.
+ */
 agentRouter.post(
   '/devices/:deviceId/approve',
   requirePermission('device:manage', 'agent:manage'),
   asyncHandler(async (req, res) => {
-    const device = await queryOne<{ id: string; status: string }>(
-      pool,
-      'SELECT id, status FROM agent_devices WHERE id = $1',
-      [req.params.deviceId],
-    );
-    if (!device) throw notFound('That device');
-    if (device.status === 'REVOKED') {
-      throw forbidden('A revoked device cannot be approved again.');
-    }
-
-    await pool.query(
-      `UPDATE agent_devices SET status = 'ACTIVE', approved_at = now(), approved_by = $2 WHERE id = $1`,
-      [req.params.deviceId, req.auth!.userId],
-    );
+    await agents.approveDevice({
+      deviceId: req.params.deviceId,
+      actorId: req.auth!.userId,
+      actorRole: req.auth!.role,
+      ipAddress: req.clientIp,
+    });
     res.json({ approved: true });
   }),
 );

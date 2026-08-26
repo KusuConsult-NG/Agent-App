@@ -1271,6 +1271,26 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
       { token },
     );
     assert.equal(replacement.status, 201, JSON.stringify(replacement.body));
+
+    /*
+     * And an officer lets it in.
+     *
+     * A replacement handset is not a first handset. `registerDevice`
+     * auto-approves the first device an agent ever registers so onboarding can
+     * finish, and it used to decide that by counting devices that were
+     * currently APPROVED or ACTIVE — so a revoked handset made the next one
+     * count as the first and it went live with nobody having looked at it,
+     * which is the opposite of what revoking a device is for. This journey
+     * asserted 201 and then transacted, so it was walking that path.
+     */
+    console.error('REPL', JSON.stringify(replacement.body));
+    assert.equal(replacement.body.status, 'PENDING');
+    const approved = await post(
+      `/agents/devices/${replacement.body.deviceId}/approve`,
+      {},
+      { token: ctx.adminToken },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
     ctx.deviceId = 'replacement-device-000002';
 
     const response = await post(
@@ -1297,7 +1317,7 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
       { token, deviceId: ctx.deviceId },
     );
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
     assert.equal(response.body.results[0].status, 'SYNCED');
     assert.ok(response.body.results[0].entityId, 'the server assigns the id, not the device');
 
