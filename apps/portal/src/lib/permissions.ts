@@ -249,6 +249,13 @@ const SCREEN: Record<string, NavItem> = {
   },
   users: { path: '/users', label: 'Officer access', permission: 'user:manage' },
   /*
+   * `system:configure`, held by administrators alone. Raising the minimum app
+   * version stops every agent still on an older build from collecting; that is
+   * a different size of decision from suspending one agent, and it is not on a
+   * revenue officer's menu.
+   */
+  fieldApp: { path: '/field-app', label: 'Field application', permission: 'system:configure' },
+  /*
    * `allocation:manage`, held by administrators and revenue officers only. A
    * finance officer settles money; they do not decide who gets fertiliser, and
    * offering them a screen the API would refuse is worse than not offering it.
@@ -289,7 +296,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Configuration',
-      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!],
+      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!,
+              SCREEN.fieldApp!],
     },
     {
       group: 'Oversight',

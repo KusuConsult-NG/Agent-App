@@ -73,6 +73,18 @@ const TRANSACTIONAL_TABLES = [
   'idempotency_keys',
   'audit_logs',
   'mock_gateway_transactions',
+  /*
+   * Reference data until an officer could add to it.
+   *
+   * `app_versions` was seeded once and never written again, so it sat outside
+   * this list with the geography and the catalogue. Publishing a new minimum
+   * version makes it operational state: the row carries `created_by`, and
+   * `resetDatabase` deletes exactly those users below — so a single published
+   * version left behind by one file broke every later file's reset with a
+   * foreign key violation, in a shard database that outlives the run. It is
+   * emptied here and the default row comes back with the rest of the seed.
+   */
+  'app_versions',
 ];
 
 export async function startTestServer(): Promise<string> {

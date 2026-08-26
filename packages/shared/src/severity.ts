@@ -63,6 +63,11 @@ const BAD = [
   'UNVERIFIED',
   'UNMATCHED',
   'TAMPERED',
+  // A blocked bank account and a handset below the minimum app version are
+  // both stops, not pauses: nothing proceeds until somebody acts. It read as
+  // neutral grey, which is the colour of a status nobody needs to do anything
+  // about.
+  'BLOCKED',
 ];
 
 /** Somebody still has to do something. */

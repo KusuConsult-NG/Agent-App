@@ -209,6 +209,17 @@ how it changes.
 | `POST` | `/agents/:id/territory` | `agent:assign_territory` |
 | `POST` | `/agents/devices/:id/approve` · `/revoke` | `device:manage` |
 | `POST` | `/agents/referees/:id/review` | `agent:approve` |
+| `POST` | `/agents/app-version` | `system:configure` — raises the minimum build |
+| `GET` | `/agents/app-version/history` | `system:configure` — record and fleet spread |
+
+`POST /agents/app-version` is the lever for a release found to be getting money
+wrong: a handset below the minimum is refused at `/payments/initiate` and
+`/vehicles/:id/renew` with 426 and `moneyStatus: NOT_DEBITED`. It appends to
+`app_versions` rather than updating, so what was required when stays readable,
+and it answers with how many active handsets the new minimum stops — locking
+every agent out is permitted, being unaware of it is not. A minimum above the
+recommended version is refused, as is an effective date at or before the row
+already in force, which the gate would never read.
 
 ## Taxpayers
 
