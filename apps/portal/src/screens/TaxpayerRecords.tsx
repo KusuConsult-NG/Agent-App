@@ -14,9 +14,9 @@
  * officer who cannot change it is told that before they type, not after.
  */
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, ErrorAlert, KeyValue, Loading } from '../ui';
+import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
 
 interface FoundTaxpayer {
   id: string;
@@ -290,6 +290,165 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           </div>
         </div>
       )}
+
+      {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
     </>
+  );
+}
+
+interface VehicleRow {
+  id: string;
+  registration_number: string;
+  make: string | null;
+  model: string | null;
+  vehicle_type: string;
+  current_expiry_date: string | null;
+  status: string;
+  status_reason: string | null;
+}
+
+/**
+ * The vehicles on this taxpayer's record, and taking one out of service.
+ *
+ * A vehicle record outlives the vehicle: it is sold, written off, scrapped.
+ * Until there was a way to say so, particulars could be renewed for a car that
+ * no longer existed, and the owner kept being treated as liable for it. The
+ * control sits on the correction screen because that is what this is — the
+ * platform saying something about somebody that has stopped being true.
+ */
+function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
+  const [vehicles, setVehicles] = useState<VehicleRow[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    api
+      .get<VehicleRow[]>(`/vehicles?taxpayerId=${taxpayerId}`)
+      .then(setVehicles)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, [taxpayerId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function change(vehicle: VehicleRow, status: string) {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ message: string }>(`/vehicles/${vehicle.id}/status`, {
+        status,
+        reason,
+      });
+      setMessage(result.message);
+      setReason('');
+      load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+      else if (caught instanceof Error) {
+        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!vehicles) return null;
+
+  return (
+    <div className="card card--flush">
+      <div style={{ padding: '18px 18px 0' }}>
+        <h2 className="card__title">Vehicles on this record</h2>
+        <p className="card__hint">
+          Particulars cannot be renewed for a vehicle that is suspended or off the register.
+          Renewals already issued stay valid for the period they were paid for.
+        </p>
+
+        {can('vehicle:manage') && vehicles.length > 0 && (
+          <div className="field">
+            <label htmlFor="veh-reason">Reason</label>
+            <textarea
+              id="veh-reason"
+              rows={2}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder="Sold out of state and re-registered in Kaduna."
+            />
+          </div>
+        )}
+      </div>
+
+      <ErrorAlert error={error} />
+      {message && <Alert kind="success">{message}</Alert>}
+
+      <Table
+        columns={[
+          {
+            key: 'registration_number',
+            label: 'Registration',
+            render: (row) => <span className="mono">{row.registration_number}</span>,
+          },
+          {
+            key: 'make',
+            label: 'Vehicle',
+            render: (row) => [row.make, row.model].filter(Boolean).join(' ') || row.vehicle_type,
+          },
+          {
+            key: 'status',
+            label: 'Status',
+            render: (row) => (
+              <span title={row.status_reason ?? undefined}>
+                <Badge status={row.status} />
+              </span>
+            ),
+          },
+          {
+            key: 'action',
+            label: '',
+            render: (row) =>
+              can('vehicle:manage') ? (
+                <div className="button-row">
+                  {row.status === 'ACTIVE' ? (
+                    <>
+                      <button
+                        type="button"
+                        className="small secondary"
+                        disabled={busy || reason.trim().length < 5}
+                        onClick={() => void change(row, 'SUSPENDED')}
+                      >
+                        Suspend
+                      </button>
+                      <button
+                        type="button"
+                        className="small danger"
+                        disabled={busy || reason.trim().length < 5}
+                        onClick={() => void change(row, 'ARCHIVED')}
+                      >
+                        Take off the register
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="small"
+                      disabled={busy || reason.trim().length < 5}
+                      onClick={() => void change(row, 'ACTIVE')}
+                    >
+                      Put back in service
+                    </button>
+                  )}
+                </div>
+              ) : null,
+          },
+        ]}
+        rows={vehicles}
+        empty="No vehicles are recorded against this taxpayer."
+      />
+    </div>
   );
 }

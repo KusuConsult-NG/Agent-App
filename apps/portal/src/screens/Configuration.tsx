@@ -18,6 +18,8 @@ interface RevenueItem {
   version: number | null;
   self_assessable: boolean;
   commission_eligible: boolean;
+  status: string;
+  status_reason: string | null;
 }
 
 function describeRate(item: RevenueItem): string {
@@ -42,10 +44,16 @@ export function CatalogueScreen({ user }: { user: User }) {
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<RevenueItem | null>(null);
   const [history, setHistory] = useState<{ item: RevenueItem; rows: any[] } | null>(null);
+  const [withdrawing, setWithdrawing] = useState<RevenueItem | null>(null);
 
   const load = useCallback(() => {
     api
-      .get<RevenueItem[]>('/revenue/items')
+      // An officer configuring the catalogue sees what has been withdrawn as
+      // well as what is on sale — otherwise a suspended item disappears the
+      // moment it is suspended and nobody can ever restore it.
+      .get<RevenueItem[]>(
+        can('catalogue:configure') ? '/revenue/items?includeWithdrawn=true' : '/revenue/items',
+      )
       .then(setItems)
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
@@ -68,6 +76,18 @@ export function CatalogueScreen({ user }: { user: User }) {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+
+      {withdrawing && (
+        <WithdrawItemForm
+          item={withdrawing}
+          onCancel={() => setWithdrawing(null)}
+          onDone={(note) => {
+            setWithdrawing(null);
+            setMessage(note);
+            load();
+          }}
+        />
+      )}
 
       {editing && (
         <RateChangeForm
@@ -159,6 +179,18 @@ export function CatalogueScreen({ user }: { user: User }) {
                 render: (row) => (row.commission_eligible ? 'Eligible' : 'Not eligible'),
               },
               {
+                key: 'status',
+                label: 'On sale',
+                render: (row) =>
+                  row.status === 'ACTIVE' ? (
+                    <Badge status="ACTIVE" />
+                  ) : (
+                    <span title={row.status_reason ?? undefined}>
+                      <Badge status={row.status} />
+                    </span>
+                  ),
+              },
+              {
                 key: 'action',
                 label: '',
                 render: (row) => (
@@ -175,9 +207,18 @@ export function CatalogueScreen({ user }: { user: User }) {
                     >
                       History
                     </button>
-                    {can('catalogue:configure') && (
+                    {can('catalogue:configure') && row.status === 'ACTIVE' && (
                       <button type="button" className="small" onClick={() => setEditing(row)}>
                         Change rate
+                      </button>
+                    )}
+                    {can('catalogue:configure') && row.status !== 'RETIRED' && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => setWithdrawing(row)}
+                      >
+                        {row.status === 'ACTIVE' ? 'Withdraw' : 'Restore'}
                       </button>
                     )}
                   </div>
@@ -190,6 +231,112 @@ export function CatalogueScreen({ user }: { user: User }) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Withdrawing a revenue item, or putting it back.
+ *
+ * Two things the officer has to be told before they press it, because neither
+ * is guessable: what happens to money already owed (nothing — invoices raised
+ * under the old rule stay payable), and that retiring cannot be undone.
+ */
+function WithdrawItemForm({
+  item,
+  onCancel,
+  onDone,
+}: {
+  item: RevenueItem;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}) {
+  const restoring = item.status !== 'ACTIVE';
+  const [status, setStatus] = useState(restoring ? 'ACTIVE' : 'SUSPENDED');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  return (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <h2 className="card__title">
+            {restoring ? 'Restore' : 'Withdraw'} — {item.name}
+          </h2>
+          <p className="card__hint">
+            {restoring
+              ? 'The item goes back into the catalogue and can be assessed against again.'
+              : 'No new assessment can be raised against a withdrawn item. Invoices already issued stay payable — withdrawing an item is not a decision to write off arrears.'}
+          </p>
+        </div>
+        <button type="button" className="small secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            const result = await api.post<{ message: string }>(
+              `/revenue/items/${item.id}/status`,
+              { status, reason },
+            );
+            onDone(result.message);
+          } catch (caught) {
+            if (caught instanceof ApiRequestError) setError(caught.error);
+            else if (caught instanceof Error) {
+              setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+            }
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {!restoring && (
+          <label>
+            What is happening to this item
+            <select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="SUSPENDED">Suspend — pause collection while something is settled</option>
+              <option value="RETIRED">Retire — the charge has ended, and cannot be brought back</option>
+            </select>
+          </label>
+        )}
+
+        <label>
+          Reason
+          <textarea
+            required
+            minLength={5}
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={
+              restoring
+                ? 'What changed — for example, the tariff was confirmed against the gazette.'
+                : 'For example: repealed by the Plateau State Finance Law amendment.'
+            }
+          />
+        </label>
+
+        {status === 'RETIRED' && (
+          <Alert kind="warning">
+            Retiring cannot be undone. If the charge is reintroduced later it needs a new revenue
+            item, with its own code and rate.
+          </Alert>
+        )}
+
+        <div className="button-row">
+          <button type="submit" disabled={busy || reason.trim().length < 5}>
+            {busy ? 'Saving…' : restoring ? 'Restore item' : 'Withdraw item'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 

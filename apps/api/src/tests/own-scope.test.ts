@@ -260,6 +260,11 @@ describe('A new :own route has to declare what it does about scope', () => {
     // is no agent row to point at when they do.
     'groups.ts GET /': 'scoped',
     'groups.ts GET /:id': 'scoped',
+    // Members go through the same `assertGroupVisible` gate as the group
+    // itself, so an agent sees the membership of the groups they registered
+    // and no others. Nothing narrows the member rows further, and nothing
+    // should: within a group an agent may see it, they may see all of it.
+    'groups.ts GET /:id/members': 'scoped',
   };
 
   it('has an entry for every route guarded by a :own permission', () => {

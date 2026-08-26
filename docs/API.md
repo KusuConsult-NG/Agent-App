@@ -229,6 +229,7 @@ how it changes.
 | `GET` | `/revenue/items/:id/rates` | `catalogue:read` |
 | `POST` | `/revenue/items` | `catalogue:configure` |
 | `POST` | `/revenue/items/:id/rates` | `catalogue:configure` + step-up |
+| `POST` | `/revenue/items/:id/status` | `catalogue:configure` — withdraw an item from the catalogue (`SUSPENDED`) or end it (`RETIRED`), or restore a suspended one. No new assessment can be raised against a withdrawn item; invoices already issued stay payable. Retirement is terminal. |
 | `POST` | `/revenue/quote` | price without creating anything |
 | `POST` | `/revenue/assessments` | `assessment:create` + active agent |
 | `GET` | `/revenue/assessments/:id` · `/invoices/:id` | read |
@@ -251,6 +252,7 @@ how it changes.
 | `POST` | `/vehicles/renewals/:id/document` | issue or re-fetch the renewal PDF |
 | `GET` | `/vehicles/renewals/authority-outstanding` | `vehicle:authority_sync` — renewals the authority never acknowledged, and vehicles captured while it was unreachable |
 | `POST` | `/vehicles/renewals/authority-retry` | `vehicle:authority_sync` — re-send those notifications; changes no financial record |
+| `POST` | `/vehicles/:id/status` | `vehicle:manage` — take a vehicle out of service (`SUSPENDED` while something is looked into, `ARCHIVED` when it is sold, written off or scrapped) or put it back. Renewal is refused for anything but `ACTIVE`; renewals already issued stay valid for the period paid for. |
 
 `REGISTRY_UNAVAILABLE` is not `NOT_FOUND`. The first says the vehicle authority
 could not be asked; the second says it answered and holds no such vehicle. A

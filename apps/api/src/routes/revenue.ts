@@ -50,9 +50,14 @@ revenueRouter.get(
       taxpayerType: z.enum(['INDIVIDUAL', 'BUSINESS']).optional(),
       lgaId: uuidSchema.optional(),
       search: z.string().optional(),
+      includeWithdrawn: z.coerce.boolean().optional(),
     }),
-    async (_req, res, data) => {
-      res.json(await revenue.listItems(pool, data));
+    async (req, res, data) => {
+      // Seeing what has been withdrawn is part of configuring the catalogue,
+      // not part of reading it: an agent asking for the withdrawn items gets
+      // the catalogue they can actually sell from.
+      const includeWithdrawn = data.includeWithdrawn === true && req.auth!.permissions.includes('catalogue:configure');
+      res.json(await revenue.listItems(pool, { ...data, includeWithdrawn }));
     },
   ),
 );
@@ -554,4 +559,44 @@ revenueRouter.get(
   asyncHandler(async (req, res) => {
     res.json(await revenue.getObligations(pool, req.params.id));
   }),
+);
+
+/**
+ * Withdraw a revenue item from the catalogue, or put it back (PRD §8).
+ *
+ * `catalogue:configure` rather than a new permission: whoever may publish an
+ * item is the person who may withdraw it, and splitting the two would leave
+ * the catalogue in the hands of somebody who can only add to it.
+ */
+revenueRouter.post(
+  '/items/:itemId/status',
+  requirePermission('catalogue:configure'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'RETIRED']),
+      reason: z
+        .string()
+        .min(5, 'Say why the item is being withdrawn, or what changed before restoring it'),
+    }),
+    async (req, res, data) => {
+      const result = await revenue.setRevenueItemStatus({
+        itemId: req.params.itemId,
+        status: data.status,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        ...result,
+        message:
+          data.status === 'ACTIVE'
+            ? `${result.name} is back in the catalogue and can be assessed again.`
+            : data.status === 'SUSPENDED'
+              ? `${result.name} is suspended. No new assessment can be raised against it; ` +
+                'invoices already issued stay payable.'
+              : `${result.name} has been retired. Invoices already issued stay payable, and the ` +
+                'item cannot be brought back.',
+      });
+    },
+  ),
 );

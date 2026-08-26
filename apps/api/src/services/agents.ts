@@ -560,7 +560,17 @@ export async function submitKyc(params: {
           ? 'KYC_CLEARED'
           : verification.status === 'FAILED'
             ? 'KYC_FAILED'
-            : 'KYC_SUBMITTED',
+            : /*
+               * "Send a clearer photograph" is not "you failed identity
+               * checks". VERIFICATION_REQUIRED came out of this branch as
+               * KYC_SUBMITTED, so the journal said the applicant had simply
+               * submitted and gone quiet, while the notification told them
+               * action was required. An officer reading the journal could not
+               * see that the platform was waiting on the applicant.
+               */
+              verification.status === 'VERIFICATION_REQUIRED'
+              ? 'KYC_INFO_REQUIRED'
+              : 'KYC_SUBMITTED',
       reason: verification.failureReason ?? null,
       actorId: params.actorId,
       metadata: { provider: verification.provider, reference: verification.reference },
@@ -1370,12 +1380,30 @@ export async function activate(params: {
       ]);
     }
 
-    const agent = await queryOne<{ agent_code: string | null; territory_id: string | null }>(
+    const agent = await queryOne<{
+      agent_code: string | null;
+      territory_id: string | null;
+      operational_status: string;
+      activated_at: Date | null;
+    }>(
       client,
-      'SELECT agent_code, territory_id FROM agents WHERE id = $1',
+      'SELECT agent_code, territory_id, operational_status, activated_at FROM agents WHERE id = $1',
       [params.agentId],
     );
     if (!agent) throw notFound('That agent');
+
+    /*
+     * Coming back is not the same as arriving.
+     *
+     * This function does both jobs — it activates a cleared applicant, and it
+     * is also the only way a suspended agent is put back to work, because the
+     * UPDATE below clears `suspended_at` and `suspension_reason`. Both wrote
+     * ACTIVATED into the clearance journal, so an agent suspended in March and
+     * restored in April showed two entries an officer could not tell apart,
+     * and the journal is the record they read to decide whether to trust this
+     * agent with a territory.
+     */
+    const returning = agent.operational_status === 'SUSPENDED' || agent.activated_at !== null;
 
     const territoryId = params.territoryId ?? agent.territory_id;
     if (!territoryId) {
@@ -1402,10 +1430,17 @@ export async function activate(params: {
 
     await journal(client, {
       agentId: params.agentId,
-      eventType: params.overrideApprovalId ? 'OVERRIDE_APPLIED' : 'ACTIVATED',
+      eventType: returning ? 'REINSTATED' : params.overrideApprovalId ? 'OVERRIDE_APPLIED' : 'ACTIVATED',
       toState: after,
       actorId: params.actorId,
-      metadata: { agentCode, territoryId, blockersAtActivation: blockers },
+      metadata: {
+        agentCode,
+        territoryId,
+        blockersAtActivation: blockers,
+        // Kept on the reinstatement too, so naming the event after the return
+        // does not lose the fact that an override carried it.
+        overrideApprovalId: params.overrideApprovalId ?? null,
+      },
     });
 
     await recordAudit(client, {

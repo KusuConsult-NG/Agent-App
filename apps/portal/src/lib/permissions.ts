@@ -84,6 +84,7 @@ export const MUTATING_PERMISSIONS = [
   'payment:reverse:approve',
   'vehicle:renew',
   'vehicle:authority_sync',
+  'vehicle:manage',
   'agent:manage',
   'agent:approve',
   'agent:suspend',

@@ -217,6 +217,15 @@ groupRouter.post(
   ),
 );
 
+groupRouter.get(
+  '/:id/members',
+  requirePermission('group:read:own', 'group:read:all'),
+  asyncHandler(async (req, res) => {
+    await assertGroupVisible(req, req.params.id);
+    res.json(await groups.listMembers(pool, req.params.id));
+  }),
+);
+
 groupRouter.post(
   '/:id/members',
   requirePermission('group:register', 'group:manage'),
@@ -241,6 +250,40 @@ groupRouter.post(
         ...result,
         message:
           'Recorded. The membership counts only once the group leader has confirmed it.',
+      });
+    },
+  ),
+);
+
+/**
+ * Record that a member has left the group (PRD §33).
+ *
+ * `group:manage` — the officer's permission — and not `group:register`, which
+ * agents hold. An agent is paid commission on what their groups collect, so an
+ * agent who could end a membership could also trim a group down to the members
+ * who transact. Adding is field work; removing is a decision.
+ */
+groupRouter.post(
+  '/:id/members/:membershipId/departure',
+  requirePermission('group:manage'),
+  validateBody(
+    z.object({
+      reason: z.string().min(5, 'Say why the membership has ended'),
+    }),
+    async (req, res, data) => {
+      await assertGroupVisible(req, req.params.id);
+      const result = await groups.recordMemberDeparture({
+        groupId: req.params.id,
+        membershipId: req.params.membershipId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        ...result,
+        message:
+          `${result.memberName} is recorded as having left ${result.groupName}. They keep what ` +
+          'they already collected and will not be counted in future allocations.',
       });
     },
   ),
