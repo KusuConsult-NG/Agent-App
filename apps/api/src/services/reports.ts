@@ -838,7 +838,12 @@ export async function financeOfficerHome(db: Db) {
          WHERE status IN ('PENDING','ELIGIBLE','APPROVED')) AS commission_liability_kobo,
        (SELECT count(*)::text FROM commission_payouts WHERE status = 'REQUESTED')
          AS payouts_awaiting_approval,
-       (SELECT count(*)::text FROM refunds WHERE status IN ('PENDING','APPROVED'))
+       -- Every refund the taxpayer has not had. This read PENDING and
+       -- APPROVED: APPROVED is not a status the column allows, so it counted
+       -- nothing, and PROCESSING and FAILED were both missing — which left the
+       -- refund the gateway had already refused, the one most in need of
+       -- somebody's attention, appearing on no screen a person reads.
+       (SELECT count(*)::text FROM refunds WHERE status IN ('PENDING','PROCESSING','FAILED'))
          AS refunds_outstanding,
        -- Money the State is holding on somebody else's behalf. It belongs on
        -- this screen more than on any other.
