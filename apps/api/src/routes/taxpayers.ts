@@ -211,6 +211,20 @@ taxpayerRouter.post(
  * Declared before the parametrised routes so "tin-outstanding" is not read as
  * a taxpayer id.
  */
+/**
+ * Records taken off the register while they still owed something.
+ *
+ * Declared here with `tin-outstanding` and for the same reason: before the
+ * parametrised routes, so the path is not read as a taxpayer id.
+ */
+taxpayerRouter.get(
+  '/ended-with-arrears',
+  requirePermission('taxpayer:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json({ taxpayers: await taxpayers.taxpayersEndedWithArrears(pool) });
+  }),
+);
+
 taxpayerRouter.get(
   '/tin-outstanding',
   requirePermission('taxpayer:tin_sync'),
@@ -383,6 +397,45 @@ taxpayerRouter.post(
           actorRole: req.auth!.role,
           reason,
           ...fields,
+        }),
+      );
+    },
+  ),
+);
+
+/**
+ * Taking a record off the register, pausing it, or putting it back.
+ *
+ * `taxpayer:correct` rather than `taxpayer:manage`: the officer who learns
+ * that a shop has shut is a revenue officer, not an administrator, and this
+ * changes nothing about *which person* the record is about — which is the
+ * distinction that reserves the identity route for an administrator.
+ *
+ * No step-up. It moves no money, repoints no identity, is reversible by the
+ * same permission, and every change carries a reason into the audit log. What
+ * guards against it being used to stop the State chasing a friend's arrears is
+ * not a second factor but daylight: the debt stays in every total, and the
+ * record appears in `/taxpayers/ended-with-arrears` until it is paid.
+ */
+taxpayerRouter.post(
+  '/:id/status',
+  requirePermission('taxpayer:correct'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'CLOSED']),
+      reason: z
+        .string()
+        .trim()
+        .min(10, 'Say what happened to this taxpayer, in at least 10 characters'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await taxpayers.setTaxpayerStatus({
+          taxpayerId: req.params.id,
+          status: data.status,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
         }),
       );
     },

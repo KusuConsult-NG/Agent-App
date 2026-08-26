@@ -110,6 +110,12 @@ async function processWindow(
      JOIN revenue_items ri ON ri.id = a.revenue_item_id
      JOIN taxpayers t ON t.id = i.taxpayer_id
     WHERE i.status IN ('UNPAID', 'PARTIALLY_PAID')
+      -- Not a record somebody took off the register. The debt stays owed and
+      -- stays in every total; what stops is the chasing, because the business
+      -- has shut or the person has died and the number now belongs to somebody
+      -- else. Ended records that still owe are worked from the
+      -- ended-with-arrears queue instead, by a person rather than a sweep.
+      AND t.status = 'ACTIVE'
       AND i.expires_at IS NOT NULL
       AND i.expires_at > now() + INTERVAL '2 days'
       AND i.expires_at BETWEEN now() + ($1 || ' days')::INTERVAL

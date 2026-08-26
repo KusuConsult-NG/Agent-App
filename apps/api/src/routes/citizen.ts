@@ -110,18 +110,39 @@ citizenRouter.get(
       tin_status: string;
       phone: string;
       status: string;
+      status_reason: string | null;
     } | null = null;
 
+    /*
+     * Any record that is still this person's, not only an active one.
+     *
+     * Both lookups required `status = 'ACTIVE'`, which was harmless for as
+     * long as no record could be anything else. Migration 038 gave a record an
+     * end, and the moment one is closed that filter starts telling a citizen
+     * who may still owe money that PSIRS has no record of them at all. A
+     * closed record does not stop being owed; it stops being chased. Saying
+     * "no record found" to the person holding the debt is the platform
+     * asserting something untrue about money, which is the one thing §95 is
+     * there to prevent.
+     *
+     * MERGED is the exception and stays excluded: that record was folded into
+     * another one, and the answer for the person is on the record it went
+     * into, not on the shell it left behind.
+     */
     if (tin) {
       taxpayer = await queryOne(
         pool,
-        `SELECT id, tin, tin_status, phone, status FROM taxpayers WHERE tin = $1 AND status = 'ACTIVE'`,
+        `SELECT id, tin, tin_status, phone, status, status_reason FROM taxpayers
+          WHERE tin = $1 AND status <> 'MERGED'`,
         [tin.trim().toUpperCase()],
       );
     } else if (phone) {
       taxpayer = await queryOne(
         pool,
-        `SELECT id, tin, tin_status, phone, status FROM taxpayers WHERE phone = $1 AND status = 'ACTIVE'`,
+        `SELECT id, tin, tin_status, phone, status, status_reason FROM taxpayers
+          WHERE phone = $1 AND status <> 'MERGED'
+          ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC
+          LIMIT 1`,
         [phone.trim()],
       );
     }
@@ -131,8 +152,8 @@ citizenRouter.get(
       res.json({
         found: false,
         message: tin
-          ? 'No active taxpayer record found for that TIN.'
-          : 'No active taxpayer record found for that phone number.',
+          ? 'No taxpayer record found for that TIN.'
+          : 'No taxpayer record found for that phone number.',
       });
       return;
     }
@@ -209,11 +230,38 @@ citizenRouter.get(
     // obligation names and the eligible programmes are gone with the fields
     // they fed — syncTaxpayerComplianceAndIncentives above already refreshes
     // both, so nothing else depended on them.
+    /*
+     * A record that has been taken off the register says so, and says why.
+     *
+     * The officer's own words, because a person told the State has closed
+     * their record is owed the reason — and because the commonest cause of a
+     * record being closed in error is a shop that was assumed shut and was
+     * not, which the person can only correct if they are told.
+     *
+     * `hasOutstanding` is untouched by any of this. What is owed is owed
+     * whether or not the record is still on the register.
+     */
+    const ended =
+      taxpayer.status === 'ACTIVE'
+        ? null
+        : {
+            status: taxpayer.status,
+            reason: taxpayer.status_reason,
+            message:
+              `This record has been ${taxpayer.status.toLowerCase()} and no new charge will be ` +
+              'raised against it. ' +
+              (hasOutstanding
+                ? 'What was already owed is still owed and can still be paid.'
+                : 'Nothing is outstanding.') +
+              ' If this is wrong, any PSIRS office can put the record back on the register.',
+          };
+
     res.json({
       found: true,
       tinStatus: taxpayer.tin_status,
       complianceStatus,
       hasOutstanding,
+      ...(ended ? { ended } : {}),
       message: statusMessages[complianceStatus] ?? '',
       detail:
         'For your TIN, your compliance score, what you owe and which support programmes you ' +

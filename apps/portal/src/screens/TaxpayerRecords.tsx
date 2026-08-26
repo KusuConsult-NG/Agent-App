@@ -291,6 +291,10 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
         </div>
       )}
 
+      {chosen && can('taxpayer:correct') && (
+        <RegisterStatus taxpayerId={chosen.id} name={displayName(chosen)} />
+      )}
+
       {chosen && can('taxpayer:obligation:waive') && <Obligations taxpayerId={chosen.id} />}
 
       {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
@@ -572,6 +576,91 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
         rows={vehicles}
         empty="No vehicles are recorded against this taxpayer."
       />
+    </div>
+  );
+}
+
+/**
+ * Taking a record off the register, and putting it back.
+ *
+ * The record of a business that shut kept accruing assessments and kept being
+ * sent reminders, because nothing could ever change its status. What this is
+ * not is a write-off: what was already owed stays owed, stays in every total,
+ * and moves to the ended-with-arrears queue on the Outstanding work screen —
+ * so a debt cannot be made to quietly stop being anybody's job by closing the
+ * record it sits on.
+ */
+function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string }) {
+  const [status, setStatus] = useState<'SUSPENDED' | 'CLOSED' | 'ACTIVE'>('CLOSED');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function submit() {
+    if (reason.trim().length < 10) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ message: string }>(`/taxpayers/${taxpayerId}/status`, {
+        status,
+        reason: reason.trim(),
+      });
+      setMessage(result.message);
+      setReason('');
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 className="card__title">The register — {name}</h2>
+      <p className="card__hint">
+        A record that is suspended or closed stops accruing new charges and stops receiving
+        reminders. Nothing already owed is written off: it stays payable, stays in the revenue
+        figures, and appears under ended records that still owe until it is settled.
+      </p>
+
+      {error && <ErrorAlert error={error} />}
+      {message && (
+        <Alert kind="success">
+          <p style={{ margin: 0 }}>{message}</p>
+        </Alert>
+      )}
+
+      <div className="field">
+        <label htmlFor="reg-status">What has happened to this taxpayer</label>
+        <select
+          id="reg-status"
+          value={status}
+          onChange={(event) => setStatus(event.target.value as typeof status)}
+        >
+          <option value="CLOSED">Closed — the business has shut or the person has died</option>
+          <option value="SUSPENDED">Suspended — paused pending an enquiry</option>
+          <option value="ACTIVE">Active — put the record back on the register</option>
+        </select>
+      </div>
+
+      <div className="field">
+        <label htmlFor="reg-reason">How this was established</label>
+        <textarea
+          id="reg-reason"
+          value={reason}
+          rows={3}
+          onChange={(event) => setReason(event.target.value)}
+          placeholder="Premises visited on 12 August: the shop has been empty since the market fire in March."
+        />
+      </div>
+
+      <div className="button-row">
+        <button type="button" disabled={busy || reason.trim().length < 10} onClick={submit}>
+          {busy ? 'Recording…' : status === 'ACTIVE' ? 'Put back on the register' : 'Take off the register'}
+        </button>
+      </div>
     </div>
   );
 }
