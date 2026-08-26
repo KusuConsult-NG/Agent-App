@@ -898,13 +898,27 @@ export async function registerDevice(params: {
       return { deviceId: existing.id, status: existing.status };
     }
 
-    // The first device of an approved agent is auto-approved so onboarding can
-    // complete; every subsequent device starts PENDING and needs an officer
-    // (Addendum §21).
+    /*
+     * The first device of an approved agent is auto-approved so onboarding can
+     * complete; every subsequent device starts PENDING and needs an officer
+     * (Addendum §21).
+     *
+     * "First" has to mean the agent has never had one, not that they have none
+     * right now. This counted only devices that were APPROVED or ACTIVE, and a
+     * revoked device is neither — so an agent whose only handset had just been
+     * revoked *for cause* counted as having none, their replacement was treated
+     * as their first, and it was collecting revenue before anybody had looked
+     * at it. Revocation kills the device, ends its sessions and refuses to let
+     * the same handset back; and then the next one let the agent straight back
+     * in. The officer's decision lasted as long as it took to register another
+     * phone.
+     *
+     * Onboarding and replacement look identical to a count and are opposite
+     * situations. Only one of them means nobody has ever had a reason to look.
+     */
     const priorDevices = await queryOne<{ count: string }>(
       client,
-      `SELECT count(*)::text AS count FROM agent_devices
-        WHERE agent_id = $1 AND status IN ('APPROVED','ACTIVE')`,
+      'SELECT count(*)::text AS count FROM agent_devices WHERE agent_id = $1',
       [params.agentId],
     );
     const isFirst = Number.parseInt(priorDevices?.count ?? '0', 10) === 0;
@@ -952,6 +966,80 @@ export async function registerDevice(params: {
 }
 
 /** Immediate device revocation (PRD §34, Addendum §21). */
+/**
+ * Let a handset start collecting government revenue (Addendum §21).
+ *
+ * The mirror of `revokeDevice`, and it had been written as neither a mirror
+ * nor a service: the route updated the row and returned, and that was all.
+ * Two things were missing because of it.
+ *
+ * The agent stayed locked out. `agent_clearance.device_registered` is what
+ * `requireActiveAgent` reads, and it is derived — revoking refreshes it, and
+ * registering refreshes it, and approving did not. So an officer could approve
+ * a replacement handset, see the device go ACTIVE, and the agent would still be
+ * told "You are not yet cleared to carry out revenue collection — no approved
+ * device has been registered", with nothing on either screen to explain the
+ * disagreement.
+ *
+ * And it left no trail. Revoking a device is on the audit log; letting one in
+ * was not, though only one of the two starts money being taken in somebody's
+ * name.
+ */
+export async function approveDevice(params: {
+  deviceId: string;
+  actorId: string;
+  actorRole: string;
+  ipAddress?: string | null;
+}): Promise<{ agentId: string }> {
+  return withTransaction(async (client) => {
+    const device = await queryOne<{
+      id: string;
+      status: string;
+      agent_id: string;
+      device_identifier: string;
+    }>(
+      client,
+      'SELECT id, status, agent_id, device_identifier FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status === 'REVOKED') {
+      throw forbidden('A revoked device cannot be approved again.');
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'ACTIVE', approved_at = now(), approved_by = $2
+        WHERE id = $1`,
+      [params.deviceId, params.actorId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await journal(client, {
+      agentId: device.agent_id,
+      eventType: 'DEVICE_REGISTERED',
+      actorId: params.actorId,
+      metadata: { deviceIdentifier: device.device_identifier, approved: true },
+    });
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_approved',
+      entityType: 'agent_device',
+      entityId: device.id,
+      oldValue: { status: device.status },
+      newValue: {
+        status: 'ACTIVE',
+        agentId: device.agent_id,
+        deviceIdentifier: device.device_identifier,
+      },
+      ipAddress: params.ipAddress ?? null,
+    });
+
+    return { agentId: device.agent_id };
+  });
+}
+
 export async function revokeDevice(params: {
   deviceId: string;
   reason: string;
