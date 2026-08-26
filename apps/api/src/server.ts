@@ -19,6 +19,7 @@ import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
 import { sendDueReminders } from './services/reminders';
+import { expireLapsedInvoices } from './services/revenue';
 import { log } from './lib/logger';
 import { metrics } from './lib/metrics';
 import { reportError } from './services/error-reporting';
@@ -44,6 +45,15 @@ const WORKER_INTERVALS = {
   authorityCatchUp: 30 * 60_000,
   /** Ask the gateway again for refunds a taxpayer is still owed. */
   refundRetry: 10 * 60_000,
+  /**
+   * Retire invoices whose payment deadline has passed.
+   *
+   * Hourly rather than nightly, because the window between an invoice lapsing
+   * and the record saying so is a window in which the platform tells a citizen
+   * they owe something it will refuse to take, and tells the State it is owed
+   * money nobody can pay it.
+   */
+  invoiceExpiry: 60 * 60_000,
   /**
    * Three-way reconciliation (PRD §46).
    *
@@ -194,6 +204,14 @@ async function main() {
       return result.attempted > 0
         ? `${result.completed} refund(s) returned, ${result.stillOutstanding} still owed`
         : null;
+    }),
+
+    // A deadline nothing acts on is a date on a piece of paper. The payment
+    // path already refuses a lapsed invoice; this is what makes the record say
+    // the same thing.
+    schedule('invoice-expiry', WORKER_INTERVALS.invoiceExpiry, async () => {
+      const result = await expireLapsedInvoices({ ...SYSTEM_ACTOR, limit: 500 });
+      return result.expired > 0 ? `${result.expired} invoice(s) passed their deadline` : null;
     }),
 
     // The control that proves government actually received the money. It ran
