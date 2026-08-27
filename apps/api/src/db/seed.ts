@@ -579,8 +579,17 @@ const INCENTIVE_PROGRAMMES = [
 const NOTIFICATION_TEMPLATES = [
   { code: 'TIN_CREATED_SMS', event: 'TIN_CREATED', channel: 'SMS', body: 'PSIRS: Your Taxpayer Identification Number is {{tin}}. Keep it safe — you will need it for every government payment.' },
   { code: 'INVOICE_SMS', event: 'INVOICE_GENERATED', channel: 'SMS', body: 'PSIRS: Invoice {{reference}} for {{amount}} has been raised. Pay only through approved government channels.' },
-  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} has been confirmed. Receipt: {{receiptNumber}}. Verify it at any time using the receipt number.' },
-  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed — receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been received and confirmed. Your official receipt number is {{receiptNumber}} (transaction {{reference}}).\n\nYou can verify this receipt at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // Confirmation gives the taxpayer an acknowledgement, not a receipt, and this
+  // is the only channel that reaches a citizen who holds no account. Migration
+  // 042 carries the same wording to deployments that already have these rows —
+  // templates are inserted ON CONFLICT DO NOTHING, so editing here alone would
+  // fix it only for installations that do not exist yet.
+  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} is confirmed. This is your acknowledgement {{receiptNumber}} - it is NOT a receipt. Your government receipt follows once the money reaches the government account. Check it at any time with this number.' },
+  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed - acknowledgement {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been confirmed by the payment system (transaction {{reference}}).\n\nThis message is your ACKNOWLEDGEMENT OF PAYMENT, number {{receiptNumber}}. It is not a government receipt. The money reaches the Plateau State Government account shortly, and your official receipt is issued automatically when it does - we will send you its number.\n\nYou can check this acknowledgement at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // And the message for the moment the money actually arrives, which had no
+  // template and no event: the receipt was issued and nobody told the taxpayer.
+  { code: 'RECEIPT_GENERATED_SMS', event: 'RECEIPT_GENERATED', channel: 'SMS', body: 'PSIRS: Government has received your payment of {{amount}}. Your official receipt is {{receiptNumber}} (transaction {{reference}}). Check it at any time with this number.' },
+  { code: 'RECEIPT_GENERATED_EMAIL', event: 'RECEIPT_GENERATED', channel: 'EMAIL', subject: 'Your government receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nThe Plateau State Government has now received your payment of {{amount}} (transaction {{reference}}).\n\nYour official receipt number is {{receiptNumber}}. This replaces the acknowledgement you were sent earlier and is your evidence of payment.\n\nYou can verify it at any time without signing in.\n\nPlateau State Internal Revenue Service' },
   { code: 'PAYMENT_FAILED_SMS', event: 'PAYMENT_FAILED', channel: 'SMS', body: 'PSIRS: Payment for {{reference}} did not go through. No money has been taken. You can try again.' },
   { code: 'VEHICLE_RENEWAL_SMS', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', body: 'PSIRS: Vehicle {{registration}} has been renewed and is valid until {{expiry}}. Download your document from the portal.' },
   { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
