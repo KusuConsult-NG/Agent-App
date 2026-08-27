@@ -6,7 +6,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
-import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
 import {
   asyncHandler,
@@ -473,6 +473,12 @@ governmentRouter.get(
           pool,
           `SELECT a.id, a.approval_type, a.entity_type, a.entity_id, a.payload, a.status,
                   a.requested_reason, a.requested_at, a.review_note, a.decision_reason,
+                  -- The id as well as the name. The portal decided whether to
+                  -- offer Approve by comparing the requester's *name* against
+                  -- the signed-in user's, which it had to because the id was
+                  -- never sent. Two officers who share a name is not a rare
+                  -- thing in one revenue office.
+                  a.requested_by AS requested_by_user_id,
                   requester.full_name AS requested_by_name,
                   reviewer.full_name AS reviewed_by_name,
                   approver.full_name AS approved_by_name
@@ -1553,38 +1559,86 @@ governmentRouter.post(
     );
     if (!programme) throw notFound('Incentive programme');
 
-    // Queue in background — can take minutes for large datasets.
-    const taxpayerIds = await query<{ id: string }>(
+    /*
+     * Answer now, evaluate afterwards.
+     *
+     * The comment here said "queue in background" and the code did no such
+     * thing: it walked every active taxpayer with a TIN inside the request,
+     * one `await` at a time, holding a connection for as long as that took. On
+     * a real register that is minutes, and a reverse proxy gives up long before
+     * the loop does — so the officer sees a 504, the work carries on
+     * invisibly, and pressing the button again starts a second pass over the
+     * same people.
+     *
+     * The advisory lock is what makes the second press harmless. A programme
+     * already being evaluated answers 409 rather than starting again beside
+     * itself.
+     */
+    const programmeId = req.params.id;
+    const actorId = req.auth!.userId;
+    const actorRole = req.auth!.role;
+    const lockName = `incentive-evaluate-all:${programmeId}`;
+
+    const started = await queryOne<{ locked: boolean }>(
       pool,
-      `SELECT id FROM taxpayers WHERE status = 'ACTIVE' AND tin IS NOT NULL`,
+      'SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked',
+      [LOCK_NAMESPACE.WORKER, lockName],
     );
-
-    let evaluated = 0;
-    for (const { id: taxpayerId } of taxpayerIds) {
-      try {
-        await incentives.evaluateEligibility({ programmeId: req.params.id, taxpayerId });
-        evaluated++;
-      } catch {
-        // Non-fatal — one taxpayer failure should not abort the batch.
-      }
+    if (!started?.locked) {
+      throw conflict(
+        'EVALUATION_ALREADY_RUNNING',
+        'This programme is already being evaluated. Wait for that pass to finish.',
+        'The result appears against each taxpayer as it is worked through.',
+      );
     }
+    await pool
+      .query('SELECT pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.WORKER, lockName])
+      .catch(() => undefined);
 
-    await withTransaction(async (client) => {
-      await recordAudit(client, {
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-        action: 'incentive.bulk_evaluated',
-        entityType: 'incentive_programme',
-        entityId: req.params.id,
-        newValue: { evaluated },
-      });
-    });
-
-    res.json({
+    res.status(202).json({
       programme: programme.name,
-      evaluated,
-      message: `Evaluated ${evaluated} taxpayer(s) against this programme.`,
+      status: 'ACCEPTED',
+      message:
+        'Evaluation started. Eligibility appears against each taxpayer as they are worked ' +
+        'through; this page does not wait for it.',
     });
+
+    /*
+     * Deliberately not awaited, and every failure swallowed into the audit
+     * record rather than thrown: the response has already gone, so an
+     * unhandled rejection here would take the process down rather than reach
+     * anybody who could act on it.
+     */
+    void withJobLock(lockName, async () => {
+      const taxpayerIds = await query<{ id: string }>(
+        pool,
+        `SELECT id FROM taxpayers WHERE status = 'ACTIVE' AND tin IS NOT NULL`,
+      );
+
+      let evaluated = 0;
+      let failed = 0;
+      for (const { id: taxpayerId } of taxpayerIds) {
+        try {
+          await incentives.evaluateEligibility({ programmeId, taxpayerId });
+          evaluated += 1;
+        } catch {
+          // One taxpayer failing must not abort the batch, but it is counted:
+          // "evaluated 900 of 1000" is a different fact from "evaluated 900".
+          failed += 1;
+        }
+      }
+
+      await withTransaction(async (client) => {
+        await recordAudit(client, {
+          actorId,
+          actorRole,
+          action: 'incentive.bulk_evaluated',
+          entityType: 'incentive_programme',
+          entityId: programmeId,
+          newValue: { evaluated, failed, considered: taxpayerIds.length },
+        });
+      });
+    }).catch(() => undefined);
   }),
 );
 

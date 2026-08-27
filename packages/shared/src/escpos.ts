@@ -26,7 +26,16 @@ export interface ReceiptPrintData {
   agentName: string;
   agentCode: string;
   issuedAt: string | Date;
-  verificationUrl: string;
+  /**
+   * The public address a citizen can scan, when there is one to print.
+   *
+   * Optional because omitting it is a legitimate outcome: a deployment with no
+   * public verification site configured must print the code alone rather than a
+   * link that looks official and reaches nothing. This was a required string,
+   * so the only way to satisfy it was to make one up — which is how every
+   * receipt came to carry a developer's localhost address.
+   */
+  verificationUrl?: string;
   verificationCode?: string;
 }
 
@@ -44,7 +53,16 @@ export interface VehicleRenewalPrintData {
   validFrom: string | Date;
   validUntil: string | Date;
   issuedAt: string | Date;
-  verificationUrl: string;
+  /**
+   * The public address a citizen can scan, when there is one to print.
+   *
+   * Optional because omitting it is a legitimate outcome: a deployment with no
+   * public verification site configured must print the code alone rather than a
+   * link that looks official and reaches nothing. This was a required string,
+   * so the only way to satisfy it was to make one up — which is how every
+   * receipt came to carry a developer's localhost address.
+   */
+  verificationUrl?: string;
   verificationCode: string;
 }
 
@@ -243,10 +261,16 @@ export function encodeReceiptEscpos(data: ReceiptPrintData, paperWidth: PaperWid
     builder.textLine(`Verification Code: ${data.verificationCode}`);
   }
 
+  builder.feed(1);
+  if (data.verificationUrl) {
+    builder.qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4).textLine(data.verificationUrl);
+  } else {
+    // No site to send them to, so tell them what to do with the code instead.
+    builder.textLine('Check this receipt at any PSIRS office');
+    builder.textLine('or on the PSIRS website, using the code above.');
+  }
+
   builder
-    .feed(1)
-    .qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4)
-    .textLine(data.verificationUrl)
     .feed(1)
     .textLine('Government Revenue Office')
     .textLine('Thank you for your civic duty')
@@ -308,11 +332,15 @@ export function encodeVehicleRenewalEscpos(
     .textLine('OFFICIAL DIGITAL CLEARANCE')
     .setBold(false)
     .textLine(`Security Code: ${data.verificationCode}`)
-    .feed(1)
-    .qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4)
-    .textLine(data.verificationUrl)
-    .feed(2)
-    .cut();
+    .feed(1);
+
+  if (data.verificationUrl) {
+    builder.qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4).textLine(data.verificationUrl);
+  } else {
+    builder.textLine('Check with the code above at any PSIRS office.');
+  }
+
+  builder.feed(2).cut();
 
   return builder.toUint8Array();
 }

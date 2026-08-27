@@ -54,7 +54,7 @@ pushRouter.use(authenticate);
 pushRouter.post(
   '/subscribe',
   validateBody(subscriptionSchema, async (req, res, data) => {
-    saveSubscription(data.subscription, {
+    await saveSubscription(data.subscription, {
       userId: req.auth!.userId,
       agentId: req.auth!.agentId,
     });
@@ -67,7 +67,7 @@ pushRouter.post(
   validateBody(unsubscribeSchema, async (req, res, data) => {
     // Only your own device. An endpoint is long and random, but "hard to guess"
     // is not the same as "checked".
-    removeSubscription(data.endpoint, { userId: req.auth!.userId });
+    await removeSubscription(data.endpoint, { userId: req.auth!.userId });
     res.json({ status: 'unsubscribed' });
   }),
 );

@@ -27,18 +27,20 @@ import {
   createGovernmentUser,
   get,
   loginAs,
+  pool,
   post,
   resetDatabase,
   startTestServer,
   stopTestServer,
 } from './helpers';
+import { queryOne } from '../db/pool';
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { sendPushNotification, saveSubscription } from '../services/push';
+import { sendPushNotification, saveSubscription, subscriptionsFor } from '../services/push';
 
 let agentToken = '';
 let agentDevice = '';
@@ -95,13 +97,14 @@ describe('registering a device for push', () => {
     );
     assert.equal(response.status, 200, JSON.stringify(response.body));
 
-    // The proof is that targeting works: an ownerless row matches no target.
-    const delivered = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Payment confirmed', body: 'A collection has been verified.' },
-    );
+    /*
+     * Asserted against the store rather than through a delivery function that
+     * does not deliver. An ownerless row matches no target, which was the
+     * defect; the question is whether the row carries who it belongs to.
+     */
+    const mine = await subscriptionsFor({ userId: agentUserId });
     assert.ok(
-      delivered.sent + delivered.failed > 0,
+      mine.some((row) => row.endpoint === endpoint),
       'the subscription must be findable by the user it belongs to',
     );
   });
@@ -113,42 +116,70 @@ describe('registering a device for push', () => {
       { token: agentToken, deviceId: agentDevice },
     );
 
-    const other = await sendPushNotification(
-      { userId: officerUserId },
-      { title: 'Not for you', body: 'Addressed to someone else.' },
-    );
-
-    assert.equal(
-      other.sent + other.failed,
-      0,
-      'a push addressed to one person must not reach another',
-    );
+    const theirs = await subscriptionsFor({ userId: officerUserId });
+    assert.equal(theirs.length, 0, 'a push addressed to one person must not reach another');
   });
 
   it('only lets you forget your own device', async () => {
     const endpoint = endpointFor('mine');
-    saveSubscription({ endpoint }, { userId: agentUserId });
+    await saveSubscription({ endpoint }, { userId: agentUserId });
 
     // Somebody else asks for it to be removed.
     const response = await post('/push/unsubscribe', { endpoint }, { token: officerToken });
     assert.equal(response.status, 200, JSON.stringify(response.body));
 
-    const stillThere = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Still subscribed', body: 'This device was not theirs to remove.' },
-    );
+    const stillThere = await subscriptionsFor({ userId: agentUserId });
     assert.ok(
-      stillThere.sent + stillThere.failed > 0,
+      stillThere.some((row) => row.endpoint === endpoint),
       'another account must not be able to unsubscribe your device',
     );
 
     // The owner can.
     await post('/push/unsubscribe', { endpoint }, { token: agentToken, deviceId: agentDevice });
-    const gone = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Gone', body: 'Removed by its owner.' },
+    const gone = await subscriptionsFor({ userId: agentUserId });
+    assert.equal(gone.length, 0, 'the owner can remove their own device');
+  });
+
+  it('survives a restart, because the store is not a process', async () => {
+    /*
+     * The reason this moved out of a Map. A fleet of handsets would have
+     * silently stopped receiving anything after a routine deploy, with nothing
+     * to look at that would say so — and in the multi-replica topology the
+     * advisory locks exist for, a handset that subscribed through one replica
+     * was unknown to the others.
+     */
+    const endpoint = endpointFor('durable');
+    await saveSubscription({ endpoint }, { userId: agentUserId });
+
+    const row = await queryOne<{ endpoint: string; user_id: string }>(
+      pool,
+      'SELECT endpoint, user_id FROM push_subscriptions WHERE endpoint = $1',
+      [endpoint],
     );
-    assert.equal(gone.sent + gone.failed, 0, 'the owner can remove their own device');
+    assert.ok(row, 'the subscription is a row, not a map entry');
+    assert.equal(row!.user_id, agentUserId, 'and it records whose device it is');
+  });
+
+  it('refuses to report a delivery it did not make', async () => {
+    /*
+     * It logged to the console, counted that as `sent`, and returned it. The
+     * messaging layer's own providerFor('PUSH') throws and explains no adapter
+     * exists; this sat beside it reporting success for the same channel.
+     *
+     * It refuses rather than returning zero, because a caller that queued a
+     * push and got { sent: 0 } would reasonably read that as "nobody is
+     * subscribed" — which is a different and equally wrong belief.
+     */
+    await saveSubscription({ endpoint: endpointFor('nowhere') }, { userId: agentUserId });
+    await assert.rejects(
+      () =>
+        sendPushNotification(
+          { userId: agentUserId },
+          { title: 'Anything', body: 'Nothing will carry this.' },
+        ),
+      /not implemented/i,
+      'a push nobody sent must not be reported as sent',
+    );
   });
 
   it('still serves the VAPID key without an account, since the browser needs it first', async () => {

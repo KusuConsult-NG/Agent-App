@@ -168,6 +168,9 @@ taxpayerRouter.post(
             role: req.auth!.role,
             mayWaive: req.auth!.permissions.includes('taxpayer:obligation:waive'),
           },
+          // Inside this transaction, not beside it: a later step throwing must
+          // take the obligations with it.
+          client,
         );
       }
       await evaluateRegistrationRisk(client, {
