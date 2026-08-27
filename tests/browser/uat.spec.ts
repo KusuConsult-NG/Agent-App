@@ -642,6 +642,50 @@ test.describe('The officer portal, role by role', () => {
 });
 
 // ===========================================================================
+test.describe('Starting a demonstration in a browser nobody has approved', () => {
+  /**
+   * The friction a presenter actually meets, and the one thing the seed cannot
+   * arrange for them.
+   *
+   * An agent's first handset is auto-approved; every one after that waits for
+   * an officer, because revoking a stolen phone would be worth nothing if the
+   * thief could register another. The seeded agent already has a handset — the
+   * seed registered one so it could build the demonstration data through the
+   * real API — so a presenter's own browser turns up as that agent's *second*
+   * handset and is refused. Correct, and useless to demonstrate around.
+   *
+   * A development build therefore accepts `?device=`, and this is the test that
+   * the demonstration route in docs/CLIENT-DEMO-GUIDE.md actually works.
+   */
+  test.use({ viewport: PHONE });
+
+  test('lets a browser pointed at the seeded handset collect straight away', async ({ browser }) => {
+    /*
+     * Only the positive half is asserted here. That an unapproved handset is
+     * refused is journey-01b's subject, and it is asserted there at the moment
+     * it actually bites — the first request that would commit money. Opening
+     * the collection screen is not that moment: the screen renders, and the
+     * refusal arrives when the agent acts on it.
+     */
+    const okContext = await browser.newContext({ viewport: PHONE });
+    const ok = await okContext.newPage();
+    await ok.goto(`${AGENT}/?device=uat-agent-device-000001`);
+    await ok.locator('input[type="tel"]').first().fill(AGENT_LOGIN.phone);
+    await ok.locator('input[type="password"]').first().fill(AGENT_LOGIN.password);
+    await ok.getByRole('button', { name: /^sign in$/i }).click();
+    await ok.waitForTimeout(3500);
+    await ok.goto(`${AGENT}/#/collect`);
+    await ok.waitForTimeout(2500);
+    expect(
+      await ok.locator('body').innerText(),
+      'the seeded handset must be able to collect straight away',
+    ).not.toMatch(/not registered to your agent account/i);
+    await agentShot(ok, 'demo-01-browser-pointed-at-seeded-handset');
+    await okContext.close();
+  });
+});
+
+// ===========================================================================
 test.describe('What a citizen sees without an account', () => {
   test('the public verification page answers an unknown receipt', async ({ page }) => {
     const console_ = watchConsole(page);
