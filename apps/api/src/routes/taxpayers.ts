@@ -299,6 +299,43 @@ taxpayerRouter.get(
       if (!searched) {
         throw badRequest('Enter something to search for — a name, phone number, TIN or reference.');
       }
+
+      /*
+       * A FILTER NARROWS A SEARCH. IT IS NOT A SEARCH.
+       *
+       * Everything this endpoint originally accepted required already knowing
+       * who you were looking for: an exact TIN, phone number, receipt number
+       * or vehicle plate, or a fragment of a name. `revenueItemId`,
+       * `categoryId` and `outstandingOnly` were added so an officer could ask
+       * "who is registered under Market Levy" — a question about a set of
+       * people rather than a person, and a useful one.
+       *
+       * This route accepts `taxpayer:read:assigned`, which every field agent
+       * holds. Those three parameters therefore turned a lookup into an
+       * enumeration: a hundred citizens' names, TINs and telephone numbers,
+       * selected by a levy the agent collects, delivered to their handset. An
+       * `lgaId` on its own is the same shape and predates them — "everybody in
+       * Jos North" is not a search for anybody.
+       *
+       * So a caller who may not read every taxpayer has to name one. The
+       * filters still work; they just cannot be the whole question.
+       */
+      const IDENTIFIERS = ['q', 'tin', 'phone', 'vehicleRegistration', 'receiptNumber',
+        'transactionReference'] as const;
+      const namedSomebody = IDENTIFIERS.some((key) => {
+        const value = criteria[key];
+        return typeof value === 'string' && value.trim().length > 0;
+      });
+
+      if (!namedSomebody && !req.auth!.permissions.includes('taxpayer:read:all')) {
+        throw forbidden(
+          'Listing taxpayers by levy, category, arrears or Local Government Area is a report, ' +
+            'not a search, and it is not part of a collecting agent’s access.',
+          'Search for the taxpayer by name, phone number, TIN, receipt number or vehicle ' +
+            'registration. You can still add a levy or an area to narrow that search.',
+        );
+      }
+
       res.json(await taxpayers.searchTaxpayers(pool, data));
     },
   ),

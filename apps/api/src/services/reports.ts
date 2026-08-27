@@ -1041,7 +1041,11 @@ export interface CategoryBreakdownParams {
  * settled figure is returned alongside so the difference is visible rather than
  * buried.
  */
-export async function revenueByCategory(db: Db, params: CategoryBreakdownParams = {}) {
+export async function revenueByCategory(
+  db: Db,
+  params: CategoryBreakdownParams = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
   const conditions: string[] = [`t.status IN ${REVENUE_STATES}`];
   const values: unknown[] = [];
   const add = (clause: string, value: unknown) => {
@@ -1054,6 +1058,19 @@ export async function revenueByCategory(db: Db, params: CategoryBreakdownParams 
   if (params.lgaId) add('t.lga_id = $$', params.lgaId);
   if (params.agentId) add('t.agent_id = $$', params.agentId);
   if (params.categoryId) add('ri.category_id = $$', params.categoryId);
+
+  /*
+   * The caller's scope, not a filter they chose.
+   *
+   * `lgaId` above is a drill-down the officer asked for; this is the limit of
+   * what they may be shown, and it is applied after so no combination of
+   * query parameters can widen it. Both queries below share these values, so
+   * the category totals and the per-item rows cannot disagree about which
+   * transactions they counted.
+   */
+  const { statewide, territoryIds } = scopeParams(scope);
+  values.push(statewide, territoryIds);
+  conditions.push(transactionScopeSql('t', values.length - 1, values.length));
 
   const where = conditions.join(' AND ');
 
@@ -1146,7 +1163,11 @@ export interface DefaultersParams {
  * Ordered by what is owed, because a list of defaulters sorted by anything else
  * is a list somebody has to sort before they can use it.
  */
-export async function defaultersByCategory(db: Db, params: DefaultersParams = {}) {
+export async function defaultersByCategory(
+  db: Db,
+  params: DefaultersParams = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
   const limit = Math.min(params.limit ?? 100, 500);
   const conditions: string[] = [
     `i.status IN ('UNPAID','PARTIALLY_PAID')`,
@@ -1161,6 +1182,20 @@ export async function defaultersByCategory(db: Db, params: DefaultersParams = {}
   if (params.categoryId) add('ri.category_id = $$', params.categoryId);
   if (params.revenueItemId) add('ri.id = $$', params.revenueItemId);
   if (params.lgaId) add('tp.lga_id = $$', params.lgaId);
+
+  /*
+   * Scoped on the transaction's territory, like every other report here.
+   *
+   * A defaulter list is a list of people who can be pressed for money, so an
+   * unscoped one hands a supervisor exactly the material an unofficial
+   * collection is made from — for an area that is not theirs. The predicate is
+   * the shared one rather than a hand-written `tp.lga_id` test, because a
+   * scope spelled differently in one report from all the others is how this
+   * came to be missing in the first place.
+   */
+  const { statewide, territoryIds } = scopeParams(scope);
+  values.push(statewide, territoryIds);
+  conditions.push(transactionScopeSql('t', values.length - 1, values.length));
 
   values.push(limit);
 

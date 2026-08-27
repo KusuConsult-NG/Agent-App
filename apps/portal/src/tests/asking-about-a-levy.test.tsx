@@ -176,3 +176,51 @@ describe('asking only about people who owe something', () => {
     });
   });
 });
+
+describe('a supervisor, who may read reports but not the whole register', () => {
+  /*
+   * The section that lists citizens by levy is an enumeration, and the API
+   * refuses it to a caller holding only `taxpayer:read:assigned` — which is
+   * what a supervisor holds. Offering the panel anyway would put a permission
+   * error inside a screen their own menu handed them.
+   *
+   * The two report sections are territory-scoped server-side and do reach
+   * them, so the screen is still worth opening.
+   */
+  const supervisor = (permission: string) =>
+    ['report:read:territory', 'taxpayer:read:assigned'].includes(permission);
+
+  it('is not shown the taxpayer list, because the API would refuse it', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation(supervisor);
+    render(<LeviesScreen />);
+
+    await waitFor(() => expect(screen.getByText(/Awaiting settlement/i)).toBeTruthy());
+    expect(screen.queryByText(/Who is registered under/i)).toBeNull();
+    // And the page does not promise them a section they will not get.
+    expect(screen.queryByText(/who is registered under it/i)).toBeNull();
+  });
+
+  it('never asks for it either', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation(supervisor);
+    render(<LeviesScreen />);
+
+    await waitFor(() => expect(asked.some((path) => path.startsWith('/government/revenue'))).toBe(true));
+    fireEvent.change(screen.getByLabelText(/Tax category/i), { target: { value: 'cat-1' } });
+
+    await waitFor(() => {
+      const money = asked.filter((path) => path.includes('categoryId=cat-1'));
+      expect(money.length, 'the filter still drives the sections they do get').toBeGreaterThan(0);
+    });
+    expect(asked.filter((path) => path.startsWith('/taxpayers/search'))).toHaveLength(0);
+  });
+
+  it('still gets the collections and the arrears, which are scoped for them', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation(supervisor);
+    render(<LeviesScreen />);
+
+    await waitFor(() => {
+      expect(asked.some((path) => path.startsWith('/government/revenue/by-category'))).toBe(true);
+      expect(asked.some((path) => path.startsWith('/government/revenue/defaulters'))).toBe(true);
+    });
+  });
+});

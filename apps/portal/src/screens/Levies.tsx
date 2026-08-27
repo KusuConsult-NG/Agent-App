@@ -109,7 +109,25 @@ export function LeviesScreen() {
     can('report:read:all') || can('report:read:territory') || can('dashboard:executive');
   const canReadDefaulters =
     can('report:read:all') || can('report:read:territory') || can('taxpayer:read:all');
-  const canReadTaxpayers = can('taxpayer:read:all') || can('taxpayer:read:assigned');
+  /*
+   * `taxpayer:read:all`, and not `taxpayer:read:assigned`.
+   *
+   * This section lists citizens selected by a levy rather than looking one up,
+   * and the search endpoint refuses that to a caller without the wider
+   * permission — because the same call from a field agent's handset is an
+   * enumeration of the register. A supervisor holds only the narrower one, so
+   * offering them the section would offer a panel the API then refuses, which
+   * is the failure this portal's menu is built to make impossible.
+   *
+   * A supervisor asking who is registered under a levy *in their own territory*
+   * is a fair question and this is not an answer to it: it would need the
+   * search to carry a scope the way the two reports above now do, and taxpayers
+   * are held by LGA rather than by territory. That is a change to what the
+   * permission means, not a fix, so it is left named here rather than guessed
+   * at. The collections and arrears sections above are scoped and do reach
+   * them.
+   */
+  const canReadTaxpayers = can('taxpayer:read:all');
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);
@@ -222,9 +240,20 @@ export function LeviesScreen() {
     <>
       <div className="card">
         <h2 className="card__title">Levies and tax categories</h2>
+        {/*
+          * The summary names what this officer will actually be shown.
+          *
+          * It read "what each levy brought in, who is registered under it, and
+          * who is behind" for everyone — including a supervisor, who does not
+          * get the middle one. A page that promises three answers and gives two
+          * reads as a screen that failed to load rather than one that is doing
+          * what it is meant to.
+          */}
         <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
-          What each levy has brought in, who is registered under it, and who is behind. Choose a
-          category or an item once and all three sections below answer for it.
+          {canReadTaxpayers
+            ? 'What each levy has brought in, who is registered under it, and who is behind.'
+            : 'What each levy has brought in, and who is behind on it.'}{' '}
+          Choose a category or an item once and every section below answers for it.
         </p>
 
         <div className="filters">

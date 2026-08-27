@@ -94,7 +94,8 @@ governmentRouter.get(
       categoryId: uuidSchema.optional(),
     }),
     async (req, res, data) => {
-      res.json(await reports.revenueByCategory(pool, data));
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.revenueByCategory(pool, data, scope));
     },
   ),
 );
@@ -110,7 +111,8 @@ governmentRouter.get(
       limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
     async (req, res, data) => {
-      res.json(await reports.defaultersByCategory(pool, data));
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.defaultersByCategory(pool, data, scope));
     },
   ),
 );
