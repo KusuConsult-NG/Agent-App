@@ -847,22 +847,63 @@ export const EXCEPTION_STATUSES = [
   'PENDING_SETTLEMENT',
 ] as const;
 
+/**
+ * The finance officer's worklist: every unresolved exception, once each.
+ *
+ * `reconciliation_records` holds one row per transaction *per run*, which is
+ * right — an auditor asking what the sweep concluded on Tuesday needs Tuesday's
+ * answer, not today's overwritten on top of it. But the queue is not history.
+ * It is a list of things somebody has to do, and it used to read every
+ * unresolved row from every run.
+ *
+ * Reconciliation runs four times a day over a trailing forty-eight hours, so a
+ * transaction still awaiting settlement was recorded afresh by each sweep that
+ * covered it: the same item appeared in the queue up to eight times, each with
+ * its own Resolve button, and resolving one left the rest. A worklist that
+ * multiplies its own contents is worse than a long one — the officer cannot
+ * tell how much work there actually is, and the count is wrong everywhere it is
+ * shown.
+ *
+ * So the queue takes the newest finding per transaction — per gateway
+ * reference, for the lines that have no platform transaction at all — and shows
+ * it only if that newest finding is still unresolved. Resolving it therefore
+ * clears the item, and an older run's stale verdict cannot bring it back.
+ */
 export async function exceptionQueue(db: Db, options: { status?: string; limit?: number } = {}) {
   return query(
     db,
-    `SELECT r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
-            r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail, r.created_at,
+    `WITH newest AS (
+       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
+              r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
+              r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail,
+              r.created_at, r.transaction_id
+         FROM reconciliation_records r
+        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
+                 r.created_at DESC, r.id DESC
+     )
+     SELECT n.id, n.run_id, n.status, n.expected_amount_kobo, n.received_amount_kobo,
+            n.variance_kobo, n.gateway_reference, n.settlement_reference, n.detail, n.created_at,
             t.transaction_reference, t.status AS transaction_status,
             tp.first_name, tp.last_name, tp.business_name,
             ag.agent_code
-       FROM reconciliation_records r
-       LEFT JOIN transactions t ON t.id = r.transaction_id
+       FROM newest n
+       LEFT JOIN transactions t ON t.id = n.transaction_id
        LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
-      WHERE r.reconciled_at IS NULL
-        AND ($1::text IS NULL OR r.status = $1)
-        AND r.status = ANY($3::text[])
-      ORDER BY r.created_at DESC
+      /*
+       * Only the status is tested, not reconciled_at.
+       *
+       * resolveException sets both in one UPDATE — status to RESOLVED and
+       * reconciled_at to now() — and nothing else writes either on this
+       * table, so the two can never disagree and RESOLVED is not in the
+       * exception list. Mutation-testing confirmed the extra condition could
+       * not change the result of any query this platform can produce, and an
+       * unreachable branch in a worklist is where a wrong belief about the
+       * worklist hides. The test file holds the invariant it depends on.
+       */
+      WHERE ($1::text IS NULL OR n.status = $1)
+        AND n.status = ANY($3::text[])
+      ORDER BY n.created_at DESC
       LIMIT $2`,
     [options.status ?? null, options.limit ?? 100, [...EXCEPTION_STATUSES]],
   );

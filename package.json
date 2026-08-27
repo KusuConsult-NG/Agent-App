@@ -26,7 +26,10 @@
     "audit:e2e": "node scripts/audit-e2e.mjs",
     "typecheck": "tsc -b packages/shared apps/api && tsc --noEmit -p apps/api/tsconfig.test.json && tsc --noEmit -p apps/agent/tsconfig.json && tsc --noEmit -p apps/portal/tsconfig.json",
     "load-test": "npm run build --workspace @psirs/shared && tsx apps/api/src/db/load-test.ts",
-    "test:browser": "bash scripts/browser-test.sh"
+    "test:browser": "bash scripts/browser-test.sh",
+    "uat": "scripts/uat/stack.sh up && npx playwright test tests/browser/uat.spec.ts",
+    "uat:up": "scripts/uat/stack.sh up",
+    "uat:down": "scripts/uat/stack.sh down"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

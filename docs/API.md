@@ -14,6 +14,17 @@ JSON number — `JSON.parse` silently rounds large integers.
 |---|---|
 | `Authorization: Bearer <token>` | Access token |
 | `Idempotency-Key` | Required on payment initiation, recommended on all creates |
+
+A retry of a completed request is replayed verbatim with `idempotent-replay:
+true`. A retry while the original is still running answers 409
+`REQUEST_IN_PROGRESS`. Past five minutes the same row answers 409
+`REQUEST_INTERRUPTED` instead: the original attempt died before it could be
+settled, so whether it took effect is genuinely unknown — `moneyStatus` stays
+`UNCONFIRMED` and the caller is told to check the record and use a new key
+rather than to keep waiting. The key is deliberately not made retryable, because
+an interrupted request may have committed and lost only its response. Settled
+keys are deleted after thirty days by the `idempotency-sweep` job; interrupted
+ones are never deleted.
 | `X-Device-Id` | Agent device identifier; required for revenue endpoints |
 | `X-App-Version` | PWA build; enforced against the minimum supported version |
 | `X-Request-Id` | Optional correlation id; echoed on the response |

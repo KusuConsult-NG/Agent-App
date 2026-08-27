@@ -21,6 +21,8 @@ import { retryOutstandingRefunds, runScheduledReconciliation } from './services/
 import { sendDueReminders } from './services/reminders';
 import { expireLapsedInvoices } from './services/revenue';
 import { BACKGROUND_JOBS, runJob, type JobName } from './services/jobs';
+import { expireSettledKeys } from './middleware/idempotency';
+import { expireOldEvents } from './services/usage';
 import { log } from './lib/logger';
 import { metrics } from './lib/metrics';
 import { reportError } from './services/error-reporting';
@@ -209,6 +211,27 @@ async function main() {
       return result.sent > 0 || result.skipped > 0
         ? `${result.sent} reminder(s) sent, ${result.skipped} skipped`
         : null;
+    }),
+
+    // Housekeeping on the two tables that grew without bound. Neither moves
+    // money; both are how a database runs out of room, which does.
+    schedule('idempotency-sweep', async () => {
+      const result = await expireSettledKeys();
+      if (result.interrupted > 0) {
+        // A key still IN_PROGRESS an hour later is a money-path request that
+        // was interrupted and never came back. It is not deleted — the same
+        // key must not be allowed to re-execute — but it is not silent either.
+        log.warn(`${result.interrupted} idempotency key(s) left by interrupted requests`, {
+          component: 'worker',
+          job: 'idempotency-sweep',
+        });
+      }
+      return result.deleted > 0 ? `${result.deleted} settled key(s) deleted` : null;
+    }),
+
+    schedule('usage-retention', async () => {
+      const result = await expireOldEvents(pool);
+      return result.deleted > 0 ? `${result.deleted} telemetry row(s) deleted` : null;
     }),
   ];
 
