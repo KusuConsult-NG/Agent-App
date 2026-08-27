@@ -20,6 +20,7 @@
     "dev:agent": "npm run dev --workspace @psirs/agent",
     "dev:portal": "npm run dev --workspace @psirs/portal",
     "test": "npm run build --workspace @psirs/shared && npm run test --workspace @psirs/api && npm run test --workspace @psirs/agent && npm run test --workspace @psirs/portal",
+    "verify": "npm run typecheck && npm run test && npm run test:concurrency",
     "test:concurrency": "npm run build --workspace @psirs/shared && npm run test:concurrency --workspace @psirs/api",
     "verify:integrations": "npm run build --workspace @psirs/shared && tsx apps/api/src/db/verify-integrations.ts",
     "benchmark": "node scripts/benchmark-load.mjs",

@@ -299,6 +299,52 @@ describe('Before the money reaches a government account', () => {
     );
   });
 
+  it('refuses a second acknowledgement for the same collection', async () => {
+    /*
+     * `receipts` has carried UNIQUE (transaction_id) since the schema was
+     * written, because a second receipt is a second government assertion that
+     * the same money was received. The acknowledgement is what the taxpayer
+     * holds for the day or two before the receipt exists, and two of them with
+     * different numbers for the same money is the same failure a day earlier.
+     *
+     * A redelivered webhook and an agent's poll arriving together is ordinary,
+     * so this cannot rest on which of them happens to run first.
+     */
+    const { transactionId } = await collectAndConfirm();
+    const existing = await queryOne<{ owner_type: string; owner_id: string; storage_reference: string; content_type: string; checksum: string; issuing_authority: string; byte_size: string }>(
+      pool,
+      `SELECT owner_type, owner_id, storage_reference, content_type, checksum, issuing_authority, byte_size
+         FROM documents
+        WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_id = $1`,
+      [transactionId],
+    );
+    assert.ok(existing, 'the first acknowledgement is there to duplicate');
+
+    await assert.rejects(
+      () =>
+        pool.query(
+          `INSERT INTO documents
+             (document_number, document_type, entity_type, entity_id, owner_type, owner_id,
+              storage_reference, content_type, checksum, issuing_authority, byte_size,
+              verification_code, status)
+           VALUES ('PSIRS-ACK/2026/999999', 'PAYMENT_ACKNOWLEDGEMENT', 'transaction', $1,
+                   $2, $3, $4, $5, $6, $7, $8, 'DUPEACK99999', 'ISSUED')`,
+          [
+            transactionId,
+            existing!.owner_type,
+            existing!.owner_id,
+            existing!.storage_reference,
+            existing!.content_type,
+            existing!.checksum,
+            existing!.issuing_authority,
+            existing!.byte_size,
+          ],
+        ),
+      /documents_one_acknowledgement_per_transaction|duplicate key/,
+      'the database must refuse a second acknowledgement for one collection',
+    );
+  });
+
   it('refuses vehicle particulars at the database too', async () => {
     /*
      * The certificate half of the same rule, and the more expensive half. A
