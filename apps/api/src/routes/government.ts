@@ -305,6 +305,22 @@ governmentRouter.post(
   ),
 );
 
+/**
+ * Collections the gateway confirmed and has not yet handed over.
+ *
+ * Separate from the exception queue because it is not an exception: it is money
+ * in transit, and the officer's job with it is to know the figure rather than to
+ * act on each row. Anything past the settlement window has moved to the
+ * exception queue instead, which is where somebody does have to act.
+ */
+governmentRouter.get(
+  '/reconciliation/awaiting-settlement',
+  requirePermission('payment:reconcile', 'report:financial', 'audit:read'),
+  asyncHandler(async (_req, res) => {
+    res.json(await reconciliation.awaitingSettlement(pool));
+  }),
+);
+
 governmentRouter.get(
   '/reconciliation/exceptions',
   requirePermission('payment:reconcile', 'audit:read'),

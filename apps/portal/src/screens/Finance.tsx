@@ -11,6 +11,7 @@ import { BankChangesCard } from './Agents';
 export function ReconciliationScreen() {
   const [settlements, setSettlements] = useState<any | null>(null);
   const [exceptions, setExceptions] = useState<any[] | null>(null);
+  const [inTransit, setInTransit] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   /**
    * A panel that could not be loaded, kept apart from `error`.
@@ -60,6 +61,10 @@ export function ReconciliationScreen() {
       .get<any[]>('/government/reconciliation/exceptions')
       .then(setExceptions)
       .catch(() => setExceptions([]));
+    api
+      .get<any[]>('/government/reconciliation/awaiting-settlement')
+      .then(setInTransit)
+      .catch(() => setInTransit([]));
   }, []);
 
   useEffect(() => {
@@ -360,11 +365,68 @@ export function ReconciliationScreen() {
         </div>
       )}
 
+      {/*
+        * Money in transit, kept out of the exception queue.
+        *
+        * A payment the gateway has confirmed is money the *gateway* holds; it
+        * reaches the government account in a batch a day or two later. That is
+        * the third leg of the reconciliation, not a fault, and listing it as an
+        * exception made ordinary business look like a problem while hiding the
+        * case that is one — a collection confirmed days ago and never handed
+        * over. Those have moved to the queue below.
+        */}
+      <div className="card card--flush">
+        <div style={{ padding: '18px 18px 0' }}>
+          <h2 className="card__title">Awaiting settlement from the gateway</h2>
+          <p className="card__hint">
+            Confirmed by the gateway and not yet paid into the government account. Normal for a day
+            or two; nobody has to do anything with these. Anything older than three days has moved
+            to the exception queue below, because by then the money should have arrived.
+          </p>
+        </div>
+        {!inTransit ? (
+          <div style={{ padding: 18 }}>
+            <Loading rows={3} />
+          </div>
+        ) : (
+          <Table
+            columns={[
+              { key: 'transaction_reference', label: 'Transaction' },
+              {
+                key: 'name',
+                label: 'Taxpayer',
+                render: (row: any) =>
+                  row.business_name ?? [row.first_name, row.last_name].filter(Boolean).join(' ') ?? '—',
+              },
+              {
+                key: 'expected_amount_kobo',
+                label: 'Amount',
+                numeric: true,
+                render: (row: any) => <Money kobo={row.expected_amount_kobo} />,
+              },
+              {
+                key: 'age_hours',
+                label: 'Waiting',
+                numeric: true,
+                render: (row: any) =>
+                  row.age_hours < 24
+                    ? `${row.age_hours} h`
+                    : `${Math.floor(row.age_hours / 24)} d ${row.age_hours % 24} h`,
+              },
+              { key: 'agent_code', label: 'Agent' },
+            ]}
+            rows={inTransit}
+            empty="Every confirmed collection has reached the government account."
+          />
+        )}
+      </div>
+
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
           <h2 className="card__title">Exception queue</h2>
           <p className="card__hint">
             Every exception is a finance officer's task. Nothing here is written off automatically.
+            Money still inside the gateway's settlement window is above, not here.
           </p>
         </div>
         {!exceptions ? (

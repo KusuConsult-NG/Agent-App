@@ -205,6 +205,17 @@ statement. Mutation-testing confirmed it could not change any result, so it went
 and the invariant it depended on is now held by a test rather than by a reading
 of the code.
 
+**Money in transit was listed as an exception.** A collection the gateway has
+confirmed is money the *gateway* holds; it reaches the government account in a
+batch a day or two later, and that third leg is the whole point of a three-way
+reconciliation. Listing it under "Exception queue" alongside amount mismatches
+made ordinary business look like a fault — and hid the case that is one, a
+collection confirmed days ago and never handed over, which looked identical to
+one taken an hour before. There are now two panels: **Awaiting settlement from
+the gateway**, with how long each has been waiting and nothing for anybody to
+do, and the exception queue, which a pending settlement joins only once it is
+past the 72-hour window and the money should have arrived.
+
 Everything else the walkthrough touched behaved correctly, including three
 refusals that look like failures and are not: an unapproved handset refused at
 the point of collection, seven revenue items refused for having no approved rate
