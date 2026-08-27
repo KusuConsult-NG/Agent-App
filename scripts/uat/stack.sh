@@ -25,6 +25,10 @@ export JWT_SECRET="uat-jwt-secret-value-long-enough-for-32ch"
 export IDENTITY_HASH_SECRET="uat-identity-secret-long-enough-for-32ch"
 export PAYMENT_WEBHOOK_SECRET="uat-webhook-secret-long-enough-for-32chars"
 export STORAGE_PATH="/tmp/psirs-uat-storage"
+# The demonstration stack approves a handset on registration, so a presenter's
+# own browser can collect without a second person approving it from the portal.
+# config.ts refuses to boot in production with this set.
+export DEVICE_AUTO_APPROVE=true
 export RUN_MIGRATIONS_ON_BOOT=false
 export PORT=4000
 

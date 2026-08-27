@@ -92,22 +92,26 @@ agent, and approve the pending handset. Reload the private window and it
 collects. That is the whole replacement-handset path, and it takes about ninety
 seconds.
 
-### Two numbers to have written down
+### Two codes to have written down
 
-You will need them in Act 5. Take them from the run in front of you — they
-change on every seed:
+The seed prints them at the end of `stack.sh up`, under **"To demonstrate public
+verification"**. You do not need a database client, and you should not open one
+in front of an audience. They change on every seed, so take them from the run in
+front of you:
 
-- an **acknowledgement** verification code — the one from this run is
-  `NA76E-2DC3F`, for `PSIRS-ACK/2026/000008`
-- a **receipt** verification code — `XM3KN-RX6AC`, for `PSIRS/2026/000001`
-
-```bash
-psql postgres://postgres:postgres@localhost:5432/psirs_uat -c \
-  "SELECT document_number, verification_code FROM documents
-     WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' LIMIT 1"
-psql postgres://postgres:postgres@localhost:5432/psirs_uat -c \
-  "SELECT receipt_number, verification_code FROM receipts LIMIT 1"
 ```
+To demonstrate public verification, at http://localhost:5174/#/verify
+  receipt          3WCDM-EAF4M  (PSIRS/2026/000010)
+                   answers VALID - a genuine government receipt
+  acknowledgement  79TKP-MGCJY  (PSIRS-ACK/2026/000008)
+                   answers VALID - NOT A RECEIPT, money not yet received
+  anything else    answers NOT FOUND
+```
+
+The acknowledgement belongs to the one collection the seed deliberately leaves
+awaiting its bank credit, which is why it is still an acknowledgement and not a
+receipt. Those two codes answering differently is Act 5, and it is the part of
+the demonstration the room can check for itself.
 
 ### The one sentence to open with
 
