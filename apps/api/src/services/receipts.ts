@@ -1,11 +1,20 @@
 /**
- * Government receipts (PRD §19, §20, §43).
+ * Government receipts, and the acknowledgement that precedes one
+ * (PRD §19, §20, §43).
  *
- * `issueReceipt` is called from exactly one place — the verified branch of
- * `confirmPayment` — and even then the database trigger
- * `receipts_require_verified_payment` re-checks that the payment is VERIFIED,
- * belongs to the transaction and matches the amount. There is no API route,
- * admin screen or service function that issues a receipt on request.
+ * A receipt asserts that the Plateau State Government received the money, so it
+ * is issued only once that is true: `issueReceipt` is called from exactly one
+ * place — the settlement branch of `settleLinkedTransactions` — and even then
+ * the database trigger `receipts_require_verified_payment` re-checks that the
+ * payment is VERIFIED, that it carries a `settlement_id`, that it belongs to the
+ * transaction and that it matches the amount. There is no API route, admin
+ * screen or service function that issues a receipt on request.
+ *
+ * It used to be issued when the *gateway* confirmed, which is a different fact:
+ * the gateway holding the money is not the State having been paid. What the
+ * taxpayer gets at that moment is `issueAcknowledgement` below — a verifiable
+ * document that says the payment is confirmed, that the State has not yet
+ * received it, and that a receipt follows.
  */
 
 import type { PoolClient } from 'pg';
@@ -15,7 +24,12 @@ import { queryOne, query } from '../db/pool';
 import { generateVerificationCode, hashIdentityNumber, normaliseVerificationCode } from '../lib/crypto';
 import { nextReceiptNumber } from '../lib/references';
 import { notFound } from '../lib/errors';
-import { registerDocument, renderReceiptPdf, verifyDocumentIntegrity } from './documents';
+import {
+  registerDocument,
+  renderAcknowledgementPdf,
+  renderReceiptPdf,
+  verifyDocumentIntegrity,
+} from './documents';
 
 export interface IssuedReceipt {
   receiptId: string;
@@ -151,6 +165,136 @@ export async function issueReceipt(
     receiptId: receipt!.id,
     receiptNumber,
     documentId: document.documentId,
+    verificationCode,
+  };
+}
+
+export interface IssuedAcknowledgement {
+  documentId: string;
+  documentNumber: string;
+  verificationCode: string;
+}
+
+/**
+ * What the taxpayer holds between the gateway confirming and the State being
+ * paid.
+ *
+ * Not a receipt, and built so it cannot be mistaken for one: its own document
+ * type, its own number series, its own wording, and a standing notice above the
+ * amount saying the money has not reached a government account yet. The
+ * alternative was to give a citizen who has just been debited nothing at all,
+ * at a market stall, with an agent who has nothing to show them — which is its
+ * own way of making the State look like it took the money and denied it.
+ *
+ * Idempotent by transaction, because a webhook and a status check can both
+ * reach the verified branch and neither should mint a second document.
+ */
+export async function issueAcknowledgement(
+  client: PoolClient,
+  params: { transactionId: string; paymentId: string },
+): Promise<IssuedAcknowledgement> {
+  const existing = await queryOne<{
+    id: string;
+    document_number: string;
+    verification_code: string;
+  }>(
+    client,
+    `SELECT id, document_number, verification_code FROM documents
+      WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_type = 'transaction'
+        AND entity_id = $1 AND status <> 'REVOKED'`,
+    [params.transactionId],
+  );
+  if (existing) {
+    return {
+      documentId: existing.id,
+      documentNumber: existing.document_number,
+      verificationCode: existing.verification_code,
+    };
+  }
+
+  const context = await queryOne<{
+    transaction_reference: string;
+    amount_kobo: string;
+    service_charge_kobo: string;
+    taxpayer_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string | null;
+    tin: string | null;
+    revenue_item: string;
+    revenue_category: string;
+    mda_name: string | null;
+    lga_name: string;
+    period_label: string | null;
+    agent_code: string | null;
+    payment_reference: string;
+    gateway_reference: string | null;
+    payment_method: string | null;
+    paid_at: Date | null;
+  }>(
+    client,
+    `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.taxpayer_id,
+            tp.first_name, tp.last_name, tp.business_name, tp.tin,
+            ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
+            l.name AS lga_name, a.period_label, ag.agent_code,
+            p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
+       FROM transactions t
+       JOIN taxpayers tp ON tp.id = t.taxpayer_id
+       JOIN revenue_items ri ON ri.id = t.revenue_item_id
+       JOIN revenue_categories rc ON rc.id = ri.category_id
+       LEFT JOIN mdas m ON m.id = ri.mda_id
+       JOIN lgas l ON l.id = t.lga_id
+       JOIN assessments a ON a.id = t.assessment_id
+       LEFT JOIN agents ag ON ag.id = t.agent_id
+       JOIN payments p ON p.id = $2
+      WHERE t.id = $1`,
+    [params.transactionId, params.paymentId],
+  );
+  if (!context) throw notFound('That transaction');
+
+  const verificationCode = generateVerificationCode();
+  const issuedAt = new Date();
+  const taxpayerName =
+    context.business_name ?? `${context.first_name ?? ''} ${context.last_name ?? ''}`.trim();
+
+  const pdf = await renderAcknowledgementPdf({
+    // The acknowledgement's own number, not a receipt number: receipt numbers
+    // are a government series and one must not be spent on a payment that may
+    // never arrive.
+    receiptNumber: context.transaction_reference,
+    transactionReference: context.transaction_reference,
+    paymentReference: context.payment_reference,
+    gatewayReference: context.gateway_reference ?? 'Not recorded',
+    taxpayerName,
+    tin: context.tin,
+    revenueCategory: context.revenue_category,
+    revenueItem: context.revenue_item,
+    mdaName: context.mda_name,
+    amountKobo: parseKobo(context.amount_kobo),
+    serviceChargeKobo: parseKobo(context.service_charge_kobo),
+    paymentMethod: context.payment_method,
+    paidAt: context.paid_at ?? issuedAt,
+    issuedAt,
+    periodLabel: context.period_label,
+    agentCode: context.agent_code,
+    lgaName: context.lga_name,
+    verificationCode,
+  });
+
+  const document = await registerDocument(client, {
+    documentType: 'PAYMENT_ACKNOWLEDGEMENT',
+    ownerType: 'TAXPAYER',
+    ownerId: context.taxpayer_id,
+    entityType: 'transaction',
+    entityId: params.transactionId,
+    bytes: pdf,
+    verificationCode,
+    numberPrefix: 'PSIRS-ACK',
+  });
+
+  return {
+    documentId: document.documentId,
+    documentNumber: document.documentNumber,
     verificationCode,
   };
 }
@@ -327,6 +471,29 @@ export async function verifyPublicly(
       issuedAt: document.issued_at.toISOString(),
       integrityConfirmed: false,
       message: 'The stored document does not match its original fingerprint. Report this to PSIRS.',
+    };
+  }
+
+  /*
+   * An acknowledgement is genuine and is not a receipt, and the difference is
+   * the entire point of it. Answering with the wording every other document
+   * gets — "a genuine government document issued by PSIRS" — is how the person
+   * holding it concludes the State has been paid, which is the confusion this
+   * document exists to prevent. So it gets its own answer, saying what it is,
+   * what it is not, and what happens next.
+   */
+  if (document.document_type === 'PAYMENT_ACKNOWLEDGEMENT') {
+    return {
+      status: 'VALID',
+      documentNumber: document.document_number,
+      documentType: document.document_type,
+      issuedAt: document.issued_at.toISOString(),
+      integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+      message:
+        'This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt. ' +
+        'The payment system has confirmed the payment; the money has not yet reached the ' +
+        'government account. A receipt is issued automatically once it does, and can be checked ' +
+        'here in the same way.',
     };
   }
 

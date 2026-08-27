@@ -17,6 +17,7 @@ import {
   grantStepUp,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -629,7 +630,27 @@ describe('Payment, verification and receipt (PRD §17, §19, §95)', () => {
     assert.equal(response.body.gatewayStatus, 'SUCCESS');
     assert.equal(response.body.webhook.outcome.status, 'VERIFIED');
 
-    ctx.receiptNumber = response.body.webhook.outcome.receiptNumber;
+    /*
+     * The webhook confirms the payment; it does not produce a receipt. What the
+     * taxpayer holds now is an acknowledgement saying the gateway confirmed it
+     * and the State has not yet received it. Settling the collection is what
+     * turns that into a government receipt, and it is done here so the rest of
+     * this file — the PDF, the public verification, the immutability — has one
+     * to work with.
+     */
+    assert.ok(
+      response.body.webhook.outcome.acknowledgementNumber,
+      'the taxpayer is not left with nothing',
+    );
+    assert.equal(response.body.webhook.outcome.receiptNumber, undefined);
+
+    await settleTransaction(ctx.transactionId);
+    const issued = await queryOne<{ receipt_number: string }>(
+      pool,
+      `SELECT receipt_number FROM receipts WHERE transaction_id = $1`,
+      [ctx.transactionId],
+    );
+    ctx.receiptNumber = issued!.receipt_number;
     assert.match(ctx.receiptNumber, /^PSIRS\/\d{4}\/\d{6}$/);
 
     const transaction = await queryOne<{ status: string; verified_at: Date | null }>(
@@ -637,7 +658,7 @@ describe('Payment, verification and receipt (PRD §17, §19, §95)', () => {
       'SELECT status, verified_at FROM transactions WHERE id = $1',
       [ctx.transactionId],
     );
-    assert.equal(transaction!.status, 'RECONCILIATION_PENDING');
+    assert.equal(transaction!.status, 'SETTLED');
     assert.ok(transaction!.verified_at);
 
     const payment = await queryOne<{ status: string; verified_by_source: string }>(
@@ -828,38 +849,92 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
       { token: ctx.financeToken },
     );
 
+  /*
+   * A second collection, confirmed and deliberately not settled.
+   *
+   * The story above now settles its own collection, because a receipt cannot
+   * exist until the money has arrived and the PDF, the public verification and
+   * the immutability tests all need one. So the two tests below — which are
+   * about the interval *before* settlement — need a collection still in it.
+   */
+  const unsettled = { transactionId: '', gatewayReference: '', amountKobo: '' };
+
+  before(async () => {
+    const assessment = await post(
+      '/revenue/assessments',
+      {
+        taxpayerId: ctx.taxpayerId,
+        revenueItemId: await revenueItemByCode('SHOPS-KIOSKS'),
+        inputs: {},
+      },
+      { token: ctx.agentToken, deviceId: ctx.deviceId, idempotencyKey: 'assessment-unsettled' },
+    );
+    assert.equal(assessment.status, 201, JSON.stringify(assessment.body));
+    unsettled.transactionId = assessment.body.transactionId;
+    unsettled.amountKobo = String(assessment.body.amountKobo);
+
+    const payment = await post(
+      '/payments/initiate',
+      { transactionId: unsettled.transactionId },
+      { token: ctx.agentToken, deviceId: ctx.deviceId, idempotencyKey: 'payment-unsettled' },
+    );
+    assert.equal(payment.status, 201, JSON.stringify(payment.body));
+    unsettled.gatewayReference = payment.body.gatewayReference;
+
+    await post(
+      '/payments/simulate',
+      { gatewayReference: unsettled.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      { token: ctx.agentToken, deviceId: ctx.deviceId },
+    );
+  });
+
   it('reports verified-but-unsettled money as pending settlement, not as collected', async () => {
     // Platform and gateway agree, but government has not yet seen the money in
     // its own account — the third leg of PRD §46's three-way match.
     const response = await reconcile();
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.totalPlatformKobo, response.body.totalGatewayKobo);
     assert.ok((response.body.byStatus.PENDING_SETTLEMENT ?? 0) >= 1);
     assert.equal(response.body.exceptions, 0, 'a pending settlement is not an exception');
+
+    // And no receipt, which is the whole of it: the State has not been paid.
+    const receipts = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM receipts WHERE transaction_id = $1`,
+      [unsettled.transactionId],
+    );
+    assert.equal(receipts!.count, '0');
   });
 
-  it('records a settlement and moves the transaction to SETTLED', async () => {
+  it('records a settlement, issues the receipt and moves the transaction to SETTLED', async () => {
     const response = await post(
       '/government/settlements',
       {
         settlementDate: new Date().toISOString().slice(0, 10),
-        gatewayReferences: [ctx.gatewayReference],
-        receivedAmountKobo: '500000',
+        gatewayReferences: [unsettled.gatewayReference],
+        receivedAmountKobo: unsettled.amountKobo,
         bankReference: 'CBN-SETTLE-0001',
       },
       { token: ctx.financeToken },
     );
 
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 201, JSON.stringify(response.body));
     assert.equal(response.body.transactionsSettled, 1);
 
     const transaction = await queryOne<{ status: string }>(
       pool,
       'SELECT status FROM transactions WHERE id = $1',
-      [ctx.transactionId],
+      [unsettled.transactionId],
     );
     assert.equal(transaction!.status, 'SETTLED');
+
+    // The receipt appears at the same moment, and not before it.
+    const receipt = await queryOne<{ receipt_number: string }>(
+      pool,
+      `SELECT receipt_number FROM receipts WHERE transaction_id = $1`,
+      [unsettled.transactionId],
+    );
+    assert.ok(receipt, 'the money arrived, so the receipt exists');
   });
 
   it('marks the payment fully matched once government settlement is recorded', async () => {

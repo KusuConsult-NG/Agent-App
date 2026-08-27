@@ -28,6 +28,7 @@ import {
   createGovernmentUser,
   firstLgaId,
   revenueItemByCode,
+  settleTransaction,
 } from './helpers';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -198,6 +199,8 @@ describe('AUDIT 1 — "No verified payment = no receipt" survives a direct datab
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const payment = await queryOne<{ id: string; status: string }>(
       pool,
@@ -291,6 +294,8 @@ describe('AUDIT 2 — an agent cannot make money appear', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     await assert.rejects(
       pool.query('DELETE FROM receipts WHERE transaction_id = $1', [transactionId]),
@@ -339,6 +344,10 @@ describe('AUDIT 3 — webhook replay cannot duplicate money', () => {
     for (const r of results) {
       assert.equal(r.status, 200, JSON.stringify(r.body));
     }
+
+    // Ten deliveries, then one settlement: the receipt is issued once, by the
+    // settlement, and neither the deliveries nor the settlement may double it.
+    await settleTransaction(transactionId);
 
     const counts = await queryOne<{
       receipts: string;
@@ -640,6 +649,8 @@ describe('AUDIT 6 — historical transactions survive a rate change', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const before = await queryOne<{ amount_kobo: string; receipt_amount: string }>(
       pool,
@@ -763,6 +774,8 @@ describe('AUDIT 8 — public receipt verification discloses only what it should'
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const receipt = await queryOne<{ verification_code: string; receipt_number: string }>(
       pool,
@@ -1009,6 +1022,8 @@ describe('AUDIT 11 — audit trail completeness for money movement', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const actions = await query<{ action: string }>(
       pool,
@@ -1039,11 +1054,18 @@ describe('AUDIT 11 — audit trail completeness for money movement', () => {
     // Transaction state history must be complete and append-only.
     const events = await query<{ to_status: string }>(
       pool,
-      'SELECT to_status FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at',
+      'SELECT to_status FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at, sequence',
       [transactionId],
     );
     const statuses = events.map((e) => e.to_status);
-    for (const expected of ['PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'PAYMENT_VERIFIED', 'RECEIPT_GENERATED']) {
+    for (const expected of [
+      'PAYMENT_PENDING',
+      'PAYMENT_SUCCESSFUL',
+      'PAYMENT_VERIFIED',
+      'RECONCILIATION_PENDING',
+      'RECEIPT_GENERATED',
+      'SETTLED',
+    ]) {
       assert.ok(statuses.includes(expected), `state history must include ${expected}`);
     }
   });
@@ -1331,6 +1353,9 @@ describe('AUDIT 13 — concurrency', () => {
       ),
     );
 
+    // Eight racing confirmations, then the settlement that earns the receipt.
+    await settleTransaction(transactionId);
+
     const counts = await queryOne<{ receipts: string; commissions: string }>(
       pool,
       `SELECT (SELECT count(*)::text FROM receipts WHERE transaction_id = $1) AS receipts,
@@ -1353,6 +1378,8 @@ describe('AUDIT 14 — document access control', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const document = await queryOne<{ id: string }>(
       pool,

@@ -13,6 +13,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { issueReceipt } from './receipts';
 import { parseKobo, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
@@ -20,7 +21,7 @@ import { gateway } from '../integrations/gateway';
 import { conflict, forbidden, notFound } from '../lib/errors';
 import { nextRefundReference, nextSettlementReference } from '../lib/references';
 import { recordAudit } from './audit';
-import { confirmPayment } from './payments';
+import { confirmPayment, issueRenewalsFor } from './payments';
 import { reverseCommissionForTransaction } from './commission';
 import { transitionTransaction } from './revenue';
 import { queueNotification } from './notifications';
@@ -511,18 +512,50 @@ async function settleLinkedTransactions(
     bankReference: string | null;
     actorId: string;
   },
-): Promise<number> {
-  const linked = await query<{ transaction_id: string; status: string }>(
+): Promise<string[]> {
+  const linked = await query<{ transaction_id: string; payment_id: string; status: string }>(
     client,
-    `SELECT DISTINCT p.transaction_id, t.status
+    `SELECT DISTINCT ON (p.transaction_id) p.transaction_id, p.id AS payment_id, t.status
        FROM payments p JOIN transactions t ON t.id = p.transaction_id
-      WHERE p.settlement_id = $1`,
+      WHERE p.settlement_id = $1
+      ORDER BY p.transaction_id, p.verified_at DESC NULLS LAST`,
     [params.settlementId],
   );
 
-  let settled = 0;
+  const settled: string[] = [];
   for (const row of linked) {
     if (!['RECEIPT_GENERATED', 'RECONCILIATION_PENDING'].includes(row.status)) continue;
+
+    /*
+     * This is the moment the receipt is earned.
+     *
+     * A receipt says the Plateau State Government received the money, and this
+     * is the first point at which that is true: a bank credit covering this
+     * collection has been reconciled, and a settlement whose credit does not
+     * match the collections it covers settles none of them. Until now the
+     * taxpayer has held an acknowledgement saying the gateway confirmed the
+     * payment and the State had not yet received it.
+     *
+     * The database refuses a receipt for a payment with no `settlement_id`, so
+     * the ordering here is not merely conventional — issuing before the payment
+     * row carries its settlement would be rejected by the trigger.
+     */
+    if (row.status === 'RECONCILIATION_PENDING') {
+      const receipt = await issueReceipt(client, {
+        transactionId: row.transaction_id,
+        paymentId: row.payment_id,
+        actorId: params.actorId,
+      });
+      await transitionTransaction(client, {
+        transactionId: row.transaction_id,
+        to: 'RECEIPT_GENERATED',
+        reason: `Money received under ${params.settlementReference}`,
+        actorId: params.actorId,
+        source: 'RECONCILIATION',
+        metadata: { receiptNumber: receipt.receiptNumber },
+      });
+    }
+
     await transitionTransaction(client, {
       transactionId: row.transaction_id,
       to: 'SETTLED',
@@ -534,7 +567,7 @@ async function settleLinkedTransactions(
         bankReference: params.bankReference,
       },
     });
-    settled += 1;
+    settled.push(row.transaction_id);
   }
   return settled;
 }
@@ -560,6 +593,25 @@ async function settleLinkedTransactions(
  * disputed, the collections in it stay where they are, and `reconcileSettlement`
  * is where a dispute goes once somebody has found the rest of the money.
  */
+/**
+ * Issue what a settlement paid for, once the settlement itself has committed.
+ *
+ * Vehicle particulars are announced to the vehicle authority over the network,
+ * and a settlement must not hold a database transaction open across somebody
+ * else's network. Wrapping it here rather than in each route means every caller
+ * — the officer's screen, the scheduled sweep, a test — gets the same
+ * behaviour without having to remember it, which is the mistake that left a
+ * webhook-confirmed renewal unissued before.
+ */
+async function issueWhatWasBought(
+  settledTransactionIds: string[],
+  actorId: string,
+  actorRole: string,
+): Promise<void> {
+  if (settledTransactionIds.length === 0) return;
+  await issueRenewalsFor(settledTransactionIds, { actorId, actorRole });
+}
+
 export async function recordSettlement(params: {
   settlementDate: Date;
   gatewayReferences: string[];
@@ -573,9 +625,12 @@ export async function recordSettlement(params: {
   settlementReference: string;
   status: 'RECONCILED' | 'DISPUTED';
   transactionsSettled: number;
+  /** Ids of the transactions this settlement paid for, so the caller can issue
+   * what they bought once this database transaction has committed. */
+  settledTransactionIds: string[];
   varianceKobo: string;
 }> {
-  return withTransaction(async (client) => {
+  const outcome = await withTransaction(async (client) => {
     const settlementReference = await nextSettlementReference(client);
 
     /*
@@ -648,9 +703,9 @@ export async function recordSettlement(params: {
       ]);
     }
 
-    let transactionsSettled = 0;
+    let settledTransactionIds: string[] = [];
     if (matched) {
-      transactionsSettled = await settleLinkedTransactions(client, {
+      settledTransactionIds = await settleLinkedTransactions(client, {
         settlementId: settlement!.id,
         settlementReference,
         bankReference: params.bankReference,
@@ -693,10 +748,14 @@ export async function recordSettlement(params: {
       settlementId: settlement!.id,
       settlementReference,
       status: matched ? ('RECONCILED' as const) : ('DISPUTED' as const),
-      transactionsSettled,
+      transactionsSettled: settledTransactionIds.length,
+      settledTransactionIds,
       varianceKobo: (params.receivedAmountKobo - expected).toString(),
     };
   });
+
+  await issueWhatWasBought(outcome.settledTransactionIds, params.actorId, params.actorRole);
+  return outcome;
 }
 
 /**
@@ -733,9 +792,10 @@ export async function reconcileSettlement(params: {
 }): Promise<{
   settlementReference: string;
   transactionsSettled: number;
+  settledTransactionIds: string[];
   receivedAmountKobo: string;
 }> {
-  return withTransaction(async (client) => {
+  const outcome = await withTransaction(async (client) => {
     const settlement = await queryOne<{
       id: string;
       settlement_reference: string;
@@ -793,7 +853,7 @@ export async function reconcileSettlement(params: {
       [settlement.id, params.receivedAmountKobo.toString(), params.bankReference, params.actorId],
     );
 
-    const transactionsSettled = await settleLinkedTransactions(client, {
+    const settledTransactionIds = await settleLinkedTransactions(client, {
       settlementId: settlement.id,
       settlementReference: settlement.settlement_reference,
       bankReference: params.bankReference,
@@ -814,17 +874,21 @@ export async function reconcileSettlement(params: {
         status: 'RECONCILED',
         receivedKobo: params.receivedAmountKobo.toString(),
         bankReference: params.bankReference,
-        transactionsSettled,
+        transactionsSettled: settledTransactionIds.length,
       },
       reason: params.note,
     });
 
     return {
       settlementReference: settlement.settlement_reference,
-      transactionsSettled,
+      transactionsSettled: settledTransactionIds.length,
+      settledTransactionIds,
       receivedAmountKobo: params.receivedAmountKobo.toString(),
     };
   });
+
+  await issueWhatWasBought(outcome.settledTransactionIds, params.actorId, params.actorRole);
+  return outcome;
 }
 
 /** Finance officer exception queue (PRD §46). */

@@ -30,6 +30,7 @@ import {
   firstLgaId,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -368,7 +369,28 @@ describe('Reconciliation runs without anyone remembering', () => {
       'the sweep must close the missed-webhook gap, not just file it',
     );
 
-    // And the taxpayer gets the receipt they were owed.
+    /*
+     * And the taxpayer gets what they were owed at that moment, which is the
+     * acknowledgement. The receipt is owed too, and comes when the settlement
+     * covering this collection is reconciled — recovering a missed webhook
+     * closes the verification gap, not the settlement one.
+     */
+    const acknowledgement = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM documents
+        WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_id = $1`,
+      [stranded.transactionId],
+    );
+    assert.equal(acknowledgement?.count, '1');
+
+    const beforeSettlement = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM receipts WHERE transaction_id = $1`,
+      [stranded.transactionId],
+    );
+    assert.equal(beforeSettlement?.count, '0', 'the State has not been paid yet');
+
+    await settleTransaction(stranded.transactionId);
     const receipt = await queryOne<{ count: string }>(
       pool,
       `SELECT count(*)::text AS count FROM receipts WHERE transaction_id = $1`,

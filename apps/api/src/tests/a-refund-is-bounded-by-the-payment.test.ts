@@ -44,6 +44,7 @@ import {
   revenueItemByCode,
   startTestServer,
   stopTestServer,
+  settleTransaction,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -129,6 +130,11 @@ async function collect(suffix: string) {
     { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
     auth,
   );
+
+  // A refund gives back money the State holds, so the fixture takes the
+  // collection through settlement — which is also what issues the receipt a
+  // reversal has to void.
+  await settleTransaction(assessment.body.transactionId);
 
   const paid = await queryOne<{ amount_kobo: string }>(
     pool,

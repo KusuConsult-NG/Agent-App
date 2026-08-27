@@ -29,6 +29,7 @@ import {
   firstLgaId,
   loginAs,
   pool,
+  settleTransaction,
   post,
   revenueItemByCode,
   resetDatabase,
@@ -112,6 +113,9 @@ async function paidRenewal(plate: string): Promise<string> {
     { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
     auth,
   );
+
+  // Particulars are granted when the money reaches a government account.
+  await settleTransaction(renewal.body.transactionId);
 
   return renewal.body.renewalId ?? renewal.body.id;
 }

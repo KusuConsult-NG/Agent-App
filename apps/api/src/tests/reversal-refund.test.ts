@@ -35,6 +35,7 @@ import {
   startTestServer,
   stopTestServer,
   revenueItemByCode,
+  settleTransaction,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -116,6 +117,10 @@ async function collect(suffix: string) {
     { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
     auth,
   );
+  // A reversal reverses a receipt, and a receipt exists once the State has
+  // actually been paid — so the fixture takes the collection all the way.
+  await settleTransaction(assessment.body.transactionId);
+
   return {
     taxpayerId: taxpayer.body.taxpayerId as string,
     transactionId: assessment.body.transactionId as string,

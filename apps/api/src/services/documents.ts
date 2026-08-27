@@ -294,6 +294,128 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
   });
 }
 
+/**
+ * An acknowledgement of payment — deliberately not a receipt.
+ *
+ * Issued when the gateway confirms, which means the gateway holds the money and
+ * the State does not yet. Every word on it is chosen so a citizen cannot mistake
+ * it for the receipt that follows: the title says ACKNOWLEDGEMENT, the amount
+ * box says what was paid to the *gateway* rather than to government, and the
+ * standing notice says in plain terms that PSIRS has not yet received it and
+ * what happens next.
+ *
+ * It carries a verification code and a QR like any other document, because the
+ * point of giving the citizen something is that it can be checked. Public
+ * verification reports it as an acknowledgement, never as a receipt.
+ */
+export async function renderAcknowledgementPdf(data: ReceiptPdfData): Promise<Buffer> {
+  const verificationUrl = publicVerificationUrl(data.verificationCode);
+  const qr = await qrDataUrl(verificationUrl);
+
+  return renderPdf((doc) => {
+    header(
+      doc,
+      'ACKNOWLEDGEMENT OF PAYMENT',
+      'Not a government receipt — the payment has not yet reached a government account',
+    );
+
+    doc
+      .fontSize(20)
+      .font(BOLD_FONT)
+      .fillColor(COLOURS.accent)
+      .text(data.receiptNumber, { align: 'center' });
+    doc.moveDown(0.9);
+
+    /*
+     * The notice comes before the figures rather than after them.
+     *
+     * A caveat under the amount is read after the reader has already decided
+     * what they are holding. This is the one thing that must not be missed, so
+     * nothing is above it.
+     */
+    const noticeTop = doc.y;
+    const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc
+      .roundedRect(doc.page.margins.left, noticeTop, noticeWidth, 62, 4)
+      .fillAndStroke('#fdf4e3', '#94651a');
+    doc
+      .fillColor('#7a520f')
+      .fontSize(9.5)
+      .font(BOLD_FONT)
+      .text('THIS IS NOT A RECEIPT', doc.page.margins.left + 14, noticeTop + 10, {
+        width: noticeWidth - 28,
+      });
+    doc
+      .fillColor('#7a520f')
+      .fontSize(9)
+      .font(BODY_FONT)
+      .text(
+        'Your payment has been confirmed by the payment gateway. It has not yet reached the ' +
+          'Plateau State Government account. Your official receipt is issued once it has, ' +
+          'normally within two working days, and can be downloaded with the code below. ' +
+          'Keep this document until then.',
+        doc.page.margins.left + 14,
+        noticeTop + 25,
+        { width: noticeWidth - 28 },
+      );
+    doc.y = noticeTop + 74;
+
+    fieldTable(doc, [
+      ['Taxpayer', data.taxpayerName],
+      ['Taxpayer Identification Number', data.tin ?? 'Not yet assigned'],
+      ['Revenue category', data.revenueCategory],
+      ['Revenue item', data.revenueItem],
+      ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
+      ['Local Government Area', data.lgaName],
+    ]);
+
+    doc.moveDown(0.5);
+    const boxTop = doc.y;
+    const boxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc
+      .roundedRect(doc.page.margins.left, boxTop, boxWidth, 54, 4)
+      .fillAndStroke('#f5f6f5', COLOURS.muted);
+    doc
+      .fillColor(COLOURS.muted)
+      .fontSize(9)
+      .font(BODY_FONT)
+      .text('AMOUNT CONFIRMED BY THE GATEWAY', doc.page.margins.left + 14, boxTop + 10);
+    doc
+      .fillColor(COLOURS.ink)
+      .fontSize(22)
+      .font(BOLD_FONT)
+      .text(formatNaira(data.amountKobo), doc.page.margins.left + 14, boxTop + 23);
+    doc.y = boxTop + 66;
+
+    fieldTable(doc, [
+      ['Transaction reference', data.transactionReference],
+      ['Payment reference', data.paymentReference],
+      ['Gateway reference', data.gatewayReference],
+      ['Payment method', data.paymentMethod ?? 'Not recorded'],
+      ['Payment date', data.paidAt.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'],
+      ['Acknowledged', data.issuedAt.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'],
+      ['Facilitating agent', data.agentCode ?? 'Not agent-assisted'],
+      ['Verification code', data.verificationCode],
+    ]);
+
+    const qrX = doc.page.width - doc.page.margins.right - 110;
+    const qrY = doc.page.height - doc.page.margins.bottom - 175;
+    doc.image(qr, qrX, qrY, { width: 110 });
+    doc
+      .fontSize(7)
+      .fillColor(COLOURS.muted)
+      .text('Scan to check', qrX, qrY + 114, { width: 110, align: 'center' });
+
+    footer(
+      doc,
+      verificationUrl,
+      'An acknowledgement records that the payment gateway confirmed this payment. It is not ' +
+        'evidence that the Plateau State Government has received the money, and it does not ' +
+        'discharge the obligation it was paid against until the receipt is issued.',
+    );
+  });
+}
+
 export interface VehicleDocumentData {
   documentNumber: string;
   registrationNumber: string;
@@ -447,7 +569,14 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 }
 
 export interface RegisterDocumentParams {
-  documentType: 'RECEIPT' | 'INVOICE' | 'ASSESSMENT' | 'VEHICLE_RENEWAL' | 'TIN_CONFIRMATION' | 'PAYMENT_EVIDENCE';
+  documentType:
+    | 'RECEIPT'
+    | 'INVOICE'
+    | 'ASSESSMENT'
+    | 'VEHICLE_RENEWAL'
+    | 'TIN_CONFIRMATION'
+    | 'PAYMENT_EVIDENCE'
+    | 'PAYMENT_ACKNOWLEDGEMENT';
   ownerType: 'TAXPAYER' | 'AGENT' | 'VEHICLE';
   ownerId: string;
   entityType?: string;

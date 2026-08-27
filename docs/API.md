@@ -263,11 +263,11 @@ already in force, which the gate would never read.
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/payments/initiate` | `Idempotency-Key` required |
-| `POST` | `/payments/:id/confirm` | asks the gateway; returns whatever it says |
+| `POST` | `/payments/:id/confirm` | asks the gateway; returns whatever it says. On success it issues an **acknowledgement of payment**, not a receipt — see below |
 | `GET` | `/payments/transactions/:reference/status` | authoritative recovery (Addendum §44) |
 | `GET` | `/payments` | `payment:read:all` |
 | `POST` | `/payments/simulate` | development gateway only |
-| `GET` | `/receipts` · `/receipts/lookup?number=` · `/receipts/:id` | receipt numbers contain `/`, so lookup by number uses a query parameter |
+| `GET` | `/receipts` · `/receipts/lookup?number=` · `/receipts/:id` | receipt numbers contain `/`, so lookup by number uses a query parameter. A receipt exists only after settlement |
 | `GET` | `/documents/:id` | metadata plus a signed download URL |
 | `GET` | `/vehicles/lookup/:registrationNumber` | platform, then authority; `source` is `PLATFORM`, `AUTHORITY`, `NOT_FOUND` or `REGISTRY_UNAVAILABLE` |
 | `POST` | `/vehicles` · `/vehicles/:id/renew` | `vehicle:renew`; capture returns `authorityOutcome` (`FOUND` / `NOT_FOUND` / `UNAVAILABLE`) |
@@ -275,6 +275,34 @@ already in force, which the gate would never read.
 | `GET` | `/vehicles/renewals/authority-outstanding` | `vehicle:authority_sync` — renewals the authority never acknowledged, and vehicles captured while it was unreachable |
 | `POST` | `/vehicles/renewals/authority-retry` | `vehicle:authority_sync` — re-send those notifications; changes no financial record |
 | `POST` | `/vehicles/:id/status` | `vehicle:manage` — take a vehicle out of service (`SUSPENDED` while something is looked into, `ARCHIVED` when it is sold, written off or scrapped) or put it back. Renewal is refused for anything but `ACTIVE`; renewals already issued stay valid for the period paid for. |
+
+### Acknowledgement now, receipt on settlement
+
+A government receipt asserts that the Plateau State Government received the
+money. The gateway confirming a payment is a different fact: it means the
+*gateway* holds the money, which reaches the government account in a batch a
+day or two later. So the two are separate events with separate documents.
+
+| When | Transaction status | What the taxpayer holds |
+|---|---|---|
+| Gateway confirms | `RECONCILIATION_PENDING` | `PAYMENT_ACKNOWLEDGEMENT` — verifiable, numbered `PSIRS-ACK-…`, and marked on its face as **not a receipt** |
+| Settlement reconciled | `RECEIPT_GENERATED` → `SETTLED` | the government receipt, plus any vehicle particulars the collection paid for |
+
+Two consequences for a client:
+
+- `POST /payments/:id/confirm` returns `acknowledgementNumber`, not
+  `receiptNumber`. A screen that reads a missing `receiptNumber` as "payment
+  failed" will tell an agent to collect a second time from someone who has
+  already paid. `GET /payments/transactions/:reference/status` carries
+  `acknowledgement_number` / `acknowledgement_code` alongside the receipt
+  columns for exactly this reason.
+- A vehicle renewal has no document until settlement. `POST
+  /vehicles/renewals/:id/document` before then is refused — the database
+  refuses it, not merely the route.
+
+Both rules are enforced by triggers (`receipts_require_verified_payment`,
+`vehicle_renewals_require_verified_payment`), so they hold against a
+compromised service account and not only against this codebase.
 
 `REGISTRY_UNAVAILABLE` is not `NOT_FOUND`. The first says the vehicle authority
 could not be asked; the second says it answered and holds no such vehicle. A
@@ -401,8 +429,18 @@ curl -X POST localhost:4000/api/v1/payments/initiate \
 # 4. Ask whether the money actually arrived
 curl -X POST localhost:4000/api/v1/payments/$PAYMENT/confirm \
   -H "authorization: Bearer $TOKEN" -H "x-device-id: $DEVICE"
-# → 200 with receiptNumber, or 202 PAYMENT_UNCONFIRMED with moneyStatus UNCONFIRMED
+# → 200 with acknowledgementNumber, or 202 PAYMENT_UNCONFIRMED with
+#   moneyStatus UNCONFIRMED. Note: acknowledgement, not receipt.
 
-# 5. Anyone can verify the receipt, with no account
-curl localhost:4000/api/v1/verify/$RECEIPT_CODE
+# 5. Anyone can verify it, with no account. Before settlement this answers
+#    documentType PAYMENT_ACKNOWLEDGEMENT and says plainly that it is not a
+#    receipt; after settlement the receipt code answers RECEIPT.
+curl localhost:4000/api/v1/verify/$ACK_CODE
+
+# 6. A finance officer records the bank credit. This is what issues the
+#    receipt, and any vehicle particulars the collection paid for.
+curl -X POST localhost:4000/api/v1/government/settlements \
+  -H "authorization: Bearer $FINANCE_TOKEN" -H 'content-type: application/json' \
+  -d '{"settlementDate":"2026-08-27","gatewayReferences":["'$GWREF'"],
+       "receivedAmountKobo":"500000","bankReference":"BANK-CREDIT-0001"}'
 ```

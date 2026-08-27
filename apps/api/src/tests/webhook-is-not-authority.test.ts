@@ -33,6 +33,7 @@ import {
   loginAs,
   pool,
   post,
+  settleTransaction,
   resetDatabase,
   startTestServer,
   stopTestServer,
@@ -221,6 +222,10 @@ describe('A signed webhook is a prompt, not a verdict', () => {
       { token: agent.token, deviceId: agent.device },
     );
     assert.equal(simulated.status, 200, JSON.stringify(simulated.body));
+
+    // The gateway saying the money arrived means the gateway has it. The
+    // receipt says the State has it, and that waits for the settlement.
+    await settleTransaction(transactionId);
 
     const receipt = await receiptFor(transactionId);
     assert.ok(receipt, 'the ordinary path still works');

@@ -43,7 +43,7 @@ import {
 import { nextPaymentReference } from '../lib/references';
 import { recordAudit } from './audit';
 import { accrueCommission } from './commission';
-import { issueReceipt } from './receipts';
+import { issueAcknowledgement } from './receipts';
 import { completeRenewal } from './vehicles';
 import { transitionTransaction } from './revenue';
 import { evaluateTransactionRisk, raiseFlag } from './fraud';
@@ -295,8 +295,17 @@ export interface ConfirmationResult {
   paymentId: string;
   transactionId: string;
   transactionReference: string;
+  /** Present once the money has settled and a receipt exists. */
   receiptNumber?: string;
   receiptId?: string;
+  /**
+   * The acknowledgement issued at gateway confirmation, before any receipt.
+   *
+   * Kept as its own field rather than reusing `receiptNumber` so no caller can
+   * print one where it means the other — which is the entire failure this
+   * change exists to prevent, and the easiest one to reintroduce by accident.
+   */
+  acknowledgementNumber?: string;
   documentId?: string;
   commissionKobo?: string;
   message: string;
@@ -326,22 +335,45 @@ export async function confirmPayment(params: {
 }): Promise<ConfirmationResult> {
   const result = await verifyAndRecord(params);
 
-  // What the citizen actually bought. Issuing it lived in the route the agent's
-  // app calls when it taps "check payment status", so a renewal confirmed by
-  // webhook — the ordinary path, and the one this platform treats as
-  // authoritative — took the money, issued the receipt, and never issued the
-  // renewal or told the vehicle authority. The taxpayer was left holding a
-  // government receipt for a renewal that had not happened.
-  //
-  // It belongs here, where the docstring above already says every confirmation
-  // route converges. Outside the transaction because it calls the vehicle
-  // authority over the network, and that must not be done holding a
-  // SERIALIZABLE transaction open.
-  if (result.status === 'VERIFIED') {
-    await issueRenewalFor(result, params);
-  }
-
+  /*
+   * The renewal document is no longer issued here.
+   *
+   * It is what a driver shows at a checkpoint: a legal instrument granting a
+   * year of cover. Issuing it on the gateway's word meant the State could grant
+   * that cover for a payment that never arrived and take a year to find out. It
+   * now issues with the receipt, when the settlement covering it is reconciled
+   * — `issueRenewalsFor` below, called from the settlement path, and refused by
+   * the database until the transaction has actually reached that point.
+   */
   return result;
+}
+
+/**
+ * Issue vehicle particulars for transactions a settlement has just paid for.
+ *
+ * Called after the settlement transaction has committed, never inside it,
+ * because announcing a renewal to the vehicle authority is a network call and
+ * a settlement must not hold a database transaction open across somebody
+ * else's network. A failure here leaves the renewal without its document and
+ * reports itself; the money and the receipt are unaffected, and the retry job
+ * carries the announcement.
+ */
+export async function issueRenewalsFor(
+  transactionIds: string[],
+  params: { actorId?: string | null; actorRole?: string | null },
+): Promise<void> {
+  for (const transactionId of transactionIds) {
+    await issueRenewalFor(
+      {
+        status: 'VERIFIED',
+        paymentId: '',
+        transactionId,
+        transactionReference: '',
+        message: '',
+      },
+      params,
+    );
+  }
 }
 
 /**
@@ -484,6 +516,20 @@ async function verifyAndRecord(params: {
           'SELECT id, receipt_number, document_id FROM receipts WHERE payment_id = $1',
           [payment.id],
         );
+        /*
+         * A confirmed payment has one of two documents behind it depending on
+         * whether the money has arrived, and the answer given here has to be
+         * whichever one actually exists.
+         */
+        const acknowledgement = receipt
+          ? null
+          : await queryOne<{ id: string; document_number: string }>(
+              client,
+              `SELECT id, document_number FROM documents
+                WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_type = 'transaction'
+                  AND entity_id = $1 AND status <> 'REVOKED'`,
+              [payment.transaction_id],
+            );
         return {
           status: 'VERIFIED',
           paymentId: payment.id,
@@ -491,8 +537,12 @@ async function verifyAndRecord(params: {
           transactionReference: payment.transaction_reference,
           receiptNumber: receipt?.receipt_number,
           receiptId: receipt?.id,
-          documentId: receipt?.document_id ?? undefined,
-          message: 'This payment was already confirmed. The receipt below is the original.',
+          acknowledgementNumber: acknowledgement?.document_number,
+          documentId: receipt?.document_id ?? acknowledgement?.id ?? undefined,
+          message: receipt
+            ? 'This payment was already confirmed and settled. The receipt below is the original.'
+            : 'This payment was already confirmed by the gateway. The government receipt is ' +
+              'issued once the money reaches a government account.',
         };
       }
 
@@ -676,27 +726,28 @@ async function verifyAndRecord(params: {
         [payment.invoice_id, expected.toString()],
       );
 
-      // ---- Evidence and incentive, in the same transaction -----------------
-      const receipt = await issueReceipt(client, {
+      /*
+       * ---- What the taxpayer gets now, and what they get later -------------
+       *
+       * Not a receipt. The gateway confirming means the gateway holds the
+       * money; a receipt says the State received it, and that is not true yet.
+       * The acknowledgement says exactly what is and is not the case, and the
+       * receipt is issued by `settleLinkedTransactions` when a bank credit
+       * covering this collection is reconciled — enforced underneath by the
+       * trigger, which refuses a receipt for a payment with no settlement.
+       */
+      const acknowledgement = await issueAcknowledgement(client, {
         transactionId: payment.transaction_id,
         paymentId: payment.id,
-        actorId: params.actorId ?? null,
-      });
-
-      await transitionTransaction(client, {
-        transactionId: payment.transaction_id,
-        to: 'RECEIPT_GENERATED',
-        actorId: params.actorId ?? null,
-        source: 'SYSTEM',
-        metadata: { receiptNumber: receipt.receiptNumber },
       });
 
       await transitionTransaction(client, {
         transactionId: payment.transaction_id,
         to: 'RECONCILIATION_PENDING',
-        reason: 'Awaiting settlement confirmation',
+        reason: 'Confirmed by the gateway; awaiting settlement into a government account',
         actorId: params.actorId ?? null,
         source: 'SYSTEM',
+        metadata: { acknowledgementNumber: acknowledgement.documentNumber },
       });
 
       const commission = await accrueCommission(client, {
@@ -719,7 +770,7 @@ async function verifyAndRecord(params: {
           gatewayReference: verification.gatewayReference,
           amountKobo: expected.toString(),
           verifiedBy: params.source,
-          receiptNumber: receipt.receiptNumber,
+          acknowledgementNumber: acknowledgement.documentNumber,
           commissionKobo: commission?.amountKobo.toString() ?? null,
         },
       });
@@ -736,7 +787,10 @@ async function verifyAndRecord(params: {
         entityId: payment.transaction_id,
         variables: {
           amount: expected.toString(),
-          receiptNumber: receipt.receiptNumber,
+          // The taxpayer is told their payment is confirmed and that the
+          // receipt follows. Naming the acknowledgement rather than a receipt
+          // number keeps the message true: there is no receipt yet.
+          receiptNumber: acknowledgement.documentNumber,
           reference: payment.transaction_reference,
         },
       });
@@ -746,11 +800,12 @@ async function verifyAndRecord(params: {
         paymentId: payment.id,
         transactionId: payment.transaction_id,
         transactionReference: payment.transaction_reference,
-        receiptNumber: receipt.receiptNumber,
-        receiptId: receipt.receiptId,
-        documentId: receipt.documentId,
+        acknowledgementNumber: acknowledgement.documentNumber,
+        documentId: acknowledgement.documentId,
         commissionKobo: commission?.amountKobo.toString(),
-        message: 'Payment confirmed and government receipt issued.',
+        message:
+          'Payment confirmed by the gateway. The taxpayer has an acknowledgement of payment; ' +
+          'the government receipt is issued once the money reaches a government account.',
       };
     },
     // SERIALIZABLE: verification reads the payment, the invoice and the
@@ -1031,7 +1086,9 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
             p.id AS payment_id, p.payment_reference, p.gateway_reference, p.status AS payment_status,
             p.paid_at, p.verified_at AS payment_verified_at, p.failure_reason,
             r.id AS receipt_id, r.receipt_number, r.verification_code AS receipt_code,
-            r.document_id
+            r.document_id,
+            ack.id AS acknowledgement_id, ack.document_number AS acknowledgement_number,
+            ack.verification_code AS acknowledgement_code
        FROM transactions t
        JOIN invoices i ON i.id = t.invoice_id
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -1040,6 +1097,14 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
        LEFT JOIN payments p ON p.transaction_id = t.id
             AND p.status IN ('INITIATED','PENDING','SUCCESSFUL','VERIFIED')
        LEFT JOIN receipts r ON r.transaction_id = t.id
+       /*
+        * The acknowledgement is what the taxpayer holds between the gateway
+        * confirming and the money reaching a government account. The agent's
+        * app has to be able to show it, or a confirmed collection reads on
+        * screen as an unconfirmed one and the agent collects again.
+        */
+       LEFT JOIN documents ack ON ack.entity_type = 'transaction' AND ack.entity_id = t.id
+            AND ack.document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND ack.status <> 'REVOKED'
       WHERE t.transaction_reference = $1`,
     [transactionReference],
   );
@@ -1049,7 +1114,8 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
   const events = await query(
     db,
     `SELECT from_status, to_status, reason, source, created_at
-       FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at`,
+       FROM transaction_events WHERE transaction_id = $1
+      ORDER BY created_at, sequence`,
     [transaction.id],
   );
 

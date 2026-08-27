@@ -431,12 +431,20 @@ documentRouter.get(
                 WHEN d.entity_type = 'invoice' THEN inv.agent_id
                 WHEN d.entity_type = 'receipt' THEN rt.agent_id
                 WHEN d.entity_type = 'vehicle_renewal' THEN vr.agent_id
+                WHEN d.entity_type = 'transaction' THEN txn.agent_id
               END AS issued_for_agent_id
          FROM documents d
          LEFT JOIN invoices inv ON d.entity_type = 'invoice' AND inv.id = d.entity_id
          LEFT JOIN receipts rc ON d.entity_type = 'receipt' AND rc.id = d.entity_id
          LEFT JOIN transactions rt ON rt.id = rc.transaction_id
          LEFT JOIN vehicle_renewals vr ON d.entity_type = 'vehicle_renewal' AND vr.id = d.entity_id
+         /*
+          * An acknowledgement of payment hangs off the transaction itself, not
+          * off a receipt that does not exist yet. Without this branch the agent
+          * who took the money is refused the one document they have to show the
+          * taxpayer standing in front of them.
+          */
+         LEFT JOIN transactions txn ON d.entity_type = 'transaction' AND txn.id = d.entity_id
         WHERE d.id = $1`,
       [req.params.id],
     );
