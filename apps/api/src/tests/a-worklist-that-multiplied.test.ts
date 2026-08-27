@@ -36,7 +36,7 @@ import {
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { exceptionQueue, resolveException } from '../services/reconciliation';
+import { awaitingSettlement, exceptionQueue, resolveException } from '../services/reconciliation';
 
 /**
  * Two real transactions to hang findings on.
@@ -146,15 +146,20 @@ const other = () => transactions[1];
 describe('One unresolved exception is one item of work', () => {
   it('shows a transaction once however many runs recorded it', async () => {
     const transactionId = transactions[0];
-    // Eight sweeps across a forty-eight-hour window, which is what the schedule
-    // actually produces for one transaction that stays unsettled.
+    /*
+     * Eight sweeps across a forty-eight-hour window, which is what the schedule
+     * actually produces for one transaction that stays unsettled — and dated
+     * beyond the settlement window, so the subject is the deduplication rather
+     * than whether an unsettled collection belongs in this queue at all. That
+     * question has its own tests below.
+     */
     for (let sweep = 0; sweep < 8; sweep += 1) {
       await record({
         runId: runId(),
         transactionId,
         gatewayReference: 'MOCKGW-ONE',
         status: 'PENDING_SETTLEMENT',
-        minutesAgo: sweep * 360,
+        minutesAgo: 5 * 24 * 60 + sweep * 360,
       });
     }
 
@@ -290,5 +295,90 @@ describe('One unresolved exception is one item of work', () => {
       0,
       'a later run that matched it means there is nothing to chase',
     );
+  });
+});
+
+
+/**
+ * Money in transit is not money that went wrong.
+ *
+ * A payment the gateway confirmed is money the *gateway* holds; it reaches the
+ * government account in a batch a day or two later, and that third leg is the
+ * whole point of a three-way reconciliation. Listing it as an exception cost
+ * twice over: ordinary business looked like a fault, so the queue an officer
+ * scans for real trouble was mostly routine — and the case that *is* a fault, a
+ * collection confirmed days ago and never handed over, looked identical to one
+ * taken an hour before.
+ */
+describe('Awaiting settlement, and settlement that is overdue', () => {
+  it('keeps a fresh collection out of the exception queue', async () => {
+    await record({
+      runId: runId(),
+      transactionId: transactions[0],
+      status: 'PENDING_SETTLEMENT',
+      minutesAgo: 30,
+    });
+
+    assert.equal(
+      (await exceptionQueue(pool)).length,
+      0,
+      'half an hour in the gateway is not a problem anybody has',
+    );
+    assert.equal((await awaitingSettlement(pool)).length, 1, 'but it is money not yet arrived');
+  });
+
+  it('promotes it once the money should have arrived and has not', async () => {
+    // Four days: past a Friday-to-Monday weekend, which is the longest an
+    // ordinary settlement delay can honestly be.
+    await record({
+      runId: runId(),
+      transactionId: transactions[0],
+      status: 'PENDING_SETTLEMENT',
+      minutesAgo: 4 * 24 * 60,
+    });
+
+    const queue = await exceptionQueue(pool);
+    assert.equal(queue.length, 1, 'the State took money it has not received');
+    assert.equal((queue[0] as any).status, 'PENDING_SETTLEMENT');
+  });
+
+  it('reports how long each one has been waiting', async () => {
+    await record({
+      runId: runId(),
+      transactionId: transactions[0],
+      status: 'PENDING_SETTLEMENT',
+      minutesAgo: 26 * 60,
+    });
+    const waiting = (await awaitingSettlement(pool))[0] as any;
+    assert.equal(waiting.age_hours, 26);
+    assert.equal(waiting.overdue, false);
+  });
+
+  it('never hides a real exception behind the settlement window', async () => {
+    /*
+     * The window applies to PENDING_SETTLEMENT alone. An amount mismatch found
+     * a minute ago is wrong now, and waiting three days to mention it would be
+     * the opposite of the point.
+     */
+    await record({
+      runId: runId(),
+      transactionId: transactions[0],
+      status: 'AMOUNT_MISMATCH',
+      minutesAgo: 1,
+    });
+    assert.equal((await exceptionQueue(pool)).length, 1);
+  });
+
+  it('leaves a settled collection out of both lists', async () => {
+    await record({
+      runId: runId(),
+      transactionId: transactions[0],
+      status: 'PENDING_SETTLEMENT',
+      minutesAgo: 5 * 24 * 60,
+    });
+    await record({ runId: runId(), transactionId: transactions[0], status: 'MATCHED', minutesAgo: 5 });
+
+    assert.equal((await exceptionQueue(pool)).length, 0);
+    assert.equal((await awaitingSettlement(pool)).length, 0, 'the money arrived');
   });
 });

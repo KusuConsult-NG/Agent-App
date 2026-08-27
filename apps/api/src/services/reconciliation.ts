@@ -848,6 +848,21 @@ export const EXCEPTION_STATUSES = [
 ] as const;
 
 /**
+ * How long the gateway has to hand the money over before it is a problem.
+ *
+ * A payment the gateway confirmed is money the *gateway* holds. It reaches the
+ * government account in a batch a day or two later, and until the State can see
+ * that credit in its own account the collection is legitimately unsettled —
+ * that is the third leg of the three-way reconciliation, not a fault.
+ *
+ * Seventy-two hours covers a Friday collection settling on Monday, which is the
+ * longest an ordinary weekend can make it. Past that the money should have
+ * arrived and has not, and that *is* a fault: it is the State having taken a
+ * citizen's money and not received it.
+ */
+const SETTLEMENT_DUE_HOURS = 72;
+
+/**
  * The finance officer's worklist: every unresolved exception, once each.
  *
  * `reconciliation_records` holds one row per transaction *per run*, which is
@@ -869,7 +884,10 @@ export const EXCEPTION_STATUSES = [
  * it only if that newest finding is still unresolved. Resolving it therefore
  * clears the item, and an older run's stale verdict cannot bring it back.
  */
-export async function exceptionQueue(db: Db, options: { status?: string; limit?: number } = {}) {
+export async function exceptionQueue(
+  db: Db,
+  options: { status?: string; limit?: number; settlementDueHours?: number } = {},
+) {
   return query(
     db,
     `WITH newest AS (
@@ -903,9 +921,68 @@ export async function exceptionQueue(db: Db, options: { status?: string; limit?:
        */
       WHERE ($1::text IS NULL OR n.status = $1)
         AND n.status = ANY($3::text[])
+        /*
+         * Money still inside the gateway's settlement window is not an
+         * exception, and listing it as one had two costs. It made ordinary
+         * business look like a fault, so the queue an officer scans for real
+         * trouble was mostly routine; and it hid the case that is a fault — a
+         * collection the gateway confirmed days ago and never handed over,
+         * which looked exactly like one taken an hour before. Past the window
+         * it appears here, which is the point at which somebody should be
+         * asking the gateway where the money is.
+         */
+        AND (n.status <> 'PENDING_SETTLEMENT'
+             OR n.created_at < now() - ($4 || ' hours')::interval)
       ORDER BY n.created_at DESC
       LIMIT $2`,
-    [options.status ?? null, options.limit ?? 100, [...EXCEPTION_STATUSES]],
+    [
+      options.status ?? null,
+      options.limit ?? 100,
+      [...EXCEPTION_STATUSES],
+      String(options.settlementDueHours ?? SETTLEMENT_DUE_HOURS),
+    ],
+  );
+}
+
+/**
+ * Collections the gateway has confirmed and not yet handed over.
+ *
+ * Kept apart from the exception queue on purpose. This is the ordinary state of
+ * money in transit and nobody has to do anything about it — but it is not
+ * nothing either, because it is the difference between what the platform has
+ * collected and what the State can actually spend. It is reported with an age
+ * so the shape of the delay is visible, and anything past the settlement window
+ * has already moved to the exception queue by the time it appears overdue here.
+ */
+export async function awaitingSettlement(
+  db: Db,
+  options: { limit?: number; settlementDueHours?: number } = {},
+) {
+  return query(
+    db,
+    `WITH newest AS (
+       SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
+              r.id, r.status, r.expected_amount_kobo, r.gateway_reference, r.created_at,
+              r.reconciled_at, r.transaction_id
+         FROM reconciliation_records r
+        ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
+                 r.created_at DESC, r.id DESC
+     )
+     SELECT n.id, n.expected_amount_kobo, n.gateway_reference, n.created_at,
+            ROUND(EXTRACT(EPOCH FROM (now() - n.created_at)) / 3600)::int AS age_hours,
+            (n.created_at < now() - ($2 || ' hours')::interval) AS overdue,
+            t.transaction_reference,
+            tp.first_name, tp.last_name, tp.business_name,
+            ag.agent_code
+       FROM newest n
+       LEFT JOIN transactions t ON t.id = n.transaction_id
+       LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
+       LEFT JOIN agents ag ON ag.id = t.agent_id
+      WHERE n.status = 'PENDING_SETTLEMENT'
+        AND n.reconciled_at IS NULL
+      ORDER BY n.created_at ASC
+      LIMIT $1`,
+    [options.limit ?? 100, String(options.settlementDueHours ?? SETTLEMENT_DUE_HOURS)],
   );
 }
 
