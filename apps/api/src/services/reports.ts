@@ -1006,3 +1006,205 @@ export async function auditorWorkItems(db: Db) {
   ]);
   return { refusals, reversals };
 }
+
+// ===========================================================================
+// Revenue by what it was collected for, and who has not paid it
+// ===========================================================================
+
+export interface CategoryBreakdownParams {
+  from?: Date;
+  to?: Date;
+  lgaId?: string;
+  agentId?: string;
+  categoryId?: string;
+}
+
+/**
+ * What each levy actually brought in (PRD §57).
+ *
+ * The executive dashboard already grouped revenue by category, but only
+ * statewide, only for all time, and only down to the category — so "Development
+ * Levy collected X" was answerable and "Development Levy in Jos North last
+ * month, by item, and how much of it this agent brought in" was not. Those are
+ * the questions a revenue officer actually has when deciding where to send
+ * people next week.
+ *
+ * Two levels are returned because they answer different questions. The category
+ * total is what a commissioner reads; the item lines under it are what a
+ * revenue officer works from, because a category that looks healthy can be one
+ * item carrying six.
+ *
+ * Only verified revenue is counted, on the same states every other figure in
+ * this file uses. Money the gateway has confirmed and the State has not yet
+ * received is included deliberately — it is revenue recognised, and excluding
+ * it would make this report disagree with the dashboard beside it — and the
+ * settled figure is returned alongside so the difference is visible rather than
+ * buried.
+ */
+export async function revenueByCategory(db: Db, params: CategoryBreakdownParams = {}) {
+  const conditions: string[] = [`t.status IN ${REVENUE_STATES}`];
+  const values: unknown[] = [];
+  const add = (clause: string, value: unknown) => {
+    values.push(value);
+    conditions.push(clause.replace('$$', `$${values.length}`));
+  };
+
+  if (params.from) add('t.created_at >= $$', params.from);
+  if (params.to) add('t.created_at <= $$', params.to);
+  if (params.lgaId) add('t.lga_id = $$', params.lgaId);
+  if (params.agentId) add('t.agent_id = $$', params.agentId);
+  if (params.categoryId) add('ri.category_id = $$', params.categoryId);
+
+  const where = conditions.join(' AND ');
+
+  const [categories, items] = await Promise.all([
+    query<{
+      category_id: string;
+      category: string;
+      transactions: string;
+      amount_kobo: string;
+      settled_kobo: string;
+      taxpayers: string;
+    }>(
+      db,
+      `SELECT rc.id AS category_id, rc.name AS category,
+              count(t.id)::text AS transactions,
+              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
+              COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status = 'SETTLED'),0)::text
+                AS settled_kobo,
+              count(DISTINCT t.taxpayer_id)::text AS taxpayers
+         FROM transactions t
+         JOIN revenue_items ri ON ri.id = t.revenue_item_id
+         JOIN revenue_categories rc ON rc.id = ri.category_id
+        WHERE ${where}
+        GROUP BY rc.id, rc.name
+        ORDER BY SUM(t.amount_kobo) DESC`,
+      values,
+    ),
+    query<{
+      category_id: string;
+      category: string;
+      revenue_item_id: string;
+      revenue_item: string;
+      code: string;
+      transactions: string;
+      amount_kobo: string;
+      settled_kobo: string;
+      taxpayers: string;
+    }>(
+      db,
+      `SELECT rc.id AS category_id, rc.name AS category,
+              ri.id AS revenue_item_id, ri.name AS revenue_item, ri.code,
+              count(t.id)::text AS transactions,
+              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
+              COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status = 'SETTLED'),0)::text
+                AS settled_kobo,
+              count(DISTINCT t.taxpayer_id)::text AS taxpayers
+         FROM transactions t
+         JOIN revenue_items ri ON ri.id = t.revenue_item_id
+         JOIN revenue_categories rc ON rc.id = ri.category_id
+        WHERE ${where}
+        GROUP BY rc.id, rc.name, ri.id, ri.name, ri.code
+        ORDER BY SUM(t.amount_kobo) DESC`,
+      values,
+    ),
+  ]);
+
+  const total = categories.reduce((sum, row) => sum + BigInt(row.amount_kobo), 0n);
+  const settled = categories.reduce((sum, row) => sum + BigInt(row.settled_kobo), 0n);
+
+  return {
+    totalKobo: total.toString(),
+    settledKobo: settled.toString(),
+    /*
+     * Stated rather than left to be worked out. The gap between what has been
+     * collected and what the State actually holds is the number this platform
+     * exists to keep honest, and a report that showed only the first would be
+     * the old behaviour in a new place.
+     */
+    awaitingSettlementKobo: (total - settled).toString(),
+    categories,
+    items,
+  };
+}
+
+export interface DefaultersParams {
+  categoryId?: string;
+  revenueItemId?: string;
+  lgaId?: string;
+  limit?: number;
+}
+
+/**
+ * Who owes what, per levy (PRD §57).
+ *
+ * An officer can already open one taxpayer and see their obligations. Nothing
+ * answered the question the other way round — which taxpayers assessed under
+ * Market Levy have not paid — which is the one that produces a day's work for a
+ * collection round rather than a name to look up.
+ *
+ * Ordered by what is owed, because a list of defaulters sorted by anything else
+ * is a list somebody has to sort before they can use it.
+ */
+export async function defaultersByCategory(db: Db, params: DefaultersParams = {}) {
+  const limit = Math.min(params.limit ?? 100, 500);
+  const conditions: string[] = [
+    `i.status IN ('UNPAID','PARTIALLY_PAID')`,
+    'i.total_amount_kobo > i.amount_paid_kobo',
+  ];
+  const values: unknown[] = [];
+  const add = (clause: string, value: unknown) => {
+    values.push(value);
+    conditions.push(clause.replace('$$', `$${values.length}`));
+  };
+
+  if (params.categoryId) add('ri.category_id = $$', params.categoryId);
+  if (params.revenueItemId) add('ri.id = $$', params.revenueItemId);
+  if (params.lgaId) add('tp.lga_id = $$', params.lgaId);
+
+  values.push(limit);
+
+  const rows = await query<{
+    taxpayer_id: string;
+    name: string;
+    tin: string | null;
+    phone: string;
+    lga: string;
+    category: string;
+    revenue_item: string;
+    invoices: string;
+    outstanding_kobo: string;
+    oldest_due: Date | null;
+  }>(
+    db,
+    `SELECT tp.id AS taxpayer_id,
+            COALESCE(tp.business_name,
+                     trim(COALESCE(tp.first_name,'') || ' ' || COALESCE(tp.last_name,''))) AS name,
+            tp.tin, tp.phone, l.name AS lga,
+            rc.name AS category, ri.name AS revenue_item,
+            count(DISTINCT i.id)::text AS invoices,
+            SUM(i.total_amount_kobo - i.amount_paid_kobo)::text AS outstanding_kobo,
+            min(i.expires_at) AS oldest_due
+       FROM invoices i
+       JOIN transactions t ON t.invoice_id = i.id
+       JOIN revenue_items ri ON ri.id = t.revenue_item_id
+       JOIN revenue_categories rc ON rc.id = ri.category_id
+       JOIN taxpayers tp ON tp.id = i.taxpayer_id
+       JOIN lgas l ON l.id = tp.lga_id
+      WHERE ${conditions.join(' AND ')}
+      -- Grouped on the source columns rather than the output alias: "name" is
+      -- ambiguous against l.name and rc.name, which are in the select list too.
+      GROUP BY tp.id, tp.business_name, tp.first_name, tp.last_name,
+               tp.tin, tp.phone, l.name, rc.name, ri.name
+      ORDER BY SUM(i.total_amount_kobo - i.amount_paid_kobo) DESC
+      LIMIT $${values.length}`,
+    values,
+  );
+
+  const total = rows.reduce((sum, row) => sum + BigInt(row.outstanding_kobo), 0n);
+  return {
+    outstandingKobo: total.toString(),
+    defaulters: rows.length,
+    rows,
+  };
+}

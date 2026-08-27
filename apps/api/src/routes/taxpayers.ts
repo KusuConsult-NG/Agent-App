@@ -274,10 +274,26 @@ taxpayerRouter.get(
       receiptNumber: z.string().max(40).optional(),
       transactionReference: z.string().max(40).optional(),
       lgaId: uuidSchema.optional(),
+      // "Who is registered under Development Levy?" — a set, not an individual.
+      revenueItemId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+      outstandingOnly: z.coerce.boolean().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(25),
     }),
     async (req, res, data) => {
-      if (!Object.values(data).some((value) => typeof value === 'string' && value.length > 0)) {
+      /*
+       * A filter counts as something to search for.
+       *
+       * The guard tested for a non-empty *string*, which an item id satisfies
+       * but `outstandingOnly` on its own does not — and "everyone with anything
+       * unpaid" is a legitimate question. It now asks whether any criterion was
+       * given at all, rather than whether any of them happened to be text.
+       */
+      const { limit: _limit, ...criteria } = data;
+      const searched = Object.values(criteria).some((value) =>
+        typeof value === 'string' ? value.length > 0 : value !== undefined && value !== false,
+      );
+      if (!searched) {
         throw badRequest('Enter something to search for — a name, phone number, TIN or reference.');
       }
       res.json(await taxpayers.searchTaxpayers(pool, data));

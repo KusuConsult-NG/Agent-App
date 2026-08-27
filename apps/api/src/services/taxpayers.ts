@@ -746,6 +746,20 @@ export interface TaxpayerSearchParams {
   receiptNumber?: string;
   transactionReference?: string;
   lgaId?: string;
+  /**
+   * Everyone who has ever been assessed under this revenue item, or anything in
+   * this category (PRD §13).
+   *
+   * "Show me who is registered under Development Levy" is a question an officer
+   * asks constantly and could not ask here: the search took a name, a phone, a
+   * TIN, a plate and a reference, all of which identify one person you already
+   * know about. What an officer planning a collection round or chasing a
+   * category of defaulters needs is the opposite — the set, not the individual.
+   */
+  revenueItemId?: string;
+  categoryId?: string;
+  /** Only those with something unpaid, which is what makes it a defaulter list. */
+  outstandingOnly?: boolean;
   limit?: number;
 }
 
@@ -781,6 +795,61 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
       't.id IN (SELECT taxpayer_id FROM transactions WHERE transaction_reference = $$)',
       params.transactionReference.trim(),
     );
+  }
+
+  /*
+   * Registered under an item means assessed under it, which is the only record
+   * of the relationship this platform keeps. There is no separate enrolment: a
+   * trader is on Market Levy because Market Levy has been assessed against
+   * them, and that is what an officer means by the question.
+   */
+  if (params.revenueItemId) {
+    add(
+      't.id IN (SELECT taxpayer_id FROM transactions WHERE revenue_item_id = $$)',
+      params.revenueItemId,
+    );
+  }
+  if (params.categoryId) {
+    add(
+      `t.id IN (SELECT tx.taxpayer_id FROM transactions tx
+                  JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                 WHERE ri.category_id = $$)`,
+      params.categoryId,
+    );
+  }
+
+  /*
+   * Outstanding means an invoice with money still on it. Scoped to the same
+   * item or category when one was given, so "defaulters on Market Levy" does
+   * not return somebody who is square on Market Levy and behind on a shop rate.
+   */
+  if (params.outstandingOnly) {
+    if (params.revenueItemId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND tx.revenue_item_id = $$)`,
+        params.revenueItemId,
+      );
+    } else if (params.categoryId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                    JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND ri.category_id = $$)`,
+        params.categoryId,
+      );
+    } else {
+      conditions.push(
+        `t.id IN (SELECT taxpayer_id FROM invoices
+                   WHERE status IN ('UNPAID','PARTIALLY_PAID')
+                     AND total_amount_kobo > amount_paid_kobo)`,
+      );
+    }
   }
   if (params.q) {
     const term = `%${params.q.trim().toLowerCase()}%`;

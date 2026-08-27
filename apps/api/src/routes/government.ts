@@ -73,6 +73,48 @@ governmentRouter.get(
   }),
 );
 
+/*
+ * What each levy brought in, and who has not paid it.
+ *
+ * Two questions an officer asks constantly and could ask nowhere: how much did
+ * Development Levy raise in this LGA last month, and which of the people
+ * assessed under Market Levy still owe. The dashboard grouped revenue by
+ * category already, but statewide, for all time, and no further down than the
+ * category — enough for a commissioner and not enough to plan a week's work.
+ */
+governmentRouter.get(
+  '/revenue/by-category',
+  requirePermission('report:read:all', 'report:read:territory', 'dashboard:executive'),
+  validateQuery(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+      lgaId: uuidSchema.optional(),
+      agentId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+    }),
+    async (req, res, data) => {
+      res.json(await reports.revenueByCategory(pool, data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/revenue/defaulters',
+  requirePermission('report:read:all', 'report:read:territory', 'taxpayer:read:all'),
+  validateQuery(
+    z.object({
+      categoryId: uuidSchema.optional(),
+      revenueItemId: uuidSchema.optional(),
+      lgaId: uuidSchema.optional(),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
+    }),
+    async (req, res, data) => {
+      res.json(await reports.defaultersByCategory(pool, data));
+    },
+  ),
+);
+
 governmentRouter.get(
   '/intelligence/geography',
   requirePermission('report:read:all', 'report:read:territory'),
