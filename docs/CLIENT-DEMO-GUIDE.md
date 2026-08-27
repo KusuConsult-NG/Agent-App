@@ -30,7 +30,7 @@ Then open four browser tabs and leave them signed out:
 
 | Tab | Address | Who |
 |---|---|---|
-| 1 | `http://localhost:5173` | The agent's phone app — **narrow the window to phone width** |
+| 1 | `http://localhost:5173/?device=uat-agent-device-000001` | The agent's phone app — **narrow the window to phone width**. The `?device=` part matters; see below |
 | 2 | `http://localhost:5174` | The officer portal |
 | 3 | `http://localhost:5174/#/verify` | Public verification — the citizen's view |
 | 4 | `http://localhost:5174/#/citizen` | Citizen self-service |
@@ -49,6 +49,48 @@ Sign-in details, all on the demonstration database only:
 
 The second finance officer exists because several of the money controls need
 two. It is only needed in the optional part of Act 3.
+
+### Why the agent app needs `?device=`
+
+Open tab 1 without it and the app will refuse the moment you try to collect:
+
+> *This device is not registered to your agent account. Register it before
+> collecting revenue.*
+
+That is the platform working correctly, and it is worth understanding before
+somebody in the room asks.
+
+An agent's **first** handset is approved automatically, so onboarding can
+finish. Every handset after that starts PENDING and waits for a supervisor —
+because revoking a stolen phone would be worth nothing if the thief could
+register another one and carry on collecting. The seeded agent already has a
+handset, since the seed had to register one to build the demonstration data
+through the real API. Your browser therefore arrives as that agent's *second*
+handset, and is refused.
+
+`?device=uat-agent-device-000001` tells the app to present the handset the seed
+already registered and approved. It is not a way past any check: the server
+still requires that handset to be approved against the signed-in agent's own
+account. Production builds ignore the parameter entirely.
+
+**If somebody asks whether you just disabled a control**, the honest answer is
+no, and the proof is the next paragraph.
+
+### Optional: show the block on purpose (2 minutes)
+
+Worth doing if the room includes an auditor. Open a **private window** at
+`http://localhost:5173` with no `?device=`, sign in as the field agent, and try
+to collect.
+
+> A cleared, active, trusted agent, signed in with the right password — and the
+> platform will not let them take a naira, because this handset is not the one
+> government approved. Losing your phone does not lose your clearance, and
+> finding somebody's phone does not gain you theirs.
+
+Then, in **tab 2** as the admin officer, open **Agents & clearance**, find the
+agent, and approve the pending handset. Reload the private window and it
+collects. That is the whole replacement-handset path, and it takes about ninety
+seconds.
 
 ### Two numbers to have written down
 

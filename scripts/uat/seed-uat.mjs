@@ -422,6 +422,11 @@ async function main() {
   );
   log('raised a support ticket from the field');
 
+  console.log('\nOpen the agent app at:');
+  console.log(`  http://localhost:5173/?device=${AGENT_DEVICE}`);
+  console.log('  (the seeded agent already has a handset, so a browser that arrives');
+  console.log('   without this is their SECOND handset and waits for an officer)');
+
   console.log('\nDone. Sign-in details:');
   console.log('  Agent PWA      +2347010000001 / FieldAgent2026');
   console.log('  Admin          +2348000000001 / Password123');
