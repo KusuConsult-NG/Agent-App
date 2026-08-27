@@ -170,9 +170,11 @@ citizenRouter.get(
       outstanding_amount_kobo: string;
       last_payment_at: Date | null;
       compliant_periods: number;
+      assessments_raised: number;
     }>(
       pool,
-      `SELECT score, has_valid_tin, outstanding_amount_kobo, last_payment_at, compliant_periods
+      `SELECT score, has_valid_tin, outstanding_amount_kobo, last_payment_at,
+              compliant_periods, assessments_raised
          FROM taxpayer_compliance WHERE taxpayer_id = $1`,
       [taxpayer.id],
     );
@@ -182,8 +184,23 @@ citizenRouter.get(
       : false;
 
     const score = compliance?.score ?? 0;
+
+    /*
+     * NOT_ASSESSED is about history, not about the absence of a row.
+     *
+     * Every read path calls syncTaxpayerComplianceAndIncentives first, so by
+     * the time this runs a row always exists — which made the NOT_ASSESSED
+     * branch below unreachable in practice. A taxpayer registered the same
+     * morning, assessed nothing and owing nothing, therefore fell through to
+     * NEEDS_ATTENTION and was told their "compliance score needs improvement".
+     * They had not been asked for anything yet.
+     *
+     * `assessments_raised` is the denominator the score's ratios are taken
+     * over. Zero means there is nothing to judge, which is a different answer
+     * from a low judgement.
+     */
     const complianceStatus =
-      !compliance
+      !compliance || compliance.assessments_raised === 0
         ? 'NOT_ASSESSED'
         : hasOutstanding
           ? 'HAS_ARREARS'
@@ -195,7 +212,7 @@ citizenRouter.get(
       COMPLIANT: 'Your tax records are up to date. Keep paying on time to maintain your status.',
       HAS_ARREARS: 'You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay.',
       NEEDS_ATTENTION: 'Your compliance score needs improvement. Paying your obligations on time will raise it.',
-      NOT_ASSESSED: 'Your compliance has not been assessed yet. This will update after your first payment.',
+      NOT_ASSESSED: 'Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment.',
     };
 
     // WHAT AN ANONYMOUS CALLER IS TOLD, AND WHY IT IS THIS LITTLE.

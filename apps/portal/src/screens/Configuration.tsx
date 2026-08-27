@@ -45,6 +45,19 @@ export function CatalogueScreen({ user }: { user: User }) {
   const [editing, setEditing] = useState<RevenueItem | null>(null);
   const [history, setHistory] = useState<{ item: RevenueItem; rows: any[] } | null>(null);
   const [withdrawing, setWithdrawing] = useState<RevenueItem | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  /*
+   * Who may read a rate's history.
+   *
+   * `/government/audit/queries/rate-changes` is guarded on `audit:read` or
+   * `catalogue:configure`, deliberately: what the rate used to be is public,
+   * but who changed it, when and why is administrative information. A
+   * supervisor holds neither and is offered this screen, so the History button
+   * beside every row answered 403 for them — a control the platform advertises
+   * and refuses.
+   */
+  const canReadRateHistory = can('audit:read') || can('catalogue:configure');
 
   const load = useCallback(() => {
     api
@@ -67,12 +80,33 @@ export function CatalogueScreen({ user }: { user: User }) {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Revenue catalogue</h2>
-        <p className="card__hint">
-          Revenue items and their rates are government configuration, not code. Changing a rate
-          creates a new version with an effective date — it never rewrites what was already assessed.
-        </p>
+        <div className="card__header">
+          <div>
+            <h2 className="card__title">Revenue catalogue</h2>
+            <p className="card__hint">
+              Revenue items and their rates are government configuration, not code. Changing a rate
+              creates a new version with an effective date — it never rewrites what was already
+              assessed.
+            </p>
+          </div>
+          {can('catalogue:configure') && !creating && (
+            <button type="button" className="small" onClick={() => setCreating(true)}>
+              Add a revenue item
+            </button>
+          )}
+        </div>
       </div>
+
+      {creating && (
+        <NewItemForm
+          onCancel={() => setCreating(false)}
+          onDone={(note) => {
+            setCreating(false);
+            setMessage(note);
+            load();
+          }}
+        />
+      )}
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
@@ -195,18 +229,20 @@ export function CatalogueScreen({ user }: { user: User }) {
                 label: '',
                 render: (row) => (
                   <div className="button-row">
-                    <button
-                      type="button"
-                      className="small secondary"
-                      onClick={async () => {
-                        const rows = await api.get<any[]>(
-                          `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
-                        );
-                        setHistory({ item: row, rows });
-                      }}
-                    >
-                      History
-                    </button>
+                    {canReadRateHistory && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={async () => {
+                          const rows = await api.get<any[]>(
+                            `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
+                          );
+                          setHistory({ item: row, rows });
+                        }}
+                      >
+                        History
+                      </button>
+                    )}
                     {can('catalogue:configure') && row.status === 'ACTIVE' && (
                       <button type="button" className="small" onClick={() => setEditing(row)}>
                         Change rate
@@ -231,6 +267,221 @@ export function CatalogueScreen({ user }: { user: User }) {
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Adding a revenue item to the catalogue.
+ *
+ * `POST /revenue/items` existed, was permission-guarded, was audited, and was
+ * called from nowhere. The catalogue screen could reprice an item, withdraw it
+ * and restore it — everything except bring one into existence. A new bye-law
+ * meant a database insert by hand, which is the state of affairs this platform
+ * was built to end.
+ *
+ * A new item is created without a rate, deliberately: `POST /revenue/items`
+ * takes no price and `POST /revenue/items/:id/rates` requires a reason and a
+ * step-up, because setting what a citizen must pay is a separate decision from
+ * naming the thing they pay it for. That is right, and it is not guessable
+ * from a form, so the outcome message says so — an item with no rate cannot be
+ * assessed in the field, and an officer who thinks they have finished has left
+ * agents with a levy they cannot charge.
+ */
+function NewItemForm({
+  onCancel,
+  onDone,
+}: {
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}) {
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    categoryId: '',
+    code: '',
+    name: '',
+    description: '',
+    frequency: 'ANNUAL',
+    selfAssessable: false,
+    commissionEligible: true,
+    applicableTaxpayerTypes: ['INDIVIDUAL', 'BUSINESS'] as string[],
+  });
+
+  useEffect(() => {
+    api
+      .get<{ id: string; name: string }[]>('/revenue/categories')
+      .then(setCategories)
+      .catch(() => setCategories([]));
+  }, []);
+
+  const toggleType = (type: string) =>
+    setForm({
+      ...form,
+      applicableTaxpayerTypes: form.applicableTaxpayerTypes.includes(type)
+        ? form.applicableTaxpayerTypes.filter((entry) => entry !== type)
+        : [...form.applicableTaxpayerTypes, type],
+    });
+
+  return (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <h2 className="card__title">New revenue item</h2>
+          <p className="card__hint">
+            The item is created without a price. Set its rate afterwards with “Change rate” — until
+            you do, an agent cannot assess it in the field.
+          </p>
+        </div>
+        <button type="button" className="small secondary" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            await api.post<{ revenueItemId: string }>('/revenue/items', {
+              categoryId: form.categoryId,
+              code: form.code.trim().toUpperCase(),
+              name: form.name.trim(),
+              description: form.description.trim() || undefined,
+              frequency: form.frequency,
+              selfAssessable: form.selfAssessable,
+              commissionEligible: form.commissionEligible,
+              applicableTaxpayerTypes: form.applicableTaxpayerTypes,
+            });
+            onDone(
+              `${form.name.trim()} has been added to the catalogue. It has no rate yet, so it ` +
+                'cannot be assessed until you set one.',
+            );
+          } catch (caught) {
+            if (caught instanceof ApiRequestError) setError(caught.error);
+            else if (caught instanceof Error) {
+              setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+            }
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="filters">
+          <div className="field">
+            <label htmlFor="new-item-category">Category</label>
+            <select
+              id="new-item-category"
+              required
+              value={form.categoryId}
+              onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
+            >
+              <option value="">Choose a category</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-code">Code</label>
+            <input
+              id="new-item-code"
+              required
+              minLength={2}
+              maxLength={40}
+              placeholder="MARKET-LEVY"
+              value={form.code}
+              onChange={(event) => setForm({ ...form, code: event.target.value })}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-name">Name</label>
+            <input
+              id="new-item-name"
+              required
+              minLength={2}
+              maxLength={200}
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-frequency">How often it is charged</label>
+            <select
+              id="new-item-frequency"
+              value={form.frequency}
+              onChange={(event) => setForm({ ...form, frequency: event.target.value })}
+            >
+              {['ONE_OFF', 'DAILY', 'MONTHLY', 'QUARTERLY', 'ANNUAL'].map((frequency) => (
+                <option key={frequency} value={frequency}>
+                  {frequency.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-item-description">What it is for</label>
+          <input
+            id="new-item-description"
+            maxLength={1000}
+            value={form.description}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+          />
+        </div>
+
+        <fieldset style={{ border: 0, padding: 0, margin: '0 0 14px' }}>
+          <legend style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Who it applies to</legend>
+          <div className="button-row">
+            {['INDIVIDUAL', 'BUSINESS'].map((type) => (
+              <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={form.applicableTaxpayerTypes.includes(type)}
+                  onChange={() => toggleType(type)}
+                />
+                {type === 'INDIVIDUAL' ? 'Individuals' : 'Businesses'}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="button-row" style={{ marginBottom: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={form.selfAssessable}
+              onChange={(event) => setForm({ ...form, selfAssessable: event.target.checked })}
+            />
+            A taxpayer may assess this themselves
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={form.commissionEligible}
+              onChange={(event) => setForm({ ...form, commissionEligible: event.target.checked })}
+            />
+            An agent earns commission on it
+          </label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={busy || form.applicableTaxpayerTypes.length === 0 || !form.categoryId}
+        >
+          {busy ? 'Adding…' : 'Add to the catalogue'}
+        </button>
+      </form>
+    </div>
   );
 }
 
