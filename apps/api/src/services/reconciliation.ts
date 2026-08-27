@@ -1619,6 +1619,14 @@ async function recordReversal(params: {
     // Only documents that assert payment succeeded are revoked. An invoice is
     // a demand notice, not evidence of payment, and the reversal puts the
     // invoice back to UNPAID — it remains a legitimate thing to present.
+    //
+    // The acknowledgement is in that set now, and it is the one that matters
+    // most in the window this reversal is most likely to be used in. Before
+    // receipts waited for settlement, a reversal that beat the bank credit had
+    // no document to worry about; now there is always one, from gateway
+    // confirmation onwards. It says a receipt follows, which a reversal makes
+    // permanently false, and it hangs off the transaction rather than off a
+    // receipt — so the two entity types above do not reach it.
     await client.query(
       `UPDATE documents d
           SET status = 'REVOKED'
@@ -1626,7 +1634,10 @@ async function recordReversal(params: {
           AND ((d.entity_type = 'receipt'
                 AND d.entity_id IN (SELECT id FROM receipts WHERE transaction_id = $1))
             OR (d.entity_type = 'vehicle_renewal'
-                AND d.entity_id IN (SELECT id FROM vehicle_renewals WHERE transaction_id = $1)))`,
+                AND d.entity_id IN (SELECT id FROM vehicle_renewals WHERE transaction_id = $1))
+            OR (d.entity_type = 'transaction'
+                AND d.document_type = 'PAYMENT_ACKNOWLEDGEMENT'
+                AND d.entity_id = $1))`,
       [transactionId],
     );
 
