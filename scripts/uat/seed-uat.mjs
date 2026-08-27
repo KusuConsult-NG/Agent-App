@@ -210,6 +210,7 @@ async function main() {
 
   // --- assessments, invoices and payments ---------------------------------
   const collected = [];
+  const collectedAmounts = [];
   const pendingPayments = [];
   let collectedKobo = 0;
 
@@ -258,7 +259,9 @@ async function main() {
         agentAuth,
       );
       const confirmed = await post(`/payments/${payment.body.paymentId}/confirm`, {}, { ...agentAuth, allow: [202] });
-      collectedKobo += Number(assessment.body.amountKobo ?? payment.body.amountKobo ?? 0);
+      const amount = Number(assessment.body.amountKobo ?? payment.body.amountKobo ?? 0);
+      collectedKobo += amount;
+      collectedAmounts.push(amount);
       collected.push({
         taxpayer: taxpayer.name,
         item: item.name,
@@ -269,7 +272,10 @@ async function main() {
       pendingPayments.push(payment.body.gatewayReference);
     }
   }
-  log(`${collected.length} collections confirmed and receipted, ${pendingPayments.length} left unconfirmed`);
+  log(
+    `${collected.length} collections confirmed and acknowledged, ` +
+      `${pendingPayments.length} left unconfirmed (receipts follow the settlement)`,
+  );
 
   // --- vehicles ------------------------------------------------------------
   /*
@@ -281,6 +287,7 @@ async function main() {
   const privateRenewal = byCode('VEH-RENEW-PRIVATE');
   const commercialRenewal = byCode('VEH-RENEW-COMMERCIAL');
   const vehicles = [];
+  const renewalReferences = [];
   for (const [index, taxpayer] of taxpayers.slice(0, 4).entries()) {
     const vehicle = await post(
       '/vehicles',
@@ -327,12 +334,40 @@ async function main() {
     if (index < 3) {
       await post('/payments/simulate', { gatewayReference: payment.body.gatewayReference, outcome: 'SUCCESS' }, agentAuth);
       await post(`/payments/${payment.body.paymentId}/confirm`, {}, { ...agentAuth, allow: [202] });
+      /*
+       * Renewal collections go into the same settlement as everything else.
+       * Vehicle particulars are issued when the money reaches the government
+       * account, not when the gateway confirms — a renewal left out of the
+       * settlement is a renewal with no document, which is correct behaviour
+       * and a confusing thing to demonstrate.
+       */
+      collectedKobo += Number(renewal.body.amountKobo ?? payment.body.amountKobo ?? 0);
+      renewalReferences.push(payment.body.gatewayReference);
     }
   }
-  log(`${vehicles.length} vehicles captured, renewals raised and mostly paid`);
+  log(
+    `${vehicles.length} vehicles captured, ${renewalReferences.length} renewals paid ` +
+      '(particulars issued at settlement)',
+  );
 
   // --- the finance officer's side -----------------------------------------
-  const references = collected.map((row) => row.gatewayReference);
+  /*
+   * One confirmed collection is deliberately left out of the settlement.
+   *
+   * It is the state the whole platform turns on and the one a screenshot of a
+   * fully settled day cannot show: the gateway has confirmed the money, the
+   * taxpayer holds an acknowledgement, and PSIRS has not been paid, so no
+   * receipt exists. Officers see it under money in transit rather than as an
+   * exception, because nothing has gone wrong \u2014 the bank credit is simply
+   * not in yet.
+   */
+  const awaitingSettlement = collected.slice(-1);
+  const awaitingSettlementKobo = collectedAmounts.slice(-1).reduce((a, b) => a + b, 0);
+  const references = [
+    ...collected.slice(0, -1).map((row) => row.gatewayReference),
+    ...renewalReferences,
+  ];
+  const settlingKobo = collectedKobo - awaitingSettlementKobo;
   if (references.length > 0) {
     /*
      * The bank pays the exact total of what the gateway confirmed, so this
@@ -346,7 +381,7 @@ async function main() {
       {
         settlementDate: new Date().toISOString().slice(0, 10),
         gatewayReferences: references,
-        receivedAmountKobo: String(collectedKobo),
+        receivedAmountKobo: String(settlingKobo),
         bankReference: `UAT-SETTLEMENT-${new Date().toISOString().slice(0, 10)}`,
       },
       { token: finance, allow: [400, 409, 422] },
@@ -354,7 +389,11 @@ async function main() {
     if (settlement.status >= 400) {
       log(`settlement refused: ${settlement.status} ${JSON.stringify(settlement.body?.error ?? settlement.body)}`);
     } else {
-      log(`recorded a settlement of ${(collectedKobo / 100).toLocaleString('en-NG')} naira covering ${references.length} collections`);
+      log(
+        `recorded a settlement of ${(settlingKobo / 100).toLocaleString('en-NG')} naira covering ` +
+          `${references.length} collections \u2014 this is what issues the receipts and particulars. ` +
+          `${awaitingSettlement.length} confirmed collection still awaits its bank credit`,
+      );
     }
   }
 
@@ -389,7 +428,9 @@ async function main() {
   console.log('  Revenue        +2348000000002 / Password123');
   console.log('  Finance        +2348000000003 / Password123');
   console.log('  Supervisor     +2348000000004 / Password123');
-  console.log('  Auditor        +2348000000005 / Password123\n');
+  console.log('  Auditor        +2348000000005 / Password123');
+  console.log('  Finance (2nd)  +2348000000006 / Password123  \u2014 closing a disputed');
+  console.log('                                                settlement needs the other one\n');
 }
 
 main().catch((error) => {

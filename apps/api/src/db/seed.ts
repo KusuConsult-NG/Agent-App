@@ -1018,6 +1018,17 @@ async function seedDemoUsers(): Promise<void> {
     { name: 'Finance Officer', phone: '+2348000000003', email: 'finance@psirs.demo', role: 'finance_officer' },
     { name: 'Agent Supervisor', phone: '+2348000000004', email: 'supervisor@psirs.demo', role: 'supervisor' },
     { name: 'State Auditor', phone: '+2348000000005', email: 'auditor@psirs.demo', role: 'auditor' },
+    /*
+     * A second finance officer, because several of the money controls require
+     * two of them and one is therefore not a working finance office.
+     *
+     * Closing a disputed settlement releases the commission on every collection
+     * in the batch, so the officer who recorded it may not be the one to close
+     * it. With a single seeded finance officer that path cannot be walked at
+     * all — not in a demonstration, not in UAT, and not by anyone checking that
+     * the separation actually holds.
+     */
+    { name: 'Finance Officer (Second)', phone: '+2348000000006', email: 'finance2@psirs.demo', role: 'finance_officer' },
   ];
 
   const passwordHash = await hashPassword('Password123');

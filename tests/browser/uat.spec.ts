@@ -71,12 +71,75 @@ function watchConsole(page: Page): { errors: string[] } {
  */
 async function shot(page: Page, name: string, options: { fullPage?: boolean } = {}): Promise<void> {
   await page.waitForLoadState('networkidle').catch(() => undefined);
+  /*
+   * Scroll to the top before a viewport capture.
+   *
+   * A phone screenshot photographs whatever the viewport is showing, and after
+   * pressing a button near the bottom of a long screen that is the middle of
+   * the page. The banner saying what happened to the money sits at the top, so
+   * the one thing the screenshot exists to prove was the one thing outside it.
+   */
+  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: options.fullPage ?? true });
 }
 
 /** What an agent actually holds: a phone, not a desktop window. */
 const PHONE = { width: 414, height: 896 };
+const DESKTOP = { width: 1440, height: 1000 };
+const API = process.env.API_URL ?? 'http://localhost:4000/api/v1';
+
+/** A signed-in officer, for the two steps that are not screen work. */
+async function officerToken(who: keyof typeof OFFICERS): Promise<string> {
+  const response = await fetch(`${API}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ phone: OFFICERS[who].phone, password: OFFICERS[who].password }),
+  });
+  const body = (await response.json()) as { accessToken?: string };
+  expect(body.accessToken, `${who} could not sign in to the API`).toBeTruthy();
+  return body.accessToken!;
+}
+
+/** The gateway reference the agent's screen is showing, read off the screen. */
+async function settlementReferenceFor(page: Page): Promise<string> {
+  const text = await page.locator('body').innerText();
+  const match = text.match(/Gateway reference\s*\n?\s*(\S+)/i);
+  expect(match, `no gateway reference on screen: ${text.slice(0, 400)}`).toBeTruthy();
+  return match![1];
+}
+
+/**
+ * The bank credit, recorded by a finance officer.
+ *
+ * Through the API rather than the screen: recording a settlement in the portal
+ * takes a bank statement upload, which a browser test cannot meaningfully fake.
+ * What is being demonstrated is what the receipt depends on, not which control
+ * an officer presses to supply it.
+ */
+async function settleThroughApi(gatewayReference: string): Promise<void> {
+  const token = await officerToken('finance');
+  // The list route answers with a bare array and takes no gateway filter, so
+  // the batch it just collected is found by reading it.
+  const status = await fetch(`${API}/payments?limit=50`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const list = (await status.json()) as { gateway_reference: string; amount_kobo: string }[];
+  const payment = list.find((row) => row.gateway_reference === gatewayReference);
+  expect(payment, `the API does not know gateway reference ${gatewayReference}`).toBeTruthy();
+
+  const response = await fetch(`${API}/government/settlements`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      settlementDate: new Date().toISOString().slice(0, 10),
+      gatewayReferences: [gatewayReference],
+      receivedAmountKobo: payment!.amount_kobo,
+      bankReference: `UAT-JOURNEY-${gatewayReference}`,
+    }),
+  });
+  expect(response.status, `settlement refused: ${await response.text()}`).toBe(201);
+}
 const agentShot = (page: Page, name: string) => shot(page, name, { fullPage: false });
 
 async function signInToPortal(page: Page, who: keyof typeof OFFICERS): Promise<void> {
@@ -404,11 +467,60 @@ test.describe('A collection, end to end in the app', () => {
     const check = agentPage.getByRole('button', { name: /check payment status/i });
     if (await check.count()) await check.first().click().catch(() => undefined);
     await agentPage.waitForTimeout(4000);
-    await agentShot(agentPage, 'journey-09-receipted');
+    await agentShot(agentPage, 'journey-09-acknowledged');
+
+    /*
+     * The gateway confirming is not the State being paid, so what the taxpayer
+     * is given here is an acknowledgement, numbered as one and saying on its
+     * face that it is not a receipt. The agent is told the payment IS confirmed
+     * — otherwise they would collect a second time from someone who has paid.
+     */
+    const acknowledged = await agentPage.locator('body').innerText();
+    expect(acknowledged, 'the acknowledgement is numbered as one').toMatch(
+      /PSIRS-ACK\/\d{4}\/\d+/,
+    );
+    expect(acknowledged, 'and says plainly that it is not a receipt').toMatch(/NOT a receipt/i);
+    expect(acknowledged, 'no receipt number may appear before settlement').not.toMatch(
+      /Receipt PSIRS\/\d{4}\/\d+/,
+    );
+
+    /*
+     * --- the money reaches a government account --------------------------
+     *
+     * The other half of §95, and the half that decides whether the State was
+     * paid. A finance officer records the bank credit; that is what issues the
+     * receipt, and nothing an agent or an app can press will do it instead.
+     */
+    const financeContext = await browser.newContext({ viewport: DESKTOP });
+    const financePage = await financeContext.newPage();
+    await signInToPortal(financePage, 'finance');
+    await financePage.goto(`${PORTAL}/#/reconciliation`);
+    await financePage.waitForTimeout(2500);
+    await shot(financePage, 'journey-09b-finance-money-in-transit');
+
+    const inTransit = await financePage.locator('.content').innerText();
+    expect(
+      inTransit,
+      'the officer can see money the gateway holds and the State does not',
+    ).toMatch(/transit|awaiting settlement|pending settlement/i);
+    await financeContext.close();
+
+    /*
+     * Recording the settlement itself goes through the API: the screen that
+     * does it takes a bank statement upload, which a browser test cannot
+     * meaningfully fake, and the point being demonstrated is what the receipt
+     * depends on rather than which button an officer presses.
+     */
+    const gatewayReference = await settlementReferenceFor(agentPage);
+    await settleThroughApi(gatewayReference);
+
+    await agentPage.reload();
+    await agentPage.waitForTimeout(3500);
+    await agentShot(agentPage, 'journey-09c-receipted-after-settlement');
 
     expect(
       await agentPage.locator('body').innerText(),
-      'a receipt number appears only after the gateway confirmed',
+      'the receipt appears once, and only once, the money has arrived',
     ).toMatch(/PSIRS\/\d{4}\/\d+/);
 
     expect(agentConsole.errors, `agent console: ${agentConsole.errors.join(' | ')}`).toEqual([]);
