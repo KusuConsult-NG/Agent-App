@@ -947,6 +947,8 @@ export async function registerDevice(params: {
   pwaVersion?: string | null;
   actorId: string;
   ipAddress?: string | null;
+  /** Overrides `config.security.deviceAutoApprove`; only a test passes it. */
+  autoApprove?: boolean;
 }): Promise<{ deviceId: string; status: string }> {
   return withTransaction(async (client) => {
     const axes = await loadAxes(client, params.agentId);
@@ -1000,6 +1002,23 @@ export async function registerDevice(params: {
     );
     const isFirst = Number.parseInt(priorDevices?.count ?? '0', 10) === 0;
 
+    /*
+     * A development or test deployment approves every handset on the spot.
+     *
+     * Not a relaxation of the rule above, which stands: it is a statement that
+     * on a laptop there is no stolen phone, no agent to protect and no revenue
+     * to lose, and that needing two people to open one screen is what stops a
+     * demonstration or a local trial from happening at all. `config.ts` forces
+     * this false in production and refuses to boot if anybody sets it there, so
+     * the only deployments that can reach it are the ones where the decision
+     * costs nothing.
+     *
+     * Passed in rather than only read from config so a test can exercise both
+     * answers without setting a process-wide environment variable that every
+     * other suite sharing the process would then inherit.
+     */
+    const approveNow = isFirst || (params.autoApprove ?? config.security.deviceAutoApprove);
+
     const device = await queryOne<{ id: string; status: string }>(
       client,
       `INSERT INTO agent_devices
@@ -1014,9 +1033,9 @@ export async function registerDevice(params: {
         params.browser ?? null,
         params.operatingSystem ?? null,
         params.pwaVersion ?? null,
-        isFirst ? 'ACTIVE' : 'PENDING',
-        isFirst ? new Date() : null,
-        isFirst ? params.actorId : null,
+        approveNow ? 'ACTIVE' : 'PENDING',
+        approveNow ? new Date() : null,
+        approveNow ? params.actorId : null,
       ],
     );
 
@@ -1025,7 +1044,17 @@ export async function registerDevice(params: {
       agentId: params.agentId,
       eventType: 'DEVICE_REGISTERED',
       actorId: params.actorId,
-      metadata: { deviceIdentifier: params.deviceIdentifier, autoApproved: isFirst },
+      /*
+       * `autoApproved` records that no officer looked, and `firstDevice`
+       * records why. An approval nobody can account for afterwards is worse
+       * than the delay it saved, and the two reasons are not the same thing:
+       * one is the onboarding rule, the other is a deployment setting.
+       */
+      metadata: {
+        deviceIdentifier: params.deviceIdentifier,
+        autoApproved: approveNow,
+        firstDevice: isFirst,
+      },
     });
 
     await recordAudit(client, {

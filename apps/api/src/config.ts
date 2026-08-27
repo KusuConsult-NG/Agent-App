@@ -459,6 +459,31 @@ export const config = {
     // reason the others are: the suite walks more referees in a minute than a
     // real LGA does in a week.
     refereeRateLimitMax: int('REFEREE_RATE_LIMIT_MAX', 20),
+    /**
+     * Approve a newly registered handset instead of leaving it for an officer.
+     *
+     * An agent's first handset is auto-approved so onboarding can finish; every
+     * one after that waits, because revoking a stolen phone would be worth
+     * nothing if the thief could register another and carry on collecting.
+     *
+     * That rule makes a demonstration or a local trial need two people to show
+     * one screen: the seeded agent already has a handset, so anybody opening
+     * the app in their own browser is a second one. Where the stakes are nil,
+     * this closes that gap.
+     *
+     * Off unless somebody asks for it, and refused outright in production by the
+     * boot check below. On a laptop it is a convenience; on a government revenue
+     * platform it is device binding removed, and a revoked handset that can be
+     * replaced without anybody looking is a revocation that meant nothing.
+     *
+     * Defaulting it *on* outside production was the obvious thing to write and
+     * was wrong twice over. It silently changed what the test suite was
+     * exercising — several suites assert that a second handset waits for an
+     * officer, and they are asserting the production rule — and it made the
+     * strict behaviour the one you had to opt into, which is the wrong way round
+     * for a control. The demonstration stack sets it explicitly instead.
+     */
+    deviceAutoApprove: isProduction ? false : bool('DEVICE_AUTO_APPROVE', false),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())
@@ -488,6 +513,20 @@ if (isProduction) {
   // state: a mock gateway in production would accept payments nobody ever made.
   const problems: string[] = [];
   if (config.payments.gateway === 'mock') problems.push('PAYMENT_GATEWAY is still "mock"');
+
+  /*
+   * Read from the environment rather than from `config`, which has already
+   * forced it false. The point is to refuse the deployment, not to quietly
+   * correct it: somebody who set this meant to turn off the control that makes
+   * a revoked handset stay revoked, and they need to be told rather than left
+   * believing it is on.
+   */
+  if (bool('DEVICE_AUTO_APPROVE', false)) {
+    problems.push(
+      'DEVICE_AUTO_APPROVE is set — a replacement handset would be approved without any officer, ' +
+        'which is device binding removed',
+    );
+  }
   if (config.integrations.tinService === 'mock') problems.push('TIN_SERVICE is still "mock"');
   if (config.storage.driver === 'local') problems.push('STORAGE_DRIVER is still "local"');
 

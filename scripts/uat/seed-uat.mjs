@@ -266,6 +266,9 @@ async function main() {
         taxpayer: taxpayer.name,
         item: item.name,
         gatewayReference: payment.body.gatewayReference,
+        // Carried so the summary can look up the acknowledgement of whichever
+        // collection is deliberately left awaiting its bank credit.
+        reference: assessment.body.transactionReference,
         receipt: confirmed.body?.receiptNumber ?? null,
       });
     } else {
@@ -421,6 +424,41 @@ async function main() {
     { token: agentToken, deviceId: AGENT_DEVICE, allow: [400, 422] },
   );
   log('raised a support ticket from the field');
+
+  /*
+   * The codes a presenter needs in their hand.
+   *
+   * Public verification is the part of the demonstration a room can check for
+   * itself, and it needs a real code typed into a real box. Printing them here
+   * is the difference between that and somebody opening a database client in
+   * front of an audience.
+   *
+   * One of each, deliberately: a receipt for a settled collection, and an
+   * acknowledgement for the one still awaiting its bank credit. They answer
+   * differently, and the difference is the point of the whole change.
+   */
+  const issued = await get('/receipts?limit=1', { token: finance, allow: [403, 404] });
+  const receipt = Array.isArray(issued.body) ? issued.body[0] : null;
+  const pendingTxn = awaitingSettlement[0];
+  const ackDoc = pendingTxn
+    ? await get(`/payments/transactions/${pendingTxn.reference}/status`, {
+        token: agentToken,
+        deviceId: AGENT_DEVICE,
+        allow: [403, 404],
+      })
+    : null;
+  const ack = ackDoc?.body?.transaction ?? null;
+
+  console.log('\nTo demonstrate public verification, at http://localhost:5174/#/verify');
+  if (receipt) {
+    console.log(`  receipt          ${receipt.verification_code}  (${receipt.receipt_number})`);
+    console.log('                   answers VALID - a genuine government receipt');
+  }
+  if (ack?.acknowledgement_code) {
+    console.log(`  acknowledgement  ${ack.acknowledgement_code}  (${ack.acknowledgement_number})`);
+    console.log('                   answers VALID - NOT A RECEIPT, money not yet received');
+  }
+  console.log('  anything else    answers NOT FOUND');
 
   console.log('\nOpen the agent app at:');
   console.log(`  http://localhost:5173/?device=${AGENT_DEVICE}`);
