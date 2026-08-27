@@ -427,13 +427,25 @@ export async function verifyPublicly(
     status: string;
     storage_reference: string;
     checksum: string;
+    transaction_status: string | null;
   }>(
     db,
-    `SELECT document_number, document_type, issued_at, expires_at, status,
-            storage_reference, checksum
-       FROM documents
-      WHERE document_number = $1
-         OR replace(upper(verification_code), '-', '') = $2`,
+    /*
+     * The transaction comes along for the acknowledgement's sake.
+     *
+     * A revoked receipt is answered by the branch above, which knows from
+     * `receipts.status` whether the payment was reversed. A document has no
+     * such column, so every revoked document got the same line — and for an
+     * acknowledgement that is a citizen being told their document is void
+     * without being told their money came back. Those are different situations
+     * and only one of them means they are square with the government.
+     */
+    `SELECT d.document_number, d.document_type, d.issued_at, d.expires_at, d.status,
+            d.storage_reference, d.checksum, t.status AS transaction_status
+       FROM documents d
+       LEFT JOIN transactions t ON d.entity_type = 'transaction' AND t.id = d.entity_id
+      WHERE d.document_number = $1
+         OR replace(upper(d.verification_code), '-', '') = $2`,
     [typed, normalised],
   );
 
@@ -452,12 +464,18 @@ export async function verifyPublicly(
   );
 
   if (document.status === 'REVOKED') {
+    const returned =
+      document.transaction_status === 'REVERSED' || document.transaction_status === 'REFUNDED';
     return {
-      status: 'INVALID',
+      status: returned ? 'REVERSED' : 'INVALID',
       documentNumber: document.document_number,
       documentType: document.document_type,
       issuedAt: document.issued_at.toISOString(),
-      message: 'This document has been revoked and is no longer valid.',
+      message: returned
+        ? 'This payment was reversed and the money is being returned to the payer, so no ' +
+          'government receipt was issued for it. The document is no longer valid evidence of ' +
+          'payment. If you have not received the money, contact PSIRS with this number.'
+        : 'This document has been revoked and is no longer valid.',
     };
   }
 
