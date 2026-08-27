@@ -66,18 +66,30 @@ Logs are in `/tmp/psirs-uat/`. `scripts/uat/stack.sh down` stops everything.
   03. the UAT handset is registered and approved
   04. reference data: 17 LGAs, 42 revenue items
   05. registered 12 taxpayers (11 received a TIN immediately)
-  06. 8 collections confirmed and receipted, 4 left unconfirmed
-  07. 4 vehicles captured, renewals raised and mostly paid
-  08. recorded a settlement of 19,225 naira covering 8 collections
-  09. reconciliation: 8 matched, 0 exception(s), 0 unchecked
+  06. 8 collections confirmed and acknowledged, 4 left unconfirmed (receipts follow the settlement)
+  07. 4 vehicles captured, 3 renewals paid (particulars issued at settlement)
+  08. recorded a settlement of 44,225 naira covering 10 collections - this is what
+      issues the receipts and particulars. 1 confirmed collection still awaits its
+      bank credit
+  09. reconciliation: 10 matched, 0 exception(s), 0 unchecked
   10. raised a support ticket from the field
 ```
 
 Eight individuals and four businesses, assessed across a daily market levy, an
 annual shop rate, a development levy and a consumption tax charged as a
-percentage of a declared base. Four of the twelve payments are left unconfirmed
-on purpose, so the officer screens show both an ordinary day's collection and
-the queue of things nobody has confirmed yet.
+percentage of a declared base.
+
+Three deliberate states, so the officer screens show a real day rather than a
+tidy one:
+
+- **Four payments left unconfirmed.** The gateway has not said yes, so the app
+  says so and nobody has a document.
+- **One confirmed collection left out of the settlement.** The gateway has
+  confirmed it and the bank credit is not in yet, so the taxpayer holds an
+  acknowledgement and there is no receipt. It appears under *money in transit*
+  rather than as an exception, because nothing has gone wrong.
+- **Everything else settled.** Ten collections, their receipts, and the three
+  vehicle particulars the renewals paid for.
 
 ---
 
@@ -140,10 +152,21 @@ This is the sequence worth reading in order.
 | `journey-06-find-taxpayer` | Searching for the taxpayer by name |
 | `journey-07-priced-by-government` | ₦3,000, from the catalogue, with the calculation shown — *the agent never types an amount* |
 | `journey-08-payment-initiated` | **"Payment not yet confirmed. This payment has NOT been marked as received. Do not ask the taxpayer to pay again."** Invoice and transaction references are issued; no receipt exists |
-| `journey-09-receipted` | After the gateway confirms: INITIATED → ASSESSMENT CREATED → INVOICE GENERATED → PAYMENT INITIATED → PAYMENT PENDING → PAYMENT SUCCESSFUL → PAYMENT VERIFIED (*verified independently via webhook*) → RECEIPT GENERATED |
+| `journey-09-acknowledged` | The gateway confirms. **"Payment confirmed — receipt to follow … this is an acknowledgement and NOT a receipt."** Acknowledgement PSIRS-ACK/2026/000025, status RECONCILIATION PENDING |
+| `journey-09b-finance-money-in-transit` | The finance officer's side of the same moment: **awaiting settlement ₦8,000.00, 2 transactions**, listed as money in transit and *not* as an exception, with an empty exception queue beside it |
+| `journey-09c-receipted-after-settlement` | After the bank credit is recorded: **Payment Successful · ₦3,000.00 · Receipt PSIRS/2026/000011**, status SETTLED, and a Download receipt button |
 
-`journey-08` and `journey-09` together are PRD §95 on screen: nothing is called
-collected until something outside the platform has confirmed it.
+Those four are PRD §95 on screen, in both halves.
+
+`journey-08` is the first half: money has been asked for and nothing has
+confirmed it, so the app refuses to say collected.
+
+`journey-09` through `journey-09c` are the second, and the one this platform
+takes further than most. The gateway confirming means the *gateway* holds the
+money; a receipt says the Plateau State Government received it. Between those
+two facts the taxpayer holds an acknowledgement that says exactly which is
+true — and the receipt appears only in `journey-09c`, after a finance officer
+has recorded the bank credit. Nothing an agent or an app can press produces it.
 
 | Screenshot | What it shows |
 |---|---|
@@ -165,14 +188,18 @@ and it proves the menu never offers a screen the API refuses.
 | State Auditor | 17 | `portal-auditor-*` |
 | Agent Supervisor | 11 | `portal-supervisor-*` |
 
-Eighty-one screens, no console errors, nothing refused.
+Eighty-one officer screens across five roles — 86 files including each role's
+home — no console errors, nothing refused. Alongside eleven agent-app screens,
+sixteen journey steps and two public pages, this run produced 115 screenshots.
 
 Worth opening specifically:
 
 * `portal-finance-01-home` — owed to the councils, commission liability,
   settlement variance, exceptions
 * `portal-finance-03-reconciliation` — three-way reconciliation, the exception
-  queue and the settlement recorded against it
+  queue, money in transit, and the settlement recorded against it. This is the
+  screen that issues receipts: recording a bank credit here is what turns a
+  confirmed collection into a receipted one
 * `portal-auditor-03-audit-log` — the hash-chained trail and its verification
 * `portal-admin-04-agents-clearance` — the six clearance axes per agent
 * `portal-admin-10-field-application` — the version gate and the fleet it governs

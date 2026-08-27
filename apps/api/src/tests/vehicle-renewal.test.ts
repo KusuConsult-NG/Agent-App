@@ -19,6 +19,15 @@
  * This is the same failure inverted — the money confirmed and the thing the
  * citizen actually bought silently not delivered — and it deserves the same
  * treatment.
+ *
+ * WHAT MOVED SINCE. Issuance is no longer triggered by the gateway confirming.
+ * A renewal document is what a driver shows at a checkpoint, and granting a
+ * year of legal cover on the gateway's word meant the State could grant it for
+ * money that never arrived. It is now issued when the settlement covering the
+ * renewal is reconciled — so these tests confirm the payment, settle it, and
+ * then assert the same properties. The first one also asserts the interval in
+ * between, which is the new behaviour: confirmed, and deliberately not yet
+ * issued.
  */
 
 import './env';
@@ -30,6 +39,7 @@ import {
   get,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   startTestServer,
@@ -160,11 +170,18 @@ describe('A renewal confirmed by webhook is still issued', () => {
     );
     assert.equal(simulated.status, 200, JSON.stringify(simulated.body));
 
+    // Confirmed by the gateway, and deliberately not issued: the State does
+    // not hold the money yet, so it has not granted anything.
+    const beforeSettlement = await renewalRow(renewal.renewalId);
+    assert.equal(beforeSettlement?.document_number, null, 'nothing is granted on the gateway word alone');
+
+    await settleTransaction(renewal.transactionId);
+
     const row = await renewalRow(renewal.renewalId);
     assert.equal(
       row?.status,
       'COMPLETED',
-      'a paid renewal must be issued when the webhook confirms it, not only when an app asks',
+      'a settled renewal must be issued without an app asking for it',
     );
     assert.ok(row?.document_number, 'the renewal document must exist');
     assert.equal(
@@ -182,6 +199,7 @@ describe('A renewal confirmed by webhook is still issued', () => {
       { gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
       { token: agent.token, deviceId: device },
     );
+    await settleTransaction(renewal.transactionId);
     const first = await renewalRow(renewal.renewalId);
 
     // A redelivered webhook, and then the agent's app polling anyway. Both are
@@ -213,9 +231,9 @@ describe('A renewal confirmed by webhook is still issued', () => {
 
   it('still confirms the payment when the authority cannot be told', async () => {
     // ZZZ is the mock registry's unreachable prefix. The money is verified and
-    // the receipt is real whatever the vehicle authority does — refusing a
-    // confirmed payment because a third party is down would be the wrong way
-    // round, and claiming the authority accepted it would be worse.
+    // settled whatever the vehicle authority does — refusing a settled payment
+    // because a third party is down would be the wrong way round, and claiming
+    // the authority accepted it would be worse.
     const { agent, device, renewal, gatewayReference } = await renewalAwaitingPayment(
       'ZZZ451AA',
       '+2347044555002',
@@ -226,6 +244,7 @@ describe('A renewal confirmed by webhook is still issued', () => {
       { gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
       { token: agent.token, deviceId: device },
     );
+    await settleTransaction(renewal.transactionId);
 
     const status = await get(`/payments/transactions/${renewal.transactionReference}/status`, {
       token: agent.token,

@@ -7,6 +7,17 @@
  * inviolable rule is that a confirmed payment yields exactly one government
  * receipt — not two, not none.
  *
+ * WHAT MOVED SINCE. A confirmed payment no longer yields a receipt at all: the
+ * gateway confirming means the gateway holds the money, and a receipt says the
+ * State received it. Confirmation issues an acknowledgement, and the receipt is
+ * issued by the settlement that puts the money in a government account.
+ *
+ * The contention property is unchanged and now has two halves rather than one,
+ * so these tests assert both: racing confirmations produce exactly one
+ * acknowledgement and no receipt, and the settlement that follows produces
+ * exactly one receipt. Asserting only the first would leave the half that
+ * actually creates the government record uncovered under contention.
+ *
  * These tests exist because that guarantee is about to be re-founded. It has
  * been resting on two things at once: an advisory lock per payment, and a
  * SERIALIZABLE transaction. The isolation level is the expensive half — every
@@ -25,7 +36,7 @@
 import '../env';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { createGovernmentUser, firstLgaId, pool, resetDatabase } from '../helpers';
+import { createGovernmentUser, firstLgaId, pool, resetDatabase, settleCollection } from '../helpers';
 import { queryOne, query } from '../../db/pool';
 import { seedReferenceData } from '../../db/seed';
 import { createAssessment } from '../../services/revenue';
@@ -89,6 +100,42 @@ async function receiptsFor(paymentId: string): Promise<number> {
   return Number(row!.n);
 }
 
+/** What the taxpayer holds between the gateway confirming and the money landing. */
+async function acknowledgementsFor(paymentId: string): Promise<number> {
+  const row = await queryOne<{ n: string }>(
+    pool,
+    `SELECT count(*)::text AS n
+       FROM documents d
+       JOIN payments p ON p.transaction_id = d.entity_id
+      WHERE p.id = $1 AND d.entity_type = 'transaction'
+        AND d.document_type = 'PAYMENT_ACKNOWLEDGEMENT'`,
+    [paymentId],
+  );
+  return Number(row!.n);
+}
+
+/**
+ * The bank credit for these payments, recorded as one settlement.
+ *
+ * The batch is settled in a single call because that is how a settlement
+ * arrives — one credit covering many collections — and because it puts the
+ * receipt-issuing half of the platform under the same contention the
+ * confirmation half is being tested for.
+ */
+async function settlePayments(paymentIds: string[]): Promise<void> {
+  const rows = await query<{ gateway_reference: string; amount_kobo: string }>(
+    pool,
+    `SELECT gateway_reference, amount_kobo FROM payments
+      WHERE id = ANY($1::uuid[]) AND status = 'VERIFIED'`,
+    [paymentIds],
+  );
+  assert.equal(rows.length, paymentIds.length, 'every payment must be verified before it settles');
+  await settleCollection({
+    gatewayReferences: rows.map((row) => row.gateway_reference),
+    amountKobo: rows.reduce((sum, row) => sum + BigInt(row.amount_kobo), 0n),
+  });
+}
+
 before(async () => {
   await resetDatabase();
   await seedReferenceData();
@@ -118,16 +165,21 @@ describe('one payment, many confirmations', () => {
       confirmPayment({ paymentId, source: 'POLL', actorRole: 'system' }),
     ]);
 
-    assert.equal(await receiptsFor(paymentId), 1, 'exactly one receipt');
+    assert.equal(await acknowledgementsFor(paymentId), 1, 'exactly one acknowledgement');
+    assert.equal(await receiptsFor(paymentId), 0, 'and no receipt, because nobody has been paid');
 
     // Whichever order they landed in, a caller that succeeded must have been
-    // told the receipt — being second is not a failure, it is a replay.
+    // told the acknowledgement — being second is not a failure, it is a replay.
     const succeeded = [a, b].filter((r) => r.status === 'fulfilled');
     assert.ok(succeeded.length >= 1, 'at least one caller is answered');
     const numbers = new Set(
-      succeeded.map((r) => (r as PromiseFulfilledResult<any>).value?.receipt?.receiptNumber),
+      succeeded.map((r) => (r as PromiseFulfilledResult<any>).value?.acknowledgementNumber),
     );
-    assert.equal(numbers.size, 1, 'every answered caller gets the same receipt number');
+    assert.equal(numbers.size, 1, 'every answered caller gets the same acknowledgement number');
+
+    // And the settlement issues exactly one receipt for it.
+    await settlePayments([paymentId]);
+    assert.equal(await receiptsFor(paymentId), 1, 'exactly one receipt once the money lands');
   });
 
   it('issues exactly one receipt when sixteen arrive together', async () => {
@@ -144,7 +196,8 @@ describe('one payment, many confirmations', () => {
       ),
     );
 
-    assert.equal(await receiptsFor(paymentId), 1, 'still exactly one receipt');
+    assert.equal(await acknowledgementsFor(paymentId), 1, 'still exactly one acknowledgement');
+    assert.equal(await receiptsFor(paymentId), 0, 'and still no receipt');
 
     const payment = await queryOne<{ status: string }>(
       pool,
@@ -152,13 +205,24 @@ describe('one payment, many confirmations', () => {
       [paymentId],
     );
     assert.equal(payment!.status, 'VERIFIED');
+
+    await settlePayments([paymentId]);
+    assert.equal(await receiptsFor(paymentId), 1, 'and exactly one receipt after settlement');
   });
 
   it('does not let a reconciliation sweep double-receipt a confirmed payment', async () => {
     const paymentId = await payableFixture('Sweep');
     await confirmPayment({ paymentId, source: 'WEBHOOK', actorRole: 'system' });
     await confirmPayment({ paymentId, source: 'RECONCILIATION', actorRole: 'system' });
+    assert.equal(await acknowledgementsFor(paymentId), 1);
+
+    await settlePayments([paymentId]);
     assert.equal(await receiptsFor(paymentId), 1);
+
+    // And a sweep that runs again after settlement may not add a second one.
+    await confirmPayment({ paymentId, source: 'RECONCILIATION', actorRole: 'system' });
+    assert.equal(await receiptsFor(paymentId), 1);
+    assert.equal(await acknowledgementsFor(paymentId), 1);
   });
 });
 
@@ -177,6 +241,19 @@ describe('many payments, confirmed at once', () => {
       [],
       'confirmations of unrelated payments must not fail each other',
     );
+
+    for (const paymentId of ids) {
+      assert.equal(
+        await acknowledgementsFor(paymentId),
+        1,
+        `payment ${paymentId} has one acknowledgement`,
+      );
+      assert.equal(await receiptsFor(paymentId), 0, `payment ${paymentId} has no receipt yet`);
+    }
+
+    // One bank credit covering all twelve. Each gets its own receipt, and the
+    // numbering has to stay unique across a batch issued in one transaction.
+    await settlePayments(ids);
 
     for (const paymentId of ids) {
       assert.equal(await receiptsFor(paymentId), 1, `payment ${paymentId} has one receipt`);

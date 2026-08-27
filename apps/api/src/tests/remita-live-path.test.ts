@@ -37,6 +37,7 @@ import {
   firstLgaId,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -352,12 +353,16 @@ describe('The API on the real Remita adapter', () => {
       `Remita's ₦${amountNaira} came back as ${amountKobo} kobo`,
     );
 
+    // Remita confirming means Remita holds the money. The receipt says the
+    // State received it, and waits for the settlement that proves it did.
+    await settleTransaction(transactionId);
+
     const receipt = await queryOne<{ receipt_number: string; amount_kobo: string }>(
       pool,
       'SELECT receipt_number, amount_kobo FROM receipts WHERE transaction_id = $1',
       [transactionId],
     );
-    assert.ok(receipt, 'a receipt exists once Remita confirmed the money');
+    assert.ok(receipt, 'a receipt exists once the money has reached a government account');
     assert.equal(
       receipt!.amount_kobo,
       String(amountKobo),

@@ -32,6 +32,7 @@ import {
   get,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   startTestServer,
@@ -104,6 +105,8 @@ async function collect(suffix: string) {
     auth,
   );
 
+  // A receipt exists only once the money has reached a government account.
+  await settleTransaction(assessment.body.transactionId);
   const row = await queryOne<{
     receipt_number: string;
     verification_code: string;
@@ -215,6 +218,9 @@ describe('Verification answers the person in front of it', () => {
       { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
       auth,
     );
+    // Particulars are granted when the money reaches a government account, not
+    // when the gateway says it has it.
+    await settleTransaction(renewal.body.transactionId);
     const issued = await post(
       `/vehicles/renewals/${renewal.body.renewalId ?? renewal.body.id}/document`,
       {},

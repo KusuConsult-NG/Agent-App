@@ -30,6 +30,7 @@ import {
   get,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -56,6 +57,7 @@ const collected: {
   receiptId: string;
   receiptNumber: string;
   documentId: string;
+  acknowledgementId: string;
 } = {} as never;
 
 before(async () => {
@@ -124,16 +126,25 @@ beforeEach(async () => {
     auth,
   );
 
+  // A receipt exists only once the money has reached a government account, so
+  // the fixture has to settle the collection before it can look one up.
+  await settleTransaction(assessment.body.transactionId);
+
   const row = await queryOne<{
     invoice_id: string;
     assessment_id: string;
     receipt_id: string;
     receipt_number: string;
     document_id: string;
+    acknowledgement_id: string;
   }>(
     pool,
-    `SELECT t.invoice_id, t.assessment_id, r.id AS receipt_id, r.receipt_number, r.document_id
-       FROM transactions t JOIN receipts r ON r.transaction_id = t.id
+    `SELECT t.invoice_id, t.assessment_id, r.id AS receipt_id, r.receipt_number, r.document_id,
+            ack.id AS acknowledgement_id
+       FROM transactions t
+       JOIN receipts r ON r.transaction_id = t.id
+       JOIN documents ack ON ack.entity_type = 'transaction' AND ack.entity_id = t.id
+            AND ack.document_type = 'PAYMENT_ACKNOWLEDGEMENT'
       WHERE t.id = $1`,
     [assessment.body.transactionId],
   );
@@ -146,6 +157,7 @@ beforeEach(async () => {
     receiptId: row!.receipt_id,
     receiptNumber: row!.receipt_number,
     documentId: row!.document_id,
+    acknowledgementId: row!.acknowledgement_id,
   });
 });
 
@@ -165,6 +177,13 @@ const GUARDED: { what: string; path: () => string }[] = [
     path: () => `/receipts/lookup?number=${encodeURIComponent(collected.receiptNumber)}`,
   },
   { what: 'the document', path: () => `/documents/${collected.documentId}` },
+  /*
+   * The acknowledgement hangs off the transaction rather than off a receipt,
+   * so it reaches the scope check by a different join and has to be proved
+   * separately. Its PDF names the taxpayer and what they paid, exactly like a
+   * receipt's does.
+   */
+  { what: 'the acknowledgement', path: () => `/documents/${collected.acknowledgementId}` },
 ];
 
 describe('Another agent cannot read what they had no part in', () => {

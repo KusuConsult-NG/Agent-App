@@ -188,8 +188,11 @@ describe('transaction state machine', () => {
       'PAYMENT_PENDING',
       'PAYMENT_SUCCESSFUL',
       'PAYMENT_VERIFIED',
-      'RECEIPT_GENERATED',
+      // Reconciliation before the receipt, not after it. The gateway
+      // confirming means the gateway holds the money; the receipt says the
+      // State received it, and only a reconciled settlement makes that true.
       'RECONCILIATION_PENDING',
+      'RECEIPT_GENERATED',
       'SETTLED',
     ] as const;
 
@@ -198,7 +201,7 @@ describe('transaction state machine', () => {
     }
   });
 
-  it('refuses to reach a receipt without verification', () => {
+  it('refuses to reach a receipt without the money having arrived', () => {
     // The single most important rule in the platform, expressed as a graph.
     assert.throws(
       () => assertTransactionTransition('PAYMENT_PENDING', 'RECEIPT_GENERATED'),
@@ -212,7 +215,19 @@ describe('transaction state machine', () => {
       () => assertTransactionTransition('FAILED', 'RECEIPT_GENERATED'),
       IllegalTransitionError,
     );
-    assert.ok(canTransactionTransition('PAYMENT_VERIFIED', 'RECEIPT_GENERATED'));
+
+    /*
+     * And not from PAYMENT_VERIFIED either, which is the rule tightening.
+     * The gateway confirming a payment means the gateway holds the money; a
+     * receipt says the Plateau State Government received it. Only a reconciled
+     * settlement makes the second true, so RECONCILIATION_PENDING is now the
+     * only door into RECEIPT_GENERATED.
+     */
+    assert.throws(
+      () => assertTransactionTransition('PAYMENT_VERIFIED', 'RECEIPT_GENERATED'),
+      IllegalTransitionError,
+    );
+    assert.ok(canTransactionTransition('RECONCILIATION_PENDING', 'RECEIPT_GENERATED'));
   });
 
   it('makes reversal and cancellation terminal', () => {

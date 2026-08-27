@@ -17,6 +17,7 @@ import { pool, closePool, queryOne } from '../db/pool';
 import { runMigrations } from '../db/migrate';
 import { installEnumObservers } from './enum-observation';
 import { hashPassword } from '../lib/crypto';
+import { recordSettlement } from '../services/reconciliation';
 import { seedReferenceData } from '../db/seed';
 
 let server: Server | null = null;
@@ -298,3 +299,84 @@ export async function revenueItemByCode(code: string): Promise<string> {
 }
 
 export { pool };
+
+/**
+ * Put the money in the government account, so a receipt can exist.
+ *
+ * A government receipt asserts that the State received the money, and the
+ * database refuses one for a payment with no settlement. Every fixture that
+ * needs a receipt therefore has to do what a finance officer does — record the
+ * bank credit covering the collection — and this does it through the same
+ * service the officer's screen calls rather than by writing rows.
+ */
+let settlementOfficerId: string | null = null;
+let settlementSeq = 0;
+
+export async function settleCollection(params: {
+  gatewayReferences: string[];
+  amountKobo: bigint;
+  actorId?: string;
+}): Promise<{ settlementReference: string; transactionsSettled: number }> {
+  let actorId = params.actorId;
+  if (!actorId) {
+    const existing = settlementOfficerId
+      ? await queryOne<{ id: string }>(pool, `SELECT id FROM users WHERE id = $1`, [settlementOfficerId])
+      : null;
+    if (!existing) {
+      settlementSeq += 1;
+      settlementOfficerId = await createGovernmentUser({
+        fullName: 'Settlement Officer',
+        phone: `+2348099${String(100000 + settlementSeq).slice(-6)}`,
+        role: 'finance_officer',
+      });
+    }
+    actorId = settlementOfficerId!;
+  }
+
+  settlementSeq += 1;
+  const result = await recordSettlement({
+    settlementDate: new Date(),
+    gatewayReferences: params.gatewayReferences,
+    receivedAmountKobo: params.amountKobo,
+    bankReference: `TEST-CREDIT-${settlementSeq}`,
+    governmentAccountId: null,
+    actorId,
+    actorRole: 'finance_officer',
+  });
+  return {
+    settlementReference: result.settlementReference,
+    transactionsSettled: result.transactionsSettled,
+  };
+}
+
+/** What the gateway confirmed for a transaction, so a fixture can settle it. */
+export async function confirmedCollection(transactionId: string): Promise<{
+  gatewayReference: string;
+  amountKobo: bigint;
+}> {
+  const row = await queryOne<{ gateway_reference: string; amount_kobo: string }>(
+    pool,
+    `SELECT gateway_reference, amount_kobo FROM payments
+      WHERE transaction_id = $1 AND status = 'VERIFIED'
+      ORDER BY verified_at DESC LIMIT 1`,
+    [transactionId],
+  );
+  if (!row) throw new Error(`No verified payment for transaction ${transactionId}`);
+  return { gatewayReference: row.gateway_reference, amountKobo: BigInt(row.amount_kobo) };
+}
+
+/**
+ * Confirm-then-settle in one call: the shape most fixtures actually want.
+ *
+ * A test that was written when a receipt appeared at gateway confirmation now
+ * needs one more step, and this is that step. It is deliberately a call the
+ * test makes rather than something the platform does on its own — the whole
+ * point of the change is that settlement is a separate event.
+ */
+export async function settleTransaction(transactionId: string): Promise<void> {
+  const collection = await confirmedCollection(transactionId);
+  await settleCollection({
+    gatewayReferences: [collection.gatewayReference],
+    amountKobo: collection.amountKobo,
+  });
+}

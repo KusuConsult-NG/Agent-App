@@ -20,6 +20,7 @@ import {
   grantStepUp,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -231,47 +232,50 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(payment!.verified_by_source, 'WEBHOOK', 'confirmed by the gateway callback');
     assert.ok(payment!.verification_response, 'the gateway evidence must be kept');
 
-    // ---- 7. Receipt and its PDF ------------------------------------------
-    const receipt = await queryOne<{
-      receipt_number: string;
-      verification_code: string;
-      document_id: string | null;
-      amount_kobo: string;
-      status: string;
-      taxpayer_id: string;
-    }>(
+    // ---- 7. An acknowledgement, and deliberately not a receipt -----------
+    // The gateway holding the money is not the State having been paid. What
+    // the citizen gets now says exactly that, and says so on its face.
+    const noReceiptYet = await queryOne<{ n: string }>(
       pool,
-      `SELECT receipt_number, verification_code, document_id, amount_kobo, status, taxpayer_id
-         FROM receipts WHERE transaction_id = $1`,
+      'SELECT count(*)::text AS n FROM receipts WHERE transaction_id = $1',
       [transactionId],
     );
-    assert.ok(receipt, 'a receipt must exist');
-    assert.equal(receipt!.status, 'VALID');
-    assert.equal(receipt!.taxpayer_id, taxpayerId);
-    assert.equal(receipt!.amount_kobo, invoice!.total_amount_kobo);
-    assert.ok(receipt!.document_id, 'the receipt must have a generated document');
+    assert.equal(noReceiptYet!.n, '0', 'no receipt may exist before the money reaches government');
 
-    const document = await queryOne<{
-      document_type: string;
+    const acknowledgement = await queryOne<{
+      document_number: string;
+      verification_code: string;
       storage_reference: string;
       content_type: string;
-      checksum: string | null;
+      status: string;
     }>(
       pool,
-      'SELECT document_type, storage_reference, content_type, checksum FROM documents WHERE id = $1',
-      [receipt!.document_id],
+      `SELECT document_number, verification_code, storage_reference, content_type, status
+         FROM documents
+        WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT'
+          AND entity_type = 'transaction' AND entity_id = $1`,
+      [transactionId],
     );
-    assert.equal(document!.document_type, 'RECEIPT');
-    assert.equal(document!.content_type, 'application/pdf');
-    assert.ok(document!.storage_reference, 'the PDF must be stored');
+    assert.ok(acknowledgement, 'the citizen must be given something verifiable straight away');
+    assert.equal(acknowledgement!.content_type, 'application/pdf');
+    assert.ok(acknowledgement!.storage_reference, 'the acknowledgement PDF must be stored');
+    assert.ok(
+      acknowledgement!.document_number.startsWith('PSIRS-ACK'),
+      'an acknowledgement is numbered as one, so it can never be read as a receipt',
+    );
 
-    // ---- 8. Public QR verification ---------------------------------------
-    const publicCheck = await get(`/verify/${receipt!.verification_code}`);
-    assert.equal(publicCheck.status, 200);
-    assert.equal(publicCheck.body.status, 'VALID');
-    assert.equal(publicCheck.body.receiptNumber, receipt!.receipt_number);
+    const awaitingMoney = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM transactions WHERE id = $1',
+      [transactionId],
+    );
+    assert.equal(
+      awaitingMoney!.status,
+      'RECONCILIATION_PENDING',
+      'a gateway-confirmed collection is awaiting settlement, not complete',
+    );
 
-    // ---- 9. Commission ----------------------------------------------------
+    // ---- 8. Commission, accrued and held ----------------------------------------------------
     const commission = await queryOne<{
       amount_kobo: string;
       rate_basis_points: number;
@@ -314,7 +318,7 @@ describe('E2E — one complete revenue collection, verified record by record', (
     );
     assert.equal(stillHeld!.status, 'PENDING', 'even a year later, an unsettled transaction pays nothing');
 
-    // ---- 10. Reconciliation ----------------------------------------------
+    // ---- 9. Reconciliation ----------------------------------------------
     const reconcile = await post(
       '/government/reconciliation/run',
       {
@@ -349,7 +353,7 @@ describe('E2E — one complete revenue collection, verified record by record', (
       `before settlement the line must be PENDING_SETTLEMENT, got ${record!.status}`,
     );
 
-    // ---- 10b. Government is actually paid --------------------------------
+    // ---- 10. Government is actually paid --------------------------------
     const settlement = await post(
       '/government/settlements',
       {
@@ -370,7 +374,48 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(settled!.status, 'SETTLED', 'the transaction must settle once money is received');
     assert.ok(settled!.settled_at, 'settlement must be timestamped');
 
-    // ---- 10c. Only now may the commission be released --------------------
+    // ---- 11. The receipt, and its PDF -----------------------------------
+    // Only now: the receipt is the State's word that it holds the money.
+    const receipt = await queryOne<{
+      receipt_number: string;
+      verification_code: string;
+      document_id: string | null;
+      amount_kobo: string;
+      status: string;
+      taxpayer_id: string;
+    }>(
+      pool,
+      `SELECT receipt_number, verification_code, document_id, amount_kobo, status, taxpayer_id
+         FROM receipts WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    assert.ok(receipt, 'a receipt must exist');
+    assert.equal(receipt!.status, 'VALID');
+    assert.equal(receipt!.taxpayer_id, taxpayerId);
+    assert.equal(receipt!.amount_kobo, invoice!.total_amount_kobo);
+    assert.ok(receipt!.document_id, 'the receipt must have a generated document');
+
+    const document = await queryOne<{
+      document_type: string;
+      storage_reference: string;
+      content_type: string;
+      checksum: string | null;
+    }>(
+      pool,
+      'SELECT document_type, storage_reference, content_type, checksum FROM documents WHERE id = $1',
+      [receipt!.document_id],
+    );
+    assert.equal(document!.document_type, 'RECEIPT');
+    assert.equal(document!.content_type, 'application/pdf');
+    assert.ok(document!.storage_reference, 'the PDF must be stored');
+
+    // ---- 12. Public QR verification -------------------------------------
+    const publicCheck = await get(`/verify/${receipt!.verification_code}`);
+    assert.equal(publicCheck.status, 200);
+    assert.equal(publicCheck.body.status, 'VALID');
+    assert.equal(publicCheck.body.receiptNumber, receipt!.receipt_number);
+
+    // ---- 13. Only now may the commission be released --------------------
     const releasable = await promoteEligibleCommissions({
       now: new Date(Date.now() + 365 * 24 * 60 * 60_000),
     });
@@ -384,7 +429,7 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(released!.status, 'ELIGIBLE');
     assert.ok(released!.eligible_at, 'eligibility must be timestamped');
 
-    // ---- 11. The audit trail behind all of it ----------------------------
+    // ---- 14. The audit trail behind all of it ----------------------------
     const audit = await query<{ action: string; actor_role: string; entity_type: string }>(
       pool,
       'SELECT action, actor_role, entity_type FROM audit_logs ORDER BY created_at',
@@ -607,6 +652,9 @@ describe('Reversal — government takes money back, and everything follows', () 
     );
 
     const transactionId = assessment.body.transactionId as string;
+    // Nothing to reverse until the State has actually been paid.
+    await settleTransaction(transactionId);
+
     const before = await queryOne<{ receipt_status: string; commission_status: string }>(
       pool,
       `SELECT r.status AS receipt_status, c.status AS commission_status

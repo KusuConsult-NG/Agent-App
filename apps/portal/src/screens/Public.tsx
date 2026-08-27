@@ -144,7 +144,15 @@ export function VerifyScreen({ code }: { code?: string }) {
               </p>
               <p className="verdict__label">
                 {result.status === 'VALID'
-                  ? 'VALID'
+                  ? /*
+                     * An acknowledgement is genuine, so it is VALID, and a
+                     * verdict that says only VALID is read as "paid" by
+                     * everybody who takes in the mark and not the paragraph
+                     * under it. The mark has to carry the distinction itself.
+                     */
+                    result.documentType === 'PAYMENT_ACKNOWLEDGEMENT'
+                    ? 'VALID — NOT A RECEIPT'
+                    : 'VALID'
                   : result.status === 'REVERSED'
                     ? 'REVERSED'
                     : result.status === 'NOT_FOUND'

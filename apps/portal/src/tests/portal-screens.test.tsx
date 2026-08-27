@@ -89,6 +89,36 @@ describe('2. Public Receipt & Particulars Verification Portal', () => {
     expect(screen.getByText(/Development Levy/i)).toBeTruthy();
   });
 
+  it('does not let an acknowledgement read as a paid receipt at a glance', async () => {
+    /*
+     * The verdict is a large green tick and one word. A market trader, a
+     * checkpoint officer or the taxpayer reads that mark and stops; the
+     * paragraph underneath it is for the people who do not. So the mark itself
+     * has to say which of the two documents this is, or an acknowledgement is
+     * a receipt to everybody who glances at it \u2014 which is the confusion the
+     * document exists to prevent.
+     */
+    vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
+      status: 'VALID',
+      documentNumber: 'PSIRS-ACK/2026/000008',
+      documentType: 'PAYMENT_ACKNOWLEDGEMENT',
+      issuedAt: '2026-08-27T10:00:36.396Z',
+      integrityConfirmed: true,
+      message:
+        'This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt.',
+    });
+
+    render(<VerifyScreen code="NA76E-2DC3F" />);
+
+    expect(await screen.findByText(/NOT a government receipt/i)).toBeTruthy();
+    const verdict = document.querySelector('.verdict__label');
+    expect(verdict, 'the verdict must be rendered').toBeTruthy();
+    expect(
+      /not a receipt|acknowledge/i.test(verdict!.textContent ?? ''),
+      `the verdict read "${verdict!.textContent}", which a glance takes as paid`,
+    ).toBe(true);
+  });
+
   it('displays warning alert when receipt was revoked or voided', async () => {
     vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
       status: 'REVERSED',

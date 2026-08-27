@@ -99,6 +99,9 @@ export interface TranslationDictionary {
   paymentFailedBody: string;
   paymentUnconfirmed: string;
   paymentUnconfirmedBody: string;
+  paymentAcknowledged: string;
+  paymentAcknowledgedBody: string;
+  acknowledgementLabel: string;
 
   // Attribution
   findTaxpayerFirst: string;
@@ -299,6 +302,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     paymentUnconfirmed: 'Payment not yet confirmed',
     paymentUnconfirmedBody:
       'This payment has NOT been marked as received. Do not ask the taxpayer to pay again \u2014 check again in a moment.',
+    paymentAcknowledged: 'Payment confirmed \u2014 receipt to follow',
+    paymentAcknowledgedBody:
+      'The payment system has confirmed this payment. Government has not yet received the money, so this is an acknowledgement and NOT a receipt. The receipt is issued automatically once the money reaches the government account. Do not ask the taxpayer to pay again.',
+    acknowledgementLabel: 'Acknowledgement',
 
     findTaxpayerFirst: 'Find the taxpayer first. Every payment must be attributed.',
     noTaxpayerMatch:
@@ -486,6 +493,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     paymentUnconfirmed: 'Ba a tabbatar da biyan kudin ba tukuna',
     paymentUnconfirmedBody:
       'BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya \u2014 ka sake dubawa nan da dan lokaci.',
+    paymentAcknowledged: 'An tabbatar da biyan kudin \u2014 rasit zai biyo baya',
+    paymentAcknowledgedBody:
+      'Na\u02bburar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya.',
+    acknowledgementLabel: 'Shaidar karbar kudi',
 
     findTaxpayerFirst: 'Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani.',
     noTaxpayerMatch:

@@ -35,9 +35,11 @@ export type TransactionState = (typeof TRANSACTION_STATES)[number];
  * Two properties are load-bearing and enforced here rather than in prose:
  *   1. Nothing reaches PAYMENT_SUCCESSFUL except from a payment-in-flight
  *      state, and only the gateway verification path may drive it (PRD §95).
- *   2. RECEIPT_GENERATED is reachable only from PAYMENT_VERIFIED, so a
- *      failed or unverified payment can never produce a valid receipt
- *      (PRD §84, §88.26).
+ *   2. RECEIPT_GENERATED is reachable only from RECONCILIATION_PENDING, so a
+ *      failed payment, an unverified one, or one the gateway confirmed and
+ *      never handed over can never produce a valid receipt (PRD §84, §88.26).
+ *      It used to be reachable from PAYMENT_VERIFIED, which asserted the State
+ *      had been paid on the gateway's word alone.
  */
 export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly TransactionState[]> = {
   INITIATED: ['ASSESSMENT_CREATED', 'CANCELLED', 'EXPIRED'],
@@ -46,9 +48,19 @@ export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly Transact
   PAYMENT_INITIATED: ['PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'FAILED', 'CANCELLED', 'EXPIRED'],
   PAYMENT_PENDING: ['PAYMENT_SUCCESSFUL', 'FAILED', 'EXPIRED', 'UNDER_REVIEW'],
   PAYMENT_SUCCESSFUL: ['PAYMENT_VERIFIED', 'UNDER_REVIEW', 'FAILED'],
-  PAYMENT_VERIFIED: ['RECEIPT_GENERATED', 'UNDER_REVIEW'],
-  RECEIPT_GENERATED: ['RECONCILIATION_PENDING', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
-  RECONCILIATION_PENDING: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
+  /*
+   * A receipt is no longer reachable from PAYMENT_VERIFIED.
+   *
+   * The gateway confirming a payment means the gateway holds the money. The
+   * receipt says the State received it, which is a different fact that arrives
+   * a day or two later with the bank credit — so the only way into
+   * RECEIPT_GENERATED is now through RECONCILIATION_PENDING, and the only thing
+   * that makes that move is a reconciled settlement. What the taxpayer holds in
+   * between is an acknowledgement of payment, which says exactly that.
+   */
+  PAYMENT_VERIFIED: ['RECONCILIATION_PENDING', 'UNDER_REVIEW'],
+  RECONCILIATION_PENDING: ['RECEIPT_GENERATED', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
+  RECEIPT_GENERATED: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   SETTLED: ['REVERSED', 'REFUNDED', 'UNDER_REVIEW'],
   UNDER_REVIEW: ['SETTLED', 'RECONCILIATION_PENDING', 'REVERSED', 'REFUNDED', 'RECEIPT_GENERATED'],
   FAILED: ['CANCELLED'],

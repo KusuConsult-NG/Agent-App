@@ -480,6 +480,9 @@ interface TransactionStatus {
     receipt_number: string | null;
     receipt_code: string | null;
     document_id: string | null;
+    acknowledgement_id: string | null;
+    acknowledgement_number: string | null;
+    acknowledgement_code: string | null;
   };
   events: { to_status: string; reason: string | null; created_at: string }[];
 }
@@ -588,6 +591,15 @@ export function TransactionScreen({
 
   const transaction = data.transaction;
   const paid = transaction.receipt_number !== null;
+  /*
+   * The middle state, and the one an agent standing at a stall most needs.
+   *
+   * The gateway has confirmed the payment; government has not yet received the
+   * money, so there is no receipt. Reading that as "not yet confirmed" would
+   * tell the agent the payment had not gone through and invite them to collect
+   * a second time from someone who has already paid.
+   */
+  const acknowledged = !paid && transaction.acknowledgement_number !== null;
   const failed = ['FAILED', 'CANCELLED', 'EXPIRED'].includes(transaction.status);
   const name =
     transaction.business_name ??
@@ -603,6 +615,15 @@ export function TransactionScreen({
           </p>
           <p className="amount-confirm__label">Receipt {transaction.receipt_number}</p>
         </div>
+      ) : acknowledged ? (
+        <Alert kind="info" title={t.paymentAcknowledged}>
+          <p style={{ margin: 0 }}>{t.paymentAcknowledgedBody}</p>
+          <p style={{ margin: '0.5rem 0 0' }}>
+            <strong>
+              {t.acknowledgementLabel} {transaction.acknowledgement_number}
+            </strong>
+          </p>
+        </Alert>
       ) : failed ? (
         <Alert kind="error" title={t.paymentFailed}>
           <p style={{ margin: 0 }}>

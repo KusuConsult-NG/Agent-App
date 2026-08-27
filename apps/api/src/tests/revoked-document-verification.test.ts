@@ -36,6 +36,7 @@ import {
   get,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   startTestServer,
@@ -164,6 +165,8 @@ async function renewedVehicle(plate: string, suffix: string): Promise<{
   );
   assert.equal(renewal.status, 201, JSON.stringify(renewal.body));
   await payFor(renewal.body.transactionId, suffix);
+  // Particulars are granted when the money reaches a government account.
+  await settleTransaction(renewal.body.transactionId);
 
   const renewalId = renewal.body.renewalId ?? renewal.body.id;
   const document = await post(`/vehicles/renewals/${renewalId}/document`, {}, auth());
@@ -230,6 +233,9 @@ async function reverse(transactionId: string) {
 
 /** The receipt row and its paired document, as the public would look them up. */
 async function receiptHandles(transactionId: string) {
+  // A receipt exists only once the money has reached a government account.
+  await settleTransaction(transactionId).catch(() => undefined);
+
   const row = await queryOne<{
     receipt_number: string;
     verification_code: string;
@@ -350,7 +356,7 @@ describe('A reversed payment leaves no document that still verifies', () => {
           renewal.body.renewalId ?? renewal.body.id,
           documentId!.id,
         ]),
-      /cannot be issued while transaction is|requires a paid transaction/i,
+      /cannot be issued while transaction is|requires a paid transaction|money has not reached a government account/i,
       'the database must still refuse papers for a renewal nobody paid for',
     );
   });
@@ -378,7 +384,7 @@ describe('A reversed payment leaves no document that still verifies', () => {
           renewalId!.id,
           replacement!.id,
         ]),
-      /cannot be issued while transaction is/i,
+      /cannot be issued while transaction is|money has not reached a government account/i,
       'a reversed renewal must not be given fresh papers',
     );
   });
