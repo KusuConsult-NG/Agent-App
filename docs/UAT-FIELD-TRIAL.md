@@ -112,43 +112,40 @@ Recruit **twelve to sixteen** for Phase 0, and take deliberately:
 
 ### 3.1 What the Hausa cohort is actually for
 
-Before the trial starts, a fact worth knowing: **the application is not
-bilingual in the way the language toggle implies.** The shared dictionary
-holds 43 terms — navigation labels and core civic vocabulary — while the agent
-screens contain roughly 277 further pieces of user-visible English: field
-hints, refusal messages, empty states, and every sentence explaining why a
-button will not work.
+**This section has been rewritten, and the change is large enough that anyone
+who read the earlier version should read this one.** It used to say the
+application was not bilingual in the way the toggle implied: 43 translated
+terms of navigation wrapped around roughly 277 pieces of English interior —
+field hints, refusal messages, empty states, and every sentence explaining why
+a button will not work. On that basis the cohort's job was to find which of
+those ~218 remaining strings actually stopped an agent, and produce a
+translation backlog ranked by how many people it blocked.
 
-So a Hausa-first agent sees Hausa navigation wrapped around an English
-interior, and much of what this platform does to be understandable — the
-plain-language refusals, the hints under blocked buttons — is in a language
-they may not read.
+**That backlog has been translated.** Every screen and component of the agent
+application now reads from the shared dictionary — 749 strings — and two tests
+stop new English arriving:
+`apps/agent/src/tests/nothing-new-in-english.test.tsx` fails on a visible
+English literal anywhere in a translated surface, and
+`apps/agent/src/tests/the-app-in-hausa.test.tsx` renders the screens and
+checks what comes out is Hausa rather than a key or an English fallback. The
+messages PSIRS sends by SMS, email and push are sent in the language the
+recipient reads, chosen at registration and recorded against the taxpayer.
 
-That is a known gap, and measuring it is not what these four agents are for.
-Comparing their completion rate against the English cohort would only produce
-a number confirming something already established, at the cost of two weeks of
-their time.
+**So the cohort's job has changed, and it is now the harder question.** Not
+*which strings are missing* — none are — but *whether the Hausa that is there
+is the Hausa an agent in a Jos market actually uses*. A translated sentence
+that reads as officialese, or that an agent has to stop and parse, costs
+almost as much as an English one. The observer records, for each point where
+the agent hesitates or misreads, **which specific Hausa sentence** they
+stumbled on and what they thought it meant. That is a wording backlog rather
+than a coverage backlog, and it feeds the same review sheet.
 
-**Since this was written, the highest-cost tier has been translated.** Twenty-nine
-strings — the cash warning, what happened to the money, attribution, receipt
-refusals, every reason a wizard step will not continue, and the device gate —
-are now in both languages, and the language toggle has been moved onto the
-signed-out screens so a Hausa-first applicant can choose Hausa *before* the
-sign-in screen and the application form rather than after them. That
-translation is **drafted and not yet reviewed by a native speaker**
-(`HAUSA-REVIEW.md`); the review must happen before Phase 0 runs, not after.
-
-**The cohort's job is therefore what remains: which of the other ~218 strings
-actually block work.**
-Not all text matters equally: a hint nobody reads costs nothing untranslated,
-while the sentence explaining why a payment was refused costs everything. The
-observer records, for each point where the agent stops, *which specific
-English sentence they were unable to act on*. That list — ordered by how many
-agents it stopped — is the remaining backlog, and it will be far shorter than
-218.
-
-Run this cohort in Phase 0 regardless. The alternative is translating the
-remaining strings on the assumption they all matter, or translating none.
+**The review has still not happened, and it is still blocking.** The whole
+dictionary and all thirty message templates are drafted without a native
+speaker (`docs/HAUSA-REVIEW.md`). Nothing in this trial substitutes for it:
+four agents encountering the strings in the field will tell you which wording
+fails in practice, and a native speaker will tell you which wording is wrong.
+Both are needed, and the review must happen before Phase 0 runs, not after.
 
 Recruit two supervisors and one revenue officer as well: the portal side has
 had the same amount of real-user exposure as the app, which is none.
@@ -308,7 +305,7 @@ Not a pass rate. Thresholds, by class:
 | Agents who believe something happened that did not | **0** | Blocking. No phase advances until it is zero. |
 | Agents taking money offline or before confirmation | **0** | Blocking, in the interface and the training both. |
 | Median J-3 duration | ≤ 6 minutes | A trader will not stand for longer. |
-| Untranslated strings that stopped a Hausa-first agent | Listed and ranked, not a rate | See §3.1. The output is a translation backlog, not a pass mark. |
+| Hausa sentences a Hausa-first agent misread or stalled on | Listed and ranked, not a rate | See §3.1. The output is a wording backlog, not a pass mark. Coverage is no longer the question; register and clarity are. |
 | Officer decisions with a meaningful reason | ≥ 95% on reading | The audit trail is decorative otherwise. |
 
 Two of those are zero-tolerance. They are the two that correspond to the
@@ -444,10 +441,11 @@ State these in the report rather than letting the sign-off imply them.
   answers.
 - **That agents will not collude.** A trial with an observer present measures
   behaviour under observation.
-- **That the platform works in Hausa.** It establishes which untranslated
-  strings block work. Whether the platform is usable by a Hausa-first agent
-  can only be answered after the backlog from §3.1 has been translated and
-  those agents have been observed again.
+- **That the platform works in Hausa.** Every string is now translated, which
+  is not the same claim. It establishes which *wordings* fail in the field.
+  Whether the platform is usable by a Hausa-first agent can only be answered
+  after a native speaker has been through `HAUSA-REVIEW.md` and the
+  corrections from both that review and this trial have been applied.
 
 ---
 

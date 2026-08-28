@@ -70,15 +70,27 @@ Their words, their language. Do not tidy them.
 
 ## If they chose Hausa
 
-The app's navigation is in Hausa; most hints, refusals and explanations are
-not. When they stopped at something written in English, write **the sentence
-itself** — not "language problem". That list is the translation backlog.
+The whole app is in Hausa now — navigation, hints, refusals and the messages
+PSIRS sends. So the question is no longer *what was in English*. It is
+**which Hausa sentences they misread, re-read, or acted on wrongly.**
 
-| Task # | The English sentence they could not act on |
+Write the sentence itself and what they thought it meant, not "language
+problem". If they read it aloud and then did the opposite of what it says,
+that is the most valuable line on this sheet.
+
+| Task # | The Hausa sentence they stumbled on | What they thought it meant |
+|---|---|---|
+| | | |
+| | | |
+| | | |
+| | | |
+
+If they *did* meet English anywhere, write it down separately — every visible
+string is meant to be translated, and one that is not is a defect rather than
+a backlog item.
+
+| Task # | English seen where Hausa was expected |
 |---|---|
-| | |
-| | |
-| | |
 | | |
 
 ---
