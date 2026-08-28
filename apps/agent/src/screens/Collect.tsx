@@ -137,7 +137,7 @@ export function CollectScreen({
         if (!Number.isFinite(naira) || naira <= 0) {
           setError({
             code: 'INVALID_INPUT',
-            message: 'Enter the amount the assessment is based on, in naira.',
+            message: t.colNeedBaseAmount,
             moneyStatus: 'NOT_APPLICABLE',
           });
           setBusy(false);
@@ -275,7 +275,7 @@ export function CollectScreen({
                     <div className="list__body">
                       <p className="list__title">{taxpayerName(result)}</p>
                       <p className="list__meta">
-                        {result.tin ? `TIN ${result.tin}` : 'No TIN'} · {result.phone}
+                        {result.tin ? `TIN ${result.tin}` : t.colNoTin} · {result.phone}
                       </p>
                     </div>
                   </button>
@@ -295,7 +295,8 @@ export function CollectScreen({
       <div className="card">
         <h2 className="card__title">{taxpayerName(taxpayer)}</h2>
         <p className="card__hint">
-          {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone} · {taxpayer.lga_name}
+          {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone} ·{' '}
+          {taxpayer.lga_name}
         </p>
         <button
           type="button"
@@ -333,7 +334,7 @@ export function CollectScreen({
           {needsBaseAmount && (
             <Field
               label={t.colBasisAmount}
-              hint="For example turnover, income or contract value. The charge itself is set by government."
+              hint={t.colBasisAmountHint}
               required
             >
               <input
@@ -386,17 +387,17 @@ export function CollectScreen({
           <div className="card">
             <KeyValue
               items={[
-                ['Taxpayer', taxpayerName(taxpayer)],
-                ['TIN', taxpayer.tin ?? 'Not yet assigned'],
-                ['Revenue', `${quote.categoryName} — ${quote.revenueItemName}`],
-                ['Government revenue', <Money key="a" kobo={quote.amountKobo} />],
+                [t.colTaxpayerLabel, taxpayerName(taxpayer)],
+                ['TIN', taxpayer.tin ?? t.tpNotYetAssigned],
+                [t.colRevenueLabel, `${quote.categoryName} — ${quote.revenueItemName}`],
+                [t.colGovernmentRevenue, <Money key="a" kobo={quote.amountKobo} />],
                 ...(BigInt(quote.serviceChargeKobo) > 0n
-                  ? ([['Approved service charge', <Money key="s" kobo={quote.serviceChargeKobo} />]] as [
+                  ? ([[t.colServiceCharge, <Money key="s" kobo={quote.serviceChargeKobo} />]] as [
                       string,
                       React.ReactNode,
                     ][])
                   : []),
-                ['Total payable', <Money key="t" kobo={quote.totalKobo} />],
+                [t.colTotalPayable, <Money key="t" kobo={quote.totalKobo} />],
               ]}
             />
           </div>
@@ -418,7 +419,7 @@ export function CollectScreen({
           {BigInt(quote.totalKobo) === 0n ? (
             <div className="button-row">
               <button type="button" className="secondary" onClick={() => setQuote(null)}>
-                Change
+                {t.colChangeChoice}
               </button>
             </div>
           ) : (
@@ -429,7 +430,7 @@ export function CollectScreen({
 
               <div className="button-row">
                 <button type="button" className="secondary" onClick={() => setQuote(null)}>
-                  Change
+                  {t.colChangeChoice}
                 </button>
                 <button type="button" disabled={busy} onClick={createAndPay}>
                   {busy ? <Spinner /> : null}
@@ -636,15 +637,18 @@ export function TransactionScreen({
       <div className="card">
         <KeyValue
           items={[
-            ['Taxpayer', name],
-            ['TIN', transaction.tin ?? 'Not yet assigned'],
-            ['Revenue', `${transaction.revenue_category} — ${transaction.revenue_item}`],
-            ['Amount', <Money key="a" kobo={transaction.total_amount_kobo} />],
-            ['Invoice', transaction.invoice_number],
-            ['Transaction', transaction.transaction_reference],
-            ['Status', <Badge key="s" status={transaction.status} />],
-            ['Payment status', transaction.payment_status ? <Badge key="p" status={transaction.payment_status} /> : '—'],
-            ['Gateway reference', transaction.gateway_reference ?? '—'],
+            [t.colTaxpayerLabel, name],
+            ['TIN', transaction.tin ?? t.tpNotYetAssigned],
+            [t.colRevenueLabel, `${transaction.revenue_category} — ${transaction.revenue_item}`],
+            [t.amount, <Money key="a" kobo={transaction.total_amount_kobo} />],
+            [t.colInvoiceLabel, transaction.invoice_number],
+            [t.supTransactionLabel, transaction.transaction_reference],
+            [t.appStatus, <Badge key="s" status={transaction.status} />],
+            [
+              t.colPaymentStatus,
+              transaction.payment_status ? <Badge key="p" status={transaction.payment_status} /> : '—',
+            ],
+            [t.colGatewayReference, transaction.gateway_reference ?? '—'],
           ]}
         />
       </div>
@@ -667,7 +671,7 @@ export function TransactionScreen({
             className="secondary"
             onClick={async () => {
               try {
-                setNotice('Transmitting receipt to Bluetooth printer...');
+                setNotice(t.colPrinting);
                 await bluetoothPrinter.printReceipt({
                   receiptNumber: transaction.receipt_number!,
                   paymentReference: transaction.transaction_reference,
@@ -693,17 +697,20 @@ export function TransactionScreen({
                   verificationUrl: verificationUrlFor(transaction.receipt_code) ?? undefined,
                   verificationCode: transaction.receipt_code ?? undefined,
                 });
-                setNotice('Receipt printed successfully on Bluetooth printer!');
+                setNotice(t.colPrinted);
               } catch (err: any) {
                 setError({
                   code: 'PRINT_FAILED',
-                  message: `Bluetooth printing failed: ${err.message || 'Check printer connection'}`,
+                  message: t.colPrintFailed.replace(
+                    '{{reason}}',
+                    err.message || t.colCheckPrinter,
+                  ),
                   moneyStatus: 'NOT_APPLICABLE',
                 });
               }
             }}
           >
-            Print (Bluetooth)
+            {t.colPrintBluetooth}
           </button>
           <button
             type="button"
@@ -716,7 +723,7 @@ export function TransactionScreen({
                 await navigator.share({ title: 'PSIRS receipt', text }).catch(() => undefined);
               } else {
                 await navigator.clipboard.writeText(text).catch(() => undefined);
-                setNotice('Receipt details copied. You can paste them into a message.');
+                setNotice(t.colReceiptCopied);
               }
             }}
           >{t.colShareReceipt}</button>
@@ -736,23 +743,25 @@ export function TransactionScreen({
           */}
           <button type="button" className="secondary" disabled={invoicing} onClick={giveInvoice}>
             {invoicing ? <Spinner /> : null}
-            {invoicing ? 'Preparing the invoice…' : 'Give the taxpayer an invoice'}
+            {invoicing ? t.colPreparingInvoice : t.colGiveInvoice}
           </button>
           <p className="field__hint" style={{ marginTop: 8 }}>
-            A printable demand notice with the invoice number, what it is for and how the amount
-            was worked out
+            {t.colInvoiceHint}
             {transaction.expires_at
-              ? `, valid until ${new Date(transaction.expires_at).toLocaleDateString('en-NG')}`
+              ? t.colInvoiceValidUntil.replace(
+                  '{{date}}',
+                  new Date(transaction.expires_at).toLocaleDateString('en-NG'),
+                )
               : ''}
             .{' '}
             {transaction.gateway_reference
-              ? `Give them the payment reference ${transaction.gateway_reference} as well — that is what a bank or USSD channel asks for.`
-              : 'Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it.'}
+              ? t.colInvoiceGiveReference.replace('{{reference}}', transaction.gateway_reference)
+              : t.colInvoiceNoReference}
           </p>
 
           <button type="button" disabled={confirming} onClick={confirmPayment}>
             {confirming ? <Spinner /> : null}
-            {confirming ? 'Checking with the payment system…' : 'Check payment status'}
+            {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
           </button>
 
           {/* Development only. The API refuses simulation outside the mock
@@ -760,17 +769,14 @@ export function TransactionScreen({
               in a production build either. */}
           {import.meta.env.DEV && transaction.gateway_reference && (
             <div className="card" style={{ marginTop: 14 }}>
-              <h2 className="card__title">Development gateway</h2>
-              <p className="card__hint">
-                This platform is running against a test payment gateway. Use these controls to
-                simulate what a real gateway would report.
-              </p>
+              <h2 className="card__title">{t.colDevGateway}</h2>
+              <p className="card__hint">{t.colDevGatewayHint}</p>
               <div className="button-row">
                 <button type="button" className="secondary" disabled={confirming} onClick={() => simulate('SUCCESS')}>
-                  Simulate success
+                  {t.colSimulateSuccess}
                 </button>
                 <button type="button" className="secondary" disabled={confirming} onClick={() => simulate('FAILED')}>
-                  Simulate failure
+                  {t.colSimulateFailure}
                 </button>
               </div>
             </div>

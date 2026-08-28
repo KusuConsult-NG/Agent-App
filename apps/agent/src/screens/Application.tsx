@@ -12,6 +12,8 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, APP_VERSION, api, type ApiError } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
+import type { TranslationDictionary } from '@psirs/shared';
+import { useI18n } from '../lib/i18n';
 
 interface ApplicationStatus {
   applicationState: string;
@@ -33,19 +35,26 @@ interface ApplicationStatus {
   history: { event_type: string; reason: string | null; created_at: string }[];
 }
 
-const STAGE_LABELS: [string, string][] = [
-  ['APPLICATION_SUBMITTED', 'Application submitted'],
-  ['KYC_CLEARED', 'Identity verified'],
-  ['REFEREE_CLEARED', 'Referee confirmed'],
-  ['READY_FOR_REVIEW', 'Ready for government review'],
-  ['GOVERNMENT_APPROVED', 'Approved by PSIRS'],
-  ['TRAINING_COMPLETED', 'Training completed'],
-  ['BANK_VERIFIED', 'Bank account verified'],
-  ['DEVICE_REGISTERED', 'Device registered'],
-  ['ACTIVE', 'Active agent'],
+/*
+ * The stage names are dictionary keys rather than English, because this array
+ * is module-level and a hook cannot reach it. Resolving `t[key]` at render is
+ * what keeps an agent reading Hausa from meeting nine English words in the one
+ * place that tells them how far their application has got.
+ */
+const STAGE_LABELS: [string, keyof TranslationDictionary][] = [
+  ['APPLICATION_SUBMITTED', 'appStageSubmitted'],
+  ['KYC_CLEARED', 'appStageKyc'],
+  ['REFEREE_CLEARED', 'appRefereeConfirmed'],
+  ['READY_FOR_REVIEW', 'appStageReview'],
+  ['GOVERNMENT_APPROVED', 'appStageApproved'],
+  ['TRAINING_COMPLETED', 'appStageTraining'],
+  ['BANK_VERIFIED', 'appBankVerified'],
+  ['DEVICE_REGISTERED', 'appStageDevice'],
+  ['ACTIVE', 'appStageActive'],
 ];
 
 export function ApplicationScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState<ApplicationStatus | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,9 +84,9 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Your application</h2>
+        <h2 className="card__title">{t.appYourApplication}</h2>
         <p className="card__hint">
-          Status: <Badge status={status.applicationState} />
+          {t.appStatus}: <Badge status={status.applicationState} />
         </p>
 
         {isTerminal ? (
@@ -85,31 +94,28 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
             kind={status.applicationState === 'ACTION_REQUIRED' ? 'warning' : 'error'}
             title={
               status.applicationState === 'ACTION_REQUIRED'
-                ? 'Action needed'
+                ? t.appActionNeeded
                 : status.applicationState === 'SUSPENDED'
-                  ? 'Your account is suspended'
-                  : 'Application not approved'
+                  ? t.appSuspended
+                  : t.appNotApproved
             }
           >
             <p style={{ margin: 0 }}>
-              {status.history[0]?.reason ??
-                'Contact your supervisor or PSIRS support for details of what to do next.'}
+              {status.history[0]?.reason ?? t.appContactSupervisor}
             </p>
           </Alert>
         ) : status.canCollectRevenue ? (
-          <Alert kind="success" title="You are cleared to collect revenue">
-            <p style={{ margin: 0 }}>All clearance requirements have been met.</p>
+          <Alert kind="success" title={t.appClearedToCollect}>
+            <p style={{ margin: 0 }}>{t.appAllRequirementsMet}</p>
           </Alert>
         ) : (
-          <Alert kind="info" title="Your application is being processed">
-            <p style={{ margin: 0 }}>
-              You cannot collect revenue until every requirement below is complete.
-            </p>
+          <Alert kind="info" title={t.appBeingProcessed}>
+            <p style={{ margin: 0 }}>{t.appCannotCollectUntil}</p>
           </Alert>
         )}
 
         <ol className="steps">
-          {STAGE_LABELS.map(([key, label], index) => {
+          {STAGE_LABELS.map(([key, labelKey], index) => {
             // The stage that has been reached is only "current" while there is
             // something after it. Reaching the last one is not a step in
             // progress — it is the end of the list, and leaving it unticked
@@ -126,7 +132,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
               >
                 <span className="steps__marker">{done ? '✓' : index + 1}</span>
                 <div>
-                  <p className="steps__label">{label}</p>
+                  <p className="steps__label">{t[labelKey]}</p>
                 </div>
               </li>
             );
@@ -136,7 +142,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
 
       {status.outstanding.length > 0 && (
         <div className="card">
-          <h2 className="card__title">Still outstanding</h2>
+          <h2 className="card__title">{t.appStillOutstanding}</h2>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.88rem' }}>
             {status.outstanding.map((item) => (
               <li key={item} style={{ marginBottom: 4 }}>
@@ -155,9 +161,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
       <DeviceSection status={status} onDone={load} />
 
       {status.canCollectRevenue && (
-        <button type="button" onClick={() => navigate('/')}>
-          Go to my dashboard
-        </button>
+        <button type="button" onClick={() => navigate('/')}>{t.appGoToDashboard}</button>
       )}
     </>
   );
@@ -217,6 +221,7 @@ function DocumentCapture({
   existing?: KycDocument;
   onUploaded: () => void;
 }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -240,7 +245,7 @@ function DocumentCapture({
           ? caught.error.message
           : caught instanceof Error
             ? caught.message
-            : 'The document could not be sent.',
+            : t.appDocumentNotSent,
       );
       setPreview(null);
     } finally {
@@ -255,7 +260,7 @@ function DocumentCapture({
         {existing ? (
           <Badge status={existing.verification_status} />
         ) : (
-          <span className="capture__todo">Not captured</span>
+          <span className="capture__todo">{t.appNotCaptured}</span>
         )}
       </div>
       <p className="card__hint" style={{ marginTop: 0 }}>
@@ -263,12 +268,12 @@ function DocumentCapture({
       </p>
 
       {existing?.rejection_reason && (
-        <Alert kind="warning" title="This document was not accepted">
+        <Alert kind="warning" title={t.appDocumentNotAccepted}>
           <p style={{ margin: 0 }}>{existing.rejection_reason}</p>
         </Alert>
       )}
 
-      {preview && <img className="capture__preview" src={preview} alt={`${label}, just captured`} />}
+      {preview && <img className="capture__preview" src={preview} alt={`${label}, ${t.appJustCaptured}`} />}
       {error && (
         <Alert kind="error">
           <p style={{ margin: 0 }}>{error}</p>
@@ -276,7 +281,7 @@ function DocumentCapture({
       )}
 
       <label className="button secondary capture__button">
-        {busy ? 'Sending...' : existing ? 'Take again' : 'Take photograph'}
+        {busy ? t.appSending : existing ? t.appTakeAgain : t.appTakePhotograph}
         <input
           type="file"
           accept="image/jpeg,image/png,image/webp,application/pdf"
@@ -307,19 +312,16 @@ interface KycDocument {
 
 /** What PSIRS asks every applicant for, in the order it is asked for. */
 const REQUIRED_DOCUMENTS = [
-  {
-    type: 'IDENTITY_DOCUMENT',
-    label: 'Your identification document',
-    hint: 'Photograph the card itself, flat and in focus, with all four corners visible.',
-  },
-  {
-    type: 'SELFIE',
-    label: 'A photograph of you',
-    hint: 'Taken now, holding the same document, so PSIRS can see that they match.',
-  },
-] as const;
+  { type: 'IDENTITY_DOCUMENT', label: 'appIdDocument', hint: 'appIdDocumentHint' },
+  { type: 'SELFIE', label: 'appSelfie', hint: 'appSelfieHint' },
+] as const satisfies readonly {
+  type: string;
+  label: keyof TranslationDictionary;
+  hint: keyof TranslationDictionary;
+}[];
 
 function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const [identityType, setIdentityType] = useState('NIN');
   const [identityNumber, setIdentityNumber] = useState('');
   const [documents, setDocuments] = useState<KycDocument[]>([]);
@@ -342,11 +344,11 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
   if (status.checklist.kycCleared) {
     return (
       <div className="card">
-        <h2 className="card__title">Identity verification</h2>
+        <h2 className="card__title">{t.appIdentityVerification}</h2>
         <KeyValue
           items={[
-            ['Status', <Badge key="s" status={status.statuses.kyc ?? 'CLEARED'} />],
-            ['Document on file', status.kyc?.identity_number_masked ?? '—'],
+            [t.appStatus, <Badge key="s" status={status.statuses.kyc ?? 'CLEARED'} />],
+            [t.appDocumentOnFile, status.kyc?.identity_number_masked ?? '—'],
           ]}
         />
       </div>
@@ -369,30 +371,27 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         });
       }}
     >
-      <h2 className="card__title">Identity verification</h2>
-      <p className="card__hint">
-        PSIRS checks your identity against the national record. Your identity number is stored
-        securely and is never shown in full.
-      </p>
+      <h2 className="card__title">{t.appIdentityVerification}</h2>
+      <p className="card__hint">{t.appKycHint}</p>
 
       <ErrorAlert error={error} />
       {status.kyc?.failure_reason && (
-        <Alert kind="warning" title="Previous attempt was not accepted">
+        <Alert kind="warning" title={t.appPreviousAttemptRejected}>
           <p style={{ margin: 0 }}>{status.kyc.failure_reason}</p>
         </Alert>
       )}
 
-      <Field label="Identification type" required>
+      <Field label={t.appIdentificationType} required>
         <select value={identityType} onChange={(event) => setIdentityType(event.target.value)}>
-          <option value="NIN">National Identification Number (NIN)</option>
-          <option value="BVN">Bank Verification Number (BVN)</option>
-          <option value="PASSPORT">International passport</option>
-          <option value="DRIVERS_LICENCE">Driver's licence</option>
-          <option value="VOTERS_CARD">Voter's card</option>
+          <option value="NIN">{t.idNin} (NIN)</option>
+          <option value="BVN">{t.idBvn} (BVN)</option>
+          <option value="PASSPORT">{t.idPassport}</option>
+          <option value="DRIVERS_LICENCE">{t.idLicence}</option>
+          <option value="VOTERS_CARD">{t.idVoters}</option>
         </select>
       </Field>
 
-      <Field label="Identification number" required>
+      <Field label={t.appIdentificationNumber} required>
         <input
           inputMode="numeric"
           value={identityNumber}
@@ -402,13 +401,13 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         />
       </Field>
 
-      <p className="section-title">Documents</p>
+      <p className="section-title">{t.appDocuments}</p>
       {REQUIRED_DOCUMENTS.map((doc) => (
         <DocumentCapture
           key={doc.type}
           documentType={doc.type}
-          label={doc.label}
-          hint={doc.hint}
+          label={t[doc.label]}
+          hint={t[doc.hint]}
           existing={held(doc.type)}
           onUploaded={loadDocuments}
         />
@@ -419,20 +418,18 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         disabled={busy || identityNumber.trim().length < 5 || missing.length > 0}
       >
         {busy ? <Spinner /> : null}
-        {busy ? 'Verifying…' : 'Submit for verification'}
+        {busy ? t.appVerifying : t.appSubmitForVerification}
       </button>
       {missing.length > 0 ? (
         <p className="card__hint">
-          Still needed before this can be submitted:{' '}
-          {missing.map((d) => d.label.toLowerCase()).join(', ')}.
+          {t.appStillNeeded}{' '}
+          {missing.map((d) => t[d.label].toLowerCase()).join(', ')}.
         </p>
       ) : (
         identityNumber.trim().length < 5 && (
           // The documents case explained itself and this one did not, so a
           // short number left the button dead with nothing said about why.
-          <p className="card__hint" role="status">
-            Enter your identification number in full before submitting.
-          </p>
+          <p className="card__hint" role="status">{t.appEnterIdInFull}</p>
         )
       )}
     </form>
@@ -440,6 +437,7 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
 }
 
 function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     fullName: '',
     phone: '',
@@ -459,10 +457,9 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
 
   return (
     <div className="card">
-      <h2 className="card__title">Referee</h2>
+      <h2 className="card__title">{t.appReferee}</h2>
       <p className="card__hint">
-        A referee is someone who knows you and can confirm your identity to PSIRS. They do not need
-        an account — they receive a secure link.
+        {t.appRefereeWhoIs} {t.appRefereeNoAccount}
       </p>
 
       {status.referees.length > 0 && (
@@ -483,24 +480,23 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
       )}
 
       {link && (
-        <Alert kind="success" title="Verification request sent">
-          <p style={{ margin: '0 0 6px' }}>
-            If your referee did not receive the message, share this link with them directly:
-          </p>
+        <Alert kind="success" title={t.appVerificationSent}>
+          <p style={{ margin: '0 0 6px' }}>{t.appRefereeShareLink}</p>
           <p style={{ margin: 0, wordBreak: 'break-all', fontSize: '0.78rem' }}>{link}</p>
         </Alert>
       )}
       {message && !link && <Alert kind="success">{message}</Alert>}
 
       {active?.status === 'CLEARED' ? (
-        <Alert kind="success" title="Referee confirmed">
-          <p style={{ margin: 0 }}>{active.full_name} has confirmed your application.</p>
+        <Alert kind="success" title={t.appRefereeConfirmed}>
+          <p style={{ margin: 0 }}>
+            {active.full_name} {t.appRefereeConfirmedYour}
+          </p>
         </Alert>
       ) : active ? (
-        <Alert kind="info" title="Waiting for your referee">
+        <Alert kind="info" title={t.appWaitingReferee}>
           <p style={{ margin: 0 }}>
-            {active.full_name} has been sent a verification request. You can nominate a replacement
-            if they cannot respond.
+            {active.full_name} {t.appRefereeSentRequest}
           </p>
         </Alert>
       ) : null}
@@ -526,7 +522,7 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
         >
           <ErrorAlert error={error} />
 
-          <Field label="Referee full name" required>
+          <Field label={t.appRefereeFullName} required>
             <input
               value={form.fullName}
               onChange={(event) => setForm({ ...form, fullName: event.target.value })}
@@ -534,7 +530,7 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
               minLength={3}
             />
           </Field>
-          <Field label="Referee phone number" hint="They will receive the verification link here" required>
+          <Field label={t.appRefereePhone} hint={t.appRefereeLinkHere} required>
             <input
               type="tel"
               inputMode="tel"
@@ -543,31 +539,31 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
               required
             />
           </Field>
-          <Field label="Referee email">
+          <Field label={t.appRefereeEmail}>
             <input
               type="email"
               value={form.email}
               onChange={(event) => setForm({ ...form, email: event.target.value })}
             />
           </Field>
-          <Field label="Who is this person?" required>
+          <Field label={t.appWhoIsThisPerson} required>
             <select
               value={form.category}
               onChange={(event) => setForm({ ...form, category: event.target.value })}
             >
-              <option value="COMMUNITY_LEADER">Community leader</option>
-              <option value="TRADITIONAL_AUTHORITY">Traditional authority</option>
-              <option value="EMPLOYER">Employer</option>
-              <option value="PUBLIC_SERVANT">Civil or public servant</option>
-              <option value="RECOGNISED_PROFESSIONAL">Recognised professional</option>
-              <option value="RELIGIOUS_LEADER">Religious leader</option>
+              <option value="COMMUNITY_LEADER">{t.refCommunityLeader}</option>
+              <option value="TRADITIONAL_AUTHORITY">{t.refTraditionalAuthority}</option>
+              <option value="EMPLOYER">{t.refEmployer}</option>
+              <option value="PUBLIC_SERVANT">{t.refCivilServant}</option>
+              <option value="RECOGNISED_PROFESSIONAL">{t.refProfessional}</option>
+              <option value="RELIGIOUS_LEADER">{t.refReligiousLeader}</option>
             </select>
           </Field>
-          <Field label="How do they know you?" required>
+          <Field label={t.appHowDoTheyKnowYou} required>
             <input
               value={form.relationship}
               onChange={(event) => setForm({ ...form, relationship: event.target.value })}
-              placeholder="District head of my community"
+              placeholder={t.refDistrictHead}
               required
               minLength={3}
             />
@@ -575,7 +571,7 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
 
           <button type="submit" disabled={busy}>
             {busy ? <Spinner /> : null}
-            {active ? 'Nominate a replacement referee' : 'Send verification request'}
+            {active ? t.appNominateReplacement : t.appSendVerification}
           </button>
         </form>
       )}
@@ -584,16 +580,19 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
 }
 
 function TrainingSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const { busy, error, run } = useAction(onDone);
   const outstanding = status.training.filter((module) => module.status !== 'COMPLETED');
 
   return (
     <div className="card">
-      <h2 className="card__title">Training</h2>
+      <h2 className="card__title">{t.appTraining}</h2>
       <p className="card__hint">
         {outstanding.length === 0
-          ? 'All mandatory training is complete.'
-          : `${outstanding.length} of ${status.training.length} modules still to complete.`}
+          ? t.appTrainingAllComplete
+          : t.appTrainingRemaining
+              .replace('{{done}}', String(outstanding.length))
+              .replace('{{total}}', String(status.training.length))}
       </p>
 
       <ErrorAlert error={error} />
@@ -605,7 +604,7 @@ function TrainingSection({ status, onDone }: { status: ApplicationStatus; onDone
               <p className="list__title">{module.title}</p>
               <p className="list__meta">
                 {module.code}
-                {module.assessed ? ` · pass mark ${module.pass_mark}%` : ' · no assessment'}
+                {module.assessed ? ` · ${t.appPassMark} ${module.pass_mark}%` : ` · ${t.appNoAssessment}`}
               </p>
             </div>
             {module.status === 'COMPLETED' ? (
@@ -623,9 +622,7 @@ function TrainingSection({ status, onDone }: { status: ApplicationStatus; onDone
                     });
                   })
                 }
-              >
-                Complete
-              </button>
+              >{t.appComplete}</button>
             )}
           </li>
         ))}
@@ -635,21 +632,20 @@ function TrainingSection({ status, onDone }: { status: ApplicationStatus; onDone
 }
 
 function BankSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const { busy, error, message, run } = useAction(onDone);
 
   return (
     <div className="card">
-      <h2 className="card__title">Commission bank account</h2>
-      <p className="card__hint">
-        Verified before any commission can be paid. Government revenue never enters this account.
-      </p>
+      <h2 className="card__title">{t.appBankAccount}</h2>
+      <p className="card__hint">{t.appBankHint}</p>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
       {status.checklist.bankVerified ? (
-        <Alert kind="success" title="Bank account verified">
-          <p style={{ margin: 0 }}>Your commission will be paid to this account.</p>
+        <Alert kind="success" title={t.appBankVerified}>
+          <p style={{ margin: 0 }}>{t.appCommissionPaidHere}</p>
         </Alert>
       ) : (
         <button
@@ -661,13 +657,13 @@ function BankSection({ status, onDone }: { status: ApplicationStatus; onDone: ()
                 '/agents/me/bank/verify',
               );
               return result.verified
-                ? 'Your bank account has been verified.'
-                : (result.failureReason ?? 'The account could not be verified.');
+                ? t.appBankVerifiedMsg
+                : (result.failureReason ?? t.appBankCouldNotVerify);
             })
           }
         >
           {busy ? <Spinner /> : null}
-          Verify my bank account
+          {t.appVerifyBankAccount}
         </button>
       )}
     </div>
@@ -675,6 +671,7 @@ function BankSection({ status, onDone }: { status: ApplicationStatus; onDone: ()
 }
 
 function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const [agreement, setAgreement] = useState<{ version: string; title: string; body: string } | null>(null);
   const [accepted, setAccepted] = useState(false);
   const { busy, error, run } = useAction(onDone);
@@ -690,9 +687,9 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
   if (status.checklist.agreementAccepted) {
     return (
       <div className="card">
-        <h2 className="card__title">Agent agreement</h2>
-        <Alert kind="success" title="Agreement accepted">
-          <p style={{ margin: 0 }}>Your acceptance has been recorded.</p>
+        <h2 className="card__title">{t.appAgreement}</h2>
+        <Alert kind="success" title={t.appAgreementAccepted}>
+          <p style={{ margin: 0 }}>{t.appAgreementRecorded}</p>
         </Alert>
       </div>
     );
@@ -700,8 +697,8 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
 
   return (
     <div className="card">
-      <h2 className="card__title">Agent agreement</h2>
-      <p className="card__hint">Read this carefully. It sets out what you may and may not do.</p>
+      <h2 className="card__title">{t.appAgreement}</h2>
+      <p className="card__hint">{t.appReadCarefully}</p>
 
       <ErrorAlert error={error} />
 
@@ -729,7 +726,9 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
               onChange={(event) => setAccepted(event.target.checked)}
             />
             <span>
-              I have read and accept the {agreement.title} (version {agreement.version}).
+              {t.appAcceptAgreementText
+                .replace('{{title}}', agreement.title)
+                .replace('{{version}}', agreement.version)}
             </span>
           </label>
 
@@ -743,7 +742,7 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
             }
           >
             {busy ? <Spinner /> : null}
-            Accept agreement
+            {t.appAcceptAgreement}
           </button>
         </>
       ) : (
@@ -754,6 +753,7 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
 }
 
 function DeviceSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
+  const { t } = useI18n();
   const { busy, error, message, run } = useAction(onDone);
   const profile = describeDevice(APP_VERSION);
   const registered = status.devices.find(
@@ -762,19 +762,17 @@ function DeviceSection({ status, onDone }: { status: ApplicationStatus; onDone: 
 
   return (
     <div className="card">
-      <h2 className="card__title">This device</h2>
-      <p className="card__hint">
-        Revenue can only be collected from a device that PSIRS has registered to you.
-      </p>
+      <h2 className="card__title">{t.moreThisDevice}</h2>
+      <p className="card__hint">{t.appDeviceOnlyRegistered}</p>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
       <KeyValue
         items={[
-          ['Device', profile.deviceName],
-          ['App version', APP_VERSION],
-          ['Status', registered ? <Badge key="s" status={registered.status} /> : 'Not registered'],
+          [t.appDeviceLabel, profile.deviceName],
+          [t.appAppVersion, APP_VERSION],
+          [t.appStatus, registered ? <Badge key="s" status={registered.status} /> : t.appNotRegistered],
         ]}
       />
 
@@ -790,26 +788,24 @@ function DeviceSection({ status, onDone }: { status: ApplicationStatus; onDone: 
           }
         >
           {busy ? <Spinner /> : null}
-          Register this device
+          {t.appRegisterDevice}
         </button>
       )}
 
       {!status.checklist.governmentApproved && !registered && (
-        <p className="field__hint" style={{ marginTop: 8 }}>
-          You can register a device once PSIRS has approved your application.
-        </p>
+        <p className="field__hint" style={{ marginTop: 8 }}>{t.appDeviceAfterApproval}</p>
       )}
 
       {status.devices.length > 1 && (
         <>
-          <p className="section-title">Other devices</p>
+          <p className="section-title">{t.appOtherDevices}</p>
           <ul className="list">
             {status.devices
               .filter((device) => device.device_identifier !== profile.deviceIdentifier)
               .map((device) => (
                 <li key={device.id} className="list__item" style={{ paddingLeft: 0, paddingRight: 0 }}>
                   <div className="list__body">
-                    <p className="list__title">{device.device_name ?? 'Registered device'}</p>
+                    <p className="list__title">{device.device_name ?? t.appRegisteredDevice}</p>
                   </div>
                   <Badge status={device.status} />
                 </li>

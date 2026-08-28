@@ -135,7 +135,7 @@ export function StepUpPrompt({
       {developmentCode && (
         <Alert kind="info" title={t.stepUpDevelopmentBuild}>
           <p style={{ margin: 0 }}>
-            No real SMS is configured, so the code is shown here: <strong>{developmentCode}</strong>
+            {t.stepUpNoSms} <strong>{developmentCode}</strong>
           </p>
         </Alert>
       )}
@@ -182,7 +182,7 @@ export function StepUpPrompt({
       </div>
 
       <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
-        Cancel
+        {t.camCancel}
       </button>
     </form>
   );

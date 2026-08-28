@@ -30,17 +30,26 @@ export interface PickedTaxpayer {
   lga_name?: string;
 }
 
-export function taxpayerDisplayName(taxpayer: PickedTaxpayer): string {
+/**
+ * A name to put on the screen, and the caller's word for having none.
+ *
+ * The fallback used to sit behind `??`, which a trimmed empty string never
+ * reaches — a record with no name rendered as blank rather than as anything
+ * an agent could act on. `||` is the operator that was meant, and the label
+ * is passed in so it can be in the agent's own language: this is a plain
+ * function and cannot reach the dictionary itself.
+ */
+export function taxpayerDisplayName(taxpayer: PickedTaxpayer, unnamed = 'Unnamed taxpayer'): string {
   return (
-    taxpayer.business_name ??
-    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ??
-    'Unnamed taxpayer'
+    taxpayer.business_name ||
+    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||
+    unnamed
   );
 }
 
 export function TaxpayerPicker({
-  label = 'Taxpayer paying',
-  hint = 'Search by name, phone number or TIN',
+  label,
+  hint,
   chosen,
   onChoose,
   onClear,
@@ -82,11 +91,13 @@ export function TaxpayerPicker({
   if (chosen) {
     return (
       <div className="field">
-        <label>{label}</label>
+        <label>{label ?? t.tpTaxpayerPaying}</label>
         <div className="card" style={{ margin: 0, padding: 12 }}>
-          <p style={{ margin: 0, fontWeight: 600 }}>{taxpayerDisplayName(chosen)}</p>
+          <p style={{ margin: 0, fontWeight: 600 }}>
+            {taxpayerDisplayName(chosen, t.tpUnnamedTaxpayer)}
+          </p>
           <p className="list__meta" style={{ margin: '2px 0 8px' }}>
-            {chosen.tin ? `TIN ${chosen.tin}` : 'No TIN yet'} · {chosen.phone}
+            {chosen.tin ? `TIN ${chosen.tin}` : t.tpNoTinYet} · {chosen.phone}
           </p>
           <button
             type="button"
@@ -98,7 +109,7 @@ export function TaxpayerPicker({
               setSearch('');
             }}
           >
-            Choose someone else
+            {t.tpChooseSomeoneElse}
           </button>
         </div>
       </div>
@@ -107,11 +118,11 @@ export function TaxpayerPicker({
 
   return (
     <>
-      <Field label={label} hint={hint} required>
+      <Field label={label ?? t.tpTaxpayerPaying} hint={hint ?? t.tpSearchByNamePhoneTin} required>
         <input
           type="search"
           value={search}
-          placeholder="Name, phone or TIN"
+          placeholder={t.tpSearchPlaceholder}
           onChange={(event) => setSearch(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -147,9 +158,9 @@ export function TaxpayerPicker({
             <li key={taxpayer.id}>
               <button type="button" className="list__item" onClick={() => onChoose(taxpayer)}>
                 <div className="list__body">
-                  <p className="list__title">{taxpayerDisplayName(taxpayer)}</p>
+                  <p className="list__title">{taxpayerDisplayName(taxpayer, t.tpUnnamedTaxpayer)}</p>
                   <p className="list__meta">
-                    {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone}
+                    {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone}
                   </p>
                 </div>
               </button>

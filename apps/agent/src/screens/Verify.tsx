@@ -75,7 +75,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       } else
         setError({
           code: 'VERIFY_FAILED',
-          message: 'PSIRS could not be reached, so this receipt could not be checked.',
+          message: t.verifyCouldNotReach,
           moneyStatus: 'NOT_APPLICABLE',
         });
     } finally {
@@ -95,7 +95,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
           if (!found) {
             // Keep scanning: the agent may simply have caught something else
             // in frame. Telling them why is more useful than stopping.
-            setCameraError('That QR code is not a PSIRS receipt code. Keep the receipt in frame.');
+            setCameraError(t.verifyNotAReceiptCode);
             return;
           }
           stopCamera();
@@ -108,7 +108,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       setCameraError(
         caught instanceof CameraUnavailable
           ? caught.message
-          : 'The camera could not be opened. Type the code printed under the QR square instead.',
+          : t.verifyCameraFailed,
       );
     }
   }
@@ -118,15 +118,13 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       <div className="card">
         <h2 className="card__title">{t.verifyCheckReceipt}</h2>
         <p className="card__hint">
-          Scan the square on the receipt, or type the code printed beneath it. PSIRS confirms
-          whether the receipt was issued — reading the code only tells you what is on the paper.
+          {t.verifyScanHint}
         </p>
 
         {connection === 'OFFLINE' && (
           <Alert kind="warning" title={t.verifyOffline}>
             <p style={{ margin: 0 }}>
-              A receipt can only be checked against PSIRS, so this needs a connection. You can still
-              scan the code and check it when you are back online.
+              {t.verifyOfflineBody}
             </p>
           </Alert>
         )}
@@ -162,7 +160,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
             if (!found) {
               setError({
                 code: 'INVALID_CODE',
-                message: '{t.receiptCodeShape}',
+                message: t.receiptCodeShape,
                 moneyStatus: 'NOT_APPLICABLE',
               });
               return;
@@ -182,7 +180,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
           </Field>
           <button type="submit" className="secondary" disabled={busy || code.trim().length === 0}>
             {busy ? <Spinner /> : null}
-            {busy ? 'Checking with PSIRS…' : 'Check this code'}
+            {busy ? t.verifyChecking : t.verifyCheckThisCode}
           </button>
         </form>
 
@@ -207,20 +205,17 @@ function VerificationOutcome({ result }: { result: VerificationResult }) {
       {genuine && (
         <KeyValue
           items={[
-            ['Receipt number', result.receiptNumber ?? '—'],
-            ['Revenue item', result.revenueType ?? '—'],
+            [t.receiptNumber, result.receiptNumber ?? '—'],
+            [t.verifyRevenueItem, result.revenueType ?? '—'],
+            [t.amount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
+            [t.tpLga, result.lga ?? '—'],
             [
-              'Amount',
-              result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—',
-            ],
-            ['Local Government Area', result.lga ?? '—'],
-            [
-              'Issued',
+              t.verifyIssued,
               result.issuedAt ? new Date(result.issuedAt).toLocaleDateString('en-NG') : '—',
             ],
             [
-              'Document fingerprint',
-              result.integrityConfirmed ? 'Matches the original' : 'Could not be confirmed',
+              t.verifyFingerprint,
+              result.integrityConfirmed ? t.verifyMatchesOriginal : t.verifyNotConfirmed,
             ],
           ]}
         />

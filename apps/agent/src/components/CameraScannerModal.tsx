@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CameraScanner, type ScannerCapabilities } from '../lib/camera-scanner';
 import { Icons, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 interface CameraScannerModalProps {
   isOpen: boolean;
@@ -18,10 +19,12 @@ interface CameraScannerModalProps {
 
 export function CameraScannerModal({
   isOpen,
-  title = 'Scan QR / Barcode',
+  title,
   onScan,
   onClose,
 }: CameraScannerModalProps) {
+  const { t } = useI18n();
+  const heading = title ?? t.scanQr;
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const scannerRef = useRef<CameraScanner | null>(null);
@@ -58,7 +61,7 @@ export function CameraScannerModal({
         setCapabilities(caps);
         setLoading(false);
       } catch (err: any) {
-        setError(err.message || 'Could not access device camera.');
+        setError(err.message || t.camNoAccess);
         setLoading(false);
       }
     }, 100);
@@ -91,17 +94,17 @@ export function CameraScannerModal({
         });
         setCapabilities(caps);
       } catch (err: any) {
-        setError(err.message || 'Camera switch failed');
+        setError(err.message || t.camSwitchFailed);
       }
     }
   };
 
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="modal-overlay" role="dialog" aria-modal="true" aria-label={heading}>
       <div className="modal-card scanner-modal">
         <div className="scanner-header">
-          <h3>{title}</h3>
-          <button type="button" className="btn-icon" onClick={onClose} aria-label="Close scanner">
+          <h3>{heading}</h3>
+          <button type="button" className="btn-icon" onClick={onClose} aria-label={t.camClose}>
             ✕
           </button>
         </div>
@@ -113,7 +116,7 @@ export function CameraScannerModal({
           {loading && (
             <div className="scanner-loading">
               <Spinner />
-              <p>Initializing camera...</p>
+              <p>{t.camInitializing}</p>
             </div>
           )}
 
@@ -138,7 +141,7 @@ export function CameraScannerModal({
                   }
                 }}
               >
-                Try Again
+                {t.camTryAgain}
               </button>
             </div>
           )}
@@ -148,7 +151,7 @@ export function CameraScannerModal({
               <div className="reticle-box">
                 <div className="laser-line" />
               </div>
-              <p className="reticle-hint">Align QR code or barcode inside frame</p>
+              <p className="reticle-hint">{t.camAlign}</p>
             </div>
           )}
         </div>
@@ -160,18 +163,18 @@ export function CameraScannerModal({
               className={`btn btn--sm ${torchActive ? 'btn--primary' : 'btn--secondary'}`}
               onClick={handleToggleTorch}
             >
-              {torchActive ? 'Flash: ON' : 'Flash: OFF'}
+              {torchActive ? t.camFlashOn : t.camFlashOff}
             </button>
           )}
 
           {capabilities?.canSwitchCamera && (
             <button type="button" className="btn btn--sm btn--secondary" onClick={handleSwitchCamera}>
-              Flip Camera
+              {t.camFlip}
             </button>
           )}
 
           <button type="button" className="btn btn--sm btn--outline" onClick={onClose}>
-            Cancel
+            {t.camCancel}
           </button>
         </div>
       </div>

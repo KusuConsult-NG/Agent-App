@@ -204,8 +204,8 @@ export function App() {
       <div className="center-screen">
         <div className="brand">
           <img className="brand__mark" src="/icon.svg" alt="" />
-          <p className="brand__name">Plateau State Revenue Agent</p>
-          <p className="brand__tagline">Restoring your session…</p>
+          <p className="brand__name">{t.shellAgentBrand}</p>
+          <p className="brand__tagline">{t.shellRestoring}</p>
         </div>
       </div>
     );
@@ -257,7 +257,7 @@ export function App() {
         <div className="app-header__row">
           <img src="/icon.svg" alt="" width={30} height={30} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 className="app-header__title">PSIRS Revenue Agent</h1>
+            <h1 className="app-header__title">{t.shellAgentTitle}</h1>
             <p className="app-header__subtitle">{session.fullName}</p>
           </div>
           <button
@@ -321,8 +321,7 @@ export function App() {
             <p style={{ margin: 0 }}>{syncProblem.message}</p>
             {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
             <p style={{ margin: '0.5rem 0 0' }}>
-              Nothing has been lost — the records are still on this phone and will be sent once this
-              is put right.
+              {t.shellNothingLost}
             </p>
           </Alert>
         )}
@@ -330,7 +329,7 @@ export function App() {
         <Routes route={route} navigate={navigate} connection={connection} onSignOut={signOut} />
       </main>
 
-      <nav className="app-nav" aria-label="Main">
+      <nav className="app-nav" aria-label={t.shellMain}>
         {nav.map((item) => {
           const active = route === item.path || (item.path !== '/' && route.startsWith(item.path));
           return (

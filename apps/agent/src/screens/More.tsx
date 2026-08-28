@@ -16,6 +16,7 @@ import { pushManager } from '../lib/push';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
+import { useI18n } from '../lib/i18n';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -33,6 +34,7 @@ interface VehicleLookup {
 }
 
 export function VehiclesScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [registration, setRegistration] = useState('');
   const [lookup, setLookup] = useState<VehicleLookup | null>(null);
   const [busy, setBusy] = useState(false);
@@ -148,11 +150,11 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Vehicle particulars renewal</h2>
+        <h2 className="card__title">{t.moreVehicleRenewal}</h2>
         <p className="card__hint">
-          Search the vehicle first. Records confirmed by the vehicle authority are marked as such.
+          {t.moreSearchVehicleFirst}
         </p>
-        <Field label="Registration number" required>
+        <Field label={t.moreRegistrationNumber} required>
           <input
             value={registration}
             onChange={(event) => setRegistration(event.target.value.toUpperCase())}
@@ -162,7 +164,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
         </Field>
         <button type="button" disabled={busy || registration.trim().length < 4} onClick={find}>
           {busy ? <Spinner /> : null}
-          Search vehicle
+          {t.moreSearchVehicle}
         </button>
       </div>
 
@@ -170,11 +172,9 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
       {capturedOffline && (
         <div className="card">
-          <Alert kind="warning" title="Saved on this phone">
+          <Alert kind="warning" title={t.moreSavedOnPhone}>
             <p style={{ margin: 0 }}>
-              This vehicle is stored on your phone and will be sent to PSIRS automatically when you
-              are back online. The vehicle authority has not been checked yet, and no renewal or
-              payment can be started until it is sent.
+              {t.moreVehicleSavedBody}
             </p>
           </Alert>
         </div>
@@ -182,23 +182,21 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
       {offlineCapture && !capturedOffline && (
         <div className="card">
-          <h2 className="card__title">Capture without a connection</h2>
-          <Alert kind="warning" title="The vehicle authority cannot be reached">
+          <h2 className="card__title">{t.moreCaptureOffline}</h2>
+          <Alert kind="warning" title={t.moreVehicleAuthorityUnreachable}>
             <p style={{ margin: 0 }}>
-              Record what you can see on the vehicle. It will be sent — and checked against the
-              authority — as soon as you are online. You cannot take a payment for a renewal until
-              then.
+              {t.moreVehicleCaptureBody}
             </p>
           </Alert>
 
-          <Field label="Owner's name" required>
+          <Field label={t.moreOwnerName} required>
             <input
               value={manual.ownerName}
               onChange={(event) => setManual({ ...manual, ownerName: event.target.value })}
-              placeholder="As written on the papers"
+              placeholder={t.moreOwnerNameHint}
             />
           </Field>
-          <Field label="Owner's phone">
+          <Field label={t.moreOwnerPhone}>
             <input
               value={manual.ownerPhone}
               onChange={(event) => setManual({ ...manual, ownerPhone: event.target.value })}
@@ -206,15 +204,15 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
               placeholder="+234…"
             />
           </Field>
-          <Field label="Vehicle type" required>
+          <Field label={t.moreVehicleType} required>
             <select
               value={manual.vehicleType}
               onChange={(event) => setManual({ ...manual, vehicleType: event.target.value })}
             >
-              <option value="PRIVATE">Private</option>
-              <option value="COMMERCIAL">Commercial</option>
-              <option value="MOTORCYCLE">Motorcycle / Okada</option>
-              <option value="TRICYCLE">Tricycle / Keke</option>
+              <option value="PRIVATE">{t.morePrivate}</option>
+              <option value="COMMERCIAL">{t.moreCommercial}</option>
+              <option value="MOTORCYCLE">{t.moreMotorcycle}</option>
+              <option value="TRICYCLE">{t.moreTricycle}</option>
             </select>
           </Field>
 
@@ -224,7 +222,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
             onClick={captureOffline}
           >
             {busy ? <Spinner /> : null}
-            Save vehicle on this phone
+            {t.moreSaveVehicleOnPhone}
           </button>
         </div>
       )}
@@ -248,7 +246,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
           {lookup.source === 'REGISTRY_UNAVAILABLE' && (
             <button type="button" disabled={busy} onClick={find}>
               {busy ? <Spinner /> : null}
-              Try the vehicle authority again
+              {t.moreTryVehicleAuthorityAgain}
             </button>
           )}
 
@@ -256,27 +254,30 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
             <>
               <KeyValue
                 items={[
-                  ['Registration', lookup.vehicle.registration_number ?? lookup.vehicle.registrationNumber],
-                  ['Owner', lookup.vehicle.owner_name ?? lookup.vehicle.ownerName],
                   [
-                    'Vehicle',
+                    t.moreRegistrationLabel,
+                    lookup.vehicle.registration_number ?? lookup.vehicle.registrationNumber,
+                  ],
+                  [t.moreOwnerLabel, lookup.vehicle.owner_name ?? lookup.vehicle.ownerName],
+                  [
+                    t.moreVehicleLabel,
                     [lookup.vehicle.make, lookup.vehicle.model].filter(Boolean).join(' ') || '—',
                   ],
-                  ['Chassis', lookup.vehicle.chassis_number ?? lookup.vehicle.chassisNumber],
+                  [t.moreChassis, lookup.vehicle.chassis_number ?? lookup.vehicle.chassisNumber],
                   [
-                    'Current expiry',
+                    t.moreCurrentExpiry,
                     lookup.vehicle.current_expiry_date ?? lookup.vehicle.currentExpiryDate ?? '—',
                   ],
                   [
-                    'Authority confirmed',
-                    lookup.authorityConfirmed ? 'Yes' : 'No — entered manually',
+                    t.moreAuthorityConfirmed,
+                    lookup.authorityConfirmed ? t.tpYes : t.moreEnteredManually,
                   ],
                 ]}
               />
 
-              <Field label="Renewal service" required>
+              <Field label={t.moreRenewalService} required>
                 <select value={revenueItemId} onChange={(event) => setRevenueItemId(event.target.value)}>
-                  <option value="">Select renewal type</option>
+                  <option value="">{t.moreSelectRenewalType}</option>
                   {items.map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name}
@@ -285,14 +286,16 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                 </select>
               </Field>
 
-              <Field label="Renewal period" required>
+              <Field label={t.moreRenewalPeriod} required>
                 <select
                   value={months}
                   onChange={(event) => setMonths(Number(event.target.value) as 6 | 12 | 24)}
                 >
-                  <option value={6}>6 months</option>
-                  <option value={12}>12 months</option>
-                  <option value={24}>24 months</option>
+                  {[6, 12, 24].map((n) => (
+                    <option key={n} value={n}>
+                      {t.moreMonths.replace('{{n}}', String(n))}
+                    </option>
+                  ))}
                 </select>
               </Field>
 
@@ -304,13 +307,13 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
               <button type="button" disabled={busy || !revenueItemId || !taxpayerId} onClick={renew}>
                 {busy ? <Spinner /> : null}
-                Calculate and proceed to payment
+                {t.moreCalculateProceed}
               </button>
               {(!revenueItemId || !taxpayerId) && (
                 <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
                   {!revenueItemId
-                    ? 'Choose which renewal is being paid for.'
-                    : 'Find the taxpayer paying for this renewal. Every payment must be attributed to somebody.'}
+                    ? t.moreChooseRenewal
+                    : t.moreFindPayingTaxpayer}
                 </p>
               )}
             </>
@@ -335,6 +338,7 @@ interface ReceiptRow {
 }
 
 export function ReceiptsScreen() {
+  const { t } = useI18n();
   const [receipts, setReceipts] = useState<ReceiptRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -353,15 +357,15 @@ export function ReceiptsScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Receipts you facilitated</h2>
+        <h2 className="card__title">{t.moreReceiptsFacilitated}</h2>
         <p className="card__hint">
-          Every receipt here was issued by government after the payment was independently confirmed.
+          {t.moreReceiptsIssuedAfter}
         </p>
       </div>
 
       <div className="card card--flush">
         {receipts.length === 0 ? (
-          <p className="empty">No receipts yet.</p>
+          <p className="empty">{t.moreNoReceipts}</p>
         ) : (
           <ul className="list">
             {receipts.map((receipt) => (
@@ -421,6 +425,7 @@ interface Wallet {
 }
 
 export function CommissionScreen() {
+  const { t } = useI18n();
   const [data, setData] = useState<Wallet | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -473,7 +478,7 @@ export function CommissionScreen() {
   return (
     <>
       <section className="headline">
-        <p className="headline__label">Available for payout</p>
+        <p className="headline__label">{t.moreAvailableForPayout}</p>
         <p className="headline__amount">
           <Money kobo={data.wallet.eligibleKobo} />
         </p>
@@ -482,31 +487,29 @@ export function CommissionScreen() {
             <strong>
               <Money kobo={data.wallet.pendingKobo} />
             </strong>
-            pending
+            {t.morePendingWord}
           </div>
           <div>
             <strong>
               <Money kobo={data.wallet.paidKobo} />
             </strong>
-            paid
+            {t.morePaidWord}
           </div>
           <div>
             <strong>{data.wallet.transactionCount}</strong>
-            transactions
+            {t.moreTransactionsWord}
           </div>
         </div>
       </section>
 
-      <Alert kind="info" title="This is a commission record, not a bank account">
+      <Alert kind="info" title={t.moreCommissionRecordNotAccount}>
         <p style={{ margin: 0 }}>{data.note}</p>
       </Alert>
 
       {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
-        <Alert kind="warning" title="Some commission is owed back">
+        <Alert kind="warning" title={t.moreSomeCommissionOwedBack}>
           <p style={{ margin: 0 }}>
-            <Money kobo={data.wallet.owedBackKobo} /> was paid on transactions that were later
-            reversed. It is taken off your next payout, so you will receive that much less than the
-            amount above.
+            <Money kobo={data.wallet.owedBackKobo} /> {t.moreOwedBackBody}
           </p>
         </Alert>
       )}
@@ -517,16 +520,15 @@ export function CommissionScreen() {
       {authorising ? (
         <StepUpPrompt
           action="commission.payout.request"
-          title="Authorise this payout"
-          confirmLabel="Confirm payout"
+          title={t.moreAuthorisePayout}
+          confirmLabel={t.moreConfirmPayout}
           description={
             <>
-              <p style={{ margin: '0 0 4px' }}>
-                You are requesting a payout of <Money kobo={data.wallet.eligibleKobo} />.
+              <p style={{ margin: '0 0 4px' }}>{t.moreRequestingPayout}<Money kobo={data.wallet.eligibleKobo} />.
               </p>
               {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
                 <p style={{ margin: 0 }}>
-                  <Money kobo={data.wallet.owedBackKobo} /> owed back will be deducted.
+                  <Money kobo={data.wallet.owedBackKobo} /> {t.moreOwedBackDeducted}
                 </p>
               )}
             </>
@@ -542,20 +544,18 @@ export function CommissionScreen() {
             onClick={() => setAuthorising(true)}
           >
             {busy ? <Spinner /> : null}
-            Request payout
+            {t.moreRequestPayout}
           </button>
           <p className="field__hint" style={{ marginTop: 8 }}>
-            Commission becomes available once the transaction has been settled to the government
-            account and the hold period has passed. You will be sent a one-time code to confirm the
-            request.
+            {t.moreCommissionAvailableWhen}
           </p>
         </>
       )}
 
-      <p className="section-title">Commission history</p>
+      <p className="section-title">{t.moreCommissionHistory}</p>
       <div className="card card--flush">
         {data.entries.length === 0 ? (
-          <p className="empty">No commission recorded yet.</p>
+          <p className="empty">{t.moreNoCommission}</p>
         ) : (
           <ul className="list">
             {data.entries.map((entry) => (
@@ -587,6 +587,7 @@ export function CommissionScreen() {
 // ----------------------------------------------------------------- profile
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
+  const { t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
   const [printerBusy, setPrinterBusy] = useState(false);
@@ -607,9 +608,9 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     setPrinterMsg(null);
     try {
       await bluetoothPrinter.connect();
-      setPrinterMsg('Connected to Bluetooth printer.');
+      setPrinterMsg(t.morePrinterConnected);
     } catch (err: any) {
-      setPrinterMsg(err.message || 'Connection failed.');
+      setPrinterMsg(err.message || t.morePrinterConnectFailed);
     } finally {
       setPrinterBusy(false);
     }
@@ -620,9 +621,9 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     setPrinterMsg(null);
     try {
       await bluetoothPrinter.printTestSlip();
-      setPrinterMsg('Test receipt sent to printer!');
+      setPrinterMsg(t.morePrinterTestSent);
     } catch (err: any) {
-      setPrinterMsg(err.message || 'Print failed.');
+      setPrinterMsg(err.message || t.morePrinterPrintFailed);
     } finally {
       setPrinterBusy(false);
     }
@@ -635,14 +636,14 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
       if (pushStatus === 'granted') {
         await pushManager.unsubscribe();
         setPushStatus('default');
-        setPushMsg('Push notifications disabled.');
+        setPushMsg(t.morePushDisabled);
       } else {
         const ok = await pushManager.subscribe();
         setPushStatus(ok ? 'granted' : 'denied');
-        setPushMsg(ok ? 'Push notifications active!' : 'Permission was not granted.');
+        setPushMsg(ok ? t.morePushActive : t.morePushNotGranted);
       }
     } catch (err: any) {
-      setPushMsg(err.message || 'Could not configure push notifications.');
+      setPushMsg(err.message || t.morePushFailed);
     } finally {
       setPushBusy(false);
     }
@@ -651,30 +652,27 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">This device</h2>
+        <h2 className="card__title">{t.moreThisDevice}</h2>
         <KeyValue
           items={[
-            ['Device', device.deviceName],
-            ['App version', APP_VERSION],
-            ['Device ID', device.deviceIdentifier.slice(0, 18) + '…'],
+            [t.appDeviceLabel, device.deviceName],
+            [t.appAppVersion, APP_VERSION],
+            [t.moreDeviceId, device.deviceIdentifier.slice(0, 18) + '…'],
           ]}
         />
-        <a className="button secondary" href="#/application">
-          View my application and clearance
-        </a>
+        <a className="button secondary" href="#/application">{t.moreViewApplication}</a>
       </div>
 
       <div className="card">
-        <h2 className="card__title">Field Thermal Printer</h2>
+        <h2 className="card__title">{t.morePrinter}</h2>
         <p className="card__hint">
-          Pair a 58mm or 80mm Bluetooth ESC/POS mobile belt printer to issue instant paper receipts
-          to taxpayers in remote field locations.
+          {t.morePrinterHint}
         </p>
         <KeyValue
           items={[
-            ['Status', <Badge status={printerState.status} />],
-            ['Connected Device', printerState.name || 'None'],
-            ['Paper Width', printerState.paperWidth],
+            [t.appStatus, <Badge status={printerState.status} />],
+            [t.moreConnectedDevice, printerState.name || t.moreNone],
+            [t.morePaperWidth, printerState.paperWidth],
           ]}
         />
         {printerMsg && (
@@ -688,8 +686,8 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
             onChange={(e) => bluetoothPrinter.setPaperWidth(e.target.value as any)}
             style={{ width: 'auto', padding: '6px 10px', borderRadius: '8px', border: '1px solid var(--line)' }}
           >
-            <option value="58mm">58mm (Standard)</option>
-            <option value="80mm">80mm (Wide)</option>
+            <option value="58mm">{t.morePaper58}</option>
+            <option value="80mm">{t.morePaper80}</option>
           </select>
           {printerState.status === 'connected' ? (
             <>
@@ -700,16 +698,14 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
                 disabled={printerBusy}
                 onClick={testPrint}
               >
-                {printerBusy ? <Spinner /> : 'Print test slip'}
+                {printerBusy ? <Spinner /> : t.morePrintTestSlip}
               </button>
               <button
                 type="button"
                 className="secondary"
                 style={{ width: 'auto' }}
                 onClick={() => bluetoothPrinter.disconnect()}
-              >
-                Disconnect
-              </button>
+              >{t.moreDisconnect}</button>
             </>
           ) : (
             <button
@@ -719,26 +715,26 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
               disabled={printerBusy || !bluetoothPrinter.isSupported()}
               onClick={connectPrinter}
             >
-              {printerBusy ? <Spinner /> : 'Pair Bluetooth Printer'}
+              {printerBusy ? <Spinner /> : t.morePairPrinter}
             </button>
           )}
         </div>
         {!bluetoothPrinter.isSupported() && (
           <p className="field__hint" style={{ marginTop: '8px', color: 'var(--danger)' }}>
-            Web Bluetooth is not supported on this browser (use Chrome on Android or desktop).
+            {t.moreNoWebBluetooth}
           </p>
         )}
       </div>
 
       <div className="card">
-        <h2 className="card__title">Instant Push Notifications</h2>
+        <h2 className="card__title">{t.morePushTitle}</h2>
         <p className="card__hint">
-          Receive real-time alerts when your KYC clears, referee responds, or commissions settle.
+          {t.morePushHint}
         </p>
         <KeyValue
           items={[
-            ['Permission', <Badge status={pushStatus === 'granted' ? 'ACTIVE' : 'DISABLED'} />],
-            ['Push Engine', pushManager.isSupported() ? 'Supported' : 'Unavailable'],
+            [t.morePermission, <Badge status={pushStatus === 'granted' ? 'ACTIVE' : 'DISABLED'} />],
+            [t.morePushEngine, pushManager.isSupported() ? t.moreSupported : t.moreUnavailable],
           ]}
         />
         {pushMsg && (
@@ -760,35 +756,28 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
       </div>
 
       <div className="card">
-        <h2 className="card__title">Where your commission is paid</h2>
+        <h2 className="card__title">{t.moreWhereCommissionPaid}</h2>
         <p className="card__hint">
-          Change the bank account PSIRS pays your commission into. It takes a one-time code, the
-          bank's confirmation and an officer's approval, so your existing account keeps being
-          used until all three are done.
+          {t.moreChangeBankHint}
         </p>
-        <a className="button secondary" href="#/bank">
-          Change my bank account
-        </a>
+        <a className="button secondary" href="#/bank">{t.moreChangeBankAccount}</a>
       </div>
 
       <div className="card">
-        <h2 className="card__title">Something wrong?</h2>
+        <h2 className="card__title">{t.moreSomethingWrong}</h2>
         <p className="card__hint">
-          Report a problem to PSIRS — a payment that has not confirmed, a receipt that looks
-          wrong, or anything a taxpayer has complained about.
+          {t.moreSupportHint}
         </p>
-        <a className="button secondary" href="#/support">
-          Get help
-        </a>
+        <a className="button secondary" href="#/support">{t.moreGetHelp}</a>
       </div>
 
       <div className="card">
-        <h2 className="card__title">Saved records on this device</h2>
+        <h2 className="card__title">{t.moreSavedRecords}</h2>
         <p className="card__hint">
-          Captures made offline. They are sent to PSIRS automatically when you have a connection.
+          {t.moreSavedRecordsHint}
         </p>
         {drafts.length === 0 ? (
-          <p className="empty">Nothing is waiting to be sent.</p>
+          <p className="empty">{t.moreNothingWaiting}</p>
         ) : (
           <ul className="list">
             {drafts.map((draft) => (
@@ -807,9 +796,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         )}
       </div>
 
-      <button type="button" className="danger" onClick={onSignOut}>
-        Sign out
-      </button>
+      <button type="button" className="danger" onClick={onSignOut}>{t.moreSignOut}</button>
     </>
   );
 }
@@ -841,6 +828,7 @@ interface BankChange {
  * pending will assume it has taken effect and wonder where their money went.
  */
 export function BankAccountScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [pending, setPending] = useState<BankChange | null | undefined>(undefined);
   const [form, setForm] = useState({
     bankName: '',
@@ -871,18 +859,18 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
 
   /** What the form is still waiting for, in words rather than a dead button. */
   const blockedBecause = ((): string | null => {
-    if (form.bankName.trim().length < 2) return 'Choose the bank the new account is with.';
+    if (form.bankName.trim().length < 2) return t.moreNeedBankName;
     if (!/^\d{3,6}$/.test(form.bankCode.trim())) {
-      return 'Enter the bank code. It is the 3 to 6 digit number the bank uses, not your account number.';
+      return t.moreNeedBankCode;
     }
     if (form.accountName.trim().length < 2) {
-      return 'Enter the name the account is held in, exactly as the bank has it.';
+      return t.moreNeedAccountName;
     }
     if (!/^\d{10}$/.test(form.accountNumber.trim())) {
-      return 'A Nigerian account number is 10 digits.';
+      return t.moreNeedAccountNumber;
     }
     if (form.reason.trim().length < 10) {
-      return 'Say why the account is changing, in at least 10 characters.';
+      return t.moreNeedReason;
     }
     return null;
   })();
@@ -921,7 +909,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
     return (
       <StepUpPrompt
         action="agent.bank_account.change"
-        title="Authorise this change"
+        title={t.moreAuthoriseChange}
         confirmLabel="Send to PSIRS"
         description={
           <>
@@ -929,9 +917,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
               You are asking PSIRS to pay your commission into {form.bankName}{' '}
               {form.accountNumber.slice(-4).padStart(8, '·')}.
             </p>
-            <p style={{ margin: 0 }}>
-              Nothing changes until an officer approves it.
-            </p>
+            <p style={{ margin: 0 }}>{t.moreNothingChangesYet}</p>
           </>
         }
         onAuthorised={submit}
@@ -943,11 +929,9 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Where your commission is paid</h2>
+        <h2 className="card__title">{t.moreWhereCommissionPaid}</h2>
         <p className="card__hint">
-          Commission is paid only into an account PSIRS has confirmed with the bank, and only
-          after an officer approves the change. Your existing account keeps being used until
-          then.
+          {t.moreCommissionOnlyVerified}
         </p>
       </div>
 
@@ -957,58 +941,68 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
       {pending ? (
         <>
           <div className="card">
-            <h2 className="card__title">A change is waiting for PSIRS</h2>
+            <h2 className="card__title">{t.moreChangeWaiting}</h2>
             <KeyValue
               items={[
-                ['Paid into now', pending.current
-                  ? `${pending.current.bankName} ${pending.current.accountNumberMasked}`
-                  : '—'],
-                ['Would change to', `${pending.bankName} ${pending.accountNumberMasked}`],
-                ['Name on the new account', pending.accountName],
                 [
-                  'Bank check',
-                  pending.verificationStatus === 'VERIFIED'
-                    ? `Confirmed${pending.verificationResolvedName ? ` as ${pending.verificationResolvedName}` : ''}`
-                    : pending.verificationStatus === 'PENDING'
-                      ? 'Waiting — the bank could not be reached'
-                      : `Not confirmed${pending.verificationReason ? `: ${pending.verificationReason}` : ''}`,
+                  t.morePaidIntoNow,
+                  pending.current
+                    ? `${pending.current.bankName} ${pending.current.accountNumberMasked}`
+                    : '—',
                 ],
-                ['Reason you gave', pending.requestedReason],
+                [t.moreWouldChangeTo, `${pending.bankName} ${pending.accountNumberMasked}`],
+                [t.moreNameOnNewAccount, pending.accountName],
+                [
+                  t.moreBankCheck,
+                  pending.verificationStatus === 'VERIFIED'
+                    ? pending.verificationResolvedName
+                      ? t.moreBankCheckConfirmedAs.replace(
+                          '{{name}}',
+                          pending.verificationResolvedName,
+                        )
+                      : t.moreBankCheckConfirmed
+                    : pending.verificationStatus === 'PENDING'
+                      ? t.moreBankCheckWaiting
+                      : pending.verificationReason
+                        ? t.moreBankCheckNotConfirmedBecause.replace(
+                            '{{reason}}',
+                            pending.verificationReason,
+                          )
+                        : t.moreBankCheckNotConfirmed,
+                ],
+                [t.moreReasonYouGave, pending.requestedReason],
               ]}
             />
           </div>
           {pending.verificationStatus !== 'VERIFIED' && (
-            <Alert kind="warning" title="The bank has not confirmed this account">
+            <Alert kind="warning" title={t.moreBankNotConfirmed}>
               <p style={{ margin: 0 }}>
-                PSIRS cannot approve a change until the bank confirms the account belongs to you.
-                If the details are wrong, ask your supervisor to refuse this request so you can
-                send the right ones.
+                {t.moreBankMustConfirm}
               </p>
             </Alert>
           )}
-          <Alert kind="info" title="You will be told either way">
+          <Alert kind="info" title={t.moreToldEitherWay}>
             <p style={{ margin: 0 }}>
-              A message goes to your phone when this is approved or refused. Only one change can
-              be waiting at a time.
+              {t.moreToldEitherWayBody}
             </p>
           </Alert>
         </>
       ) : (
         <div className="card">
-          <h2 className="card__title">Ask for a different account</h2>
-          <Field label="Bank" required>
+          <h2 className="card__title">{t.moreAskDifferentAccount}</h2>
+          <Field label={t.moreBankLabel} required>
             <input value={form.bankName} onChange={set('bankName')} />
           </Field>
-          <Field label="Bank code" hint="The 3 to 6 digit code the bank uses" required>
+          <Field label={t.moreBankCode} hint={t.moreBankCodeHint} required>
             <input inputMode="numeric" value={form.bankCode} onChange={set('bankCode')} />
           </Field>
-          <Field label="Name on the account" hint="Exactly as the bank has it" required>
+          <Field label={t.moreAccountName} hint={t.moreAccountNameHint} required>
             <input value={form.accountName} onChange={set('accountName')} />
           </Field>
-          <Field label="Account number" required>
+          <Field label={t.moreAccountNumber} required>
             <input inputMode="numeric" value={form.accountNumber} onChange={set('accountNumber')} />
           </Field>
-          <Field label="Why it is changing" required>
+          <Field label={t.moreWhyChanging} required>
             <textarea value={form.reason} onChange={set('reason')} rows={3} />
           </Field>
 
@@ -1023,11 +1017,9 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
               type="button"
               disabled={busy || blockedBecause !== null}
               onClick={() => setAuthorising(true)}
-            >
-              Continue
-            </button>
+            >{t.moreContinue}</button>
             <button type="button" className="secondary" onClick={() => navigate('/profile')}>
-              Back
+              {t.moreBack}
             </button>
           </div>
         </div>

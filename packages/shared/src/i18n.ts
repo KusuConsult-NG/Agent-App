@@ -135,6 +135,547 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  colChangeChoice: string;
+  moreMonths: string;
+  supGetHelpHint: string;
+  authKeepItSafe: string;
+
+  /**
+   * The profile screen: vehicle renewal, commission, the printer, push, and
+   * asking for a different commission account.
+   */
+  moreSearchVehicleFirst: string;
+  moreVehicleSavedBody: string;
+  moreVehicleCaptureBody: string;
+  moreOwnerName: string;
+  moreOwnerNameHint: string;
+  moreOwnerPhone: string;
+  moreMotorcycle: string;
+  moreTricycle: string;
+  moreRegistrationLabel: string;
+  moreOwnerLabel: string;
+  moreVehicleLabel: string;
+  moreChassis: string;
+  moreCurrentExpiry: string;
+  moreAuthorityConfirmed: string;
+  moreEnteredManually: string;
+  moreChooseRenewal: string;
+  moreFindPayingTaxpayer: string;
+  moreReceiptsIssuedAfter: string;
+  morePendingWord: string;
+  morePaidWord: string;
+  moreTransactionsWord: string;
+  moreOwedBackBody: string;
+  moreOwedBackDeducted: string;
+  moreConfirmPayout: string;
+  moreCommissionAvailableWhen: string;
+  moreDeviceId: string;
+  morePrinterHint: string;
+  moreConnectedDevice: string;
+  morePaperWidth: string;
+  moreNone: string;
+  morePaper58: string;
+  morePaper80: string;
+  morePrintTestSlip: string;
+  morePairPrinter: string;
+  moreNoWebBluetooth: string;
+  morePrinterConnected: string;
+  morePrinterConnectFailed: string;
+  morePrinterTestSent: string;
+  morePrinterPrintFailed: string;
+  morePushHint: string;
+  morePermission: string;
+  morePushEngine: string;
+  moreSupported: string;
+  moreUnavailable: string;
+  morePushDisabled: string;
+  morePushActive: string;
+  morePushNotGranted: string;
+  morePushFailed: string;
+  moreChangeBankHint: string;
+  moreSupportHint: string;
+  moreSavedRecordsHint: string;
+  moreBack: string;
+  moreCommissionOnlyVerified: string;
+  moreBankMustConfirm: string;
+  moreToldEitherWayBody: string;
+  morePaidIntoNow: string;
+  moreWouldChangeTo: string;
+  moreNameOnNewAccount: string;
+  moreBankCheck: string;
+  moreBankCheckConfirmed: string;
+  moreBankCheckConfirmedAs: string;
+  moreBankCheckWaiting: string;
+  moreBankCheckNotConfirmed: string;
+  moreBankCheckNotConfirmedBecause: string;
+  moreReasonYouGave: string;
+  moreBankLabel: string;
+  moreBankCodeHint: string;
+  moreAccountNameHint: string;
+  moreNeedBankName: string;
+  moreNeedBankCode: string;
+  moreNeedAccountName: string;
+  moreNeedAccountNumber: string;
+  moreNeedReason: string;
+
+  /**
+   * Taking one payment, and everything the agent is shown about it afterwards.
+   */
+  colNeedBaseAmount: string;
+  colNoTin: string;
+  colBasisAmountHint: string;
+  colTaxpayerLabel: string;
+  colRevenueLabel: string;
+  colGovernmentRevenue: string;
+  colServiceCharge: string;
+  colTotalPayable: string;
+  colInvoiceLabel: string;
+  colPaymentStatus: string;
+  colGatewayReference: string;
+  colPrinting: string;
+  colPrinted: string;
+  colPrintFailed: string;
+  colCheckPrinter: string;
+  colPrintBluetooth: string;
+  colReceiptCopied: string;
+  colPreparingInvoice: string;
+  colGiveInvoice: string;
+  colInvoiceHint: string;
+  colInvoiceValidUntil: string;
+  colInvoiceGiveReference: string;
+  colInvoiceNoReference: string;
+  colCheckingPayment: string;
+  colCheckPaymentStatus: string;
+  colDevGateway: string;
+  colDevGatewayHint: string;
+  colSimulateSuccess: string;
+  colSimulateFailure: string;
+  grpConfirmedMembers: string;
+
+  /**
+   * The rest of the agent's screens: the home tiles, the support form, the
+   * receipt check, allocations, groups, signing in, and the app shell.
+   */
+  homeQaRenewVehicle: string;
+  homeQaFindTaxpayer: string;
+  homeQaCheckReceipt: string;
+  homeQaHandOut: string;
+  homeQaGroups: string;
+  homeGoodMorning: string;
+  homeGoodAfternoon: string;
+  homeGoodEvening: string;
+  homeAccountSuspended: string;
+  homeApplicationProcessing: string;
+  homeTransactions: string;
+  homeCommissionWord: string;
+  homeRegisteredWord: string;
+  homePendingTitle: string;
+  homePendingBody: string;
+  supNormal: string;
+  supProblemCameBack: string;
+  supReportItAgain: string;
+  supKeepsHistory: string;
+  supCatPayment: string;
+  supCatReceipt: string;
+  supCatAssessment: string;
+  supCatTin: string;
+  supCatVehicle: string;
+  supCatTechnical: string;
+  supCatComplaint: string;
+  supCatUnauthorised: string;
+  supCatUnauthorisedHint: string;
+  supCatMisconduct: string;
+  supCatMisconductHint: string;
+  supWhatHappenedHint: string;
+  supTransactionHint: string;
+  supSending: string;
+  supSendToPsirs: string;
+  supSendWord: string;
+  supReopenedNotice: string;
+  supAbout: string;
+  supTransactionLabel: string;
+  supReported: string;
+  verifyScanHint: string;
+  verifyOfflineBody: string;
+  verifyCouldNotReach: string;
+  verifyNotAReceiptCode: string;
+  verifyCameraFailed: string;
+  verifyChecking: string;
+  verifyCheckThisCode: string;
+  verifyRevenueItem: string;
+  verifyIssued: string;
+  verifyFingerprint: string;
+  verifyMatchesOriginal: string;
+  verifyNotConfirmed: string;
+  allocScanHint: string;
+  allocOfflineBody: string;
+  allocFailed: string;
+  allocNotACode: string;
+  allocCameraFailed: string;
+  allocRecordCollection: string;
+  allocGive: string;
+  grpListHint: string;
+  grpEmpty: string;
+  grpRegisterHint: string;
+  grpNoAssessmentBody: string;
+  grpMemberHint: string;
+  grpAskLeaderHint: string;
+  grpRegisterGroup: string;
+  grpRecordThisMember: string;
+  grpSendLeaderLink: string;
+  grpFarmers: string;
+  grpMarket: string;
+  grpTransport: string;
+  grpArtisan: string;
+  grpTraders: string;
+  grpFisheries: string;
+  grpLivestock: string;
+  grpOther: string;
+  grpLocalGovernment: string;
+  grpLeader: string;
+  grpMembersConfirmed: string;
+  grpAwaitingLeader: string;
+  authSigningIn: string;
+  authPasswordHint: string;
+  authPasswordPatternHint: string;
+  authBankName: string;
+  authAccountName: string;
+  authAccountNumber: string;
+  authTenDigits: string;
+  authSubmitting: string;
+  authSubmitApplication: string;
+  authPsirsFull: string;
+  authRevenueNeverToAgent: string;
+  stepUpNoSms: string;
+  shellMain: string;
+  shellNothingLost: string;
+  shellRestoring: string;
+  shellAgentTitle: string;
+  shellAgentBrand: string;
+  uiLoading: string;
+
+  /**
+   * The taxpayer register: finding somebody, registering somebody, and the
+   * profile an agent is allowed to see afterwards.
+   */
+  tpFindTaxpayer: string;
+  tpSearchHint: string;
+  tpSearchPlaceholder: string;
+  tpSearchByNamePhoneTin: string;
+  tpNoTinYet: string;
+  tpRegisterNew: string;
+  tpTaxpayerPaying: string;
+  tpUnnamedTaxpayer: string;
+  tpChooseSomeoneElse: string;
+  tpStepTin: string;
+  tpStepDetails: string;
+  tpStepIdentification: string;
+  tpStepAddress: string;
+  tpStepActivity: string;
+  tpStepReview: string;
+  tpStepOf: string;
+  tpSavedOnDevice: string;
+  tpNotYetSent: string;
+  tpSavedOfflineBody: string;
+  tpBackToHome: string;
+  tpTaxpayerRegistered: string;
+  tpGiveTinToTaxpayer: string;
+  tpTinRequested: string;
+  tpTinPending: string;
+  tpCollectRevenue: string;
+  tpViewProfile: string;
+  tpPossibleExisting: string;
+  tpCheckSamePerson: string;
+  tpNoneOfThese: string;
+  tpHasTin: string;
+  tpYes: string;
+  tpNo: string;
+  tpExistingTin: string;
+  tpExistingTinHint: string;
+  tpBasicInfo: string;
+  tpRegisteringAs: string;
+  tpAnIndividual: string;
+  tpABusiness: string;
+  tpBusinessName: string;
+  tpTypeOfBusiness: string;
+  tpFirstName: string;
+  tpMiddleName: string;
+  tpLastName: string;
+  tpDateOfBirth: string;
+  tpPhoneNumber: string;
+  tpEmailAddress: string;
+  tpNeedBusinessName: string;
+  tpIdentificationHint: string;
+  tpLga: string;
+  tpSelectLga: string;
+  tpWardHint: string;
+  tpChooseLgaFirst: string;
+  tpNoWardsListed: string;
+  tpSelectWard: string;
+  tpCommunity: string;
+  tpBusinessOrActivity: string;
+  tpEconomicSector: string;
+  tpSelectSector: string;
+  tpSuggestedObligations: string;
+  tpConfirmWhichTaxes: string;
+  tpOccupation: string;
+  tpBusinessActivity: string;
+  tpReviewConfirm: string;
+  tpType: string;
+  tpBusiness: string;
+  tpIndividual: string;
+  tpName: string;
+  tpPhone: string;
+  tpLgaShort: string;
+  tpWard: string;
+  tpWillBeRequested: string;
+  tpConsent: string;
+  tpDeclaration: string;
+  tpBack: string;
+  tpContinue: string;
+  tpRegistering: string;
+  tpRegisterTaxpayer: string;
+  tpYouAreOffline: string;
+  tpSaveOfflineBody: string;
+  tpSaveOnDevice: string;
+  tpNotYetAssigned: string;
+  tpTransactionsYouFacilitated: string;
+  tpNoTransactions: string;
+  tpWhatYouCanSee: string;
+  tpVehicles: string;
+  tpExpires: string;
+  tpNoRenewal: string;
+  camAlign: string;
+  camCancel: string;
+  camClose: string;
+  camFlip: string;
+  camInitializing: string;
+  camTryAgain: string;
+  camFlashOn: string;
+  camFlashOff: string;
+  camNoAccess: string;
+  camSwitchFailed: string;
+
+  /**
+   * The agent's own application: the clearance steps, the documents PSIRS
+   * asks for, and the three ways an application stops.
+   */
+  appStageSubmitted: string;
+  appStageKyc: string;
+  appStageReview: string;
+  appStageApproved: string;
+  appStageTraining: string;
+  appStageDevice: string;
+  appStageActive: string;
+  appActionNeeded: string;
+  appSuspended: string;
+  appNotApproved: string;
+  appContactSupervisor: string;
+  appTakePhotograph: string;
+  appTakeAgain: string;
+  appSending: string;
+  appDocumentNotSent: string;
+  appIdDocument: string;
+  appIdDocumentHint: string;
+  appSelfie: string;
+  appSelfieHint: string;
+  appJustCaptured: string;
+  appKycHint: string;
+  appSubmitForVerification: string;
+  appVerifying: string;
+  appStillNeeded: string;
+  appStatus: string;
+  appDocumentOnFile: string;
+  appRefereeNoAccount: string;
+  appRefereeShareLink: string;
+  appRefereeConfirmedYour: string;
+  appRefereeSentRequest: string;
+  appRefereeLinkHere: string;
+  appNominateReplacement: string;
+  appSendVerification: string;
+  appTrainingAllComplete: string;
+  appTrainingRemaining: string;
+  appPassMark: string;
+  appNoAssessment: string;
+  appBankHint: string;
+  appBankVerifiedMsg: string;
+  appBankCouldNotVerify: string;
+  appAcceptAgreementText: string;
+  appDeviceLabel: string;
+  appAppVersion: string;
+  appNotRegistered: string;
+  appRegisteredDevice: string;
+  errNetwork: string;
+
+  /**
+   * Becoming an agent, and the six things that must all be true first.
+   *
+   * The device sentence is the one the schema enforces and the screen has to
+   * explain: revenue can only be collected from a handset PSIRS has registered
+   * to this person. An agent who does not understand it reads a refusal as a
+   * fault in the app.
+   */
+  appYourApplication: string;
+  appBeingProcessed: string;
+  appClearedToCollect: string;
+  appAllRequirementsMet: string;
+  appCannotCollectUntil: string;
+  appStillOutstanding: string;
+  appComplete: string;
+  appGoToDashboard: string;
+  appIdentityVerification: string;
+  appIdentificationType: string;
+  appIdentificationNumber: string;
+  appEnterIdInFull: string;
+  appPreviousAttemptRejected: string;
+  appDocumentNotAccepted: string;
+  appDocuments: string;
+  appNotCaptured: string;
+  appReferee: string;
+  appRefereeFullName: string;
+  appRefereePhone: string;
+  appRefereeEmail: string;
+  appHowDoTheyKnowYou: string;
+  appWhoIsThisPerson: string;
+  appRefereeConfirmed: string;
+  appWaitingReferee: string;
+  appVerificationSent: string;
+  appTraining: string;
+  appAgreement: string;
+  appAcceptAgreement: string;
+  appAgreementAccepted: string;
+  appAgreementRecorded: string;
+  appReadCarefully: string;
+  appBankAccount: string;
+  appVerifyBankAccount: string;
+  appBankVerified: string;
+  appCommissionPaidHere: string;
+  appRegisterDevice: string;
+  appOtherDevices: string;
+  appDeviceOnlyRegistered: string;
+  appDeviceAfterApproval: string;
+  appRefereeWhoIs: string;
+  idNin: string;
+  idBvn: string;
+  idPassport: string;
+  idLicence: string;
+  idVoters: string;
+  refCivilServant: string;
+  refCommunityLeader: string;
+  refDistrictHead: string;
+  refReligiousLeader: string;
+  refTraditionalAuthority: string;
+  refProfessional: string;
+  refEmployer: string;
+
+  /**
+   * The screen an agent opens to look at their own money, their handset and
+   * their vehicle work.
+   *
+   * The bank-account strings are the ones with a cost attached. "This is a
+   * commission record, not a bank account" and "the bank has not confirmed
+   * this account" both exist to stop an agent believing government revenue
+   * passes through an account of theirs, which is the belief every
+   * cash-in-pocket story starts from.
+   */
+  moreThisDevice: string;
+  moreSignOut: string;
+  moreSomethingWrong: string;
+  moreGetHelp: string;
+  moreViewApplication: string;
+  moreWhereCommissionPaid: string;
+  moreCommissionRecordNotAccount: string;
+  moreChangeBankAccount: string;
+  moreAskDifferentAccount: string;
+  moreAuthoriseChange: string;
+  moreAuthorisePayout: string;
+  moreChangeWaiting: string;
+  moreNothingChangesYet: string;
+  moreToldEitherWay: string;
+  moreBankNotConfirmed: string;
+  moreWhyChanging: string;
+  moreAccountName: string;
+  moreAccountNumber: string;
+  moreBankCode: string;
+  moreCommissionHistory: string;
+  moreNoCommission: string;
+  moreAvailableForPayout: string;
+  moreRequestPayout: string;
+  moreRequestingPayout: string;
+  moreSomeCommissionOwedBack: string;
+  moreReceiptsFacilitated: string;
+  moreNoReceipts: string;
+  moreSavedRecords: string;
+  moreNothingWaiting: string;
+  moreSavedOnPhone: string;
+  moreVehicleRenewal: string;
+  moreSearchVehicle: string;
+  moreRegistrationNumber: string;
+  moreVehicleType: string;
+  morePrivate: string;
+  moreCommercial: string;
+  moreRenewalService: string;
+  moreSelectRenewalType: string;
+  moreRenewalPeriod: string;
+  moreCalculateProceed: string;
+  moreSaveVehicleOnPhone: string;
+  moreCaptureOffline: string;
+  moreVehicleAuthorityUnreachable: string;
+  moreTryVehicleAuthorityAgain: string;
+  morePrinter: string;
+  moreDisconnect: string;
+  morePushTitle: string;
+  moreContinue: string;
+
+  /**
+   * Registering a group, and becoming an agent.
+   *
+   * "This does not assess anybody" is the one that stops a misunderstanding
+   * costing somebody money: registering a cooperative records that it exists
+   * and charges nobody anything, and an agent who thinks otherwise will tell a
+   * market association it owes tax.
+   */
+  grpTitle: string;
+  grpRegister: string;
+  grpName: string;
+  grpKind: string;
+  grpChooseOne: string;
+  grpLeaderName: string;
+  grpLeaderPhone: string;
+  grpLga: string;
+  grpCommunity: string;
+  grpMemberCount: string;
+  grpRecordMember: string;
+  grpMember: string;
+  grpRecorded: string;
+  grpWaitingOfficer: string;
+  grpAskLeaderConfirm: string;
+  grpSendToLeader: string;
+  grpNoAssessment: string;
+  authSignInTitle: string;
+  authSignIn: string;
+  authPhoneHint: string;
+  authPassword: string;
+  authApply: string;
+  authApplyTitle: string;
+  authBackToSignIn: string;
+  authYourDetails: string;
+  authFullName: string;
+  authPhone: string;
+  authEmail: string;
+  authDateOfBirth: string;
+  authOccupation: string;
+  authWhereYouLive: string;
+  authAddress: string;
+  authSelectLga: string;
+  authNeedDocuments: string;
+  authWhatNext: string;
+  authNextSignIn: string;
+  authNextReferee: string;
+  authNextReview: string;
+  authNextClearance: string;
+  authApplicationReceived: string;
+  authApplicationNumber: string;
 
   /**
    * Collecting revenue, and asking PSIRS for help.
@@ -470,6 +1011,494 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    colChangeChoice: "Change",
+    moreMonths: "{{n}} months",
+    supGetHelpHint: "Report a problem to PSIRS. You will get a reply here, and a message when there is something to read.",
+    authKeepItSafe: ". Keep it safe.",
+    moreSearchVehicleFirst: "Search the vehicle first. Records confirmed by the vehicle authority are marked as such.",
+    moreVehicleSavedBody: "This vehicle is stored on your phone and will be sent to PSIRS automatically when you are back online. The vehicle authority has not been checked yet, and no renewal or payment can be started until it is sent.",
+    moreVehicleCaptureBody: "Record what you can see on the vehicle. It will be sent — and checked against the authority — as soon as you are online. You cannot take a payment for a renewal until then.",
+    moreOwnerName: "Owner’s name",
+    moreOwnerNameHint: "As written on the papers",
+    moreOwnerPhone: "Owner’s phone",
+    moreMotorcycle: "Motorcycle / Okada",
+    moreTricycle: "Tricycle / Keke",
+    moreRegistrationLabel: "Registration",
+    moreOwnerLabel: "Owner",
+    moreVehicleLabel: "Vehicle",
+    moreChassis: "Chassis",
+    moreCurrentExpiry: "Current expiry",
+    moreAuthorityConfirmed: "Authority confirmed",
+    moreEnteredManually: "No — entered manually",
+    moreChooseRenewal: "Choose which renewal is being paid for.",
+    moreFindPayingTaxpayer: "Find the taxpayer paying for this renewal. Every payment must be attributed to somebody.",
+    moreReceiptsIssuedAfter: "Every receipt here was issued by government after the payment was independently confirmed.",
+    morePendingWord: "pending",
+    morePaidWord: "paid",
+    moreTransactionsWord: "transactions",
+    moreOwedBackBody: "was paid on transactions that were later reversed. It is taken off your next payout, so you will receive that much less than the amount above.",
+    moreOwedBackDeducted: "owed back will be deducted.",
+    moreConfirmPayout: "Confirm payout",
+    moreCommissionAvailableWhen: "Commission becomes available once the transaction has been settled to the government account and the hold period has passed. You will be sent a one-time code to confirm the request.",
+    moreDeviceId: "Device ID",
+    morePrinterHint: "Pair a 58mm or 80mm Bluetooth ESC/POS mobile belt printer to issue instant paper receipts to taxpayers in remote field locations.",
+    moreConnectedDevice: "Connected device",
+    morePaperWidth: "Paper width",
+    moreNone: "None",
+    morePaper58: "58mm (standard)",
+    morePaper80: "80mm (wide)",
+    morePrintTestSlip: "Print test slip",
+    morePairPrinter: "Pair Bluetooth printer",
+    moreNoWebBluetooth: "Web Bluetooth is not supported on this browser (use Chrome on Android or desktop).",
+    morePrinterConnected: "Connected to Bluetooth printer.",
+    morePrinterConnectFailed: "Connection failed.",
+    morePrinterTestSent: "Test receipt sent to printer!",
+    morePrinterPrintFailed: "Print failed.",
+    morePushHint: "Receive real-time alerts when your KYC clears, referee responds, or commissions settle.",
+    morePermission: "Permission",
+    morePushEngine: "Push engine",
+    moreSupported: "Supported",
+    moreUnavailable: "Unavailable",
+    morePushDisabled: "Push notifications disabled.",
+    morePushActive: "Push notifications active!",
+    morePushNotGranted: "Permission was not granted.",
+    morePushFailed: "Could not configure push notifications.",
+    moreChangeBankHint: "Change the bank account PSIRS pays your commission into. It takes a one-time code, the bank’s confirmation and an officer’s approval, so your existing account keeps being used until all three are done.",
+    moreSupportHint: "Report a problem to PSIRS — a payment that has not confirmed, a receipt that looks wrong, or anything a taxpayer has complained about.",
+    moreSavedRecordsHint: "Captures made offline. They are sent to PSIRS automatically when you have a connection.",
+    moreBack: "Back",
+    moreCommissionOnlyVerified: "Commission is paid only into an account PSIRS has confirmed with the bank, and only after an officer approves the change. Your existing account keeps being used until then.",
+    moreBankMustConfirm: "PSIRS cannot approve a change until the bank confirms the account belongs to you. If the details are wrong, ask your supervisor to refuse this request so you can send the right ones.",
+    moreToldEitherWayBody: "A message goes to your phone when this is approved or refused. Only one change can be waiting at a time.",
+    morePaidIntoNow: "Paid into now",
+    moreWouldChangeTo: "Would change to",
+    moreNameOnNewAccount: "Name on the new account",
+    moreBankCheck: "Bank check",
+    moreBankCheckConfirmed: "Confirmed",
+    moreBankCheckConfirmedAs: "Confirmed as {{name}}",
+    moreBankCheckWaiting: "Waiting — the bank could not be reached",
+    moreBankCheckNotConfirmed: "Not confirmed",
+    moreBankCheckNotConfirmedBecause: "Not confirmed: {{reason}}",
+    moreReasonYouGave: "Reason you gave",
+    moreBankLabel: "Bank",
+    moreBankCodeHint: "The 3 to 6 digit code the bank uses",
+    moreAccountNameHint: "Exactly as the bank has it",
+    moreNeedBankName: "Choose the bank the new account is with.",
+    moreNeedBankCode: "Enter the bank code. It is the 3 to 6 digit number the bank uses, not your account number.",
+    moreNeedAccountName: "Enter the name the account is held in, exactly as the bank has it.",
+    moreNeedAccountNumber: "A Nigerian account number is 10 digits.",
+    moreNeedReason: "Say why the account is changing, in at least 10 characters.",
+    colNeedBaseAmount: "Enter the amount the assessment is based on, in naira.",
+    colNoTin: "No TIN",
+    colBasisAmountHint: "For example turnover, income or contract value. The charge itself is set by government.",
+    colTaxpayerLabel: "Taxpayer",
+    colRevenueLabel: "Revenue",
+    colGovernmentRevenue: "Government revenue",
+    colServiceCharge: "Approved service charge",
+    colTotalPayable: "Total payable",
+    colInvoiceLabel: "Invoice",
+    colPaymentStatus: "Payment status",
+    colGatewayReference: "Gateway reference",
+    colPrinting: "Transmitting receipt to Bluetooth printer...",
+    colPrinted: "Receipt printed successfully on Bluetooth printer!",
+    colPrintFailed: "Bluetooth printing failed: {{reason}}",
+    colCheckPrinter: "Check printer connection",
+    colPrintBluetooth: "Print (Bluetooth)",
+    colReceiptCopied: "Receipt details copied. You can paste them into a message.",
+    colPreparingInvoice: "Preparing the invoice…",
+    colGiveInvoice: "Give the taxpayer an invoice",
+    colInvoiceHint: "A printable demand notice with the invoice number, what it is for and how the amount was worked out",
+    colInvoiceValidUntil: ", valid until {{date}}",
+    colInvoiceGiveReference: "Give them the payment reference {{reference}} as well — that is what a bank or USSD channel asks for.",
+    colInvoiceNoReference: "Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it.",
+    colCheckingPayment: "Checking with the payment system…",
+    colCheckPaymentStatus: "Check payment status",
+    colDevGateway: "Development gateway",
+    colDevGatewayHint: "This platform is running against a test payment gateway. Use these controls to simulate what a real gateway would report.",
+    colSimulateSuccess: "Simulate success",
+    colSimulateFailure: "Simulate failure",
+    grpConfirmedMembers: "{{n}} confirmed member(s)",
+    homeQaRenewVehicle: "Renew vehicle",
+    homeQaFindTaxpayer: "Find taxpayer",
+    homeQaCheckReceipt: "Check a receipt",
+    homeQaHandOut: "Hand out allocation",
+    homeQaGroups: "Groups",
+    homeGoodMorning: "Good morning",
+    homeGoodAfternoon: "Good afternoon",
+    homeGoodEvening: "Good evening",
+    homeAccountSuspended: "Your agent account is suspended",
+    homeApplicationProcessing: "Your application is still being processed",
+    homeTransactions: "transactions",
+    homeCommissionWord: "commission",
+    homeRegisteredWord: "registered",
+    homePendingTitle: "{{n}} payment(s) awaiting confirmation",
+    homePendingBody: "These are not yet confirmed. Do not ask the taxpayer to pay again — open the transaction to check its status.",
+    supNormal: "Normal",
+    supProblemCameBack: "If the problem has come back,",
+    supReportItAgain: "report it again",
+    supKeepsHistory: "so it keeps its own history.",
+    supCatPayment: "A payment has not gone through",
+    supCatReceipt: "A receipt is wrong or missing",
+    supCatAssessment: "The amount charged looks wrong",
+    supCatTin: "A taxpayer has no TIN yet",
+    supCatVehicle: "A vehicle renewal problem",
+    supCatTechnical: "The app is not working",
+    supCatComplaint: "A taxpayer has a complaint",
+    supCatUnauthorised: "Someone was charged money they should not have been",
+    supCatUnauthorisedHint: "Use this if a taxpayer was asked for money outside an official assessment.",
+    supCatMisconduct: "Report the conduct of an agent",
+    supCatMisconductHint: "This goes to PSIRS oversight, not to the agent concerned.",
+    supWhatHappenedHint: "Include anything PSIRS would need to look it up.",
+    supTransactionHint: "If this is about one payment, the reference lets PSIRS find it without asking you.",
+    supSending: "Sending…",
+    supSendToPsirs: "Send to PSIRS",
+    supSendWord: "Send",
+    supReopenedNotice: "This report has been opened again for PSIRS to look at.",
+    supAbout: "About",
+    supTransactionLabel: "Transaction",
+    supReported: "Reported",
+    verifyScanHint: "Scan the square on the receipt, or type the code printed beneath it. PSIRS confirms whether the receipt was issued — reading the code only tells you what is on the paper.",
+    verifyOfflineBody: "A receipt can only be checked against PSIRS, so this needs a connection. You can still scan the code and check it when you are back online.",
+    verifyCouldNotReach: "PSIRS could not be reached, so this receipt could not be checked.",
+    verifyNotAReceiptCode: "That QR code is not a PSIRS receipt code. Keep the receipt in frame.",
+    verifyCameraFailed: "The camera could not be opened. Type the code printed under the QR square instead.",
+    verifyChecking: "Checking with PSIRS…",
+    verifyCheckThisCode: "Check this code",
+    verifyRevenueItem: "Revenue item",
+    verifyIssued: "Issued",
+    verifyFingerprint: "Document fingerprint",
+    verifyMatchesOriginal: "Matches the original",
+    verifyNotConfirmed: "Could not be confirmed",
+    allocScanHint: "Scan or type the collection code the beneficiary was given. Record it before you hand anything over — a code can only be used once, and this is what stops the same allocation being collected twice.",
+    allocOfflineBody: "PSIRS could not be reached, so this collection has not been recorded. Do not hand anything over until it has been.",
+    allocFailed: "The collection could not be recorded. Try again.",
+    allocNotACode: "That code is not a PSIRS collection code. Keep it in frame.",
+    allocCameraFailed: "The camera could not be opened. Type the code instead.",
+    allocRecordCollection: "Record this collection",
+    allocGive: "Give",
+    grpListHint: "The groups you registered, and any an officer recorded for you to work. Another agent’s cooperatives are not listed here.",
+    grpEmpty: "No groups yet. When you meet a cooperative, a market association or a union, register it here so its members can be brought onto the register together.",
+    grpRegisterHint: "Record the body itself, and who leads it. Members are added after an officer has approved the group.",
+    grpNoAssessmentBody: "Registering a group records that it exists. Nobody is charged anything, and no member is added, until an officer has approved it.",
+    grpMemberHint: "The person has to be registered as a taxpayer first. Search for them by name, phone or TIN.",
+    grpAskLeaderHint: "You are paid commission on what these members pay, so your word that somebody belongs is not enough on its own. The group’s own leader confirms the list.",
+    grpRegisterGroup: "Register group",
+    grpRecordThisMember: "Record this member",
+    grpSendLeaderLink: "Send the leader a confirmation link",
+    grpFarmers: "Farmers’ cooperative",
+    grpMarket: "Market association",
+    grpTransport: "Transport union",
+    grpArtisan: "Artisan guild",
+    grpTraders: "Traders’ association",
+    grpFisheries: "Fisheries group",
+    grpLivestock: "Livestock association",
+    grpOther: "Other",
+    grpLocalGovernment: "Local Government",
+    grpLeader: "Leader",
+    grpMembersConfirmed: "Members confirmed",
+    grpAwaitingLeader: "Awaiting the leader",
+    authSigningIn: "Signing in…",
+    authPasswordHint: "At least 8 characters, including a letter and a number",
+    authPasswordPatternHint: "At least 8 characters, including at least one letter and at least one number.",
+    authBankName: "Bank name",
+    authAccountName: "Account name",
+    authAccountNumber: "Account number",
+    authTenDigits: "10 digits",
+    authSubmitting: "Submitting…",
+    authSubmitApplication: "Submit application",
+    authPsirsFull: "Plateau State Internal Revenue Service",
+    authRevenueNeverToAgent: "Government revenue is never paid into an agent’s account. This account is used only to pay the commission you earn.",
+    stepUpNoSms: "No real SMS is configured, so the code is shown here:",
+    shellMain: "Main",
+    shellNothingLost: "Nothing has been lost — the records are still on this phone and will be sent once this is put right.",
+    shellRestoring: "Restoring your session…",
+    shellAgentTitle: "PSIRS Revenue Agent",
+    shellAgentBrand: "Plateau State Revenue Agent",
+    uiLoading: "Loading",
+    tpFindTaxpayer: "Find a taxpayer",
+    tpSearchHint: "Search by name, business name, phone number, TIN, receipt number or vehicle registration.",
+    tpSearchPlaceholder: "Name, phone or TIN",
+    tpSearchByNamePhoneTin: "Search by name, phone number or TIN",
+    tpNoTinYet: "No TIN yet",
+    tpRegisterNew: "Register a new taxpayer",
+    tpTaxpayerPaying: "Taxpayer paying",
+    tpUnnamedTaxpayer: "Unnamed taxpayer",
+    tpChooseSomeoneElse: "Choose someone else",
+    tpStepTin: "TIN",
+    tpStepDetails: "Details",
+    tpStepIdentification: "Identification",
+    tpStepAddress: "Address",
+    tpStepActivity: "Activity",
+    tpStepReview: "Review",
+    tpStepOf: "Step {{n}} of {{total}}",
+    tpSavedOnDevice: "Saved on this device",
+    tpNotYetSent: "Not yet sent to PSIRS",
+    tpSavedOfflineBody: "This registration is stored on your phone and will be sent automatically when you are back online. No TIN has been issued yet, and no payment can be taken until it is sent.",
+    tpBackToHome: "Back to home",
+    tpTaxpayerRegistered: "Taxpayer registered",
+    tpGiveTinToTaxpayer: "Give this number to the taxpayer. They will need it for every government payment.",
+    tpTinRequested: "TIN request submitted",
+    tpTinPending: "The TIN service has not returned a number yet. It will appear on the taxpayer’s profile once assigned.",
+    tpCollectRevenue: "Collect revenue",
+    tpViewProfile: "View profile",
+    tpPossibleExisting: "Possible existing taxpayer",
+    tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
+    tpNoneOfThese: "None of these — register as a new taxpayer",
+    tpHasTin: "Does the taxpayer already have a TIN?",
+    tpYes: "Yes",
+    tpNo: "No",
+    tpExistingTin: "Existing TIN",
+    tpExistingTinHint: "We will confirm it with the PSIRS TIN service",
+    tpBasicInfo: "Basic information",
+    tpRegisteringAs: "Registering as",
+    tpAnIndividual: "An individual",
+    tpABusiness: "A business",
+    tpBusinessName: "Business name",
+    tpTypeOfBusiness: "Type of business",
+    tpFirstName: "First name",
+    tpMiddleName: "Middle name",
+    tpLastName: "Last name",
+    tpDateOfBirth: "Date of birth",
+    tpPhoneNumber: "Phone number",
+    tpEmailAddress: "Email address",
+    tpNeedBusinessName: "Enter the name of the business.",
+    tpIdentificationHint: "Optional, but it helps prevent duplicate records. The number is stored securely and never shown in full.",
+    tpLga: "Local Government Area",
+    tpSelectLga: "Select LGA",
+    tpWardHint: "Where revenue is reported from. Without it this collection cannot be counted below LGA level.",
+    tpChooseLgaFirst: "Choose an LGA first",
+    tpNoWardsListed: "No wards listed",
+    tpSelectWard: "Select ward",
+    tpCommunity: "Community",
+    tpBusinessOrActivity: "Business or activity",
+    tpEconomicSector: "Economic sector",
+    tpSelectSector: "— Select sector —",
+    tpSuggestedObligations: "Suggested tax obligations for {{sector}}",
+    tpConfirmWhichTaxes: "Confirm which taxes apply to this taxpayer. You can add more later.",
+    tpOccupation: "Occupation (optional)",
+    tpBusinessActivity: "Business activity (optional)",
+    tpReviewConfirm: "Review and confirm",
+    tpType: "Type",
+    tpBusiness: "Business",
+    tpIndividual: "Individual",
+    tpName: "Name",
+    tpPhone: "Phone",
+    tpLgaShort: "LGA",
+    tpWard: "Ward",
+    tpWillBeRequested: "Will be requested",
+    tpConsent: "The taxpayer consents to their information being used by PSIRS for revenue administration.",
+    tpDeclaration: "The taxpayer declares that the information given is true and correct.",
+    tpBack: "Back",
+    tpContinue: "Continue",
+    tpRegistering: "Registering…",
+    tpRegisterTaxpayer: "Register taxpayer",
+    tpYouAreOffline: "You are offline",
+    tpSaveOfflineBody: "Save this registration on the device. It will be sent to PSIRS automatically when you are back online, and a TIN will be requested then.",
+    tpSaveOnDevice: "Save on this device",
+    tpNotYetAssigned: "Not yet assigned",
+    tpTransactionsYouFacilitated: "Transactions you facilitated",
+    tpNoTransactions: "You have not processed any transaction for this taxpayer.",
+    tpWhatYouCanSee: "What you can see here",
+    tpVehicles: "Vehicles",
+    tpExpires: "Expires {{date}}",
+    tpNoRenewal: "No renewal on record",
+    camAlign: "Align QR code or barcode inside frame",
+    camCancel: "Cancel",
+    camClose: "Close scanner",
+    camFlip: "Flip camera",
+    camInitializing: "Initializing camera...",
+    camTryAgain: "Try again",
+    camFlashOn: "Flash: ON",
+    camFlashOff: "Flash: OFF",
+    camNoAccess: "Could not access the device camera.",
+    camSwitchFailed: "The camera could not be switched.",
+    appStageSubmitted: "Application submitted",
+    appStageKyc: "Identity verified",
+    appStageReview: "Ready for government review",
+    appStageApproved: "Approved by PSIRS",
+    appStageTraining: "Training completed",
+    appStageDevice: "Device registered",
+    appStageActive: "Active agent",
+    appActionNeeded: "Action needed",
+    appSuspended: "Your account is suspended",
+    appNotApproved: "Application not approved",
+    appContactSupervisor: "Contact your supervisor or PSIRS support for details of what to do next.",
+    appTakePhotograph: "Take photograph",
+    appTakeAgain: "Take again",
+    appSending: "Sending...",
+    appDocumentNotSent: "The document could not be sent.",
+    appIdDocument: "Your identification document",
+    appIdDocumentHint: "Photograph the card itself, flat and in focus, with all four corners visible.",
+    appSelfie: "A photograph of you",
+    appSelfieHint: "Taken now, holding the same document, so PSIRS can see that they match.",
+    appJustCaptured: "just captured",
+    appKycHint: "PSIRS checks your identity against the national record. Your identity number is stored securely and is never shown in full.",
+    appSubmitForVerification: "Submit for verification",
+    appVerifying: "Verifying…",
+    appStillNeeded: "Still needed before this can be submitted:",
+    appStatus: "Status",
+    appDocumentOnFile: "Document on file",
+    appRefereeNoAccount: "They do not need an account — they receive a secure link.",
+    appRefereeShareLink: "If your referee did not receive the message, share this link with them directly:",
+    appRefereeConfirmedYour: "has confirmed your application.",
+    appRefereeSentRequest: "has been sent a verification request. You can nominate a replacement if they cannot respond.",
+    appRefereeLinkHere: "They will receive the verification link here",
+    appNominateReplacement: "Nominate a replacement referee",
+    appSendVerification: "Send verification request",
+    appTrainingAllComplete: "All mandatory training is complete.",
+    appTrainingRemaining: "{{done}} of {{total}} modules still to complete.",
+    appPassMark: "pass mark",
+    appNoAssessment: "no assessment",
+    appBankHint: "Verified before any commission can be paid. Government revenue never enters this account.",
+    appBankVerifiedMsg: "Your bank account has been verified.",
+    appBankCouldNotVerify: "The account could not be verified.",
+    appAcceptAgreementText: "I have read and accept the {{title}} (version {{version}}).",
+    appDeviceLabel: "Device",
+    appAppVersion: "App version",
+    appNotRegistered: "Not registered",
+    appRegisteredDevice: "Registered device",
+    errNetwork: "Could not reach PSIRS. Try again.",
+    appYourApplication: "Your application",
+    appBeingProcessed: "Your application is being processed",
+    appClearedToCollect: "You are cleared to collect revenue",
+    appAllRequirementsMet: "All clearance requirements have been met.",
+    appCannotCollectUntil: "You cannot collect revenue until every requirement below is complete.",
+    appStillOutstanding: "Still outstanding",
+    appComplete: "Complete",
+    appGoToDashboard: "Go to my dashboard",
+    appIdentityVerification: "Identity verification",
+    appIdentificationType: "Identification type",
+    appIdentificationNumber: "Identification number",
+    appEnterIdInFull: "Enter your identification number in full before submitting.",
+    appPreviousAttemptRejected: "Previous attempt was not accepted",
+    appDocumentNotAccepted: "This document was not accepted",
+    appDocuments: "Documents",
+    appNotCaptured: "Not captured",
+    appReferee: "Referee",
+    appRefereeFullName: "Referee full name",
+    appRefereePhone: "Referee phone number",
+    appRefereeEmail: "Referee email",
+    appHowDoTheyKnowYou: "How do they know you?",
+    appWhoIsThisPerson: "Who is this person?",
+    appRefereeConfirmed: "Referee confirmed",
+    appWaitingReferee: "Waiting for your referee",
+    appVerificationSent: "Verification request sent",
+    appTraining: "Training",
+    appAgreement: "Agent agreement",
+    appAcceptAgreement: "Accept agreement",
+    appAgreementAccepted: "Agreement accepted",
+    appAgreementRecorded: "Your acceptance has been recorded.",
+    appReadCarefully: "Read this carefully. It sets out what you may and may not do.",
+    appBankAccount: "Commission bank account",
+    appVerifyBankAccount: "Verify my bank account",
+    appBankVerified: "Bank account verified",
+    appCommissionPaidHere: "Your commission will be paid to this account.",
+    appRegisterDevice: "Register this device",
+    appOtherDevices: "Other devices",
+    appDeviceOnlyRegistered: "Revenue can only be collected from a device that PSIRS has registered to you.",
+    appDeviceAfterApproval: "You can register a device once PSIRS has approved your application.",
+    appRefereeWhoIs: "A referee is someone who knows you and can confirm your identity to PSIRS.",
+    idNin: "National Identification Number",
+    idBvn: "Bank Verification Number",
+    idPassport: "International passport",
+    idLicence: "Driver’s licence",
+    idVoters: "Voter’s card",
+    refCivilServant: "Civil or public servant",
+    refCommunityLeader: "Community leader",
+    refDistrictHead: "District head of my community",
+    refReligiousLeader: "Religious leader",
+    refTraditionalAuthority: "Traditional authority",
+    refProfessional: "Recognised professional",
+    refEmployer: "Employer",
+    moreThisDevice: "This device",
+    moreSignOut: "Sign out",
+    moreSomethingWrong: "Something wrong?",
+    moreGetHelp: "Get help",
+    moreViewApplication: "View my application and clearance",
+    moreWhereCommissionPaid: "Where your commission is paid",
+    moreCommissionRecordNotAccount: "This is a commission record, not a bank account",
+    moreChangeBankAccount: "Change my bank account",
+    moreAskDifferentAccount: "Ask for a different account",
+    moreAuthoriseChange: "Authorise this change",
+    moreAuthorisePayout: "Authorise this payout",
+    moreChangeWaiting: "A change is waiting for PSIRS",
+    moreNothingChangesYet: "Nothing changes until an officer approves it.",
+    moreToldEitherWay: "You will be told either way",
+    moreBankNotConfirmed: "The bank has not confirmed this account",
+    moreWhyChanging: "Why it is changing",
+    moreAccountName: "Name on the account",
+    moreAccountNumber: "Account number",
+    moreBankCode: "Bank code",
+    moreCommissionHistory: "Commission history",
+    moreNoCommission: "No commission recorded yet.",
+    moreAvailableForPayout: "Available for payout",
+    moreRequestPayout: "Request payout",
+    moreRequestingPayout: "You are requesting a payout of",
+    moreSomeCommissionOwedBack: "Some commission is owed back",
+    moreReceiptsFacilitated: "Receipts you facilitated",
+    moreNoReceipts: "No receipts yet.",
+    moreSavedRecords: "Saved records on this device",
+    moreNothingWaiting: "Nothing is waiting to be sent.",
+    moreSavedOnPhone: "Saved on this phone",
+    moreVehicleRenewal: "Vehicle particulars renewal",
+    moreSearchVehicle: "Search vehicle",
+    moreRegistrationNumber: "Registration number",
+    moreVehicleType: "Vehicle type",
+    morePrivate: "Private",
+    moreCommercial: "Commercial",
+    moreRenewalService: "Renewal service",
+    moreSelectRenewalType: "Select renewal type",
+    moreRenewalPeriod: "Renewal period",
+    moreCalculateProceed: "Calculate and proceed to payment",
+    moreSaveVehicleOnPhone: "Save vehicle on this phone",
+    moreCaptureOffline: "Capture without a connection",
+    moreVehicleAuthorityUnreachable: "The vehicle authority cannot be reached",
+    moreTryVehicleAuthorityAgain: "Try the vehicle authority again",
+    morePrinter: "Field Thermal Printer",
+    moreDisconnect: "Disconnect",
+    morePushTitle: "Instant Push Notifications",
+    moreContinue: "Continue",
+    grpTitle: "Groups and cooperatives",
+    grpRegister: "Register a group",
+    grpName: "Group name",
+    grpKind: "What kind of group",
+    grpChooseOne: "Choose one",
+    grpLeaderName: "Leader’s name",
+    grpLeaderPhone: "Leader’s phone number",
+    grpLga: "Local Government Area",
+    grpCommunity: "Community",
+    grpMemberCount: "Roughly how many members",
+    grpRecordMember: "Record a member",
+    grpMember: "Member",
+    grpRecorded: "Recorded",
+    grpWaitingOfficer: "Waiting for an officer",
+    grpAskLeaderConfirm: "Ask the leader to confirm",
+    grpSendToLeader: "Send this to the leader",
+    grpNoAssessment: "This does not assess anybody",
+    authSignInTitle: "Sign in to continue",
+    authSignIn: "Sign in",
+    authPhoneHint: "Use the phone number you registered with PSIRS.",
+    authPassword: "Password",
+    authApply: "Apply to become an agent",
+    authApplyTitle: "Apply to become a revenue agent",
+    authBackToSignIn: "Back to sign in",
+    authYourDetails: "Your details",
+    authFullName: "Full name",
+    authPhone: "Phone number",
+    authEmail: "Email address",
+    authDateOfBirth: "Date of birth",
+    authOccupation: "Occupation",
+    authWhereYouLive: "Where you live",
+    authAddress: "Residential address",
+    authSelectLga: "Select your LGA",
+    authNeedDocuments: "You will need identity documents, bank details and a referee.",
+    authWhatNext: "What happens next",
+    authNextSignIn: "Sign in and complete identity verification.",
+    authNextReferee: "Nominate a referee who can confirm who you are.",
+    authNextReview: "PSIRS reviews your application.",
+    authNextClearance: "Complete training, bank verification and device registration.",
+    authApplicationReceived: "Application received",
+    authApplicationNumber: "Your application number is",
     colWhoIsPaying: "Who is paying?",
     colSearchTaxpayer: "Search taxpayer",
     colNamePhoneTin: "Name, phone or TIN",
@@ -754,6 +1783,494 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    colChangeChoice: "Canza",
+    moreMonths: "Watanni {{n}}",
+    supGetHelpHint: "Ka kai rahoton matsala ga PSIRS. Za ka samu amsa a nan, da sako idan akwai abin karantawa.",
+    authKeepItSafe: ". Ka adana ta lafiya.",
+    moreSearchVehicleFirst: "Ka fara neman motar. An yiwa rikodin da hukumar motoci ta tabbatar alama.",
+    moreVehicleSavedBody: "An adana wannan motar a wayarka kuma za a tura ta zuwa PSIRS ta atomatik idan ka dawo kan layi. Ba a duba hukumar motoci ba tukuna, kuma ba za a iya fara sabuntawa ko biyan kudi ba sai an tura ta.",
+    moreVehicleCaptureBody: "Ka rubuta abin da ka gani a kan motar. Za a tura shi — a kuma duba shi da hukumar — da zarar ka dawo kan layi. Ba za ka iya karbar kudin sabuntawa ba sai lokacin.",
+    moreOwnerName: "Sunan mai motar",
+    moreOwnerNameHint: "Kamar yadda aka rubuta a takardun",
+    moreOwnerPhone: "Wayar mai motar",
+    moreMotorcycle: "Babur / Acaba",
+    moreTricycle: "Keke napep",
+    moreRegistrationLabel: "Lambar rajista",
+    moreOwnerLabel: "Mai motar",
+    moreVehicleLabel: "Mota",
+    moreChassis: "Lambar jiki",
+    moreCurrentExpiry: "Karewar yanzu",
+    moreAuthorityConfirmed: "Hukuma ta tabbatar",
+    moreEnteredManually: "A’a — an shigar da hannu",
+    moreChooseRenewal: "Ka zabi wace sabuntawa ake biya.",
+    moreFindPayingTaxpayer: "Ka nemo mai biyan haraji da ke biyan wannan sabuntawar. Dole a danganta kowane biyan kudi ga wani.",
+    moreReceiptsIssuedAfter: "Gwamnati ce ta bayar da kowanne rasit a nan bayan an tabbatar da biyan kudin da kansa.",
+    morePendingWord: "ana jira",
+    morePaidWord: "an biya",
+    moreTransactionsWord: "ma’amaloli",
+    moreOwedBackBody: "an biya shi a kan ma’amalolin da aka juyar da su daga baya. Ana cire shi daga biyan ka na gaba, don haka za ka karbi kasa da adadin da ke sama.",
+    moreOwedBackDeducted: "da ake bin ka za a cire shi.",
+    moreConfirmPayout: "Tabbatar da biyan kwamishan",
+    moreCommissionAvailableWhen: "Kwamishan yana samuwa ne bayan an tura ma’amalar zuwa asusun gwamnati kuma lokacin rikewa ya wuce. Za a tura maka lamba ta sau daya domin tabbatar da bukatar.",
+    moreDeviceId: "Lambar na’ura",
+    morePrinterHint: "Ka hada na’urar buga takarda ta Bluetooth ta 58mm ko 80mm domin bayar da rasit na takarda nan take ga masu biyan haraji a wurare masu nisa.",
+    moreConnectedDevice: "Na’urar da aka hada",
+    morePaperWidth: "Fadin takarda",
+    moreNone: "Babu",
+    morePaper58: "58mm (na kowa)",
+    morePaper80: "80mm (mai fadi)",
+    morePrintTestSlip: "Buga takardar gwaji",
+    morePairPrinter: "Hada na’urar buga takarda ta Bluetooth",
+    moreNoWebBluetooth: "Wannan burauzar ba ta goyon bayan Web Bluetooth ba (ka yi amfani da Chrome a Android ko kwamfuta).",
+    morePrinterConnected: "An hada da na’urar buga takarda ta Bluetooth.",
+    morePrinterConnectFailed: "Hadin ya gagara.",
+    morePrinterTestSent: "An tura rasit na gwaji zuwa na’urar buga takarda!",
+    morePrinterPrintFailed: "Buga takarda ya gagara.",
+    morePushHint: "Ka karbi sanarwa nan take idan shaidarka ta wuce, mai shaida ya amsa, ko an sasanta kwamishan.",
+    morePermission: "Izini",
+    morePushEngine: "Na’urar tura sanarwa",
+    moreSupported: "Ana goyon baya",
+    moreUnavailable: "Babu",
+    morePushDisabled: "An kashe sanarwar turawa.",
+    morePushActive: "Sanarwar turawa tana aiki!",
+    morePushNotGranted: "Ba a bayar da izini ba.",
+    morePushFailed: "Ba a iya saita sanarwar turawa ba.",
+    moreChangeBankHint: "Canza asusun bankin da PSIRS ke biyan kwamishan dinka. Yana bukatar lamba ta sau daya, tabbatarwa daga banki da amincewar jami’i, don haka za a ci gaba da amfani da asusunka na yanzu sai an cika ukun.",
+    moreSupportHint: "Ka kai rahoton matsala ga PSIRS — biyan kudi da ba a tabbatar ba, rasit da ba ya kama da daidai, ko duk abin da mai biyan haraji ya yi korafi a kai.",
+    moreSavedRecordsHint: "Abubuwan da aka rubuta ba tare da layi ba. Ana tura su zuwa PSIRS ta atomatik idan ka samu hanyar sadarwa.",
+    moreBack: "Koma baya",
+    moreCommissionOnlyVerified: "Ana biyan kwamishan ne kawai cikin asusun da PSIRS ta tabbatar da banki, kuma bayan jami’i ya amince da canjin. Za a ci gaba da amfani da asusunka na yanzu har lokacin.",
+    moreBankMustConfirm: "PSIRS ba za ta iya amincewa da canji ba sai banki ya tabbatar cewa asusun naka ne. Idan bayanan ba daidai ba ne, ka nemi shugabanka ya ki wannan bukatar domin ka tura wadanda suka dace.",
+    moreToldEitherWayBody: "Sako zai zo wayarka idan an amince ko an ki wannan. Canji daya ne kawai zai iya jira a lokaci guda.",
+    morePaidIntoNow: "Ana biya a nan yanzu",
+    moreWouldChangeTo: "Zai canza zuwa",
+    moreNameOnNewAccount: "Sunan da ke sabon asusun",
+    moreBankCheck: "Dubawar banki",
+    moreBankCheckConfirmed: "An tabbatar",
+    moreBankCheckConfirmedAs: "An tabbatar a matsayin {{name}}",
+    moreBankCheckWaiting: "Ana jira — ba a iya samun banki ba",
+    moreBankCheckNotConfirmed: "Ba a tabbatar ba",
+    moreBankCheckNotConfirmedBecause: "Ba a tabbatar ba: {{reason}}",
+    moreReasonYouGave: "Dalilin da ka bayar",
+    moreBankLabel: "Banki",
+    moreBankCodeHint: "Lambar lambobi 3 zuwa 6 da banki ke amfani da ita",
+    moreAccountNameHint: "Daidai yadda banki yake da shi",
+    moreNeedBankName: "Ka zabi bankin da sabon asusun yake.",
+    moreNeedBankCode: "Ka shigar da lambar banki. Lamba ce ta lambobi 3 zuwa 6 da banki ke amfani da ita, ba lambar asusunka ba.",
+    moreNeedAccountName: "Ka shigar da sunan da asusun yake a kansa, daidai yadda banki yake da shi.",
+    moreNeedAccountNumber: "Lambar asusu ta Najeriya lambobi 10 ce.",
+    moreNeedReason: "Ka fadi dalilin canza asusun, da akalla haruffa 10.",
+    colNeedBaseAmount: "Ka shigar da kudin da aka gina kimar a kansa, da naira.",
+    colNoTin: "Babu TIN",
+    colBasisAmountHint: "Misali kudin shiga, riba ko darajar kwangila. Gwamnati ce ke saita kudin da kansa.",
+    colTaxpayerLabel: "Mai biyan haraji",
+    colRevenueLabel: "Haraji",
+    colGovernmentRevenue: "Harajin gwamnati",
+    colServiceCharge: "Kudin hidima da aka amince da shi",
+    colTotalPayable: "Jimlar da za a biya",
+    colInvoiceLabel: "Takardar biya",
+    colPaymentStatus: "Matsayin biyan kudi",
+    colGatewayReference: "Lambar tashar biya",
+    colPrinting: "Ana tura rasit zuwa na’urar buga takarda ta Bluetooth...",
+    colPrinted: "An buga rasit cikin nasara a na’urar Bluetooth!",
+    colPrintFailed: "Buga takarda ta Bluetooth ya gagara: {{reason}}",
+    colCheckPrinter: "Ka duba hadin na’urar buga takarda",
+    colPrintBluetooth: "Buga (Bluetooth)",
+    colReceiptCopied: "An kwafi bayanan rasit. Za ka iya liko su cikin sako.",
+    colPreparingInvoice: "Ana shirya takardar biya…",
+    colGiveInvoice: "Ba mai biyan haraji takardar biya",
+    colInvoiceHint: "Sanarwar biya da za a iya bugawa, dauke da lambar takardar biya, abin da ake biya da yadda aka lissafa kudin",
+    colInvoiceValidUntil: ", yana aiki har {{date}}",
+    colInvoiceGiveReference: "Ka ba su lambar biyan kudi {{reference}} shi ma — wannan ne abin da banki ko tashar USSD ke nema.",
+    colInvoiceNoReference: "Ka fara biyan kudin idan suna son biya a banki: lambar da banki ke nema ana bayar da ita a lokacin, kuma takardar biya ba ta dauke da ita ba.",
+    colCheckingPayment: "Ana dubawa tare da tsarin biyan kudi…",
+    colCheckPaymentStatus: "Duba matsayin biyan kudi",
+    colDevGateway: "Tashar gwaji",
+    colDevGatewayHint: "Wannan dandalin yana aiki da tashar biyan kudi ta gwaji. Ka yi amfani da wadannan don kwaikwayon abin da tashar gaske za ta bayar.",
+    colSimulateSuccess: "Kwaikwayon nasara",
+    colSimulateFailure: "Kwaikwayon gazawa",
+    grpConfirmedMembers: "Mambobin da aka tabbatar: {{n}}",
+    homeQaRenewVehicle: "Sabunta mota",
+    homeQaFindTaxpayer: "Nemo mai biyan haraji",
+    homeQaCheckReceipt: "Duba rasit",
+    homeQaHandOut: "Bayar da rabo",
+    homeQaGroups: "Kungiyoyi",
+    homeGoodMorning: "Barka da safiya",
+    homeGoodAfternoon: "Barka da rana",
+    homeGoodEvening: "Barka da yamma",
+    homeAccountSuspended: "An dakatar da asusun wakilcinka",
+    homeApplicationProcessing: "Ana ci gaba da sarrafa bukatarka",
+    homeTransactions: "ma’amaloli",
+    homeCommissionWord: "kwamishan",
+    homeRegisteredWord: "an yi rajista",
+    homePendingTitle: "Biyan kudi {{n}} na jiran tabbatarwa",
+    homePendingBody: "Ba a tabbatar da wadannan ba tukuna. Kada ka sake ce wa mai biyan haraji ya biya — ka bude ma’amalar don duba matsayinta.",
+    supNormal: "Na yau da kullum",
+    supProblemCameBack: "Idan matsalar ta dawo,",
+    supReportItAgain: "ka sake bayar da rahoto",
+    supKeepsHistory: "domin ya ci gaba da tarihinsa.",
+    supCatPayment: "Biyan kudi bai wuce ba",
+    supCatReceipt: "Rasit ba daidai ba ne ko ya bata",
+    supCatAssessment: "Kudin da aka caje ba daidai ba ne",
+    supCatTin: "Mai biyan haraji babu TIN tukuna",
+    supCatVehicle: "Matsalar sabunta mota",
+    supCatTechnical: "Manhajar ba ta aiki",
+    supCatComplaint: "Mai biyan haraji yana da korafi",
+    supCatUnauthorised: "An caji wani kudi da bai kamata ba",
+    supCatUnauthorisedHint: "Ka yi amfani da wannan idan an nemi mai biyan haraji kudi ba tare da kima ta hukuma ba.",
+    supCatMisconduct: "Kai rahoton halin wani wakili",
+    supCatMisconductHint: "Wannan zai je sashen sa ido na PSIRS, ba ga wakilin da abin ya shafa ba.",
+    supWhatHappenedHint: "Ka hada duk abin da PSIRS za ta bukata don nemo shi.",
+    supTransactionHint: "Idan wannan game da biyan kudi daya ne, lambar tana taimaka wa PSIRS ta same shi ba tare da tambayar ka ba.",
+    supSending: "Ana turawa…",
+    supSendToPsirs: "Tura zuwa PSIRS",
+    supSendWord: "Tura",
+    supReopenedNotice: "An sake bude wannan rahoton domin PSIRS ta duba.",
+    supAbout: "Game da",
+    supTransactionLabel: "Ma’amala",
+    supReported: "An bayar da rahoto",
+    verifyScanHint: "Ka duba murabba’in da ke kan rasit, ko ka rubuta lambar da ke kasansa. PSIRS na tabbatar ko an bayar da rasit — karanta lambar kawai yana gaya maka abin da ke kan takardar.",
+    verifyOfflineBody: "Ba za a iya duba rasit ba sai ta PSIRS, don haka wannan yana bukatar hanyar sadarwa. Za ka iya duba lambar sannan ka tantance ta idan ka dawo kan layi.",
+    verifyCouldNotReach: "Ba a iya samun PSIRS ba, don haka ba a iya duba wannan rasit ba.",
+    verifyNotAReceiptCode: "Wannan QR code ba lambar rasit ta PSIRS ba ce. Ka rike rasit a cikin firam.",
+    verifyCameraFailed: "Ba a iya bude kyamara ba. Maimakon haka ka rubuta lambar da aka buga karkashin murabba’in QR.",
+    verifyChecking: "Ana dubawa tare da PSIRS…",
+    verifyCheckThisCode: "Duba wannan lambar",
+    verifyRevenueItem: "Nau’in haraji",
+    verifyIssued: "An bayar",
+    verifyFingerprint: "Sa hannun takardar",
+    verifyMatchesOriginal: "Ya yi daidai da na asali",
+    verifyNotConfirmed: "Ba a iya tabbatarwa ba",
+    allocScanHint: "Ka duba ko ka rubuta lambar karban da aka ba mai amfana. Ka rubuta ta kafin ka mika komai — ana amfani da lamba sau daya kawai, wannan ne ke hana a karbi rabo iri daya sau biyu.",
+    allocOfflineBody: "Ba a iya samun PSIRS ba, don haka ba a rubuta wannan karban ba. Kada ka mika komai sai an rubuta shi.",
+    allocFailed: "Ba a iya rubuta karban ba. Ka sake gwadawa.",
+    allocNotACode: "Wannan lambar ba lambar karba ta PSIRS ba ce. Ka rike ta a cikin firam.",
+    allocCameraFailed: "Ba a iya bude kyamara ba. Maimakon haka ka rubuta lambar.",
+    allocRecordCollection: "Rubuta wannan karban",
+    allocGive: "Ka ba",
+    grpListHint: "Kungiyoyin da ka yi wa rajista, da duk wanda jami’i ya rubuta domin ka yi aiki da su. Ba a jera kungiyoyin wani wakili a nan ba.",
+    grpEmpty: "Babu kungiyoyi tukuna. Idan ka hadu da kungiyar hadin kai, kungiyar kasuwa ko kungiyar sana’a, ka yi mata rajista a nan domin a shigar da mambobinta tare.",
+    grpRegisterHint: "Ka rubuta kungiyar da kanta, da wanda ke shugabanta. Ana kara mambobi bayan jami’i ya amince da kungiyar.",
+    grpNoAssessmentBody: "Yin rajistar kungiya yana nuna cewa tana nan. Ba a caji kowa komai ba, kuma ba a kara wani mamba ba, sai jami’i ya amince da ita.",
+    grpMemberHint: "Dole ne a fara yi wa mutumin rajista a matsayin mai biyan haraji. Ka neme shi da suna, waya ko TIN.",
+    grpAskLeaderHint: "Ana biyan ka kwamishan a kan abin da wadannan mambobin suka biya, don haka maganarka kadai cewa wani na cikinsu ba ta isa ba. Shugaban kungiyar da kansa ne ke tabbatar da jerin.",
+    grpRegisterGroup: "Yi rajistar kungiya",
+    grpRecordThisMember: "Rubuta wannan mamba",
+    grpSendLeaderLink: "Tura wa shugaba hanyar tabbatarwa",
+    grpFarmers: "Kungiyar hadin kan manoma",
+    grpMarket: "Kungiyar kasuwa",
+    grpTransport: "Kungiyar masu sufuri",
+    grpArtisan: "Kungiyar masu sana’a",
+    grpTraders: "Kungiyar ’yan kasuwa",
+    grpFisheries: "Kungiyar masunta",
+    grpLivestock: "Kungiyar masu dabbobi",
+    grpOther: "Wani",
+    grpLocalGovernment: "Karamar Hukuma",
+    grpLeader: "Shugaba",
+    grpMembersConfirmed: "Mambobin da aka tabbatar",
+    grpAwaitingLeader: "Ana jiran shugaba",
+    authSigningIn: "Ana shiga…",
+    authPasswordHint: "Akalla haruffa 8, tare da harafi da lamba",
+    authPasswordPatternHint: "Akalla haruffa 8, tare da akalla harafi daya da akalla lamba daya.",
+    authBankName: "Sunan banki",
+    authAccountName: "Sunan asusu",
+    authAccountNumber: "Lambar asusu",
+    authTenDigits: "Lambobi 10",
+    authSubmitting: "Ana turawa…",
+    authSubmitApplication: "Tura bukata",
+    authPsirsFull: "Hukumar Karbar Haraji ta Cikin Gida ta Jihar Filato",
+    authRevenueNeverToAgent: "Ba a taba biyan kudin gwamnati cikin asusun wakili ba. Ana amfani da wannan asusun ne kawai domin biyan kwamishan da ka samu.",
+    stepUpNoSms: "Ba a saita SMS na gaske ba, don haka an nuna lambar a nan:",
+    shellMain: "Babban",
+    shellNothingLost: "Ba a rasa komai ba — rikodin na nan a wayar kuma za a tura su idan an gyara wannan.",
+    shellRestoring: "Ana dawo da zamanka…",
+    shellAgentTitle: "Wakilin Haraji na PSIRS",
+    shellAgentBrand: "Wakilin Haraji na Jihar Filato",
+    uiLoading: "Ana lodi",
+    tpFindTaxpayer: "Nemo mai biyan haraji",
+    tpSearchHint: "Ka bincika da suna, sunan kasuwanci, lambar waya, TIN, lambar rasit ko lambar mota.",
+    tpSearchPlaceholder: "Suna, waya ko TIN",
+    tpSearchByNamePhoneTin: "Ka bincika da suna, lambar waya ko TIN",
+    tpNoTinYet: "Babu TIN tukuna",
+    tpRegisterNew: "Yi rajistar sabon mai biyan haraji",
+    tpTaxpayerPaying: "Mai biyan haraji",
+    tpUnnamedTaxpayer: "Mai biyan haraji marar suna",
+    tpChooseSomeoneElse: "Zabi wani",
+    tpStepTin: "Lambar TIN",
+    tpStepDetails: "Bayanai",
+    tpStepIdentification: "Shaida",
+    tpStepAddress: "Adireshi",
+    tpStepActivity: "Sana’a",
+    tpStepReview: "Duba",
+    tpStepOf: "Mataki {{n}} na {{total}}",
+    tpSavedOnDevice: "An adana a wannan na’ura",
+    tpNotYetSent: "Ba a tura zuwa PSIRS ba tukuna",
+    tpSavedOfflineBody: "An adana wannan rajistar a wayarka kuma za a tura ta ta atomatik idan ka dawo kan layi. Ba a bayar da TIN ba tukuna, kuma ba za a iya karbar kudi ba sai an tura ta.",
+    tpBackToHome: "Koma shafin farko",
+    tpTaxpayerRegistered: "An yi wa mai biyan haraji rajista",
+    tpGiveTinToTaxpayer: "Ka ba mai biyan haraji wannan lambar. Za su bukace ta a duk biyan kudi na gwamnati.",
+    tpTinRequested: "An tura bukatar TIN",
+    tpTinPending: "Sashen TIN bai dawo da lamba ba tukuna. Za ta bayyana a bayanan mai biyan haraji da zarar an ba shi.",
+    tpCollectRevenue: "Karbi haraji",
+    tpViewProfile: "Duba bayanai",
+    tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
+    tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",
+    tpNoneOfThese: "Babu daya daga cikinsu — yi rajistar sabon mai biyan haraji",
+    tpHasTin: "Mai biyan haraji yana da TIN kuwa?",
+    tpYes: "Eh",
+    tpNo: "A’a",
+    tpExistingTin: "TIN da yake da shi",
+    tpExistingTinHint: "Za mu tabbatar da shi ta sashen TIN na PSIRS",
+    tpBasicInfo: "Bayanai na asali",
+    tpRegisteringAs: "Ana yin rajista a matsayin",
+    tpAnIndividual: "Mutum daya",
+    tpABusiness: "Kasuwanci",
+    tpBusinessName: "Sunan kasuwanci",
+    tpTypeOfBusiness: "Nau’in kasuwanci",
+    tpFirstName: "Sunan farko",
+    tpMiddleName: "Sunan tsakiya",
+    tpLastName: "Sunan karshe",
+    tpDateOfBirth: "Ranar haihuwa",
+    tpPhoneNumber: "Lambar waya",
+    tpEmailAddress: "Adireshin imel",
+    tpNeedBusinessName: "Ka rubuta sunan kasuwancin.",
+    tpIdentificationHint: "Ba dole ba ne, amma yana taimakawa wajen hana maimaita rajista. Ana adana lambar cikin tsaro kuma ba a taba nuna ta gaba daya ba.",
+    tpLga: "Karamar Hukuma",
+    tpSelectLga: "Zabi Karamar Hukuma",
+    tpWardHint: "Inda ake bayar da rahoton haraji. Ba tare da shi ba, ba za a iya kirga wannan karban a kasa da matakin Karamar Hukuma ba.",
+    tpChooseLgaFirst: "Ka zabi Karamar Hukuma tukuna",
+    tpNoWardsListed: "Babu unguwannin da aka jera",
+    tpSelectWard: "Zabi unguwa",
+    tpCommunity: "Al’umma",
+    tpBusinessOrActivity: "Kasuwanci ko sana’a",
+    tpEconomicSector: "Bangaren tattalin arziki",
+    tpSelectSector: "— Zabi bangare —",
+    tpSuggestedObligations: "Harajin da aka ba da shawara ga {{sector}}",
+    tpConfirmWhichTaxes: "Ka tabbatar da harajin da ya shafi wannan mai biyan haraji. Za ka iya kara wasu daga baya.",
+    tpOccupation: "Sana’a (ba dole ba)",
+    tpBusinessActivity: "Sana’ar kasuwanci (ba dole ba)",
+    tpReviewConfirm: "Duba ka tabbatar",
+    tpType: "Nau’i",
+    tpBusiness: "Kasuwanci",
+    tpIndividual: "Mutum",
+    tpName: "Suna",
+    tpPhone: "Waya",
+    tpLgaShort: "Karamar Hukuma",
+    tpWard: "Unguwa",
+    tpWillBeRequested: "Za a nema",
+    tpConsent: "Mai biyan haraji ya yarda a yi amfani da bayanansa ta PSIRS domin gudanar da harkokin haraji.",
+    tpDeclaration: "Mai biyan haraji ya bayyana cewa bayanan da aka bayar gaskiya ne kuma daidai.",
+    tpBack: "Koma baya",
+    tpContinue: "Ci gaba",
+    tpRegistering: "Ana yin rajista…",
+    tpRegisterTaxpayer: "Yi rajistar mai biyan haraji",
+    tpYouAreOffline: "Ba ka kan layi",
+    tpSaveOfflineBody: "Ka adana wannan rajistar a na’ura. Za a tura ta zuwa PSIRS ta atomatik idan ka dawo kan layi, sannan a nemi TIN.",
+    tpSaveOnDevice: "Adana a wannan na’ura",
+    tpNotYetAssigned: "Ba a ba da shi ba tukuna",
+    tpTransactionsYouFacilitated: "Ma’amalolin da ka gudanar",
+    tpNoTransactions: "Ba ka gudanar da wata ma’amala ga wannan mai biyan haraji ba.",
+    tpWhatYouCanSee: "Abin da za ka iya gani a nan",
+    tpVehicles: "Motoci",
+    tpExpires: "Zai kare {{date}}",
+    tpNoRenewal: "Babu sabuntawa a rajista",
+    camAlign: "Ka daidaita QR code ko barcode cikin firam",
+    camCancel: "Soke",
+    camClose: "Rufe na’urar dubawa",
+    camFlip: "Juya kyamara",
+    camInitializing: "Ana shirya kyamara...",
+    camTryAgain: "Sake gwadawa",
+    camFlashOn: "Fitila: A KUNNE",
+    camFlashOff: "Fitila: A KASHE",
+    camNoAccess: "Ba a iya samun kyamarar na’ura ba.",
+    camSwitchFailed: "Ba a iya canza kyamara ba.",
+    appStageSubmitted: "An mika bukata",
+    appStageKyc: "An tabbatar da shaida",
+    appStageReview: "A shirye don nazarin gwamnati",
+    appStageApproved: "PSIRS ta amince",
+    appStageTraining: "An kammala horo",
+    appStageDevice: "An yi rajistar na’ura",
+    appStageActive: "Wakili mai aiki",
+    appActionNeeded: "Ana bukatar mataki",
+    appSuspended: "An dakatar da asusunka",
+    appNotApproved: "Ba a amince da bukatar ba",
+    appContactSupervisor: "Ka tuntubi shugabanka ko sashen taimako na PSIRS domin sanin abin da za ka yi na gaba.",
+    appTakePhotograph: "Dauki hoto",
+    appTakeAgain: "Sake daukar hoto",
+    appSending: "Ana turawa...",
+    appDocumentNotSent: "Ba a iya tura takardar ba.",
+    appIdDocument: "Takardar shaidarka",
+    appIdDocumentHint: "Ka dauki hoton katin da kansa, a shimfide kuma a bayyane, kusurwoyi hudu duka suna bayyana.",
+    appSelfie: "Hotonka",
+    appSelfieHint: "A dauka yanzu, kana rike da takardar guda, domin PSIRS ta ga sun yi daidai.",
+    appJustCaptured: "an dauka yanzu",
+    appKycHint: "PSIRS na duba shaidarka a rajistar kasa. Ana adana lambar shaidarka cikin tsaro kuma ba a taba nuna ta gaba daya ba.",
+    appSubmitForVerification: "Tura don tabbatarwa",
+    appVerifying: "Ana tabbatarwa…",
+    appStillNeeded: "Abin da ya rage kafin a iya turawa:",
+    appStatus: "Matsayi",
+    appDocumentOnFile: "Takardar da ke rijista",
+    appRefereeNoAccount: "Ba sa bukatar asusu — za su karbi hanyar sadarwa mai tsaro.",
+    appRefereeShareLink: "Idan mai shaidarka bai karbi sakon ba, ka aika masa da wannan hanyar kai tsaye:",
+    appRefereeConfirmedYour: "ya tabbatar da bukatarka.",
+    appRefereeSentRequest: "an tura masa bukatar tabbatarwa. Za ka iya zabar wani idan ba zai iya amsawa ba.",
+    appRefereeLinkHere: "Za su karbi hanyar tabbatarwa a nan",
+    appNominateReplacement: "Zabi wani mai shaida",
+    appSendVerification: "Tura bukatar tabbatarwa",
+    appTrainingAllComplete: "An kammala dukkan horon wajibi.",
+    appTrainingRemaining: "Sauran darussa {{done}} cikin {{total}} da za a kammala.",
+    appPassMark: "matakin cin jarabawa",
+    appNoAssessment: "babu jarabawa",
+    appBankHint: "An tabbatar kafin a biya kowane kwamishan. Kudin gwamnati ba ya shiga wannan asusun ko kadan.",
+    appBankVerifiedMsg: "An tabbatar da asusun bankinka.",
+    appBankCouldNotVerify: "Ba a iya tabbatar da asusun ba.",
+    appAcceptAgreementText: "Na karanta kuma na amince da {{title}} (sigar {{version}}).",
+    appDeviceLabel: "Na’ura",
+    appAppVersion: "Sigar manhaja",
+    appNotRegistered: "Ba a yi rajista ba",
+    appRegisteredDevice: "Na’urar da aka yi wa rajista",
+    errNetwork: "Ba a iya samun PSIRS ba. Ka sake gwadawa.",
+    appYourApplication: "Bukatarka",
+    appBeingProcessed: "Ana sarrafa bukatarka",
+    appClearedToCollect: "An ba ka izinin karbar haraji",
+    appAllRequirementsMet: "An cika dukkan sharudan izinin.",
+    appCannotCollectUntil: "Ba za ka iya karbar haraji ba sai an kammala dukkan sharudan da ke kasa.",
+    appStillOutstanding: "Sauran da ba a kammala ba",
+    appComplete: "An kammala",
+    appGoToDashboard: "Je shafin aikina",
+    appIdentityVerification: "Tabbatar da shaida",
+    appIdentificationType: "Nau’in shaida",
+    appIdentificationNumber: "Lambar shaida",
+    appEnterIdInFull: "Ka shigar da lambar shaidarka gaba daya kafin ka tura.",
+    appPreviousAttemptRejected: "Ba a karbi yunkurin da ya gabata ba",
+    appDocumentNotAccepted: "Ba a karbi wannan takardar ba",
+    appDocuments: "Takardu",
+    appNotCaptured: "Ba a dauka ba",
+    appReferee: "Mai shaida",
+    appRefereeFullName: "Cikakken sunan mai shaida",
+    appRefereePhone: "Lambar wayar mai shaida",
+    appRefereeEmail: "Imel na mai shaida",
+    appHowDoTheyKnowYou: "Ta yaya ya san ka?",
+    appWhoIsThisPerson: "Wanene wannan mutumin?",
+    appRefereeConfirmed: "Mai shaida ya tabbatar",
+    appWaitingReferee: "Ana jiran mai shaidarka",
+    appVerificationSent: "An tura bukatar tabbatarwa",
+    appTraining: "Horo",
+    appAgreement: "Yarjejeniyar wakili",
+    appAcceptAgreement: "Amince da yarjejeniya",
+    appAgreementAccepted: "An amince da yarjejeniya",
+    appAgreementRecorded: "An rubuta amincewarka.",
+    appReadCarefully: "Ka karanta wannan sosai. Yana bayyana abin da za ka iya yi da abin da ba za ka iya yi ba.",
+    appBankAccount: "Asusun bankin kwamishan",
+    appVerifyBankAccount: "Tabbatar da asusun bankina",
+    appBankVerified: "An tabbatar da asusun banki",
+    appCommissionPaidHere: "Za a biya kwamishan dinka a wannan asusun.",
+    appRegisterDevice: "Yi rajistar wannan na’ura",
+    appOtherDevices: "Sauran na’urori",
+    appDeviceOnlyRegistered: "Ba za a iya karbar haraji ba sai daga na’urar da PSIRS ta yi wa rajista da sunanka.",
+    appDeviceAfterApproval: "Za ka iya yin rajistar na’ura da zarar PSIRS ta amince da bukatarka.",
+    appRefereeWhoIs: "Mai shaida shi ne wanda ya san ka kuma zai iya tabbatar da kai ga PSIRS.",
+    idNin: "Lambar Shaidar Kasa",
+    idBvn: "Lambar Tabbatar da Banki",
+    idPassport: "Fasfo na kasa da kasa",
+    idLicence: "Lasisin tuki",
+    idVoters: "Katin zabe",
+    refCivilServant: "Ma’aikacin gwamnati",
+    refCommunityLeader: "Shugaban unguwa",
+    refDistrictHead: "Hakimin unguwata",
+    refReligiousLeader: "Shugaban addini",
+    refTraditionalAuthority: "Sarauta",
+    refProfessional: "Kwararre da aka sani",
+    refEmployer: "Ma’aikaci",
+    moreThisDevice: "Wannan na’ura",
+    moreSignOut: "Fita",
+    moreSomethingWrong: "Akwai matsala?",
+    moreGetHelp: "Nemi taimako",
+    moreViewApplication: "Duba bukatata da izinina",
+    moreWhereCommissionPaid: "Inda ake biyan kwamishan dinka",
+    moreCommissionRecordNotAccount: "Wannan bayanin kwamishan ne, ba asusun banki ba",
+    moreChangeBankAccount: "Canza asusun bankina",
+    moreAskDifferentAccount: "Nemi wani asusun daban",
+    moreAuthoriseChange: "Ba da izinin wannan canjin",
+    moreAuthorisePayout: "Ba da izinin wannan biyan",
+    moreChangeWaiting: "Ana jiran PSIRS ta duba canjin",
+    moreNothingChangesYet: "Babu abin da zai canza sai jami’i ya amince.",
+    moreToldEitherWay: "Za a sanar da kai ko ta yaya",
+    moreBankNotConfirmed: "Banki bai tabbatar da wannan asusun ba",
+    moreWhyChanging: "Dalilin canjin",
+    moreAccountName: "Sunan da ke kan asusun",
+    moreAccountNumber: "Lambar asusu",
+    moreBankCode: "Lambar banki",
+    moreCommissionHistory: "Tarihin kwamishan",
+    moreNoCommission: "Ba a rubuta kwamishan ba tukuna.",
+    moreAvailableForPayout: "Wanda ake iya biya",
+    moreRequestPayout: "Nemi a biya ka",
+    moreRequestingPayout: "Kana neman a biya ka",
+    moreSomeCommissionOwedBack: "Ana bin ka wasu kwamishan",
+    moreReceiptsFacilitated: "Rasit da ka taimaka a bayar",
+    moreNoReceipts: "Babu rasit tukuna.",
+    moreSavedRecords: "Bayanan da aka ajiye a wannan na’ura",
+    moreNothingWaiting: "Babu abin da ke jiran a aika.",
+    moreSavedOnPhone: "An ajiye a wannan wayar",
+    moreVehicleRenewal: "Sabunta takardun mota",
+    moreSearchVehicle: "Nemo mota",
+    moreRegistrationNumber: "Lambar rajista",
+    moreVehicleType: "Nau’in mota",
+    morePrivate: "Na kaina",
+    moreCommercial: "Na kasuwanci",
+    moreRenewalService: "Sabis na sabuntawa",
+    moreSelectRenewalType: "Zabi nau’in sabuntawa",
+    moreRenewalPeriod: "Tsawon sabuntawa",
+    moreCalculateProceed: "Lissafa ka ci gaba zuwa biyan kudi",
+    moreSaveVehicleOnPhone: "Ajiye motar a wannan wayar",
+    moreCaptureOffline: "Rubuta ba tare da intanet ba",
+    moreVehicleAuthorityUnreachable: "Ba a iya isa ga hukumar motoci ba",
+    moreTryVehicleAuthorityAgain: "Sake gwada hukumar motoci",
+    morePrinter: "Na’urar buga rasit",
+    moreDisconnect: "Cire hadi",
+    morePushTitle: "Sakonnin gargadi kai tsaye",
+    moreContinue: "Ci gaba",
+    grpTitle: "Kungiyoyi da hadin gwiwa",
+    grpRegister: "Yi rajistar kungiya",
+    grpName: "Sunan kungiya",
+    grpKind: "Wace irin kungiya",
+    grpChooseOne: "Zabi daya",
+    grpLeaderName: "Sunan shugaba",
+    grpLeaderPhone: "Lambar wayar shugaba",
+    grpLga: "Karamar Hukuma",
+    grpCommunity: "Unguwa",
+    grpMemberCount: "Kimanin adadin mambobi",
+    grpRecordMember: "Rubuta mamba",
+    grpMember: "Mamba",
+    grpRecorded: "An rubuta",
+    grpWaitingOfficer: "Ana jiran jami’i",
+    grpAskLeaderConfirm: "Ka nemi shugaba ya tabbatar",
+    grpSendToLeader: "Tura wannan ga shugaba",
+    grpNoAssessment: "Wannan ba ya sanya wa kowa haraji",
+    authSignInTitle: "Shiga domin ci gaba",
+    authSignIn: "Shiga",
+    authPhoneHint: "Ka yi amfani da lambar wayar da ka yi rajista da ita a PSIRS.",
+    authPassword: "Kalmar sirri",
+    authApply: "Nemi zama wakili",
+    authApplyTitle: "Nemi zama wakilin karbar haraji",
+    authBackToSignIn: "Koma shiga",
+    authYourDetails: "Bayananka",
+    authFullName: "Cikakken suna",
+    authPhone: "Lambar waya",
+    authEmail: "Adireshin imel",
+    authDateOfBirth: "Ranar haihuwa",
+    authOccupation: "Sana’a",
+    authWhereYouLive: "Inda kake zama",
+    authAddress: "Adireshin gida",
+    authSelectLga: "Zabi Karamar Hukumarka",
+    authNeedDocuments: "Za ka bukaci takardun shaida, bayanan banki da mai shaida.",
+    authWhatNext: "Abin da zai biyo baya",
+    authNextSignIn: "Ka shiga ka kammala tabbatar da shaidarka.",
+    authNextReferee: "Ka gabatar da mai shaida wanda zai iya tabbatar da kai.",
+    authNextReview: "PSIRS za ta duba bukatarka.",
+    authNextClearance: "Ka kammala horo, tabbatar da banki da rajistar na’ura.",
+    authApplicationReceived: "An karbi bukatar",
+    authApplicationNumber: "Lambar bukatarka ita ce",
     colWhoIsPaying: "Wa ke biya?",
     colSearchTaxpayer: "Nemo mai biyan haraji",
     colNamePhoneTin: "Suna, waya ko TIN",

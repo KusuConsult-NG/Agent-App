@@ -34,6 +34,9 @@ export function LoginScreen({
           ? caught.error
           : {
               code: 'NETWORK',
+              // Kept in English as a last resort: ErrorAlert renders `errNetwork`
+              // for this code, and anything that shows a raw message instead
+              // should still say something rather than nothing.
               message: 'Could not reach PSIRS. Check your connection and try again.',
               moneyStatus: 'NOT_APPLICABLE',
             },
@@ -47,18 +50,18 @@ export function LoginScreen({
     <div className="center-screen">
       <div className="brand">
         <img className="brand__mark" src="/icon.svg" alt="" />
-        <p className="brand__name">Plateau State Revenue Agent</p>
-        <p className="brand__tagline">Plateau State Internal Revenue Service</p>
+        <p className="brand__name">{t.shellAgentBrand}</p>
+        <p className="brand__tagline">{t.authPsirsFull}</p>
         {languageSwitch}
       </div>
 
       <form className="card" onSubmit={submit}>
-        <h2 className="card__title">Sign in</h2>
-        <p className="card__hint">Use the phone number you registered with PSIRS.</p>
+        <h2 className="card__title">{t.authSignIn}</h2>
+        <p className="card__hint">{t.authPhoneHint}</p>
 
         <ErrorAlert error={error} />
 
-        <Field label="Phone number" required>
+        <Field label={t.authPhone} required>
           <input
             type="tel"
             inputMode="tel"
@@ -71,7 +74,7 @@ export function LoginScreen({
         </Field>
 
         <PasswordField
-          label="Password"
+          label={t.authPassword}
           autoComplete="current-password"
           value={password}
           onChange={setPassword}
@@ -80,12 +83,10 @@ export function LoginScreen({
 
         <button type="submit" disabled={busy}>
           {busy ? <Spinner /> : null}
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t.authSigningIn : t.authSignIn}
         </button>
 
-        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={onApply}>
-          Apply to become an agent
-        </button>
+        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={onApply}>{t.authApply}</button>
       </form>
 
       <Alert kind="info" title={t.neverCollectCash}>
@@ -108,6 +109,7 @@ export function ApplyScreen({
   onDone: () => void;
   languageSwitch?: React.ReactNode;
 }) {
+  const { t } = useI18n();
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -158,6 +160,9 @@ export function ApplyScreen({
           ? caught.error
           : {
               code: 'NETWORK',
+              // Kept in English as a last resort: ErrorAlert renders `errNetwork`
+              // for this code, and anything that shows a raw message instead
+              // should still say something rather than nothing.
               message: 'Could not reach PSIRS. Check your connection and try again.',
               moneyStatus: 'NOT_APPLICABLE',
             },
@@ -171,21 +176,18 @@ export function ApplyScreen({
     return (
       <div className="center-screen">
         <div className="card">
-          <h2 className="card__title">Application received</h2>
-          <p className="card__hint">
-            Your application number is <strong>{result.applicationNumber}</strong>. Keep it safe.
+          <h2 className="card__title">{t.authApplicationReceived}</h2>
+          <p className="card__hint">{t.authApplicationNumber}<strong>{result.applicationNumber}</strong>{t.authKeepItSafe}
           </p>
-          <Alert kind="info" title="What happens next">
+          <Alert kind="info" title={t.authWhatNext}>
             <ol style={{ margin: '6px 0 0', paddingLeft: 18 }}>
-              <li>Sign in and complete identity verification.</li>
-              <li>Nominate a referee who can confirm who you are.</li>
-              <li>PSIRS reviews your application.</li>
-              <li>Complete training, bank verification and device registration.</li>
+              <li>{t.authNextSignIn}</li>
+              <li>{t.authNextReferee}</li>
+              <li>{t.authNextReview}</li>
+              <li>{t.authNextClearance}</li>
             </ol>
           </Alert>
-          <button type="button" onClick={onDone}>
-            Sign in to continue
-          </button>
+          <button type="button" onClick={onDone}>{t.authSignInTitle}</button>
         </div>
       </div>
     );
@@ -195,27 +197,25 @@ export function ApplyScreen({
     <div className="center-screen">
       <div className="brand">
         <img className="brand__mark" src="/icon.svg" alt="" />
-        <p className="brand__name">Apply to become a revenue agent</p>
-        <p className="brand__tagline">
-          You will need identity documents, bank details and a referee.
-        </p>
+        <p className="brand__name">{t.authApplyTitle}</p>
+        <p className="brand__tagline">{t.authNeedDocuments}</p>
         {languageSwitch}
       </div>
 
       <form className="card" onSubmit={submit}>
         <ErrorAlert error={error} />
 
-        <p className="section-title">Your details</p>
-        <Field label="Full name" required>
+        <p className="section-title">{t.authYourDetails}</p>
+        <Field label={t.authFullName} required>
           <input value={form.fullName} onChange={update('fullName')} required minLength={3} />
         </Field>
-        <Field label="Phone number" required>
+        <Field label={t.authPhone} required>
           <input type="tel" inputMode="tel" placeholder="08012345678" value={form.phone} onChange={update('phone')} required />
         </Field>
-        <Field label="Email address">
+        <Field label={t.authEmail}>
           <input type="email" inputMode="email" value={form.email} onChange={update('email')} />
         </Field>
-        <Field label="Date of birth">
+        <Field label={t.authDateOfBirth}>
           {/*
             * Bounded here as well as on the server. The rule is the same one
             * the API applies, and applying it at the input means a slipped
@@ -231,24 +231,24 @@ export function ApplyScreen({
           />
         </Field>
         <PasswordField
-          label="Password"
-          hint="At least 8 characters, including a letter and a number"
+          label={t.authPassword}
+          hint={t.authPasswordHint}
           autoComplete="new-password"
           value={form.password}
           onChange={(next) => setForm((current) => ({ ...current, password: next }))}
           required
           minLength={8}
           pattern="(?=.*[0-9])(?=.*[a-zA-Z]).{8,}"
-          patternHint="At least 8 characters, including at least one letter and at least one number."
+          patternHint={t.authPasswordPatternHint}
         />
 
-        <p className="section-title">Where you live</p>
-        <Field label="Residential address" required>
+        <p className="section-title">{t.authWhereYouLive}</p>
+        <Field label={t.authAddress} required>
           <input value={form.address} onChange={update('address')} required minLength={5} />
         </Field>
-        <Field label="Local Government Area" required>
+        <Field label={t.grpLga} required>
           <select value={form.lgaId} onChange={update('lgaId')} required>
-            <option value="">Select your LGA</option>
+            <option value="">{t.authSelectLga}</option>
             {lgas.map((lga) => (
               <option key={lga.id} value={lga.id}>
                 {lga.name} ({lga.zone})
@@ -256,27 +256,26 @@ export function ApplyScreen({
             ))}
           </select>
         </Field>
-        <Field label="Community">
+        <Field label={t.grpCommunity}>
           <input value={form.community} onChange={update('community')} />
         </Field>
-        <Field label="Occupation">
+        <Field label={t.authOccupation}>
           <input value={form.occupation} onChange={update('occupation')} />
         </Field>
 
-        <p className="section-title">Commission bank account</p>
-        <Alert kind="warning" title="This account is for your commission only">
+        <p className="section-title">{t.appBankAccount}</p>
+        <Alert kind="warning" title={t.commissionAccountOnly}>
           <p style={{ margin: 0 }}>
-            Government revenue is never paid into an agent's account. This account is used only to
-            pay the commission you earn.
+            {t.authRevenueNeverToAgent}
           </p>
         </Alert>
-        <Field label="Bank name" required>
+        <Field label={t.authBankName} required>
           <input value={form.bankName} onChange={update('bankName')} required minLength={2} />
         </Field>
-        <Field label="Account name" required>
+        <Field label={t.authAccountName} required>
           <input value={form.accountName} onChange={update('accountName')} required minLength={3} />
         </Field>
-        <Field label="Account number" hint="10 digits" required>
+        <Field label={t.authAccountNumber} hint={t.authTenDigits} required>
           <input
             inputMode="numeric"
             pattern="\d{10}"
@@ -289,11 +288,9 @@ export function ApplyScreen({
 
         <button type="submit" disabled={busy}>
           {busy ? <Spinner /> : null}
-          {busy ? 'Submitting…' : 'Submit application'}
+          {busy ? t.authSubmitting : t.authSubmitApplication}
         </button>
-        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={onDone}>
-          Back to sign in
-        </button>
+        <button type="button" className="secondary" style={{ marginTop: 10 }} onClick={onDone}>{t.authBackToSignIn}</button>
       </form>
     </div>
   );

@@ -58,6 +58,7 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   DEVICE_NOT_REGISTERED: 'errDeviceNotRegistered',
   RATE_LIMITED: 'errRateLimited',
   UPDATE_REQUIRED: 'errUpdateRequired',
+  NETWORK: 'errNetwork',
 };
 
 export function ErrorAlert({ error }: { error: ApiError | null }) {
@@ -201,8 +202,9 @@ export function Spinner() {
 }
 
 export function Loading({ rows = 3 }: { rows?: number }) {
+  const { t } = useI18n();
   return (
-    <div aria-busy="true" aria-label="Loading">
+    <div aria-busy="true" aria-label={t.uiLoading}>
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="skeleton" style={{ width: `${100 - index * 12}%` }} />
       ))}

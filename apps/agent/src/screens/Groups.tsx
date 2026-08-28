@@ -30,6 +30,8 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { Alert, Badge, Empty, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface GroupRow {
   id: string;
@@ -63,26 +65,31 @@ interface Lga {
  * list offers and the API rejects is a form that cannot be submitted, and the
  * agent has no way to tell which of their answers was the wrong one.
  */
-const GROUP_TYPES = [
-  { value: 'FARMERS_COOPERATIVE', label: 'Farmers’ cooperative' },
-  { value: 'MARKET_ASSOCIATION', label: 'Market association' },
-  { value: 'TRANSPORT_UNION', label: 'Transport union' },
-  { value: 'ARTISAN_GUILD', label: 'Artisan guild' },
-  { value: 'TRADERS_ASSOCIATION', label: 'Traders’ association' },
-  { value: 'FISHERIES_GROUP', label: 'Fisheries group' },
-  { value: 'LIVESTOCK_ASSOCIATION', label: 'Livestock association' },
-  { value: 'OTHER', label: 'Other' },
+const GROUP_TYPES: { value: string; label: keyof TranslationDictionary }[] = [
+  { value: 'FARMERS_COOPERATIVE', label: 'grpFarmers' },
+  { value: 'MARKET_ASSOCIATION', label: 'grpMarket' },
+  { value: 'TRANSPORT_UNION', label: 'grpTransport' },
+  { value: 'ARTISAN_GUILD', label: 'grpArtisan' },
+  { value: 'TRADERS_ASSOCIATION', label: 'grpTraders' },
+  { value: 'FISHERIES_GROUP', label: 'grpFisheries' },
+  { value: 'LIVESTOCK_ASSOCIATION', label: 'grpLivestock' },
+  { value: 'OTHER', label: 'grpOther' },
 ];
 
-const readable = (value: string) =>
-  GROUP_TYPES.find((t) => t.value === value)?.label ??
-  value.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+const readable = (value: string, t: TranslationDictionary) => {
+  const type = GROUP_TYPES.find((candidate) => candidate.value === value);
+  // A type the app does not know still has to read as something.
+  return type
+    ? t[type.label]
+    : value.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
+};
 
 // ===========================================================================
 // The list
 // ===========================================================================
 
 export function GroupsScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -104,25 +111,21 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   return (
     <section>
       <header className="screen-head">
-        <h1>Groups and cooperatives</h1>
+        <h1>{t.grpTitle}</h1>
         <p>
-          The groups you registered, and any an officer recorded for you to work. Another
-          agent’s cooperatives are not listed here.
+          {t.grpListHint}
         </p>
       </header>
 
       <ErrorAlert error={error} />
 
-      <button type="button" onClick={() => navigate('/groups/new')}>
-        Register a group
-      </button>
+      <button type="button" onClick={() => navigate('/groups/new')}>{t.grpRegister}</button>
 
       {groups === null && <Loading rows={3} />}
 
       {groups?.length === 0 && (
         <Empty>
-          No groups yet. When you meet a cooperative, a market association or a union, register
-          it here so its members can be brought onto the register together.
+          {t.grpEmpty}
         </Empty>
       )}
 
@@ -134,11 +137,10 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                 <div>
                   <p className="list__title">{group.name}</p>
                   <p className="list__meta">
-                    {group.code} · {readable(group.group_type)} · {group.lga_name}
+                    {group.code} · {readable(group.group_type, t)} · {group.lga_name}
                   </p>
                   <p className="list__meta">
-                    {group.attested_members} confirmed member
-                    {group.attested_members === '1' ? '' : 's'}
+                    {t.grpConfirmedMembers.replace('{{n}}', group.attested_members)}
                   </p>
                 </div>
                 <Badge status={group.status} />
@@ -156,6 +158,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 // ===========================================================================
 
 export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [form, setForm] = useState({
     name: '',
@@ -217,17 +220,16 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
   return (
     <section>
       <header className="screen-head">
-        <h1>Register a group</h1>
+        <h1>{t.grpRegister}</h1>
         <p>
-          Record the body itself, and who leads it. Members are added after an officer has
-          approved the group.
+          {t.grpRegisterHint}
         </p>
       </header>
 
       <ErrorAlert error={error} />
 
       <form onSubmit={submit}>
-        <Field label="Group name" hint="As the group itself gives it" required>
+        <Field label={t.grpName} hint="As the group itself gives it" required>
           <input
             type="text"
             value={form.name}
@@ -237,31 +239,31 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
         </Field>
 
         <div className="field">
-          <label htmlFor="group-type">What kind of group</label>
+          <label htmlFor="group-type">{t.grpKind}</label>
           <select
             id="group-type"
             value={form.groupType}
             onChange={(event) => set('groupType')(event.target.value)}
             required
           >
-            <option value="">Choose one</option>
+            <option value="">{t.grpChooseOne}</option>
             {GROUP_TYPES.map((type) => (
               <option key={type.value} value={type.value}>
-                {type.label}
+                {t[type.label]}
               </option>
             ))}
           </select>
         </div>
 
         <div className="field">
-          <label htmlFor="group-lga">Local Government Area</label>
+          <label htmlFor="group-lga">{t.grpLga}</label>
           <select
             id="group-lga"
             value={form.lgaId}
             onChange={(event) => set('lgaId')(event.target.value)}
             required
           >
-            <option value="">Choose one</option>
+            <option value="">{t.grpChooseOne}</option>
             {lgas.map((lga) => (
               <option key={lga.id} value={lga.id}>
                 {lga.name}
@@ -270,7 +272,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           </select>
         </div>
 
-        <Field label="Community" hint="Where the group meets. Optional.">
+        <Field label={t.grpCommunity} hint="Where the group meets. Optional.">
           <input
             type="text"
             value={form.community}
@@ -279,7 +281,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label="Leader’s name" hint="The person who can confirm who belongs" required>
+        <Field label={t.grpLeaderName} hint="The person who can confirm who belongs" required>
           <input
             type="text"
             value={form.leaderName}
@@ -288,7 +290,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label="Leader’s phone number" hint="They are sent a link to confirm the membership list" required>
+        <Field label={t.grpLeaderPhone} hint="They are sent a link to confirm the membership list" required>
           <input
             type="text"
             value={form.leaderPhone}
@@ -297,7 +299,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label="Roughly how many members" hint="An estimate is fine. Optional.">
+        <Field label={t.grpMemberCount} hint="An estimate is fine. Optional.">
           <input
             type="number"
             value={form.memberEstimate}
@@ -306,15 +308,14 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Alert kind="info" title="This does not assess anybody">
+        <Alert kind="info" title={t.grpNoAssessment}>
           <p style={{ margin: 0 }}>
-            Registering a group records that it exists. Nobody is charged anything, and no
-            member is added, until an officer has approved it.
+            {t.grpNoAssessmentBody}
           </p>
         </Alert>
 
         <button type="submit" disabled={!ready || busy}>
-          {busy ? <Spinner /> : 'Register group'}
+          {busy ? <Spinner /> : t.grpRegisterGroup}
         </button>
       </form>
     </section>
@@ -326,6 +327,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
 // ===========================================================================
 
 export function GroupScreen({ groupId }: { groupId: string }) {
+  const { t } = useI18n();
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [chosen, setChosen] = useState<PickedTaxpayer | null>(null);
@@ -399,7 +401,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       <header className="screen-head">
         <h1>{group.name}</h1>
         <p>
-          {group.code} · {readable(group.group_type)}
+          {group.code} · {readable(group.group_type, t)}
         </p>
       </header>
 
@@ -408,19 +410,19 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       <div className="card">
         <KeyValue
           items={[
-            ['Status', <Badge key="s" status={group.status} />],
-            ['Local Government', group.lga_name],
-            ['Ward', group.ward_name ?? '—'],
-            ['Community', group.community ?? '—'],
-            ['Leader', `${group.leader_name} · ${group.leader_phone}`],
-            ['Members confirmed', group.attested_members],
-            ['Awaiting the leader', group.pending_members],
+            [t.appStatus, <Badge key="s" status={group.status} />],
+            [t.grpLocalGovernment, group.lga_name],
+            [t.tpWard, group.ward_name ?? '—'],
+            [t.tpCommunity, group.community ?? '—'],
+            [t.grpLeader, `${group.leader_name} · ${group.leader_phone}`],
+            [t.grpMembersConfirmed, group.attested_members],
+            [t.grpAwaitingLeader, group.pending_members],
           ]}
         />
       </div>
 
       {!active && (
-        <Alert kind="info" title="Waiting for an officer">
+        <Alert kind="info" title={t.grpWaitingOfficer}>
           <p style={{ margin: 0 }}>
             This group is {group.status.toLowerCase()}. Members can be recorded once an officer
             has approved it — there is nothing more to do here until then.
@@ -430,42 +432,40 @@ export function GroupScreen({ groupId }: { groupId: string }) {
 
       {active && (
         <>
-          <h2>Record a member</h2>
+          <h2>{t.grpRecordMember}</h2>
           <p className="hint">
-            The person has to be registered as a taxpayer first. Search for them by name, phone
-            or TIN.
+            {t.grpMemberHint}
           </p>
 
           {added && (
-            <Alert kind="success" title="Recorded">
+            <Alert kind="success" title={t.grpRecorded}>
               <p style={{ margin: 0 }}>{added}</p>
             </Alert>
           )}
 
           <TaxpayerPicker
-            label="Member"
-            hint="Search by name, phone number or TIN"
+            label={t.grpMember}
+            hint={t.tpSearchByNamePhoneTin}
             chosen={chosen}
             onChoose={setChosen}
             onClear={() => setChosen(null)}
           />
 
           <button type="button" onClick={addMember} disabled={!chosen || busy}>
-            {busy ? <Spinner /> : 'Record this member'}
+            {busy ? <Spinner /> : t.grpRecordThisMember}
           </button>
 
-          <h2>Ask the leader to confirm</h2>
+          <h2>{t.grpAskLeaderConfirm}</h2>
           <p className="hint">
-            You are paid commission on what these members pay, so your word that somebody
-            belongs is not enough on its own. The group’s own leader confirms the list.
+            {t.grpAskLeaderHint}
           </p>
 
           <button type="button" className="secondary" onClick={askLeader} disabled={busy}>
-            {busy ? <Spinner /> : 'Send the leader a confirmation link'}
+            {busy ? <Spinner /> : t.grpSendLeaderLink}
           </button>
 
           {invitation && (
-            <Alert kind="success" title="Send this to the leader">
+            <Alert kind="success" title={t.grpSendToLeader}>
               <p style={{ margin: 0, wordBreak: 'break-all' }}>{invitation}</p>
               <p style={{ margin: '0.5rem 0 0' }}>
                 {group.leader_name} can open it on any phone. Until they confirm, the members

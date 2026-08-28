@@ -69,14 +69,13 @@ export function CollectionScreen() {
         setError({
           code: 'OFFLINE',
           message:
-            'PSIRS could not be reached, so this collection has not been recorded. ' +
-            'Do not hand anything over until it has been.',
+            t.allocOfflineBody,
           moneyStatus: 'NOT_APPLICABLE',
         });
       } else {
         setError({
           code: 'COLLECTION_FAILED',
-          message: 'The collection could not be recorded. Try again.',
+          message: t.allocFailed,
           moneyStatus: 'NOT_APPLICABLE',
         });
       }
@@ -95,7 +94,7 @@ export function CollectionScreen() {
         onCode: (text) => {
           const found = verificationCodeFrom(text);
           if (!found) {
-            setCameraError('That code is not a PSIRS collection code. Keep it in frame.');
+            setCameraError(t.allocNotACode);
             return;
           }
           stopCamera();
@@ -108,7 +107,7 @@ export function CollectionScreen() {
       setCameraError(
         caught instanceof CameraUnavailable
           ? caught.message
-          : 'The camera could not be opened. Type the code instead.',
+          : t.allocCameraFailed,
       );
     }
   }
@@ -118,9 +117,7 @@ export function CollectionScreen() {
       <div className="card">
         <h2 className="card__title">{t.allocHandOut}</h2>
         <p className="card__hint">
-          Scan or type the collection code the beneficiary was given. Record it before you hand
-          anything over — a code can only be used once, and this is what stops the same allocation
-          being collected twice.
+          {t.allocScanHint}
         </p>
 
         {scanning ? (
@@ -159,7 +156,7 @@ export function CollectionScreen() {
           onClick={() => void record(code.trim())}
         >
           {busy ? <Spinner /> : null}
-          {busy ? 'Checking with PSIRS…' : 'Record this collection'}
+          {busy ? t.verifyChecking : t.allocRecordCollection}
         </button>
 
         <ErrorAlert error={error} />
@@ -169,7 +166,7 @@ export function CollectionScreen() {
         <div className="card">
           <Alert kind="success" title={t.allocRecorded}>
             <p style={{ margin: 0 }}>
-              Give <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
+              {t.allocGive} <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
               {readable(collected.unit)}.
             </p>
           </Alert>

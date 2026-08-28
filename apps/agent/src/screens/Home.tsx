@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
 import { useI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface HomeData {
   today: { collected_kobo: string; successful: string; total: string; pending: string };
@@ -21,28 +22,28 @@ interface HomeData {
 }
 
 const QUICK_ACTIONS = [
-  { href: '#/taxpayers/new', label: 'Register taxpayer', icon: Icons.add },
-  { href: '#/collect', label: 'Collect revenue', icon: Icons.collect },
-  { href: '#/vehicles', label: 'Renew vehicle', icon: Icons.vehicle },
-  { href: '#/taxpayers', label: 'Find taxpayer', icon: Icons.search },
+  { href: '#/taxpayers/new', label: 'tpRegisterTaxpayer', icon: Icons.add },
+  { href: '#/collect', label: 'tpCollectRevenue', icon: Icons.collect },
+  { href: '#/vehicles', label: 'homeQaRenewVehicle', icon: Icons.vehicle },
+  { href: '#/taxpayers', label: 'homeQaFindTaxpayer', icon: Icons.search },
   // Agents are asked "is this receipt real?" in the field constantly; until
   // now answering meant leaving the application.
-  { href: '#/verify', label: 'Check a receipt', icon: Icons.receipt },
+  { href: '#/verify', label: 'homeQaCheckReceipt', icon: Icons.receipt },
   // The collection point. Reachable from here rather than from a tab, because
   // a distribution is a season's work for an agent rather than a daily one —
   // but reachable, which the Profile screen was not until somebody looked.
-  { href: '#/collections', label: 'Hand out allocation', icon: Icons.check },
+  { href: '#/collections', label: 'homeQaHandOut', icon: Icons.check },
   // Registering a cooperative is how a whole market reaches the register at
   // once. The endpoint was written for an agent on a bound handset and had no
   // screen behind it at all.
-  { href: '#/groups', label: 'Groups', icon: Icons.people },
-];
+  { href: '#/groups', label: 'homeQaGroups', icon: Icons.people },
+] as const satisfies readonly { href: string; label: keyof TranslationDictionary; icon: unknown }[];
 
-function greeting(): string {
+function greetingKey(): keyof TranslationDictionary {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (hour < 12) return 'homeGoodMorning';
+  if (hour < 17) return 'homeGoodAfternoon';
+  return 'homeGoodEvening';
 }
 
 export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
@@ -70,8 +71,8 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
           kind={error.code === 'AGENT_SUSPENDED' ? 'error' : 'info'}
           title={
             error.code === 'AGENT_SUSPENDED'
-              ? 'Your agent account is suspended'
-              : 'Your application is still being processed'
+              ? t.homeAccountSuspended
+              : t.homeApplicationProcessing
           }
         >
           <p style={{ margin: 0 }}>{error.message}</p>
@@ -89,7 +90,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
 
   return (
     <>
-      <p style={{ margin: '0 0 10px', fontSize: '0.9rem', color: 'var(--muted)' }}>{greeting()}</p>
+      <p style={{ margin: '0 0 10px', fontSize: '0.9rem', color: 'var(--muted)' }}>{t[greetingKey()]}</p>
 
       <section className="headline">
         <p className="headline__label">{t.homeCollectedToday}</p>
@@ -99,27 +100,27 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         <div className="headline__stats">
           <div>
             <strong>{data.today.successful}</strong>
-            transactions
+            {t.homeTransactions}
           </div>
           <div>
             <strong>
               <Money kobo={data.commission.today_kobo} />
             </strong>
-            commission
+            {t.homeCommissionWord}
           </div>
           <div>
             <strong>{data.taxpayersOnboarded.today}</strong>
-            registered
+            {t.homeRegisteredWord}
           </div>
         </div>
       </section>
 
       {Number(data.today.pending) > 0 && (
-        <Alert kind="warning" title={`${data.today.pending} payment(s) awaiting confirmation`}>
-          <p style={{ margin: 0 }}>
-            These are not yet confirmed. Do not ask the taxpayer to pay again — open the transaction
-            to check its status.
-          </p>
+        <Alert
+          kind="warning"
+          title={t.homePendingTitle.replace('{{n}}', String(data.today.pending))}
+        >
+          <p style={{ margin: 0 }}>{t.homePendingBody}</p>
         </Alert>
       )}
 
@@ -128,7 +129,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         {QUICK_ACTIONS.map((action) => (
           <a key={action.href} className="quick-action" href={action.href}>
             <action.icon />
-            {action.label}
+            {t[action.label]}
           </a>
         ))}
       </div>

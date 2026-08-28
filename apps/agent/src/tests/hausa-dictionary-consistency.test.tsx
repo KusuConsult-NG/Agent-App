@@ -98,7 +98,10 @@ describe('the Hausa dictionary holds together', () => {
     // strings that turn on *not* are the ones that stop an agent taking cash
     // or telling a taxpayer to pay a second time.
     const englishNegative = /\b(not|never|no|cannot|can't|do not|don't|without|nothing|unless)\b/i;
-    const hausaNegative = /\b(ba|kada|babu|bai|banda)\b/i;
+    // `a’a` is the bare "no" — the answer to a yes/no question rather than a
+    // negated sentence. It was missing here, and the first string that needed
+    // it was the Yes/No pair asking whether a taxpayer already holds a TIN.
+    const hausaNegative = /(\b(ba|kada|babu|bai|banda)\b|a’a)/i;
     const dropped = keys.filter((k) => englishNegative.test(en[k]) && !hausaNegative.test(ha[k]));
     expect(dropped).toEqual([]);
   });
