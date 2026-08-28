@@ -40,10 +40,19 @@ const ALLOWED = new Set([
 
 const RENDERED_PROPS = /\b(?:title|placeholder|aria-label|label|hint|alt)="([^"]+)"/g;
 
+/**
+ * Fragments of TypeScript the text-run pattern picks up by accident.
+ *
+ * Kept identical to the agent's copy, and narrow for the same reason: an
+ * earlier version treated any parenthesis as code, which would have let every
+ * parenthesised label through unchecked. The seams between two JSX branches
+ * are recognised by starting with a close parenthesis, which no visible
+ * string does.
+ */
 function looksLikeCode(text: string): boolean {
   return (
-    /[;=(){}[\]]/.test(text) ||
-    /^\w+\s*\./.test(text) ||
+    /[;={}[\]]/.test(text) ||
+    text.startsWith(')') ||
     /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
   );
 }

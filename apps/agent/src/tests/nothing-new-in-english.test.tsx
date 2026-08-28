@@ -83,11 +83,20 @@ const SHOWN_MESSAGES =
  * `= 0 && (index` sits between two of them. Filtering on syntax rather than
  * on a list of specific strings keeps the check from going quiet as the code
  * around it changes.
+ *
+ * The rules are deliberately narrow. An earlier version treated any text
+ * containing a parenthesis as code, which would have let `Occupation
+ * (optional)` and every other parenthesised label through unchecked — the
+ * blind spot was wider than the noise it removed. So only brackets that do
+ * not appear in prose are matched, and the false positives left over — the
+ * seams between two JSX branches, `) : condition ? (` and its variants — are
+ * recognised by starting with a close parenthesis, which no visible string
+ * does, rather than by widening the rule until it swallows real text.
  */
 function looksLikeCode(text: string): boolean {
   return (
-    /[;=(){}[\]]/.test(text) ||
-    /^\w+\s*\./.test(text) ||
+    /[;={}[\]]/.test(text) ||
+    text.startsWith(')') ||
     /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
   );
 }
