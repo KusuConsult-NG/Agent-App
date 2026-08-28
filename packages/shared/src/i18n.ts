@@ -135,6 +135,24 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  shellSyncFailed: string;
+  grpNameHint: string;
+  grpCommunityHint: string;
+  grpLeaderNameHint: string;
+  grpLeaderPhoneHint: string;
+  grpMemberCountHint: string;
+  stepUpCodeFailed: string;
+  stepUpAuthoriseFailed: string;
+
+  /**
+   * The verdict the public verification page prints in large type. Everything
+   * under it was translated; the one word most readers actually take in was not.
+   */
+  pubVerdictValid: string;
+  pubVerdictAcknowledgement: string;
+  pubVerdictReversed: string;
+  pubVerdictNotFound: string;
+  pubVerdictInvalid: string;
   colChangeChoice: string;
   moreMonths: string;
   supGetHelpHint: string;
@@ -1011,6 +1029,19 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    shellSyncFailed: "Your saved records could not be sent to PSIRS. They are still on this phone.",
+    grpNameHint: "As the group itself gives it",
+    grpCommunityHint: "Where the group meets. Optional.",
+    grpLeaderNameHint: "The person who can confirm who belongs",
+    grpLeaderPhoneHint: "They are sent a link to confirm the membership list",
+    grpMemberCountHint: "An estimate is fine. Optional.",
+    stepUpCodeFailed: "Could not send a code.",
+    stepUpAuthoriseFailed: "Could not authorise this.",
+    pubVerdictValid: "VALID",
+    pubVerdictAcknowledgement: "VALID — NOT A RECEIPT",
+    pubVerdictReversed: "REVERSED",
+    pubVerdictNotFound: "NOT FOUND",
+    pubVerdictInvalid: "INVALID",
     colChangeChoice: "Change",
     moreMonths: "{{n}} months",
     supGetHelpHint: "Report a problem to PSIRS. You will get a reply here, and a message when there is something to read.",
@@ -1783,6 +1814,19 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    shellSyncFailed: "Ba a iya tura rikodin da ka adana zuwa PSIRS ba. Suna nan a wannan wayar.",
+    grpNameHint: "Kamar yadda kungiyar da kanta ta bayar",
+    grpCommunityHint: "Inda kungiyar ke haduwa. Ba dole ba.",
+    grpLeaderNameHint: "Mutumin da zai iya tabbatar da wanda ke cikinta",
+    grpLeaderPhoneHint: "Ana tura masa hanyar tabbatar da jerin mambobi",
+    grpMemberCountHint: "Kiyasi ya isa. Ba dole ba.",
+    stepUpCodeFailed: "Ba a iya tura lamba ba.",
+    stepUpAuthoriseFailed: "Ba a iya bada izinin wannan ba.",
+    pubVerdictValid: "INGANTACCE",
+    pubVerdictAcknowledgement: "INGANTACCE — BA RASIT BA NE",
+    pubVerdictReversed: "AN JUYAR DA SHI",
+    pubVerdictNotFound: "BA A SAMU BA",
+    pubVerdictInvalid: "BA INGANTACCE BA",
     colChangeChoice: "Canza",
     moreMonths: "Watanni {{n}}",
     supGetHelpHint: "Ka kai rahoton matsala ga PSIRS. Za ka samu amsa a nan, da sako idan akwai abin karantawa.",

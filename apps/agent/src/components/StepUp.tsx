@@ -70,7 +70,7 @@ export function StepUpPrompt({
       inputRef.current?.focus();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : 'Could not send a code.');
+      else setFailure(caught instanceof Error ? caught.message : t.stepUpCodeFailed);
     } finally {
       setSending(false);
     }
@@ -99,7 +99,7 @@ export function StepUpPrompt({
       await onAuthorised();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : 'Could not authorise this.');
+      else setFailure(caught instanceof Error ? caught.message : t.stepUpAuthoriseFailed);
       // The grant failed, so the code is spent or wrong either way. Clearing it
       // stops a second submit re-sending the same rejected digits.
       setCode('');

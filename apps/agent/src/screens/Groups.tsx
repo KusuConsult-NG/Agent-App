@@ -229,7 +229,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
       <ErrorAlert error={error} />
 
       <form onSubmit={submit}>
-        <Field label={t.grpName} hint="As the group itself gives it" required>
+        <Field label={t.grpName} hint={t.grpNameHint} required>
           <input
             type="text"
             value={form.name}
@@ -272,7 +272,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           </select>
         </div>
 
-        <Field label={t.grpCommunity} hint="Where the group meets. Optional.">
+        <Field label={t.grpCommunity} hint={t.grpCommunityHint}>
           <input
             type="text"
             value={form.community}
@@ -281,7 +281,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label={t.grpLeaderName} hint="The person who can confirm who belongs" required>
+        <Field label={t.grpLeaderName} hint={t.grpLeaderNameHint} required>
           <input
             type="text"
             value={form.leaderName}
@@ -290,7 +290,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label={t.grpLeaderPhone} hint="They are sent a link to confirm the membership list" required>
+        <Field label={t.grpLeaderPhone} hint={t.grpLeaderPhoneHint} required>
           <input
             type="text"
             value={form.leaderPhone}
@@ -299,7 +299,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
           />
         </Field>
 
-        <Field label={t.grpMemberCount} hint="An estimate is fine. Optional.">
+        <Field label={t.grpMemberCount} hint={t.grpMemberCountHint}>
           <input
             type="number"
             value={form.memberEstimate}

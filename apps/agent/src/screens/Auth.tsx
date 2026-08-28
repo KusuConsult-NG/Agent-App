@@ -34,10 +34,7 @@ export function LoginScreen({
           ? caught.error
           : {
               code: 'NETWORK',
-              // Kept in English as a last resort: ErrorAlert renders `errNetwork`
-              // for this code, and anything that shows a raw message instead
-              // should still say something rather than nothing.
-              message: 'Could not reach PSIRS. Check your connection and try again.',
+              message: t.errNetwork,
               moneyStatus: 'NOT_APPLICABLE',
             },
       );
@@ -160,10 +157,7 @@ export function ApplyScreen({
           ? caught.error
           : {
               code: 'NETWORK',
-              // Kept in English as a last resort: ErrorAlert renders `errNetwork`
-              // for this code, and anything that shows a raw message instead
-              // should still say something rather than nothing.
-              message: 'Could not reach PSIRS. Check your connection and try again.',
+              message: t.errNetwork,
               moneyStatus: 'NOT_APPLICABLE',
             },
       );

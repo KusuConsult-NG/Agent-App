@@ -151,13 +151,13 @@ export function VerifyScreen({ code }: { code?: string }) {
                      * under it. The mark has to carry the distinction itself.
                      */
                     result.documentType === 'PAYMENT_ACKNOWLEDGEMENT'
-                    ? 'VALID — NOT A RECEIPT'
-                    : 'VALID'
+                    ? t.pubVerdictAcknowledgement
+                    : t.pubVerdictValid
                   : result.status === 'REVERSED'
-                    ? 'REVERSED'
+                    ? t.pubVerdictReversed
                     : result.status === 'NOT_FOUND'
-                      ? 'NOT FOUND'
-                      : 'INVALID'}
+                      ? t.pubVerdictNotFound
+                      : t.pubVerdictInvalid}
               </p>
             </div>
 
@@ -705,7 +705,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         <ErrorAlert error={error} />
 
         {pending.length === 0 ? (
-          <Alert kind="success" title="Nothing waiting">
+          <Alert kind="success" title={t.pubAttestNothingTitle}>
             <p style={{ margin: 0 }}>
               {t.pubAttestNothingBody}
             </p>
@@ -873,7 +873,7 @@ export function CitizenPortalScreen() {
           <div style={{ marginTop: 16 }}>
             <div className="verdict verdict--invalid">
               <p className="verdict__mark">×</p>
-              <p className="verdict__label">NOT FOUND</p>
+              <p className="verdict__label">{t.pubVerdictNotFound}</p>
             </div>
             <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
             {result.count !== undefined && result.count > 1 && (

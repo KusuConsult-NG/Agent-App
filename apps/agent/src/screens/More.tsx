@@ -910,7 +910,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
       <StepUpPrompt
         action="agent.bank_account.change"
         title={t.moreAuthoriseChange}
-        confirmLabel="Send to PSIRS"
+        confirmLabel={t.supSendToPsirs}
         description={
           <>
             <p style={{ margin: '0 0 4px' }}>

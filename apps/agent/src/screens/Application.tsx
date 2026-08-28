@@ -168,6 +168,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
 }
 
 function useAction(onDone: () => void) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -184,7 +185,7 @@ function useAction(onDone: () => void) {
       setError(
         caught instanceof ApiRequestError
           ? caught.error
-          : { code: 'NETWORK', message: 'Could not reach PSIRS. Try again.', moneyStatus: 'NOT_APPLICABLE' },
+          : { code: 'NETWORK', message: t.errNetwork, moneyStatus: 'NOT_APPLICABLE' },
       );
     } finally {
       setBusy(false);

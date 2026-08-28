@@ -161,7 +161,7 @@ export function App() {
         setSyncProblem({ message: caught.error.message, nextStep: caught.error.nextStep });
       } else {
         setSyncProblem({
-          message: 'Your saved records could not be sent to PSIRS. They are still on this phone.',
+          message: t.shellSyncFailed,
         });
       }
     }

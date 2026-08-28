@@ -63,6 +63,56 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'emailIncomplete',
   'deviceNotRegistered',
   'deviceAfterApproval',
+  /*
+   * Added when the app stopped running out of Hausa halfway down.
+   *
+   * The tier is not "strings on screens that touch money" — that is most of
+   * the app now. It is the strings whose *meaning inverted* leaves somebody
+   * out of pocket: a refusal read as a success, an unconfirmed payment read
+   * as a confirmed one, an offline capture read as a completed collection,
+   * or the sentence that keeps government revenue out of an agent's own
+   * account.
+   */
+  'errPaymentUnconfirmed',
+  'errPaymentPendingReconciliation',
+  'errPaymentFailed',
+  'errAgentNotCleared',
+  'errDeviceNotRegistered',
+  'errUpdateRequired',
+  'errNetwork',
+  'moneyNotDebited',
+  'moneyUnconfirmed',
+  'moneyReceived',
+  'homePendingBody',
+  'appCannotCollectUntil',
+  'appDeviceOnlyRegistered',
+  'appBankHint',
+  'authRevenueNeverToAgent',
+  'tpSavedOfflineBody',
+  'tpNotYetSent',
+  'tpConsent',
+  'tpDeclaration',
+  'tpTinPending',
+  'allocOfflineBody',
+  'allocFailed',
+  'verifyCouldNotReach',
+  'verifyNotAReceiptCode',
+  'verifyOfflineBody',
+  'grpNoAssessmentBody',
+  'grpAskLeaderHint',
+  'moreCommissionOnlyVerified',
+  'moreVehicleSavedBody',
+  'moreVehicleCaptureBody',
+  'moreBankMustConfirm',
+  'colInvoiceNoReference',
+  // The verdict a citizen reads off the public verification page, in the
+  // largest type on it. Every word underneath was translated and these were
+  // not, which is the failure this tier exists to catch.
+  'pubVerdictValid',
+  'pubVerdictAcknowledgement',
+  'pubVerdictReversed',
+  'pubVerdictNotFound',
+  'pubVerdictInvalid',
 ];
 
 describe('the safety tier is really in Hausa', () => {
