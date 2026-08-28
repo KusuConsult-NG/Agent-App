@@ -28,6 +28,18 @@ export type NotificationEvent =
   | 'DOCUMENT_READY'
   | 'COMMISSION_EARNED'
   | 'COMMISSION_PAID'
+  /*
+   * The two ways an agent's payout does not arrive.
+   *
+   * `COMMISSION_PAID` was seeded and never queued; these two did not exist at
+   * all. There was no event for a transfer the bank bounced or a payout an
+   * officer declined, so the agent's own money could stop moving and the only
+   * record was an audit entry they cannot read. A bounced transfer is usually
+   * wrong account details — a thing only the agent can fix, and only if
+   * somebody tells them there is something to fix.
+   */
+  | 'COMMISSION_PAYOUT_FAILED'
+  | 'COMMISSION_PAYOUT_REFUSED'
   | 'SECURITY_ALERT'
   | 'AGENT_APPROVED'
   | 'AGENT_REJECTED'
@@ -164,10 +176,26 @@ export async function queueNotification(
   let queued = 0;
 
   for (const template of templates) {
+    /*
+     * A push is delivered to a person's devices, so its recipient is a user id.
+     *
+     * This read "EMAIL ? email : phone", which addressed a PUSH row to a
+     * telephone number. The adapter looks subscriptions up by user id and
+     * refuses anything else, so every push would have been permanently
+     * rejected — with a message blaming whoever wrote the template. Nobody had
+     * noticed because no PUSH template was seeded, which is its own problem
+     * and not a defence.
+     *
+     * `userId` is null for a taxpayer, who holds no account here. Then there is
+     * nothing to push to and the row is skipped, which is the right answer:
+     * their receipt goes by SMS, and that is the copy that matters.
+     */
     const recipient =
-      template.channel === 'EMAIL'
-        ? recipientEmail
-        : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
+      template.channel === 'PUSH'
+        ? userId
+        : template.channel === 'EMAIL'
+          ? recipientEmail
+          : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
     if (!recipient) continue;
 
     await client.query(

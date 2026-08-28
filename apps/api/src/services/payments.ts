@@ -598,6 +598,33 @@ async function verifyAndRecord(params: {
 
         metrics.paymentConfirmed('FAILED', params.source);
 
+        /*
+         * And tell the taxpayer, which this branch never did.
+         *
+         * Success queued PAYMENT_SUCCESSFUL; failure queued nothing, though a
+         * PAYMENT_FAILED template has been seeded from the beginning. The
+         * sentence returned below goes to whichever client made the call —
+         * the agent's handset, or a gateway posting a webhook — and neither of
+         * those is the person whose money it is.
+         *
+         * The asymmetry is the wrong way round. A citizen whose payment
+         * succeeded finds out anyway, because a receipt follows. A citizen
+         * whose payment failed may have been debited by their own bank and had
+         * the gateway report failure regardless, and PRD §60 exists because
+         * somebody who cannot tell whether their money left their account pays
+         * a second time.
+         */
+        await queueNotification(client, {
+          event: 'PAYMENT_FAILED',
+          taxpayerId: await taxpayerIdFor(client, payment.transaction_id),
+          entityType: 'transaction',
+          entityId: payment.transaction_id,
+          variables: {
+            reference: payment.transaction_reference,
+            reason: verification.failureReason ?? 'the payment did not complete',
+          },
+        });
+
         return {
           status: 'FAILED',
           paymentId: payment.id,

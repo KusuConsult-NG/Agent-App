@@ -577,6 +577,33 @@ const INCENTIVE_PROGRAMMES = [
 ] as const;
 
 const NOTIFICATION_TEMPLATES = [
+  /*
+   * The agent's own money, on the three occasions it moves.
+   *
+   * `COMMISSION_PAID` was here from the beginning and nothing queued it, so an
+   * agent learned their payout had arrived by checking their bank — and learned
+   * a transfer had bounced by not finding it there, which is indistinguishable
+   * from PSIRS not having paid them. That is the belief that becomes a support
+   * ticket, or an agent who starts asking citizens for cash.
+   */
+  { code: 'COMMISSION_PAYOUT_FAILED_SMS', event: 'COMMISSION_PAYOUT_FAILED', channel: 'SMS', body: 'PSIRS: Your commission payout {{reference}} could not be paid into your account: {{reason}}. The money has not been lost — it returns to your available balance and will go out again once the account details are correct. Check your bank details in the app.' },
+  { code: 'COMMISSION_PAYOUT_REFUSED_SMS', event: 'COMMISSION_PAYOUT_REFUSED', channel: 'SMS', body: 'PSIRS: Your commission payout request {{reference}} was not approved: {{reason}}. The money has not been lost — it stays in your available balance and you can request it again.' },
+  /*
+   * Push, for the messages an agent needs while they are in the field.
+   *
+   * Additive: every one of these still goes by SMS, because an agent may have
+   * declined the browser prompt or replaced the handset, and suspension is
+   * exactly the message they must not miss. Push is free and immediate; the
+   * SMS is the one that always arrives.
+   *
+   * Only events that resolve to a user account. A taxpayer holds none, so a
+   * push template on a taxpayer-facing event would queue nothing.
+   */
+  { code: 'AGENT_SUSPENDED_PUSH', event: 'AGENT_SUSPENDED', channel: 'PUSH', subject: 'You have been suspended', body: 'Stop collecting now. Reason: {{reason}}. Open the app for what happens next.' },
+  { code: 'AGENT_APPROVED_PUSH', event: 'AGENT_APPROVED', channel: 'PUSH', subject: 'You are cleared to collect', body: 'Your application has been approved. Open the app to register your device and begin.' },
+  { code: 'KYC_ACTION_REQUIRED_PUSH', event: 'KYC_ACTION_REQUIRED', channel: 'PUSH', subject: 'Your application needs something', body: '{{reason}}' },
+  { code: 'COMMISSION_PAID_PUSH', event: 'COMMISSION_PAID', channel: 'PUSH', subject: 'Commission paid', body: 'Your payout {{reference}} has been sent to your bank.' },
+  { code: 'COMMISSION_PAYOUT_FAILED_PUSH', event: 'COMMISSION_PAYOUT_FAILED', channel: 'PUSH', subject: 'Payout could not be paid', body: '{{reason}}. The money is still yours — check your bank details in the app.' },
   { code: 'TIN_CREATED_SMS', event: 'TIN_CREATED', channel: 'SMS', body: 'PSIRS: Your Taxpayer Identification Number is {{tin}}. Keep it safe — you will need it for every government payment.' },
   { code: 'INVOICE_SMS', event: 'INVOICE_GENERATED', channel: 'SMS', body: 'PSIRS: Invoice {{reference}} for {{amount}} has been raised. Pay only through approved government channels.' },
   // Confirmation gives the taxpayer an acknowledgement, not a receipt, and this

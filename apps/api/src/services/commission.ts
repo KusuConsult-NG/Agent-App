@@ -27,6 +27,7 @@ import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '
 import { conflict, notFound, forbidden } from '../lib/errors';
 import { nextPayoutReference } from '../lib/references';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
 
 interface CommissionPolicyRow {
   id: string;
@@ -664,10 +665,13 @@ export async function refusePayout(
     );
   }
 
-  await client.query(
-    `UPDATE commission_payouts SET status = 'REJECTED' WHERE id = $1`,
+  const refused = await queryOne<{ payout_reference: string }>(
+    client,
+    `UPDATE commission_payouts SET status = 'REJECTED' WHERE id = $1
+      RETURNING payout_reference`,
     [params.payoutId],
   );
+  const refusedReference = refused!.payout_reference;
 
   const included = await query<{ id: string }>(
     client,
@@ -709,6 +713,19 @@ export async function refusePayout(
       clawbackRestored: restored.length,
     },
     reason: params.reason,
+  });
+
+  /*
+   * A refusal the agent is never told about is not a decision they can respond
+   * to. The money stays in their available balance, so the message says that
+   * too — the request was declined, not the earnings.
+   */
+  await queueNotification(client, {
+    event: 'COMMISSION_PAYOUT_REFUSED',
+    agentId: payout.agent_id,
+    variables: { reference: refusedReference, reason: params.reason },
+    entityType: 'commission_payout',
+    entityId: params.payoutId,
   });
 
   return { returnedToEligible: included.length, clawbackRestored: restored.length };
@@ -760,8 +777,10 @@ export async function failPayout(params: {
       );
     }
 
-    await client.query(
-      `UPDATE commission_payouts SET status = 'FAILED', failure_reason = $2 WHERE id = $1`,
+    const failed = await queryOne<{ agent_id: string; payout_reference: string }>(
+      client,
+      `UPDATE commission_payouts SET status = 'FAILED', failure_reason = $2 WHERE id = $1
+        RETURNING agent_id, payout_reference`,
       [params.payoutId, params.reason],
     );
 
@@ -807,6 +826,23 @@ export async function failPayout(params: {
       reason: params.reason,
     });
 
+    /*
+     * The message that matters more than the successful one.
+     *
+     * A bounced transfer is almost always wrong account details, which only the
+     * agent can correct — and until somebody tells them, "the bank refused my
+     * account" is indistinguishable from "PSIRS did not pay me". The money went
+     * back to ELIGIBLE a few lines above, so the notification says so: an agent
+     * told only that their payout failed reasonably concludes it is gone.
+     */
+    await queueNotification(client, {
+      event: 'COMMISSION_PAYOUT_FAILED',
+      agentId: failed!.agent_id,
+      variables: { reference: failed!.payout_reference, reason: params.reason },
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
+    });
+
     return { returnedToEligible: included.length, clawbackRestored: restored.length };
   });
 }
@@ -837,10 +873,12 @@ export async function completePayout(params: {
       );
     }
 
-    await client.query(
+    const paid = await queryOne<{ agent_id: string; amount_kobo: string }>(
+      client,
       `UPDATE commission_payouts
           SET status = 'PAID', bank_reference = $2, paid_at = now()
-        WHERE id = $1`,
+        WHERE id = $1
+        RETURNING agent_id, amount_kobo::text AS amount_kobo`,
       [params.payoutId, params.bankReference],
     );
 
@@ -866,6 +904,25 @@ export async function completePayout(params: {
       entityType: 'commission_payout',
       entityId: params.payoutId,
       newValue: { bankReference: params.bankReference, commissionCount: commissions.length },
+    });
+
+    /*
+     * And tell the agent, which nothing in this file used to do.
+     *
+     * A `COMMISSION_PAID` template has been seeded since the beginning and
+     * nothing ever queued it, so an agent learned their payout had arrived by
+     * checking their bank. The audit entry above records the same fact for
+     * somebody who will never read it on the agent's behalf.
+     */
+    await queueNotification(client, {
+      event: 'COMMISSION_PAID',
+      agentId: paid!.agent_id,
+      variables: {
+        amount: formatNaira(BigInt(paid!.amount_kobo)),
+        reference: params.bankReference,
+      },
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
     });
   });
 }
