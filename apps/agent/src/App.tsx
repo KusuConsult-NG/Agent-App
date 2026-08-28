@@ -231,7 +231,7 @@ export function App() {
           track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
           setLanguage(lang === 'en' ? 'ha' : 'en');
         }}
-        aria-label="Switch language"
+        aria-label={t.appSwitchLanguage}
       >
         {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
       </button>
@@ -271,7 +271,7 @@ export function App() {
           track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
           setLanguage(lang === 'en' ? 'ha' : 'en');
         }}
-            aria-label="Switch Language"
+            aria-label={t.appSwitchLanguage}
           >
             {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
           </button>
@@ -281,7 +281,7 @@ export function App() {
             style={{ color: '#fff', width: 'auto' }}
             onClick={signOut}
           >
-            Sign out
+            {t.appSignOut}
           </button>
         </div>
 
@@ -302,7 +302,7 @@ export function App() {
         )}
 
         {version && !version.supported && (
-          <Alert kind="error" title="Update required">
+          <Alert kind="error" title={t.appUpdateRequired}>
             <p style={{ margin: 0 }}>
               This version ({APP_VERSION}) can no longer be used for transactions. Close and reopen
               the app to install version {version.recommendedVersion}.
@@ -311,13 +311,13 @@ export function App() {
         )}
 
         {syncMessage && (
-          <Alert kind="success" title="Records synchronised">
+          <Alert kind="success" title={t.appRecordsSynced}>
             <p style={{ margin: 0 }}>{syncMessage}</p>
           </Alert>
         )}
 
         {syncProblem && (
-          <Alert kind="error" title="Saved records could not be sent">
+          <Alert kind="error" title={t.appRecordsNotSent}>
             <p style={{ margin: 0 }}>{syncProblem.message}</p>
             {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
             <p style={{ margin: '0.5rem 0 0' }}>
@@ -360,6 +360,7 @@ function Routes({
   connection: ConnectionState;
   onSignOut: () => void;
 }) {
+  const { t } = useI18n();
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
   const ticketMatch = matchRoute(route, '/support/:id');
@@ -393,9 +394,9 @@ function Routes({
   if (ticketMatch) return <TicketScreen ticketId={ticketMatch.id!} />;
 
   return (
-    <Alert kind="info" title="Page not found">
+    <Alert kind="info" title={t.appPageNotFound}>
       <p style={{ margin: 0 }}>
-        That screen does not exist. <a href="#/">Return to the home screen</a>.
+        {t.appPageNotFoundBody} <a href="#/">{t.appReturnHome}</a>.
       </p>
     </Alert>
   );

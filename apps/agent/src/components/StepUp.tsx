@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, type ApiError } from '../lib/api';
 import { grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
 import { Alert, ErrorAlert, Field, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 /** Mask all but the last three digits: enough to recognise, not to publish. */
 function maskPhone(phone: string): string {
@@ -41,6 +42,7 @@ export function StepUpPrompt({
   onAuthorised: () => Promise<void> | void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -125,20 +127,20 @@ export function StepUpPrompt({
 
       <ErrorAlert error={error} />
       {failure && (
-        <Alert kind="error" title="Could not continue">
+        <Alert kind="error" title={t.stepUpCouldNotContinue}>
           <p style={{ margin: 0 }}>{failure}</p>
         </Alert>
       )}
 
       {developmentCode && (
-        <Alert kind="info" title="Development build">
+        <Alert kind="info" title={t.stepUpDevelopmentBuild}>
           <p style={{ margin: 0 }}>
             No real SMS is configured, so the code is shown here: <strong>{developmentCode}</strong>
           </p>
         </Alert>
       )}
 
-      <Field label="One-time code" required>
+      <Field label={t.stepUpOneTimeCode} required>
         <input
           ref={inputRef}
           value={code}
@@ -154,8 +156,8 @@ export function StepUpPrompt({
 
       {!sending &&
         (expired ? (
-          <Alert kind="warning" title="That code has expired">
-            <p style={{ margin: 0 }}>Ask for a new one to continue.</p>
+          <Alert kind="warning" title={t.stepUpExpired}>
+            <p style={{ margin: 0 }}>{t.stepUpAskNew}</p>
           </Alert>
         ) : (
           <p className="field__hint">
@@ -175,7 +177,7 @@ export function StepUpPrompt({
           {busy ? <Spinner /> : confirmLabel}
         </button>
         <button type="button" className="secondary" disabled={sending || busy} onClick={() => void send()}>
-          Send a new code
+          {t.stepUpSendNew}
         </button>
       </div>
 

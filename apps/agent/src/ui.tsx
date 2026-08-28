@@ -3,7 +3,9 @@
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
 import { formatNaira, statusSeverity } from '@psirs/shared';
+import type { TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
+import { useI18n } from './lib/i18n';
 
 export function Money({ kobo, className }: { kobo: string | bigint | null | undefined; className?: string }) {
   if (kobo === null || kobo === undefined) return <span className={className}>—</span>;
@@ -36,21 +38,55 @@ function fieldLabel(field: string): string {
   return readable.charAt(0).toUpperCase() + readable.slice(1).toLowerCase();
 }
 
+/**
+ * The errors whose meaning is fixed, and can therefore be translated.
+ *
+ * Keyed by code rather than matched on text: the server's wording changes, and
+ * a translation that stopped applying when somebody improved an English
+ * sentence would fail silently and in the language nobody testing it reads.
+ *
+ * Everything absent from this map falls back to what the server said. A
+ * validation message names a field and is generated from the schema, so a
+ * Hausa sentence guessed for a message nobody has seen would be worse than the
+ * English one — the agent cannot tell a guess from a translation.
+ */
+const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+  PAYMENT_UNCONFIRMED: 'errPaymentUnconfirmed',
+  PAYMENT_PENDING_RECONCILIATION: 'errPaymentPendingReconciliation',
+  PAYMENT_FAILED: 'errPaymentFailed',
+  AGENT_NOT_CLEARED: 'errAgentNotCleared',
+  DEVICE_NOT_REGISTERED: 'errDeviceNotRegistered',
+  RATE_LIMITED: 'errRateLimited',
+  UPDATE_REQUIRED: 'errUpdateRequired',
+};
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
+  const { t } = useI18n();
   if (!error) return null;
 
+  /*
+   * The sentence that decides whether a citizen is asked to pay twice.
+   *
+   * It was three English literals here, unreachable by any dictionary and by
+   * the Hausa review — in an application that has offered Hausa since it was
+   * built. It has only three possible values, so it is always in the agent's
+   * language whatever the error was.
+   */
   const moneyLine =
     error.moneyStatus === 'NOT_DEBITED'
-      ? 'No money has been taken from the taxpayer.'
+      ? t.moneyNotDebited
       : error.moneyStatus === 'UNCONFIRMED'
-        ? 'The payment has NOT been confirmed. Do not collect again.'
+        ? t.moneyUnconfirmed
         : error.moneyStatus === 'RECEIVED'
-          ? 'The money has been received.'
+          ? t.moneyReceived
           : null;
+
+  const translated = TRANSLATED_ERRORS[error.code];
+  const message = translated ? t[translated] : error.message;
 
   return (
     <div className={`alert alert--${error.moneyStatus === 'UNCONFIRMED' ? 'warning' : 'error'}`} role="alert">
-      <strong>{error.message}</strong>
+      <strong>{message}</strong>
       {moneyLine && <p style={{ margin: '6px 0 0', fontWeight: 600 }}>{moneyLine}</p>}
       {error.nextStep && <p style={{ margin: '6px 0 0' }}>{error.nextStep}</p>}
       {error.details && error.details.length > 0 && (
@@ -64,7 +100,9 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
         </ul>
       )}
       {error.reference && (
-        <p style={{ margin: '6px 0 0', fontSize: '0.78rem' }}>Reference: {error.reference}</p>
+        <p style={{ margin: '6px 0 0', fontSize: '0.78rem' }}>
+          {t.errReference}: {error.reference}
+        </p>
       )}
     </div>
   );

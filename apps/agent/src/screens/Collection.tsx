@@ -15,6 +15,7 @@ import { useCallback, useRef, useState } from 'react';
 import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../lib/api';
 import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
 import { Alert, ErrorAlert, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 interface Collected {
   awardId: string;
@@ -27,6 +28,7 @@ interface Collected {
 const readable = (unit: string) => unit.replace(/_/g, ' ').toLowerCase();
 
 export function CollectionScreen() {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -114,7 +116,7 @@ export function CollectionScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Hand out an allocation</h2>
+        <h2 className="card__title">{t.allocHandOut}</h2>
         <p className="card__hint">
           Scan or type the collection code the beneficiary was given. Record it before you hand
           anything over — a code can only be used once, and this is what stops the same allocation
@@ -125,23 +127,23 @@ export function CollectionScreen() {
           <>
             <video ref={videoRef} className="scanner__view" playsInline muted />
             <button type="button" className="secondary" onClick={stopCamera}>
-              Stop scanning
+              {t.allocStopScanning}
             </button>
           </>
         ) : (
           <button type="button" onClick={() => void startScanning()} disabled={busy}>
-            Scan the code
+            {t.allocScanCode}
           </button>
         )}
 
         {cameraError && (
-          <Alert kind="warning" title="Camera">
+          <Alert kind="warning" title={t.scanCamera}>
             <p style={{ margin: 0 }}>{cameraError}</p>
           </Alert>
         )}
 
         <div className="field" style={{ marginTop: 14 }}>
-          <label htmlFor="collection-code">Or type the collection code</label>
+          <label htmlFor="collection-code">{t.allocTypeCode}</label>
           <input
             id="collection-code"
             value={code}
@@ -165,14 +167,14 @@ export function CollectionScreen() {
 
       {collected && (
         <div className="card">
-          <Alert kind="success" title="Recorded">
+          <Alert kind="success" title={t.allocRecorded}>
             <p style={{ margin: 0 }}>
               Give <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
               {readable(collected.unit)}.
             </p>
           </Alert>
           <p className="card__hint" style={{ marginTop: 10 }}>
-            This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.
+            {t.allocCodeUsed}
           </p>
         </div>
       )}

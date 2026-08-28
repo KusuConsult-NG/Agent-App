@@ -110,6 +110,130 @@ export interface TranslationDictionary {
   languageForMessages: string;
   languageForMessagesHint: string;
 
+  /**
+   * What happened to the money, and the errors that decide it.
+   *
+   * `ErrorAlert` printed these in English regardless of the language the agent
+   * had chosen, and the money line beneath every error was a hardcoded literal
+   * no dictionary and no review could reach. An agent who misreads it either
+   * collects a second time from somebody who has already paid, or walks away
+   * from money the State is owed.
+   *
+   * Only codes with a fixed meaning are here. A validation message is generated
+   * from the schema and names a field; guessing Hausa for a sentence we have
+   * not seen would be worse than showing the English, because the agent cannot
+   * tell a guess from a translation.
+   */
+  moneyNotDebited: string;
+  moneyUnconfirmed: string;
+  moneyReceived: string;
+  errPaymentUnconfirmed: string;
+  errPaymentPendingReconciliation: string;
+  errPaymentFailed: string;
+  errAgentNotCleared: string;
+  errDeviceNotRegistered: string;
+  errRateLimited: string;
+  errUpdateRequired: string;
+  errReference: string;
+
+  /**
+   * Collecting revenue, and asking PSIRS for help.
+   *
+   * The offline notice is the one that matters here: an agent who reads it as
+   * a temporary glitch waits, and an agent who does not understand it takes
+   * cash instead. It says why there can be no receipt, not merely that there
+   * is no signal.
+   */
+  colWhoIsPaying: string;
+  colSearchTaxpayer: string;
+  colNamePhoneTin: string;
+  colChangeTaxpayer: string;
+  colRegisterNew: string;
+  colWhatPaying: string;
+  colRevenueItem: string;
+  colSelectItem: string;
+  colBasisAmount: string;
+  colCalculate: string;
+  colHowCalculated: string;
+  colAboutToCollect: string;
+  colConfirmProceed: string;
+  colDownloadReceipt: string;
+  colShareReceipt: string;
+  colHistory: string;
+  colBackHome: string;
+  colOfflineTitle: string;
+  colOfflineBody: string;
+  supGetHelp: string;
+  supReportProblem: string;
+  supMyReports: string;
+  supNothingReported: string;
+  supWhatProblem: string;
+  supChooseOne: string;
+  supShortSummary: string;
+  supWhatHappened: string;
+  supHowUrgent: string;
+  supNotUrgent: string;
+  supUrgent: string;
+  supVeryUrgent: string;
+  supTransactionRef: string;
+  supBeforeYouSend: string;
+  supConversation: string;
+  supAddToReport: string;
+  supReportClosed: string;
+  supReopened: string;
+
+  /**
+   * Handing out an allocation, checking a receipt, the step-up prompt and the
+   * application shell.
+   *
+   * Two of these decide something: that a collection code has been used and
+   * cannot be presented again, and that a one-time code has expired. An agent
+   * who misreads either hands out a second bag of fertiliser or refuses a
+   * beneficiary who is entitled to one.
+   */
+  allocHandOut: string;
+  allocScanCode: string;
+  allocStopScanning: string;
+  allocTypeCode: string;
+  allocRecorded: string;
+  allocCodeUsed: string;
+  scanCamera: string;
+  verifyCheckReceipt: string;
+  verifyScanQr: string;
+  verifyTypeCode: string;
+  verifyOffline: string;
+  stepUpOneTimeCode: string;
+  stepUpExpired: string;
+  stepUpAskNew: string;
+  stepUpSendNew: string;
+  stepUpCouldNotContinue: string;
+  stepUpDevelopmentBuild: string;
+  appSignOut: string;
+  appSwitchLanguage: string;
+  appPageNotFound: string;
+  appPageNotFoundBody: string;
+  appReturnHome: string;
+  appRecordsSynced: string;
+  appRecordsNotSent: string;
+  appUpdateRequired: string;
+
+  /**
+   * The home screen an agent opens on.
+   *
+   * Nine strings that were English literals in an application that has offered
+   * Hausa since it was built — including the figure an agent checks against
+   * what is in their hand at the end of a day.
+   */
+  homeViewApplication: string;
+  homeCollectedToday: string;
+  homeQuickActions: string;
+  homeRecentTransactions: string;
+  homeNoTransactions: string;
+  homeLifetime: string;
+  homeTaxpayersRegistered: string;
+  homeCommissionEarned: string;
+  homeAvailableForPayout: string;
+
   // Checking a receipt
   genuineReceipt: string;
   receiptNotValid: string;
@@ -330,6 +454,94 @@ export const translations: Record<Language, TranslationDictionary> = {
     languageForMessagesHint:
       'Ask the taxpayer. Their receipt arrives by SMS and it is the only copy they will have.',
 
+    moneyNotDebited: 'No money has been taken from the taxpayer.',
+    moneyUnconfirmed: 'The payment has NOT been confirmed. Do not collect again.',
+    moneyReceived: 'The money has been received.',
+    errPaymentUnconfirmed:
+      'The payment could not be confirmed yet. The money has NOT been marked as received. Do not ask the taxpayer to pay again — check this transaction again in a few minutes.',
+    errPaymentPendingReconciliation:
+      'The payment has been received but is waiting for settlement. Do not collect again. The receipt is issued as soon as the government account has the money.',
+    errPaymentFailed:
+      'The payment did not go through. No money has been taken from the taxpayer. You can start it again.',
+    errAgentNotCleared:
+      'You are not yet cleared to collect revenue. Your application must be completed and approved first.',
+    errDeviceNotRegistered:
+      'This device is not registered to your account. Register it before you collect anything.',
+    errRateLimited: 'Too many attempts. Wait a moment and try again.',
+    errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
+    errReference: 'Reference',
+    colWhoIsPaying: "Who is paying?",
+    colSearchTaxpayer: "Search taxpayer",
+    colNamePhoneTin: "Name, phone or TIN",
+    colChangeTaxpayer: "Change taxpayer",
+    colRegisterNew: "Register a new taxpayer",
+    colWhatPaying: "What are they paying?",
+    colRevenueItem: "Revenue item",
+    colSelectItem: "Select a revenue item",
+    colBasisAmount: "Amount the charge is calculated on (₦)",
+    colCalculate: "Calculate amount",
+    colHowCalculated: "How this amount was calculated",
+    colAboutToCollect: "You are about to collect",
+    colConfirmProceed: "Confirm and proceed to payment",
+    colDownloadReceipt: "Download receipt",
+    colShareReceipt: "Share receipt",
+    colHistory: "History",
+    colBackHome: "Back to home",
+    colOfflineTitle: "You are offline",
+    colOfflineBody: "Revenue cannot be collected without a connection. Government payments must be confirmed by the payment system before a receipt exists.",
+    supGetHelp: "Get help",
+    supReportProblem: "Report a problem",
+    supMyReports: "My reports",
+    supNothingReported: "You have not reported anything yet.",
+    supWhatProblem: "What is the problem?",
+    supChooseOne: "Choose one",
+    supShortSummary: "Short summary",
+    supWhatHappened: "What happened?",
+    supHowUrgent: "How urgent is it?",
+    supNotUrgent: "Not urgent",
+    supUrgent: "Urgent — a taxpayer is waiting",
+    supVeryUrgent: "Very urgent — money may be at risk",
+    supTransactionRef: "Transaction reference",
+    supBeforeYouSend: "Before you send this",
+    supConversation: "Conversation",
+    supAddToReport: "Add to this report",
+    supReportClosed: "This report is closed",
+    supReopened: "Reopened",
+    allocHandOut: "Hand out an allocation",
+    allocScanCode: "Scan the code",
+    allocStopScanning: "Stop scanning",
+    allocTypeCode: "Or type the collection code",
+    allocRecorded: "Recorded",
+    allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
+    scanCamera: "Camera",
+    verifyCheckReceipt: "Check a receipt",
+    verifyScanQr: "Scan the QR code",
+    verifyTypeCode: "Or type the receipt code",
+    verifyOffline: "You are offline",
+    stepUpOneTimeCode: "One-time code",
+    stepUpExpired: "That code has expired",
+    stepUpAskNew: "Ask for a new one to continue.",
+    stepUpSendNew: "Send a new code",
+    stepUpCouldNotContinue: "Could not continue",
+    stepUpDevelopmentBuild: "Development build",
+    appSignOut: "Sign out",
+    appSwitchLanguage: "Switch language",
+    appPageNotFound: "Page not found",
+    appPageNotFoundBody: "That screen does not exist.",
+    appReturnHome: "Return to the home screen",
+    appRecordsSynced: "Records synchronised",
+    appRecordsNotSent: "Saved records could not be sent",
+    appUpdateRequired: "Update required",
+    homeViewApplication: "View my application",
+    homeCollectedToday: "Collected today",
+    homeQuickActions: "Quick actions",
+    homeRecentTransactions: "Recent transactions",
+    homeNoTransactions: "No transactions yet. Start by registering or finding a taxpayer.",
+    homeLifetime: "Lifetime",
+    homeTaxpayersRegistered: "Taxpayers registered",
+    homeCommissionEarned: "Commission earned",
+    homeAvailableForPayout: "Available for payout",
+
     genuineReceipt: 'Genuine receipt',
     receiptNotValid: 'Not a valid receipt',
     receiptNotValidBody:
@@ -525,6 +737,94 @@ export const translations: Record<Language, TranslationDictionary> = {
     languageForMessages: 'Harshen sakonnin sa',
     languageForMessagesHint:
       'Ka tambayi mai biyan haraji. Rasit dinsa yana zuwa ta SMS, kuma shi ne kwafin da zai samu kadai.',
+
+    moneyNotDebited: 'Ba a karbi kudi daga mai biyan haraji ba.',
+    moneyUnconfirmed: 'BA a tabbatar da biyan kudin ba. Kada ka sake karba.',
+    moneyReceived: 'An karbi kudin.',
+    errPaymentUnconfirmed:
+      'Ba a iya tabbatar da biyan kudin ba tukuna. BA a rubuta cewa an karbi kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake duba wannan ma’amala bayan wasu mintuna.',
+    errPaymentPendingReconciliation:
+      'An karbi kudin amma ana jiran a sasanta shi. Kada ka sake karba. Za a bayar da rasit da zarar kudin ya isa asusun gwamnati.',
+    errPaymentFailed:
+      'Biyan kudin bai yi nasara ba. Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake farawa.',
+    errAgentNotCleared:
+      'Ba a ba ka izinin karbar haraji ba tukuna. Dole a kammala bukatarka a kuma amince da ita.',
+    errDeviceNotRegistered:
+      'Ba a yi rajistar wannan na’ura a asusunka ba. Ka yi rajistarta kafin ka karbi komai.',
+    errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
+    errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
+    errReference: 'Lamba',
+    colWhoIsPaying: "Wa ke biya?",
+    colSearchTaxpayer: "Nemo mai biyan haraji",
+    colNamePhoneTin: "Suna, waya ko TIN",
+    colChangeTaxpayer: "Canza mai biyan haraji",
+    colRegisterNew: "Yi rajistar sabon mai biyan haraji",
+    colWhatPaying: "Me suke biya?",
+    colRevenueItem: "Nau’in haraji",
+    colSelectItem: "Zabi nau’in haraji",
+    colBasisAmount: "Adadin da ake lissafin haraji a kai (₦)",
+    colCalculate: "Lissafa adadi",
+    colHowCalculated: "Yadda aka lissafa wannan adadin",
+    colAboutToCollect: "Za ka karba",
+    colConfirmProceed: "Tabbatar ka ci gaba zuwa biyan kudi",
+    colDownloadReceipt: "Sauke rasit",
+    colShareReceipt: "Raba rasit",
+    colHistory: "Tarihi",
+    colBackHome: "Koma shafin farko",
+    colOfflineTitle: "Ba ka da intanet",
+    colOfflineBody: "Ba za a iya karbar haraji ba tare da intanet ba. Dole tsarin biyan kudi ya tabbatar da kudin gwamnati kafin a sami rasit.",
+    supGetHelp: "Nemi taimako",
+    supReportProblem: "Kai korafi",
+    supMyReports: "Korafina",
+    supNothingReported: "Ba ka kai wani korafi ba tukuna.",
+    supWhatProblem: "Menene matsalar?",
+    supChooseOne: "Zabi daya",
+    supShortSummary: "Takaitaccen bayani",
+    supWhatHappened: "Me ya faru?",
+    supHowUrgent: "Yaya gaggawarsa?",
+    supNotUrgent: "Ba gaggawa ba",
+    supUrgent: "Gaggawa — mai biyan haraji na jira",
+    supVeryUrgent: "Gaggawa kwarai — kudi na iya cikin hadari",
+    supTransactionRef: "Lambar ma’amala",
+    supBeforeYouSend: "Kafin ka tura wannan",
+    supConversation: "Tattaunawa",
+    supAddToReport: "Kara a kan wannan korafin",
+    supReportClosed: "An rufe wannan korafin",
+    supReopened: "An sake budewa",
+    allocHandOut: "Bayar da kason taimako",
+    allocScanCode: "Duba lambar",
+    allocStopScanning: "Daina duba",
+    allocTypeCode: "Ko rubuta lambar karba",
+    allocRecorded: "An rubuta",
+    allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
+    scanCamera: "Kyamara",
+    verifyCheckReceipt: "Duba rasit",
+    verifyScanQr: "Duba lambar QR",
+    verifyTypeCode: "Ko rubuta lambar rasit",
+    verifyOffline: "Ba ka da intanet",
+    stepUpOneTimeCode: "Lambar amfani sau daya",
+    stepUpExpired: "Lambar ta kare",
+    stepUpAskNew: "Ka nemi sabuwa domin ci gaba.",
+    stepUpSendNew: "Tura sabuwar lamba",
+    stepUpCouldNotContinue: "Ba a iya ci gaba ba",
+    stepUpDevelopmentBuild: "Sigar gwaji",
+    appSignOut: "Fita",
+    appSwitchLanguage: "Canza harshe",
+    appPageNotFound: "Ba a sami shafin ba",
+    appPageNotFoundBody: "Wannan shafin babu shi.",
+    appReturnHome: "Koma shafin farko",
+    appRecordsSynced: "An aika bayanan",
+    appRecordsNotSent: "Ba a iya aika bayanan da aka ajiye ba",
+    appUpdateRequired: "Ana bukatar sabuntawa",
+    homeViewApplication: "Duba bukatata",
+    homeCollectedToday: "An karba yau",
+    homeQuickActions: "Ayyuka masu sauri",
+    homeRecentTransactions: "Ma’amalolin baya-bayan nan",
+    homeNoTransactions: "Babu ma’amala tukuna. Fara da yin rajista ko neman mai biyan haraji.",
+    homeLifetime: "Jimla gaba daya",
+    homeTaxpayersRegistered: "Masu biyan haraji da aka yi wa rajista",
+    homeCommissionEarned: "Kwamishan da aka samu",
+    homeAvailableForPayout: "Wanda ake iya biya",
 
     genuineReceipt: 'Rasit na gaskiya',
     receiptNotValid: 'Rasit din ba na gaskiya ba ne',

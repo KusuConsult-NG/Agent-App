@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 interface HomeData {
   today: { collected_kobo: string; successful: string; total: string; pending: string };
@@ -45,6 +46,7 @@ function greeting(): string {
 }
 
 export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +77,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
           <p style={{ margin: 0 }}>{error.message}</p>
         </Alert>
         <button type="button" onClick={() => navigate('/application')}>
-          View my application
+          {t.homeViewApplication}
         </button>
       </>
     );
@@ -90,7 +92,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
       <p style={{ margin: '0 0 10px', fontSize: '0.9rem', color: 'var(--muted)' }}>{greeting()}</p>
 
       <section className="headline">
-        <p className="headline__label">Collected today</p>
+        <p className="headline__label">{t.homeCollectedToday}</p>
         <p className="headline__amount">
           <Money kobo={data.today.collected_kobo} />
         </p>
@@ -121,7 +123,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         </Alert>
       )}
 
-      <p className="section-title">Quick actions</p>
+      <p className="section-title">{t.homeQuickActions}</p>
       <div className="grid-2">
         {QUICK_ACTIONS.map((action) => (
           <a key={action.href} className="quick-action" href={action.href}>
@@ -131,10 +133,10 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         ))}
       </div>
 
-      <p className="section-title">Recent transactions</p>
+      <p className="section-title">{t.homeRecentTransactions}</p>
       <div className="card card--flush">
         {data.recentTransactions.length === 0 ? (
-          <p className="empty">No transactions yet. Start by registering or finding a taxpayer.</p>
+          <p className="empty">{t.homeNoTransactions}</p>
         ) : (
           <ul className="list">
             {data.recentTransactions.map((transaction) => (
@@ -161,20 +163,20 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         )}
       </div>
 
-      <p className="section-title">Lifetime</p>
+      <p className="section-title">{t.homeLifetime}</p>
       <div className="card">
         <div className="kv">
-          <dt>Taxpayers registered</dt>
+          <dt>{t.homeTaxpayersRegistered}</dt>
           <dd>{data.taxpayersOnboarded.total}</dd>
         </div>
         <div className="kv">
-          <dt>Commission earned</dt>
+          <dt>{t.homeCommissionEarned}</dt>
           <dd>
             <Money kobo={data.commission.lifetime_kobo} />
           </dd>
         </div>
         <div className="kv">
-          <dt>Available for payout</dt>
+          <dt>{t.homeAvailableForPayout}</dt>
           <dd>
             <Money kobo={data.commission.available_kobo} />
           </dd>

@@ -213,12 +213,8 @@ export function CollectScreen({
 
   if (connection === 'OFFLINE') {
     return (
-      <Alert kind="error" title="You are offline">
-        <p style={{ margin: 0 }}>
-          Revenue cannot be collected without a connection. Government payments must be confirmed by
-          the payment system before a receipt can be issued — nothing can be marked as paid on this
-          device.
-        </p>
+      <Alert kind="error" title={t.colOfflineTitle}>
+        <p style={{ margin: 0 }}>{t.colOfflineBody}</p>
       </Alert>
     );
   }
@@ -227,14 +223,14 @@ export function CollectScreen({
     return (
       <>
         <div className="card">
-          <h2 className="card__title">Who is paying?</h2>
+          <h2 className="card__title">{t.colWhoIsPaying}</h2>
           <p className="card__hint">{t.findTaxpayerFirst}</p>
-          <Field label="Search taxpayer">
+          <Field label={t.colSearchTaxpayer}>
             <input
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Name, phone or TIN"
+              placeholder={t.colNamePhoneTin}
             />
           </Field>
           <button
@@ -289,9 +285,7 @@ export function CollectScreen({
           </div>
         )}
 
-        <button type="button" className="secondary" onClick={() => navigate('/taxpayers/new')}>
-          Register a new taxpayer
-        </button>
+        <button type="button" className="secondary" onClick={() => navigate('/taxpayers/new')}>{t.colRegisterNew}</button>
       </>
     );
   }
@@ -311,17 +305,15 @@ export function CollectScreen({
             setSelectedItem(null);
             setQuote(null);
           }}
-        >
-          Change taxpayer
-        </button>
+        >{t.colChangeTaxpayer}</button>
       </div>
 
       <ErrorAlert error={error} />
 
       {!quote && (
         <div className="card">
-          <h2 className="card__title">What are they paying?</h2>
-          <Field label="Revenue item" required>
+          <h2 className="card__title">{t.colWhatPaying}</h2>
+          <Field label={t.colRevenueItem} required>
             <select
               value={selectedItem?.id ?? ''}
               onChange={(event) => {
@@ -329,7 +321,7 @@ export function CollectScreen({
                 setQuote(null);
               }}
             >
-              <option value="">Select a revenue item</option>
+              <option value="">{t.colSelectItem}</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.category_name} — {item.name}
@@ -340,7 +332,7 @@ export function CollectScreen({
 
           {needsBaseAmount && (
             <Field
-              label="Amount the charge is calculated on (₦)"
+              label={t.colBasisAmount}
               hint="For example turnover, income or contract value. The charge itself is set by government."
               required
             >
@@ -355,7 +347,7 @@ export function CollectScreen({
 
           <button type="button" disabled={busy || !selectedItem} onClick={getQuote}>
             {busy ? <Spinner /> : null}
-            Calculate amount
+            {t.colCalculate}
           </button>
         </div>
       )}
@@ -383,7 +375,7 @@ export function CollectScreen({
             </Alert>
           ) : (
             <div className="amount-confirm">
-              <p className="amount-confirm__label">You are about to collect</p>
+              <p className="amount-confirm__label">{t.colAboutToCollect}</p>
               <p className="amount-confirm__value">
                 <Money kobo={quote.totalKobo} />
               </p>
@@ -410,7 +402,7 @@ export function CollectScreen({
           </div>
 
           <div className="card">
-            <h2 className="card__title">How this amount was calculated</h2>
+            <h2 className="card__title">{t.colHowCalculated}</h2>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.82rem', color: 'var(--muted)' }}>
               {quote.trace.map((step, index) => (
                 <li key={index} style={{ marginBottom: 4 }}>
@@ -441,7 +433,7 @@ export function CollectScreen({
                 </button>
                 <button type="button" disabled={busy} onClick={createAndPay}>
                   {busy ? <Spinner /> : null}
-                  Confirm and proceed to payment
+                  {t.colConfirmProceed}
                 </button>
               </div>
             </>
@@ -669,9 +661,7 @@ export function TransactionScreen({
               );
               window.open(receipt.downloadUrl, '_blank', 'noopener');
             }}
-          >
-            Download receipt
-          </a>
+          >{t.colDownloadReceipt}</a>
           <button
             type="button"
             className="secondary"
@@ -729,9 +719,7 @@ export function TransactionScreen({
                 setNotice('Receipt details copied. You can paste them into a message.');
               }
             }}
-          >
-            Share receipt
-          </button>
+          >{t.colShareReceipt}</button>
         </div>
       )}
 
@@ -790,7 +778,7 @@ export function TransactionScreen({
         </>
       )}
 
-      <p className="section-title">History</p>
+      <p className="section-title">{t.colHistory}</p>
       <div className="card card--flush">
         <ul className="list">
           {data.events.map((event, index) => (
@@ -807,9 +795,7 @@ export function TransactionScreen({
         </ul>
       </div>
 
-      <button type="button" className="secondary" onClick={() => navigate('/')}>
-        Back to home
-      </button>
+      <button type="button" className="secondary" onClick={() => navigate('/')}>{t.colBackHome}</button>
     </>
   );
 }

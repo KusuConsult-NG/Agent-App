@@ -35,6 +35,7 @@ interface VerificationResult {
 }
 
 export function VerifyScreen({ connection }: { connection: ConnectionState }) {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [scanning, setScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -115,14 +116,14 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Check a receipt</h2>
+        <h2 className="card__title">{t.verifyCheckReceipt}</h2>
         <p className="card__hint">
           Scan the square on the receipt, or type the code printed beneath it. PSIRS confirms
           whether the receipt was issued — reading the code only tells you what is on the paper.
         </p>
 
         {connection === 'OFFLINE' && (
-          <Alert kind="warning" title="You are offline">
+          <Alert kind="warning" title={t.verifyOffline}>
             <p style={{ margin: 0 }}>
               A receipt can only be checked against PSIRS, so this needs a connection. You can still
               scan the code and check it when you are back online.
@@ -146,11 +147,11 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
 
         {scanning ? (
           <button type="button" className="secondary" onClick={stopCamera}>
-            Stop scanning
+            {t.allocStopScanning}
           </button>
         ) : (
           <button type="button" onClick={() => void startScanning()}>
-            Scan the QR code
+            {t.verifyScanQr}
           </button>
         )}
 
@@ -169,7 +170,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
             void verify(found);
           }}
         >
-          <Field label="Or type the receipt code">
+          <Field label={t.verifyTypeCode}>
             <input
               value={code}
               onChange={(event) => setCode(event.target.value.toUpperCase())}

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 /** The categories the API accepts, in the words an agent would use. */
 const CATEGORIES: { value: string; label: string; hint?: string }[] = [
@@ -57,6 +58,7 @@ interface TicketSummary {
 }
 
 export function SupportScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -73,24 +75,22 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Get help</h2>
+        <h2 className="card__title">{t.supGetHelp}</h2>
         <p className="card__hint">
           Report a problem to PSIRS. You will get a reply here, and a message when there is
           something to read.
         </p>
-        <a className="button" href="#/support/new">
-          Report a problem
-        </a>
+        <a className="button" href="#/support/new">{t.supReportProblem}</a>
       </div>
 
       <ErrorAlert error={error} />
 
       <div className="card">
-        <h2 className="card__title">My reports</h2>
+        <h2 className="card__title">{t.supMyReports}</h2>
         {!tickets ? (
           <Loading />
         ) : tickets.length === 0 ? (
-          <Empty>You have not reported anything yet.</Empty>
+          <Empty>{t.supNothingReported}</Empty>
         ) : (
           <ul className="list">
             {tickets.map((ticket) => (
@@ -119,6 +119,7 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 }
 
 export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     category: '',
     subject: '',
@@ -156,17 +157,17 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
 
   return (
     <form className="card" onSubmit={submit}>
-      <h2 className="card__title">Report a problem</h2>
+      <h2 className="card__title">{t.supReportProblem}</h2>
 
       <ErrorAlert error={error} />
 
-      <Field label="What is the problem?" required>
+      <Field label={t.supWhatProblem} required>
         <select
           value={form.category}
           onChange={(event) => set('category', event.target.value)}
           required
         >
-          <option value="">Choose one</option>
+          <option value="">{t.supChooseOne}</option>
           {CATEGORIES.map((entry) => (
             <option key={entry.value} value={entry.value}>
               {entry.label}
@@ -176,12 +177,12 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       </Field>
 
       {chosen?.hint && (
-        <Alert kind="info" title="Before you send this">
+        <Alert kind="info" title={t.supBeforeYouSend}>
           <p style={{ margin: 0 }}>{chosen.hint}</p>
         </Alert>
       )}
 
-      <Field label="Short summary" required>
+      <Field label={t.supShortSummary} required>
         <input
           value={form.subject}
           minLength={5}
@@ -191,7 +192,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
         />
       </Field>
 
-      <Field label="What happened?" hint="Include anything PSIRS would need to look it up." required>
+      <Field label={t.supWhatHappened} hint="Include anything PSIRS would need to look it up." required>
         <textarea
           value={form.description}
           rows={5}
@@ -203,7 +204,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       </Field>
 
       <Field
-        label="Transaction reference"
+        label={t.supTransactionRef}
         hint="If this is about one payment, the reference lets PSIRS find it without asking you."
       >
         <input
@@ -213,12 +214,12 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
         />
       </Field>
 
-      <Field label="How urgent is it?">
+      <Field label={t.supHowUrgent}>
         <select value={form.priority} onChange={(event) => set('priority', event.target.value)}>
-          <option value="LOW">Not urgent</option>
+          <option value="LOW">{t.supNotUrgent}</option>
           <option value="NORMAL">Normal</option>
-          <option value="HIGH">Urgent — a taxpayer is waiting</option>
-          <option value="URGENT">Very urgent — money may be at risk</option>
+          <option value="HIGH">{t.supUrgent}</option>
+          <option value="URGENT">{t.supVeryUrgent}</option>
         </select>
       </Field>
 
@@ -252,6 +253,7 @@ interface TicketDetail {
 }
 
 export function TicketScreen({ ticketId }: { ticketId: string }) {
+  const { t } = useI18n();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [reply, setReply] = useState('');
@@ -318,7 +320,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       </div>
 
       <div className="card">
-        <h2 className="card__title">Conversation</h2>
+        <h2 className="card__title">{t.supConversation}</h2>
         <ol className="thread">
           <li className="thread__item thread__item--mine">
             <p className="thread__meta">You · {new Date(ticket.created_at).toLocaleString('en-NG')}</p>
@@ -340,7 +342,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       </div>
 
       {notice && (
-        <Alert kind="success" title="Reopened">
+        <Alert kind="success" title={t.supReopened}>
           <p style={{ margin: 0 }}>{notice}</p>
         </Alert>
       )}
@@ -348,7 +350,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       <ErrorAlert error={error} />
 
       {closed ? (
-        <Alert kind="info" title="This report is closed">
+        <Alert kind="info" title={t.supReportClosed}>
           <p style={{ margin: 0 }}>
             If the problem has come back, <a href="#/support/new">report it again</a> so it keeps its
             own history.
@@ -356,7 +358,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         </Alert>
       ) : (
         <form className="card" onSubmit={send}>
-          <Field label="Add to this report">
+          <Field label={t.supAddToReport}>
             <textarea
               value={reply}
               rows={4}
