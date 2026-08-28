@@ -55,6 +55,7 @@ export async function accrueCommission(
 
   const transaction = await queryOne<{
     id: string;
+    transaction_reference: string;
     agent_id: string | null;
     amount_kobo: string;
     status: string;
@@ -64,7 +65,9 @@ export async function accrueCommission(
     commission_policy_id: string | null;
   }>(
     client,
-    `SELECT t.id, t.agent_id, t.amount_kobo, t.status, t.revenue_item_id,
+    // The reference, not the id: it is what the agent sees on the receipt and
+    // what they would quote to support. A UUID tells them nothing.
+    `SELECT t.id, t.transaction_reference, t.agent_id, t.amount_kobo, t.status, t.revenue_item_id,
             ri.category_id, ri.commission_eligible, a.commission_policy_id
        FROM transactions t
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -149,6 +152,30 @@ export async function accrueCommission(
       amountKobo: amount.toString(),
       status: 'PENDING',
     },
+  });
+
+  /*
+   * And tell the agent, on the channel that does not cost a message.
+   *
+   * This event was seeded and never raised. An SMS for every collection would
+   * be a real cost per message and would bury the payout notifications, so it
+   * goes out by push — free, immediate, and what the handset is for.
+   *
+   * The commission is PENDING here: the gateway has confirmed but PSIRS does
+   * not hold the settlement yet, and a reversal can still take it back. The
+   * template says so. Telling an agent they have earned money that might be
+   * withdrawn is the overstatement this platform is organised against, one
+   * ledger down from the citizen's receipt.
+   */
+  await queueNotification(client, {
+    event: 'COMMISSION_EARNED',
+    agentId: transaction.agent_id,
+    variables: {
+      amount: formatNaira(amount),
+      reference: transaction.transaction_reference,
+    },
+    entityType: 'commission',
+    entityId: row!.id,
   });
 
   return { commissionId: row!.id, amountKobo: amount };

@@ -519,3 +519,165 @@ describe('a payment that did not go through', () => {
     );
   });
 });
+
+describe('the commission an agent has just earned', () => {
+  /**
+   * Told by push, and not by SMS.
+   *
+   * This was the fourth dead template and the one deliberately left alone: an
+   * agent collects many times a day, and an SMS for each would cost real money
+   * per message and drown the payout notifications that matter. Push costs
+   * nothing and is exactly what a handset notification is for, so the SMS
+   * template is retired and the event goes out on push instead.
+   *
+   * The wording is the part to get right. A commission accrues PENDING at
+   * collection and becomes the agent's money only once PSIRS has the
+   * settlement — so the message says it is not payable yet. Telling an agent
+   * they have earned money that a reversal can still take back is the same
+   * overstatement this platform exists to prevent, one ledger down.
+   */
+  it('reaches them on the channel that does not cost a message', async () => {
+    const session = await loginAs(demoPhone, demoPassword, demoDevice);
+    const auth = { token: session.accessToken, deviceId: demoDevice };
+
+    const created = await post(
+      '/taxpayers',
+      {
+        taxpayerType: 'INDIVIDUAL',
+        firstName: 'Commission',
+        lastName: 'Payer',
+        phone: '+2348098300001',
+        address: '7 Market Rd',
+        lgaId: await firstLgaId(),
+        consentGiven: true,
+        declarationAccepted: true,
+      },
+      { ...auth, idempotencyKey: 'earn-tp-1' },
+    );
+    const assessment = await post(
+      '/revenue/assessments',
+      {
+        taxpayerId: created.body.taxpayerId,
+        revenueItemId: await revenueItemByCode('MARKET-LEVY'),
+        inputs: {},
+      },
+      { ...auth, idempotencyKey: 'earn-as-1' },
+    );
+    const initiated = await post(
+      '/payments/initiate',
+      { transactionId: assessment.body.transactionId },
+      { ...auth, idempotencyKey: 'earn-pay-1' },
+    );
+    await post(
+      '/payments/simulate',
+      {
+        gatewayReference: initiated.body.gatewayReference,
+        outcome: 'SUCCESS',
+        deliverWebhook: true,
+      },
+      auth,
+    );
+
+    const queued = await notificationsFor('COMMISSION_EARNED');
+    assert.ok(queued.length > 0, 'a commission accrued and the agent was told nothing');
+    assert.deepEqual(
+      [...new Set(queued.map((row) => row.channel))],
+      ['PUSH'],
+      `commission is told by push and not by SMS: ${JSON.stringify(queued.map((r) => r.channel))}`,
+    );
+    assert.equal(queued[0]!.user_id, agentUserId, 'and it goes to the agent who collected');
+    assert.ok(
+      queued.some((row) => row.message.includes(assessment.body.transactionReference ?? 'PSIRS/')),
+      `the message must name the transaction reference, not its id: ${JSON.stringify(queued.map((r) => r.message))}`,
+    );
+  });
+
+  it('does not claim the money is theirs yet, because settlement has not happened', async () => {
+    const session = await loginAs(demoPhone, demoPassword, demoDevice);
+    const auth = { token: session.accessToken, deviceId: demoDevice };
+
+    const created = await post(
+      '/taxpayers',
+      {
+        taxpayerType: 'INDIVIDUAL',
+        firstName: 'Commission',
+        lastName: 'Payer2',
+        phone: '+2348098300002',
+        address: '8 Market Rd',
+        lgaId: await firstLgaId(),
+        consentGiven: true,
+        declarationAccepted: true,
+      },
+      { ...auth, idempotencyKey: 'earn-tp-2' },
+    );
+    const assessment = await post(
+      '/revenue/assessments',
+      {
+        taxpayerId: created.body.taxpayerId,
+        revenueItemId: await revenueItemByCode('MARKET-LEVY'),
+        inputs: {},
+      },
+      { ...auth, idempotencyKey: 'earn-as-2' },
+    );
+    const initiated = await post(
+      '/payments/initiate',
+      { transactionId: assessment.body.transactionId },
+      { ...auth, idempotencyKey: 'earn-pay-2' },
+    );
+    await post(
+      '/payments/simulate',
+      {
+        gatewayReference: initiated.body.gatewayReference,
+        outcome: 'SUCCESS',
+        deliverWebhook: true,
+      },
+      auth,
+    );
+
+    const queued = await notificationsFor('COMMISSION_EARNED');
+    assert.ok(
+      queued.some((row) => /after settlement|not payable|once PSIRS/i.test(row.message)),
+      `a commission a reversal can still take back is not yet theirs: ${JSON.stringify(queued.map((r) => r.message))}`,
+    );
+  });
+
+  it('is seeded switched off, because a migration cannot switch off a row that is not there', () => {
+    /*
+     * The ordering trap. Migrations run before the seed on a fresh database, so
+     * migration 046's UPDATE finds no COMMISSION_EARNED_SMS row to deactivate —
+     * and both inserts are ON CONFLICT DO NOTHING, so nothing corrects it
+     * afterwards. A new deployment would send the SMS the migration exists to
+     * stop.
+     *
+     * Read from the seed source rather than the database, because a test
+     * database is never fresh in the way that matters: the row survives
+     * resetDatabase, so the seed's status never applies there and a mutation to
+     * it passes unnoticed. This was found by exactly that mutation.
+     */
+    const seed = readFileSync(join(__dirname, '..', 'db', 'seed.ts'), 'utf8');
+    const line = seed
+      .split('\n')
+      .find((text) => text.includes("code: 'COMMISSION_EARNED_SMS'"));
+    assert.ok(line, 'the SMS template must still be in the seed catalogue');
+    assert.match(
+      line!,
+      /status:\s*'INACTIVE'/,
+      'a fresh database seeds this row itself; the migration runs before it exists',
+    );
+  });
+
+  it('leaves the SMS template on the record, switched off rather than deleted', async () => {
+    /*
+     * Retired, not removed. A deployment that has been sending these has rows
+     * in `notifications` pointing at the decision, and a template that vanishes
+     * makes the history unreadable. INACTIVE is also reversible: if PSIRS
+     * decides the SMS was worth its cost after all, it is one UPDATE.
+     */
+    const row = await queryOne<{ status: string }>(
+      pool,
+      `SELECT status FROM notification_templates WHERE code = 'COMMISSION_EARNED_SMS'`,
+    );
+    assert.ok(row, 'the template must still be on the record');
+    assert.equal(row!.status, 'INACTIVE');
+  });
+});

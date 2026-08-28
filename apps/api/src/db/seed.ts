@@ -619,7 +619,21 @@ const NOTIFICATION_TEMPLATES = [
   { code: 'RECEIPT_GENERATED_EMAIL', event: 'RECEIPT_GENERATED', channel: 'EMAIL', subject: 'Your government receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nThe Plateau State Government has now received your payment of {{amount}} (transaction {{reference}}).\n\nYour official receipt number is {{receiptNumber}}. This replaces the acknowledgement you were sent earlier and is your evidence of payment.\n\nYou can verify it at any time without signing in.\n\nPlateau State Internal Revenue Service' },
   { code: 'PAYMENT_FAILED_SMS', event: 'PAYMENT_FAILED', channel: 'SMS', body: 'PSIRS: Payment for {{reference}} did not go through. No money has been taken. You can try again.' },
   { code: 'VEHICLE_RENEWAL_SMS', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', body: 'PSIRS: Vehicle {{registration}} has been renewed and is valid until {{expiry}}. Download your document from the portal.' },
-  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  /*
+   * Told by push, and not by SMS.
+   *
+   * An agent collects many times a day. An SMS for each costs real money per
+   * message and would drown the payout notifications beside it, which is why
+   * this event was seeded and then never raised by anything. Push costs nothing
+   * and is what a handset notification is for.
+   *
+   * The SMS row stays on the record, switched off rather than deleted: a
+   * template that vanishes makes the notification history unreadable, and
+   * INACTIVE is one UPDATE away from being reversed if PSIRS decides the
+   * message was worth its cost after all.
+   */
+  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', status: 'INACTIVE', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  { code: 'COMMISSION_EARNED_PUSH', event: 'COMMISSION_EARNED', channel: 'PUSH', subject: 'Commission recorded', body: '{{amount}} on {{reference}}. It becomes payable after settlement.' },
   { code: 'COMMISSION_PAID_SMS', event: 'COMMISSION_PAID', channel: 'SMS', body: 'PSIRS: Commission of {{amount}} has been paid to your verified bank account. Reference {{reference}}.' },
   { code: 'AGENT_APPROVED_SMS', event: 'AGENT_APPROVED', channel: 'SMS', body: 'PSIRS: Your agent application has been approved. Complete training and register your device to begin work.' },
   { code: 'AGENT_REJECTED_SMS', event: 'AGENT_REJECTED', channel: 'SMS', body: 'PSIRS: Your agent application was not approved. Reason: {{reason}}' },
@@ -965,9 +979,20 @@ async function seedReferenceData(): Promise<void> {
 
     for (const template of NOTIFICATION_TEMPLATES) {
       await client.query(
-        `INSERT INTO notification_templates (code, event, channel, subject, body)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
-        [template.code, template.event, template.channel, template.subject ?? null, template.body],
+        `INSERT INTO notification_templates (code, event, channel, subject, body, status)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        [
+          template.code,
+          template.event,
+          template.channel,
+          template.subject ?? null,
+          template.body,
+          // A template can be seeded switched off. Migrations run before this
+          // on a fresh database, so a migration that deactivates a row would
+          // run before the row existed — the status has to be seeded, not
+          // patched afterwards.
+          ('status' in template ? template.status : null) ?? 'ACTIVE',
+        ],
       );
     }
 
