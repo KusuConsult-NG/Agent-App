@@ -27,18 +27,25 @@ import {
   createGovernmentUser,
   get,
   loginAs,
+  pool,
   post,
   resetDatabase,
   startTestServer,
   stopTestServer,
 } from './helpers';
+import { queryOne } from '../db/pool';
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { sendPushNotification, saveSubscription } from '../services/push';
+import {
+  clearVapidForTesting,
+  saveSubscription,
+  sendPushNotification,
+  subscriptionsFor,
+} from '../services/push';
 
 let agentToken = '';
 let agentDevice = '';
@@ -95,13 +102,14 @@ describe('registering a device for push', () => {
     );
     assert.equal(response.status, 200, JSON.stringify(response.body));
 
-    // The proof is that targeting works: an ownerless row matches no target.
-    const delivered = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Payment confirmed', body: 'A collection has been verified.' },
-    );
+    /*
+     * Asserted against the store rather than through a delivery function that
+     * does not deliver. An ownerless row matches no target, which was the
+     * defect; the question is whether the row carries who it belongs to.
+     */
+    const mine = await subscriptionsFor({ userId: agentUserId });
     assert.ok(
-      delivered.sent + delivered.failed > 0,
+      mine.some((row) => row.endpoint === endpoint),
       'the subscription must be findable by the user it belongs to',
     );
   });
@@ -113,50 +121,92 @@ describe('registering a device for push', () => {
       { token: agentToken, deviceId: agentDevice },
     );
 
-    const other = await sendPushNotification(
-      { userId: officerUserId },
-      { title: 'Not for you', body: 'Addressed to someone else.' },
-    );
-
-    assert.equal(
-      other.sent + other.failed,
-      0,
-      'a push addressed to one person must not reach another',
-    );
+    const theirs = await subscriptionsFor({ userId: officerUserId });
+    assert.equal(theirs.length, 0, 'a push addressed to one person must not reach another');
   });
 
   it('only lets you forget your own device', async () => {
     const endpoint = endpointFor('mine');
-    saveSubscription({ endpoint }, { userId: agentUserId });
+    await saveSubscription({ endpoint }, { userId: agentUserId });
 
     // Somebody else asks for it to be removed.
     const response = await post('/push/unsubscribe', { endpoint }, { token: officerToken });
     assert.equal(response.status, 200, JSON.stringify(response.body));
 
-    const stillThere = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Still subscribed', body: 'This device was not theirs to remove.' },
-    );
+    const stillThere = await subscriptionsFor({ userId: agentUserId });
     assert.ok(
-      stillThere.sent + stillThere.failed > 0,
+      stillThere.some((row) => row.endpoint === endpoint),
       'another account must not be able to unsubscribe your device',
     );
 
     // The owner can.
     await post('/push/unsubscribe', { endpoint }, { token: agentToken, deviceId: agentDevice });
-    const gone = await sendPushNotification(
-      { userId: agentUserId },
-      { title: 'Gone', body: 'Removed by its owner.' },
-    );
-    assert.equal(gone.sent + gone.failed, 0, 'the owner can remove their own device');
+    const gone = await subscriptionsFor({ userId: agentUserId });
+    assert.equal(gone.length, 0, 'the owner can remove their own device');
   });
 
-  it('still serves the VAPID key without an account, since the browser needs it first', async () => {
+  it('survives a restart, because the store is not a process', async () => {
+    /*
+     * The reason this moved out of a Map. A fleet of handsets would have
+     * silently stopped receiving anything after a routine deploy, with nothing
+     * to look at that would say so — and in the multi-replica topology the
+     * advisory locks exist for, a handset that subscribed through one replica
+     * was unknown to the others.
+     */
+    const endpoint = endpointFor('durable');
+    await saveSubscription({ endpoint }, { userId: agentUserId });
+
+    const row = await queryOne<{ endpoint: string; user_id: string }>(
+      pool,
+      'SELECT endpoint, user_id FROM push_subscriptions WHERE endpoint = $1',
+      [endpoint],
+    );
+    assert.ok(row, 'the subscription is a row, not a map entry');
+    assert.equal(row!.user_id, agentUserId, 'and it records whose device it is');
+  });
+
+  it('refuses to report a delivery it could not have signed', async () => {
+    /*
+     * It logged to the console, counted that as `sent`, and returned it. Then
+     * it refused outright, correctly, because no adapter existed. There is an
+     * adapter now — and this is the one case that must still refuse rather than
+     * count: a server with no VAPID identity has not failed to reach anybody's
+     * handset, it has not tried. Returning `{ sent: 0, failed: 1 }` would put
+     * that on the citizen's record instead of the deployment's.
+     *
+     * `a-push-nobody-can-receive.test.ts` holds the delivery behaviour itself.
+     */
+    clearVapidForTesting();
+    await saveSubscription({ endpoint: endpointFor('nowhere') }, { userId: agentUserId });
+    await assert.rejects(
+      () =>
+        sendPushNotification(
+          { userId: agentUserId },
+          { title: 'Anything', body: 'Nothing will carry this.' },
+        ),
+      /not configured/i,
+      'a push nobody sent must not be reported as sent',
+    );
+  });
+
+  it('says plainly there is no key rather than serving one it invented', async () => {
+    /*
+     * 200 with a real key when configured; 503 when not. What it must never do
+     * again is answer 200 with a key generated at startup — which a browser
+     * binds to permanently and the next restart discards.
+     */
     const response = await get('/push/vapid-key');
     assert.ok(
-      [200, 404, 503].includes(response.status),
+      [200, 503].includes(response.status),
       `unexpected ${response.status}: ${JSON.stringify(response.body).slice(0, 160)}`,
     );
+    if (response.status === 200) {
+      const raw = Buffer.from(response.body.publicKey, 'base64url');
+      assert.equal(raw.length, 65, 'a browser can only subscribe with the raw point');
+      assert.equal(raw[0], 0x04);
+    } else {
+      assert.match(response.body.error?.message ?? '', /not configured/i);
+    }
   });
 });
 

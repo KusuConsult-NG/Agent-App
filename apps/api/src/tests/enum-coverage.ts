@@ -424,16 +424,18 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
     'No charge in the seeded Plateau schedule is levied quarterly.',
 
   /*
-   * Push notifications do not go through the template table.
+   * `notification_templates.channel: PUSH` was listed here, and the reason
+   * given was the bug.
    *
-   * Web push is dispatched by `services/push.ts` against a per-device
-   * subscription, with the message built at the point of sending — there is
-   * nowhere for a stored template to be rendered to, because a push has no
-   * recipient address in the sense the other two channels do. No PUSH template
-   * is seeded and none is written.
+   * It said a push "has no recipient address in the sense the other two
+   * channels do", so no template could render to one. That belief is what
+   * produced the defect: `queueNotification` addressed a PUSH row to a
+   * telephone number, and the adapter looks subscriptions up by user id. A
+   * push does have a recipient — the person, rather than one of their devices,
+   * because they may have three — and it renders a template like any other
+   * channel. Four are seeded now, so the state is reachable and the exemption
+   * is gone.
    */
-  'notification_templates.channel: PUSH':
-    'Web push is dispatched per device subscription by push.ts; it does not render a stored template.',
 
   /*
    * A draft synchronised twice.

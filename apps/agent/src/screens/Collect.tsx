@@ -14,6 +14,7 @@ import { whereAmI } from '../lib/location';
 import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { verificationUrlFor } from '../lib/verification-url';
 import { bluetoothPrinter } from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
@@ -264,7 +265,7 @@ export function CollectScreen({
         {results && results.length === 0 && (
           <div className="card card--flush">
             <p className="empty">
-              {t.noTaxpayerMatch}
+              {t.noTaxpayerMatch} {t.searchAnotherArea}
             </p>
           </div>
         )}
@@ -693,7 +694,13 @@ export function TransactionScreen({
                   agentName: 'Authorized Field Officer',
                   agentCode: 'AGT',
                   issuedAt: new Date().toISOString(),
-                  verificationUrl: `http://localhost:5174/#/verify/${transaction.receipt_code ?? ''}`,
+                  /*
+                   * Omitted rather than guessed. This is printed on paper and
+                   * handed over; a link to a machine no citizen can reach looks
+                   * official and goes nowhere, which is worse than no link at
+                   * all beside a code they can type in anywhere.
+                   */
+                  verificationUrl: verificationUrlFor(transaction.receipt_code) ?? undefined,
                   verificationCode: transaction.receipt_code ?? undefined,
                 });
                 setNotice('Receipt printed successfully on Bluetooth printer!');

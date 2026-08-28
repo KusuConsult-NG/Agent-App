@@ -136,3 +136,91 @@ export async function territoriesForOfficer(db: Db, userId: string) {
     [userId],
   );
 }
+
+/**
+ * How much of the *register* a caller may see, which is not the same question.
+ *
+ * `resolveReportScope` above answers "whose money may this officer count".
+ * This answers "whose personal record may they reach", and the two are
+ * deliberately separate: `report:read:all` is a reporting grant and must never
+ * widen access to citizens' names, TINs and telephone numbers by inheritance.
+ * So this reads the taxpayer permission and the assignments directly rather
+ * than delegating.
+ *
+ * `source` matters as much as the scope. A supervisor and a field agent can
+ * both end up scoped to one Local Government Area, and they are not owed the
+ * same thing inside it: listing everybody assessed under a levy is a
+ * supervisor's job and is the material an unofficial collection is made from
+ * if an agent holds it. The caller decides using `source`; this only reports
+ * where the boundary came from.
+ */
+export type TaxpayerReach = {
+  scope: ReportScope;
+  /**
+   * ALL — `taxpayer:read:all`, the whole register.
+   * OFFICER — an officer's assigned territories. May be empty, which is a real
+   *   answer meaning the account has not been finished.
+   * AGENT — the one territory a collecting agent works. The schema refuses to
+   *   activate an agent without one.
+   */
+  source: 'ALL' | 'OFFICER' | 'AGENT';
+};
+
+export async function resolveTaxpayerReach(db: Db, auth: ScopeHolder & { userId: string }): Promise<TaxpayerReach> {
+  if (auth.permissions.includes('taxpayer:read:all')) {
+    return { scope: { kind: 'STATEWIDE' }, source: 'ALL' };
+  }
+
+  /*
+   * Whether this is an agent is asked first, and asked of the agent record
+   * rather than of the territory. An agent whose territory has been withdrawn
+   * is still an agent, and answering OFFICER for them would offer them the
+   * register of any territory somebody later assigned to their user account.
+   */
+  const agent = await query<{ id: string; name: string; code: string; lga_id: string }>(
+    db,
+    `SELECT t.id, t.name, t.code, t.lga_id
+       FROM agents a
+       LEFT JOIN territories t ON t.id = a.territory_id AND t.status = 'ACTIVE'
+      WHERE a.user_id = $1`,
+    [auth.userId],
+  );
+  if (agent.length > 0) {
+    // LEFT JOIN, so an agent with no live territory yields a row of nulls,
+    // which is an empty scope and reaches nobody. That is the right answer:
+    // they cannot collect in that state either.
+    return { scope: territoriesScope(agent.filter((row) => row.id !== null)), source: 'AGENT' };
+  }
+
+  /*
+   * Otherwise an officer, and their reach is what has been assigned to them —
+   * which may be nothing. Reaching nobody is the fail-closed answer, and the
+   * caller is expected to say which failure it is rather than return an empty
+   * list: "no record matches" and "your account has no territory" are
+   * different facts, and only one of them is about the person searched for.
+   */
+  const officer = await query<{ id: string; name: string; code: string; lga_id: string }>(
+    db,
+    `SELECT t.id, t.name, t.code, t.lga_id
+       FROM user_territories ut
+       JOIN territories t ON t.id = ut.territory_id
+      WHERE ut.user_id = $1 AND t.status = 'ACTIVE'
+      ORDER BY t.name`,
+    [auth.userId],
+  );
+  return { scope: territoriesScope(officer), source: 'OFFICER' };
+}
+
+function territoriesScope(
+  rows: { id: string; name: string; code: string; lga_id: string }[],
+): ReportScope {
+  return {
+    kind: 'TERRITORIES',
+    territories: rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      code: row.code,
+      lgaId: row.lga_id,
+    })),
+  };
+}

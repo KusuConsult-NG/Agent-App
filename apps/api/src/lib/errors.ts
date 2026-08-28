@@ -170,6 +170,23 @@ export function tooManyRequests(retryAfterSeconds: number): AppError {
   });
 }
 
+/**
+ * A capability this deployment has not been configured with.
+ *
+ * Distinct from `internal`: nothing has gone wrong, and the caller is not
+ * asked to quote a reference to support. Something has not been set up, and
+ * saying which setting is what turns a silent outage into a checklist item.
+ */
+export function serviceUnavailable(message: string, nextStep?: string): AppError {
+  return new AppError({
+    statusCode: 503,
+    code: 'NOT_CONFIGURED',
+    message,
+    nextStep,
+    moneyStatus: 'NOT_APPLICABLE',
+  });
+}
+
 export function internal(reference?: string): AppError {
   return new AppError({
     statusCode: 500,

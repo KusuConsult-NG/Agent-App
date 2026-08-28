@@ -23,6 +23,7 @@ import {
 import { AppError, badRequest, forbidden } from '../lib/errors';
 import { log } from '../lib/logger';
 import * as taxpayers from '../services/taxpayers';
+import { resolveTaxpayerReach } from '../services/report-scope';
 import * as vehicles from '../services/vehicles';
 import * as obligations from '../services/obligations';
 import { vehicleCaptureSchema } from './vehicles';
@@ -168,6 +169,9 @@ taxpayerRouter.post(
             role: req.auth!.role,
             mayWaive: req.auth!.permissions.includes('taxpayer:obligation:waive'),
           },
+          // Inside this transaction, not beside it: a later step throwing must
+          // take the obligations with it.
+          client,
         );
       }
       await evaluateRegistrationRisk(client, {
@@ -274,13 +278,119 @@ taxpayerRouter.get(
       receiptNumber: z.string().max(40).optional(),
       transactionReference: z.string().max(40).optional(),
       lgaId: uuidSchema.optional(),
+      // "Who is registered under Development Levy?" — a set, not an individual.
+      revenueItemId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+      outstandingOnly: z.coerce.boolean().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(25),
     }),
     async (req, res, data) => {
-      if (!Object.values(data).some((value) => typeof value === 'string' && value.length > 0)) {
+      /*
+       * A filter counts as something to search for.
+       *
+       * The guard tested for a non-empty *string*, which an item id satisfies
+       * but `outstandingOnly` on its own does not — and "everyone with anything
+       * unpaid" is a legitimate question. It now asks whether any criterion was
+       * given at all, rather than whether any of them happened to be text.
+       */
+      const { limit: _limit, ...criteria } = data;
+      const searched = Object.values(criteria).some((value) =>
+        typeof value === 'string' ? value.length > 0 : value !== undefined && value !== false,
+      );
+      if (!searched) {
         throw badRequest('Enter something to search for — a name, phone number, TIN or reference.');
       }
-      res.json(await taxpayers.searchTaxpayers(pool, data));
+
+      /*
+       * A FILTER NARROWS A SEARCH. IT IS NOT A SEARCH.
+       *
+       * Everything this endpoint originally accepted required already knowing
+       * who you were looking for: an exact TIN, phone number, receipt number
+       * or vehicle plate, or a fragment of a name. `revenueItemId`,
+       * `categoryId` and `outstandingOnly` were added so an officer could ask
+       * "who is registered under Market Levy" — a question about a set of
+       * people rather than a person, and a useful one.
+       *
+       * This route accepts `taxpayer:read:assigned`, which every field agent
+       * holds. Those three parameters therefore turned a lookup into an
+       * enumeration: a hundred citizens' names, TINs and telephone numbers,
+       * selected by a levy the agent collects, delivered to their handset. An
+       * `lgaId` on its own is the same shape and predates them — "everybody in
+       * Jos North" is not a search for anybody.
+       *
+       * So a caller who may not read every taxpayer has to name one. The
+       * filters still work; they just cannot be the whole question.
+       */
+      const given = (key: keyof typeof criteria) => {
+        const value = criteria[key];
+        return typeof value === 'string' && value.trim().length > 0;
+      };
+
+      /*
+       * AN IDENTIFIER REACHES ANYWHERE. A FRAGMENT REACHES WHERE YOU WORK.
+       *
+       * A TIN, a phone number, a receipt number or a vehicle registration is a
+       * thing the citizen standing in front of the agent hands over, and it
+       * has to keep working across every Local Government Area: a trader
+       * registered in Jos North buys their levy at a Jos South market, and an
+       * agent who cannot serve them is a worse outcome than the one being
+       * prevented here.
+       *
+       * `q` is not that. It is a guess, and it can be varied — `a`, then `ab`,
+       * then `ac` — until the register falls out a hundred rows at a time.
+       * There is no offset parameter, which bounds a single query and not a
+       * patient caller. So a fragment is answered from the caller's own
+       * territory, and an agent's territory is one LGA that the schema will
+       * not let them be active without.
+       */
+      const identifiedExactly =
+        given('tin') || given('phone') || given('vehicleRegistration') ||
+        given('receiptNumber') || given('transactionReference');
+      const namedSomebody = identifiedExactly || given('q');
+
+      const reach = await resolveTaxpayerReach(pool, req.auth!);
+
+      /*
+       * Listing rather than looking up.
+       *
+       * A supervisor asking who is registered under the shop rate in their own
+       * area is doing their job, and the reports beside this one already
+       * answer for them. A field agent holding the same list is holding the
+       * material an unofficial collection is made from, and PRD §36 gives them
+       * "Assigned" access for exactly that reason. Same boundary, different
+       * entitlement inside it — which is what `source` distinguishes.
+       */
+      if (!namedSomebody) {
+        if (reach.source === 'AGENT') {
+          throw forbidden(
+            'Listing taxpayers by levy, category, arrears or Local Government Area is a report, ' +
+              'not a search, and it is not part of a collecting agent’s access.',
+            'Search for the taxpayer by name, phone number, TIN, receipt number or vehicle ' +
+              'registration. You can still add a levy or an area to narrow that search.',
+          );
+        }
+        if (reach.source === 'OFFICER' && reach.scope.kind === 'TERRITORIES' &&
+            reach.scope.territories.length === 0) {
+          /*
+           * Fail closed, and say which failure it is. An empty list would read
+           * as "nobody matches", and the account most likely to reach this is
+           * one an administrator has not finished setting up.
+           */
+          throw forbidden(
+            'Your account has no territory assigned, so there is no area to list taxpayers for.',
+            'Ask an administrator to assign your territories, then try again. You can still ' +
+              'look somebody up by name, phone number or TIN.',
+          );
+        }
+      }
+
+      res.json(
+        await taxpayers.searchTaxpayers(
+          pool,
+          data,
+          identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
+        ),
+      );
     },
   ),
 );

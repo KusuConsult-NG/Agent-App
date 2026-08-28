@@ -131,6 +131,20 @@ const DELIBERATELY_MUTABLE = new Set([
    */
   'background_jobs',
   /*
+   * One row per subscribed device — current state, not evidence.
+   *
+   * A citizen's handset unsubscribes, the browser rotates the endpoint, the
+   * push service reports one gone: all ordinary, all of which change what the
+   * row says rather than adding to a history. Expiry is a column rather than a
+   * delete for the same reason, so a resubscribing device is one row with a
+   * history and a sudden mass expiry is visible.
+   *
+   * Deleting from it fails safe: a subscription that is gone means a device
+   * stops receiving pushes, which is the direction that loses a notification
+   * rather than the one that fabricates one.
+   */
+  'push_subscriptions',
+  /*
    * An assignment, not a record. Changing which territories an officer covers
    * replaces the rows wholesale, so the table always states current coverage
    * and nothing else. The history that matters — who widened whose view of the

@@ -554,6 +554,39 @@ async function settleLinkedTransactions(
         source: 'RECONCILIATION',
         metadata: { receiptNumber: receipt.receiptNumber },
       });
+
+      /*
+       * And tell the taxpayer, which nothing did.
+       *
+       * A citizen holds no account, so the message they were sent at
+       * confirmation is their only copy of the transaction — and it names an
+       * acknowledgement. Issuing the receipt silently left them holding a
+       * document that is not one, with no way to learn the number of the
+       * receipt they are actually entitled to.
+       */
+      const detail = await queryOne<{
+        taxpayer_id: string;
+        transaction_reference: string;
+        amount_kobo: string;
+      }>(
+        client,
+        `SELECT taxpayer_id, transaction_reference, amount_kobo
+           FROM transactions WHERE id = $1`,
+        [row.transaction_id],
+      );
+      if (detail) {
+        await queueNotification(client, {
+          event: 'RECEIPT_GENERATED',
+          taxpayerId: detail.taxpayer_id,
+          entityType: 'transaction',
+          entityId: row.transaction_id,
+          variables: {
+            amount: detail.amount_kobo,
+            reference: detail.transaction_reference,
+            receiptNumber: receipt.receiptNumber,
+          },
+        });
+      }
     }
 
     await transitionTransaction(client, {

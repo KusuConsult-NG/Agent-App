@@ -866,7 +866,19 @@ export function ApprovalsScreen({ user }: { user: User }) {
                 key: 'action',
                 label: '',
                 render: (row) => {
-                  const isRequester = row.requested_by_name === user.fullName;
+                  /*
+                   * By id, not by name.
+                   *
+                   * The server refuses self-approval on `requested_by` and has
+                   * done all along, so this was never a way past the control —
+                   * what it got wrong was the label, in both directions. Two
+                   * officers sharing a name meant the second was shown "Your
+                   * request" and no buttons, and was blocked from a review they
+                   * were entitled to do; a difference of casing or spacing meant
+                   * the requester was offered Approve on their own request and
+                   * got a 403 for pressing it.
+                   */
+                  const isRequester = row.requested_by_user_id === user.id;
                   if (isRequester) {
                     return <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Your request</span>;
                   }

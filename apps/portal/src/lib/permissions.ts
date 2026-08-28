@@ -221,6 +221,20 @@ const SCREEN: Record<string, NavItem> = {
     label: 'Revenue summary',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  /*
+   * The levy view of the same money the revenue summary reports by place.
+   *
+   * Gated on the reporting permissions rather than on `taxpayer:read:all`,
+   * because the collections half is the part every reporting role needs and
+   * the taxpayer list below it is fetched only by officers who hold the
+   * permission for it. An auditor is offered this and sees the money and the
+   * arrears, which is their job.
+   */
+  levies: {
+    path: '/levies',
+    label: 'Levies & categories',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
@@ -305,8 +319,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Revenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!, SCREEN.transactions!,
-              SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!,
+              SCREEN.transactions!, SCREEN.performance!],
     },
   ],
 
@@ -317,7 +331,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Assessment',
-      items: [SCREEN.catalogue!, SCREEN.transactions!],
+      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.transactions!],
     },
     {
       group: 'Revenue',
@@ -342,7 +356,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Revenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.transactions!, SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.transactions!,
+              SCREEN.intelligence!],
     },
     {
       group: 'Who collected it',
@@ -365,7 +380,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'What was charged',
-      items: [SCREEN.catalogue!, SCREEN.revenue!, SCREEN.dashboard!, SCREEN.intelligence!],
+      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.dashboard!,
+              SCREEN.intelligence!],
     },
     {
       group: 'Who did it',
@@ -381,7 +397,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'Revenue here',
-      items: [SCREEN.revenue!, SCREEN.intelligence!, SCREEN.transactions!, SCREEN.commissions!],
+      items: [SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!,
+              SCREEN.commissions!],
     },
     {
       group: 'Oversight',

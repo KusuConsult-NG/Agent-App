@@ -26,7 +26,9 @@
  * Only endpoints with a static path are asked for. A screen that builds its URL
  * from a record id needs that record to exist, which is a fixture question
  * rather than a permission one, and guessing at ids here would test the wrong
- * thing.
+ * thing. A path whose interpolation is all in the *query string* is static in
+ * the sense that matters — `/government/transactions?${filters}` is asked for
+ * without its filters, and answers or refuses on the same permission.
  */
 
 import './env';
@@ -78,8 +80,12 @@ function componentToFile(): Map<string, string> {
  * and reading the file would blame each of them for the others' fetches. That
  * is a false alarm of exactly the kind that gets a failing test switched off.
  *
- * Template literals are skipped. A URL built from a record id needs that record
- * to exist, which is a fixture question and not a permission one.
+ * Template literals count when the interpolation begins after the `?`. Nine
+ * endpoints were invisible here because their screens spell the query string
+ * with a filter object — `/government/transactions?${params}`, `/agents?${q}`,
+ * the two `/taxpayers/search?` calls — and every one of them is a path this
+ * can ask for unchanged. A template literal whose *path* is interpolated is
+ * still skipped, for the record-id reason above.
  */
 function readsOf(file: string, component: string): { path: string; guarded: boolean }[] {
   const source = readFileSync(join(PORTAL, 'screens', file), 'utf8');
@@ -100,15 +106,37 @@ function readsOf(file: string, component: string): { path: string; guarded: bool
 
   const reads: { path: string; guarded: boolean }[] = [];
   const seen = new Set<string>();
-  for (const match of body.matchAll(/api\s*\.\s*get\s*(?:<[^>]*>)?\(\s*'([^'`]+)'/g)) {
-    const path = match[1]!.split('?')[0]!;
+  const calls = [
+    // A quoted string: the whole literal, whatever is concatenated after it.
+    ...body.matchAll(/api\s*\.\s*get\s*(?:<[^>]*>)?\(\s*'([^'`]+)'/g),
+    // A template literal: taken only up to its first interpolation.
+    ...body.matchAll(/api\s*\.\s*get\s*(?:<[^>]*>)?\(\s*`([^`]*)`/g),
+  ].sort((a, b) => a.index! - b.index!);
+
+  for (const match of calls) {
+    const literal = match[1]!;
+    const head = literal.split('${')[0]!;
+    // An interpolated *path* needs a record that exists; an interpolated query
+    // string does not. Only the second is askable, and the `?` says which.
+    if (head !== literal && !head.includes('?')) continue;
+    const path = head.split('?')[0]!;
+    if (!path.startsWith('/')) continue;
     if (seen.has(path)) continue;
     seen.add(path);
-    // Guarded only if one of those flags is tested immediately above the call.
-    // A screen whose main panel loads unconditionally is making a claim about
-    // who may open it, and that claim is what the menu has to match.
-    const preceding = body.slice(Math.max(0, match.index! - 220), match.index!);
-    reads.push({ path, guarded: flags.some((flag) => new RegExp(`if\\s*\\(\\s*${flag}\\b`).test(preceding)) });
+    /*
+     * Guarded only if one of those flags is tested immediately above the call.
+     * A screen whose main panel loads unconditionally is making a claim about
+     * who may open it, and that claim is what the menu has to match.
+     *
+     * Both spellings count. A fetch inside `if (flag) {` and a button rendered
+     * inside `{flag && (` are the same decision — the second is how a screen
+     * withholds one row action rather than a whole panel, and reading only the
+     * first would report a correctly guarded button as an unguarded fetch.
+     */
+    const preceding = body.slice(Math.max(0, match.index! - 320), match.index!);
+    const guardedBy = (flag: string) =>
+      new RegExp(`(?:if\\s*\\(\\s*|\\{\\s*)${flag}\\s*(?:&&|\\))`).test(preceding);
+    reads.push({ path, guarded: flags.some(guardedBy) });
   }
   return reads;
 }

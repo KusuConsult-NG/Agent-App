@@ -360,6 +360,30 @@ Do not walk every screen. Pick three.
 3. **Fraud & leakage** *(any oversight role)* — the rules that watch for
    collection patterns that do not look like honest work.
 
+**If the room is a revenue authority rather than a finance one**, swap item 3
+for **Levies & categories**. It answers the three questions a revenue officer
+actually asks, and it asks them about a *levy* rather than about a person:
+
+- what a category or a single levy has brought in, and how much of that the
+  State's account actually holds yet;
+- who is registered under it, filtered to an LGA or to only those with
+  something unpaid;
+- who is behind on it, largest debt first, with the oldest due date.
+
+One filter bar drives all three, so choosing "Development Levy" once answers
+all of them at once.
+
+> The point to make: every other revenue platform can tell you what one person
+> owes. Ask this one who owes on the shop rate in Jos North and it answers
+> without you knowing a single name first — which is the direction enforcement
+> actually works in.
+
+**Revenue catalogue** *(admin)* pairs with it. A new bye-law is added from the
+screen: name it, file it under a category, then set its rate as a separate,
+reason-required, step-up-protected decision. The item is created with no price
+and the screen says so, because a levy with no rate cannot be charged in the
+field.
+
 **Close on the roles:** the sidebar is different for every officer because the
 menu is built from what that person is permitted to do. An auditor sees
 everything and can change nothing. A supervisor sees their own agents. There is

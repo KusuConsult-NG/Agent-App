@@ -17,6 +17,7 @@
  * module WAIVES rather than removes.
  */
 
+import type { PoolClient } from 'pg';
 import { ECONOMIC_SECTORS } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
@@ -133,8 +134,23 @@ export async function upsertObligations(
   source: 'AGENT_ONBOARDING' | 'OFFICER_REVIEW' | 'AUTO_RECOMMENDATION',
   actorId: string | null,
   actor: { role: string; mayWaive: boolean },
+  /**
+   * Join the caller's transaction instead of opening one.
+   *
+   * This always opened its own, on its own connection, which is fine when it is
+   * the whole operation and wrong when it is a step inside a larger one.
+   * Registering a taxpayer writes the obligations, evaluates registration risk,
+   * queues a TIN notification and syncs compliance in one outer transaction —
+   * and if any of those later steps threw, the outer transaction rolled back
+   * while the obligations stayed committed on the other connection. A taxpayer
+   * record that does not exist, carrying obligations that do.
+   *
+   * Optional so the callers for which this *is* the whole operation are
+   * unchanged: given no client it opens a transaction exactly as before.
+   */
+  existing?: PoolClient,
 ): Promise<{ added: number; waived: number }> {
-  return withTransaction(async (client) => {
+  const run = async (client: PoolClient) => {
     /*
      * Waiving is a separate authority from adding.
      *
@@ -218,5 +234,7 @@ export async function upsertObligations(
     }
 
     return { added, waived };
-  });
+  };
+
+  return existing ? run(existing) : withTransaction(run);
 }

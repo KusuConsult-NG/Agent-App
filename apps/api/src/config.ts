@@ -553,6 +553,27 @@ if (isProduction) {
     );
   }
 
+  /*
+   * Push is optional; a half-configured push is not.
+   *
+   * One key without the other is a deployment that will serve no VAPID key,
+   * accept no browser subscription and send no notification — and say nothing
+   * about it, because the channel is allowed to be absent. Naming the missing
+   * half turns a silent no-op into a line on a checklist.
+   *
+   * Both absent is a supported deployment: push is a convenience, and the
+   * citizen's receipt goes by SMS.
+   */
+  const vapidPublic = process.env.VAPID_PUBLIC_KEY?.trim();
+  const vapidPrivate = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (Boolean(vapidPublic) !== Boolean(vapidPrivate)) {
+    problems.push(
+      vapidPublic
+        ? 'VAPID_PUBLIC_KEY is set but VAPID_PRIVATE_KEY is not, so no push can be sent'
+        : 'VAPID_PRIVATE_KEY is set but VAPID_PUBLIC_KEY is not, so no browser can subscribe',
+    );
+  }
+
   // The local driver keeps receipts on a container's disk, where the next
   // deploy destroys them while the document records still point at them.
   if (config.storage.driver === 's3') {

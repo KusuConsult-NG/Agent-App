@@ -37,16 +37,19 @@ export async function computeComplianceScore(
 ): Promise<ComplianceBreakdown> {
   const stats = await queryOne<{
     has_tin: boolean;
+    raised_count: string;
     paid_count: string;
     late_count: string;
     outstanding_kobo: string;
     distinct_periods: string;
+    assessed_periods: string;
     last_payment_at: Date | null;
     reversed_count: string;
   }>(
     client,
     `SELECT
        (SELECT tin IS NOT NULL FROM taxpayers WHERE id = $1) AS has_tin,
+       count(*)::text AS raised_count,
        count(*) FILTER (WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING'))::text
          AS paid_count,
        count(*) FILTER (WHERE i.expires_at IS NOT NULL AND t.verified_at > i.expires_at)::text
@@ -54,9 +57,24 @@ export async function computeComplianceScore(
        COALESCE((SELECT SUM(total_amount_kobo - amount_paid_kobo) FROM invoices
                   WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')), 0)::text
          AS outstanding_kobo,
-       count(DISTINCT a.period_label) FILTER (
+       /*
+        * An assessment with no period label is still a period.
+        *
+        * Most revenue items carry no period_label at all — it is set by the
+        * caller, and only vehicle renewals set one. count(DISTINCT ...) ignores
+        * nulls, so this counted zero for a daily market levy and one for an
+        * annual shop rate. Up to twenty points turned on which levy a citizen
+        * happened to be assessed under, which is not a fact about them, and
+        * they could neither see it nor influence it.
+        *
+        * Falling back to the assessment id counts the assessment as its own
+        * period, which is what an unlabelled one is: a single occasion the
+        * state asked for money.
+        */
+       count(DISTINCT COALESCE(a.period_label, a.id::text)) FILTER (
          WHERE t.status IN ('SETTLED','RECEIPT_GENERATED','RECONCILIATION_PENDING')
        )::text AS distinct_periods,
+       count(DISTINCT COALESCE(a.period_label, a.id::text))::text AS assessed_periods,
        max(t.verified_at) AS last_payment_at,
        /*
         * Only reversals the taxpayer is answerable for.
@@ -91,17 +109,43 @@ export async function computeComplianceScore(
     components.push({ factor: 'Valid TIN', points: 0, detail: 'No TIN assigned yet' });
   }
 
+  const raised = Number.parseInt(stats?.raised_count ?? '0', 10);
   const paid = Number.parseInt(stats?.paid_count ?? '0', 10);
   const late = Number.parseInt(stats?.late_count ?? '0', 10);
   const onTime = Math.max(0, paid - late);
+  const periods = Number.parseInt(stats?.distinct_periods ?? '0', 10);
+  const assessedPeriods = Number.parseInt(stats?.assessed_periods ?? '0', 10);
 
-  const paymentPoints = Math.min(35, onTime * 5);
-  score += paymentPoints;
-  components.push({
-    factor: 'Payments made on time',
-    points: paymentPoints,
-    detail: `${onTime} on-time payment(s) of ${paid} total`,
-  });
+  /*
+   * WHY THESE TWO COMPONENTS ARE RATIOS AND NOT COUNTS.
+   *
+   * They were counts: five points per on-time payment up to thirty-five, five
+   * per period up to twenty. Full marks therefore needed seven payments and
+   * four periods, and a trader assessed once a year could not reach them
+   * however punctually they paid. One market trader with a TIN, one levy paid
+   * on time and nothing outstanding scored fifty and was told their
+   * "compliance score needs improvement" — there was nothing further they
+   * could have done.
+   *
+   * A score that cannot be earned by doing everything asked is not measuring
+   * compliance, it is measuring turnover. It gates fertiliser, seed and
+   * training access under PRD §41, so the arithmetic decides who receives
+   * them.
+   *
+   * Both are now proportions of what the state actually asked this person
+   * for. Paying everything, on time, owing nothing is full marks whether that
+   * is one obligation or forty.
+   */
+  const punctuality = paid > 0 ? onTime / paid : 0;
+  const paymentPoints = raised === 0 ? 0 : Math.round(35 * punctuality);
+  if (raised > 0) {
+    score += paymentPoints;
+    components.push({
+      factor: 'Payments made on time',
+      points: paymentPoints,
+      detail: `${onTime} of ${paid} payment(s) made on time`,
+    });
+  }
 
   if (late > 0) {
     const penalty = Math.min(15, late * 5);
@@ -124,14 +168,16 @@ export async function computeComplianceScore(
    * satisfied by them. The filter is on the same statuses `paid_count` already
    * uses, which are the ones that mean money arrived.
    */
-  const periods = Number.parseInt(stats?.distinct_periods ?? '0', 10);
-  const periodPoints = Math.min(20, periods * 5);
-  score += periodPoints;
-  components.push({
-    factor: 'Compliant periods',
-    points: periodPoints,
-    detail: `${periods} distinct assessment period(s) settled`,
-  });
+  const coverage = assessedPeriods > 0 ? periods / assessedPeriods : 0;
+  const periodPoints = assessedPeriods === 0 ? 0 : Math.round(20 * coverage);
+  if (assessedPeriods > 0) {
+    score += periodPoints;
+    components.push({
+      factor: 'Compliant periods',
+      points: periodPoints,
+      detail: `${periods} of ${assessedPeriods} assessment period(s) settled`,
+    });
+  }
 
   const outstanding = parseKobo(stats?.outstanding_kobo ?? '0');
   if (outstanding === 0n) {
@@ -146,6 +192,24 @@ export async function computeComplianceScore(
       factor: 'Outstanding liabilities',
       points: 0,
       detail: `₦${(outstanding / 100n).toString()} outstanding across unpaid invoices`,
+    });
+  }
+
+  /*
+   * Nothing has been asked of this person yet.
+   *
+   * A ratio has no meaning with an empty denominator, and reporting the two
+   * components as zero reads as a finding about conduct there has not been any
+   * of. The citizen portal turned that into "your compliance score needs
+   * improvement" for somebody registered the same morning. So the components
+   * are omitted and their absence is stated instead, and `assessments_raised`
+   * carries the same fact to every other reader of the table.
+   */
+  if (raised === 0) {
+    components.push({
+      factor: 'No assessment history',
+      points: 0,
+      detail: 'Nothing has been assessed against this taxpayer yet, so there is nothing to score',
     });
   }
 
@@ -165,13 +229,15 @@ export async function computeComplianceScore(
   await client.query(
     `INSERT INTO taxpayer_compliance
        (taxpayer_id, score, on_time_payments, late_payments, compliant_periods,
-        outstanding_amount_kobo, has_valid_tin, last_payment_at, score_breakdown, computed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,now())
+        assessments_raised, outstanding_amount_kobo, has_valid_tin, last_payment_at,
+        score_breakdown, computed_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
      ON CONFLICT (taxpayer_id) DO UPDATE SET
        score = EXCLUDED.score,
        on_time_payments = EXCLUDED.on_time_payments,
        late_payments = EXCLUDED.late_payments,
        compliant_periods = EXCLUDED.compliant_periods,
+       assessments_raised = EXCLUDED.assessments_raised,
        outstanding_amount_kobo = EXCLUDED.outstanding_amount_kobo,
        has_valid_tin = EXCLUDED.has_valid_tin,
        last_payment_at = EXCLUDED.last_payment_at,
@@ -183,6 +249,7 @@ export async function computeComplianceScore(
       onTime,
       late,
       periods,
+      raised,
       outstanding.toString(),
       hasTin,
       stats?.last_payment_at ?? null,

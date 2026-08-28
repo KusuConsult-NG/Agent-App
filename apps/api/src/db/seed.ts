@@ -577,13 +577,63 @@ const INCENTIVE_PROGRAMMES = [
 ] as const;
 
 const NOTIFICATION_TEMPLATES = [
+  /*
+   * The agent's own money, on the three occasions it moves.
+   *
+   * `COMMISSION_PAID` was here from the beginning and nothing queued it, so an
+   * agent learned their payout had arrived by checking their bank — and learned
+   * a transfer had bounced by not finding it there, which is indistinguishable
+   * from PSIRS not having paid them. That is the belief that becomes a support
+   * ticket, or an agent who starts asking citizens for cash.
+   */
+  { code: 'COMMISSION_PAYOUT_FAILED_SMS', event: 'COMMISSION_PAYOUT_FAILED', channel: 'SMS', body: 'PSIRS: Your commission payout {{reference}} could not be paid into your account: {{reason}}. The money has not been lost — it returns to your available balance and will go out again once the account details are correct. Check your bank details in the app.' },
+  { code: 'COMMISSION_PAYOUT_REFUSED_SMS', event: 'COMMISSION_PAYOUT_REFUSED', channel: 'SMS', body: 'PSIRS: Your commission payout request {{reference}} was not approved: {{reason}}. The money has not been lost — it stays in your available balance and you can request it again.' },
+  /*
+   * Push, for the messages an agent needs while they are in the field.
+   *
+   * Additive: every one of these still goes by SMS, because an agent may have
+   * declined the browser prompt or replaced the handset, and suspension is
+   * exactly the message they must not miss. Push is free and immediate; the
+   * SMS is the one that always arrives.
+   *
+   * Only events that resolve to a user account. A taxpayer holds none, so a
+   * push template on a taxpayer-facing event would queue nothing.
+   */
+  { code: 'AGENT_SUSPENDED_PUSH', event: 'AGENT_SUSPENDED', channel: 'PUSH', subject: 'You have been suspended', body: 'Stop collecting now. Reason: {{reason}}. Open the app for what happens next.' },
+  { code: 'AGENT_APPROVED_PUSH', event: 'AGENT_APPROVED', channel: 'PUSH', subject: 'You are cleared to collect', body: 'Your application has been approved. Open the app to register your device and begin.' },
+  { code: 'KYC_ACTION_REQUIRED_PUSH', event: 'KYC_ACTION_REQUIRED', channel: 'PUSH', subject: 'Your application needs something', body: '{{reason}}' },
+  { code: 'COMMISSION_PAID_PUSH', event: 'COMMISSION_PAID', channel: 'PUSH', subject: 'Commission paid', body: 'Your payout {{reference}} has been sent to your bank.' },
+  { code: 'COMMISSION_PAYOUT_FAILED_PUSH', event: 'COMMISSION_PAYOUT_FAILED', channel: 'PUSH', subject: 'Payout could not be paid', body: '{{reason}}. The money is still yours — check your bank details in the app.' },
   { code: 'TIN_CREATED_SMS', event: 'TIN_CREATED', channel: 'SMS', body: 'PSIRS: Your Taxpayer Identification Number is {{tin}}. Keep it safe — you will need it for every government payment.' },
   { code: 'INVOICE_SMS', event: 'INVOICE_GENERATED', channel: 'SMS', body: 'PSIRS: Invoice {{reference}} for {{amount}} has been raised. Pay only through approved government channels.' },
-  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} has been confirmed. Receipt: {{receiptNumber}}. Verify it at any time using the receipt number.' },
-  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed — receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been received and confirmed. Your official receipt number is {{receiptNumber}} (transaction {{reference}}).\n\nYou can verify this receipt at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // Confirmation gives the taxpayer an acknowledgement, not a receipt, and this
+  // is the only channel that reaches a citizen who holds no account. Migration
+  // 042 carries the same wording to deployments that already have these rows —
+  // templates are inserted ON CONFLICT DO NOTHING, so editing here alone would
+  // fix it only for installations that do not exist yet.
+  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} is confirmed. This is your acknowledgement {{receiptNumber}} - it is NOT a receipt. Your government receipt follows once the money reaches the government account. Check it at any time with this number.' },
+  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed - acknowledgement {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been confirmed by the payment system (transaction {{reference}}).\n\nThis message is your ACKNOWLEDGEMENT OF PAYMENT, number {{receiptNumber}}. It is not a government receipt. The money reaches the Plateau State Government account shortly, and your official receipt is issued automatically when it does - we will send you its number.\n\nYou can check this acknowledgement at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // And the message for the moment the money actually arrives, which had no
+  // template and no event: the receipt was issued and nobody told the taxpayer.
+  { code: 'RECEIPT_GENERATED_SMS', event: 'RECEIPT_GENERATED', channel: 'SMS', body: 'PSIRS: Government has received your payment of {{amount}}. Your official receipt is {{receiptNumber}} (transaction {{reference}}). Check it at any time with this number.' },
+  { code: 'RECEIPT_GENERATED_EMAIL', event: 'RECEIPT_GENERATED', channel: 'EMAIL', subject: 'Your government receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nThe Plateau State Government has now received your payment of {{amount}} (transaction {{reference}}).\n\nYour official receipt number is {{receiptNumber}}. This replaces the acknowledgement you were sent earlier and is your evidence of payment.\n\nYou can verify it at any time without signing in.\n\nPlateau State Internal Revenue Service' },
   { code: 'PAYMENT_FAILED_SMS', event: 'PAYMENT_FAILED', channel: 'SMS', body: 'PSIRS: Payment for {{reference}} did not go through. No money has been taken. You can try again.' },
   { code: 'VEHICLE_RENEWAL_SMS', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', body: 'PSIRS: Vehicle {{registration}} has been renewed and is valid until {{expiry}}. Download your document from the portal.' },
-  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  /*
+   * Told by push, and not by SMS.
+   *
+   * An agent collects many times a day. An SMS for each costs real money per
+   * message and would drown the payout notifications beside it, which is why
+   * this event was seeded and then never raised by anything. Push costs nothing
+   * and is what a handset notification is for.
+   *
+   * The SMS row stays on the record, switched off rather than deleted: a
+   * template that vanishes makes the notification history unreadable, and
+   * INACTIVE is one UPDATE away from being reversed if PSIRS decides the
+   * message was worth its cost after all.
+   */
+  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', status: 'INACTIVE', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  { code: 'COMMISSION_EARNED_PUSH', event: 'COMMISSION_EARNED', channel: 'PUSH', subject: 'Commission recorded', body: '{{amount}} on {{reference}}. It becomes payable after settlement.' },
   { code: 'COMMISSION_PAID_SMS', event: 'COMMISSION_PAID', channel: 'SMS', body: 'PSIRS: Commission of {{amount}} has been paid to your verified bank account. Reference {{reference}}.' },
   { code: 'AGENT_APPROVED_SMS', event: 'AGENT_APPROVED', channel: 'SMS', body: 'PSIRS: Your agent application has been approved. Complete training and register your device to begin work.' },
   { code: 'AGENT_REJECTED_SMS', event: 'AGENT_REJECTED', channel: 'SMS', body: 'PSIRS: Your agent application was not approved. Reason: {{reason}}' },
@@ -929,9 +979,20 @@ async function seedReferenceData(): Promise<void> {
 
     for (const template of NOTIFICATION_TEMPLATES) {
       await client.query(
-        `INSERT INTO notification_templates (code, event, channel, subject, body)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
-        [template.code, template.event, template.channel, template.subject ?? null, template.body],
+        `INSERT INTO notification_templates (code, event, channel, subject, body, status)
+         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        [
+          template.code,
+          template.event,
+          template.channel,
+          template.subject ?? null,
+          template.body,
+          // A template can be seeded switched off. Migrations run before this
+          // on a fresh database, so a migration that deactivates a row would
+          // run before the row existed — the status has to be seeded, not
+          // patched afterwards.
+          ('status' in template ? template.status : null) ?? 'ACTIVE',
+        ],
       );
     }
 

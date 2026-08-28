@@ -17,6 +17,7 @@ import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
+import { scopeParams, type ReportScope } from './report-scope';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -746,6 +747,20 @@ export interface TaxpayerSearchParams {
   receiptNumber?: string;
   transactionReference?: string;
   lgaId?: string;
+  /**
+   * Everyone who has ever been assessed under this revenue item, or anything in
+   * this category (PRD §13).
+   *
+   * "Show me who is registered under Development Levy" is a question an officer
+   * asks constantly and could not ask here: the search took a name, a phone, a
+   * TIN, a plate and a reference, all of which identify one person you already
+   * know about. What an officer planning a collection round or chasing a
+   * category of defaulters needs is the opposite — the set, not the individual.
+   */
+  revenueItemId?: string;
+  categoryId?: string;
+  /** Only those with something unpaid, which is what makes it a defaulter list. */
+  outstandingOnly?: boolean;
   limit?: number;
 }
 
@@ -753,7 +768,11 @@ export interface TaxpayerSearchParams {
  * Taxpayer search (PRD §13). Every branch is a parameterised query — a search
  * box on a government system is the last place to build SQL by concatenation.
  */
-export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
+export async function searchTaxpayers(
+  db: Db,
+  params: TaxpayerSearchParams,
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
   const limit = Math.min(params.limit ?? 25, 100);
   const conditions: string[] = ["t.status IN ('ACTIVE','DRAFT')"];
   const values: unknown[] = [];
@@ -782,6 +801,61 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
       params.transactionReference.trim(),
     );
   }
+
+  /*
+   * Registered under an item means assessed under it, which is the only record
+   * of the relationship this platform keeps. There is no separate enrolment: a
+   * trader is on Market Levy because Market Levy has been assessed against
+   * them, and that is what an officer means by the question.
+   */
+  if (params.revenueItemId) {
+    add(
+      't.id IN (SELECT taxpayer_id FROM transactions WHERE revenue_item_id = $$)',
+      params.revenueItemId,
+    );
+  }
+  if (params.categoryId) {
+    add(
+      `t.id IN (SELECT tx.taxpayer_id FROM transactions tx
+                  JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                 WHERE ri.category_id = $$)`,
+      params.categoryId,
+    );
+  }
+
+  /*
+   * Outstanding means an invoice with money still on it. Scoped to the same
+   * item or category when one was given, so "defaulters on Market Levy" does
+   * not return somebody who is square on Market Levy and behind on a shop rate.
+   */
+  if (params.outstandingOnly) {
+    if (params.revenueItemId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND tx.revenue_item_id = $$)`,
+        params.revenueItemId,
+      );
+    } else if (params.categoryId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                    JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND ri.category_id = $$)`,
+        params.categoryId,
+      );
+    } else {
+      conditions.push(
+        `t.id IN (SELECT taxpayer_id FROM invoices
+                   WHERE status IN ('UNPAID','PARTIALLY_PAID')
+                     AND total_amount_kobo > amount_paid_kobo)`,
+      );
+    }
+  }
   if (params.q) {
     const term = `%${params.q.trim().toLowerCase()}%`;
     values.push(term);
@@ -791,6 +865,23 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
         ` OR t.phone LIKE $${values.length} OR t.tin LIKE $${values.length})`,
     );
   }
+
+  /*
+   * Where the caller works, on the taxpayer's own Local Government Area.
+   *
+   * Taxpayers are held by LGA and territories carry one, which is the join
+   * `report-scope.ts` already makes for every scoped report. Applied last and
+   * from the caller's identity rather than from a query parameter, so no
+   * combination of filters can widen it.
+   *
+   * The caller decides whether to pass a scope at all: an exact identifier —
+   * a TIN, a phone number, a receipt, a plate — is something a citizen hands
+   * over, and it has to keep working across every LGA, because a trader
+   * registered in one buys their levy in the market next door.
+   */
+  const { statewide, lgaIds } = scopeParams(scope);
+  values.push(statewide, lgaIds);
+  conditions.push(`($${values.length - 1} OR t.lga_id = ANY($${values.length}::uuid[]))`);
 
   values.push(limit);
 

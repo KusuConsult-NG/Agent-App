@@ -249,7 +249,14 @@ describe('a taxpayer who gave an email address', () => {
     const email = queued.find((row) => row.channel === 'EMAIL')!;
     assert.equal(email.recipient, 'ledger.keeper@example.com', 'to the address, not the phone');
     assert.ok(email.subject, 'an email has a subject line and an SMS does not');
-    assert.match(email.subject!, /receipt/i);
+    /*
+     * The subject named a receipt when confirmation issued one. It now names
+     * the acknowledgement, because that is what the message is about — this is
+     * the one copy a citizen with no account keeps, and a subject line saying
+     * "receipt" is how an acknowledgement gets filed as one.
+     */
+    assert.match(email.subject!, /acknowledgement/i);
+    assert.doesNotMatch(email.subject!, /receipt/i);
   });
 
   it('gets the text message alone when there is no address to send to', async () => {

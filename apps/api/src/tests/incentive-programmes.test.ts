@@ -217,7 +217,14 @@ describe('social incentive programmes', () => {
     assert.equal(response.status, 400, JSON.stringify(response.body));
   });
 
-  it('runs the bulk evaluation', async () => {
+  it('accepts the bulk evaluation and does not wait for it', async () => {
+    /*
+     * It used to walk every active taxpayer with a TIN inside the request, one
+     * await at a time, holding a connection for as long as that took. On a real
+     * register that is minutes, and a reverse proxy gives up long before the
+     * loop does — so the officer saw a 504, the work carried on invisibly, and
+     * pressing the button again started a second pass over the same people.
+     */
     await setStatus(programmeId, 'ACTIVE');
 
     const response = await post(
@@ -226,6 +233,12 @@ describe('social incentive programmes', () => {
       { token: adminToken },
     );
 
-    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(response.status, 202, JSON.stringify(response.body));
+    assert.equal(response.body.status, 'ACCEPTED');
+    assert.match(
+      response.body.message,
+      /does not wait/i,
+      'the officer must be told the page is not waiting for it',
+    );
   });
 });

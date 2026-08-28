@@ -50,6 +50,7 @@ function displayName(taxpayer: {
 }
 
 export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TaxpayerSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,6 +100,8 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
           {results.length === 0 ? (
             <p className="empty">
               No taxpayer matches that search. You can register them as a new taxpayer.
+              {' '}
+              {t.searchAnotherArea}
             </p>
           ) : (
             <ul className="list">
