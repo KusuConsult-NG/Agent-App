@@ -1,31 +1,173 @@
 /**
- * Web Push Notification Dispatcher.
+ * Web push, from the application server's side (PRD §44).
  *
- * Provides VAPID-based Web Push message dispatching to agent PWA devices for
- * real-time clearance approvals, referee invitations, and payment settlement notifications.
+ * WHY THIS USES A LIBRARY WHEN EVERY OTHER INTEGRATION HERE IS HAND-WRITTEN.
+ * The Remita, SMS and KYC adapters are hand-written because they are HTTP
+ * shapes, and an HTTP shape that is wrong fails loudly. This is RFC 8291
+ * content encryption and RFC 8292 request signing, and cryptography that is
+ * subtly wrong does not fail loudly — it produces something that looks
+ * delivered. `web-push` is the reference implementation of both. Getting this
+ * independently right is not a saving worth making on a platform whose whole
+ * purpose is not to tell a citizen something happened when it did not.
+ *
+ * THE KEYS ARE CONFIGURATION, AND THAT IS THE WHOLE POINT.
+ *
+ * This module called `generateKeyPairSync` at import time whenever
+ * `VAPID_PUBLIC_KEY` was unset, and served the result. A browser binds its
+ * subscription to the application server key it was handed, permanently. So a
+ * generated key worked until the next restart and then stopped: every handset
+ * in the fleet held a subscription signed by a key the server no longer had,
+ * every push came back 403, and nothing anywhere said so. Across replicas it
+ * never worked at all, because each one had a different identity.
+ *
+ * A missing key is a visible failure. A generated one is an invisible one, and
+ * it is the worse of the two. So when none is configured this serves none,
+ * says so, and refuses to send.
  */
 
-import { generateKeyPairSync } from 'node:crypto';
+import { createPrivateKey, createPublicKey } from 'node:crypto';
+import webpush from 'web-push';
 import { pool, query } from '../db/pool';
+import { log } from '../lib/logger';
 
-// In-memory / ephemeral VAPID keys for development; in production read from env
-let vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
-let vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
+interface VapidKeys {
+  /** Raw uncompressed P-256 point, base64url. What a browser subscribes with. */
+  publicKey: string;
+  /** The 32-byte private scalar, base64url. */
+  privateKey: string;
+  /** `mailto:` or `https:` contact, which the push services require. */
+  subject: string;
+}
 
-if (!vapidPublicKey || !vapidPrivateKey) {
-  // Generate a standard EC keypair if none supplied
-  try {
-    const { publicKey, privateKey } = generateKeyPairSync('ec', {
-      namedCurve: 'prime256v1',
-      publicKeyEncoding: { type: 'spki', format: 'der' },
-      privateKeyEncoding: { type: 'pkcs8', format: 'der' },
-    });
-    vapidPublicKey = Buffer.from(publicKey).toString('base64url');
-    vapidPrivateKey = Buffer.from(privateKey).toString('base64url');
-  } catch {
-    vapidPublicKey = 'BN-mock-public-vapid-key-for-development-purposes-only-32bytes';
-    vapidPrivateKey = 'mock-private-vapid-key-32bytes-long';
+/**
+ * The public key in the one encoding a browser accepts.
+ *
+ * `applicationServerKey` takes the raw uncompressed point — 65 bytes beginning
+ * 0x04. What this endpoint served was an SPKI DER wrapper around that point,
+ * because that is what `export({ type: 'spki' })` produces.
+ * `pushManager.subscribe()` rejects it, so the endpoint could not have produced
+ * a single working subscription.
+ *
+ * Accepting either encoding and answering with the raw one means a deployment
+ * that pastes in whichever form its key tool emitted still works.
+ */
+export function publicKeyFor(configured: string): string {
+  const bytes = Buffer.from(configured.trim(), 'base64url');
+  if (bytes.length === 65 && bytes[0] === 0x04) return bytes.toString('base64url');
+
+  const key = createPublicKey({ key: bytes, format: 'der', type: 'spki' });
+  const raw = Buffer.from(key.export({ type: 'spki', format: 'der' })).subarray(-65);
+  if (raw.length !== 65 || raw[0] !== 0x04) {
+    throw new Error('VAPID_PUBLIC_KEY is not a P-256 public key.');
   }
+  return raw.toString('base64url');
+}
+
+/**
+ * The private key as the 32-byte scalar, whichever encoding was configured.
+ *
+ * `web-push generate-vapid-keys` emits the raw scalar; `openssl ecparam` and
+ * Node's own `export({ type: 'pkcs8' })` emit DER, and a PEM block is what most
+ * people have to hand. All three are a P-256 private key and only one of them
+ * is accepted downstream — a mismatch is otherwise rejected at *send* time, one
+ * notification at a time, which is the class of failure this module exists to
+ * stop producing.
+ */
+export function privateKeyFor(configured: string): string {
+  const trimmed = configured.trim();
+  const bytes = Buffer.from(trimmed, 'base64url');
+  if (bytes.length === 32) return bytes.toString('base64url');
+
+  const key = trimmed.includes('-----BEGIN')
+    ? createPrivateKey(trimmed)
+    : createPrivateKey({ key: bytes, format: 'der', type: 'pkcs8' });
+  const { d } = key.export({ format: 'jwk' }) as { d?: string };
+  if (!d) throw new Error('VAPID_PRIVATE_KEY is not a P-256 private key.');
+  return d;
+}
+
+function fromEnvironment(): VapidKeys | null {
+  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim();
+  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (!publicKey || !privateKey) return null;
+
+  return {
+    publicKey: publicKeyFor(publicKey),
+    privateKey: privateKeyFor(privateKey),
+    /*
+     * The push services require a contact so they can reach whoever is sending
+     * at their users. Defaulted rather than required: a deployment that has set
+     * two keys and forgotten the address should send with a generic PSIRS
+     * address rather than not send.
+     */
+    subject: process.env.VAPID_SUBJECT?.trim() || 'mailto:revenue@psirs.pl.gov.ng',
+  };
+}
+
+/**
+ * The one call that leaves the building, behind a name.
+ *
+ * `web-push` speaks HTTPS unconditionally, which is right — every real push
+ * endpoint is HTTPS and a plaintext one would put a citizen's notification on
+ * the wire. It also means the delivery path cannot be aimed at a local server,
+ * so the branch that decides whether a failure retires a handset is reachable
+ * only through this seam.
+ *
+ * That branch is worth reaching. Retiring a subscription cannot be undone from
+ * this side — nothing here can recreate one, only the citizen opening the
+ * application again — so getting it wrong on a push service's bad afternoon
+ * would quietly unsubscribe the fleet.
+ */
+type PushTransport = (
+  subscription: webpush.PushSubscription,
+  payload: string,
+  options: webpush.RequestOptions,
+) => Promise<{ statusCode: number }>;
+
+const realTransport: PushTransport = (subscription, payload, options) =>
+  webpush.sendNotification(subscription, payload, options);
+
+let transport: PushTransport = realTransport;
+
+export function setPushTransportForTesting(fn: PushTransport): void {
+  transport = fn;
+}
+
+export function resetPushTransport(): void {
+  transport = realTransport;
+}
+
+/**
+ * Outbound proxy, because a government network usually has one.
+ *
+ * PSIRS egress is unlikely to be direct, and a push that cannot leave the
+ * network fails as a connection error — indistinguishable, without this, from
+ * the push service being down. `web-push` handles the proxy itself; this only
+ * decides whether to hand it one.
+ */
+function proxyUrl(): string | undefined {
+  return process.env.PUSH_PROXY_URL?.trim() || process.env.HTTPS_PROXY?.trim() || undefined;
+}
+
+let configured: VapidKeys | null | undefined;
+
+/** The configured identity, or null when there is none. Never invented. */
+export function vapidKeys(): VapidKeys | null {
+  if (configured === undefined) configured = fromEnvironment();
+  return configured;
+}
+
+/** Test seam. Production reads the environment and nothing else. */
+export function setVapidForTesting(keys: VapidKeys): void {
+  configured = {
+    ...keys,
+    publicKey: publicKeyFor(keys.publicKey),
+    privateKey: privateKeyFor(keys.privateKey),
+  };
+}
+
+export function clearVapidForTesting(): void {
+  configured = null;
 }
 
 export interface PushSubscriptionData {
@@ -52,8 +194,8 @@ interface StoredSubscription {
  * handset that subscribed through one replica was unknown to the others, and
  * nothing could be audited, revoked centrally or counted.
  */
-export function getVapidPublicKey(): string {
-  return vapidPublicKey!;
+export function getVapidPublicKey(): string | null {
+  return vapidKeys()?.publicKey ?? null;
 }
 
 export async function saveSubscription(
@@ -125,24 +267,161 @@ export async function subscriptionsFor(target: {
 }
 
 /**
- * Web push delivery, which does not exist yet — and now says so.
+ * This server has no identity to sign with.
  *
- * This counted a `console.log` as a delivery and returned it as `sent`. The
- * messaging layer's own `providerFor('PUSH')` throws and explains that no
- * adapter exists; this function sat beside it reporting success for the same
- * channel. Reporting a notification as sent when nothing left the building is
- * the failure this whole platform is organised against, and it is worse here
- * than most because the caller has no other way to find out.
+ * Its own class, because the caller has to tell it from everything else that
+ * can go wrong. It is transient — two environment variables away from working
+ * — and it is a fact about the deployment rather than about the handset or the
+ * person, so it must never be recorded as a failed delivery against either.
+ */
+export class PushNotConfiguredError extends Error {
+  constructor() {
+    super(
+      'Web push is not configured. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY; nothing has ' +
+        'been sent, and no subscription has been counted as failed.',
+    );
+    this.name = 'PushNotConfiguredError';
+  }
+}
+
+/**
+ * The request that would go out, without sending it.
  *
- * It refuses rather than returning zero, because a caller that queued a push
- * and got `{ sent: 0 }` would reasonably read it as "nobody is subscribed".
+ * `web-push` builds this the same way for a real send, so asserting on it is
+ * asserting on the wire format: the aes128gcm body the push service cannot
+ * read, and the VAPID signature it checks before routing anything. It is also
+ * the thing to print when a deployment's pushes are being refused and nobody
+ * can see why.
+ */
+export function pushRequestFor(
+  subscription: { endpoint: string; p256dh: string; auth: string },
+  payload: { title: string; body: string },
+): { endpoint: string; headers: Record<string, string>; body: Buffer } {
+  const keys = vapidKeys();
+  if (!keys) throw new Error('Web push is not configured.');
+
+  const details = webpush.generateRequestDetails(
+    {
+      endpoint: subscription.endpoint,
+      keys: { p256dh: subscription.p256dh, auth: subscription.auth },
+    },
+    JSON.stringify(payload),
+    {
+      vapidDetails: {
+        subject: keys.subject,
+        publicKey: keys.publicKey,
+        privateKey: keys.privateKey,
+      },
+      TTL: 60 * 60 * 24,
+    },
+  );
+
+  return {
+    endpoint: details.endpoint,
+    headers: details.headers as Record<string, string>,
+    body: details.body as Buffer,
+  };
+}
+
+/**
+ * Deliver to every live handset a person or an agent has registered.
+ *
+ * This counted a `console.log` as a delivery and returned it as `sent`, and
+ * then — correctly — refused outright rather than lying. It sends now, and the
+ * outcomes are the same ones every other integration in this platform reports:
+ *
+ *   sent      the push service accepted the message for delivery
+ *   failed    it refused, and the subscription is retired only if the service
+ *             said the handset itself is gone
+ *   throws    this server has no identity to sign with, which is not a fact
+ *             about any handset and must not be counted against one
+ *
+ * The last distinction costs something to get wrong. A push service returning
+ * 503 on a bad afternoon is not a verdict about a citizen's phone, and retiring
+ * the fleet over it is unrecoverable: a subscription cannot be recreated from
+ * here, only by every citizen opening the application again.
  */
 export async function sendPushNotification(
-  _target: { userId?: string; agentId?: string },
-  _payload: { title: string; body: string; data?: Record<string, unknown> },
+  target: { userId?: string; agentId?: string },
+  payload: { title: string; body: string; data?: Record<string, unknown> },
 ): Promise<{ sent: number; failed: number }> {
-  throw new Error(
-    'Web push delivery is not implemented. Subscriptions are recorded in ' +
-      'push_subscriptions and are waiting for a VAPID adapter; nothing has been sent.',
-  );
+  const keys = vapidKeys();
+  if (!keys) {
+    throw new PushNotConfiguredError();
+  }
+
+  const subscriptions = await subscriptionsFor(target);
+  if (subscriptions.length === 0) return { sent: 0, failed: 0 };
+
+  const message = JSON.stringify({
+    title: payload.title,
+    body: payload.body,
+    ...(payload.data ? { data: payload.data } : {}),
+  });
+
+  let sent = 0;
+  let failed = 0;
+
+  for (const subscription of subscriptions) {
+    /*
+     * A row saved before the browser handed over its keys cannot be encrypted
+     * to. Skipped rather than counted as a failure, and not allowed to stop the
+     * handsets that can be reached.
+     */
+    if (!subscription.p256dh || !subscription.auth_secret) {
+      log.warn('push subscription has no encryption keys', {
+        component: 'push',
+        endpoint: subscription.endpoint,
+      });
+      continue;
+    }
+
+    try {
+      await transport(
+        {
+          endpoint: subscription.endpoint,
+          keys: { p256dh: subscription.p256dh, auth: subscription.auth_secret },
+        },
+        message,
+        {
+          vapidDetails: {
+            subject: keys.subject,
+            publicKey: keys.publicKey,
+            privateKey: keys.privateKey,
+          },
+          TTL: 60 * 60 * 24,
+          ...(proxyUrl() ? { proxy: proxyUrl() } : {}),
+        },
+      );
+      sent += 1;
+    } catch (error) {
+      failed += 1;
+      const status = (error as { statusCode?: number }).statusCode;
+
+      /*
+       * 404 and 410 are how a push service reports that the handset is gone —
+       * the browser uninstalled, the site data cleared, the subscription
+       * revoked. Left in the table it is retried on every notification for
+       * ever, and the failure count grows with nothing actually wrong.
+       *
+       * Every other status, and every error with none, leaves the row alone.
+       */
+      if (status === 404 || status === 410) {
+        await removeSubscription(subscription.endpoint);
+        log.info('push subscription retired by the push service', {
+          component: 'push',
+          endpoint: subscription.endpoint,
+          status,
+        });
+      } else {
+        log.warn('push delivery failed', {
+          component: 'push',
+          endpoint: subscription.endpoint,
+          status: status ?? null,
+        });
+      }
+    }
+  }
+
+  return { sent, failed };
 }

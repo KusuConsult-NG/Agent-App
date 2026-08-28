@@ -2407,9 +2407,17 @@ describe('A notification is only recorded as sent if it was sent', () => {
   });
 
   it('does not let one unroutable message stall everyone else\'s receipt', async () => {
-    // No push adapter exists, so a PUSH row cannot be delivered. It must fail
-    // on its own and let the sweep continue — an exception here would stop
-    // every queued receipt behind it.
+    /*
+     * A PUSH row addressed to a subscription token rather than a user id. There
+     * is a push adapter now, and this is still unroutable — a push is addressed
+     * to a person, and a template queuing PUSH for anything else has been
+     * written for the wrong channel. It must fail on its own and let the sweep
+     * continue; an exception here would stop every queued receipt behind it.
+     *
+     * Permanently refused rather than retried, and that distinction is the
+     * point: a server with no VAPID keys is two settings from working and gets
+     * left QUEUED, while this can never become deliverable.
+     */
     const unroutable = await queryOne<{ id: string }>(
       pool,
       `INSERT INTO notifications (recipient, event, channel, message)

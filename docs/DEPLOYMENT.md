@@ -57,6 +57,33 @@ boot rather than at the first taxpayer:
 | `ERROR_REPORTING` + URL | still `mock`, or named without a URL |
 | `METRICS_TOKEN` | missing — `/metrics` would be unauthenticated |
 | `REMITA_*` | `PAYMENT_GATEWAY=remita` with credentials missing or the demo base URL |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | one set without the other |
+
+### Web push keys
+
+Push is optional. With both keys blank the channel is off, the key endpoint
+answers 503 saying so, and the citizen's receipt still goes by SMS — which is
+the copy that matters, because a taxpayer holds no account here.
+
+With one key set and not the other the server refuses to start, because that
+deployment would serve no key, accept no subscription and send nothing, while
+looking configured.
+
+**Generate them once and keep them.** A browser binds its subscription to the
+application server key permanently, so replacing these unsubscribes every
+handset in the fleet — silently, because nothing on either side reports it.
+Treat them like `JWT_SECRET`: in the secret manager, never regenerated on a
+whim.
+
+```
+npx web-push generate-vapid-keys
+```
+
+`VAPID_PUBLIC_KEY` must be a P-256 public key; the raw point that browsers
+accept is served to them whichever encoding is configured.
+`VAPID_PRIVATE_KEY` may be the raw scalar, DER or PEM. `VAPID_SUBJECT` is the
+contact the push services use to reach the operator. `PUSH_PROXY_URL` (falling
+back to `HTTPS_PROXY`) routes outbound pushes where egress is not direct.
 
 Set `RUN_MIGRATIONS_ON_BOOT=false` in production. The pipeline owns migrations.
 

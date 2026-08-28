@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { getVapidPublicKey, removeSubscription, saveSubscription } from '../services/push';
 import { authenticate } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
+import { serviceUnavailable } from '../lib/errors';
 
 export const pushRouter = Router();
 
@@ -26,10 +27,26 @@ const unsubscribeSchema = z.object({
   endpoint: z.string().url(),
 });
 
-// The VAPID public key is public by definition and the browser needs it before
-// it can subscribe, so this one stays open.
+/*
+ * The VAPID public key is public by definition and the browser needs it before
+ * it can subscribe, so this one stays open.
+ *
+ * When none is configured this answers 503 rather than a key. It used to serve
+ * one generated at startup, which a browser binds to permanently and which the
+ * next restart throws away — a fleet that stops receiving anything, with
+ * nothing anywhere to say why. An honest refusal here is a deployment checklist
+ * item; the alternative was a silent outage.
+ */
 pushRouter.get('/vapid-key', (_req, res) => {
-  res.json({ publicKey: getVapidPublicKey() });
+  const publicKey = getVapidPublicKey();
+  if (!publicKey) {
+    throw serviceUnavailable(
+      'Push notifications are not configured on this server, so there is no key to subscribe ' +
+        'with.',
+      'An administrator must set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.',
+    );
+  }
+  res.json({ publicKey });
 });
 
 /*

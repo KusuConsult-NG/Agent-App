@@ -110,24 +110,19 @@ export function LeviesScreen() {
   const canReadDefaulters =
     can('report:read:all') || can('report:read:territory') || can('taxpayer:read:all');
   /*
-   * `taxpayer:read:all`, and not `taxpayer:read:assigned`.
+   * Listing citizens by levy, which is a report and not a lookup.
    *
-   * This section lists citizens selected by a levy rather than looking one up,
-   * and the search endpoint refuses that to a caller without the wider
-   * permission — because the same call from a field agent's handset is an
-   * enumeration of the register. A supervisor holds only the narrower one, so
-   * offering them the section would offer a panel the API then refuses, which
-   * is the failure this portal's menu is built to make impossible.
+   * The search endpoint refuses it to a collecting agent — the same call from
+   * a handset is an enumeration of the register — and answers it for an
+   * officer, bounded to the territories they hold. So the section belongs to
+   * anyone with either the statewide taxpayer permission or a territory to be
+   * bounded to, and a supervisor gets their own area's list.
    *
-   * A supervisor asking who is registered under a levy *in their own territory*
-   * is a fair question and this is not an answer to it: it would need the
-   * search to carry a scope the way the two reports above now do, and taxpayers
-   * are held by LGA rather than by territory. That is a change to what the
-   * permission means, not a fix, so it is left named here rather than guessed
-   * at. The collections and arrears sections above are scoped and do reach
-   * them.
+   * A supervisor with no territory assigned is refused with a message that
+   * says so. That is shown rather than hidden on purpose: the account is
+   * unfinished, and an officer who can see the reason can get it fixed.
    */
-  const canReadTaxpayers = can('taxpayer:read:all');
+  const canReadTaxpayers = can('taxpayer:read:all') || can('report:read:territory');
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [items, setItems] = useState<Item[]>([]);

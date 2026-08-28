@@ -487,3 +487,87 @@ describe('the next report added here', () => {
     );
   });
 });
+
+describe('every report that counts money', () => {
+  /**
+   * Has either a scope or a written reason it has none.
+   *
+   * The route test above catches a route that offers itself to a territory
+   * officer and then answers for the state. It cannot catch the other order:
+   * a function written without a scope, sitting quietly until somebody adds a
+   * route to it. Ten functions in `reports.ts` were in exactly that position —
+   * unreachable by a territory role today, which is a fact about the routes and
+   * not about the functions, and a fact nobody had written down.
+   *
+   * So each one takes a `ReportScope`, or says `@statewide` and why. The
+   * exemptions are real and several are correct: an agent's own day is keyed to
+   * one agent, and the state's cash position belongs to no territory. What
+   * changed is that they are now decisions rather than omissions, and the next
+   * author has to make one.
+   */
+  it('takes a ReportScope, or says in writing why it does not', () => {
+    const source = readFileSync(
+      join(__dirname, '..', 'services', 'reports.ts'),
+      'utf8',
+    );
+
+    const starts = [...source.matchAll(/export async function (\w+)\(/g)];
+    assert.ok(starts.length > 15, `expected the report functions, found ${starts.length}`);
+
+    const undecided: string[] = [];
+    const unexplained: string[] = [];
+    let counted = 0;
+
+    for (const [index, match] of starts.entries()) {
+      const next = starts[index + 1];
+      const body = source.slice(match.index!, next ? next.index! : source.length);
+      // Only the ones that read money. A lookup over audit_logs alone has no
+      // geography to be scoped by and is not what this is about.
+      if (!/(FROM|JOIN)\s+(transactions|invoices)\b/.test(body)) continue;
+      counted += 1;
+
+      // The signature: from the opening paren to its match.
+      let depth = 0;
+      let end = match.index! + match[0].length - 1;
+      for (let i = end; i < source.length; i += 1) {
+        if (source[i] === '(') depth += 1;
+        else if (source[i] === ')') {
+          depth -= 1;
+          if (depth === 0) { end = i; break; }
+        }
+      }
+      const signature = source.slice(match.index!, end + 1);
+      if (signature.includes('ReportScope')) continue;
+
+      /*
+       * No scope, so there must be a marker in the doc comment immediately
+       * above — and a reason after it, because `@statewide` on its own is the
+       * omission with a label on it.
+       */
+      const preceding = source.slice(Math.max(0, match.index! - 1400), match.index!);
+      const comment = preceding.lastIndexOf('/**');
+      const marker = comment === -1 ? -1 : preceding.indexOf('@statewide', comment);
+      if (marker === -1) {
+        undecided.push(match[1]!);
+        continue;
+      }
+      const reason = preceding.slice(marker + '@statewide'.length).split('\n')[0]!.trim();
+      if (reason.length < 20) unexplained.push(match[1]!);
+    }
+
+    assert.ok(counted >= 15, `expected to find the money reports, found ${counted}`);
+    assert.deepEqual(
+      undecided,
+      [],
+      'these read transactions or invoices, take no ReportScope, and say nothing about why. ' +
+        'Add the scope, or a @statewide line in the doc comment giving the reason:\n  ' +
+        undecided.join('\n  '),
+    );
+    assert.deepEqual(
+      unexplained,
+      [],
+      'these are marked @statewide with no reason after it, which is the omission with a ' +
+        'label on it:\n  ' + unexplained.join('\n  '),
+    );
+  });
+});

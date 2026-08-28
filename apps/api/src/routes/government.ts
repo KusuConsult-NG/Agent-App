@@ -1314,11 +1314,11 @@ governmentRouter.get(
     z.object({ agentId: uuidSchema, from: z.string().datetime(), to: z.string().datetime() }),
     async (_req, res, data) => {
       res.json(
-        await reports.transactionsByAgent(pool, {
-          agentId: data.agentId,
-          from: new Date(data.from),
-          to: new Date(data.to),
-        }),
+        await reports.transactionsByAgent(
+          pool,
+          { agentId: data.agentId, from: new Date(data.from), to: new Date(data.to) },
+          await resolveReportScope(pool, _req.auth!),
+        ),
       );
     },
   ),
@@ -1331,10 +1331,14 @@ governmentRouter.get(
     z.object({ from: z.string().datetime().optional(), to: z.string().datetime().optional() }),
     async (_req, res, data) => {
       res.json(
-        await reports.reversedAfterSuccess(pool, {
-          from: data.from ? new Date(data.from) : undefined,
-          to: data.to ? new Date(data.to) : undefined,
-        }),
+        await reports.reversedAfterSuccess(
+          pool,
+          {
+            from: data.from ? new Date(data.from) : undefined,
+            to: data.to ? new Date(data.to) : undefined,
+          },
+          await resolveReportScope(pool, _req.auth!),
+        ),
       );
     },
   ),
@@ -1363,7 +1367,9 @@ governmentRouter.get(
   '/audit/queries/receipts-by-item',
   requirePermission('audit:read', 'report:read:all'),
   validateQuery(z.object({ revenueItemCode: z.string().min(2) }), async (_req, res, data) => {
-    res.json(await reports.receiptsByRevenueItem(pool, data));
+    res.json(
+      await reports.receiptsByRevenueItem(pool, data, await resolveReportScope(pool, _req.auth!)),
+    );
   }),
 );
 

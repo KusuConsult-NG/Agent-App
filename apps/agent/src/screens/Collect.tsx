@@ -265,7 +265,7 @@ export function CollectScreen({
         {results && results.length === 0 && (
           <div className="card card--flush">
             <p className="empty">
-              {t.noTaxpayerMatch}
+              {t.noTaxpayerMatch} {t.searchAnotherArea}
             </p>
           </div>
         )}

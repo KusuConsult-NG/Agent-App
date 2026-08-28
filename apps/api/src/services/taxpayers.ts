@@ -17,6 +17,7 @@ import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
+import { scopeParams, type ReportScope } from './report-scope';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -767,7 +768,11 @@ export interface TaxpayerSearchParams {
  * Taxpayer search (PRD §13). Every branch is a parameterised query — a search
  * box on a government system is the last place to build SQL by concatenation.
  */
-export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
+export async function searchTaxpayers(
+  db: Db,
+  params: TaxpayerSearchParams,
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
   const limit = Math.min(params.limit ?? 25, 100);
   const conditions: string[] = ["t.status IN ('ACTIVE','DRAFT')"];
   const values: unknown[] = [];
@@ -860,6 +865,23 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
         ` OR t.phone LIKE $${values.length} OR t.tin LIKE $${values.length})`,
     );
   }
+
+  /*
+   * Where the caller works, on the taxpayer's own Local Government Area.
+   *
+   * Taxpayers are held by LGA and territories carry one, which is the join
+   * `report-scope.ts` already makes for every scoped report. Applied last and
+   * from the caller's identity rather than from a query parameter, so no
+   * combination of filters can widen it.
+   *
+   * The caller decides whether to pass a scope at all: an exact identifier —
+   * a TIN, a phone number, a receipt, a plate — is something a citizen hands
+   * over, and it has to keep working across every LGA, because a trader
+   * registered in one buys their levy in the market next door.
+   */
+  const { statewide, lgaIds } = scopeParams(scope);
+  values.push(statewide, lgaIds);
+  conditions.push(`($${values.length - 1} OR t.lga_id = ANY($${values.length}::uuid[]))`);
 
   values.push(limit);
 

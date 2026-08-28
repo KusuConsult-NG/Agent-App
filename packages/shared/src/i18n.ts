@@ -106,6 +106,7 @@ export interface TranslationDictionary {
   // Attribution
   findTaxpayerFirst: string;
   noTaxpayerMatch: string;
+  searchAnotherArea: string;
 
   // Checking a receipt
   genuineReceipt: string;
@@ -310,6 +311,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     findTaxpayerFirst: 'Find the taxpayer first. Every payment must be attributed.',
     noTaxpayerMatch:
       'No taxpayer matches that search. Register them below before taking a payment \u2014 every payment must be attributed to a taxpayer.',
+    /*
+     * A name search answers from the Local Government Area you work in. A
+     * trader registered elsewhere and trading in your market is a real and
+     * ordinary case, and an agent who is told only "no match" will register
+     * them a second time. What they hand over reaches any area.
+     */
+    searchAnotherArea:
+      'A name search covers your own Local Government Area. If they are registered elsewhere, search by their phone number, TIN, vehicle registration or a receipt number.',
 
     genuineReceipt: 'Genuine receipt',
     receiptNotValid: 'Not a valid receipt',
@@ -501,6 +510,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     findTaxpayerFirst: 'Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani.',
     noTaxpayerMatch:
       'Babu mai biyan haraji da ya dace da wannan bincike. Ka yi masa rajista a kasa kafin ka karbi kudi \u2014 dole a danganta kowane biyan kudi ga mai biyan haraji.',
+    searchAnotherArea:
+      'Binciken suna yana rufe Karamar Hukumar da kake aiki a ciki kadai. Idan an yi masa rajista a wata Karamar Hukuma, ka nemo shi da lambar wayarsa, TIN, lambar mota ko lambar rasit.',
 
     genuineReceipt: 'Rasit na gaskiya',
     receiptNotValid: 'Rasit din ba na gaskiya ba ne',

@@ -23,6 +23,7 @@ import {
 import { AppError, badRequest, forbidden } from '../lib/errors';
 import { log } from '../lib/logger';
 import * as taxpayers from '../services/taxpayers';
+import { resolveTaxpayerReach } from '../services/report-scope';
 import * as vehicles from '../services/vehicles';
 import * as obligations from '../services/obligations';
 import { vehicleCaptureSchema } from './vehicles';
@@ -320,23 +321,76 @@ taxpayerRouter.get(
        * So a caller who may not read every taxpayer has to name one. The
        * filters still work; they just cannot be the whole question.
        */
-      const IDENTIFIERS = ['q', 'tin', 'phone', 'vehicleRegistration', 'receiptNumber',
-        'transactionReference'] as const;
-      const namedSomebody = IDENTIFIERS.some((key) => {
+      const given = (key: keyof typeof criteria) => {
         const value = criteria[key];
         return typeof value === 'string' && value.trim().length > 0;
-      });
+      };
 
-      if (!namedSomebody && !req.auth!.permissions.includes('taxpayer:read:all')) {
-        throw forbidden(
-          'Listing taxpayers by levy, category, arrears or Local Government Area is a report, ' +
-            'not a search, and it is not part of a collecting agent’s access.',
-          'Search for the taxpayer by name, phone number, TIN, receipt number or vehicle ' +
-            'registration. You can still add a levy or an area to narrow that search.',
-        );
+      /*
+       * AN IDENTIFIER REACHES ANYWHERE. A FRAGMENT REACHES WHERE YOU WORK.
+       *
+       * A TIN, a phone number, a receipt number or a vehicle registration is a
+       * thing the citizen standing in front of the agent hands over, and it
+       * has to keep working across every Local Government Area: a trader
+       * registered in Jos North buys their levy at a Jos South market, and an
+       * agent who cannot serve them is a worse outcome than the one being
+       * prevented here.
+       *
+       * `q` is not that. It is a guess, and it can be varied — `a`, then `ab`,
+       * then `ac` — until the register falls out a hundred rows at a time.
+       * There is no offset parameter, which bounds a single query and not a
+       * patient caller. So a fragment is answered from the caller's own
+       * territory, and an agent's territory is one LGA that the schema will
+       * not let them be active without.
+       */
+      const identifiedExactly =
+        given('tin') || given('phone') || given('vehicleRegistration') ||
+        given('receiptNumber') || given('transactionReference');
+      const namedSomebody = identifiedExactly || given('q');
+
+      const reach = await resolveTaxpayerReach(pool, req.auth!);
+
+      /*
+       * Listing rather than looking up.
+       *
+       * A supervisor asking who is registered under the shop rate in their own
+       * area is doing their job, and the reports beside this one already
+       * answer for them. A field agent holding the same list is holding the
+       * material an unofficial collection is made from, and PRD §36 gives them
+       * "Assigned" access for exactly that reason. Same boundary, different
+       * entitlement inside it — which is what `source` distinguishes.
+       */
+      if (!namedSomebody) {
+        if (reach.source === 'AGENT') {
+          throw forbidden(
+            'Listing taxpayers by levy, category, arrears or Local Government Area is a report, ' +
+              'not a search, and it is not part of a collecting agent’s access.',
+            'Search for the taxpayer by name, phone number, TIN, receipt number or vehicle ' +
+              'registration. You can still add a levy or an area to narrow that search.',
+          );
+        }
+        if (reach.source === 'OFFICER' && reach.scope.kind === 'TERRITORIES' &&
+            reach.scope.territories.length === 0) {
+          /*
+           * Fail closed, and say which failure it is. An empty list would read
+           * as "nobody matches", and the account most likely to reach this is
+           * one an administrator has not finished setting up.
+           */
+          throw forbidden(
+            'Your account has no territory assigned, so there is no area to list taxpayers for.',
+            'Ask an administrator to assign your territories, then try again. You can still ' +
+              'look somebody up by name, phone number or TIN.',
+          );
+        }
       }
 
-      res.json(await taxpayers.searchTaxpayers(pool, data));
+      res.json(
+        await taxpayers.searchTaxpayers(
+          pool,
+          data,
+          identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
+        ),
+      );
     },
   ),
 );

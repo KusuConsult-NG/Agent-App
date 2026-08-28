@@ -40,7 +40,12 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
-import { sendPushNotification, saveSubscription, subscriptionsFor } from '../services/push';
+import {
+  clearVapidForTesting,
+  saveSubscription,
+  sendPushNotification,
+  subscriptionsFor,
+} from '../services/push';
 
 let agentToken = '';
 let agentDevice = '';
@@ -160,16 +165,18 @@ describe('registering a device for push', () => {
     assert.equal(row!.user_id, agentUserId, 'and it records whose device it is');
   });
 
-  it('refuses to report a delivery it did not make', async () => {
+  it('refuses to report a delivery it could not have signed', async () => {
     /*
-     * It logged to the console, counted that as `sent`, and returned it. The
-     * messaging layer's own providerFor('PUSH') throws and explains no adapter
-     * exists; this sat beside it reporting success for the same channel.
+     * It logged to the console, counted that as `sent`, and returned it. Then
+     * it refused outright, correctly, because no adapter existed. There is an
+     * adapter now — and this is the one case that must still refuse rather than
+     * count: a server with no VAPID identity has not failed to reach anybody's
+     * handset, it has not tried. Returning `{ sent: 0, failed: 1 }` would put
+     * that on the citizen's record instead of the deployment's.
      *
-     * It refuses rather than returning zero, because a caller that queued a
-     * push and got { sent: 0 } would reasonably read that as "nobody is
-     * subscribed" — which is a different and equally wrong belief.
+     * `a-push-nobody-can-receive.test.ts` holds the delivery behaviour itself.
      */
+    clearVapidForTesting();
     await saveSubscription({ endpoint: endpointFor('nowhere') }, { userId: agentUserId });
     await assert.rejects(
       () =>
@@ -177,17 +184,29 @@ describe('registering a device for push', () => {
           { userId: agentUserId },
           { title: 'Anything', body: 'Nothing will carry this.' },
         ),
-      /not implemented/i,
+      /not configured/i,
       'a push nobody sent must not be reported as sent',
     );
   });
 
-  it('still serves the VAPID key without an account, since the browser needs it first', async () => {
+  it('says plainly there is no key rather than serving one it invented', async () => {
+    /*
+     * 200 with a real key when configured; 503 when not. What it must never do
+     * again is answer 200 with a key generated at startup — which a browser
+     * binds to permanently and the next restart discards.
+     */
     const response = await get('/push/vapid-key');
     assert.ok(
-      [200, 404, 503].includes(response.status),
+      [200, 503].includes(response.status),
       `unexpected ${response.status}: ${JSON.stringify(response.body).slice(0, 160)}`,
     );
+    if (response.status === 200) {
+      const raw = Buffer.from(response.body.publicKey, 'base64url');
+      assert.equal(raw.length, 65, 'a browser can only subscribe with the raw point');
+      assert.equal(raw[0], 0x04);
+    } else {
+      assert.match(response.body.error?.message ?? '', /not configured/i);
+    }
   });
 });
 

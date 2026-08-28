@@ -17,6 +17,7 @@
 import { useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { ErrorAlert, Field, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 export interface PickedTaxpayer {
   id: string;
@@ -50,6 +51,7 @@ export function TaxpayerPicker({
   onChoose: (taxpayer: PickedTaxpayer) => void;
   onClear: () => void;
 }) {
+  const { t } = useI18n();
   const [search, setSearch] = useState('');
   /**
    * `null` until a search has been run, so "nothing found" can be told apart
@@ -135,7 +137,7 @@ export function TaxpayerPicker({
       {results && results.length === 0 && (
         <p className="empty">
           No taxpayer matches that search. They must be registered before a payment can be
-          attributed to them.
+          attributed to them. {t.searchAnotherArea}
         </p>
       )}
 

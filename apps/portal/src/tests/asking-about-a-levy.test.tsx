@@ -177,41 +177,21 @@ describe('asking only about people who owe something', () => {
   });
 });
 
-describe('a supervisor, who may read reports but not the whole register', () => {
+describe('a supervisor, whose reach is a territory rather than the state', () => {
   /*
-   * The section that lists citizens by levy is an enumeration, and the API
-   * refuses it to a caller holding only `taxpayer:read:assigned` — which is
-   * what a supervisor holds. Offering the panel anyway would put a permission
-   * error inside a screen their own menu handed them.
-   *
-   * The two report sections are territory-scoped server-side and do reach
-   * them, so the screen is still worth opening.
+   * They hold `report:read:territory` and `taxpayer:read:assigned`. The search
+   * answers a levy list for them, bounded server-side to the territories they
+   * hold — so the section is theirs, and what comes back is their own area.
    */
   const supervisor = (permission: string) =>
     ['report:read:territory', 'taxpayer:read:assigned'].includes(permission);
 
-  it('is not shown the taxpayer list, because the API would refuse it', async () => {
+  it('is offered the taxpayer list, because the API answers it for them', async () => {
     vi.spyOn(apiModule, 'can').mockImplementation(supervisor);
     render(<LeviesScreen />);
 
     await waitFor(() => expect(screen.getByText(/Awaiting settlement/i)).toBeTruthy());
-    expect(screen.queryByText(/Who is registered under/i)).toBeNull();
-    // And the page does not promise them a section they will not get.
-    expect(screen.queryByText(/who is registered under it/i)).toBeNull();
-  });
-
-  it('never asks for it either', async () => {
-    vi.spyOn(apiModule, 'can').mockImplementation(supervisor);
-    render(<LeviesScreen />);
-
-    await waitFor(() => expect(asked.some((path) => path.startsWith('/government/revenue'))).toBe(true));
-    fireEvent.change(screen.getByLabelText(/Tax category/i), { target: { value: 'cat-1' } });
-
-    await waitFor(() => {
-      const money = asked.filter((path) => path.includes('categoryId=cat-1'));
-      expect(money.length, 'the filter still drives the sections they do get').toBeGreaterThan(0);
-    });
-    expect(asked.filter((path) => path.startsWith('/taxpayers/search'))).toHaveLength(0);
+    expect(screen.getByRole('heading', { name: /Who is registered under/i })).toBeTruthy();
   });
 
   it('still gets the collections and the arrears, which are scoped for them', async () => {
@@ -222,5 +202,33 @@ describe('a supervisor, who may read reports but not the whole register', () => 
       expect(asked.some((path) => path.startsWith('/government/revenue/by-category'))).toBe(true);
       expect(asked.some((path) => path.startsWith('/government/revenue/defaulters'))).toBe(true);
     });
+  });
+});
+
+describe('an officer with no taxpayer access at all', () => {
+  // A role that may read reports and not the register — the section would be
+  // refused, so it is not offered.
+  const reportsOnly = (permission: string) => permission === 'dashboard:executive';
+
+  it('is not shown the taxpayer list, or promised it in the opening line', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation(reportsOnly);
+    render(<LeviesScreen />);
+
+    await waitFor(() => expect(screen.getByText(/Awaiting settlement/i)).toBeTruthy());
+    expect(screen.queryByRole('heading', { name: /Who is registered under/i })).toBeNull();
+    expect(screen.queryByText(/who is registered under it/i)).toBeNull();
+  });
+
+  it('never asks for it either', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation(reportsOnly);
+    render(<LeviesScreen />);
+
+    await waitFor(() => expect(asked.some((path) => path.startsWith('/government/revenue'))).toBe(true));
+    fireEvent.change(screen.getByLabelText(/Tax category/i), { target: { value: 'cat-1' } });
+
+    await waitFor(() => {
+      expect(asked.filter((path) => path.includes('categoryId=cat-1')).length).toBeGreaterThan(0);
+    });
+    expect(asked.filter((path) => path.startsWith('/taxpayers/search'))).toHaveLength(0);
   });
 });

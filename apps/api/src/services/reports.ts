@@ -295,7 +295,18 @@ export async function agentPerformance(
   );
 }
 
-/** Agent home-screen figures (PRD §29, §56). */
+/**
+ * Agent home-screen figures (PRD §29, §56).
+ *
+ * @statewide Keyed on one agent, which is narrower than any territory.
+ *
+ * Every row here is already filtered to `agent_id`, and an agent works one
+ * territory. Adding the territory predicate on top would change nothing except
+ * in the case where it would get it wrong: a transaction whose `territory_id`
+ * is null sits outside every territory scope by design, and zeroing an agent's
+ * own day because of an unattributed collection is a worse answer than not
+ * filtering at all.
+ */
 export async function agentToday(db: Db, agentId: string) {
   const [today, wallet, recent] = await Promise.all([
     queryOne(
@@ -351,7 +362,9 @@ export async function agentToday(db: Db, agentId: string) {
 export async function transactionsByAgent(
   db: Db,
   params: { agentId: string; from: Date; to: Date },
+  scope: ReportScope = { kind: 'STATEWIDE' },
 ) {
+  const { statewide, territoryIds } = scopeParams(scope);
   return query(
     db,
     `SELECT t.transaction_reference, t.amount_kobo, t.status, t.created_at, t.verified_at,
@@ -363,12 +376,18 @@ export async function transactionsByAgent(
        LEFT JOIN receipts r ON r.transaction_id = t.id
        LEFT JOIN payments p ON p.transaction_id = t.id AND p.status = 'VERIFIED'
       WHERE t.agent_id = $1 AND t.created_at BETWEEN $2 AND $3
+        AND ${transactionScopeSql('t', 4, 5)}
       ORDER BY t.created_at`,
-    [params.agentId, params.from, params.to],
+    [params.agentId, params.from, params.to, statewide, territoryIds],
   );
 }
 
-export async function reversedAfterSuccess(db: Db, params: { from?: Date; to?: Date } = {}) {
+export async function reversedAfterSuccess(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, territoryIds } = scopeParams(scope);
   return query(
     db,
     `SELECT t.transaction_reference, t.amount_kobo, t.status, t.reversed_at,
@@ -381,8 +400,9 @@ export async function reversedAfterSuccess(db: Db, params: { from?: Date; to?: D
                      WHERE e.transaction_id = t.id AND e.to_status = 'PAYMENT_VERIFIED')
         AND ($1::timestamptz IS NULL OR t.reversed_at >= $1)
         AND ($2::timestamptz IS NULL OR t.reversed_at <= $2)
+        AND ${transactionScopeSql('t', 3, 4)}
       ORDER BY t.reversed_at DESC`,
-    [params.from ?? null, params.to ?? null],
+    [params.from ?? null, params.to ?? null, statewide, territoryIds],
   );
 }
 
@@ -414,7 +434,12 @@ export async function taxpayerAccessLog(db: Db, taxpayerId: string) {
   );
 }
 
-export async function receiptsByRevenueItem(db: Db, params: { revenueItemCode: string }) {
+export async function receiptsByRevenueItem(
+  db: Db,
+  params: { revenueItemCode: string },
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, territoryIds } = scopeParams(scope);
   return query(
     db,
     `SELECT r.receipt_number, r.amount_kobo, r.issued_at, r.status,
@@ -425,12 +450,24 @@ export async function receiptsByRevenueItem(db: Db, params: { revenueItemCode: s
        JOIN lgas l ON l.id = t.lga_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
       WHERE ri.code = $1
+        AND ${transactionScopeSql('t', 2, 3)}
       ORDER BY r.issued_at DESC LIMIT 1000`,
-    [params.revenueItemCode],
+    [params.revenueItemCode, statewide, territoryIds],
   );
 }
 
-/** Key performance indicators (PRD §91). */
+/**
+ * Key performance indicators (PRD §91).
+ *
+ * @statewide A statewide indicator set, guarded on report:read:all.
+ *
+ * These count taxpayers, agents, payments and reconciliation records as well
+ * as transactions, and only the last of those carries a territory. Scoping the
+ * ones that can be scoped would produce a figure that is partly one territory
+ * and partly the state — not a smaller truth but a different and false one.
+ * The route requires report:read:all, so no territory-scoped officer reaches
+ * it, and the route-level test holds that.
+ */
 export async function kpis(db: Db) {
   return queryOne(
     db,
@@ -797,7 +834,17 @@ export async function adminHome(db: Db) {
   );
 }
 
-/** The taxpayer register, which is the revenue officer's charge. */
+/**
+ * The taxpayer register, which is the revenue officer's charge.
+ *
+ * @statewide A home screen for a role that holds report:read:all.
+ *
+ * Counts across taxpayers, approvals and invoices. Invoices carry no territory
+ * and taxpayers carry an LGA rather than one, so a scope here would have to be
+ * spelled differently in each subquery — which is exactly how a filter comes to
+ * be right in one place and absent in the next. If a territory-scoped role is
+ * ever added to `/government/home`, this needs a scope before that happens.
+ */
 export async function revenueOfficerHome(db: Db) {
   return queryOne(
     db,
@@ -822,7 +869,15 @@ export async function revenueOfficerHome(db: Db) {
   );
 }
 
-/** Money in, money out, and money held for somebody else. */
+/**
+ * Money in, money out, and money held for somebody else.
+ *
+ * @statewide Settlement, commission and refund positions are state finance.
+ *
+ * Reconciliation records, settlements, commission payouts and refunds are
+ * handled centrally and belong to no territory. Splitting the state's cash
+ * position by territory would invent a number nobody holds.
+ */
 export async function financeOfficerHome(db: Db) {
   return queryOne(
     db,
@@ -862,6 +917,13 @@ export async function financeOfficerHome(db: Db) {
  * Read-only by construction: every figure here is a count of something to
  * examine, and nothing on this screen leads to an action that changes a
  * record.
+ *
+ * @statewide The audit trail is one trail, and an auditor holds report:read:all.
+ *
+ * Audit entries, refusals and verification attempts record what the platform
+ * did rather than where money came from, and several carry no geography at
+ * all. An audit view that silently omitted part of the trail would be worse
+ * than no view — the opposite of the usual argument for scoping.
  */
 export async function auditorHome(db: Db) {
   return queryOne(
@@ -927,7 +989,14 @@ export async function adminWorkItems(db: Db) {
   return { agents, devices, supervisors };
 }
 
-/** The taxpayers a revenue officer has to chase. */
+/**
+ * The taxpayers a revenue officer has to chase.
+ *
+ * @statewide The queue behind revenueOfficerHome, and scoped the same way.
+ *
+ * It must not diverge from the counts above it: a home screen whose number and
+ * whose list disagree is worse than either on its own.
+ */
 export async function revenueOfficerWorkItems(db: Db) {
   const [failedTins, expiring] = await Promise.all([
     query(
@@ -983,7 +1052,14 @@ export async function financeOfficerWorkItems(db: Db) {
   return { exceptions, payouts };
 }
 
-/** What an auditor would open first. Reads only. */
+/**
+ * What an auditor would open first. Reads only.
+ *
+ * @statewide The queue behind auditorHome, and scoped the same way.
+ *
+ * Refusals and reversals out of the one audit trail, and it must not diverge
+ * from the counts it sits under.
+ */
 export async function auditorWorkItems(db: Db) {
   const [refusals, reversals] = await Promise.all([
     query(
