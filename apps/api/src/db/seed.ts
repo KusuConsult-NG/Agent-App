@@ -652,6 +652,51 @@ const NOTIFICATION_TEMPLATES = [
   // asked for is noticed by the person it was made to.
   { code: 'TAXPAYER_RECORD_CORRECTED_SMS', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', body: 'PSIRS: {{fields}} on your taxpayer record has been corrected by a revenue officer. If you did not ask for this, visit any PSIRS office.' },
   { code: 'USER_ROLE_CHANGED_SMS', event: 'USER_ROLE_CHANGED', channel: 'SMS', body: 'PSIRS: Your access has been changed from {{previousRole}} to {{newRole}}. You have been signed out and must sign in again. If this was not expected, contact your administrator now.' },
+
+  // ---------------------------------------------------------------------
+  // The same thirty, in Hausa.
+  //
+  // A taxpayer holds no account here, so an SMS is the only copy of their
+  // receipt they will ever have — and a receipt somebody cannot read is a
+  // receipt they cannot check, which is PRD §95 undone at the last step.
+  //
+  // Held fixed while translating: every placeholder and every code an eye
+  // reads and a hand types back; every negation, each carried by ba, bai,
+  // babu or kada; and the glossary the agent application already uses —
+  // rasit, kwamishan, asusu, kudi, tabbatar, mai biyan haraji.
+  //
+  // NOT YET READ BY A NATIVE SPEAKER. docs/HAUSA-REVIEW.md carries them.
+  // ---------------------------------------------------------------------
+  { code: 'COMMISSION_PAYOUT_FAILED_SMS_HA', event: 'COMMISSION_PAYOUT_FAILED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a iya tura kwamishan dinka {{reference}} zuwa asusunka ba: {{reason}}. Kudin bai bata ba — ya koma cikin kudin da ake bin ka, kuma za a sake turawa idan an gyara bayanan asusun. Duba bayanan bankinka a cikin manhajar." },
+  { code: 'COMMISSION_PAYOUT_REFUSED_SMS_HA', event: 'COMMISSION_PAYOUT_REFUSED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatarka ta biyan kwamishan {{reference}} ba: {{reason}}. Kudin bai bata ba — ya kasance cikin kudin da ake bin ka kuma kana iya sake nema." },
+  { code: 'AGENT_SUSPENDED_PUSH_HA', event: 'AGENT_SUSPENDED', channel: 'PUSH', language: 'ha', subject: "An dakatar da kai", body: "Ka daina karbar kudi yanzu. Dalili: {{reason}}. Bude manhajar don ka ga abin da zai biyo baya." },
+  { code: 'AGENT_APPROVED_PUSH_HA', event: 'AGENT_APPROVED', channel: 'PUSH', language: 'ha', subject: "An amince ka fara karba", body: "An amince da bukatarka. Bude manhajar don ka yi rajistar na’urarka ka fara aiki." },
+  { code: 'KYC_ACTION_REQUIRED_PUSH_HA', event: 'KYC_ACTION_REQUIRED', channel: 'PUSH', language: 'ha', subject: "Bukatarka na bukatar wani abu", body: "Tabbatar da shaidarka bai cika ba: {{reason}}. Bude manhajar don ka sake turawa." },
+  { code: 'COMMISSION_PAID_PUSH_HA', event: 'COMMISSION_PAID', channel: 'PUSH', language: 'ha', subject: "An biya kwamishan", body: "An tura kwamishan dinka {{reference}} zuwa bankinka." },
+  { code: 'COMMISSION_PAYOUT_FAILED_PUSH_HA', event: 'COMMISSION_PAYOUT_FAILED', channel: 'PUSH', language: 'ha', subject: "Ba a iya biyan kwamishan ba", body: "{{reason}}. Kudin naka ne har yanzu — duba bayanan bankinka a cikin manhajar." },
+  { code: 'TIN_CREATED_SMS_HA', event: 'TIN_CREATED', channel: 'SMS', language: 'ha', body: "PSIRS: Lambar Shaidar Biyan Haraji taka ita ce {{tin}}. Ka adana ta — za ka bukace ta a duk biyan kudi na gwamnati." },
+  { code: 'INVOICE_SMS_HA', event: 'INVOICE_GENERATED', channel: 'SMS', language: 'ha', body: "PSIRS: An bayar da takardar biya {{reference}} na {{amount}}. Ka biya ta hanyoyin gwamnati da aka amince da su kadai." },
+  { code: 'PAYMENT_SUCCESS_SMS_HA', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', language: 'ha', body: "PSIRS: An tabbatar da biyan kudin ka na {{amount}}. Wannan shaidar karba ce {{receiptNumber}} — BA rasit ba ne. Rasit din gwamnati zai zo bayan kudin ya isa asusun gwamnati. Kana iya duba shi a kowane lokaci da wannan lambar." },
+  { code: 'PAYMENT_SUCCESS_EMAIL_HA', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', language: 'ha', body: "Ranka ya dade {{name}},\n\nAn tabbatar da biyan kudin ka na {{amount}} ta tsarin biyan kudi (ma’amala {{reference}}).\n\nWannan sakon SHAIDAR KARBA ce, lamba {{receiptNumber}}. BA rasit din gwamnati ba ne. Kudin zai isa asusun Gwamnatin Jihar Plateau nan ba da jimawa ba, kuma za a bayar da rasit din ka kai tsaye idan ya isa — za mu tura maka lambarsa.\n\nKana iya duba wannan shaidar karba a kowane lokaci ba tare da shiga asusu ba.\n\nHukumar Haraji ta Jihar Plateau" },
+  { code: 'RECEIPT_GENERATED_SMS_HA', event: 'RECEIPT_GENERATED', channel: 'SMS', language: 'ha', body: "PSIRS: Gwamnati ta karbi biyan kudin ka na {{amount}}. Rasit din ka na gwamnati shi ne {{receiptNumber}} (ma’amala {{reference}}). Kana iya duba shi a kowane lokaci da wannan lambar." },
+  { code: 'RECEIPT_GENERATED_EMAIL_HA', event: 'RECEIPT_GENERATED', channel: 'EMAIL', language: 'ha', body: "Ranka ya dade {{name}},\n\nGwamnatin Jihar Plateau ta karbi biyan kudin ka na {{amount}} (ma’amala {{reference}}).\n\nLambar rasit din ka ta gwamnati ita ce {{receiptNumber}}. Wannan ya maye gurbin shaidar karba da aka tura maka a baya, kuma shi ne shaidar biyan kudin ka.\n\nKana iya tabbatar da shi a kowane lokaci ba tare da shiga asusu ba.\n\nHukumar Haraji ta Jihar Plateau" },
+  { code: 'PAYMENT_FAILED_SMS_HA', event: 'PAYMENT_FAILED', channel: 'SMS', language: 'ha', body: "PSIRS: Biyan kudi na {{reference}} bai yi nasara ba. Ba a karbi kudi ba. Kana iya sake gwadawa." },
+  { code: 'VEHICLE_RENEWAL_SMS_HA', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', language: 'ha', body: "PSIRS: An sabunta motar {{registration}}, tana aiki har zuwa {{expiry}}. Sauke takardarka daga shafin." },
+  { code: 'COMMISSION_EARNED_SMS_HA', event: 'COMMISSION_EARNED', channel: 'SMS', language: 'ha', status: 'INACTIVE', body: "PSIRS: Ka samu kwamishan {{amount}} a kan ma’amala {{reference}}. Za a iya biyan sa bayan an sasanta kudin." },
+  { code: 'COMMISSION_EARNED_PUSH_HA', event: 'COMMISSION_EARNED', channel: 'PUSH', language: 'ha', subject: "An rubuta kwamishan", body: "{{amount}} a kan {{reference}}. Za a iya biyan sa bayan an sasanta kudin." },
+  { code: 'COMMISSION_PAID_SMS_HA', event: 'COMMISSION_PAID', channel: 'SMS', language: 'ha', body: "PSIRS: An biya kwamishan {{amount}} zuwa asusun bankin ka da aka tabbatar. Lamba {{reference}}." },
+  { code: 'AGENT_APPROVED_SMS_HA', event: 'AGENT_APPROVED', channel: 'SMS', language: 'ha', body: "PSIRS: An amince da bukatarka ta zama wakili. Ka kammala horo ka yi rajistar na’urarka don fara aiki." },
+  { code: 'AGENT_REJECTED_SMS_HA', event: 'AGENT_REJECTED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatarka ta zama wakili ba. Dalili: {{reason}}" },
+  { code: 'AGENT_SUSPENDED_SMS_HA', event: 'AGENT_SUSPENDED', channel: 'SMS', language: 'ha', body: "PSIRS: An dakatar da asusun wakilcin ka. Dalili: {{reason}}. Ka tuntubi shugabanka." },
+  { code: 'REFEREE_INVITATION_SMS_HA', event: 'REFEREE_INVITATION', channel: 'SMS', language: 'ha', body: "PSIRS: {{applicant}} ya sa ka a matsayin mai shaida a kan bukatar zama wakilin karbar haraji ({{reference}}). Ka tabbatar a {{link}} kafin {{expiry}}." },
+  { code: 'KYC_ACTION_SMS_HA', event: 'KYC_ACTION_REQUIRED', channel: 'SMS', language: 'ha', body: "PSIRS: Tabbatar da shaidarka na bukatar kulawa. {{reason}}. Bude manhajar don ka sake turawa." },
+  { code: 'SUPPORT_REPLY_SMS_HA', event: 'SUPPORT_TICKET_UPDATED', channel: 'SMS', language: 'ha', body: "PSIRS: An amsa takardar korafinka {{ticketNumber}}. Bude manhajar don ka karanta." },
+  { code: 'SECURITY_OTP_SMS_HA', event: 'SECURITY_ALERT', channel: 'SMS', language: 'ha', body: "PSIRS: Lambar tabbatarwarka ita ce {{code}}. Za ta kare cikin mintuna {{minutes}}. Kada ka fada wa kowa, hatta ma’aikatan PSIRS." },
+  { code: 'AGENT_BANK_CHANGE_REQUESTED_SMS_HA', event: 'AGENT_BANK_CHANGE_REQUESTED', channel: 'SMS', language: 'ha', body: "PSIRS: An nemi a rika biyan kwamishan dinka a {{bank}} {{account}}. Babu abin da ya canza tukuna. Idan ba kai ba ne, ka tuntubi shugabanka yanzu." },
+  { code: 'AGENT_BANK_CHANGE_APPLIED_SMS_HA', event: 'AGENT_BANK_CHANGE_APPLIED', channel: 'SMS', language: 'ha', body: "PSIRS: Yanzu za a rika biyan kwamishan dinka a {{bank}} {{account}}. Idan ba kai ba ne, ka tuntubi shugabanka yanzu." },
+  { code: 'AGENT_BANK_CHANGE_REFUSED_SMS_HA', event: 'AGENT_BANK_CHANGE_REFUSED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatar canza asusun kwamishan dinka ba. Dalili: {{reason}}. Asusun ka na yanzu bai canza ba." },
+  { code: 'TAXPAYER_RECORD_CORRECTED_SMS_HA', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', language: 'ha', body: "PSIRS: An gyara {{fields}} a kan bayananka na mai biyan haraji ta hannun jami’in haraji. Idan ba kai ka nema ba, ka je kowane ofishin PSIRS." },
+  { code: 'USER_ROLE_CHANGED_SMS_HA', event: 'USER_ROLE_CHANGED', channel: 'SMS', language: 'ha', body: "PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu." },
 ];
 
 const AGENT_AGREEMENT = `PLATEAU STATE INTERNAL REVENUE SERVICE
@@ -979,8 +1024,8 @@ async function seedReferenceData(): Promise<void> {
 
     for (const template of NOTIFICATION_TEMPLATES) {
       await client.query(
-        `INSERT INTO notification_templates (code, event, channel, subject, body, status)
-         VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (code) DO NOTHING`,
+        `INSERT INTO notification_templates (code, event, channel, subject, body, status, language)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO NOTHING`,
         [
           template.code,
           template.event,
@@ -992,6 +1037,9 @@ async function seedReferenceData(): Promise<void> {
           // run before the row existed — the status has to be seeded, not
           // patched afterwards.
           ('status' in template ? template.status : null) ?? 'ACTIVE',
+          // English unless the row says otherwise. Selection prefers the
+          // recipient's own language and falls back to this.
+          ('language' in template ? template.language : null) ?? 'en',
         ],
       );
     }

@@ -311,9 +311,19 @@ describe('Correcting a deployment that already has the old wording', () => {
     await pool.query(migration);
     await pool.query(migration);
 
+    /*
+     * Counted per language, because there are two now.
+     *
+     * This asserted two rows outright, which was the same number as "one SMS
+     * and one email" until a Hausa rendering of each existed. Migration 042
+     * inserts English, so English is what its idempotence is about — and
+     * scoping it keeps the property exact rather than turning it into a
+     * headcount that has to be edited every time a language is added.
+     */
     const count = await queryOne<{ n: string }>(
       pool,
-      `SELECT count(*)::text AS n FROM notification_templates WHERE event = 'RECEIPT_GENERATED'`,
+      `SELECT count(*)::text AS n FROM notification_templates
+        WHERE event = 'RECEIPT_GENERATED' AND language = 'en'`,
     );
     assert.equal(count!.n, '2', 'one SMS template and one email template, however often it runs');
   });

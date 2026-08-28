@@ -44,6 +44,14 @@ export interface TaxpayerInput {
   identityNumber?: string;
   consentGiven: boolean;
   declarationAccepted: boolean;
+  /**
+   * The language this person reads.
+   *
+   * Everything the platform sends them is chosen with it, and for a taxpayer
+   * that is one SMS carrying the only copy of their receipt. Optional, and
+   * absent means English — the same as the column default.
+   */
+  preferredLanguage?: 'en' | 'ha';
   existingTin?: string;
 }
 
@@ -411,7 +419,7 @@ export async function registerTaxpayer(params: {
          phone, alternate_phone, email, address, lga_id, ward_id, community,
          occupation, business_activity, identity_type, identity_hash, identity_masked,
          consent_given, consent_at, declaration_accepted,
-         registered_by_agent_id, source, tin_reason, tin_attempts
+         registered_by_agent_id, source, tin_reason, tin_attempts, preferred_language
        ) VALUES (
          $1,$2,$3, now(), $4, $5,
          $6,$7,$8,$9,$10,
@@ -419,7 +427,7 @@ export async function registerTaxpayer(params: {
          $15,$16,$17,$18,$19,$20,$21,
          $22,$23,$24,$25,$26,
          $27, now(), $28,
-         $29,$30,$31,$32
+         $29,$30,$31,$32,$33
        ) RETURNING id`,
       [
         input.taxpayerType,
@@ -454,6 +462,8 @@ export async function registerTaxpayer(params: {
         params.source ?? 'AGENT',
         tinReason,
         tinStatus === 'NOT_REQUESTED' || tinStatus === 'EXISTING' ? 0 : 1,
+        // English when the agent did not ask, which is also the column default.
+        input.preferredLanguage ?? 'en',
       ],
     );
 

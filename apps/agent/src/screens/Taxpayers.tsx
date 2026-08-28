@@ -232,6 +232,16 @@ export function RegisterTaxpayerScreen({
     businessActivity: '',
     consentGiven: false,
     declarationAccepted: false,
+    /*
+     * The language this taxpayer reads.
+     *
+     * Defaulted to whatever the agent has the app set to, because an agent
+     * working a Hausa-speaking market is overwhelmingly registering Hausa
+     * speakers and the correct answer should not need a tap each time. It is
+     * still a question the agent can change, because it is about the taxpayer
+     * and not about them.
+     */
+    preferredLanguage: 'en' as 'en' | 'ha',
   });
 
   useEffect(() => {
@@ -303,6 +313,7 @@ export function RegisterTaxpayerScreen({
       existingTin: form.hasTin && form.existingTin ? form.existingTin : undefined,
       consentGiven: form.consentGiven,
       declarationAccepted: form.declarationAccepted,
+      preferredLanguage: form.preferredLanguage,
       acknowledgeDuplicates,
     };
   }
@@ -812,6 +823,30 @@ export function RegisterTaxpayerScreen({
                 ['TIN', form.hasTin ? form.existingTin : 'Will be requested'],
               ]}
             />
+
+            {/*
+              * Which language PSIRS writes to this person in.
+              *
+              * On the review step, beside the consent, because it is a question
+              * for the taxpayer rather than a detail of the form — and this is
+              * the moment the agent is confirming things with them out loud.
+              * They hold no account here, so every message the platform ever
+              * sends them is chosen by this one answer.
+              */}
+            <div className="field">
+              <label htmlFor="preferred-language">{t.languageForMessages}</label>
+              <select
+                id="preferred-language"
+                value={form.preferredLanguage}
+                onChange={(event) =>
+                  set('preferredLanguage', event.target.value as 'en' | 'ha')
+                }
+              >
+                <option value="en">English</option>
+                <option value="ha">Hausa</option>
+              </select>
+              <p className="hint">{t.languageForMessagesHint}</p>
+            </div>
 
             <label className="checkbox">
               <input

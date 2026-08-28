@@ -70,6 +70,18 @@ taxpayerRouter.use(authenticate);
 const taxpayerInputSchema = z
   .object({
     taxpayerType: z.enum(['INDIVIDUAL', 'BUSINESS']),
+    /*
+     * The language this person reads.
+     *
+     * Asked at registration because the agent is standing in front of them and
+     * is the only one who can ask. Everything the platform ever sends this
+     * taxpayer is chosen with it — and for a taxpayer that is one SMS carrying
+     * the only copy of their receipt they will ever hold.
+     *
+     * Optional, defaulting to English, so a handset on an older build that does
+     * not send it still registers people.
+     */
+    preferredLanguage: z.enum(['en', 'ha']).optional(),
     firstName: z.string().min(2).max(80).optional(),
     middleName: z.string().max(80).optional(),
     lastName: z.string().min(2).max(80).optional(),

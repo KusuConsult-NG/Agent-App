@@ -161,16 +161,50 @@ export async function queueNotification(
     }
   }
 
+  /*
+   * The language this person reads.
+   *
+   * Resolved from the recipient rather than passed in: a caller queueing a
+   * receipt knows the transaction, not what the taxpayer speaks, and making it
+   * an argument would mean every one of the eighteen call sites getting it
+   * right. Defaults to English, which is also what an unrecorded preference
+   * means.
+   */
+  const language =
+    (
+      await queryOne<{ preferred_language: string }>(
+        client,
+        `SELECT COALESCE(
+                  (SELECT preferred_language FROM taxpayers WHERE id = $1),
+                  (SELECT preferred_language FROM users WHERE id = $2),
+                  'en') AS preferred_language`,
+        [params.taxpayerId ?? null, userId],
+      )
+    )?.preferred_language ?? 'en';
+
+  /*
+   * One row per channel, in the recipient's language where there is one.
+   *
+   * DISTINCT ON with the language ordered first picks the translation when it
+   * exists and the English when it does not — so a channel is never sent twice,
+   * once per language, and an English-only template still reaches somebody who
+   * reads Hausa. Silence would be the worse failure: a receipt in the wrong
+   * language can still be checked, and a receipt that never arrives cannot.
+   */
   const templates = await query<{
     channel: 'SMS' | 'EMAIL' | 'PUSH';
     subject: string | null;
     body: string;
+    language: string;
   }>(
     client,
-    `SELECT channel, subject, body FROM notification_templates
+    `SELECT DISTINCT ON (channel) channel, subject, body, language
+       FROM notification_templates
       WHERE event = $1 AND status = 'ACTIVE'
-        AND ($2::text[] IS NULL OR channel = ANY($2))`,
-    [params.event, params.channels ?? null],
+        AND ($2::text[] IS NULL OR channel = ANY($2))
+        AND language IN ($3, 'en')
+      ORDER BY channel, (language = $3) DESC`,
+    [params.event, params.channels ?? null, language],
   );
 
   let queued = 0;
@@ -200,8 +234,8 @@ export async function queueNotification(
 
     await client.query(
       `INSERT INTO notifications
-         (user_id, recipient, event, channel, subject, message, entity_type, entity_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+         (user_id, recipient, event, channel, subject, message, entity_type, entity_id, language)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         userId,
         recipient,
@@ -211,6 +245,10 @@ export async function queueNotification(
         render(template.body, variables),
         params.entityType ?? null,
         params.entityId ?? null,
+        // The language it was actually rendered in, not the one asked for:
+        // the fallback means those differ, and a support officer reading the
+        // queue has to see which one the citizen received.
+        template.language,
       ],
     );
     queued += 1;

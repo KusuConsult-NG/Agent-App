@@ -107,6 +107,8 @@ export interface TranslationDictionary {
   findTaxpayerFirst: string;
   noTaxpayerMatch: string;
   searchAnotherArea: string;
+  languageForMessages: string;
+  languageForMessagesHint: string;
 
   // Checking a receipt
   genuineReceipt: string;
@@ -319,6 +321,14 @@ export const translations: Record<Language, TranslationDictionary> = {
      */
     searchAnotherArea:
       'A name search covers your own Local Government Area. If they are registered elsewhere, search by their phone number, TIN, vehicle registration or a receipt number.',
+    /*
+     * The taxpayer holds no account here, so every message PSIRS ever sends
+     * them — including the SMS that is the only copy of their receipt — is
+     * chosen by this one answer. Ask them; do not assume from the market.
+     */
+    languageForMessages: 'Language for their messages',
+    languageForMessagesHint:
+      'Ask the taxpayer. Their receipt arrives by SMS and it is the only copy they will have.',
 
     genuineReceipt: 'Genuine receipt',
     receiptNotValid: 'Not a valid receipt',
@@ -512,6 +522,9 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Babu mai biyan haraji da ya dace da wannan bincike. Ka yi masa rajista a kasa kafin ka karbi kudi \u2014 dole a danganta kowane biyan kudi ga mai biyan haraji.',
     searchAnotherArea:
       'Binciken suna yana rufe Karamar Hukumar da kake aiki a ciki kadai. Idan an yi masa rajista a wata Karamar Hukuma, ka nemo shi da lambar wayarsa, TIN, lambar mota ko lambar rasit.',
+    languageForMessages: 'Harshen sakonnin sa',
+    languageForMessagesHint:
+      'Ka tambayi mai biyan haraji. Rasit dinsa yana zuwa ta SMS, kuma shi ne kwafin da zai samu kadai.',
 
     genuineReceipt: 'Rasit na gaskiya',
     receiptNotValid: 'Rasit din ba na gaskiya ba ne',
