@@ -135,6 +135,59 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcGpConfirmationLinkFor: string;
+  ofcSpOpenComplaints: string;
+
+  /**
+   * The support desk an agent's report lands in, and the groups and
+   * distributions an officer approves.
+   */
+  ofcSpAboutRevenue: string;
+  ofcSpSupportQueue: string;
+  ofcSpQueueIntro: string;
+  ofcSpAssigned: string;
+  ofcSpInProgress: string;
+  ofcSpResolved: string;
+  ofcSpClosed: string;
+  ofcSpBackToQueue: string;
+  ofcSpNobodyReplied: string;
+  ofcSpReadOnlyNote: string;
+  ofcSpClosedKeepsHistory: string;
+  ofcSpKeepInternal: string;
+  ofcSpMoveTicket: string;
+  ofcSpHowResolved: string;
+  ofcSpResolutionRequired: string;
+  ofcSpMarkResolved: string;
+  ofcSpResolutionRecorded: string;
+  ofcSpDone: string;
+  ofcSpReadAccess: string;
+  ofcSpTicketClosed: string;
+  ofcSpTicket: string;
+  ofcSpSubject: string;
+  ofcSpPriority: string;
+  ofcSpReportedBy: string;
+  ofcSpReplies: string;
+  ofcGpLeaderCodeOnce: string;
+  ofcGpWaitingDecision: string;
+  ofcGpWaitingIntro: string;
+  ofcGpDistributions: string;
+  ofcGpDistributionsIntro: string;
+  ofcGpRegisteredGroups: string;
+  ofcGpGroupsIntro: string;
+  ofcGpMembersIntro: string;
+  ofcGpMembershipEnded: string;
+  ofcGpMembers: string;
+  ofcGpAskLeader: string;
+  ofcGpTotal: string;
+  ofcGpAwarded: string;
+  ofcGpRemaining: string;
+  ofcGpSampleNote: string;
+  ofcGpSampleEnded: string;
+  ofcGpMostNotCollected: string;
+  ofcGpNote: string;
+  ofcGpSector: string;
+  ofcGpConfirmedMembers: string;
+  ofcGpScoreAtAward: string;
 
   /**
    * Levies by category, and the distribution rounds a social programme runs
@@ -1530,6 +1583,54 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcGpConfirmationLinkFor: "Confirmation link for {{group}}",
+    ofcSpOpenComplaints: "{{n}} open complaint(s) about conduct or charges",
+    ofcSpAboutRevenue: "These are reports about how revenue was collected, not about the platform. They are listed first below.",
+    ofcSpSupportQueue: "Support queue",
+    ofcSpQueueIntro: "Ordered by priority. A ticket is answered in its thread — a status change on its own tells the person who reported it nothing.",
+    ofcSpAssigned: "Assigned",
+    ofcSpInProgress: "In progress",
+    ofcSpResolved: "Resolved",
+    ofcSpClosed: "Closed",
+    ofcSpBackToQueue: "Back to the queue",
+    ofcSpNobodyReplied: "Nobody has replied yet.",
+    ofcSpReadOnlyNote: "Replying and moving a ticket need support:manage. You can read everything here, including internal notes.",
+    ofcSpClosedKeepsHistory: "A closed ticket keeps its history. New problems get new tickets.",
+    ofcSpKeepInternal: "Keep this internal — do not show it to the reporter",
+    ofcSpMoveTicket: "Move this ticket",
+    ofcSpHowResolved: "How was it resolved?",
+    ofcSpResolutionRequired: "A resolution is required before a ticket can be marked resolved, and it is shown to the person who reported it.",
+    ofcSpMarkResolved: "Mark resolved",
+    ofcSpResolutionRecorded: "Resolution recorded",
+    ofcSpDone: "Done",
+    ofcSpReadAccess: "You have read access to this ticket",
+    ofcSpTicketClosed: "This ticket is closed",
+    ofcSpTicket: "Ticket",
+    ofcSpSubject: "Subject",
+    ofcSpPriority: "Priority",
+    ofcSpReportedBy: "Reported by",
+    ofcSpReplies: "Replies",
+    ofcGpLeaderCodeOnce: "Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost.",
+    ofcGpWaitingDecision: "Waiting for a decision",
+    ofcGpWaitingIntro: "An agent has recorded these groups in the field. Members cannot be added until a group is approved, so nothing else happens while they sit here.",
+    ofcGpDistributions: "Distributions",
+    ofcGpDistributionsIntro: "Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to see who has been awarded and who has actually collected.",
+    ofcGpRegisteredGroups: "Registered groups",
+    ofcGpGroupsIntro: "Cooperatives, market associations and unions. The member count is confirmed membership only — what an agent recorded but the leader has not yet confirmed does not count towards anything.",
+    ofcGpMembersIntro: "Only confirmed members count towards allocations and group-based programmes. Somebody who has left stays on this list: they were a member when whatever they already collected was awarded.",
+    ofcGpMembershipEnded: "Reason a membership ended",
+    ofcGpMembers: "Members",
+    ofcGpAskLeader: "Ask the leader",
+    ofcGpTotal: "Total",
+    ofcGpAwarded: "Awarded",
+    ofcGpRemaining: "Remaining",
+    ofcGpSampleNote: "Checked against the ministry register of cooperatives.",
+    ofcGpSampleEnded: "Moved his stall to Bukuru market and left the association.",
+    ofcGpMostNotCollected: "Most of this round has not been collected",
+    ofcGpNote: "Note",
+    ofcGpSector: "Sector",
+    ofcGpConfirmedMembers: "Confirmed members",
+    ofcGpScoreAtAward: "Score at award",
     ofcLvTitle: "Levies and tax categories",
     ofcLvTaxCategory: "Tax category",
     ofcLvAllCategories: "All categories",
@@ -2776,6 +2877,54 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcGpConfirmationLinkFor: "Hanyar tabbatarwa ta {{group}}",
+    ofcSpOpenComplaints: "Korafe-korafe {{n}} a bude kan hali ko kudi",
+    ofcSpAboutRevenue: "Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa.",
+    ofcSpSupportQueue: "Jerin gwanon taimako",
+    ofcSpQueueIntro: "An jera bisa muhimmanci. Ana amsa rahoto a cikin zaren sa — canza matsayi kadai ba ya gaya wa wanda ya kai rahoton komai.",
+    ofcSpAssigned: "An ba da",
+    ofcSpInProgress: "Ana kan aiki",
+    ofcSpResolved: "An warware",
+    ofcSpClosed: "An rufe",
+    ofcSpBackToQueue: "Koma ga jerin gwanon",
+    ofcSpNobodyReplied: "Babu wanda ya amsa tukuna.",
+    ofcSpReadOnlyNote: "Amsawa da matsar da rahoto suna bukatar support:manage. Za ka iya karanta komai a nan, hade da bayanan cikin gida.",
+    ofcSpClosedKeepsHistory: "Rahoton da aka rufe yana rike da tarihinsa. Sabbin matsaloli suna samun sabbin rahotanni.",
+    ofcSpKeepInternal: "Ka rike wannan a cikin gida — kada ka nuna wa wanda ya kai rahoton",
+    ofcSpMoveTicket: "Matsar da wannan rahoton",
+    ofcSpHowResolved: "Yaya aka warware shi?",
+    ofcSpResolutionRequired: "Ana bukatar warwarewa kafin a sanya rahoto a matsayin warware, kuma ana nuna ta ga wanda ya kai rahoton.",
+    ofcSpMarkResolved: "Sanya a matsayin warware",
+    ofcSpResolutionRecorded: "An rubuta warwarewa",
+    ofcSpDone: "An gama",
+    ofcSpReadAccess: "Kana da izinin karanta wannan rahoton",
+    ofcSpTicketClosed: "An rufe wannan rahoton",
+    ofcSpTicket: "Rahoto",
+    ofcSpSubject: "Batu",
+    ofcSpPriority: "Muhimmanci",
+    ofcSpReportedBy: "Wanda ya kai rahoto",
+    ofcSpReplies: "Amsoshi",
+    ofcGpLeaderCodeOnce: "Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata.",
+    ofcGpWaitingDecision: "Ana jiran shawara",
+    ofcGpWaitingIntro: "Wakili ya rubuta wadannan kungiyoyi a filin aiki. Ba za a iya kara mambobi ba sai an amince da kungiya, don haka babu abin da ke faruwa yayin da suke nan.",
+    ofcGpDistributions: "Rabo",
+    ofcGpDistributionsIntro: "Taki, iri da sauran rabon da ke da adadi tsayayye a bayansu. Ka bude daya don ganin wanda aka ba da wanda ya karba a hakika.",
+    ofcGpRegisteredGroups: "Kungiyoyin da aka yi wa rajista",
+    ofcGpGroupsIntro: "Kungiyoyin hadin kai, kungiyoyin kasuwa da kungiyoyin sana’a. Adadin mambobi shi ne wanda aka tabbatar kawai — abin da wakili ya rubuta amma shugaba bai tabbatar ba tukuna ba ya kirguwa a komai.",
+    ofcGpMembersIntro: "Mambobin da aka tabbatar kawai ne ke kirguwa ga rabo da shirye-shiryen kungiya. Wanda ya fita yana nan a jerin: mamba ne a lokacin da aka ba shi abin da ya riga ya karba.",
+    ofcGpMembershipEnded: "Dalilin da ya sa mamba ta kare",
+    ofcGpMembers: "Mambobi",
+    ofcGpAskLeader: "Tambayi shugaba",
+    ofcGpTotal: "Jimla",
+    ofcGpAwarded: "An ba da",
+    ofcGpRemaining: "Da ya rage",
+    ofcGpSampleNote: "An duba shi da rajistar kungiyoyin hadin kai ta ma’aikatar.",
+    ofcGpSampleEnded: "Ya matsar da shagonsa zuwa kasuwar Bukuru kuma ya bar kungiyar.",
+    ofcGpMostNotCollected: "Ba a karbi mafi yawan wannan zagayen ba",
+    ofcGpNote: "Bayani",
+    ofcGpSector: "Bangare",
+    ofcGpConfirmedMembers: "Mambobin da aka tabbatar",
+    ofcGpScoreAtAward: "Maki a lokacin bayarwa",
     ofcLvTitle: "Haraji da rukunonin haraji",
     ofcLvTaxCategory: "Rukunin haraji",
     ofcLvAllCategories: "Dukkan rukunoni",

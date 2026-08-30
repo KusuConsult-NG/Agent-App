@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface RoundRow {
   id: string;
@@ -52,6 +53,7 @@ const readable = (value: string | null) =>
   value ? value.replace(/_/g, ' ').toLowerCase() : '—';
 
 export function GroupsScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = usePortalI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -106,17 +108,14 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
     <>
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Done">
+        <Alert kind="success" title="ofcSpDone">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
 
       {attestationLink && (
-        <Alert kind="info" title={`Confirmation link for ${attestationLink.name}`}>
-          <p style={{ margin: '0 0 8px' }}>
-            Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so
-            it cannot be read back later. Request another if it is lost.
-          </p>
+        <Alert kind="info" title={{ text: t.ofcGpConfirmationLinkFor.replace('{{group}}', attestationLink.name) }}>
+          <p style={{ margin: '0 0 8px' }}>{t.ofcGpLeaderCodeOnce}</p>
           <code
             style={{
               display: 'block',
@@ -134,11 +133,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {pending.length > 0 && can('group:manage') && (
         <div className="card">
-          <h2 className="card__title">Waiting for a decision</h2>
-          <p className="card__hint">
-            An agent has recorded these groups in the field. Members cannot be added until a group
-            is approved, so nothing else happens while they sit here.
-          </p>
+          <h2 className="card__title">{t.ofcGpWaitingDecision}</h2>
+          <p className="card__hint">{t.ofcGpWaitingIntro}</p>
 
           <div className="field">
             <label htmlFor="group-reason">{t.ofcAgReasonMinimum}</label>
@@ -147,7 +143,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               rows={2}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Checked against the ministry register of cooperatives."
+              placeholder={t.ofcGpSampleNote}
             />
           </div>
 
@@ -160,7 +156,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               { key: 'leader_name', label: 'grpLeader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button
@@ -204,31 +200,28 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       {can('allocation:read:all') && rounds !== null && (
         <div className="card card--flush">
           <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Distributions</h2>
-            <p className="card__hint">
-              Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to
-              see who has been awarded and who has actually collected.
-            </p>
+            <h2 className="card__title">{t.ofcGpDistributions}</h2>
+            <p className="card__hint">{t.ofcGpDistributionsIntro}</p>
           </div>
           <Table
             columns={[
-              { key: 'name', label: 'Round' },
-              { key: 'programme_name', label: 'Programme' },
+              { key: 'name', label: 'ofcAlRound' },
+              { key: 'programme_name', label: 'ofcAlProgramme' },
               {
                 key: 'total_quantity',
-                label: 'Total',
+                label: 'ofcGpTotal',
                 render: (row) => `${row.total_quantity} ${readable(row.unit)}`,
               },
               {
                 key: 'awarded_quantity',
-                label: 'Awarded',
+                label: 'ofcGpAwarded',
                 render: (row) => `${row.awarded_quantity} (${row.awarded_count} people)`,
               },
-              { key: 'collected_count', label: 'Collected' },
+              { key: 'collected_count', label: 'ofcPfCollected' },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'open',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <button
                     type="button"
@@ -246,12 +239,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Registered groups</h2>
-          <p className="card__hint">
-            Cooperatives, market associations and unions. The member count is confirmed
-            membership only — what an agent recorded but the leader has not yet confirmed does not
-            count towards anything.
-          </p>
+          <h2 className="card__title">{t.ofcGpRegisteredGroups}</h2>
+          <p className="card__hint">{t.ofcGpGroupsIntro}</p>
           <div className="field" style={{ maxWidth: 260 }}>
             <label htmlFor="group-status">{t.appStatus}</label>
             <select
@@ -273,26 +262,20 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             <div className="card__header">
               <div>
                 <h2 className="card__title">Members — {members.group.name}</h2>
-                <p className="card__hint">
-                  Only confirmed members count towards allocations and group-based programmes.
-                  Somebody who has left stays on this list: they were a member when whatever they
-                  already collected was awarded.
-                </p>
+                <p className="card__hint">{t.ofcGpMembersIntro}</p>
               </div>
-              <button type="button" className="small secondary" onClick={() => setMembers(null)}>
-                Close
-              </button>
+              <button type="button" className="small secondary" onClick={() => setMembers(null)}>{t.ofcKycClose}</button>
             </div>
 
             {can('group:manage') && (
               <div className="field">
-                <label htmlFor="departure-reason">Reason a membership ended</label>
+                <label htmlFor="departure-reason">{t.ofcGpMembershipEnded}</label>
                 <textarea
                   id="departure-reason"
                   rows={2}
                   value={departureReason}
                   onChange={(event) => setDepartureReason(event.target.value)}
-                  placeholder="Moved his stall to Bukuru market and left the association."
+                  placeholder={t.ofcGpSampleEnded}
                 />
               </div>
             )}
@@ -305,12 +288,12 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'left_reason',
-                label: 'Note',
+                label: 'ofcGpNote',
                 render: (row) => row.left_reason ?? row.rejection_reason ?? '—',
               },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) =>
                   can('group:manage') && (row.status === 'ATTESTED' || row.status === 'PENDING_ATTESTATION') ? (
                     <button
@@ -348,13 +331,13 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             { key: 'code', label: 'ofcAgCode' },
             { key: 'name', label: 'pubAttestGroup' },
             { key: 'group_type', label: 'tpType', render: (row) => readable(row.group_type) },
-            { key: 'economic_sector', label: 'Sector', render: (row) => readable(row.economic_sector) },
+            { key: 'economic_sector', label: 'ofcGpSector', render: (row) => readable(row.economic_sector) },
             { key: 'lga_name', label: 'tpLgaShort' },
-            { key: 'attested_members', label: 'Confirmed members' },
+            { key: 'attested_members', label: 'ofcGpConfirmedMembers' },
             { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
             {
               key: 'members',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 can('group:read:all') || can('group:read:own') ? (
                   <button
@@ -367,14 +350,12 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                         return null;
                       })
                     }
-                  >
-                    Members
-                  </button>
+                  >{t.ofcGpMembers}</button>
                 ) : null,
             },
             {
               key: 'attest',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 row.status === 'ACTIVE' && can('group:manage') ? (
                   <button
@@ -390,9 +371,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                         return 'Confirmation link created.';
                       })
                     }
-                  >
-                    Ask the leader
-                  </button>
+                  >{t.ofcGpAskLeader}</button>
                 ) : null,
             },
           ]}
@@ -444,6 +423,7 @@ interface AwardRow {
  * exist, and both are worth knowing before the next round is planned.
  */
 export function AllocationRoundScreen({ roundId }: { roundId: string }) {
+  const { t } = usePortalI18n();
   const [round, setRound] = useState<RoundSummary | null>(null);
   const [awards, setAwards] = useState<AwardRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -474,39 +454,39 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
     <>
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Done">
+        <Alert kind="success" title="ofcSpDone">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
 
       <div className="stat-grid">
         <div className="stat">
-          <p className="stat__label">Total</p>
+          <p className="stat__label">{t.ofcGpTotal}</p>
           <p className="stat__value">
             {round.total_quantity} <span style={{ fontSize: '0.7em' }}>{readable(round.unit)}</span>
           </p>
         </div>
         <div className="stat">
-          <p className="stat__label">Awarded</p>
+          <p className="stat__label">{t.ofcGpAwarded}</p>
           <p className="stat__value">{round.awardedQuantity}</p>
           <p className="stat__hint">{round.awardedCount} beneficiaries</p>
         </div>
         <div className="stat">
-          <p className="stat__label">Collected</p>
+          <p className="stat__label">{t.ofcPfCollected}</p>
           <p className="stat__value">{round.collectedQuantity}</p>
           <p className="stat__hint">
             {round.collectedCount} of {round.awardedCount} ({collectionRate}%)
           </p>
         </div>
         <div className="stat">
-          <p className="stat__label">Remaining</p>
+          <p className="stat__label">{t.ofcGpRemaining}</p>
           <p className="stat__value">{round.remainingQuantity}</p>
           <p className="stat__hint">enough for {round.beneficiariesRemaining} more</p>
         </div>
       </div>
 
       {round.awardedCount > 0 && collectionRate < 60 && (
-        <Alert kind="warning" title="Most of this round has not been collected">
+        <Alert kind="warning" title="ofcGpMostNotCollected">
           <p style={{ margin: 0 }}>
             {round.awardedCount - round.collectedCount} beneficiaries were awarded and have not
             turned up. That is either a distribution that is not reaching people, or names on a
@@ -533,19 +513,19 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         ) : (
           <Table
             columns={[
-              { key: 'taxpayer_name', label: 'Beneficiary' },
+              { key: 'taxpayer_name', label: 'ofcAlBeneficiary' },
               { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
               { key: 'group_name', label: 'pubAttestGroup', render: (row) => row.group_name ?? '—' },
-              { key: 'quantity', label: 'Quantity' },
+              { key: 'quantity', label: 'ofcAlQuantity' },
               {
                 key: 'compliance_score',
-                label: 'Score at award',
+                label: 'ofcGpScoreAtAward',
                 render: (row) => (row.compliance_score === null ? '—' : String(row.compliance_score)),
               },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'collected_at',
-                label: 'Collected',
+                label: 'ofcPfCollected',
                 render: (row) => (row.collected_at ? formatDateTime(row.collected_at) : '—'),
               },
             ]}
