@@ -135,6 +135,52 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+
+  /**
+   * Levies by category, and the distribution rounds a social programme runs
+   * through — fertiliser, seed and the like.
+   */
+  ofcLvTitle: string;
+  ofcLvTaxCategory: string;
+  ofcLvAllCategories: string;
+  ofcLvLevyOrItem: string;
+  ofcLvAllItems: string;
+  ofcLvCollectedFrom: string;
+  ofcLvCollectedTo: string;
+  ofcLvByIndividualLevy: string;
+  ofcLvOnlyUnpaid: string;
+  ofcLvChooseFilter: string;
+  ofcLvSettledToState: string;
+  ofcLvAwaitingSettlement: string;
+  ofcLvTaxpayersInArrears: string;
+  ofcLvTotalOutstanding: string;
+  ofcLvCollections: string;
+  ofcLvSettled: string;
+  ofcLvLevy: string;
+  ofcLvInvoices: string;
+  ofcLvOldestDue: string;
+  ofcAlIntro: string;
+  ofcAlNewRound: string;
+  ofcAlProgramme: string;
+  ofcAlSelectProgramme: string;
+  ofcAlNoProgramme: string;
+  ofcAlRoundName: string;
+  ofcAlMeasuredIn: string;
+  ofcAlTotalToDistribute: string;
+  ofcAlEachReceives: string;
+  ofcAlEnoughFor: string;
+  ofcAlBeneficiariesWord: string;
+  ofcAlCollectionPoint: string;
+  ofcAlOpens: string;
+  ofcAlClosesOptional: string;
+  ofcAlRelease: string;
+  ofcAlAwards: string;
+  ofcAlSampleRound: string;
+  ofcAlSamplePoint: string;
+  ofcAlBeneficiary: string;
+  ofcAlQuantity: string;
+  ofcAlRound: string;
+  ofcAlDistributing: string;
   ofcFaEveryHandsetCan: string;
   ofcFaSomeCannotCollect: string;
   ofcKycNotReviewed: string;
@@ -1484,6 +1530,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcLvTitle: "Levies and tax categories",
+    ofcLvTaxCategory: "Tax category",
+    ofcLvAllCategories: "All categories",
+    ofcLvLevyOrItem: "Levy or tax item",
+    ofcLvAllItems: "All items",
+    ofcLvCollectedFrom: "Collected from",
+    ofcLvCollectedTo: "Collected to",
+    ofcLvByIndividualLevy: "By individual levy",
+    ofcLvOnlyUnpaid: "Only those with something unpaid",
+    ofcLvChooseFilter: "Choose a category, a levy, an LGA, or \"only those with something unpaid\" to list the taxpayers it applies to.",
+    ofcLvSettledToState: "Settled to the State",
+    ofcLvAwaitingSettlement: "Awaiting settlement",
+    ofcLvTaxpayersInArrears: "Taxpayers in arrears",
+    ofcLvTotalOutstanding: "Total outstanding",
+    ofcLvCollections: "Collections",
+    ofcLvSettled: "Settled",
+    ofcLvLevy: "Levy",
+    ofcLvInvoices: "Invoices",
+    ofcLvOldestDue: "Oldest due",
+    ofcAlIntro: "A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point.",
+    ofcAlNewRound: "New round",
+    ofcAlProgramme: "Programme",
+    ofcAlSelectProgramme: "Select a programme",
+    ofcAlNoProgramme: "No programme exists yet. One has to be created under Social incentives before a round can distribute under it.",
+    ofcAlRoundName: "What this round is called",
+    ofcAlMeasuredIn: "Measured in",
+    ofcAlTotalToDistribute: "Total to distribute",
+    ofcAlEachReceives: "Each beneficiary receives",
+    ofcAlEnoughFor: "Enough for",
+    ofcAlBeneficiariesWord: "beneficiaries.",
+    ofcAlCollectionPoint: "Collection point",
+    ofcAlOpens: "Opens",
+    ofcAlClosesOptional: "Closes (optional)",
+    ofcAlRelease: "Release",
+    ofcAlAwards: "Awards",
+    ofcAlSampleRound: "Dry season fertiliser, Jos North",
+    ofcAlSamplePoint: "Terminus Market store, Jos North",
+    ofcAlBeneficiary: "Beneficiary",
+    ofcAlQuantity: "Quantity",
+    ofcAlRound: "Round",
+    ofcAlDistributing: "Distributing",
     ofcFaEveryHandsetCan: "Every handset can collect.",
     ofcFaSomeCannotCollect: "These agents cannot collect until they update.",
     ofcKycNotReviewed: "{{n}} document(s) not yet reviewed",
@@ -2689,6 +2776,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcLvTitle: "Haraji da rukunonin haraji",
+    ofcLvTaxCategory: "Rukunin haraji",
+    ofcLvAllCategories: "Dukkan rukunoni",
+    ofcLvLevyOrItem: "Haraji ko nau’in haraji",
+    ofcLvAllItems: "Dukkan nau’ika",
+    ofcLvCollectedFrom: "An karba daga",
+    ofcLvCollectedTo: "An karba zuwa",
+    ofcLvByIndividualLevy: "Bisa ga kowane haraji",
+    ofcLvOnlyUnpaid: "Wadanda kawai suke da abin da ba a biya ba",
+    ofcLvChooseFilter: "Ka zabi rukuni, haraji, Karamar Hukuma, ko “wadanda kawai suke da abin da ba a biya ba” domin jera masu biyan harajin da ya shafa.",
+    ofcLvSettledToState: "An tura wa Jiha",
+    ofcLvAwaitingSettlement: "Ana jiran turawa",
+    ofcLvTaxpayersInArrears: "Masu biyan haraji da ke bin bashi",
+    ofcLvTotalOutstanding: "Jimlar da ta rage",
+    ofcLvCollections: "Karba",
+    ofcLvSettled: "An tura",
+    ofcLvLevy: "Haraji",
+    ofcLvInvoices: "Takardun biya",
+    ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
+    ofcAlIntro: "Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba.",
+    ofcAlNewRound: "Sabon zagaye",
+    ofcAlProgramme: "Shiri",
+    ofcAlSelectProgramme: "Zabi shiri",
+    ofcAlNoProgramme: "Babu shirin da ke nan tukuna. Dole a kirkiri daya a karkashin Tallafin jama’a kafin zagaye ya iya rabawa a karkashinsa.",
+    ofcAlRoundName: "Sunan wannan zagayen",
+    ofcAlMeasuredIn: "Ana aunawa da",
+    ofcAlTotalToDistribute: "Jimlar da za a raba",
+    ofcAlEachReceives: "Kowane mai amfana zai karba",
+    ofcAlEnoughFor: "Ya isa ga",
+    ofcAlBeneficiariesWord: "masu amfana.",
+    ofcAlCollectionPoint: "Wurin karba",
+    ofcAlOpens: "Zai bude",
+    ofcAlClosesOptional: "Zai rufe (ba dole ba)",
+    ofcAlRelease: "Saki",
+    ofcAlAwards: "Bayarwa",
+    ofcAlSampleRound: "Takin damina, Jos ta Arewa",
+    ofcAlSamplePoint: "Shagon Kasuwar Terminus, Jos ta Arewa",
+    ofcAlBeneficiary: "Mai amfana",
+    ofcAlQuantity: "Yawa",
+    ofcAlRound: "Zagaye",
+    ofcAlDistributing: "Ana rabawa",
     ofcFaEveryHandsetCan: "Kowace waya na iya karba.",
     ofcFaSomeCannotCollect: "Wadannan wakilai ba za su iya karba ba sai sun sabunta.",
     ofcKycNotReviewed: "Takardu {{n}} ba a duba ba tukuna",

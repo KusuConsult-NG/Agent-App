@@ -27,6 +27,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface Category {
   id: string;
@@ -105,6 +106,7 @@ const displayName = (row: Registrant) =>
   row.business_name ?? `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() ?? '—';
 
 export function LeviesScreen() {
+  const { t } = usePortalI18n();
   const canReadRevenue =
     can('report:read:all') || can('report:read:territory') || can('dashboard:executive');
   const canReadDefaulters =
@@ -234,7 +236,7 @@ export function LeviesScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Levies and tax categories</h2>
+        <h2 className="card__title">{t.ofcLvTitle}</h2>
         {/*
           * The summary names what this officer will actually be shown.
           *
@@ -253,7 +255,7 @@ export function LeviesScreen() {
 
         <div className="filters">
           <div className="field">
-            <label htmlFor="levy-category">Tax category</label>
+            <label htmlFor="levy-category">{t.ofcLvTaxCategory}</label>
             <select
               id="levy-category"
               value={filters.categoryId}
@@ -261,7 +263,7 @@ export function LeviesScreen() {
                 setFilters({ ...filters, categoryId: event.target.value, revenueItemId: '' })
               }
             >
-              <option value="">All categories</option>
+              <option value="">{t.ofcLvAllCategories}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -271,13 +273,13 @@ export function LeviesScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="levy-item">Levy or tax item</label>
+            <label htmlFor="levy-item">{t.ofcLvLevyOrItem}</label>
             <select
               id="levy-item"
               value={filters.revenueItemId}
               onChange={(event) => setFilters({ ...filters, revenueItemId: event.target.value })}
             >
-              <option value="">All items</option>
+              <option value="">{t.ofcLvAllItems}</option>
               {itemsInScope.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} ({item.code})
@@ -293,7 +295,7 @@ export function LeviesScreen() {
               value={filters.lgaId}
               onChange={(event) => setFilters({ ...filters, lgaId: event.target.value })}
             >
-              <option value="">All LGAs</option>
+              <option value="">{t.ofcAllLgas}</option>
               {lgas.map((lga) => (
                 <option key={lga.id} value={lga.id}>
                   {lga.name}
@@ -303,7 +305,7 @@ export function LeviesScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="levy-from">Collected from</label>
+            <label htmlFor="levy-from">{t.ofcLvCollectedFrom}</label>
             <input
               id="levy-from"
               type="date"
@@ -313,7 +315,7 @@ export function LeviesScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="levy-to">Collected to</label>
+            <label htmlFor="levy-to">{t.ofcLvCollectedTo}</label>
             <input
               id="levy-to"
               type="date"
@@ -349,8 +351,8 @@ export function LeviesScreen() {
           ) : (
             <>
               <div className="stat-grid">
-                <Stat label="Collected" value={<Money kobo={revenue.totalKobo} />} />
-                <Stat label="Settled to the State" value={<Money kobo={revenue.settledKobo} />} />
+                <Stat label="ofcPfCollected" value={<Money kobo={revenue.totalKobo} />} />
+                <Stat label="ofcLvSettledToState" value={<Money kobo={revenue.settledKobo} />} />
                 {/*
                   * Stated rather than left to be inferred from the difference.
                   * Money a gateway has confirmed and the State's account has
@@ -359,7 +361,7 @@ export function LeviesScreen() {
                   * be the old behaviour in a new screen.
                   */}
                 <Stat
-                  label="Awaiting settlement"
+                  label="ofcLvAwaitingSettlement"
                   value={<Money kobo={revenue.awaitingSettlementKobo} />}
                 />
               </div>
@@ -367,17 +369,17 @@ export function LeviesScreen() {
               <Table
                 columns={[
                   { key: 'category', label: 'ofcAgCategory' },
-                  { key: 'transactions', label: 'Collections', numeric: true },
+                  { key: 'transactions', label: 'ofcLvCollections', numeric: true },
                   { key: 'taxpayers', label: 'ofcRhTaxpayers', numeric: true },
                   {
                     key: 'amount_kobo',
-                    label: 'Collected',
+                    label: 'ofcPfCollected',
                     numeric: true,
                     render: (row) => <Money kobo={row.amount_kobo} />,
                   },
                   {
                     key: 'settled_kobo',
-                    label: 'Settled',
+                    label: 'ofcLvSettled',
                     numeric: true,
                     render: (row) => <Money kobo={row.settled_kobo} />,
                   },
@@ -386,22 +388,22 @@ export function LeviesScreen() {
                 empty="ofcNoneNothingCollectedFilter"
               />
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>By individual levy</h3>
+              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcLvByIndividualLevy}</h3>
               <Table
                 columns={[
                   { key: 'code', label: 'ofcAgCode' },
-                  { key: 'revenue_item', label: 'Levy' },
+                  { key: 'revenue_item', label: 'ofcLvLevy' },
                   { key: 'category', label: 'ofcAgCategory' },
-                  { key: 'transactions', label: 'Collections', numeric: true },
+                  { key: 'transactions', label: 'ofcLvCollections', numeric: true },
                   {
                     key: 'amount_kobo',
-                    label: 'Collected',
+                    label: 'ofcPfCollected',
                     numeric: true,
                     render: (row) => <Money kobo={row.amount_kobo} />,
                   },
                   {
                     key: 'settled_kobo',
-                    label: 'Settled',
+                    label: 'ofcLvSettled',
                     numeric: true,
                     render: (row) => <Money kobo={row.settled_kobo} />,
                   },
@@ -422,8 +424,8 @@ export function LeviesScreen() {
           ) : (
             <>
               <div className="stat-grid">
-                <Stat label="Taxpayers in arrears" value={String(defaulters.defaulters)} />
-                <Stat label="Total outstanding" value={<Money kobo={defaulters.outstandingKobo} />} />
+                <Stat label="ofcLvTaxpayersInArrears" value={String(defaulters.defaulters)} />
+                <Stat label="ofcLvTotalOutstanding" value={<Money kobo={defaulters.outstandingKobo} />} />
               </div>
               {defaulters.rows.length === 100 || defaulters.rows.length === 500 ? (
                 <Alert kind="info">
@@ -437,8 +439,8 @@ export function LeviesScreen() {
                   { key: 'tin', label: 'tpStepTin' },
                   { key: 'phone', label: 'tpPhone' },
                   { key: 'lga', label: 'tpLgaShort' },
-                  { key: 'revenue_item', label: 'Levy' },
-                  { key: 'invoices', label: 'Invoices', numeric: true },
+                  { key: 'revenue_item', label: 'ofcLvLevy' },
+                  { key: 'invoices', label: 'ofcLvInvoices', numeric: true },
                   {
                     key: 'outstanding_kobo',
                     label: 'ofcAgOutstanding',
@@ -447,7 +449,7 @@ export function LeviesScreen() {
                   },
                   {
                     key: 'oldest_due',
-                    label: 'Oldest due',
+                    label: 'ofcLvOldestDue',
                     render: (row) => formatDate(row.oldest_due),
                   },
                 ]}
@@ -470,18 +472,13 @@ export function LeviesScreen() {
                 onChange={(event) =>
                   setFilters({ ...filters, outstandingOnly: event.target.checked })
                 }
-              />
-              Only those with something unpaid
-            </label>
+              />{t.ofcLvOnlyUnpaid}</label>
           </div>
           {registrants === null ? (
             <Loading />
           ) : registrants.length === 0 && !filters.categoryId && !filters.revenueItemId &&
             !filters.lgaId && !filters.outstandingOnly ? (
-            <Empty>
-              Choose a category, a levy, an LGA, or "only those with something unpaid" to list the
-              taxpayers it applies to.
-            </Empty>
+            <Empty>{t.ofcLvChooseFilter}</Empty>
           ) : (
             <Table
               columns={[

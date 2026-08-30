@@ -28,6 +28,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface Round {
   id: string;
@@ -65,6 +66,7 @@ const UNITS = [
 const UNIT_LABEL = Object.fromEntries(UNITS) as Record<string, string>;
 
 export function AllocationsScreen() {
+  const { t } = usePortalI18n();
   const [rounds, setRounds] = useState<Round[] | null>(null);
   const [programmes, setProgrammes] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
@@ -180,11 +182,7 @@ export function AllocationsScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcNavAllocations}</h2>
-        <p className="card__hint">
-          A programme decides who is eligible; a round is one actual distribution. Awards accrue
-          only while a round is open, which is what stops a programme distributing on paper what
-          is not at the collection point.
-        </p>
+        <p className="card__hint">{t.ofcAlIntro}</p>
         <button type="button" onClick={() => setCreating((c) => !c)}>
           {creating ? 'Cancel' : 'Create a round'}
         </button>
@@ -195,16 +193,16 @@ export function AllocationsScreen() {
 
       {creating && (
         <div className="card">
-          <h2 className="card__title">New round</h2>
+          <h2 className="card__title">{t.ofcAlNewRound}</h2>
 
           <div className="field">
-            <label htmlFor="programme">Programme</label>
+            <label htmlFor="programme">{t.ofcAlProgramme}</label>
             <select
               id="programme"
               value={form.programmeId}
               onChange={(e) => setForm({ ...form, programmeId: e.target.value })}
             >
-              <option value="">Select a programme</option>
+              <option value="">{t.ofcAlSelectProgramme}</option>
               {programmes.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -212,25 +210,22 @@ export function AllocationsScreen() {
               ))}
             </select>
             {programmes.length === 0 && (
-              <p className="field__hint">
-                No programme exists yet. One has to be created under Social incentives before a
-                round can distribute under it.
-              </p>
+              <p className="field__hint">{t.ofcAlNoProgramme}</p>
             )}
           </div>
 
           <div className="field">
-            <label htmlFor="round-name">What this round is called</label>
+            <label htmlFor="round-name">{t.ofcAlRoundName}</label>
             <input
               id="round-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Dry season fertiliser, Jos North"
+              placeholder={t.ofcAlSampleRound}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="unit">Measured in</label>
+            <label htmlFor="unit">{t.ofcAlMeasuredIn}</label>
             <select
               id="unit"
               value={form.unit}
@@ -245,7 +240,7 @@ export function AllocationsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="total">Total to distribute</label>
+            <label htmlFor="total">{t.ofcAlTotalToDistribute}</label>
             <input
               id="total"
               inputMode="numeric"
@@ -256,7 +251,7 @@ export function AllocationsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="each">Each beneficiary receives</label>
+            <label htmlFor="each">{t.ofcAlEachReceives}</label>
             <input
               id="each"
               inputMode="numeric"
@@ -265,24 +260,22 @@ export function AllocationsScreen() {
               placeholder="2"
             />
             {beneficiaries !== null && (
-              <p className="field__hint">
-                Enough for <strong>{beneficiaries}</strong> beneficiaries.
-              </p>
+              <p className="field__hint">{t.ofcAlEnoughFor}<strong>{beneficiaries}</strong>{t.ofcAlBeneficiariesWord}</p>
             )}
           </div>
 
           <div className="field">
-            <label htmlFor="point">Collection point</label>
+            <label htmlFor="point">{t.ofcAlCollectionPoint}</label>
             <input
               id="point"
               value={form.collectionPoint}
               onChange={(e) => setForm({ ...form, collectionPoint: e.target.value })}
-              placeholder="Terminus Market store, Jos North"
+              placeholder={t.ofcAlSamplePoint}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="opens">Opens</label>
+            <label htmlFor="opens">{t.ofcAlOpens}</label>
             <input
               id="opens"
               type="datetime-local"
@@ -292,7 +285,7 @@ export function AllocationsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="closes">Closes (optional)</label>
+            <label htmlFor="closes">{t.ofcAlClosesOptional}</label>
             <input
               id="closes"
               type="datetime-local"
@@ -345,9 +338,7 @@ export function AllocationsScreen() {
           </h2>
           <p className="card__hint" style={{ padding: '0 18px' }}>
             Who has been awarded under this round, and who has collected.{' '}
-            <button type="button" className="link" onClick={() => setAwardsFor(null)}>
-              Close
-            </button>
+            <button type="button" className="link" onClick={() => setAwardsFor(null)}>{t.ofcKycClose}</button>
           </p>
           {!awards ? (
             <div style={{ padding: 18 }}>
@@ -356,8 +347,8 @@ export function AllocationsScreen() {
           ) : (
             <Table
               columns={[
-                { key: 'taxpayer_name', label: 'Beneficiary' },
-                { key: 'quantity', label: 'Quantity' },
+                { key: 'taxpayer_name', label: 'ofcAlBeneficiary' },
+                { key: 'quantity', label: 'ofcAlQuantity' },
                 {
                   key: 'status',
                   label: 'appStatus',
@@ -365,22 +356,20 @@ export function AllocationsScreen() {
                 },
                 {
                   key: 'collected_at',
-                  label: 'Collected',
+                  label: 'ofcPfCollected',
                   render: (row: Award) =>
                     row.collected_at ? formatDateTime(row.collected_at) : 'Not yet',
                 },
                 {
                   key: 'release',
-                  label: '',
+                  label: { text: '' },
                   render: (row: Award) =>
                     row.status === 'AWARDED' ? (
                       <button
                         type="button"
                         className="link"
                         onClick={() => release(awardsFor, row)}
-                      >
-                        Release
-                      </button>
+                      >{t.ofcAlRelease}</button>
                     ) : null,
                 },
               ]}
@@ -394,24 +383,24 @@ export function AllocationsScreen() {
       <div className="card card--flush">
         <Table
           columns={[
-            { key: 'name', label: 'Round' },
-            { key: 'programme_name', label: 'Programme' },
+            { key: 'name', label: 'ofcAlRound' },
+            { key: 'programme_name', label: 'ofcAlProgramme' },
             {
               key: 'quantity',
-              label: 'Distributing',
+              label: 'ofcAlDistributing',
               render: (row: Round) =>
                 `${row.total_quantity} × ${UNIT_LABEL[row.unit] ?? row.unit}, ${row.quantity_per_beneficiary} each`,
             },
-            { key: 'collection_point', label: 'Collection point' },
+            { key: 'collection_point', label: 'ofcAlCollectionPoint' },
             {
               key: 'opens_at',
-              label: 'Opens',
+              label: 'ofcAlOpens',
               render: (row: Round) => formatDateTime(row.opens_at),
             },
             { key: 'status', label: 'appStatus', render: (row: Round) => <Badge status={row.status} /> },
             {
               key: 'act',
-              label: '',
+              label: { text: '' },
               render: (row: Round) => (
                 <>
                   {row.status === 'DRAFT' && (
@@ -441,13 +430,9 @@ export function AllocationsScreen() {
                           `${row.name} is closed. No further awards.`,
                         )
                       }
-                    >
-                      Close
-                    </button>
+                    >{t.ofcKycClose}</button>
                   )}{' '}
-                  <button type="button" className="small secondary" onClick={() => openAwards(row)}>
-                    Awards
-                  </button>
+                  <button type="button" className="small secondary" onClick={() => openAwards(row)}>{t.ofcAlAwards}</button>
                 </>
               ),
             },
