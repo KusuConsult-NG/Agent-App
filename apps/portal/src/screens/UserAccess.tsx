@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface PortalUser {
   id: string;
@@ -66,6 +67,7 @@ interface Territory {
 const TERRITORY_SCOPED_ROLES = ['supervisor'];
 
 export function UserAccessScreen({ user }: { user: User }) {
+  const { t } = usePortalI18n();
   const [users, setUsers] = useState<PortalUser[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -214,12 +216,7 @@ export function UserAccessScreen({ user }: { user: User }) {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcNavUsers}</h2>
-        <p className="card__hint">
-          Changing a role signs the officer out of every device immediately, because their
-          current access travels in the session they are holding. They sign in again with the
-          new role. Agents are not listed: their access follows the clearance pipeline, not a
-          role.
-        </p>
+        <p className="card__hint">{t.ofcUaRoleChangeIntro}</p>
       </div>
 
       <ErrorAlert error={error} />
@@ -233,13 +230,13 @@ export function UserAccessScreen({ user }: { user: User }) {
           </p>
 
           <div className="field">
-            <label htmlFor="new-role">New role</label>
+            <label htmlFor="new-role">{t.ofcUaNewRole}</label>
             <select
               id="new-role"
               value={chosenRole}
               onChange={(event) => setChosenRole(event.target.value)}
             >
-              <option value="">Select a role</option>
+              <option value="">{t.ofcUaSelectRole}</option>
               {ASSIGNABLE.map((role) => (
                 <option key={role} value={role}>
                   {readable(role)}
@@ -252,13 +249,13 @@ export function UserAccessScreen({ user }: { user: User }) {
           </div>
 
           <div className="field">
-            <label htmlFor="role-reason">Why this is changing</label>
+            <label htmlFor="role-reason">{t.ofcUaWhyChanging}</label>
             <textarea
               id="role-reason"
               value={reason}
               rows={3}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Transferred to the audit office from 1 September."
+              placeholder={t.ofcUaSampleTransferred}
             />
           </div>
 
@@ -295,31 +292,31 @@ export function UserAccessScreen({ user }: { user: User }) {
           </p>
 
           <div className="field">
-            <label htmlFor="new-status">New account status</label>
+            <label htmlFor="new-status">{t.ofcUaNewAccountStatus}</label>
             <select
               id="new-status"
               value={chosenStatus}
               onChange={(event) => setChosenStatus(event.target.value as AccountStatus)}
             >
-              <option value="SUSPENDED">Suspended — pending an enquiry</option>
-              <option value="CLOSED">Closed — they have left the service</option>
-              <option value="ACTIVE">Active — lift a suspension</option>
+              <option value="SUSPENDED">{t.ofcUaSuspendedPending}</option>
+              <option value="CLOSED">{t.ofcUaClosedLeft}</option>
+              <option value="ACTIVE">{t.ofcUaActiveLift}</option>
             </select>
           </div>
 
           <div className="field">
-            <label htmlFor="status-reason">Why this is changing</label>
+            <label htmlFor="status-reason">{t.ofcUaWhyChanging}</label>
             <textarea
               id="status-reason"
               value={statusReason}
               rows={3}
               onChange={(event) => setStatusReason(event.target.value)}
-              placeholder="Left the service at the end of the quarter."
+              placeholder={t.ofcUaSampleLeft}
             />
           </div>
 
           {chosenStatus === 'CLOSED' && (
-            <Alert kind="warning" title="This cannot be undone">
+            <Alert kind="warning" title="ofcUaCannotBeUndone">
               <p style={{ margin: 0 }}>
                 A closed account can never be reopened. If {closing.full_name} returns to the
                 service they will need a new account.
@@ -354,20 +351,16 @@ export function UserAccessScreen({ user }: { user: User }) {
       {coverage && (
         <div className="card">
           <h2 className="card__title">Territories — {coverage.full_name}</h2>
-          <p className="card__hint">
-            A supervisor sees revenue for the territories assigned here and no others. With none
-            assigned they see nothing at all — which is deliberate, so an account nobody has
-            finished setting up is the least revealing one rather than the most.
-          </p>
+          <p className="card__hint">{t.ofcUaTerritoryIntro}</p>
 
           {!territories ? (
             <Loading rows={3} />
           ) : (
             <>
               <div className="field">
-                <span className="field__label">Territories covered</span>
+                <span className="field__label">{t.ofcUaTerritoriesCovered}</span>
                 {territories.available.length === 0 ? (
-                  <p className="field__hint">No active territory has been created yet.</p>
+                  <p className="field__hint">{t.ofcUaNoTerritory}</p>
                 ) : (
                   <ul className="list" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {territories.available.map((territory) => (
@@ -398,18 +391,18 @@ export function UserAccessScreen({ user }: { user: User }) {
               </div>
 
               <div className="field">
-                <label htmlFor="coverage-reason">Why this is changing</label>
+                <label htmlFor="coverage-reason">{t.ofcUaWhyChanging}</label>
                 <textarea
                   id="coverage-reason"
                   value={coverageReason}
                   rows={3}
                   onChange={(event) => setCoverageReason(event.target.value)}
-                  placeholder="Taking over the Jos North market round from 1 September."
+                  placeholder={t.ofcUaSampleTakingOver}
                 />
               </div>
 
               {chosenTerritories.length === 0 && (
-                <Alert kind="warning" title="This will leave them covering nothing">
+                <Alert kind="warning" title="ofcUaWillCoverNothing">
                   <p style={{ margin: 0 }}>
                     {coverage.full_name} will see no revenue figures at all until a territory is
                     assigned.
@@ -450,18 +443,18 @@ export function UserAccessScreen({ user }: { user: User }) {
             { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
             {
               key: 'last_login_at',
-              label: 'Last signed in',
+              label: 'ofcUaLastSignedIn',
               render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'),
             },
             {
               key: 'action',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 row.isSelf ? (
                   // Greyed rather than hidden: an administrator looking for
                   // their own row should find it and see why it cannot be
                   // changed, instead of wondering where it went.
-                  <span className="list__meta">Your own access</span>
+                  <span className="list__meta">{t.ofcUaYourOwnAccess}</span>
                 ) : (
                   <>
                     <button
@@ -473,17 +466,13 @@ export function UserAccessScreen({ user }: { user: User }) {
                         setReason('');
                         setMessage(null);
                       }}
-                    >
-                      Change access
-                    </button>{' '}
+                    >{t.ofcUaChangeAccess}</button>{' '}
                     {TERRITORY_SCOPED_ROLES.includes(row.role) && (
                       <button
                         type="button"
                         className="small secondary"
                         onClick={() => openCoverage(row as PortalUser)}
-                      >
-                        Territories
-                      </button>
+                      >{t.ofcUaTerritories}</button>
                     )}{' '}
                     {row.status !== 'CLOSED' && (
                       <button
@@ -495,9 +484,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                           setStatusReason('');
                           setMessage(null);
                         }}
-                      >
-                        Account
-                      </button>
+                      >{t.ofcUaAccount}</button>
                     )}
                   </>
                 ),

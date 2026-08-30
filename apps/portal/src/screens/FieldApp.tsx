@@ -19,6 +19,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { compareVersions } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Stat, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface PublishedVersion {
   minimumVersion: string;
@@ -53,6 +54,7 @@ function wouldStop(fleet: FleetRow[], minimum: string): number {
 }
 
 export function FieldAppScreen() {
+  const { t } = usePortalI18n();
   const [history, setHistory] = useState<History | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -129,42 +131,37 @@ export function FieldAppScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcNavFieldApp}</h2>
-        <p className="card__hint">
-          A handset below the minimum version cannot start a payment or renew a vehicle. It is
-          refused before any money moves, and the agent is told to update. Raise the minimum when
-          a release is getting something wrong in the field; every agent still on that build stops
-          collecting the moment it is published.
-        </p>
+        <p className="card__hint">{t.ofcFaIntro}</p>
       </div>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
       <div className="stat-grid">
-        <Stat label="Minimum version in force" value={history.minimumVersion} />
-        <Stat label="Recommended" value={history.recommendedVersion} />
-        <Stat label="Active handsets" value={history.activeDevices} />
+        <Stat label="ofcFaMinimumInForce" value={history.minimumVersion} />
+        <Stat label="ofcFaRecommended" value={history.recommendedVersion} />
+        <Stat label="ofcFaActiveHandsets" value={history.activeDevices} />
         <Stat
-          label="Below the minimum now"
+          label="ofcFaBelowMinimum"
           value={belowNow}
           variant={belowNow > 0 ? 'alert' : undefined}
-          hint={belowNow > 0 ? 'These agents cannot collect until they update.' : 'Every handset can collect.'}
+          hint={belowNow > 0 ? 'ofcFaSomeCannotCollect' : 'ofcFaEveryHandsetCan'}
         />
       </div>
 
       <div className="card">
-        <h2 className="card__title">Handsets in the field</h2>
+        <h2 className="card__title">{t.ofcFaHandsetsInField}</h2>
         <Table
           columns={[
             {
               key: 'version',
-              label: 'Build',
+              label: 'ofcFaBuild',
               render: (row: FleetRow) => row.version ?? 'Never reported a version',
             },
-            { key: 'devices', label: 'Handsets', numeric: true },
+            { key: 'devices', label: 'ofcFaHandsets', numeric: true },
             {
               key: 'belowMinimum',
-              label: 'Against the minimum',
+              label: 'ofcFaAgainstMinimum',
               render: (row: FleetRow) => <Badge status={row.belowMinimum ? 'BLOCKED' : 'ACTIVE'} />,
             },
           ]}
@@ -174,14 +171,11 @@ export function FieldAppScreen() {
       </div>
 
       <div className="card">
-        <h2 className="card__title">Publish a new minimum</h2>
-        <p className="card__hint">
-          This appends to the record rather than replacing it, so what was required when — and who
-          decided — stays readable. It cannot be edited afterwards.
-        </p>
+        <h2 className="card__title">{t.ofcFaPublishNewMinimum}</h2>
+        <p className="card__hint">{t.ofcFaAppendsRecord}</p>
 
         <div className="field">
-          <label htmlFor="minimum-version">Minimum version</label>
+          <label htmlFor="minimum-version">{t.ofcFaMinimumVersion}</label>
           <input
             id="minimum-version"
             value={minimum}
@@ -200,42 +194,36 @@ export function FieldAppScreen() {
         </div>
 
         <div className="field">
-          <label htmlFor="recommended-version">Recommended version</label>
+          <label htmlFor="recommended-version">{t.ofcFaRecommendedVersion}</label>
           <input
             id="recommended-version"
             value={recommended}
             onChange={(event) => setRecommended(event.target.value)}
             placeholder="1.4.0"
           />
-          <p className="field__hint">
-            What an agent is asked to update to. It cannot be below the minimum.
-          </p>
+          <p className="field__hint">{t.ofcFaRecommendedHint}</p>
         </div>
 
         <div className="field">
-          <label htmlFor="version-notes">Why the minimum is moving</label>
+          <label htmlFor="version-notes">{t.ofcFaWhyMoving}</label>
           <textarea
             id="version-notes"
             value={notes}
             rows={3}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="Build 1.3.2 rounds the service charge down; no collection from below 1.4.0."
+            placeholder={t.ofcFaSampleReason}
           />
         </div>
 
         <div className="field">
-          <label htmlFor="version-effective">Takes effect (optional)</label>
+          <label htmlFor="version-effective">{t.ofcFaTakesEffectOptional}</label>
           <input
             id="version-effective"
             type="datetime-local"
             value={effectiveFrom}
             onChange={(event) => setEffectiveFrom(event.target.value)}
           />
-          <p className="field__hint">
-            Leave empty to take effect immediately. A date in the future announces the change
-            without enforcing it yet; a date at or before the version currently in force is
-            refused, because the gate would never read it.
-          </p>
+          <p className="field__hint">{t.ofcFaTakesEffectHint}</p>
         </div>
 
         {blockedBecause && (
@@ -252,16 +240,16 @@ export function FieldAppScreen() {
       </div>
 
       <div className="card">
-        <h2 className="card__title">What has been required, and when</h2>
+        <h2 className="card__title">{t.ofcFaHistory}</h2>
         <Table
           columns={[
             {
               key: 'effectiveFrom',
-              label: 'Takes effect',
+              label: 'ofcFaTakesEffect',
               render: (row: PublishedVersion) => formatDateTime(row.effectiveFrom),
             },
-            { key: 'minimumVersion', label: 'Minimum' },
-            { key: 'recommendedVersion', label: 'Recommended' },
+            { key: 'minimumVersion', label: 'ofcFaMinimum' },
+            { key: 'recommendedVersion', label: 'ofcFaRecommended' },
             {
               key: 'inForce',
               label: 'appStatus',
@@ -279,13 +267,13 @@ export function FieldAppScreen() {
             },
             {
               key: 'publishedBy',
-              label: 'Published by',
+              label: 'ofcFaPublishedBy',
               // The seeded row that shipped with the platform has no author,
               // and saying so is more honest than leaving a dash to be read as
               // missing data.
               render: (row: PublishedVersion) => row.publishedBy ?? 'Shipped with the platform',
             },
-            { key: 'notes', label: 'Why' },
+            { key: 'notes', label: 'ofcFaWhy' },
           ]}
           rows={history.published}
           empty="ofcNoneNothingPublished"

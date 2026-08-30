@@ -135,6 +135,106 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcFaEveryHandsetCan: string;
+  ofcFaSomeCannotCollect: string;
+  ofcKycNotReviewed: string;
+  ofcKycAlready: string;
+
+  /**
+   * Identity documents, the minimum app version held over every handset in
+   * the field, and who may sign in to the portal.
+   */
+  ofcKycIdentityDocuments: string;
+  ofcKycIntro: string;
+  ofcKycNoDocuments: string;
+  ofcKycApprovingBlind: string;
+  ofcKycClose: string;
+  ofcKycOpenNewTab: string;
+  ofcKycChecksum: string;
+  ofcKycSuperseded: string;
+  ofcKycWhyRequired: string;
+  ofcKycAccept: string;
+  ofcKycNeedsPermission: string;
+  ofcKycWhoLooked: string;
+  ofcKycSupersededLabel: string;
+  ofcKycDocument: string;
+  ofcKycCaptured: string;
+  ofcKycSize: string;
+  ofcKycReviewed: string;
+  ofcKycWho: string;
+  ofcKycWhat: string;
+  ofcFaIntro: string;
+  ofcFaHandsetsInField: string;
+  ofcFaPublishNewMinimum: string;
+  ofcFaAppendsRecord: string;
+  ofcFaMinimumVersion: string;
+  ofcFaRecommendedVersion: string;
+  ofcFaRecommendedHint: string;
+  ofcFaWhyMoving: string;
+  ofcFaTakesEffectOptional: string;
+  ofcFaTakesEffectHint: string;
+  ofcFaHistory: string;
+  ofcFaMinimumInForce: string;
+  ofcFaRecommended: string;
+  ofcFaActiveHandsets: string;
+  ofcFaBelowMinimum: string;
+  ofcFaSampleReason: string;
+  ofcFaBuild: string;
+  ofcFaHandsets: string;
+  ofcFaAgainstMinimum: string;
+  ofcFaTakesEffect: string;
+  ofcFaMinimum: string;
+  ofcFaPublishedBy: string;
+  ofcFaWhy: string;
+  ofcUaRoleChangeIntro: string;
+  ofcUaNewRole: string;
+  ofcUaSelectRole: string;
+  ofcUaWhyChanging: string;
+  ofcUaNewAccountStatus: string;
+  ofcUaSuspendedPending: string;
+  ofcUaClosedLeft: string;
+  ofcUaActiveLift: string;
+  ofcUaTerritoryIntro: string;
+  ofcUaTerritoriesCovered: string;
+  ofcUaNoTerritory: string;
+  ofcUaYourOwnAccess: string;
+  ofcUaChangeAccess: string;
+  ofcUaTerritories: string;
+  ofcUaAccount: string;
+  ofcUaSampleTransferred: string;
+  ofcUaSampleLeft: string;
+  ofcUaCannotBeUndone: string;
+  ofcUaSampleTakingOver: string;
+  ofcUaWillCoverNothing: string;
+  ofcUaLastSignedIn: string;
+  ofcPfFlagIsQuestion: string;
+  ofcPfAgentsWithFlag: string;
+
+  /**
+   * Transaction and agent-performance reporting, and the filters both use.
+   */
+  ofcAllStatuses: string;
+  ofcAllLgas: string;
+  ofcFrom: string;
+  ofcTo: string;
+  ofcExportCsv: string;
+  ofcDownloadCsv: string;
+  ofcTxReceipt: string;
+  ofcTxCreated: string;
+  ofcPfIntro: string;
+  ofcPfCollectedByAgents: string;
+  ofcPfTaxpayersOnboarded: string;
+  ofcPfAgentsWorked: string;
+  ofcPfOpenFraudFlags: string;
+  ofcPfCollected: string;
+  ofcPfAverage: string;
+  ofcPfOnboarded: string;
+  ofcPfTins: string;
+  ofcPfRenewals: string;
+  ofcPfFailed: string;
+  ofcPfReversed: string;
+  ofcPfFlags: string;
+  ofcPfDaysWorked: string;
 
   /**
    * Empty states. Every table in the portal has one, and an officer reads
@@ -1384,6 +1484,97 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcFaEveryHandsetCan: "Every handset can collect.",
+    ofcFaSomeCannotCollect: "These agents cannot collect until they update.",
+    ofcKycNotReviewed: "{{n}} document(s) not yet reviewed",
+    ofcKycAlready: "Already {{status}}",
+    ofcKycIdentityDocuments: "Identity documents",
+    ofcKycIntro: "What the applicant submitted. Opening one is recorded against your name.",
+    ofcKycNoDocuments: "This applicant has not submitted any documents.",
+    ofcKycApprovingBlind: "Approving this applicant without opening them means the identity check rests on the provider’s automated answer alone.",
+    ofcKycClose: "Close",
+    ofcKycOpenNewTab: "Open it in a new tab",
+    ofcKycChecksum: "Checksum",
+    ofcKycSuperseded: "A newer capture of this document has been submitted. Review that one instead.",
+    ofcKycWhyRequired: "Why? Required either way, and shown to the applicant on a rejection",
+    ofcKycAccept: "Accept",
+    ofcKycNeedsPermission: "Deciding on a document needs agent:approve.",
+    ofcKycWhoLooked: "Who has looked at this?",
+    ofcKycSupersededLabel: "Superseded",
+    ofcKycDocument: "Document",
+    ofcKycCaptured: "Captured",
+    ofcKycSize: "Size",
+    ofcKycReviewed: "Reviewed",
+    ofcKycWho: "Who",
+    ofcKycWhat: "What",
+    ofcFaIntro: "A handset below the minimum version cannot start a payment or renew a vehicle. It is refused before any money moves, and the agent is told to update. Raise the minimum when a release is getting something wrong in the field; every agent still on that build stops collecting the moment it is published.",
+    ofcFaHandsetsInField: "Handsets in the field",
+    ofcFaPublishNewMinimum: "Publish a new minimum",
+    ofcFaAppendsRecord: "This appends to the record rather than replacing it, so what was required when — and who decided — stays readable. It cannot be edited afterwards.",
+    ofcFaMinimumVersion: "Minimum version",
+    ofcFaRecommendedVersion: "Recommended version",
+    ofcFaRecommendedHint: "What an agent is asked to update to. It cannot be below the minimum.",
+    ofcFaWhyMoving: "Why the minimum is moving",
+    ofcFaTakesEffectOptional: "Takes effect (optional)",
+    ofcFaTakesEffectHint: "Leave empty to take effect immediately. A date in the future announces the change without enforcing it yet; a date at or before the version currently in force is refused, because the gate would never read it.",
+    ofcFaHistory: "What has been required, and when",
+    ofcFaMinimumInForce: "Minimum version in force",
+    ofcFaRecommended: "Recommended",
+    ofcFaActiveHandsets: "Active handsets",
+    ofcFaBelowMinimum: "Below the minimum now",
+    ofcFaSampleReason: "Build 1.3.2 rounds the service charge down; no collection from below 1.4.0.",
+    ofcFaBuild: "Build",
+    ofcFaHandsets: "Handsets",
+    ofcFaAgainstMinimum: "Against the minimum",
+    ofcFaTakesEffect: "Takes effect",
+    ofcFaMinimum: "Minimum",
+    ofcFaPublishedBy: "Published by",
+    ofcFaWhy: "Why",
+    ofcUaRoleChangeIntro: "Changing a role signs the officer out of every device immediately, because their current access travels in the session they are holding. They sign in again with the new role. Agents are not listed: their access follows the clearance pipeline, not a role.",
+    ofcUaNewRole: "New role",
+    ofcUaSelectRole: "Select a role",
+    ofcUaWhyChanging: "Why this is changing",
+    ofcUaNewAccountStatus: "New account status",
+    ofcUaSuspendedPending: "Suspended — pending an enquiry",
+    ofcUaClosedLeft: "Closed — they have left the service",
+    ofcUaActiveLift: "Active — lift a suspension",
+    ofcUaTerritoryIntro: "A supervisor sees revenue for the territories assigned here and no others. With none assigned they see nothing at all — which is deliberate, so an account nobody has finished setting up is the least revealing one rather than the most.",
+    ofcUaTerritoriesCovered: "Territories covered",
+    ofcUaNoTerritory: "No active territory has been created yet.",
+    ofcUaYourOwnAccess: "Your own access",
+    ofcUaChangeAccess: "Change access",
+    ofcUaTerritories: "Territories",
+    ofcUaAccount: "Account",
+    ofcUaSampleTransferred: "Transferred to the audit office from 1 September.",
+    ofcUaSampleLeft: "Left the service at the end of the quarter.",
+    ofcUaCannotBeUndone: "This cannot be undone",
+    ofcUaSampleTakingOver: "Taking over the Jos North market round from 1 September.",
+    ofcUaWillCoverNothing: "This will leave them covering nothing",
+    ofcUaLastSignedIn: "Last signed in",
+    ofcPfFlagIsQuestion: "A flag is a question, not a finding. Their figures are shown here unchanged —",
+    ofcPfAgentsWithFlag: "{{n}} agent(s) with an open fraud flag",
+    ofcAllStatuses: "All statuses",
+    ofcAllLgas: "All LGAs",
+    ofcFrom: "From",
+    ofcTo: "To",
+    ofcExportCsv: "Export CSV",
+    ofcDownloadCsv: "Download CSV",
+    ofcTxReceipt: "Receipt",
+    ofcTxCreated: "Created",
+    ofcPfIntro: "Collections, reach and trouble side by side. An agent in a commercial ward will out-collect the best agent in a rural one, so read the columns together rather than sorting by naira.",
+    ofcPfCollectedByAgents: "Collected by agents",
+    ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
+    ofcPfAgentsWorked: "Agents who worked",
+    ofcPfOpenFraudFlags: "Open fraud flags",
+    ofcPfCollected: "Collected",
+    ofcPfAverage: "Average",
+    ofcPfOnboarded: "Onboarded",
+    ofcPfTins: "TINs",
+    ofcPfRenewals: "Renewals",
+    ofcPfFailed: "Failed",
+    ofcPfReversed: "Reversed",
+    ofcPfFlags: "Flags",
+    ofcPfDaysWorked: "Days worked",
     ofcNoneConfirmedCollectionReachedGovernment: "Every confirmed collection has reached the government account.",
     ofcNoneEveryoneTin: "Everyone has their TIN.",
     ofcNoneLgaEnoughActivityReport: "No LGA has enough activity to report without singling somebody out.",
@@ -2498,6 +2689,97 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcFaEveryHandsetCan: "Kowace waya na iya karba.",
+    ofcFaSomeCannotCollect: "Wadannan wakilai ba za su iya karba ba sai sun sabunta.",
+    ofcKycNotReviewed: "Takardu {{n}} ba a duba ba tukuna",
+    ofcKycAlready: "An riga an {{status}}",
+    ofcKycIdentityDocuments: "Takardun shaida",
+    ofcKycIntro: "Abin da mai nema ya tura. Ana rubuta budewa da sunanka.",
+    ofcKycNoDocuments: "Wannan mai nema bai tura wata takarda ba.",
+    ofcKycApprovingBlind: "Amincewa da wannan mai nema ba tare da bude su ba yana nufin duban shaidar ya dogara ne kawai a kan amsar na’urar mai bayarwa.",
+    ofcKycClose: "Rufe",
+    ofcKycOpenNewTab: "Bude shi a sabon shafi",
+    ofcKycChecksum: "Lambar tantancewa",
+    ofcKycSuperseded: "An tura sabon hoton wannan takardar. Ka duba wancan maimakon haka.",
+    ofcKycWhyRequired: "Me ya sa? Ana bukatarsa ko ta yaya, kuma ana nuna wa mai nema idan an ki",
+    ofcKycAccept: "Amince",
+    ofcKycNeedsPermission: "Yanke shawara kan takarda yana bukatar agent:approve.",
+    ofcKycWhoLooked: "Wa ya duba wannan?",
+    ofcKycSupersededLabel: "An maye gurbinsa",
+    ofcKycDocument: "Takarda",
+    ofcKycCaptured: "An dauka",
+    ofcKycSize: "Girma",
+    ofcKycReviewed: "An duba",
+    ofcKycWho: "Wa",
+    ofcKycWhat: "Me",
+    ofcFaIntro: "Wayar da ke kasa da mafi karancin siga ba za ta iya fara biyan kudi ko sabunta mota ba. Ana ki ta kafin kudi ya motsa, kuma ana gaya wa wakilin ya sabunta. Ka daga mafi karanci idan wani saki yana kuskure a filin aiki; duk wakilin da ke kan wannan sigar zai daina karba nan take idan aka buga shi.",
+    ofcFaHandsetsInField: "Wayoyi a filin aiki",
+    ofcFaPublishNewMinimum: "Buga sabon mafi karanci",
+    ofcFaAppendsRecord: "Wannan yana kara a rikodi maimakon maye gurbinsa, don haka abin da aka bukata a lokacin — da wanda ya yanke shawara — yana nan a karanta. Ba za a iya gyara shi daga baya ba.",
+    ofcFaMinimumVersion: "Mafi karancin siga",
+    ofcFaRecommendedVersion: "Sigar da aka ba da shawara",
+    ofcFaRecommendedHint: "Abin da ake nema wakili ya sabunta zuwa gare shi. Ba zai iya zama kasa da mafi karanci ba.",
+    ofcFaWhyMoving: "Dalilin da ya sa mafi karanci ke motsi",
+    ofcFaTakesEffectOptional: "Zai fara aiki (ba dole ba)",
+    ofcFaTakesEffectHint: "Ka bar shi babu komai domin ya fara aiki nan take. Ranar da ke gaba tana sanar da canjin ba tare da tilasta shi ba tukuna; ranar da ta yi daidai ko ta gabaci sigar da ke aiki yanzu ana ki ta, saboda kofar ba za ta taba karanta ta ba.",
+    ofcFaHistory: "Abin da aka bukata, da yaushe",
+    ofcFaMinimumInForce: "Mafi karancin siga da ke aiki",
+    ofcFaRecommended: "An ba da shawara",
+    ofcFaActiveHandsets: "Wayoyin da ke aiki",
+    ofcFaBelowMinimum: "Kasa da mafi karanci yanzu",
+    ofcFaSampleReason: "Sigar 1.3.2 tana rage kudin hidima; babu karba daga kasa da 1.4.0.",
+    ofcFaBuild: "Siga",
+    ofcFaHandsets: "Wayoyi",
+    ofcFaAgainstMinimum: "Idan aka kwatanta da mafi karanci",
+    ofcFaTakesEffect: "Zai fara aiki",
+    ofcFaMinimum: "Mafi karanci",
+    ofcFaPublishedBy: "Wanda ya buga",
+    ofcFaWhy: "Dalili",
+    ofcUaRoleChangeIntro: "Canza matsayi yana fitar da jami’i daga kowace na’ura nan take, saboda izininsa na yanzu yana tafiya cikin zaman da yake rike da shi. Zai sake shiga da sabon matsayin. Ba a jera wakilai: izininsu yana bin tsarin izini, ba matsayi ba.",
+    ofcUaNewRole: "Sabon matsayi",
+    ofcUaSelectRole: "Zabi matsayi",
+    ofcUaWhyChanging: "Dalilin wannan canjin",
+    ofcUaNewAccountStatus: "Sabon matsayin asusu",
+    ofcUaSuspendedPending: "An dakatar — ana jiran bincike",
+    ofcUaClosedLeft: "An rufe — ya bar aikin",
+    ofcUaActiveLift: "Yana aiki — a dage dakatarwa",
+    ofcUaTerritoryIntro: "Mai kula yana ganin harajin yankunan da aka ba shi a nan kuma babu wasu. Idan babu wanda aka ba shi, ba ya ganin komai — da gangan ne, don asusun da ba a gama saitin sa ba shi ne mafi karancin bayyanawa ba mafi yawa ba.",
+    ofcUaTerritoriesCovered: "Yankunan da ake kula da su",
+    ofcUaNoTerritory: "Ba a kirkiri yankin da ke aiki ba tukuna.",
+    ofcUaYourOwnAccess: "Izininka na kanka",
+    ofcUaChangeAccess: "Canza izini",
+    ofcUaTerritories: "Yankuna",
+    ofcUaAccount: "Asusu",
+    ofcUaSampleTransferred: "An mayar da shi ofishin bincike daga 1 ga Satumba.",
+    ofcUaSampleLeft: "Ya bar aikin a karshen kwata.",
+    ofcUaCannotBeUndone: "Ba za a iya soke wannan ba",
+    ofcUaSampleTakingOver: "Zai karbi zagayen kasuwar Jos ta Arewa daga 1 ga Satumba.",
+    ofcUaWillCoverNothing: "Wannan zai bar shi ba tare da yankin da zai kula ba",
+    ofcUaLastSignedIn: "Shiga na karshe",
+    ofcPfFlagIsQuestion: "Alama tambaya ce, ba hukunci ba. An nuna adadinsu a nan ba tare da canji ba —",
+    ofcPfAgentsWithFlag: "Wakilai {{n}} da ke da alamar zamba a bude",
+    ofcAllStatuses: "Dukkan matsayi",
+    ofcAllLgas: "Dukkan Kananan Hukumomi",
+    ofcFrom: "Daga",
+    ofcTo: "Zuwa",
+    ofcExportCsv: "Fitar da CSV",
+    ofcDownloadCsv: "Sauke CSV",
+    ofcTxReceipt: "Rasit",
+    ofcTxCreated: "An kirkira",
+    ofcPfIntro: "Karba, isa da matsala gefe da gefe. Wakili a unguwar kasuwanci zai fi karbar mafi kyawun wakili a unguwar karkara, don haka ka karanta ginshikan tare maimakon jera su da naira.",
+    ofcPfCollectedByAgents: "Abin da wakilai suka karba",
+    ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
+    ofcPfAgentsWorked: "Wakilan da suka yi aiki",
+    ofcPfOpenFraudFlags: "Alamun zamba a bude",
+    ofcPfCollected: "An karba",
+    ofcPfAverage: "Matsakaici",
+    ofcPfOnboarded: "An shigar",
+    ofcPfTins: "TIN",
+    ofcPfRenewals: "Sabuntawa",
+    ofcPfFailed: "Ya gaza",
+    ofcPfReversed: "An juyar",
+    ofcPfFlags: "Alamu",
+    ofcPfDaysWorked: "Kwanakin aiki",
     ofcNoneConfirmedCollectionReachedGovernment: "Duk karban da aka tabbatar ya isa asusun gwamnati.",
     ofcNoneEveryoneTin: "Kowa yana da TIN dinsa.",
     ofcNoneLgaEnoughActivityReport: "Babu Karamar Hukuma da ke da isasshen aiki da za a bayar da rahoto ba tare da nuna wani ba.",

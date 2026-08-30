@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
 import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface TransactionRow {
   transaction_reference: string;
@@ -35,6 +36,7 @@ const STATUSES = [
 ];
 
 export function TransactionsScreen() {
+  const { t } = usePortalI18n();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
@@ -84,7 +86,7 @@ export function TransactionsScreen() {
               value={filters.status}
               onChange={(event) => setFilters({ ...filters, status: event.target.value })}
             >
-              <option value="">All statuses</option>
+              <option value="">{t.ofcAllStatuses}</option>
               {STATUSES.map((status) => (
                 <option key={status} value={status}>
                   {status.replace(/_/g, ' ')}
@@ -100,7 +102,7 @@ export function TransactionsScreen() {
               value={filters.lgaId}
               onChange={(event) => setFilters({ ...filters, lgaId: event.target.value })}
             >
-              <option value="">All LGAs</option>
+              <option value="">{t.ofcAllLgas}</option>
               {lgas.map((lga) => (
                 <option key={lga.id} value={lga.id}>
                   {lga.name}
@@ -110,7 +112,7 @@ export function TransactionsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="from">From</label>
+            <label htmlFor="from">{t.ofcFrom}</label>
             <input
               id="from"
               type="date"
@@ -120,7 +122,7 @@ export function TransactionsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="to">To</label>
+            <label htmlFor="to">{t.ofcTo}</label>
             <input
               id="to"
               type="date"
@@ -129,9 +131,7 @@ export function TransactionsScreen() {
             />
           </div>
 
-          <button type="button" className="secondary" onClick={exportCsv}>
-            Export CSV
-          </button>
+          <button type="button" className="secondary" onClick={exportCsv}>{t.ofcExportCsv}</button>
         </div>
       </div>
 
@@ -163,13 +163,13 @@ export function TransactionsScreen() {
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'receipt_number',
-                label: 'Receipt',
+                label: 'ofcTxReceipt',
                 render: (row) =>
                   row.receipt_number ? <span className="mono">{row.receipt_number}</span> : '—',
               },
               {
                 key: 'created_at',
-                label: 'Created',
+                label: 'ofcTxCreated',
                 render: (row) => formatDateTime(row.created_at),
               },
             ]}

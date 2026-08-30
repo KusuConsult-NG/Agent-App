@@ -24,6 +24,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface AgentRow {
   agent_id: string;
@@ -45,6 +46,7 @@ interface AgentRow {
 }
 
 export function PerformanceScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = usePortalI18n();
   const [rows, setRows] = useState<AgentRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -77,20 +79,20 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       <ErrorAlert error={error} />
 
       {flagged.length > 0 && (
-        <Alert kind="warning" title={`${flagged.length} agent(s) with an open fraud flag`}>
+        <Alert kind="warning" title={{ text: t.ofcPfAgentsWithFlag.replace('{{n}}', String(flagged.length)) }}>
           <p style={{ margin: 0 }}>
-            A flag is a question, not a finding. Their figures are shown here unchanged —{' '}
+            {t.ofcPfFlagIsQuestion}{' '}
             {flagged.map((row) => row.full_name).join(', ')}.
           </p>
         </Alert>
       )}
 
       <div className="stat-grid">
-        <Stat label="Collected by agents" value={<Money kobo={totals.collected.toString()} />} />
-        <Stat label="Taxpayers onboarded" value={totals.onboarded.toLocaleString()} />
-        <Stat label="Agents who worked" value={`${totals.working} of ${rows?.length ?? 0}`} />
+        <Stat label="ofcPfCollectedByAgents" value={<Money kobo={totals.collected.toString()} />} />
+        <Stat label="ofcPfTaxpayersOnboarded" value={totals.onboarded.toLocaleString()} />
+        <Stat label="ofcPfAgentsWorked" value={`${totals.working} of ${rows?.length ?? 0}`} />
         <Stat
-          label="Open fraud flags"
+          label="ofcPfOpenFraudFlags"
           value={String(totals.flags)}
           variant={totals.flags > 0 ? 'alert' : undefined}
         />
@@ -100,20 +102,14 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
         <div style={{ padding: '18px 18px 0' }}>
           <div className="card__header">
             <h2 className="card__title">{t.ofcNavPerformance}</h2>
-            <p className="card__hint">
-              Collections, reach and trouble side by side. An agent in a commercial ward will
-              out-collect the best agent in a rural one, so read the columns together rather than
-              sorting by naira.
-            </p>
+            <p className="card__hint">{t.ofcPfIntro}</p>
           </div>
           {rows && rows.length > 0 && (
             <button
               type="button"
               className="small secondary"
               onClick={() => downloadCsv('agent-performance.csv', toCsv(rows))}
-            >
-              Download CSV
-            </button>
+            >{t.ofcDownloadCsv}</button>
           )}
         </div>
 
@@ -144,31 +140,31 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
               },
               {
                 key: 'collected_kobo',
-                label: 'Collected',
+                label: 'ofcPfCollected',
                 numeric: true,
                 render: (row) => <Money kobo={row.collected_kobo} />,
               },
               { key: 'successful_transactions', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'average_transaction_kobo',
-                label: 'Average',
+                label: 'ofcPfAverage',
                 numeric: true,
                 render: (row) => <Money kobo={row.average_transaction_kobo} />,
               },
-              { key: 'taxpayers_onboarded', label: 'Onboarded', numeric: true },
-              { key: 'tins_registered', label: 'TINs', numeric: true },
-              { key: 'vehicle_renewals', label: 'Renewals', numeric: true },
+              { key: 'taxpayers_onboarded', label: 'ofcPfOnboarded', numeric: true },
+              { key: 'tins_registered', label: 'ofcPfTins', numeric: true },
+              { key: 'vehicle_renewals', label: 'ofcPfRenewals', numeric: true },
               {
                 key: 'commission_earned_kobo',
                 label: 'navCommission',
                 numeric: true,
                 render: (row) => <Money kobo={row.commission_earned_kobo} />,
               },
-              { key: 'failed_transactions', label: 'Failed', numeric: true },
-              { key: 'reversed_transactions', label: 'Reversed', numeric: true },
+              { key: 'failed_transactions', label: 'ofcPfFailed', numeric: true },
+              { key: 'reversed_transactions', label: 'ofcPfReversed', numeric: true },
               {
                 key: 'open_fraud_flags',
-                label: 'Flags',
+                label: 'ofcPfFlags',
                 numeric: true,
                 render: (row) =>
                   Number(row.open_fraud_flags) > 0 ? (
@@ -177,7 +173,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                     '0'
                   ),
               },
-              { key: 'active_days', label: 'Days worked', numeric: true },
+              { key: 'active_days', label: 'ofcPfDaysWorked', numeric: true },
             ]}
             rows={rows}
             empty="ofcNoneAgentsCleared"
