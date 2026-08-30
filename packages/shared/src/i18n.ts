@@ -135,6 +135,56 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcOvTransactionCount: string;
+  ofcOvSettlementsOutstanding: string;
+  ofcOvIntact: string;
+  ofcOvSystem: string;
+  ofcOvNoRows: string;
+
+  /**
+   * Fraud, leakage, and the hash-chained audit trail an auditor reads.
+   */
+  ofcOvLeakageTitle: string;
+  ofcOvSignalsBody: string;
+  ofcOvSweepBody: string;
+  ofcOvAgentsWithFlags: string;
+  ofcOvFraudSignals: string;
+  ofcOvUnderReview: string;
+  ofcOvDismissed: string;
+  ofcOvConfirm: string;
+  ofcOvDismiss: string;
+  ofcOvUnattendedWork: string;
+  ofcOvOpenFlags: string;
+  ofcOvHighestSeverity: string;
+  ofcOvAuditTrail: string;
+  ofcOvChainBody: string;
+  ofcOvVerifyChain: string;
+  ofcOvStandardQuestions: string;
+  ofcOvStandardQuestionsBody: string;
+  ofcOvEntityType: string;
+  ofcOvAction: string;
+  ofcOvFindTheTaxpayer: string;
+  ofcOvUnreconciled48h: string;
+  ofcOvSettlementShortfall: string;
+  ofcOvDuplicatePayments: string;
+  ofcOvFailedVerifications: string;
+  ofcOvNoValidReceipt: string;
+  ofcOvEntityPlaceholder: string;
+  ofcOvActionPlaceholder: string;
+  ofcOvReversedAfterPayment: string;
+  ofcOvAllRateChanges: string;
+  ofcOvOneAgentCollected: string;
+  ofcOvReceiptsOneItem: string;
+  ofcOvWhoLookedAtRecord: string;
+  ofcOvJob: string;
+  ofcOvRuns: string;
+  ofcOvLastSucceeded: string;
+  ofcOvWhatThatMeans: string;
+  ofcOvActor: string;
+  ofcOvEntity: string;
+  ofcOvResult: string;
+  ofcOvHash: string;
+  ofcOvTampered: string;
   ofcDbShowing: string;
   ofcDbCoversYourTerritory: string;
   ofcDbCoversYourTerritories: string;
@@ -1725,6 +1775,52 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcOvTransactionCount: "{{n}} transaction(s)",
+    ofcOvSettlementsOutstanding: "{{n}} settlement(s) outstanding",
+    ofcOvIntact: "Audit trail intact",
+    ofcOvSystem: "System",
+    ofcOvNoRows: "No rows",
+    ofcOvLeakageTitle: "Revenue leakage monitoring",
+    ofcOvSignalsBody: "Signals are raised for review, never acted on automatically. No transaction is deleted or blocked by a heuristic.",
+    ofcOvSweepBody: "The sweep re-runs every heuristic over the current data and raises what it finds. It raises flags for a person to judge and changes no transaction, so running it is safe — but it is a deliberate act rather than something that happens quietly, which is why it is a button.",
+    ofcOvAgentsWithFlags: "Agents with open flags",
+    ofcOvFraudSignals: "Fraud signals",
+    ofcOvUnderReview: "Under review",
+    ofcOvDismissed: "Dismissed",
+    ofcOvConfirm: "Confirm",
+    ofcOvDismiss: "Dismiss",
+    ofcOvUnattendedWork: "Unattended work",
+    ofcOvOpenFlags: "Open flags",
+    ofcOvHighestSeverity: "Highest severity",
+    ofcOvAuditTrail: "Audit trail",
+    ofcOvChainBody: "Every entry is chained to the one before it. Editing or removing any historical entry breaks the chain and is detected by the check below.",
+    ofcOvVerifyChain: "Verify chain integrity",
+    ofcOvStandardQuestions: "Standard audit questions",
+    ofcOvStandardQuestionsBody: "Answerable without querying production tables directly.",
+    ofcOvEntityType: "Entity type",
+    ofcOvAction: "Action",
+    ofcOvFindTheTaxpayer: "Find the taxpayer",
+    ofcOvUnreconciled48h: "Unreconciled over 48h",
+    ofcOvSettlementShortfall: "Settlement shortfall",
+    ofcOvDuplicatePayments: "Duplicate payments",
+    ofcOvFailedVerifications: "Failed receipt verifications",
+    ofcOvNoValidReceipt: "Public checks that found no valid receipt",
+    ofcOvEntityPlaceholder: "payment, agent, taxpayer…",
+    ofcOvActionPlaceholder: "payment.verified",
+    ofcOvReversedAfterPayment: "Transactions reversed after successful payment",
+    ofcOvAllRateChanges: "All changes made to revenue rates",
+    ofcOvOneAgentCollected: "Everything one agent collected",
+    ofcOvReceiptsOneItem: "Receipts issued under one revenue item",
+    ofcOvWhoLookedAtRecord: "Who has looked at one taxpayer’s record",
+    ofcOvJob: "Job",
+    ofcOvRuns: "Runs",
+    ofcOvLastSucceeded: "Last succeeded",
+    ofcOvWhatThatMeans: "What that means",
+    ofcOvActor: "Actor",
+    ofcOvEntity: "Entity",
+    ofcOvResult: "Result",
+    ofcOvHash: "Hash",
+    ofcOvTampered: "Audit trail has been tampered with",
     ofcDbShowing: "Showing {{territories}}",
     ofcDbCoversYourTerritory: "Every figure on this page covers your territory only, not the whole state.",
     ofcDbCoversYourTerritories: "Every figure on this page covers your territories only, not the whole state.",
@@ -3151,6 +3247,52 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcOvTransactionCount: "Ma’amaloli {{n}}",
+    ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
+    ofcOvIntact: "Rajistar bincike ba ta lalace ba",
+    ofcOvSystem: "Tsarin",
+    ofcOvNoRows: "Babu layuka",
+    ofcOvLeakageTitle: "Sa ido kan yoyon haraji",
+    ofcOvSignalsBody: "Ana daga alamu domin a duba su, ba a taba aiki da su ta atomatik ba. Babu ma’amalar da ake sharewa ko hanawa ta hanyar kiyasi.",
+    ofcOvSweepBody: "Sharewar tana sake gudanar da kowane kiyasi a kan bayanan yanzu kuma tana daga abin da ta gano. Tana daga alamu domin mutum ya yanke hukunci kuma ba ta canza wata ma’amala ba, don haka gudanar da ita ba shi da hadari — amma aiki ne na gangan maimakon abin da ke faruwa a shiru, shi ya sa maballi ne.",
+    ofcOvAgentsWithFlags: "Wakilan da ke da alamu a bude",
+    ofcOvFraudSignals: "Alamun zamba",
+    ofcOvUnderReview: "Ana dubawa",
+    ofcOvDismissed: "An soke",
+    ofcOvConfirm: "Tabbatar",
+    ofcOvDismiss: "Soke",
+    ofcOvUnattendedWork: "Aikin da babu mai kula",
+    ofcOvOpenFlags: "Alamu a bude",
+    ofcOvHighestSeverity: "Mafi girman hadari",
+    ofcOvAuditTrail: "Rajistar bincike",
+    ofcOvChainBody: "An sarkafa kowace shigarwa da wadda ta gabace ta. Gyara ko cire wata shigarwar tarihi yana karya sarkar kuma duban da ke kasa yana gano hakan.",
+    ofcOvVerifyChain: "Tantance ingancin sarkar",
+    ofcOvStandardQuestions: "Tambayoyin bincike na yau da kullum",
+    ofcOvStandardQuestionsBody: "Ana iya amsa su ba tare da bincika teburan aiki kai tsaye ba.",
+    ofcOvEntityType: "Nau’in abu",
+    ofcOvAction: "Aiki",
+    ofcOvFindTheTaxpayer: "Nemo mai biyan haraji",
+    ofcOvUnreconciled48h: "Ba a daidaita ba sama da awa 48",
+    ofcOvSettlementShortfall: "Karancin turawa",
+    ofcOvDuplicatePayments: "Biyan kudi sau biyu",
+    ofcOvFailedVerifications: "Tantance rasit da suka gaza",
+    ofcOvNoValidReceipt: "Duban jama’a da bai samu rasit mai inganci ba",
+    ofcOvEntityPlaceholder: "biyan kudi, wakili, mai biyan haraji…",
+    ofcOvActionPlaceholder: "payment.verified",
+    ofcOvReversedAfterPayment: "Ma’amalolin da aka juyar bayan biyan kudi ya yi nasara",
+    ofcOvAllRateChanges: "Dukkan canje-canjen kudin haraji",
+    ofcOvOneAgentCollected: "Duk abin da wakili daya ya karba",
+    ofcOvReceiptsOneItem: "Rasit din da aka bayar a karkashin nau’in haraji daya",
+    ofcOvWhoLookedAtRecord: "Wa ya duba rikodin mai biyan haraji daya",
+    ofcOvJob: "Aiki",
+    ofcOvRuns: "Gudanarwa",
+    ofcOvLastSucceeded: "Nasara ta karshe",
+    ofcOvWhatThatMeans: "Abin da hakan ke nufi",
+    ofcOvActor: "Mai aikatawa",
+    ofcOvEntity: "Abu",
+    ofcOvResult: "Sakamako",
+    ofcOvHash: "Sa hannu",
+    ofcOvTampered: "An taba rajistar bincike",
     ofcDbShowing: "Ana nuna {{territories}}",
     ofcDbCoversYourTerritory: "Kowane adadi a wannan shafin ya shafi yankinka kadai, ba dukkan jihar ba.",
     ofcDbCoversYourTerritories: "Kowane adadi a wannan shafin ya shafi yankunanka kadai, ba dukkan jihar ba.",

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
+import { usePortalI18n } from '../lib/i18n';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -62,6 +63,7 @@ function formatValue(value: unknown): string {
 }
 
 export function FraudScreen() {
+  const { t } = usePortalI18n();
   const [leakage, setLeakage] = useState<any | null>(null);
   const [flags, setFlags] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -120,19 +122,11 @@ export function FraudScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Revenue leakage monitoring</h2>
-        <p className="card__hint">
-          Signals are raised for review, never acted on automatically. No transaction is deleted or
-          blocked by a heuristic.
-        </p>
+        <h2 className="card__title">{t.ofcOvLeakageTitle}</h2>
+        <p className="card__hint">{t.ofcOvSignalsBody}</p>
         {canSweep && (
           <>
-            <p className="card__hint" style={{ marginTop: 12 }}>
-              The sweep re-runs every heuristic over the current data and raises what it finds. It
-              raises flags for a person to judge and changes no transaction, so running it is
-              safe — but it is a deliberate act rather than something that happens quietly, which
-              is why it is a button.
-            </p>
+            <p className="card__hint" style={{ marginTop: 12 }}>{t.ofcOvSweepBody}</p>
             <div className="button-row">
               <button
                 type="button"
@@ -171,21 +165,31 @@ export function FraudScreen() {
       {leakage && (
         <div className="stat-grid">
           <Stat
-            label="Unreconciled over 48h"
+            label="ofcOvUnreconciled48h"
             value={<Money kobo={leakage.unreconciledOver48Hours.amount_kobo} />}
-            hint={`${leakage.unreconciledOver48Hours.count} transaction(s)`}
+            hint={{
+              text: t.ofcOvTransactionCount.replace(
+                '{{n}}',
+                String(leakage.unreconciledOver48Hours.count),
+              ),
+            }}
             variant={Number(leakage.unreconciledOver48Hours.count) > 0 ? 'alert' : undefined}
           />
           <Stat
-            label="Settlement shortfall"
+            label="ofcOvSettlementShortfall"
             value={<Money kobo={leakage.settlementsOutstanding.variance_kobo} />}
-            hint={`${leakage.settlementsOutstanding.count} settlement(s) outstanding`}
+            hint={{
+              text: t.ofcOvSettlementsOutstanding.replace(
+                '{{n}}',
+                String(leakage.settlementsOutstanding.count),
+              ),
+            }}
           />
-          <Stat label="Duplicate payments" value={leakage.duplicatePayments.count} />
+          <Stat label="ofcOvDuplicatePayments" value={leakage.duplicatePayments.count} />
           <Stat
-            label="Failed receipt verifications"
+            label="ofcOvFailedVerifications"
             value={leakage.failedReceiptVerifications.count}
-            hint="Public checks that found no valid receipt"
+            hint="ofcOvNoValidReceipt"
           />
         </div>
       )}
@@ -196,16 +200,16 @@ export function FraudScreen() {
       {leakage && leakage.highRiskAgents.length > 0 && (
         <div className="card card--flush">
           <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Agents with open flags</h2>
+            <h2 className="card__title">{t.ofcOvAgentsWithFlags}</h2>
           </div>
           <Table
             columns={[
               { key: 'agent_code', label: 'ofcRhAgent' },
               { key: 'full_name', label: 'tpName' },
-              { key: 'flag_count', label: 'Open flags', numeric: true },
+              { key: 'flag_count', label: 'ofcOvOpenFlags', numeric: true },
               {
                 key: 'highest_severity',
-                label: 'Highest severity',
+                label: 'ofcOvHighestSeverity',
                 render: (row) => <Badge status={row.highest_severity} />,
               },
             ]}
@@ -218,7 +222,7 @@ export function FraudScreen() {
         <div style={{ padding: '18px 18px 0' }}>
           <div className="card__header">
             <div>
-              <h2 className="card__title">Fraud signals</h2>
+              <h2 className="card__title">{t.ofcOvFraudSignals}</h2>
             </div>
             <div className="field" style={{ marginBottom: 0, minWidth: 160 }}>
               <label htmlFor="flag-status">{t.appStatus}</label>
@@ -229,9 +233,9 @@ export function FraudScreen() {
               >
                 <option value="">{t.ofcAgAll}</option>
                 <option value="OPEN">{t.ofcRhOpen}</option>
-                <option value="UNDER_REVIEW">Under review</option>
+                <option value="UNDER_REVIEW">{t.ofcOvUnderReview}</option>
                 <option value="CONFIRMED">{t.moreBankCheckConfirmed}</option>
-                <option value="DISMISSED">Dismissed</option>
+                <option value="DISMISSED">{t.ofcOvDismissed}</option>
               </select>
             </div>
           </div>
@@ -245,7 +249,7 @@ export function FraudScreen() {
             columns={[
               { key: 'rule', label: 'ofcAgSignal', render: (row) => <Badge status={row.rule} /> },
               { key: 'severity', label: 'ofcAgSeverity', render: (row) => <Badge status={row.severity} /> },
-              { key: 'entity_type', label: 'Subject' },
+              { key: 'entity_type', label: 'ofcSpSubject' },
               { key: 'agent_name', label: 'ofcRhAgent', render: (row) => row.agent_name ?? '—' },
               {
                 key: 'transaction_reference',
@@ -260,7 +264,7 @@ export function FraudScreen() {
               { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) =>
                   can('fraud:manage') && ['OPEN', 'UNDER_REVIEW'].includes(row.status) ? (
                     <div className="button-row">
@@ -268,16 +272,12 @@ export function FraudScreen() {
                         type="button"
                         className="small danger"
                         onClick={() => review(row.id, 'CONFIRMED')}
-                      >
-                        Confirm
-                      </button>
+                      >{t.ofcOvConfirm}</button>
                       <button
                         type="button"
                         className="small secondary"
                         onClick={() => review(row.id, 'DISMISSED')}
-                      >
-                        Dismiss
-                      </button>
+                      >{t.ofcOvDismiss}</button>
                     </div>
                   ) : (
                     <Badge status={row.status} />
@@ -326,30 +326,30 @@ interface AuditQuery {
 const AUDIT_QUERIES: AuditQuery[] = [
   {
     key: 'reversed',
-    label: 'Transactions reversed after successful payment',
+    label: 'ofcOvReversedAfterPayment',
     path: '/government/audit/queries/reversed-after-success',
   },
   {
     key: 'rates',
-    label: 'All changes made to revenue rates',
+    label: 'ofcOvAllRateChanges',
     path: '/government/audit/queries/rate-changes',
   },
   {
     key: 'agent-transactions',
-    label: 'Everything one agent collected',
+    label: 'ofcOvOneAgentCollected',
     path: '/government/audit/queries/agent-transactions',
     parameter: { name: 'agentId', prompt: 'Which agent?', source: 'agents' },
     period: true,
   },
   {
     key: 'receipts-by-item',
-    label: 'Receipts issued under one revenue item',
+    label: 'ofcOvReceiptsOneItem',
     path: '/government/audit/queries/receipts-by-item',
     parameter: { name: 'revenueItemCode', prompt: 'Which revenue item?', source: 'revenueItems' },
   },
   {
     key: 'taxpayer-access',
-    label: 'Who has looked at one taxpayer’s record',
+    label: 'ofcOvWhoLookedAtRecord',
     path: '/government/audit/queries/taxpayer-access',
     parameter: { name: 'taxpayerId', prompt: 'Which taxpayer?', source: 'taxpayerSearch' },
   },
@@ -393,6 +393,7 @@ function readInterval(ms: number): string {
 }
 
 export function BackgroundWorkPanel() {
+  const { t } = usePortalI18n();
   const [health, setHealth] = useState<{
     jobs: JobReport[];
     healthy: boolean;
@@ -414,7 +415,7 @@ export function BackgroundWorkPanel() {
 
   return (
     <div className="card">
-      <h2 className="card__title">Unattended work</h2>
+      <h2 className="card__title">{t.ofcOvUnattendedWork}</h2>
       <p className="card__hint">
         {health.healthy
           ? 'Every scheduled job has run recently and succeeded.'
@@ -424,7 +425,7 @@ export function BackgroundWorkPanel() {
         columns={[
           {
             key: 'name',
-            label: 'Job',
+            label: 'ofcOvJob',
             render: (row: JobReport) => (
               <>
                 <strong>{row.name.replace(/-/g, ' ')}</strong>
@@ -433,21 +434,21 @@ export function BackgroundWorkPanel() {
               </>
             ),
           },
-          { key: 'intervalMs', label: 'Runs', render: (row: JobReport) => readInterval(row.intervalMs) },
+          { key: 'intervalMs', label: 'ofcOvRuns', render: (row: JobReport) => readInterval(row.intervalMs) },
           {
             key: 'state',
-            label: 'State',
+            label: 'ofcOsState',
             render: (row: JobReport) => <Badge status={row.state} />,
           },
           {
             key: 'lastSucceededAt',
             // Not "last run". A job throwing since Tuesday has a recent run and
             // no recent success, and that is the distinction worth a column.
-            label: 'Last succeeded',
+            label: 'ofcOvLastSucceeded',
             render: (row: JobReport) =>
               row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : 'Never',
           },
-          { key: 'message', label: 'What that means' },
+          { key: 'message', label: 'ofcOvWhatThatMeans' },
         ]}
         rows={health.jobs}
         empty="ofcNoneBackgroundJobsDeclared"
@@ -457,6 +458,7 @@ export function BackgroundWorkPanel() {
 }
 
 export function AuditScreen() {
+  const { t } = usePortalI18n();
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
@@ -483,11 +485,8 @@ export function AuditScreen() {
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Audit trail</h2>
-            <p className="card__hint">
-              Every entry is chained to the one before it. Editing or removing any historical entry
-              breaks the chain and is detected by the check below.
-            </p>
+            <h2 className="card__title">{t.ofcOvAuditTrail}</h2>
+            <p className="card__hint">{t.ofcOvChainBody}</p>
           </div>
           <button
             type="button"
@@ -517,15 +516,13 @@ export function AuditScreen() {
                   } as ApiError);
               }
             }}
-          >
-            Verify chain integrity
-          </button>
+          >{t.ofcOvVerifyChain}</button>
         </div>
 
         {verification && (
           <Alert
             kind={verification.valid ? 'success' : 'error'}
-            title={verification.valid ? 'Audit trail intact' : 'Audit trail has been tampered with'}
+            title={verification.valid ? 'ofcOvIntact' : 'ofcOvTampered'}
           >
             <p style={{ margin: 0 }}>{verification.message}</p>
           </Alert>
@@ -535,10 +532,8 @@ export function AuditScreen() {
       <BackgroundWorkPanel />
 
       <div className="card">
-        <h2 className="card__title">Standard audit questions</h2>
-        <p className="card__hint">
-          Answerable without querying production tables directly.
-        </p>
+        <h2 className="card__title">{t.ofcOvStandardQuestions}</h2>
+        <p className="card__hint">{t.ofcOvStandardQuestionsBody}</p>
         <div className="button-row">
           {AUDIT_QUERIES.map((query) => (
             <button
@@ -583,15 +578,14 @@ export function AuditScreen() {
           <div style={{ padding: '18px 18px 0' }}>
             <div className="card__header">
               <h2 className="card__title">{queryResult.label}</h2>
-              <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>
-                Close
-              </button>
+              <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
           <Table
-            columns={Object.keys(queryResult.rows[0] ?? { result: 'No rows' }).map((key) => ({
+            columns={Object.keys(queryResult.rows[0] ?? { result: t.ofcOvNoRows }).map((key) => ({
               key,
-              label: key.replace(/_/g, ' '),
+              // A column named by whatever the query returned: data, not a label.
+              label: { text: key.replace(/_/g, ' ') },
               render: (row: any) =>
                 typeof row[key] === 'object' && row[key] !== null ? (
                   <span className="mono">{JSON.stringify(row[key])}</span>
@@ -611,21 +605,21 @@ export function AuditScreen() {
         <div style={{ padding: '18px 18px 0' }}>
           <div className="filters">
             <div className="field">
-              <label htmlFor="entity">Entity type</label>
+              <label htmlFor="entity">{t.ofcOvEntityType}</label>
               <input
                 id="entity"
                 value={filters.entityType}
                 onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
-                placeholder="payment, agent, taxpayer…"
+                placeholder={t.ofcOvEntityPlaceholder}
               />
             </div>
             <div className="field">
-              <label htmlFor="action">Action</label>
+              <label htmlFor="action">{t.ofcOvAction}</label>
               <input
                 id="action"
                 value={filters.action}
                 onChange={(event) => setFilters({ ...filters, action: event.target.value })}
-                placeholder="payment.verified"
+                placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
             <button
@@ -638,9 +632,7 @@ export function AuditScreen() {
                 const csv = await api.get<string>(`/government/audit?${params.toString()}`);
                 downloadCsv(`plateau-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv);
               }}
-            >
-              Export CSV
-            </button>
+            >{t.ofcExportCsv}</button>
           </div>
         </div>
 
@@ -651,17 +643,17 @@ export function AuditScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'sequence_no', label: '#', numeric: true },
+              { key: 'sequence_no', label: { text: '#' }, numeric: true },
               { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
-              { key: 'actor_name', label: 'Actor', render: (row) => row.actor_name ?? 'System' },
+              { key: 'actor_name', label: 'ofcOvActor', render: (row) => row.actor_name ?? t.ofcOvSystem },
               { key: 'actor_role', label: 'ofcRhRole' },
-              { key: 'action', label: 'Action', render: (row) => <span className="mono">{row.action}</span> },
-              { key: 'entity_type', label: 'Entity' },
-              { key: 'result', label: 'Result', render: (row) => <Badge status={row.result} /> },
+              { key: 'action', label: 'ofcOvAction', render: (row) => <span className="mono">{row.action}</span> },
+              { key: 'entity_type', label: 'ofcOvEntity' },
+              { key: 'result', label: 'ofcOvResult', render: (row) => <Badge status={row.result} /> },
               { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
               {
                 key: 'hash',
-                label: 'Hash',
+                label: 'ofcOvHash',
                 render: (row) => <span className="mono">{String(row.hash).slice(0, 10)}…</span>,
               },
             ]}
@@ -693,6 +685,7 @@ function AuditQueryParameters({
   onRan: (rows: any[]) => void;
   onError: (error: ApiError) => void;
 }) {
+  const { t } = usePortalI18n();
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
   const [value, setValue] = useState('');
   const [search, setSearch] = useState('');
@@ -798,7 +791,7 @@ function AuditQueryParameters({
       {source === 'taxpayerSearch' && (
         <div className="filters">
           <div className="field">
-            <label htmlFor="taxpayer-search">Find the taxpayer</label>
+            <label htmlFor="taxpayer-search">{t.ofcOvFindTheTaxpayer}</label>
             <input
               id="taxpayer-search"
               value={search}
@@ -843,7 +836,7 @@ function AuditQueryParameters({
       {query.period && (
         <div className="filters">
           <div className="field">
-            <label htmlFor="audit-from">From</label>
+            <label htmlFor="audit-from">{t.ofcFrom}</label>
             <input
               id="audit-from"
               type="date"
@@ -852,7 +845,7 @@ function AuditQueryParameters({
             />
           </div>
           <div className="field">
-            <label htmlFor="audit-to">To</label>
+            <label htmlFor="audit-to">{t.ofcTo}</label>
             <input
               id="audit-to"
               type="date"
