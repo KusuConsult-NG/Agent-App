@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react';
 import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface Funnel {
   event: string;
@@ -57,6 +58,7 @@ const seconds = (ms: string) => {
 };
 
 export function UsageScreen() {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -79,73 +81,74 @@ export function UsageScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Product usage — last 30 days</h2>
+        <h2 className="card__title">{t.ofcUsTitle}</h2>
         <p className="card__hint">
           How the software is being used, not who is using it. These figures carry no identity:
           no officer, agent or taxpayer is named in them, and groups smaller than{' '}
           {USAGE_MIN_GROUP_SIZE} are withheld rather than shown, because a small enough count
           singles somebody out even without a name. For an individual agent's work, see{' '}
-          <strong>{t.ofcNavPerformance}</strong>, which reports collections.
-        </p>
+          <strong>{t.ofcNavPerformance}</strong>{t.ofcUsReportsCollections}</p>
       </div>
 
       {nothingYet && (
-        <Alert kind="info" title="Nothing has been reported yet">
-          <p style={{ margin: 0 }}>
-            Usage is reported by the agent application and this portal as they are used. An empty
-            page here means no version carrying the reporting has been deployed yet, or nobody has
-            opened one since it was.
-          </p>
+        <Alert kind="info" title="ofcUsNothingReported">
+          <p style={{ margin: 0 }}>{t.ofcUsIntro}</p>
         </Alert>
       )}
 
       <div className="stat-grid">
         <Stat
-          label="Registrations completed"
+          label="ofcUsRegistrationsCompleted"
           value={registration ? percent(registration.completed, registration.started) : '—'}
           variant="accent"
-          hint={registration ? `${registration.started} started` : 'No attempts recorded'}
+          hint={
+            registration
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(registration.started)) }
+              : 'ofcUsNoAttempts'
+          }
         />
         <Stat
-          label="Collections completed"
+          label="ofcUsCollectionsCompleted"
           value={collection ? percent(collection.completed, collection.started) : '—'}
-          hint={collection ? `${collection.started} started` : 'No attempts recorded'}
+          hint={
+            collection
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(collection.started)) }
+              : 'ofcUsNoAttempts'
+          }
         />
         <Stat
-          label="Median registration"
+          label="ofcUsMedianRegistration"
           value={registration ? seconds(registration.median_completion_ms) : '—'}
-          hint="Start to finish, on the device"
+          hint="ofcUsStartToFinish"
         />
         <Stat
-          label="Median collection"
+          label="ofcUsMedianCollection"
           value={collection ? seconds(collection.median_completion_ms) : '—'}
-          hint="Until payment is handed off"
+          hint="ofcUsUntilHandedOff"
         />
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Every flow
-        </h2>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsEveryFlow}</h2>
         <Table
           columns={[
             {
               key: 'event',
-              label: 'Flow',
+              label: 'ofcUsFlow',
               render: (row: Funnel) => FLOW_LABEL[row.event] ?? row.event,
             },
-            { key: 'started', label: 'Started' },
-            { key: 'completed', label: 'Completed' },
+            { key: 'started', label: 'ofcUsStarted' },
+            { key: 'completed', label: 'ofcUsCompleted' },
             {
               key: 'rate',
-              label: 'Completion',
+              label: 'ofcUsCompletion',
               render: (row: Funnel) => percent(row.completed, row.started),
             },
-            { key: 'abandoned', label: 'Given up' },
-            { key: 'failed', label: 'Failed' },
+            { key: 'abandoned', label: 'ofcUsGivenUp' },
+            { key: 'failed', label: 'ofcPfFailed' },
             {
               key: 'median_completion_ms',
-              label: 'Median time',
+              label: 'ofcUsMedianTime',
               render: (row: Funnel) => seconds(row.median_completion_ms),
             },
           ]}
@@ -155,47 +158,35 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Where people give up
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          The last step an abandoned attempt reached. This is the screen to go and look at — an
-          abandoned registration creates no taxpayer, so nothing else in the platform records that
-          it happened.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsWhereGiveUp}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsWhereGiveUpBody}</p>
         <Table
           columns={[
             {
               key: 'event',
-              label: 'Flow',
+              label: 'ofcUsFlow',
               render: (row: { event: string }) => FLOW_LABEL[row.event] ?? row.event,
             },
-            { key: 'step', label: 'Last step reached' },
-            { key: 'abandoned_here', label: 'Attempts' },
+            { key: 'step', label: 'ofcUsLastStepReached' },
+            { key: 'abandoned_here', label: 'ofcOsAttempts' },
           ]}
           rows={data.abandonment}
-          empty={`No abandonment point reached ${USAGE_MIN_GROUP_SIZE} attempts.`}
+          empty={{ text: t.ofcUsNoAbandonment.replace('{{n}}', String(USAGE_MIN_GROUP_SIZE)) }}
         />
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Reach beyond Jos
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          Whether the platform works as well in the rural LGAs as in the capital. A completion rate
-          that is fine statewide and poor here is the difference between serving the grassroots and
-          serving Jos.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsReachBeyondJos}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsReachBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
-            { key: 'zone', label: 'Zone' },
-            { key: 'started', label: 'Started' },
-            { key: 'completed', label: 'Completed' },
+            { key: 'zone', label: 'ofcUsZone' },
+            { key: 'started', label: 'ofcUsStarted' },
+            { key: 'completed', label: 'ofcUsCompleted' },
             {
               key: 'rate',
-              label: 'Completion',
+              label: 'ofcUsCompletion',
               render: (row: { completed: string; started: string }) =>
                 percent(row.completed, row.started),
             },
@@ -207,16 +198,14 @@ export function UsageScreen() {
 
       <div className="two-column">
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            The offline queue
-          </h2>
+          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsOfflineQueue}</h2>
           <Table
             columns={[
               { key: 'event', label: 'ofcAgEvent' },
-              { key: 'events', label: 'Count' },
+              { key: 'events', label: 'ofcUsCount' },
               {
                 key: 'median_delay_seconds',
-                label: 'Median delay',
+                label: 'ofcUsMedianDelay',
                 render: (row: { median_delay_seconds: string }) =>
                   seconds(String(Number(row.median_delay_seconds) * 1000)),
               },
@@ -231,7 +220,7 @@ export function UsageScreen() {
           <Table
             columns={[
               { key: 'language', label: 'pubLanguage' },
-              { key: 'events', label: 'Events' },
+              { key: 'events', label: 'ofcUsEvents' },
             ]}
             rows={data.language}
             empty="ofcNoneLanguageUseReported"
@@ -240,14 +229,12 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Screens reached
-        </h2>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsScreensReached}</h2>
         <Table
           columns={[
             { key: 'surface', label: 'ofcAgApplication' },
-            { key: 'screen', label: 'Screen' },
-            { key: 'views', label: 'Views' },
+            { key: 'screen', label: 'ofcUsScreen' },
+            { key: 'views', label: 'ofcUsViews' },
           ]}
           rows={data.screens}
           empty="ofcNoneScreensReported"

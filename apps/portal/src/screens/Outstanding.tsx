@@ -22,6 +22,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface Refund {
   id: string;
@@ -81,18 +82,17 @@ interface AwaitingAuthority {
 
 /** A queue the signed-in officer may not read, stated rather than hidden. */
 function NotYours({ what, permission }: { what: string; permission: string }) {
+  const { t } = usePortalI18n();
   return (
     <div className="card">
       <h2 className="card__title">{what}</h2>
-      <p className="card__hint">
-        Reading this queue needs <code>{permission}</code>, which your role does not hold. It is not
-        empty — it is not yours.
-      </p>
+      <p className="card__hint">{t.ofcOsReadingNeeds}<code>{permission}</code>{t.ofcOsNotYours}</p>
     </div>
   );
 }
 
 export function OutstandingScreen() {
+  const { t } = usePortalI18n();
   const [refunds, setRefunds] = useState<Refund[] | null>(null);
   const [tins, setTins] = useState<AwaitingTin[] | null>(null);
   const [renewals, setRenewals] = useState<AuthorityRenewal[] | null>(null);
@@ -184,7 +184,7 @@ export function OutstandingScreen() {
   return (
     <>
       {waiting === 0 && loaded ? (
-        <Alert kind="success" title="Nothing is outstanding">
+        <Alert kind="success" title="ofcOsNothingOutstanding">
           <p style={{ margin: 0 }}>
             {readsRefunds && readsTins && readsVehicles
               ? 'Every refund has been returned, every taxpayer has their TIN, and the vehicle ' +
@@ -195,10 +195,10 @@ export function OutstandingScreen() {
         </Alert>
       ) : (
         <div className="stat-grid">
-          <Stat label="Owed to taxpayers" value={<Money kobo={owedKobo.toString()} />} />
-          <Stat label="Refunds not yet made" value={String(refunds?.length ?? 0)} />
-          <Stat label="Waiting for a TIN" value={String(tins?.length ?? 0)} />
-          <Stat label="Renewals unacknowledged" value={String(renewals?.length ?? 0)} />
+          <Stat label="ofcOsOwedToTaxpayers" value={<Money kobo={owedKobo.toString()} />} />
+          <Stat label="ofcOsRefundsNotMade" value={String(refunds?.length ?? 0)} />
+          <Stat label="ofcOsWaitingForTin" value={String(tins?.length ?? 0)} />
+          <Stat label="ofcOsRenewalsUnacknowledged" value={String(renewals?.length ?? 0)} />
         </div>
       )}
 
@@ -206,7 +206,7 @@ export function OutstandingScreen() {
       {message && (
         <Alert
           kind={message.resolved ? 'success' : 'warning'}
-          title={message.resolved ? 'Cleared' : 'Still outstanding'}
+          title={message.resolved ? 'ofcOsCleared' : 'ofcOsStillOutstanding'}
         >
           <p style={{ margin: 0 }}>{message.text}</p>
         </Alert>
@@ -218,11 +218,8 @@ export function OutstandingScreen() {
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Refunds owed to taxpayers</h2>
-            <p className="card__hint">
-              A reversal voids the receipt immediately; the money comes back only when the gateway
-              confirms it. Until then the taxpayer has not been refunded.
-            </p>
+            <h2 className="card__title">{t.ofcOsRefundsOwed}</h2>
+            <p className="card__hint">{t.ofcOsReversalBody}</p>
           </div>
           {!refunds ? (
             <Loading />
@@ -230,7 +227,7 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'refund_reference', label: 'Refund' },
+                  { key: 'refund_reference', label: 'ofcOsRefund' },
                   { key: 'transaction_reference', label: 'supTransactionLabel' },
                   {
                     key: 'amount_kobo',
@@ -239,18 +236,18 @@ export function OutstandingScreen() {
                     render: (row) => <Money kobo={row.amount_kobo} />,
                   },
                   { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
-                  { key: 'attempts', label: 'Attempts', numeric: true },
+                  { key: 'attempts', label: 'ofcOsAttempts', numeric: true },
                   {
                     key: 'failure_reason',
-                    label: 'Why not yet',
+                    label: 'ofcOsWhyNotYet',
                     render: (row) => row.failure_reason ?? 'Not attempted yet',
                   },
                   {
                     key: 'last_attempt_at',
-                    label: 'Last tried',
+                    label: 'ofcOsLastTried',
                     render: (row) => (row.last_attempt_at ? formatDateTime(row.last_attempt_at) : '—'),
                   },
-                  { key: 'created_at', label: 'Owed since', render: (row) => formatDate(row.created_at) },
+                  { key: 'created_at', label: 'ofcOsOwedSince', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={refunds}
                 empty="ofcNoneRefundOutstanding"
@@ -274,11 +271,8 @@ export function OutstandingScreen() {
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Taxpayers waiting for a TIN</h2>
-            <p className="card__hint">
-              Registered while the PSIRS TIN service could not be reached. They can be assessed and
-              can pay; only the number is missing.
-            </p>
+            <h2 className="card__title">{t.ofcOsWaitingTinTitle}</h2>
+            <p className="card__hint">{t.ofcOsWaitingTinBody}</p>
           </div>
           {!tins ? (
             <Loading />
@@ -289,8 +283,8 @@ export function OutstandingScreen() {
                   { key: 'display_name', label: 'colTaxpayerLabel' },
                   { key: 'phone', label: 'tpPhone' },
                   { key: 'tin_status', label: 'appStatus', render: (row) => <Badge status={row.tin_status} /> },
-                  { key: 'tin_attempts', label: 'Attempts', numeric: true },
-                  { key: 'tin_reason', label: 'Why not yet', render: (row) => row.tin_reason ?? '—' },
+                  { key: 'tin_attempts', label: 'ofcOsAttempts', numeric: true },
+                  { key: 'tin_reason', label: 'ofcOsWhyNotYet', render: (row) => row.tin_reason ?? '—' },
                   { key: 'created_at', label: 'ofcRhRegistered', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={tins}
@@ -315,11 +309,8 @@ export function OutstandingScreen() {
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Renewals the vehicle authority has not acknowledged</h2>
-            <p className="card__hint">
-              The renewal itself is valid and paid for. What is outstanding is the authority
-              recording it, which matters the first time the driver is stopped.
-            </p>
+            <h2 className="card__title">{t.ofcOsRenewalsUnackTitle}</h2>
+            <p className="card__hint">{t.ofcOsRenewalsUnackBody}</p>
           </div>
           {!renewals ? (
             <Loading />
@@ -328,17 +319,17 @@ export function OutstandingScreen() {
               <Table
                 columns={[
                   { key: 'registration_number', label: 'moreVehicleLabel' },
-                  { key: 'document_number', label: 'Document' },
-                  { key: 'expiry_date', label: 'Valid until', render: (row) => formatDate(row.expiry_date) },
+                  { key: 'document_number', label: 'ofcKycDocument' },
+                  { key: 'expiry_date', label: 'ofcOsValidUntil', render: (row) => formatDate(row.expiry_date) },
                   {
                     key: 'authority_notification_status',
                     label: 'appStatus',
                     render: (row) => <Badge status={row.authority_notification_status} />,
                   },
-                  { key: 'authority_notification_attempts', label: 'Attempts', numeric: true },
+                  { key: 'authority_notification_attempts', label: 'ofcOsAttempts', numeric: true },
                   {
                     key: 'authority_notification_reason',
-                    label: 'Why not yet',
+                    label: 'ofcOsWhyNotYet',
                     render: (row) => row.authority_notification_reason ?? '—',
                   },
                 ]}
@@ -362,11 +353,8 @@ export function OutstandingScreen() {
       {readsVehicles && vehicles && vehicles.length > 0 && (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Vehicles captured without an authority check</h2>
-            <p className="card__hint">
-              Recorded from what the owner presented because the authority could not be reached. The
-              details have not been confirmed against the register.
-            </p>
+            <h2 className="card__title">{t.ofcOsVehiclesUncheckedTitle}</h2>
+            <p className="card__hint">{t.ofcOsVehiclesUncheckedBody}</p>
           </div>
           <Table
             columns={[
@@ -377,7 +365,7 @@ export function OutstandingScreen() {
                 label: 'moreVehicleLabel',
                 render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—',
               },
-              { key: 'created_at', label: 'Captured', render: (row) => formatDate(row.created_at) },
+              { key: 'created_at', label: 'ofcKycCaptured', render: (row) => formatDate(row.created_at) },
             ]}
             rows={vehicles}
             empty="ofcNoneNone"
@@ -400,33 +388,29 @@ export function OutstandingScreen() {
         ended && (
           <div className="card card--flush">
             <div style={{ padding: '18px 18px 0' }}>
-              <h2 className="card__title">Ended records that still owe</h2>
-              <p className="card__hint">
-                Closed or suspended while money was outstanding. Nothing has been written off — the
-                reminder sweep has stopped chasing these, so they are worked by hand until they are
-                paid or the record goes back on the register.
-              </p>
+              <h2 className="card__title">{t.ofcOsEndedOwingTitle}</h2>
+              <p className="card__hint">{t.ofcOsEndedOwingBody}</p>
             </div>
             <Table
               columns={[
                 { key: 'name', label: 'colTaxpayerLabel' },
                 { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
-                { key: 'status', label: 'State', render: (row) => <Badge status={row.status} /> },
+                { key: 'status', label: 'ofcOsState', render: (row) => <Badge status={row.status} /> },
                 {
                   key: 'outstanding_kobo',
-                  label: 'Owed',
+                  label: 'ofcOsOwed',
                   numeric: true,
                   render: (row) => <Money kobo={row.outstanding_kobo} />,
                 },
-                { key: 'unpaid_invoices', label: 'Invoices', numeric: true },
+                { key: 'unpaid_invoices', label: 'ofcLvInvoices', numeric: true },
                 {
                   key: 'status_reason',
-                  label: 'Why it ended',
+                  label: 'ofcOsWhyEnded',
                   render: (row) => row.status_reason ?? '—',
                 },
                 {
                   key: 'status_changed_at',
-                  label: 'Ended',
+                  label: 'ofcOsEnded',
                   render: (row) =>
                     `${formatDate(row.status_changed_at)}${row.ended_by ? ` · ${row.ended_by}` : ''}`,
                 },

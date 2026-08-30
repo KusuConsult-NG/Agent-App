@@ -135,6 +135,73 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcOsCleared: string;
+  ofcOsStillOutstanding: string;
+  ofcUsStartedCount: string;
+  ofcUsNoAttempts: string;
+  ofcUsNoAbandonment: string;
+
+  /**
+   * What the platform is still carrying — refunds, missing TINs, renewals the
+   * authority has not acknowledged — and what it observes about its own use.
+   */
+  ofcOsReadingNeeds: string;
+  ofcOsNotYours: string;
+  ofcOsRefundsOwed: string;
+  ofcOsReversalBody: string;
+  ofcOsWaitingTinTitle: string;
+  ofcOsWaitingTinBody: string;
+  ofcOsRenewalsUnackTitle: string;
+  ofcOsRenewalsUnackBody: string;
+  ofcOsVehiclesUncheckedTitle: string;
+  ofcOsVehiclesUncheckedBody: string;
+  ofcOsEndedOwingTitle: string;
+  ofcOsEndedOwingBody: string;
+  ofcOsNothingOutstanding: string;
+  ofcOsOwedToTaxpayers: string;
+  ofcOsRefundsNotMade: string;
+  ofcOsWaitingForTin: string;
+  ofcOsRenewalsUnacknowledged: string;
+  ofcOsRefund: string;
+  ofcOsAttempts: string;
+  ofcOsWhyNotYet: string;
+  ofcOsLastTried: string;
+  ofcOsOwedSince: string;
+  ofcOsValidUntil: string;
+  ofcOsState: string;
+  ofcOsOwed: string;
+  ofcOsWhyEnded: string;
+  ofcOsEnded: string;
+  ofcUsTitle: string;
+  ofcUsReportsCollections: string;
+  ofcUsIntro: string;
+  ofcUsEveryFlow: string;
+  ofcUsWhereGiveUp: string;
+  ofcUsWhereGiveUpBody: string;
+  ofcUsReachBeyondJos: string;
+  ofcUsReachBody: string;
+  ofcUsOfflineQueue: string;
+  ofcUsScreensReached: string;
+  ofcUsNothingReported: string;
+  ofcUsRegistrationsCompleted: string;
+  ofcUsCollectionsCompleted: string;
+  ofcUsMedianRegistration: string;
+  ofcUsStartToFinish: string;
+  ofcUsMedianCollection: string;
+  ofcUsUntilHandedOff: string;
+  ofcUsFlow: string;
+  ofcUsStarted: string;
+  ofcUsCompleted: string;
+  ofcUsCompletion: string;
+  ofcUsGivenUp: string;
+  ofcUsMedianTime: string;
+  ofcUsLastStepReached: string;
+  ofcUsZone: string;
+  ofcUsCount: string;
+  ofcUsMedianDelay: string;
+  ofcUsEvents: string;
+  ofcUsScreen: string;
+  ofcUsViews: string;
   ofcGpConfirmationLinkFor: string;
   ofcSpOpenComplaints: string;
 
@@ -1583,6 +1650,68 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcOsCleared: "Cleared",
+    ofcOsStillOutstanding: "Still outstanding",
+    ofcUsStartedCount: "{{n}} started",
+    ofcUsNoAttempts: "No attempts recorded",
+    ofcUsNoAbandonment: "No abandonment point reached {{n}} attempts.",
+    ofcOsReadingNeeds: "Reading this queue needs",
+    ofcOsNotYours: ", which your role does not hold. It is not empty — it is not yours.",
+    ofcOsRefundsOwed: "Refunds owed to taxpayers",
+    ofcOsReversalBody: "A reversal voids the receipt immediately; the money comes back only when the gateway confirms it. Until then the taxpayer has not been refunded.",
+    ofcOsWaitingTinTitle: "Taxpayers waiting for a TIN",
+    ofcOsWaitingTinBody: "Registered while the PSIRS TIN service could not be reached. They can be assessed and can pay; only the number is missing.",
+    ofcOsRenewalsUnackTitle: "Renewals the vehicle authority has not acknowledged",
+    ofcOsRenewalsUnackBody: "The renewal itself is valid and paid for. What is outstanding is the authority recording it, which matters the first time the driver is stopped.",
+    ofcOsVehiclesUncheckedTitle: "Vehicles captured without an authority check",
+    ofcOsVehiclesUncheckedBody: "Recorded from what the owner presented because the authority could not be reached. The details have not been confirmed against the register.",
+    ofcOsEndedOwingTitle: "Ended records that still owe",
+    ofcOsEndedOwingBody: "Closed or suspended while money was outstanding. Nothing has been written off — the reminder sweep has stopped chasing these, so they are worked by hand until they are paid or the record goes back on the register.",
+    ofcOsNothingOutstanding: "Nothing is outstanding",
+    ofcOsOwedToTaxpayers: "Owed to taxpayers",
+    ofcOsRefundsNotMade: "Refunds not yet made",
+    ofcOsWaitingForTin: "Waiting for a TIN",
+    ofcOsRenewalsUnacknowledged: "Renewals unacknowledged",
+    ofcOsRefund: "Refund",
+    ofcOsAttempts: "Attempts",
+    ofcOsWhyNotYet: "Why not yet",
+    ofcOsLastTried: "Last tried",
+    ofcOsOwedSince: "Owed since",
+    ofcOsValidUntil: "Valid until",
+    ofcOsState: "State",
+    ofcOsOwed: "Owed",
+    ofcOsWhyEnded: "Why it ended",
+    ofcOsEnded: "Ended",
+    ofcUsTitle: "Product usage — last 30 days",
+    ofcUsReportsCollections: ", which reports collections.",
+    ofcUsIntro: "Usage is reported by the agent application and this portal as they are used. An empty page here means no version carrying the reporting has been deployed yet, or nobody has opened one since it was.",
+    ofcUsEveryFlow: "Every flow",
+    ofcUsWhereGiveUp: "Where people give up",
+    ofcUsWhereGiveUpBody: "The last step an abandoned attempt reached. This is the screen to go and look at — an abandoned registration creates no taxpayer, so nothing else in the platform records that it happened.",
+    ofcUsReachBeyondJos: "Reach beyond Jos",
+    ofcUsReachBody: "Whether the platform works as well in the rural LGAs as in the capital. A completion rate that is fine statewide and poor here is the difference between serving the grassroots and serving Jos.",
+    ofcUsOfflineQueue: "The offline queue",
+    ofcUsScreensReached: "Screens reached",
+    ofcUsNothingReported: "Nothing has been reported yet",
+    ofcUsRegistrationsCompleted: "Registrations completed",
+    ofcUsCollectionsCompleted: "Collections completed",
+    ofcUsMedianRegistration: "Median registration",
+    ofcUsStartToFinish: "Start to finish, on the device",
+    ofcUsMedianCollection: "Median collection",
+    ofcUsUntilHandedOff: "Until payment is handed off",
+    ofcUsFlow: "Flow",
+    ofcUsStarted: "Started",
+    ofcUsCompleted: "Completed",
+    ofcUsCompletion: "Completion",
+    ofcUsGivenUp: "Given up",
+    ofcUsMedianTime: "Median time",
+    ofcUsLastStepReached: "Last step reached",
+    ofcUsZone: "Zone",
+    ofcUsCount: "Count",
+    ofcUsMedianDelay: "Median delay",
+    ofcUsEvents: "Events",
+    ofcUsScreen: "Screen",
+    ofcUsViews: "Views",
     ofcGpConfirmationLinkFor: "Confirmation link for {{group}}",
     ofcSpOpenComplaints: "{{n}} open complaint(s) about conduct or charges",
     ofcSpAboutRevenue: "These are reports about how revenue was collected, not about the platform. They are listed first below.",
@@ -2877,6 +3006,68 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcOsCleared: "An share",
+    ofcOsStillOutstanding: "Har yanzu ya rage",
+    ofcUsStartedCount: "An fara {{n}}",
+    ofcUsNoAttempts: "Ba a rubuta wani yunkuri ba",
+    ofcUsNoAbandonment: "Babu wurin watsarwa da ya kai yunkuri {{n}}.",
+    ofcOsReadingNeeds: "Karanta wannan jerin yana bukatar",
+    ofcOsNotYours: ", wanda matsayinka bai rike ba. Ba fanko ba ne — ba naka ba ne.",
+    ofcOsRefundsOwed: "Mayarwar da ake bin masu biyan haraji",
+    ofcOsReversalBody: "Juyarwa tana soke rasit nan take; kudin yana dawowa ne kawai idan tashar ta tabbatar. Har lokacin ba a mayar wa mai biyan haraji ba.",
+    ofcOsWaitingTinTitle: "Masu biyan haraji da ke jiran TIN",
+    ofcOsWaitingTinBody: "An yi musu rajista yayin da ba a iya samun sashen TIN na PSIRS ba. Za a iya yi musu kima kuma za su iya biya; lambar kadai ce babu.",
+    ofcOsRenewalsUnackTitle: "Sabuntawar da hukumar motoci ba ta amince da ita ba",
+    ofcOsRenewalsUnackBody: "Sabuntawar da kanta tana da inganci kuma an biya ta. Abin da ya rage shi ne hukumar ta rubuta ta, wanda ke da muhimmanci a karo na farko da aka tsayar da direba.",
+    ofcOsVehiclesUncheckedTitle: "Motocin da aka rubuta ba tare da duban hukuma ba",
+    ofcOsVehiclesUncheckedBody: "An rubuta daga abin da mai motar ya gabatar saboda ba a iya samun hukumar ba. Ba a tabbatar da bayanan da rajistar ba.",
+    ofcOsEndedOwingTitle: "Rikodin da aka rufe da ake bin su",
+    ofcOsEndedOwingBody: "An rufe ko an dakatar yayin da ake bin kudi. Ba a share komai ba — tunatarwa ta daina bin wadannan, don haka ana yin su da hannu har sai an biya ko rikodin ya koma rajistar.",
+    ofcOsNothingOutstanding: "Babu abin da ya rage",
+    ofcOsOwedToTaxpayers: "Ana bin masu biyan haraji",
+    ofcOsRefundsNotMade: "Mayarwar da ba a yi ba tukuna",
+    ofcOsWaitingForTin: "Ana jiran TIN",
+    ofcOsRenewalsUnacknowledged: "Sabuntawar da ba a amince da ita ba",
+    ofcOsRefund: "Mayarwa",
+    ofcOsAttempts: "Yunkuri",
+    ofcOsWhyNotYet: "Dalilin da bai riga ba",
+    ofcOsLastTried: "Gwadawa na karshe",
+    ofcOsOwedSince: "Ana bin tun",
+    ofcOsValidUntil: "Yana aiki har",
+    ofcOsState: "Matsayi",
+    ofcOsOwed: "Ana bin",
+    ofcOsWhyEnded: "Dalilin da ya sa ya kare",
+    ofcOsEnded: "Ya kare",
+    ofcUsTitle: "Amfani da manhaja — kwanaki 30 na karshe",
+    ofcUsReportsCollections: ", wanda ke bayar da rahoton karba.",
+    ofcUsIntro: "Manhajar wakilai da wannan shafin suna bayar da rahoton amfani yayin da ake amfani da su. Shafi mara komai a nan yana nufin ba a tura sigar da ke dauke da rahoton ba tukuna, ko babu wanda ya bude daya tun lokacin.",
+    ofcUsEveryFlow: "Kowane mataki",
+    ofcUsWhereGiveUp: "Inda mutane ke daina",
+    ofcUsWhereGiveUpBody: "Matakin karshe da yunkurin da aka watsar ya kai. Wannan shi ne shafin da za a je a duba — rajistar da aka watsar ba ta samar da mai biyan haraji ba, don haka babu wani abu a dandalin da ke rubuta cewa ya faru.",
+    ofcUsReachBeyondJos: "Isa bayan Jos",
+    ofcUsReachBody: "Ko dandalin yana aiki a Kananan Hukumomin karkara kamar yadda yake a babban birni. Adadin kammalawa mai kyau a fadin jiha amma mara kyau a nan shi ne bambanci tsakanin yi wa talakawa hidima da yi wa Jos hidima.",
+    ofcUsOfflineQueue: "Jerin gwanon ba tare da layi ba",
+    ofcUsScreensReached: "Shafukan da aka kai",
+    ofcUsNothingReported: "Ba a bayar da rahoton komai ba tukuna",
+    ofcUsRegistrationsCompleted: "Rajistar da aka kammala",
+    ofcUsCollectionsCompleted: "Karban da aka kammala",
+    ofcUsMedianRegistration: "Matsakaicin rajista",
+    ofcUsStartToFinish: "Daga fara zuwa karshe, a kan na’ura",
+    ofcUsMedianCollection: "Matsakaicin karba",
+    ofcUsUntilHandedOff: "Har sai an mika biyan kudi",
+    ofcUsFlow: "Mataki",
+    ofcUsStarted: "An fara",
+    ofcUsCompleted: "An kammala",
+    ofcUsCompletion: "Kammalawa",
+    ofcUsGivenUp: "An daina",
+    ofcUsMedianTime: "Matsakaicin lokaci",
+    ofcUsLastStepReached: "Matakin karshe da aka kai",
+    ofcUsZone: "Yanki",
+    ofcUsCount: "Adadi",
+    ofcUsMedianDelay: "Matsakaicin jinkiri",
+    ofcUsEvents: "Abubuwan da suka faru",
+    ofcUsScreen: "Shafi",
+    ofcUsViews: "Kallo",
     ofcGpConfirmationLinkFor: "Hanyar tabbatarwa ta {{group}}",
     ofcSpOpenComplaints: "Korafe-korafe {{n}} a bude kan hali ko kudi",
     ofcSpAboutRevenue: "Wadannan rahotanni ne kan yadda aka karbi haraji, ba kan dandalin ba. An jera su a farko a kasa.",
