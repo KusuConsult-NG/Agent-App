@@ -96,6 +96,14 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Check the Hausa review sheet is not behind the dictionary
+        # docs/HAUSA-REVIEW.md is what a native speaker reads before any of
+        # this reaches an agent, and its tables are generated. A sheet listing
+        # some of the strings is worse than no sheet, because it looks complete
+        # to the person reviewing it. This was in `npm run verify` and CI runs
+        # the steps individually, so nothing was running it.
+        run: npm run check:hausa-review
+
       - name: Apply migrations
         run: npm run migrate
 
