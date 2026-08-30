@@ -26,6 +26,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { translations } from '@psirs/shared';
 
 /**
  * Every file whose output an agent reads, as source text.
@@ -47,6 +48,15 @@ const SURFACES: Record<string, string> = {
  * Anything added here is a decision somebody can read and disagree with,
  * which is the point. "It was easier" is not one of the reasons below.
  */
+/**
+ * A dictionary key is not English text.
+ *
+ * The module-level arrays here hold keys rather than labels — the clearance
+ * stages, the wizard steps, the support categories — so without this the check
+ * would report the very thing it is asking for.
+ */
+const KEYS = new Set(Object.keys(translations.en));
+
 const ALLOWED = new Set([
   // Sample values an agent types or dials. A translated phone number or
   // registration plate is a number somebody will actually use.
@@ -71,6 +81,14 @@ const ALLOWED = new Set([
 /** Props whose value is rendered rather than used. */
 const RENDERED_PROPS =
   /\b(?:title|placeholder|aria-label|label|hint|patternHint|confirmLabel|alt)="([^"]+)"/g;
+
+/** The same props written as a JSX expression, which is equally valid. */
+const BRACED_PROPS =
+  /\b(?:title|placeholder|aria-label|label|hint|empty|patternHint|confirmLabel|alt)=\{'((?:[^'\\]|\\.)+)'\}/g;
+
+/** Object-literal fields that are rendered rather than used. */
+const RENDERED_FIELDS =
+  /\b(?:label|hint|title|description|blurb|note|caption|help)\s*:\s*'((?:[^'\\]|\\.){2,})'/g;
 
 /** Messages the agent is shown when something goes wrong or completes. */
 const SHOWN_MESSAGES =
@@ -99,6 +117,7 @@ function looksLikeCode(text: string): boolean {
     /[{}[\]]|=>|\);|\(\{|\}\)|&&|\|\||\?\?/.test(text) ||
     text.startsWith(')') ||
     text.endsWith('(') ||
+    /^[a-z][A-Za-z0-9_]*$/.test(text) ||
     /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
   );
 }
@@ -107,17 +126,20 @@ function englishIn(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const found: string[] = [];
 
-  for (const match of code.matchAll(/>([^<>{}]+)</g)) {
+  for (const match of code.matchAll(/(?<![=!<>-])>([^<>{}]+)</g)) {
     // Two or more consecutive letters is the cheapest test for "a word rather
     // than punctuation, an entity, or a fragment of an expression".
     const text = match[1].replace(/\s+/g, ' ').trim();
     if (/[A-Za-z]{2}/.test(text)) found.push(text);
   }
   for (const match of code.matchAll(RENDERED_PROPS)) found.push(match[1].trim());
+  for (const match of code.matchAll(BRACED_PROPS)) found.push(match[1].trim());
+  for (const match of code.matchAll(RENDERED_FIELDS)) found.push(match[1].trim());
   for (const match of code.matchAll(SHOWN_MESSAGES)) found.push(match[1].trim());
 
   return found.filter(
-    (text) => /[A-Za-z]{2}/.test(text) && !ALLOWED.has(text) && !looksLikeCode(text),
+    (text) =>
+      /[A-Za-z]{2}/.test(text) && !KEYS.has(text) && !ALLOWED.has(text) && !looksLikeCode(text),
   );
 }
 

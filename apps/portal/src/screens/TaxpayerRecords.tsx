@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface FoundTaxpayer {
   id: string;
@@ -34,6 +35,7 @@ const displayName = (t: FoundTaxpayer) =>
   t.business_name ?? `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim();
 
 export function TaxpayerRecordsScreen({ user }: { user: User }) {
+  const { t } = usePortalI18n();
   const [search, setSearch] = useState('');
   /** `null` until a search has run, so "found nobody" is not "not searched". */
   const [results, setResults] = useState<FoundTaxpayer[] | null>(null);
@@ -122,12 +124,8 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Correct a taxpayer record</h2>
-        <p className="card__hint">
-          Every correction is recorded against the officer who made it, with the reason given,
-          and the taxpayer is sent a message telling them their record was changed. Only the
-          fields you fill in are altered.
-        </p>
+        <h2 className="card__title">{t.ofcTrTitle}</h2>
+        <p className="card__hint">{t.ofcTrIntro}</p>
       </div>
 
       <ErrorAlert error={error} />
@@ -137,11 +135,11 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
         <div className="card">
           <div className="filters">
             <div className="field">
-              <label htmlFor="tp-search">Find the taxpayer</label>
+              <label htmlFor="tp-search">{t.ofcOvFindTheTaxpayer}</label>
               <input
                 id="tp-search"
                 value={search}
-                placeholder="Name, phone, TIN or receipt number"
+                placeholder={t.ofcTrSearchPlaceholder}
                 onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && search.trim().length >= 2) void run();
@@ -159,7 +157,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           {busy && <Loading rows={2} />}
 
           {results && results.length === 0 && (
-            <p className="empty">No taxpayer matches that search.</p>
+            <p className="empty">{t.ofcTrNoMatch}</p>
           )}
 
           {results && results.length > 0 && (
@@ -192,8 +190,8 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
             ]}
           />
 
-          <p className="section-title">Corrected details</p>
-          <p className="card__hint">Leave anything that is already right blank.</p>
+          <p className="section-title">{t.ofcTrCorrectedDetails}</p>
+          <p className="card__hint">{t.ofcTrLeaveBlank}</p>
 
           <div className="field">
             <label htmlFor="c-first">{t.tpFirstName}</label>
@@ -225,24 +223,21 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
 
           {mayChangeDocument ? (
             <>
-              <p className="section-title">Identification document</p>
-              <p className="card__hint">
-                This decides which person the record is about, so it is checked against every
-                other active taxpayer before it is accepted.
-              </p>
+              <p className="section-title">{t.ofcTrIdentificationDocument}</p>
+              <p className="card__hint">{t.ofcTrDecidesWhichPerson}</p>
               <div className="field">
                 <label htmlFor="c-idtype">{t.tpType}</label>
                 <select id="c-idtype" value={form.identityType} onChange={set('identityType')}>
-                  <option value="">Unchanged</option>
+                  <option value="">{t.ofcTrUnchanged}</option>
                   <option value="NIN">{t.pubIdNin}</option>
                   <option value="BVN">{t.pubIdBvn}</option>
                   <option value="PASSPORT">{t.pubIdPassport}</option>
-                  <option value="DRIVERS_LICENCE">Driver&rsquo;s licence</option>
-                  <option value="VOTERS_CARD">Voter&rsquo;s card</option>
+                  <option value="DRIVERS_LICENCE">{t.idLicence}</option>
+                  <option value="VOTERS_CARD">{t.idVoters}</option>
                 </select>
               </div>
               <div className="field">
-                <label htmlFor="c-idnum">Number</label>
+                <label htmlFor="c-idnum">{t.ofcTrNumber}</label>
                 <input
                   id="c-idnum"
                   inputMode="numeric"
@@ -252,23 +247,19 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
               </div>
             </>
           ) : (
-            <Alert kind="info" title="Changing the identification document needs an administrator">
-              <p style={{ margin: 0 }}>
-                A name or date of birth can be corrected here. The document the record is held
-                under decides which person it is about, so an administrator has to make that
-                change.
-              </p>
+            <Alert kind="info" title="ofcTrNeedsAdministrator">
+              <p style={{ margin: 0 }}>{t.ofcTrNameOrDob}</p>
             </Alert>
           )}
 
           <div className="field">
-            <label htmlFor="c-reason">What is being corrected, and why</label>
+            <label htmlFor="c-reason">{t.ofcTrWhatAndWhy}</label>
             <textarea
               id="c-reason"
               rows={3}
               value={form.reason}
               onChange={set('reason')}
-              placeholder="Surname was misspelt at registration; corrected against the NIN slip presented at the office."
+              placeholder={t.ofcTrSampleCorrection}
             />
           </div>
 
@@ -324,6 +315,7 @@ interface ObligationRow {
  * rather than a delete.
  */
 function Obligations({ taxpayerId }: { taxpayerId: string }) {
+  const { t } = usePortalI18n();
   const [rows, setRows] = useState<ObligationRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -372,11 +364,8 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
   return (
     <div className="card card--flush">
       <div style={{ padding: '18px 18px 0' }}>
-        <h2 className="card__title">What this taxpayer is liable for</h2>
-        <p className="card__hint">
-          Waiving an obligation stops future assessments against it. Invoices already raised stay
-          payable — cancelling those is a separate decision, invoice by invoice.
-        </p>
+        <h2 className="card__title">{t.ofcTrLiableFor}</h2>
+        <p className="card__hint">{t.ofcTrWaiveBody}</p>
       </div>
 
       <ErrorAlert error={error} />
@@ -387,11 +376,11 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
           { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
           { key: 'name', label: 'colRevenueItem' },
           { key: 'categoryName', label: 'ofcAgCategory' },
-          { key: 'source', label: 'Recorded by', render: (row) => readableSource(row.source) },
+          { key: 'source', label: 'ofcTrRecordedBy', render: (row) => readableSource(row.source) },
           { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
           {
             key: 'action',
-            label: '',
+            label: { text: '' },
             render: (row) =>
               row.status === 'ACTIVE' ? (
                 <button
@@ -399,9 +388,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
                   className="small danger"
                   disabled={busy}
                   onClick={() => void waive(row)}
-                >
-                  Waive
-                </button>
+                >{t.ofcTrWaive}</button>
               ) : null,
           },
         ]}
@@ -440,6 +427,7 @@ interface VehicleRow {
  * platform saying something about somebody that has stopped being true.
  */
 function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
+  const { t } = usePortalI18n();
   const [vehicles, setVehicles] = useState<VehicleRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -486,11 +474,8 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
   return (
     <div className="card card--flush">
       <div style={{ padding: '18px 18px 0' }}>
-        <h2 className="card__title">Vehicles on this record</h2>
-        <p className="card__hint">
-          Particulars cannot be renewed for a vehicle that is suspended or off the register.
-          Renewals already issued stay valid for the period they were paid for.
-        </p>
+        <h2 className="card__title">{t.ofcTrVehiclesOnRecord}</h2>
+        <p className="card__hint">{t.ofcTrVehiclesBody}</p>
 
         {can('vehicle:manage') && vehicles.length > 0 && (
           <div className="field">
@@ -500,7 +485,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
               rows={2}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Sold out of state and re-registered in Kaduna."
+              placeholder={t.ofcTrSampleVehicle}
             />
           </div>
         )}
@@ -532,7 +517,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
           },
           {
             key: 'action',
-            label: '',
+            label: { text: '' },
             render: (row) =>
               can('vehicle:manage') ? (
                 <div className="button-row">
@@ -549,9 +534,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
                         className="small danger"
                         disabled={busy || reason.trim().length < 5}
                         onClick={() => void change(row, 'ARCHIVED')}
-                      >
-                        Take off the register
-                      </button>
+                      >{t.ofcTrTakeOffRegister}</button>
                     </>
                   ) : (
                     <button
@@ -559,9 +542,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
                       className="small"
                       disabled={busy || reason.trim().length < 5}
                       onClick={() => void change(row, 'ACTIVE')}
-                    >
-                      Put back in service
-                    </button>
+                    >{t.ofcTrPutBackInService}</button>
                   )}
                 </div>
               ) : null,
@@ -585,6 +566,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
  * record it sits on.
  */
 function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string }) {
+  const { t } = usePortalI18n();
   const [status, setStatus] = useState<'SUSPENDED' | 'CLOSED' | 'ACTIVE'>('CLOSED');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
@@ -613,11 +595,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
   return (
     <div className="card">
       <h2 className="card__title">The register — {name}</h2>
-      <p className="card__hint">
-        A record that is suspended or closed stops accruing new charges and stops receiving
-        reminders. Nothing already owed is written off: it stays payable, stays in the revenue
-        figures, and appears under ended records that still owe until it is settled.
-      </p>
+      <p className="card__hint">{t.ofcTrEndedBody}</p>
 
       {error && <ErrorAlert error={error} />}
       {message && (
@@ -627,26 +605,26 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
       )}
 
       <div className="field">
-        <label htmlFor="reg-status">What has happened to this taxpayer</label>
+        <label htmlFor="reg-status">{t.ofcTrWhatHappened}</label>
         <select
           id="reg-status"
           value={status}
           onChange={(event) => setStatus(event.target.value as typeof status)}
         >
-          <option value="CLOSED">Closed — the business has shut or the person has died</option>
-          <option value="SUSPENDED">Suspended — paused pending an enquiry</option>
-          <option value="ACTIVE">Active — put the record back on the register</option>
+          <option value="CLOSED">{t.ofcTrClosedOption}</option>
+          <option value="SUSPENDED">{t.ofcTrSuspendedOption}</option>
+          <option value="ACTIVE">{t.ofcTrActiveOption}</option>
         </select>
       </div>
 
       <div className="field">
-        <label htmlFor="reg-reason">How this was established</label>
+        <label htmlFor="reg-reason">{t.ofcTrHowEstablished}</label>
         <textarea
           id="reg-reason"
           value={reason}
           rows={3}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Premises visited on 12 August: the shop has been empty since the market fire in March."
+          placeholder={t.ofcTrSampleClosure}
         />
       </div>
 

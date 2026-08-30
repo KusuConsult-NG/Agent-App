@@ -393,7 +393,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
           </p>
         </div>
 
-        <Alert kind="info" title={`${invitation.applicantName} has named you as their referee`}>
+        <Alert kind="info" title={{ text: t.pubRefereeNamedYou.replace('{{name}}', invitation.applicantName) }}>
           <p style={{ margin: 0 }}>
             {invitation.applicantLga ? `${invitation.applicantLga} — ` : ''}
             {t.pubRefereeIntro}
@@ -656,7 +656,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
           </p>
         </div>
 
-        <Alert kind="info" title={`${view.groupName}`}>
+        <Alert kind="info" title={{ text: view.groupName }}>
           <p style={{ margin: 0 }}>
             {view.lga} — {t.pubAttestIntro}
           </p>
@@ -674,7 +674,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         <ErrorAlert error={error} />
 
         {pending.length === 0 ? (
-          <Alert kind="success" title={t.pubAttestNothingTitle}>
+          <Alert kind="success" title="pubAttestNothingTitle">
             <p style={{ margin: 0 }}>
               {t.pubAttestNothingBody}
             </p>

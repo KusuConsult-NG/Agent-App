@@ -111,7 +111,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
             },
             {
               key: 'action',
-              label: '',
+              label: { text: '' },
               render: (row) => (
                 <button type="button" className="small" onClick={() => navigate(`/agents/${row.agentId}`)}>{t.tpStepReview}</button>
               ),
@@ -172,7 +172,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
               },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <button
                     type="button"
@@ -352,7 +352,7 @@ export function AgentDetailScreen({
             { key: 'responded_at', label: 'ofcAgResponded', render: (row) => formatDateTime(row.responded_at) },
             {
               key: 'action',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 ['SUBMITTED', 'UNDER_REVIEW'].includes(row.status) && can('agent:approve') ? (
                   <div className="button-row">
@@ -422,7 +422,7 @@ export function AgentDetailScreen({
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) =>
                   can('device:manage') ? (
                     <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -766,7 +766,7 @@ export function RefereesScreen() {
             },
             {
               key: 'action',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 can('fraud:manage') ? (
                   <button

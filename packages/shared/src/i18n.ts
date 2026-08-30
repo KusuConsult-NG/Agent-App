@@ -135,6 +135,42 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  pubRefereeNamedYou: string;
+
+  /**
+   * Correcting a taxpayer's record, and ending one — closure, suspension,
+   * and what stays payable afterwards.
+   */
+  ofcTrTitle: string;
+  ofcTrIntro: string;
+  ofcTrNoMatch: string;
+  ofcTrCorrectedDetails: string;
+  ofcTrLeaveBlank: string;
+  ofcTrIdentificationDocument: string;
+  ofcTrDecidesWhichPerson: string;
+  ofcTrUnchanged: string;
+  ofcTrNumber: string;
+  ofcTrNameOrDob: string;
+  ofcTrWhatAndWhy: string;
+  ofcTrLiableFor: string;
+  ofcTrWaiveBody: string;
+  ofcTrWaive: string;
+  ofcTrVehiclesOnRecord: string;
+  ofcTrVehiclesBody: string;
+  ofcTrTakeOffRegister: string;
+  ofcTrPutBackInService: string;
+  ofcTrEndedBody: string;
+  ofcTrWhatHappened: string;
+  ofcTrClosedOption: string;
+  ofcTrSuspendedOption: string;
+  ofcTrActiveOption: string;
+  ofcTrHowEstablished: string;
+  ofcTrSearchPlaceholder: string;
+  ofcTrNeedsAdministrator: string;
+  ofcTrSampleCorrection: string;
+  ofcTrSampleVehicle: string;
+  ofcTrSampleClosure: string;
+  ofcTrRecordedBy: string;
 
   /**
    * Settlement: reconciling the platform against the gateway against the
@@ -1867,6 +1903,37 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    pubRefereeNamedYou: "{{name}} has named you as their referee",
+    ofcTrTitle: "Correct a taxpayer record",
+    ofcTrIntro: "Every correction is recorded against the officer who made it, with the reason given, and the taxpayer is sent a message telling them their record was changed. Only the fields you fill in are altered.",
+    ofcTrNoMatch: "No taxpayer matches that search.",
+    ofcTrCorrectedDetails: "Corrected details",
+    ofcTrLeaveBlank: "Leave anything that is already right blank.",
+    ofcTrIdentificationDocument: "Identification document",
+    ofcTrDecidesWhichPerson: "This decides which person the record is about, so it is checked against every other active taxpayer before it is accepted.",
+    ofcTrUnchanged: "Unchanged",
+    ofcTrNumber: "Number",
+    ofcTrNameOrDob: "A name or date of birth can be corrected here. The document the record is held under decides which person it is about, so an administrator has to make that change.",
+    ofcTrWhatAndWhy: "What is being corrected, and why",
+    ofcTrLiableFor: "What this taxpayer is liable for",
+    ofcTrWaiveBody: "Waiving an obligation stops future assessments against it. Invoices already raised stay payable — cancelling those is a separate decision, invoice by invoice.",
+    ofcTrWaive: "Waive",
+    ofcTrVehiclesOnRecord: "Vehicles on this record",
+    ofcTrVehiclesBody: "Particulars cannot be renewed for a vehicle that is suspended or off the register. Renewals already issued stay valid for the period they were paid for.",
+    ofcTrTakeOffRegister: "Take off the register",
+    ofcTrPutBackInService: "Put back in service",
+    ofcTrEndedBody: "A record that is suspended or closed stops accruing new charges and stops receiving reminders. Nothing already owed is written off: it stays payable, stays in the revenue figures, and appears under ended records that still owe until it is settled.",
+    ofcTrWhatHappened: "What has happened to this taxpayer",
+    ofcTrClosedOption: "Closed — the business has shut or the person has died",
+    ofcTrSuspendedOption: "Suspended — paused pending an enquiry",
+    ofcTrActiveOption: "Active — put the record back on the register",
+    ofcTrHowEstablished: "How this was established",
+    ofcTrSearchPlaceholder: "Name, phone, TIN or receipt number",
+    ofcTrNeedsAdministrator: "Changing the identification document needs an administrator",
+    ofcTrSampleCorrection: "Surname was misspelt at registration; corrected against the NIN slip presented at the office.",
+    ofcTrSampleVehicle: "Sold out of state and re-registered in Kaduna.",
+    ofcTrSampleClosure: "Premises visited on 12 August: the shop has been empty since the market fire in March.",
+    ofcTrRecordedBy: "Recorded by",
     ofcFnThreeWay: "Three-way reconciliation",
     ofcFnThreeWayBody: "Platform transaction against gateway transaction against government settlement. Anything that does not match becomes an exception below.",
     ofcFnRunReconciliation: "Run reconciliation",
@@ -3421,6 +3488,37 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    pubRefereeNamedYou: "{{name}} ya sanya ka a matsayin mai shaidarsa",
+    ofcTrTitle: "Gyara rikodin mai biyan haraji",
+    ofcTrIntro: "Ana rubuta kowane gyara da sunan jami’in da ya yi shi, tare da dalilin, kuma ana tura wa mai biyan haraji sako yana gaya masa an canza rikodinsa. Filayen da ka cika kawai ake canzawa.",
+    ofcTrNoMatch: "Babu mai biyan haraji da ya dace da wannan binciken.",
+    ofcTrCorrectedDetails: "Bayanan da aka gyara",
+    ofcTrLeaveBlank: "Ka bar duk abin da ya riga ya yi daidai babu komai.",
+    ofcTrIdentificationDocument: "Takardar shaida",
+    ofcTrDecidesWhichPerson: "Wannan yana yanke wanne mutum rikodin ya shafa, don haka ana duba shi da kowane mai biyan haraji mai aiki kafin a karba.",
+    ofcTrUnchanged: "Ba a canza ba",
+    ofcTrNumber: "Lamba",
+    ofcTrNameOrDob: "Ana iya gyara suna ko ranar haihuwa a nan. Takardar da aka rike rikodin a kanta ce ke yanke wanne mutum ya shafa, don haka mai gudanarwa ne ya kamata ya yi wannan canjin.",
+    ofcTrWhatAndWhy: "Abin da ake gyarawa, da dalilin",
+    ofcTrLiableFor: "Abin da wannan mai biyan haraji ke bin sa",
+    ofcTrWaiveBody: "Yafe wajibi yana tsayar da kima na gaba a kansa. Takardun biya da aka riga aka yi suna nan a biya — soke su shawara ce daban, takarda bayan takarda.",
+    ofcTrWaive: "Yafe",
+    ofcTrVehiclesOnRecord: "Motoci a wannan rikodin",
+    ofcTrVehiclesBody: "Ba za a iya sabunta takardun mota da aka dakatar ko da aka cire daga rajistar ba. Sabuntawar da aka riga aka bayar tana nan da inganci na tsawon lokacin da aka biya.",
+    ofcTrTakeOffRegister: "Cire daga rajistar",
+    ofcTrPutBackInService: "Mayar da aiki",
+    ofcTrEndedBody: "Rikodin da aka dakatar ko aka rufe yana daina tara sabbin caji kuma yana daina samun tunatarwa. Ba a share abin da ake bin sa ba: yana nan a biya, yana nan a adadin haraji, kuma yana bayyana a karkashin rikodin da aka rufe da ake bin su har sai an biya.",
+    ofcTrWhatHappened: "Me ya faru da wannan mai biyan haraji",
+    ofcTrClosedOption: "An rufe — kasuwancin ya rufe ko mutumin ya rasu",
+    ofcTrSuspendedOption: "An dakatar — an tsayar ana jiran bincike",
+    ofcTrActiveOption: "Yana aiki — a mayar da rikodin cikin rajistar",
+    ofcTrHowEstablished: "Yadda aka tabbatar da wannan",
+    ofcTrSearchPlaceholder: "Suna, waya, TIN ko lambar rasit",
+    ofcTrNeedsAdministrator: "Canza takardar shaida yana bukatar mai gudanarwa",
+    ofcTrSampleCorrection: "An rubuta sunan mahaifi ba daidai ba a lokacin rajista; an gyara shi da takardar NIN da aka gabatar a ofis.",
+    ofcTrSampleVehicle: "An sayar da ita a wajen jihar kuma an sake yi mata rajista a Kaduna.",
+    ofcTrSampleClosure: "An ziyarci wurin a 12 ga Agusta: shagon babu kowa tun gobarar kasuwa a watan Maris.",
+    ofcTrRecordedBy: "Wanda ya rubuta",
     ofcFnThreeWay: "Daidaita lissafi ta hanyoyi uku",
     ofcFnThreeWayBody: "Ma’amalar dandali a kan ma’amalar tashar biya a kan turawar gwamnati. Duk abin da bai dace ba yana zama kuskure a kasa.",
     ofcFnRunReconciliation: "Gudanar da daidaita lissafi",
