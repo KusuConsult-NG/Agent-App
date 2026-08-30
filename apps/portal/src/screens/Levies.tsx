@@ -287,7 +287,7 @@ export function LeviesScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="levy-lga">Local Government Area</label>
+            <label htmlFor="levy-lga">{t.pubVerifyLga}</label>
             <select
               id="levy-lga"
               value={filters.lgaId}
@@ -335,9 +335,7 @@ export function LeviesScreen() {
                 outstandingOnly: false,
               })
             }
-          >
-            Clear
-          </button>
+          >{t.ofcAgClear}</button>
         </div>
       </div>
 
@@ -368,9 +366,9 @@ export function LeviesScreen() {
 
               <Table
                 columns={[
-                  { key: 'category', label: 'Category' },
+                  { key: 'category', label: 'ofcAgCategory' },
                   { key: 'transactions', label: 'Collections', numeric: true },
-                  { key: 'taxpayers', label: 'Taxpayers', numeric: true },
+                  { key: 'taxpayers', label: 'ofcRhTaxpayers', numeric: true },
                   {
                     key: 'amount_kobo',
                     label: 'Collected',
@@ -385,15 +383,15 @@ export function LeviesScreen() {
                   },
                 ]}
                 rows={revenue.categories}
-                empty="Nothing has been collected under this filter."
+                empty="ofcNoneNothingCollectedFilter"
               />
 
               <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>By individual levy</h3>
               <Table
                 columns={[
-                  { key: 'code', label: 'Code' },
+                  { key: 'code', label: 'ofcAgCode' },
                   { key: 'revenue_item', label: 'Levy' },
-                  { key: 'category', label: 'Category' },
+                  { key: 'category', label: 'ofcAgCategory' },
                   { key: 'transactions', label: 'Collections', numeric: true },
                   {
                     key: 'amount_kobo',
@@ -409,7 +407,7 @@ export function LeviesScreen() {
                   },
                 ]}
                 rows={revenue.items}
-                empty="No individual levy has collected anything under this filter."
+                empty="ofcNoneIndividualLevyCollectedAnything"
               />
             </>
           )}
@@ -435,15 +433,15 @@ export function LeviesScreen() {
               ) : null}
               <Table
                 columns={[
-                  { key: 'name', label: 'Taxpayer' },
-                  { key: 'tin', label: 'TIN' },
-                  { key: 'phone', label: 'Phone' },
-                  { key: 'lga', label: 'LGA' },
+                  { key: 'name', label: 'colTaxpayerLabel' },
+                  { key: 'tin', label: 'tpStepTin' },
+                  { key: 'phone', label: 'tpPhone' },
+                  { key: 'lga', label: 'tpLgaShort' },
                   { key: 'revenue_item', label: 'Levy' },
                   { key: 'invoices', label: 'Invoices', numeric: true },
                   {
                     key: 'outstanding_kobo',
-                    label: 'Outstanding',
+                    label: 'ofcAgOutstanding',
                     numeric: true,
                     render: (row) => <Money kobo={row.outstanding_kobo} />,
                   },
@@ -454,7 +452,7 @@ export function LeviesScreen() {
                   },
                 ]}
                 rows={defaulters.rows}
-                empty="Nobody is in arrears under this filter."
+                empty="ofcNoneNobodyArrearsFilter"
               />
             </>
           )}
@@ -487,16 +485,16 @@ export function LeviesScreen() {
           ) : (
             <Table
               columns={[
-                { key: 'name', label: 'Taxpayer', render: (row) => displayName(row) },
-                { key: 'taxpayer_type', label: 'Type' },
-                { key: 'tin', label: 'TIN' },
-                { key: 'phone', label: 'Phone' },
-                { key: 'lga_name', label: 'LGA' },
-                { key: 'ward_name', label: 'Ward' },
-                { key: 'status', label: 'Status' },
+                { key: 'name', label: 'colTaxpayerLabel', render: (row) => displayName(row) },
+                { key: 'taxpayer_type', label: 'tpType' },
+                { key: 'tin', label: 'tpStepTin' },
+                { key: 'phone', label: 'tpPhone' },
+                { key: 'lga_name', label: 'tpLgaShort' },
+                { key: 'ward_name', label: 'tpWard' },
+                { key: 'status', label: 'appStatus' },
               ]}
               rows={registrants}
-              empty="Nobody is registered under this filter."
+              empty="ofcNoneNobodyRegisteredFilter"
             />
           )}
         </div>

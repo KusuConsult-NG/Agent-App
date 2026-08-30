@@ -141,7 +141,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
           </p>
 
           <div className="field">
-            <label htmlFor="group-reason">Reason (minimum 10 characters)</label>
+            <label htmlFor="group-reason">{t.ofcAgReasonMinimum}</label>
             <textarea
               id="group-reason"
               rows={2}
@@ -153,11 +153,11 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
           <Table
             columns={[
-              { key: 'code', label: 'Code' },
-              { key: 'name', label: 'Group' },
-              { key: 'group_type', label: 'Type', render: (row) => readable(row.group_type) },
-              { key: 'lga_name', label: 'LGA' },
-              { key: 'leader_name', label: 'Leader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
+              { key: 'code', label: 'ofcAgCode' },
+              { key: 'name', label: 'pubAttestGroup' },
+              { key: 'group_type', label: 'tpType', render: (row) => readable(row.group_type) },
+              { key: 'lga_name', label: 'tpLgaShort' },
+              { key: 'leader_name', label: 'grpLeader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
               {
                 key: 'action',
                 label: '',
@@ -176,9 +176,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           return `${row.name} approved. Members can now be recorded.`;
                         })
                       }
-                    >
-                      Approve
-                    </button>
+                    >{t.ofcRhApprove}</button>
                     <button
                       type="button"
                       className="small danger"
@@ -192,15 +190,13 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           return `${row.name} suspended.`;
                         })
                       }
-                    >
-                      Suspend
-                    </button>
+                    >{t.ofcAgSuspend}</button>
                   </div>
                 ),
               },
             ]}
             rows={pending}
-            empty="Nothing waiting."
+            empty="ofcNoneNothingWaiting"
           />
         </div>
       )}
@@ -229,7 +225,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                 render: (row) => `${row.awarded_quantity} (${row.awarded_count} people)`,
               },
               { key: 'collected_count', label: 'Collected' },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'open',
                 label: '',
@@ -238,14 +234,12 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                     type="button"
                     className="small secondary"
                     onClick={() => navigate(`/allocations/${row.id}`)}
-                  >
-                    Open
-                  </button>
+                  >{t.ofcRhOpen}</button>
                 ),
               },
             ]}
             rows={rounds}
-            empty="No distributions have been set up yet."
+            empty="ofcNoneDistributionsSetUp"
           />
         </div>
       )}
@@ -259,16 +253,16 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             count towards anything.
           </p>
           <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="group-status">Status</label>
+            <label htmlFor="group-status">{t.appStatus}</label>
             <select
               id="group-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="">All</option>
-              <option value="PENDING">Pending</option>
-              <option value="ACTIVE">Active</option>
-              <option value="SUSPENDED">Suspended</option>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="PENDING">{t.ofcAgPending}</option>
+              <option value="ACTIVE">{t.ofcAgActive}</option>
+              <option value="SUSPENDED">{t.ofcAgSuspendedStatus}</option>
             </select>
           </div>
         </div>
@@ -306,9 +300,9 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
           <Table
             columns={[
-              { key: 'member_name', label: 'Member', render: (row) => row.member_name ?? '—' },
-              { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'member_name', label: 'pubAttestYes', render: (row) => row.member_name ?? '—' },
+              { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'left_reason',
                 label: 'Note',
@@ -344,20 +338,20 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               },
             ]}
             rows={members.rows}
-            empty="Nobody has been recorded in this group yet."
+            empty="ofcNoneNobodyRecordedGroup"
           />
         </div>
       )}
 
         <Table
           columns={[
-            { key: 'code', label: 'Code' },
-            { key: 'name', label: 'Group' },
-            { key: 'group_type', label: 'Type', render: (row) => readable(row.group_type) },
+            { key: 'code', label: 'ofcAgCode' },
+            { key: 'name', label: 'pubAttestGroup' },
+            { key: 'group_type', label: 'tpType', render: (row) => readable(row.group_type) },
             { key: 'economic_sector', label: 'Sector', render: (row) => readable(row.economic_sector) },
-            { key: 'lga_name', label: 'LGA' },
+            { key: 'lga_name', label: 'tpLgaShort' },
             { key: 'attested_members', label: 'Confirmed members' },
-            { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+            { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
             {
               key: 'members',
               label: '',
@@ -403,7 +397,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             },
           ]}
           rows={groups}
-          empty="No groups have been registered yet."
+          empty="ofcNoneGroupsRegistered"
         />
       </div>
     </>
@@ -535,20 +529,20 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         {awards === null ? (
           <Loading rows={3} />
         ) : awards.length === 0 ? (
-          <Empty>Nobody has been awarded from this round yet.</Empty>
+          <Empty>{t.ofcNoneNobodyAwardedRound}</Empty>
         ) : (
           <Table
             columns={[
               { key: 'taxpayer_name', label: 'Beneficiary' },
-              { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
-              { key: 'group_name', label: 'Group', render: (row) => row.group_name ?? '—' },
+              { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
+              { key: 'group_name', label: 'pubAttestGroup', render: (row) => row.group_name ?? '—' },
               { key: 'quantity', label: 'Quantity' },
               {
                 key: 'compliance_score',
                 label: 'Score at award',
                 render: (row) => (row.compliance_score === null ? '—' : String(row.compliance_score)),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'collected_at',
                 label: 'Collected',
@@ -556,7 +550,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
               },
             ]}
             rows={awards}
-            empty="Nobody has been awarded from this round yet."
+            empty="ofcNoneNobodyAwardedRound"
           />
         )}
       </div>

@@ -179,7 +179,7 @@ export function AllocationsScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Distribution rounds</h2>
+        <h2 className="card__title">{t.ofcNavAllocations}</h2>
         <p className="card__hint">
           A programme decides who is eligible; a round is one actual distribution. Awards accrue
           only while a round is open, which is what stops a programme distributing on paper what
@@ -360,7 +360,7 @@ export function AllocationsScreen() {
                 { key: 'quantity', label: 'Quantity' },
                 {
                   key: 'status',
-                  label: 'Status',
+                  label: 'appStatus',
                   render: (row: Award) => <Badge status={row.status} />,
                 },
                 {
@@ -385,7 +385,7 @@ export function AllocationsScreen() {
                 },
               ]}
               rows={awards}
-              empty="Nobody has been awarded under this round yet."
+              empty="ofcNoneNobodyAwardedRound2"
             />
           )}
         </div>
@@ -408,7 +408,7 @@ export function AllocationsScreen() {
               label: 'Opens',
               render: (row: Round) => formatDateTime(row.opens_at),
             },
-            { key: 'status', label: 'Status', render: (row: Round) => <Badge status={row.status} /> },
+            { key: 'status', label: 'appStatus', render: (row: Round) => <Badge status={row.status} /> },
             {
               key: 'act',
               label: '',
@@ -426,9 +426,7 @@ export function AllocationsScreen() {
                           `${row.name} is open. Awards can now be made.`,
                         )
                       }
-                    >
-                      Open
-                    </button>
+                    >{t.ofcRhOpen}</button>
                   )}
                   {row.status === 'OPEN' && (
                     <button
@@ -455,7 +453,7 @@ export function AllocationsScreen() {
             },
           ]}
           rows={rounds}
-          empty="No distribution round has been created."
+          empty="ofcNoneDistributionRoundCreated"
         />
       </div>
     </>

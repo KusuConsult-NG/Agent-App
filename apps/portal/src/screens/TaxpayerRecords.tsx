@@ -153,9 +153,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
               className="secondary"
               disabled={busy || search.trim().length < 2}
               onClick={() => void run()}
-            >
-              Search
-            </button>
+            >{t.search}</button>
           </div>
 
           {busy && <Loading rows={2} />}
@@ -198,23 +196,23 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           <p className="card__hint">Leave anything that is already right blank.</p>
 
           <div className="field">
-            <label htmlFor="c-first">First name</label>
+            <label htmlFor="c-first">{t.tpFirstName}</label>
             <input id="c-first" value={form.firstName} onChange={set('firstName')} />
           </div>
           <div className="field">
-            <label htmlFor="c-middle">Middle name</label>
+            <label htmlFor="c-middle">{t.tpMiddleName}</label>
             <input id="c-middle" value={form.middleName} onChange={set('middleName')} />
           </div>
           <div className="field">
-            <label htmlFor="c-last">Last name</label>
+            <label htmlFor="c-last">{t.tpLastName}</label>
             <input id="c-last" value={form.lastName} onChange={set('lastName')} />
           </div>
           <div className="field">
-            <label htmlFor="c-business">Business name</label>
+            <label htmlFor="c-business">{t.tpBusinessName}</label>
             <input id="c-business" value={form.businessName} onChange={set('businessName')} />
           </div>
           <div className="field">
-            <label htmlFor="c-dob">Date of birth</label>
+            <label htmlFor="c-dob">{t.authDateOfBirth}</label>
             <input
               id="c-dob"
               type="date"
@@ -233,12 +231,12 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
                 other active taxpayer before it is accepted.
               </p>
               <div className="field">
-                <label htmlFor="c-idtype">Type</label>
+                <label htmlFor="c-idtype">{t.tpType}</label>
                 <select id="c-idtype" value={form.identityType} onChange={set('identityType')}>
                   <option value="">Unchanged</option>
-                  <option value="NIN">National Identification Number</option>
-                  <option value="BVN">Bank Verification Number</option>
-                  <option value="PASSPORT">International passport</option>
+                  <option value="NIN">{t.pubIdNin}</option>
+                  <option value="BVN">{t.pubIdBvn}</option>
+                  <option value="PASSPORT">{t.pubIdPassport}</option>
                   <option value="DRIVERS_LICENCE">Driver&rsquo;s licence</option>
                   <option value="VOTERS_CARD">Voter&rsquo;s card</option>
                 </select>
@@ -284,9 +282,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
               {busy ? 'Correcting…' : 'Record this correction'}
             </button>
-            <button type="button" className="secondary" onClick={() => setChosen(null)}>
-              Choose someone else
-            </button>
+            <button type="button" className="secondary" onClick={() => setChosen(null)}>{t.tpChooseSomeoneElse}</button>
           </div>
         </div>
       )}
@@ -388,11 +384,11 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 
       <Table
         columns={[
-          { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
-          { key: 'name', label: 'Revenue item' },
-          { key: 'categoryName', label: 'Category' },
+          { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
+          { key: 'name', label: 'colRevenueItem' },
+          { key: 'categoryName', label: 'ofcAgCategory' },
           { key: 'source', label: 'Recorded by', render: (row) => readableSource(row.source) },
-          { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+          { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
           {
             key: 'action',
             label: '',
@@ -410,7 +406,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
           },
         ]}
         rows={rows}
-        empty="No obligations are recorded against this taxpayer."
+        empty="ofcNoneObligationsRecordedAgainstTaxpayer"
       />
     </div>
   );
@@ -498,7 +494,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
 
         {can('vehicle:manage') && vehicles.length > 0 && (
           <div className="field">
-            <label htmlFor="veh-reason">Reason</label>
+            <label htmlFor="veh-reason">{t.ofcAgReason}</label>
             <textarea
               id="veh-reason"
               rows={2}
@@ -517,17 +513,17 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
         columns={[
           {
             key: 'registration_number',
-            label: 'Registration',
+            label: 'moreRegistrationLabel',
             render: (row) => <span className="mono">{row.registration_number}</span>,
           },
           {
             key: 'make',
-            label: 'Vehicle',
+            label: 'moreVehicleLabel',
             render: (row) => [row.make, row.model].filter(Boolean).join(' ') || row.vehicle_type,
           },
           {
             key: 'status',
-            label: 'Status',
+            label: 'appStatus',
             render: (row) => (
               <span title={row.status_reason ?? undefined}>
                 <Badge status={row.status} />
@@ -547,9 +543,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
                         className="small secondary"
                         disabled={busy || reason.trim().length < 5}
                         onClick={() => void change(row, 'SUSPENDED')}
-                      >
-                        Suspend
-                      </button>
+                      >{t.ofcAgSuspend}</button>
                       <button
                         type="button"
                         className="small danger"
@@ -574,7 +568,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
           },
         ]}
         rows={vehicles}
-        empty="No vehicles are recorded against this taxpayer."
+        empty="ofcNoneVehiclesRecordedAgainstTaxpayer"
       />
     </div>
   );

@@ -213,7 +213,7 @@ export function UserAccessScreen({ user }: { user: User }) {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Officer access</h2>
+        <h2 className="card__title">{t.ofcNavUsers}</h2>
         <p className="card__hint">
           Changing a role signs the officer out of every device immediately, because their
           current access travels in the session they are holding. They sign in again with the
@@ -280,9 +280,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                 setChosenRole('');
                 setReason('');
               }}
-            >
-              Cancel
-            </button>
+            >{t.camCancel}</button>
           </div>
         </div>
       )}
@@ -348,9 +346,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                 setClosing(null);
                 setStatusReason('');
               }}
-            >
-              Cancel
-            </button>
+            >{t.camCancel}</button>
           </div>
         </div>
       )}
@@ -429,9 +425,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                 >
                   {busy ? 'Saving…' : 'Save territories'}
                 </button>
-                <button type="button" className="secondary" onClick={() => setCoverage(null)}>
-                  Cancel
-                </button>
+                <button type="button" className="secondary" onClick={() => setCoverage(null)}>{t.camCancel}</button>
               </div>
             </>
           )}
@@ -441,11 +435,11 @@ export function UserAccessScreen({ user }: { user: User }) {
       <div className="card card--flush">
         <Table
           columns={[
-            { key: 'full_name', label: 'Officer' },
-            { key: 'phone', label: 'Phone' },
+            { key: 'full_name', label: 'ofcRhOfficer' },
+            { key: 'phone', label: 'tpPhone' },
             {
               key: 'role',
-              label: 'Role',
+              label: 'ofcRhRole',
               render: (row) => (
                 <>
                   <Badge status={row.role.toUpperCase()} />{' '}
@@ -453,7 +447,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                 </>
               ),
             },
-            { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+            { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
             {
               key: 'last_login_at',
               label: 'Last signed in',
@@ -510,7 +504,7 @@ export function UserAccessScreen({ user }: { user: User }) {
             },
           ]}
           rows={users}
-          empty="No officers are recorded."
+          empty="ofcNoneOfficersRecorded"
         />
       </div>
     </>

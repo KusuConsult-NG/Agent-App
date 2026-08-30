@@ -82,7 +82,7 @@ export function CatalogueScreen({ user }: { user: User }) {
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Revenue catalogue</h2>
+            <h2 className="card__title">{t.ofcNavCatalogue}</h2>
             <p className="card__hint">
               Revenue items and their rates are government configuration, not code. Changing a rate
               creates a new version with an effective date — it never rewrites what was already
@@ -154,8 +154,8 @@ export function CatalogueScreen({ user }: { user: User }) {
           </div>
           <Table
             columns={[
-              { key: 'version', label: 'Version', numeric: true },
-              { key: 'rate_type', label: 'Type' },
+              { key: 'version', label: 'ofcAgVersion', numeric: true },
+              { key: 'rate_type', label: 'tpType' },
               {
                 key: 'fixed_amount_kobo',
                 label: 'Fixed amount',
@@ -178,12 +178,12 @@ export function CatalogueScreen({ user }: { user: User }) {
               { key: 'changed_by', label: 'Changed by', render: (row) => row.changed_by ?? 'System' },
               {
                 key: 'requested_reason',
-                label: 'Reason',
+                label: 'ofcAgReason',
                 render: (row) => row.decision_reason ?? row.requested_reason ?? '—',
               },
             ]}
             rows={history.rows}
-            empty="No rate history."
+            empty="ofcNoneRateHistory"
           />
         </div>
       )}
@@ -196,20 +196,20 @@ export function CatalogueScreen({ user }: { user: User }) {
         ) : (
           <Table
             columns={[
-              { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
-              { key: 'name', label: 'Revenue item' },
-              { key: 'category_name', label: 'Category' },
+              { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
+              { key: 'name', label: 'colRevenueItem' },
+              { key: 'category_name', label: 'ofcAgCategory' },
               { key: 'frequency', label: 'Frequency', render: (row) => <Badge status={row.frequency} /> },
               { key: 'rate', label: 'Current rate', render: (row) => describeRate(row) },
               {
                 key: 'version',
-                label: 'Version',
+                label: 'ofcAgVersion',
                 numeric: true,
                 render: (row) => row.version ?? '—',
               },
               {
                 key: 'commission_eligible',
-                label: 'Commission',
+                label: 'navCommission',
                 render: (row) => (row.commission_eligible ? 'Eligible' : 'Not eligible'),
               },
               {
@@ -239,9 +239,7 @@ export function CatalogueScreen({ user }: { user: User }) {
                           );
                           setHistory({ item: row, rows });
                         }}
-                      >
-                        History
-                      </button>
+                      >{t.colHistory}</button>
                     )}
                     {can('catalogue:configure') && row.status === 'ACTIVE' && (
                       <button type="button" className="small" onClick={() => setEditing(row)}>
@@ -262,7 +260,7 @@ export function CatalogueScreen({ user }: { user: User }) {
               },
             ]}
             rows={items}
-            empty="No revenue items configured."
+            empty="ofcNoneRevenueItemsConfigured"
           />
         )}
       </div>
@@ -333,9 +331,7 @@ function NewItemForm({
             you do, an agent cannot assess it in the field.
           </p>
         </div>
-        <button type="button" className="small secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
       <ErrorAlert error={error} />
@@ -372,7 +368,7 @@ function NewItemForm({
       >
         <div className="filters">
           <div className="field">
-            <label htmlFor="new-item-category">Category</label>
+            <label htmlFor="new-item-category">{t.ofcAgCategory}</label>
             <select
               id="new-item-category"
               required
@@ -389,7 +385,7 @@ function NewItemForm({
           </div>
 
           <div className="field">
-            <label htmlFor="new-item-code">Code</label>
+            <label htmlFor="new-item-code">{t.ofcAgCode}</label>
             <input
               id="new-item-code"
               required
@@ -402,7 +398,7 @@ function NewItemForm({
           </div>
 
           <div className="field">
-            <label htmlFor="new-item-name">Name</label>
+            <label htmlFor="new-item-name">{t.tpName}</label>
             <input
               id="new-item-name"
               required
@@ -520,9 +516,7 @@ function WithdrawItemForm({
               : 'No new assessment can be raised against a withdrawn item. Invoices already issued stay payable — withdrawing an item is not a decision to write off arrears.'}
           </p>
         </div>
-        <button type="button" className="small secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
       <ErrorAlert error={error} />
@@ -558,9 +552,7 @@ function WithdrawItemForm({
           </label>
         )}
 
-        <label>
-          Reason
-          <textarea
+        <label>{t.ofcAgReason}<textarea
             required
             minLength={5}
             rows={3}
@@ -759,9 +751,7 @@ function RateChangeForm({
         <button type="button" disabled={busy || rateProblem !== null} onClick={submit}>
           {busy ? 'Recording…' : 'Record new rate version'}
         </button>
-        <button type="button" className="secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="button" className="secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
     </div>
   );
@@ -844,7 +834,7 @@ export function ProgrammesScreen() {
           <Table
             columns={[
               { key: 'name', label: 'Programme' },
-              { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
+              { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
               { key: 'benefit_type', label: 'Benefit' },
               { key: 'minimum_score', label: 'Min. score', numeric: true },
               {
@@ -853,7 +843,7 @@ export function ProgrammesScreen() {
                 render: (row) => (row.requires_no_arrears ? 'Yes' : 'No'),
               },
               { key: 'eligible_taxpayers', label: 'Eligible', numeric: true },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
                 label: '',
@@ -916,7 +906,7 @@ export function ProgrammesScreen() {
               },
             ]}
             rows={programmes}
-            empty="No incentive programmes have been created."
+            empty="ofcNoneIncentiveProgrammesCreated"
           />
         )}
       </div>
@@ -941,10 +931,10 @@ export function ProgrammesScreen() {
           ) : (
             <Table
               columns={[
-                { key: 'tin', label: 'TIN', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
-                { key: 'name', label: 'Name' },
-                { key: 'lga_name', label: 'LGA' },
-                { key: 'score', label: 'Score', numeric: true, render: (row) => row.score ?? '—' },
+                { key: 'tin', label: 'tpStepTin', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
+                { key: 'name', label: 'tpName' },
+                { key: 'lga_name', label: 'tpLgaShort' },
+                { key: 'score', label: 'ofcAgScore', numeric: true, render: (row) => row.score ?? '—' },
                 {
                   key: 'eligible',
                   label: 'Eligible',
@@ -961,7 +951,7 @@ export function ProgrammesScreen() {
                 },
               ]}
               rows={beneficiaries}
-              empty="No beneficiaries found."
+              empty="ofcNoneBeneficiariesFound"
             />
           )}
         </div>

@@ -99,7 +99,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
           <div className="card__header">
-            <h2 className="card__title">Agent performance</h2>
+            <h2 className="card__title">{t.ofcNavPerformance}</h2>
             <p className="card__hint">
               Collections, reach and trouble side by side. An agent in a commercial ward will
               out-collect the best agent in a rural one, so read the columns together rather than
@@ -124,7 +124,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
             columns={[
               {
                 key: 'full_name',
-                label: 'Agent',
+                label: 'ofcRhAgent',
                 render: (row) => (
                   <button
                     type="button"
@@ -135,11 +135,11 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                   </button>
                 ),
               },
-              { key: 'agent_code', label: 'Code' },
-              { key: 'lga', label: 'LGA', render: (row) => row.lga ?? '—' },
+              { key: 'agent_code', label: 'ofcAgCode' },
+              { key: 'lga', label: 'tpLgaShort', render: (row) => row.lga ?? '—' },
               {
                 key: 'operational_status',
-                label: 'Status',
+                label: 'appStatus',
                 render: (row) => <Badge status={row.operational_status} />,
               },
               {
@@ -148,7 +148,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                 numeric: true,
                 render: (row) => <Money kobo={row.collected_kobo} />,
               },
-              { key: 'successful_transactions', label: 'Transactions', numeric: true },
+              { key: 'successful_transactions', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'average_transaction_kobo',
                 label: 'Average',
@@ -160,7 +160,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
               { key: 'vehicle_renewals', label: 'Renewals', numeric: true },
               {
                 key: 'commission_earned_kobo',
-                label: 'Commission',
+                label: 'navCommission',
                 numeric: true,
                 render: (row) => <Money kobo={row.commission_earned_kobo} />,
               },
@@ -180,7 +180,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
               { key: 'active_days', label: 'Days worked', numeric: true },
             ]}
             rows={rows}
-            empty="No agents have been cleared yet."
+            empty="ofcNoneAgentsCleared"
           />
         )}
       </div>

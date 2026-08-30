@@ -85,7 +85,7 @@ export function UsageScreen() {
           no officer, agent or taxpayer is named in them, and groups smaller than{' '}
           {USAGE_MIN_GROUP_SIZE} are withheld rather than shown, because a small enough count
           singles somebody out even without a name. For an individual agent's work, see{' '}
-          <strong>Agent performance</strong>, which reports collections.
+          <strong>{t.ofcNavPerformance}</strong>, which reports collections.
         </p>
       </div>
 
@@ -150,7 +150,7 @@ export function UsageScreen() {
             },
           ]}
           rows={data.funnels}
-          empty="No flows have been attempted in this period."
+          empty="ofcNoneFlowsAttemptedPeriod"
         />
       </div>
 
@@ -189,7 +189,7 @@ export function UsageScreen() {
         </p>
         <Table
           columns={[
-            { key: 'lga', label: 'LGA' },
+            { key: 'lga', label: 'tpLgaShort' },
             { key: 'zone', label: 'Zone' },
             { key: 'started', label: 'Started' },
             { key: 'completed', label: 'Completed' },
@@ -201,7 +201,7 @@ export function UsageScreen() {
             },
           ]}
           rows={data.reach}
-          empty="No LGA has enough activity to report without singling somebody out."
+          empty="ofcNoneLgaEnoughActivityReport"
         />
       </div>
 
@@ -212,7 +212,7 @@ export function UsageScreen() {
           </h2>
           <Table
             columns={[
-              { key: 'event', label: 'Event' },
+              { key: 'event', label: 'ofcAgEvent' },
               { key: 'events', label: 'Count' },
               {
                 key: 'median_delay_seconds',
@@ -222,21 +222,19 @@ export function UsageScreen() {
               },
             ]}
             rows={data.offline}
-            empty="The offline queue has not been used in this period."
+            empty="ofcNoneOfflineQueueUsedPeriod"
           />
         </div>
 
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            Language
-          </h2>
+          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.pubLanguage}</h2>
           <Table
             columns={[
-              { key: 'language', label: 'Language' },
+              { key: 'language', label: 'pubLanguage' },
               { key: 'events', label: 'Events' },
             ]}
             rows={data.language}
-            empty="No language use has been reported."
+            empty="ofcNoneLanguageUseReported"
           />
         </div>
       </div>
@@ -247,12 +245,12 @@ export function UsageScreen() {
         </h2>
         <Table
           columns={[
-            { key: 'surface', label: 'Application' },
+            { key: 'surface', label: 'ofcAgApplication' },
             { key: 'screen', label: 'Screen' },
             { key: 'views', label: 'Views' },
           ]}
           rows={data.screens}
-          empty="No screens have been reported."
+          empty="ofcNoneScreensReported"
         />
       </div>
     </>

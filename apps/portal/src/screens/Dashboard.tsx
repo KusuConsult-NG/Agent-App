@@ -96,7 +96,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
 
       <div className="stat-grid">
         <Stat
-          label="Collected today"
+          label="homeCollectedToday"
           value={<Money kobo={data.collections.today_kobo} />}
           variant="accent"
           hint="Verified revenue only"
@@ -104,7 +104,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
         <Stat label="This month" value={<Money kobo={data.collections.month_kobo} />} />
         <Stat label="Year to date" value={<Money kobo={data.collections.ytd_kobo} />} />
         <Stat
-          label="Commission liability"
+          label="ofcRhCommissionLiability"
           value={<Money kobo={data.counts.commission_liability_kobo} />}
           hint="Accrued but not yet paid"
         />
@@ -112,7 +112,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
 
       <div className="stat-grid">
         <Stat label="Registered taxpayers" value={Number(data.counts.taxpayers).toLocaleString()} hint={`${data.counts.new_taxpayers_this_month} new this month`} />
-        <Stat label="Active agents" value={data.counts.active_agents} hint={`${data.counts.agents_awaiting_review} awaiting review`} />
+        <Stat label="ofcAgActiveAgents" value={data.counts.active_agents} hint={`${data.counts.agents_awaiting_review} awaiting review`} />
         <Stat label="Successful transactions" value={Number(data.counts.successful_transactions).toLocaleString()} hint={`${data.counts.failed_transactions} failed`} />
         <Stat
           label="Awaiting reconciliation"
@@ -176,9 +176,9 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
         </div>
         <Table
           columns={[
-            { key: 'agent_code', label: 'Agent' },
-            { key: 'full_name', label: 'Name' },
-            { key: 'transactions', label: 'Transactions', numeric: true },
+            { key: 'agent_code', label: 'ofcRhAgent' },
+            { key: 'full_name', label: 'tpName' },
+            { key: 'transactions', label: 'ofcNavTransactions', numeric: true },
             {
               key: 'amount_kobo',
               label: 'Collected',
@@ -187,7 +187,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
             },
           ]}
           rows={data.revenueByAgent}
-          empty="No agent collections recorded yet."
+          empty="ofcNoneAgentCollectionsRecorded"
         />
       </div>
 
@@ -206,7 +206,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
             },
           ]}
           rows={data.revenueByMda}
-          empty="No MDA collections recorded yet."
+          empty="ofcNoneMdaCollectionsRecorded"
         />
       </div>
 
@@ -306,8 +306,8 @@ export function IntelligenceScreen() {
                   ),
               },
               { key: 'zone', label: 'Zone' },
-              { key: 'taxpayers', label: 'Taxpayers', numeric: true },
-              { key: 'transactions', label: 'Transactions', numeric: true },
+              { key: 'taxpayers', label: 'ofcRhTaxpayers', numeric: true },
+              { key: 'transactions', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'amount_kobo',
                 label: 'Collected',
@@ -316,7 +316,7 @@ export function IntelligenceScreen() {
               },
             ]}
             rows={rows}
-            empty="No collections recorded for this area."
+            empty="ofcNoneCollectionsRecordedArea"
           />
         )}
       </div>

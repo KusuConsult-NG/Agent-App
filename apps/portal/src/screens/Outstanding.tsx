@@ -231,14 +231,14 @@ export function OutstandingScreen() {
               <Table
                 columns={[
                   { key: 'refund_reference', label: 'Refund' },
-                  { key: 'transaction_reference', label: 'Transaction' },
+                  { key: 'transaction_reference', label: 'supTransactionLabel' },
                   {
                     key: 'amount_kobo',
-                    label: 'Amount',
+                    label: 'pubVerifyAmount',
                     numeric: true,
                     render: (row) => <Money kobo={row.amount_kobo} />,
                   },
-                  { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+                  { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
                   { key: 'attempts', label: 'Attempts', numeric: true },
                   {
                     key: 'failure_reason',
@@ -253,7 +253,7 @@ export function OutstandingScreen() {
                   { key: 'created_at', label: 'Owed since', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={refunds}
-                empty="No refund is outstanding."
+                empty="ofcNoneRefundOutstanding"
               />
               {can('payment:reconcile') && refunds.length > 0 && (
                 <button
@@ -286,15 +286,15 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'display_name', label: 'Taxpayer' },
-                  { key: 'phone', label: 'Phone' },
-                  { key: 'tin_status', label: 'Status', render: (row) => <Badge status={row.tin_status} /> },
+                  { key: 'display_name', label: 'colTaxpayerLabel' },
+                  { key: 'phone', label: 'tpPhone' },
+                  { key: 'tin_status', label: 'appStatus', render: (row) => <Badge status={row.tin_status} /> },
                   { key: 'tin_attempts', label: 'Attempts', numeric: true },
                   { key: 'tin_reason', label: 'Why not yet', render: (row) => row.tin_reason ?? '—' },
-                  { key: 'created_at', label: 'Registered', render: (row) => formatDate(row.created_at) },
+                  { key: 'created_at', label: 'ofcRhRegistered', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={tins}
-                empty="Everyone has their TIN."
+                empty="ofcNoneEveryoneTin"
               />
               {tins.length > 0 && (
                 <button
@@ -327,12 +327,12 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'registration_number', label: 'Vehicle' },
+                  { key: 'registration_number', label: 'moreVehicleLabel' },
                   { key: 'document_number', label: 'Document' },
                   { key: 'expiry_date', label: 'Valid until', render: (row) => formatDate(row.expiry_date) },
                   {
                     key: 'authority_notification_status',
-                    label: 'Status',
+                    label: 'appStatus',
                     render: (row) => <Badge status={row.authority_notification_status} />,
                   },
                   { key: 'authority_notification_attempts', label: 'Attempts', numeric: true },
@@ -343,7 +343,7 @@ export function OutstandingScreen() {
                   },
                 ]}
                 rows={renewals}
-                empty="The authority has acknowledged every renewal."
+                empty="ofcNoneAuthorityAcknowledgedRenewal"
               />
               {renewals.length > 0 && (
                 <button
@@ -370,17 +370,17 @@ export function OutstandingScreen() {
           </div>
           <Table
             columns={[
-              { key: 'registration_number', label: 'Registration' },
-              { key: 'owner_name', label: 'Owner' },
+              { key: 'registration_number', label: 'moreRegistrationLabel' },
+              { key: 'owner_name', label: 'moreOwnerLabel' },
               {
                 key: 'make',
-                label: 'Vehicle',
+                label: 'moreVehicleLabel',
                 render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—',
               },
               { key: 'created_at', label: 'Captured', render: (row) => formatDate(row.created_at) },
             ]}
             rows={vehicles}
-            empty="None."
+            empty="ofcNoneNone"
           />
         </div>
       )}
@@ -409,8 +409,8 @@ export function OutstandingScreen() {
             </div>
             <Table
               columns={[
-                { key: 'name', label: 'Taxpayer' },
-                { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
+                { key: 'name', label: 'colTaxpayerLabel' },
+                { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
                 { key: 'status', label: 'State', render: (row) => <Badge status={row.status} /> },
                 {
                   key: 'outstanding_kobo',
@@ -432,7 +432,7 @@ export function OutstandingScreen() {
                 },
               ]}
               rows={ended}
-              empty="No ended record owes anything."
+              empty="ofcNoneEndedRecordOwesAnything"
             />
           </div>
         )

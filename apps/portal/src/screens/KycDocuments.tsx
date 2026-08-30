@@ -106,7 +106,7 @@ export function KycDocumentsCard({
 
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Recorded">
+        <Alert kind="success" title="allocRecorded">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
@@ -131,7 +131,7 @@ export function KycDocumentsCard({
               { key: 'document_type', label: 'Document', render: (row) => humanise(row.document_type) },
               {
                 key: 'verification_status',
-                label: 'Status',
+                label: 'appStatus',
                 render: (row) =>
                   row.superseded_at ? (
                     <Badge status="SUPERSEDED" />
@@ -141,7 +141,7 @@ export function KycDocumentsCard({
               },
               { key: 'capture_source', label: 'Captured', render: (row) => humanise(row.capture_source ?? 'unknown') },
               { key: 'byte_size', label: 'Size', numeric: true, render: (row) => sizeOf(row.byte_size) },
-              { key: 'uploaded_at', label: 'Submitted', render: (row) => formatDateTime(row.uploaded_at) },
+              { key: 'uploaded_at', label: 'ofcAgSubmitted', render: (row) => formatDateTime(row.uploaded_at) },
               {
                 key: 'reviewed_at',
                 label: 'Reviewed',
@@ -158,7 +158,7 @@ export function KycDocumentsCard({
               },
             ]}
             rows={documents}
-            empty="No documents."
+            empty="ofcNoneDocuments"
           />
         </>
       )}
@@ -314,9 +314,7 @@ function DocumentViewer({
               className="danger"
               disabled={busy || reason.trim().length < 4}
               onClick={() => decide('REJECT')}
-            >
-              Reject
-            </button>
+            >{t.ofcAgReject}</button>
           </div>
         </div>
       ) : (
@@ -330,18 +328,18 @@ function DocumentViewer({
               Who has looked at this?
             </button>
           ) : access.length === 0 ? (
-            <Empty>No access recorded.</Empty>
+            <Empty>{t.ofcNoneAccessRecorded}</Empty>
           ) : (
             <Table
               columns={[
                 { key: 'full_name', label: 'Who', render: (row) => row.full_name ?? 'the applicant' },
-                { key: 'role', label: 'Role', render: (row) => humanise(row.role ?? 'unknown') },
+                { key: 'role', label: 'ofcRhRole', render: (row) => humanise(row.role ?? 'unknown') },
                 { key: 'access_type', label: 'What', render: (row) => humanise(row.access_type) },
-                { key: 'created_at', label: 'When', render: (row) => formatDateTime(row.created_at) },
+                { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
                 { key: 'ip_address', label: 'From', render: (row) => row.ip_address ?? '—' },
               ]}
               rows={access}
-              empty="No access recorded."
+              empty="ofcNoneAccessRecorded"
             />
           )}
         </div>

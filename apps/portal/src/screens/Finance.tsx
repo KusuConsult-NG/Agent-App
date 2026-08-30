@@ -391,32 +391,32 @@ export function ReconciliationScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'transaction_reference', label: 'Transaction' },
+              { key: 'transaction_reference', label: 'supTransactionLabel' },
               {
                 key: 'name',
-                label: 'Taxpayer',
+                label: 'colTaxpayerLabel',
                 render: (row: any) =>
                   row.business_name ?? [row.first_name, row.last_name].filter(Boolean).join(' ') ?? '—',
               },
               {
                 key: 'expected_amount_kobo',
-                label: 'Amount',
+                label: 'pubVerifyAmount',
                 numeric: true,
                 render: (row: any) => <Money kobo={row.expected_amount_kobo} />,
               },
               {
                 key: 'age_hours',
-                label: 'Waiting',
+                label: 'ofcRhWaiting',
                 numeric: true,
                 render: (row: any) =>
                   row.age_hours < 24
                     ? `${row.age_hours} h`
                     : `${Math.floor(row.age_hours / 24)} d ${row.age_hours % 24} h`,
               },
-              { key: 'agent_code', label: 'Agent' },
+              { key: 'agent_code', label: 'ofcRhAgent' },
             ]}
             rows={inTransit}
-            empty="Every confirmed collection has reached the government account."
+            empty="ofcNoneConfirmedCollectionReachedGovernment"
           />
         )}
       </div>
@@ -439,23 +439,23 @@ export function ReconciliationScreen() {
               { key: 'status', label: 'Exception', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'transaction_reference',
-                label: 'Transaction',
+                label: 'supTransactionLabel',
                 render: (row) => <span className="mono">{row.transaction_reference ?? '—'}</span>,
               },
               {
                 key: 'gateway_reference',
-                label: 'Gateway reference',
+                label: 'colGatewayReference',
                 render: (row) => <span className="mono">{row.gateway_reference ?? '—'}</span>,
               },
               {
                 key: 'expected_amount_kobo',
-                label: 'Expected',
+                label: 'ofcRhExpected',
                 numeric: true,
                 render: (row) => <Money kobo={row.expected_amount_kobo} />,
               },
               {
                 key: 'received_amount_kobo',
-                label: 'Received',
+                label: 'ofcRhReceived',
                 numeric: true,
                 render: (row) => <Money kobo={row.received_amount_kobo} />,
               },
@@ -465,7 +465,7 @@ export function ReconciliationScreen() {
                 numeric: true,
                 render: (row) => <Money kobo={row.variance_kobo} />,
               },
-              { key: 'agent_code', label: 'Agent', render: (row) => row.agent_code ?? '—' },
+              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? '—' },
               {
                 key: 'action',
                 label: '',
@@ -499,7 +499,7 @@ export function ReconciliationScreen() {
               },
             ]}
             rows={exceptions}
-            empty="No open reconciliation exceptions."
+            empty="ofcNoneOpenReconciliationExceptions"
           />
         )}
       </div>
@@ -513,25 +513,25 @@ export function ReconciliationScreen() {
             columns={[
               {
                 key: 'settlement_reference',
-                label: 'Reference',
+                label: 'errReference',
                 render: (row) => <span className="mono">{row.settlement_reference}</span>,
               },
               { key: 'settlement_date', label: 'Date', render: (row) => formatDate(row.settlement_date) },
               { key: 'bank_reference', label: 'Bank reference' },
-              { key: 'transaction_count', label: 'Transactions', numeric: true },
+              { key: 'transaction_count', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'expected_amount_kobo',
-                label: 'Expected',
+                label: 'ofcRhExpected',
                 numeric: true,
                 render: (row) => <Money kobo={row.expected_amount_kobo} />,
               },
               {
                 key: 'received_amount_kobo',
-                label: 'Received',
+                label: 'ofcRhReceived',
                 numeric: true,
                 render: (row) => <Money kobo={row.received_amount_kobo} />,
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'id',
                 label: '',
@@ -549,7 +549,7 @@ export function ReconciliationScreen() {
               },
             ]}
             rows={settlements.recentSettlements}
-            empty="No settlements recorded."
+            empty="ofcNoneSettlementsRecorded"
           />
           <p className="field__hint" style={{ padding: '0 18px 18px' }}>
             A settlement whose credit does not match the collections it covers settles none of
@@ -624,11 +624,11 @@ export function CommissionsScreen() {
                 label: 'Payout',
                 render: (row) => <span className="mono">{row.payout_reference}</span>,
               },
-              { key: 'agent_code', label: 'Agent' },
-              { key: 'full_name', label: 'Name' },
+              { key: 'agent_code', label: 'ofcRhAgent' },
+              { key: 'full_name', label: 'tpName' },
               {
                 key: 'amount_kobo',
-                label: 'Amount',
+                label: 'pubVerifyAmount',
                 numeric: true,
                 render: (row) => <Money kobo={row.amount_kobo} />,
               },
@@ -643,7 +643,7 @@ export function CommissionsScreen() {
                   </>
                 ),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
                 label: '',
@@ -670,9 +670,7 @@ export function CommissionsScreen() {
                             setMessage,
                           })
                         }
-                      >
-                        Approve
-                      </button>
+                      >{t.ofcRhApprove}</button>
                     )}
                     {row.status === 'APPROVED' && can('commission:manage') && (
                       <button
@@ -733,7 +731,7 @@ export function CommissionsScreen() {
               },
             ]}
             rows={payouts}
-            empty="No payout requests."
+            empty="ofcNonePayoutRequests"
           />
         )}
       </div>
@@ -820,14 +818,14 @@ export function ApprovalsScreen({ user }: { user: User }) {
             </p>
           </div>
           <div className="field" style={{ marginBottom: 0, minWidth: 170 }}>
-            <label htmlFor="approval-status">Status</label>
+            <label htmlFor="approval-status">{t.appStatus}</label>
             <select
               id="approval-status"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
-              <option value="">All</option>
-              <option value="REQUESTED">Requested</option>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="REQUESTED">{t.ofcRhRequested}</option>
               <option value="REVIEWED">Reviewed</option>
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
@@ -850,18 +848,18 @@ export function ApprovalsScreen({ user }: { user: User }) {
             columns={[
               {
                 key: 'approval_type',
-                label: 'Type',
+                label: 'tpType',
                 render: (row) => <Badge status={row.approval_type} />,
               },
               { key: 'entity_type', label: 'Subject' },
               { key: 'requested_by_name', label: 'Requested by' },
-              { key: 'requested_reason', label: 'Reason' },
+              { key: 'requested_reason', label: 'ofcAgReason' },
               {
                 key: 'requested_at',
-                label: 'Requested',
+                label: 'ofcRhRequested',
                 render: (row) => formatDateTime(row.requested_at),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
                 label: '',
@@ -886,16 +884,12 @@ export function ApprovalsScreen({ user }: { user: User }) {
                     <div className="button-row">
                       {['REQUESTED', 'REVIEWED'].includes(row.status) && can('approval:review') && (
                         <>
-                          <button type="button" className="small" onClick={() => decide(row.id, 'APPROVE')}>
-                            Approve
-                          </button>
+                          <button type="button" className="small" onClick={() => decide(row.id, 'APPROVE')}>{t.ofcRhApprove}</button>
                           <button
                             type="button"
                             className="small danger"
                             onClick={() => decide(row.id, 'REJECT')}
-                          >
-                            Reject
-                          </button>
+                          >{t.ofcAgReject}</button>
                         </>
                       )}
                       {row.status === 'APPROVED' &&
@@ -915,7 +909,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
               },
             ]}
             rows={approvals}
-            empty="No approval requests match this filter."
+            empty="ofcNoneApprovalRequestsMatchFilter"
           />
         )}
       </div>

@@ -135,6 +135,162 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+
+  /**
+   * Empty states. Every table in the portal has one, and an officer reads
+   * more of these than of any other kind of string — a screen with nothing on
+   * it is the normal case for most of the queues here.
+   */
+  ofcNoneConfirmedCollectionReachedGovernment: string;
+  ofcNoneEveryoneTin: string;
+  ofcNoneLgaEnoughActivityReport: string;
+  ofcNoneMdaCollectionsRecorded: string;
+  ofcNoneMdaConfigured: string;
+  ofcNoneAccessRecorded: string;
+  ofcNoneAgentCollectionsRecorded: string;
+  ofcNoneAgentCollectedPeriod: string;
+  ofcNoneAgentsCleared: string;
+  ofcNoneAgentsMatchFilter: string;
+  ofcNoneApplicationsWaitingReview: string;
+  ofcNoneApprovalRequestsMatchFilter: string;
+  ofcNoneAuditEntriesMatchThese: string;
+  ofcNoneBackgroundJobsDeclared: string;
+  ofcNoneBeneficiariesFound: string;
+  ofcNoneClearanceEventsRecorded: string;
+  ofcNoneCollectionsRecordedArea: string;
+  ofcNoneDevicesRegistered: string;
+  ofcNoneDistributionRoundCreated: string;
+  ofcNoneDistributionsSetUp: string;
+  ofcNoneDocuments: string;
+  ofcNoneEndedRecordOwesAnything: string;
+  ofcNoneFlowsAttemptedPeriod: string;
+  ofcNoneFraudSignalsMatchFilter: string;
+  ofcNoneGroupsRegistered: string;
+  ofcNoneHandsetRegistered: string;
+  ofcNoneIncentiveProgrammesCreated: string;
+  ofcNoneIndividualLevyCollectedAnything: string;
+  ofcNoneLanguageUseReported: string;
+  ofcNoneLocalGovernmentRevenueCollected: string;
+  ofcNoneObligationsRecordedAgainstTaxpayer: string;
+  ofcNoneOfficersRecorded: string;
+  ofcNoneOpenReconciliationExceptions: string;
+  ofcNonePayoutRequests: string;
+  ofcNoneRateHistory: string;
+  ofcNoneRecordsMatchQuery: string;
+  ofcNoneRefereeNominated: string;
+  ofcNoneRefereeRiskFlagsOpen: string;
+  ofcNoneRefereeSupportsMoreApplicant: string;
+  ofcNoneRefundOutstanding: string;
+  ofcNoneRevenueCollectedPeriod: string;
+  ofcNoneRevenueItemsConfigured: string;
+  ofcNoneScreensReported: string;
+  ofcNoneSettlementsRecorded: string;
+  ofcNoneTicketsMatchFilter: string;
+  ofcNoneTrainingRecords: string;
+  ofcNoneTransactionsMatchTheseFilters: string;
+  ofcNoneVehiclesRecordedAgainstTaxpayer: string;
+  ofcNoneNobodyAwardedRound: string;
+  ofcNoneNobodyAwardedRound2: string;
+  ofcNoneNobodyRecordedGroup: string;
+  ofcNoneNobodyArrearsFilter: string;
+  ofcNoneNobodyRegisteredFilter: string;
+  ofcNoneNone: string;
+  ofcNoneNothingCollectedFilter: string;
+  ofcNoneNothingPublished: string;
+  ofcNoneNothingWaiting: string;
+  ofcNoneAuthorityAcknowledgedRenewal: string;
+  ofcNoneOfflineQueueUsedPeriod: string;
+
+  /**
+   * Agent clearance: the queue, one agent's file, the six status axes, and
+   * the decisions an officer records against their own name.
+   */
+  ofcAgAwaitingGovernmentReview: string;
+  ofcAgApplicantsCompleted: string;
+  ofcAgAllAgents: string;
+  ofcAgSixAxes: string;
+  ofcAgOperationalStatus: string;
+  ofcAgAll: string;
+  ofcAgActive: string;
+  ofcAgInactive: string;
+  ofcAgSuspendedStatus: string;
+  ofcAgBackToAgents: string;
+  ofcAgClearanceChecklist: string;
+  ofcAgEveryItemSatisfied: string;
+  ofcAgNoKycSubmitted: string;
+  ofcAgRefereeHistoryKept: string;
+  ofcAgClear: string;
+  ofcAgReject: string;
+  ofcAgDevices: string;
+  ofcAgDevicesBody: string;
+  ofcAgSuspend: string;
+  ofcAgRestore: string;
+  ofcAgRevoke: string;
+  ofcAgDecision: string;
+  ofcAgDecisionRecorded: string;
+  ofcAgReasonMinimum: string;
+  ofcAgApproveApplication: string;
+  ofcAgRequestMoreInformation: string;
+  ofcAgAssignTerritory: string;
+  ofcAgSelectTerritory: string;
+  ofcAgTerritoryRequired: string;
+  ofcAgActivateAgent: string;
+  ofcAgActivationBlocked: string;
+  ofcAgMoveTerritory: string;
+  ofcAgMoveTerritoryBody: string;
+  ofcAgReassignTerritory: string;
+  ofcAgSuspendAgent: string;
+  ofcAgClearanceHistory: string;
+  ofcAgRefereeRiskFlags: string;
+  ofcAgRefereeRiskBody: string;
+  ofcAgWhatYouFound: string;
+  ofcAgLookingIntoIt: string;
+  ofcAgUpheld: string;
+  ofcAgDismissed: string;
+  ofcAgRefereesMultiple: string;
+  ofcAgBankAccountChanges: string;
+  ofcAgBankChangeBody: string;
+  ofcAgNoBankChanges: string;
+  ofcAgAskBankAgain: string;
+  ofcAgRefuse: string;
+  ofcAgApplicationsReceived: string;
+  ofcAgReadyForReview: string;
+  ofcAgBothCleared: string;
+  ofcAgActiveAgents: string;
+  ofcAgKycPending: string;
+  ofcAgAwaitingApplicant: string;
+  ofcAgKycCleared: string;
+  ofcAgRefereePending: string;
+  ofcAgRefereeFailed: string;
+  ofcAgApplicationState: string;
+  ofcAgAccessStage: string;
+  ofcAgMayCollectRevenue: string;
+  ofcAgOutstanding: string;
+  ofcAgTotalReferees: string;
+  ofcAgPending: string;
+  ofcAgCleared: string;
+  ofcAgFailedRejected: string;
+  ofcAgBankDifferentName: string;
+  ofcAgApplicantsSupported: string;
+  ofcAgApplication: string;
+  ofcAgSubmitted: string;
+  ofcAgCode: string;
+  ofcAgKyc: string;
+  ofcAgOperational: string;
+  ofcAgCategory: string;
+  ofcAgRelationship: string;
+  ofcAgResponded: string;
+  ofcAgModule: string;
+  ofcAgTitleHeading: string;
+  ofcAgScore: string;
+  ofcAgVersion: string;
+  ofcAgEvent: string;
+  ofcAgReason: string;
+  ofcAgSignal: string;
+  ofcAgSeverity: string;
+  ofcAgDetail: string;
+  ofcAgSampleKycNote: string;
+  ofcAgSampleRefereeNote: string;
   ofcRhBlockedCount: string;
   ofcRhInvoicesStillOpen: string;
   colShareTitle: string;
@@ -1228,6 +1384,151 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcNoneConfirmedCollectionReachedGovernment: "Every confirmed collection has reached the government account.",
+    ofcNoneEveryoneTin: "Everyone has their TIN.",
+    ofcNoneLgaEnoughActivityReport: "No LGA has enough activity to report without singling somebody out.",
+    ofcNoneMdaCollectionsRecorded: "No MDA collections recorded yet.",
+    ofcNoneMdaConfigured: "No MDA is configured.",
+    ofcNoneAccessRecorded: "No access recorded.",
+    ofcNoneAgentCollectionsRecorded: "No agent collections recorded yet.",
+    ofcNoneAgentCollectedPeriod: "No agent has collected in this period.",
+    ofcNoneAgentsCleared: "No agents have been cleared yet.",
+    ofcNoneAgentsMatchFilter: "No agents match this filter.",
+    ofcNoneApplicationsWaitingReview: "No applications are waiting for review.",
+    ofcNoneApprovalRequestsMatchFilter: "No approval requests match this filter.",
+    ofcNoneAuditEntriesMatchThese: "No audit entries match these filters.",
+    ofcNoneBackgroundJobsDeclared: "No background jobs are declared.",
+    ofcNoneBeneficiariesFound: "No beneficiaries found.",
+    ofcNoneClearanceEventsRecorded: "No clearance events recorded.",
+    ofcNoneCollectionsRecordedArea: "No collections recorded for this area.",
+    ofcNoneDevicesRegistered: "No devices registered.",
+    ofcNoneDistributionRoundCreated: "No distribution round has been created.",
+    ofcNoneDistributionsSetUp: "No distributions have been set up yet.",
+    ofcNoneDocuments: "No documents.",
+    ofcNoneEndedRecordOwesAnything: "No ended record owes anything.",
+    ofcNoneFlowsAttemptedPeriod: "No flows have been attempted in this period.",
+    ofcNoneFraudSignalsMatchFilter: "No fraud signals match this filter.",
+    ofcNoneGroupsRegistered: "No groups have been registered yet.",
+    ofcNoneHandsetRegistered: "No handset has been registered yet.",
+    ofcNoneIncentiveProgrammesCreated: "No incentive programmes have been created.",
+    ofcNoneIndividualLevyCollectedAnything: "No individual levy has collected anything under this filter.",
+    ofcNoneLanguageUseReported: "No language use has been reported.",
+    ofcNoneLocalGovernmentRevenueCollected: "No local government revenue has been collected in this period.",
+    ofcNoneObligationsRecordedAgainstTaxpayer: "No obligations are recorded against this taxpayer.",
+    ofcNoneOfficersRecorded: "No officers are recorded.",
+    ofcNoneOpenReconciliationExceptions: "No open reconciliation exceptions.",
+    ofcNonePayoutRequests: "No payout requests.",
+    ofcNoneRateHistory: "No rate history.",
+    ofcNoneRecordsMatchQuery: "No records match this query.",
+    ofcNoneRefereeNominated: "No referee has been nominated.",
+    ofcNoneRefereeRiskFlagsOpen: "No referee risk flags are open.",
+    ofcNoneRefereeSupportsMoreApplicant: "No referee supports more than one applicant.",
+    ofcNoneRefundOutstanding: "No refund is outstanding.",
+    ofcNoneRevenueCollectedPeriod: "No revenue has been collected in this period.",
+    ofcNoneRevenueItemsConfigured: "No revenue items configured.",
+    ofcNoneScreensReported: "No screens have been reported.",
+    ofcNoneSettlementsRecorded: "No settlements recorded.",
+    ofcNoneTicketsMatchFilter: "No tickets match this filter.",
+    ofcNoneTrainingRecords: "No training records.",
+    ofcNoneTransactionsMatchTheseFilters: "No transactions match these filters.",
+    ofcNoneVehiclesRecordedAgainstTaxpayer: "No vehicles are recorded against this taxpayer.",
+    ofcNoneNobodyAwardedRound: "Nobody has been awarded from this round yet.",
+    ofcNoneNobodyAwardedRound2: "Nobody has been awarded under this round yet.",
+    ofcNoneNobodyRecordedGroup: "Nobody has been recorded in this group yet.",
+    ofcNoneNobodyArrearsFilter: "Nobody is in arrears under this filter.",
+    ofcNoneNobodyRegisteredFilter: "Nobody is registered under this filter.",
+    ofcNoneNone: "None.",
+    ofcNoneNothingCollectedFilter: "Nothing has been collected under this filter.",
+    ofcNoneNothingPublished: "Nothing has been published yet.",
+    ofcNoneNothingWaiting: "Nothing waiting.",
+    ofcNoneAuthorityAcknowledgedRenewal: "The authority has acknowledged every renewal.",
+    ofcNoneOfflineQueueUsedPeriod: "The offline queue has not been used in this period.",
+    ofcAgAwaitingGovernmentReview: "Awaiting government review",
+    ofcAgApplicantsCompleted: "These applicants have completed identity verification and referee clearance.",
+    ofcAgAllAgents: "All agents",
+    ofcAgSixAxes: "Six independent status axes: an agent is only operational when every one is satisfied.",
+    ofcAgOperationalStatus: "Operational status",
+    ofcAgAll: "All",
+    ofcAgActive: "Active",
+    ofcAgInactive: "Inactive",
+    ofcAgSuspendedStatus: "Suspended",
+    ofcAgBackToAgents: "← Back to agents",
+    ofcAgClearanceChecklist: "Clearance checklist",
+    ofcAgEveryItemSatisfied: "Every item must be satisfied before activation.",
+    ofcAgNoKycSubmitted: "The applicant has not submitted identity verification.",
+    ofcAgRefereeHistoryKept: "A replaced referee stays on the record — the history is never overwritten.",
+    ofcAgClear: "Clear",
+    ofcAgReject: "Reject",
+    ofcAgDevices: "Devices",
+    ofcAgDevicesBody: "A phone an agent has just registered waits here as PENDING and cannot be used to collect until it is approved. Revoking a device ends its sessions immediately.",
+    ofcAgSuspend: "Suspend",
+    ofcAgRestore: "Restore",
+    ofcAgRevoke: "Revoke",
+    ofcAgDecision: "Decision",
+    ofcAgDecisionRecorded: "Every decision is recorded against your name in the audit log and requires a reason.",
+    ofcAgReasonMinimum: "Reason (minimum 10 characters)",
+    ofcAgApproveApplication: "Approve application",
+    ofcAgRequestMoreInformation: "Request more information",
+    ofcAgAssignTerritory: "Assign territory",
+    ofcAgSelectTerritory: "Select a territory",
+    ofcAgTerritoryRequired: "Every transaction is attributed to a territory, so one must be assigned before activation.",
+    ofcAgActivateAgent: "Activate agent",
+    ofcAgActivationBlocked: "Activation is blocked until every clearance item is satisfied. An exception requires an approved government override.",
+    ofcAgMoveTerritory: "Move to another territory",
+    ofcAgMoveTerritoryBody: "Collections already made keep the territory they were collected under. This decides where the next ones are attributed.",
+    ofcAgReassignTerritory: "Reassign territory",
+    ofcAgSuspendAgent: "Suspend agent",
+    ofcAgClearanceHistory: "Clearance history",
+    ofcAgRefereeRiskFlags: "Referee risk flags",
+    ofcAgRefereeRiskBody: "Patterns that suggest a referee relationship is not genuine. Nothing is blocked while a flag is merely open — but a flag you uphold stops that referee being cleared until somebody dismisses it with their findings.",
+    ofcAgWhatYouFound: "What you found",
+    ofcAgLookingIntoIt: "Looking into it",
+    ofcAgUpheld: "Upheld — this referee cannot be relied on",
+    ofcAgDismissed: "Dismissed — the pattern is innocent",
+    ofcAgRefereesMultiple: "Referees supporting more than one applicant",
+    ofcAgBankAccountChanges: "Bank account changes",
+    ofcAgBankChangeBody: "Where an agent’s commission is paid. Nothing moves until the bank confirms the new account and an officer other than the one who asked approves it. The account in use keeps being used until then.",
+    ofcAgNoBankChanges: "No bank account changes are waiting.",
+    ofcAgAskBankAgain: "Ask the bank again",
+    ofcAgRefuse: "Refuse",
+    ofcAgApplicationsReceived: "Applications received",
+    ofcAgReadyForReview: "Ready for review",
+    ofcAgBothCleared: "KYC and referee both cleared",
+    ofcAgActiveAgents: "Active agents",
+    ofcAgKycPending: "KYC pending",
+    ofcAgAwaitingApplicant: "Awaiting applicant",
+    ofcAgKycCleared: "KYC cleared",
+    ofcAgRefereePending: "Referee pending",
+    ofcAgRefereeFailed: "Referee failed",
+    ofcAgApplicationState: "Application state",
+    ofcAgAccessStage: "Access stage",
+    ofcAgMayCollectRevenue: "May collect revenue",
+    ofcAgOutstanding: "Outstanding",
+    ofcAgTotalReferees: "Total referees",
+    ofcAgPending: "Pending",
+    ofcAgCleared: "Cleared",
+    ofcAgFailedRejected: "Failed or rejected",
+    ofcAgBankDifferentName: "The bank returned a different name",
+    ofcAgApplicantsSupported: "Applicants supported",
+    ofcAgApplication: "Application",
+    ofcAgSubmitted: "Submitted",
+    ofcAgCode: "Code",
+    ofcAgKyc: "KYC",
+    ofcAgOperational: "Operational",
+    ofcAgCategory: "Category",
+    ofcAgRelationship: "Relationship",
+    ofcAgResponded: "Responded",
+    ofcAgModule: "Module",
+    ofcAgTitleHeading: "Title",
+    ofcAgScore: "Score",
+    ofcAgVersion: "Version",
+    ofcAgEvent: "Event",
+    ofcAgReason: "Reason",
+    ofcAgSignal: "Signal",
+    ofcAgSeverity: "Severity",
+    ofcAgDetail: "Detail",
+    ofcAgSampleKycNote: "Identity verified against NIN; referee confirmed by district head; records in order.",
+    ofcAgSampleRefereeNote: "Called all six applicants; four have never met him.",
     ofcRhBlockedCount: "{{n}} thing(s) are stopping somebody working",
     ofcRhInvoicesStillOpen: "{{n}} invoice(s) still open",
     colShareTitle: "PSIRS receipt",
@@ -2197,6 +2498,151 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcNoneConfirmedCollectionReachedGovernment: "Duk karban da aka tabbatar ya isa asusun gwamnati.",
+    ofcNoneEveryoneTin: "Kowa yana da TIN dinsa.",
+    ofcNoneLgaEnoughActivityReport: "Babu Karamar Hukuma da ke da isasshen aiki da za a bayar da rahoto ba tare da nuna wani ba.",
+    ofcNoneMdaCollectionsRecorded: "Ba a rubuta karban ma’aikatu ba tukuna.",
+    ofcNoneMdaConfigured: "Babu ma’aikatar da aka saita.",
+    ofcNoneAccessRecorded: "Ba a rubuta shiga ba.",
+    ofcNoneAgentCollectionsRecorded: "Ba a rubuta karban wakilai ba tukuna.",
+    ofcNoneAgentCollectedPeriod: "Babu wakilin da ya karba a wannan lokacin.",
+    ofcNoneAgentsCleared: "Ba a ba wa wakilai izini ba tukuna.",
+    ofcNoneAgentsMatchFilter: "Babu wakilin da ya dace da wannan tacewar.",
+    ofcNoneApplicationsWaitingReview: "Babu bukatun da ke jiran dubawa.",
+    ofcNoneApprovalRequestsMatchFilter: "Babu bukatun amincewa da suka dace da wannan tacewar.",
+    ofcNoneAuditEntriesMatchThese: "Babu shigarwar bincike da ta dace da wadannan tacewar.",
+    ofcNoneBackgroundJobsDeclared: "Ba a bayyana wani aikin baya ba.",
+    ofcNoneBeneficiariesFound: "Ba a samu masu amfana ba.",
+    ofcNoneClearanceEventsRecorded: "Ba a rubuta abin da ya faru kan izini ba.",
+    ofcNoneCollectionsRecordedArea: "Ba a rubuta karba ga wannan yankin ba.",
+    ofcNoneDevicesRegistered: "Ba a yi rajistar na’ura ba.",
+    ofcNoneDistributionRoundCreated: "Ba a bude zagayen rabo ba.",
+    ofcNoneDistributionsSetUp: "Ba a shirya rabo ba tukuna.",
+    ofcNoneDocuments: "Babu takardu.",
+    ofcNoneEndedRecordOwesAnything: "Babu rikodin da aka rufe da ake bin sa komai.",
+    ofcNoneFlowsAttemptedPeriod: "Ba a gwada wani mataki ba a wannan lokacin.",
+    ofcNoneFraudSignalsMatchFilter: "Babu alamun zamba da suka dace da wannan tacewar.",
+    ofcNoneGroupsRegistered: "Ba a yi rajistar kungiya ba tukuna.",
+    ofcNoneHandsetRegistered: "Ba a yi rajistar waya ba tukuna.",
+    ofcNoneIncentiveProgrammesCreated: "Ba a kirkiri shirin tallafi ba.",
+    ofcNoneIndividualLevyCollectedAnything: "Babu harajin da ya karbi komai a karkashin wannan tacewar.",
+    ofcNoneLanguageUseReported: "Ba a bayar da rahoton amfani da harshe ba.",
+    ofcNoneLocalGovernmentRevenueCollected: "Ba a karbi harajin karamar hukuma ba a wannan lokacin.",
+    ofcNoneObligationsRecordedAgainstTaxpayer: "Ba a rubuta wani wajibi a kan wannan mai biyan haraji ba.",
+    ofcNoneOfficersRecorded: "Ba a rubuta jami’ai ba.",
+    ofcNoneOpenReconciliationExceptions: "Babu kura-kuran daidaita lissafi a bude.",
+    ofcNonePayoutRequests: "Babu bukatun biyan kudi.",
+    ofcNoneRateHistory: "Babu tarihin kudin haraji.",
+    ofcNoneRecordsMatchQuery: "Babu rikodin da ya dace da wannan binciken.",
+    ofcNoneRefereeNominated: "Ba a zabi mai shaida ba.",
+    ofcNoneRefereeRiskFlagsOpen: "Babu alamun hadarin mai shaida a bude.",
+    ofcNoneRefereeSupportsMoreApplicant: "Babu mai shaida da ke goyon bayan mai nema fiye da daya.",
+    ofcNoneRefundOutstanding: "Babu mayarwar da ta rage.",
+    ofcNoneRevenueCollectedPeriod: "Ba a karbi haraji ba a wannan lokacin.",
+    ofcNoneRevenueItemsConfigured: "Ba a saita nau’in haraji ba.",
+    ofcNoneScreensReported: "Ba a bayar da rahoton shafuka ba.",
+    ofcNoneSettlementsRecorded: "Ba a rubuta turawar kudi ba.",
+    ofcNoneTicketsMatchFilter: "Babu rahotannin da suka dace da wannan tacewar.",
+    ofcNoneTrainingRecords: "Babu rikodin horo.",
+    ofcNoneTransactionsMatchTheseFilters: "Babu ma’amalolin da suka dace da wadannan tacewar.",
+    ofcNoneVehiclesRecordedAgainstTaxpayer: "Ba a rubuta motoci a kan wannan mai biyan haraji ba.",
+    ofcNoneNobodyAwardedRound: "Ba a ba wa kowa daga wannan zagayen ba tukuna.",
+    ofcNoneNobodyAwardedRound2: "Ba a ba wa kowa a karkashin wannan zagayen ba tukuna.",
+    ofcNoneNobodyRecordedGroup: "Ba a rubuta kowa a wannan kungiyar ba tukuna.",
+    ofcNoneNobodyArrearsFilter: "Babu wanda ke bin bashi a karkashin wannan tacewar.",
+    ofcNoneNobodyRegisteredFilter: "Babu wanda aka yi wa rajista a karkashin wannan tacewar.",
+    ofcNoneNone: "Babu.",
+    ofcNoneNothingCollectedFilter: "Ba a karbi komai a karkashin wannan tacewar ba.",
+    ofcNoneNothingPublished: "Ba a buga komai ba tukuna.",
+    ofcNoneNothingWaiting: "Babu abin da ke jira.",
+    ofcNoneAuthorityAcknowledgedRenewal: "Hukumar ta amince da kowace sabuntawa.",
+    ofcNoneOfflineQueueUsedPeriod: "Ba a yi amfani da jerin gwanon ba tare da layi ba a wannan lokacin.",
+    ofcAgAwaitingGovernmentReview: "Na jiran nazarin gwamnati",
+    ofcAgApplicantsCompleted: "Wadannan masu nema sun kammala tabbatar da shaida da izinin mai shaida.",
+    ofcAgAllAgents: "Dukkan wakilai",
+    ofcAgSixAxes: "Matakan matsayi shida masu zaman kansu: wakili yana aiki ne kawai idan an cika kowanne.",
+    ofcAgOperationalStatus: "Matsayin aiki",
+    ofcAgAll: "Duka",
+    ofcAgActive: "Yana aiki",
+    ofcAgInactive: "Ba ya aiki",
+    ofcAgSuspendedStatus: "An dakatar",
+    ofcAgBackToAgents: "← Koma ga wakilai",
+    ofcAgClearanceChecklist: "Jerin sharudan izini",
+    ofcAgEveryItemSatisfied: "Dole a cika kowane sharadi kafin a kunna.",
+    ofcAgNoKycSubmitted: "Mai nema bai tura tabbatar da shaida ba.",
+    ofcAgRefereeHistoryKept: "Mai shaida da aka maye gurbinsa yana nan a rikodi — ba a taba share tarihin ba.",
+    ofcAgClear: "Ba da izini",
+    ofcAgReject: "Ki",
+    ofcAgDevices: "Na’urori",
+    ofcAgDevicesBody: "Wayar da wakili ya yi wa rajista tana jira a nan a matsayin ANA JIRA kuma ba za a iya karba da ita ba sai an amince da ita. Janye na’ura yana kawo karshen zamanta nan take.",
+    ofcAgSuspend: "Dakatar",
+    ofcAgRestore: "Mayar",
+    ofcAgRevoke: "Janye",
+    ofcAgDecision: "Shawara",
+    ofcAgDecisionRecorded: "Ana rubuta kowace shawara da sunanka a rajistar bincike kuma tana bukatar dalili.",
+    ofcAgReasonMinimum: "Dalili (akalla haruffa 10)",
+    ofcAgApproveApplication: "Amince da bukata",
+    ofcAgRequestMoreInformation: "Nemi karin bayani",
+    ofcAgAssignTerritory: "Ba da yanki",
+    ofcAgSelectTerritory: "Zabi yanki",
+    ofcAgTerritoryRequired: "Ana danganta kowace ma’amala ga yanki, don haka dole a ba da daya kafin a kunna.",
+    ofcAgActivateAgent: "Kunna wakili",
+    ofcAgActivationBlocked: "An hana kunnawa har sai an cika kowane sharadin izini. Kebancewa yana bukatar izinin gwamnati na musamman.",
+    ofcAgMoveTerritory: "Matsar zuwa wani yanki",
+    ofcAgMoveTerritoryBody: "Karban da aka riga aka yi yana rike da yankin da aka karba a ciki. Wannan yana yanke inda za a danganta na gaba.",
+    ofcAgReassignTerritory: "Sake ba da yanki",
+    ofcAgSuspendAgent: "Dakatar da wakili",
+    ofcAgClearanceHistory: "Tarihin izini",
+    ofcAgRefereeRiskFlags: "Alamun hadarin mai shaida",
+    ofcAgRefereeRiskBody: "Alamun da ke nuna dangantakar mai shaida ba ta gaskiya ba ce. Ba a hana komai yayin da alama take a bude kawai — amma alamar da ka tabbatar tana hana a ba wa mai shaidan izini har sai wani ya soke ta da abin da ya gano.",
+    ofcAgWhatYouFound: "Abin da ka gano",
+    ofcAgLookingIntoIt: "Ana bincike",
+    ofcAgUpheld: "An tabbatar — ba za a iya dogara da wannan mai shaida ba",
+    ofcAgDismissed: "An soke — alamar ba ta da laifi",
+    ofcAgRefereesMultiple: "Masu shaida da ke goyon bayan mai nema fiye da daya",
+    ofcAgBankAccountChanges: "Canjin asusun banki",
+    ofcAgBankChangeBody: "Inda ake biyan kwamishan wakili. Babu abin da zai motsa sai banki ya tabbatar da sabon asusun kuma wani jami’i ban da wanda ya nema ya amince da shi. Za a ci gaba da amfani da asusun da ake amfani da shi har lokacin.",
+    ofcAgNoBankChanges: "Babu canjin asusun banki da ke jira.",
+    ofcAgAskBankAgain: "Sake tambayar banki",
+    ofcAgRefuse: "Ki",
+    ofcAgApplicationsReceived: "Bukatun da aka karba",
+    ofcAgReadyForReview: "A shirye don dubawa",
+    ofcAgBothCleared: "An ba da izinin shaida da mai shaida",
+    ofcAgActiveAgents: "Wakilan da ke aiki",
+    ofcAgKycPending: "Ana jiran shaida",
+    ofcAgAwaitingApplicant: "Ana jiran mai nema",
+    ofcAgKycCleared: "An ba da izinin shaida",
+    ofcAgRefereePending: "Ana jiran mai shaida",
+    ofcAgRefereeFailed: "Mai shaida ya gaza",
+    ofcAgApplicationState: "Matsayin bukata",
+    ofcAgAccessStage: "Matakin izini",
+    ofcAgMayCollectRevenue: "Zai iya karbar haraji",
+    ofcAgOutstanding: "Da ya rage",
+    ofcAgTotalReferees: "Jimlar masu shaida",
+    ofcAgPending: "Ana jira",
+    ofcAgCleared: "An ba da izini",
+    ofcAgFailedRejected: "Ya gaza ko an ki",
+    ofcAgBankDifferentName: "Banki ya dawo da wani suna daban",
+    ofcAgApplicantsSupported: "Masu nema da aka goyi baya",
+    ofcAgApplication: "Bukata",
+    ofcAgSubmitted: "An tura",
+    ofcAgCode: "Lamba",
+    ofcAgKyc: "Shaida",
+    ofcAgOperational: "Yana aiki",
+    ofcAgCategory: "Rukuni",
+    ofcAgRelationship: "Dangantaka",
+    ofcAgResponded: "Ya amsa",
+    ofcAgModule: "Darasi",
+    ofcAgTitleHeading: "Take",
+    ofcAgScore: "Maki",
+    ofcAgVersion: "Siga",
+    ofcAgEvent: "Abin da ya faru",
+    ofcAgReason: "Dalili",
+    ofcAgSignal: "Alama",
+    ofcAgSeverity: "Girman hadari",
+    ofcAgDetail: "Bayani",
+    ofcAgSampleKycNote: "An tabbatar da shaida da NIN; hakimin unguwa ya tabbatar da mai shaida; rikodin sun daidaita.",
+    ofcAgSampleRefereeNote: "An kira dukkan masu nema shida; hudu ba su taba haduwa da shi ba.",
     ofcRhBlockedCount: "Abubuwa {{n}} na hana wani yin aiki",
     ofcRhInvoicesStillOpen: "Takardun biya {{n}} na nan a bude",
     colShareTitle: "Rasit na PSIRS",

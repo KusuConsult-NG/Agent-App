@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { KycDocumentsCard } from './KycDocuments';
 import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface KycDashboard {
   counts: Record<string, string>;
@@ -28,6 +29,7 @@ interface KycDashboard {
 }
 
 export function AgentsScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = usePortalI18n();
   const [dashboard, setDashboard] = useState<KycDashboard | null>(null);
   const [agents, setAgents] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -61,66 +63,62 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
   return (
     <>
       <div className="stat-grid">
-        <Stat label="Applications received" value={counts.applications_received} />
+        <Stat label="ofcAgApplicationsReceived" value={counts.applications_received} />
         <Stat
-          label="Ready for review"
+          label="ofcAgReadyForReview"
           value={counts.ready_for_review}
           variant={Number(counts.ready_for_review) > 0 ? 'accent' : undefined}
-          hint="KYC and referee both cleared"
+          hint="ofcAgBothCleared"
         />
-        <Stat label="Active agents" value={counts.active} />
+        <Stat label="ofcAgActiveAgents" value={counts.active} />
         <Stat
-          label="Suspended"
+          label="ofcAgSuspendedStatus"
           value={counts.suspended}
           variant={Number(counts.suspended) > 0 ? 'alert' : undefined}
         />
       </div>
 
       <div className="stat-grid">
-        <Stat label="KYC pending" value={counts.kyc_pending} />
+        <Stat label="ofcAgKycPending" value={counts.kyc_pending} />
         {/* Waiting on the applicant, not on us: these need chasing, not reviewing. */}
         <Stat
-          label="Awaiting applicant"
+          label="ofcAgAwaitingApplicant"
           value={counts.kyc_action_required}
           variant={Number(counts.kyc_action_required) > 0 ? 'alert' : undefined}
         />
-        <Stat label="KYC cleared" value={counts.kyc_cleared} />
-        <Stat label="Referee pending" value={counts.referee_pending} />
-        <Stat label="Referee failed" value={counts.referee_failed} />
+        <Stat label="ofcAgKycCleared" value={counts.kyc_cleared} />
+        <Stat label="ofcAgRefereePending" value={counts.referee_pending} />
+        <Stat label="ofcAgRefereeFailed" value={counts.referee_failed} />
       </div>
 
       <BankChangesCard />
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Awaiting government review</h2>
-          <p className="card__hint">
-            These applicants have completed identity verification and referee clearance.
-          </p>
+          <h2 className="card__title">{t.ofcAgAwaitingGovernmentReview}</h2>
+          <p className="card__hint">{t.ofcAgApplicantsCompleted}</p>
         </div>
         <Table
           columns={[
-            { key: 'application_number', label: 'Application' },
-            { key: 'full_name', label: 'Applicant' },
-            { key: 'phone', label: 'Phone' },
-            { key: 'lga_name', label: 'LGA' },
+            { key: 'application_number', label: 'ofcAgApplication' },
+            { key: 'full_name', label: 'pubRefereeApplicant' },
+            { key: 'phone', label: 'tpPhone' },
+            { key: 'lga_name', label: 'tpLgaShort' },
             {
               key: 'application_submitted_at',
-              label: 'Submitted',
+              label: 'ofcAgSubmitted',
               render: (row) => formatDateTime(row.application_submitted_at),
             },
             {
               key: 'action',
               label: '',
               render: (row) => (
-                <button type="button" className="small" onClick={() => navigate(`/agents/${row.agentId}`)}>
-                  Review
-                </button>
+                <button type="button" className="small" onClick={() => navigate(`/agents/${row.agentId}`)}>{t.tpStepReview}</button>
               ),
             },
           ]}
           rows={dashboard.reviewQueue}
-          empty="No applications are waiting for review."
+          empty="ofcNoneApplicationsWaitingReview"
         />
       </div>
 
@@ -128,23 +126,20 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         <div style={{ padding: '18px 18px 0' }}>
           <div className="card__header">
             <div>
-              <h2 className="card__title">All agents</h2>
-              <p className="card__hint">
-                Six independent status axes: an agent is only operational when every one is
-                satisfied.
-              </p>
+              <h2 className="card__title">{t.ofcAgAllAgents}</h2>
+              <p className="card__hint">{t.ofcAgSixAxes}</p>
             </div>
             <div className="field" style={{ marginBottom: 0, minWidth: 180 }}>
-              <label htmlFor="status">Operational status</label>
+              <label htmlFor="status">{t.ofcAgOperationalStatus}</label>
               <select
                 id="status"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
               >
-                <option value="">All</option>
-                <option value="ACTIVE">Active</option>
-                <option value="INACTIVE">Inactive</option>
-                <option value="SUSPENDED">Suspended</option>
+                <option value="">{t.ofcAgAll}</option>
+                <option value="ACTIVE">{t.ofcAgActive}</option>
+                <option value="INACTIVE">{t.ofcAgInactive}</option>
+                <option value="SUSPENDED">{t.ofcAgSuspendedStatus}</option>
               </select>
             </div>
           </div>
@@ -156,23 +151,23 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         ) : (
           <Table
             columns={[
-              { key: 'agent_code', label: 'Code', render: (row) => row.agent_code ?? '—' },
-              { key: 'full_name', label: 'Name' },
-              { key: 'lga', label: 'LGA' },
-              { key: 'kyc_status', label: 'KYC', render: (row) => <Badge status={row.kyc_status} /> },
+              { key: 'agent_code', label: 'ofcAgCode', render: (row) => row.agent_code ?? '—' },
+              { key: 'full_name', label: 'tpName' },
+              { key: 'lga', label: 'tpLgaShort' },
+              { key: 'kyc_status', label: 'ofcAgKyc', render: (row) => <Badge status={row.kyc_status} /> },
               {
                 key: 'referee_status',
-                label: 'Referee',
+                label: 'appReferee',
                 render: (row) => <Badge status={row.referee_status} />,
               },
               {
                 key: 'training_status',
-                label: 'Training',
+                label: 'appTraining',
                 render: (row) => <Badge status={row.training_status} />,
               },
               {
                 key: 'operational_status',
-                label: 'Operational',
+                label: 'ofcAgOperational',
                 render: (row) => <Badge status={row.operational_status} />,
               },
               {
@@ -183,14 +178,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
                     type="button"
                     className="small secondary"
                     onClick={() => navigate(`/agents/${row.id}`)}
-                  >
-                    Open
-                  </button>
+                  >{t.ofcRhOpen}</button>
                 ),
               },
             ]}
             rows={agents}
-            empty="No agents match this filter."
+            empty="ofcNoneAgentsMatchFilter"
           />
         )}
       </div>
@@ -223,6 +216,7 @@ export function AgentDetailScreen({
   user: User;
   navigate: (path: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -272,15 +266,13 @@ export function AgentDetailScreen({
 
   return (
     <>
-      <button type="button" className="link" onClick={() => navigate('/agents')} style={{ marginBottom: 14 }}>
-        ← Back to agents
-      </button>
+      <button type="button" className="link" onClick={() => navigate('/agents')} style={{ marginBottom: 14 }}>{t.ofcAgBackToAgents}</button>
 
       <div className="stat-grid">
-        <Stat label="Application state" value={<Badge status={detail.applicationState} />} />
-        <Stat label="Access stage" value={<Badge status={detail.accessStage} />} />
+        <Stat label="ofcAgApplicationState" value={<Badge status={detail.applicationState} />} />
+        <Stat label="ofcAgAccessStage" value={<Badge status={detail.accessStage} />} />
         <Stat
-          label="May collect revenue"
+          label="ofcAgMayCollectRevenue"
           value={detail.canCollectRevenue ? 'Yes' : 'No'}
           variant={detail.canCollectRevenue ? 'accent' : 'alert'}
         />
@@ -291,8 +283,8 @@ export function AgentDetailScreen({
 
       <div className="grid-2">
         <div className="card">
-          <h2 className="card__title">Clearance checklist</h2>
-          <p className="card__hint">Every item must be satisfied before activation.</p>
+          <h2 className="card__title">{t.ofcAgClearanceChecklist}</h2>
+          <p className="card__hint">{t.ofcAgEveryItemSatisfied}</p>
           <Checklist
             items={[
               ['Identity verified (KYC)', checklist.kycCleared],
@@ -305,7 +297,7 @@ export function AgentDetailScreen({
             ]}
           />
           {detail.outstanding.length > 0 && (
-            <Alert kind="warning" title="Outstanding">
+            <Alert kind="warning" title="ofcAgOutstanding">
               <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
                 {detail.outstanding.map((item) => (
                   <li key={item}>{item}</li>
@@ -316,7 +308,7 @@ export function AgentDetailScreen({
         </div>
 
         <div className="card">
-          <h2 className="card__title">Identity verification</h2>
+          <h2 className="card__title">{t.appIdentityVerification}</h2>
           {detail.kyc ? (
             <KeyValue
               items={[
@@ -330,7 +322,7 @@ export function AgentDetailScreen({
               ]}
             />
           ) : (
-            <p className="empty">The applicant has not submitted identity verification.</p>
+            <p className="empty">{t.ofcAgNoKycSubmitted}</p>
           )}
         </div>
 
@@ -347,19 +339,17 @@ export function AgentDetailScreen({
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Referees</h2>
-          <p className="card__hint">
-            A replaced referee stays on the record — the history is never overwritten.
-          </p>
+          <h2 className="card__title">{t.ofcNavReferees}</h2>
+          <p className="card__hint">{t.ofcAgRefereeHistoryKept}</p>
         </div>
         <Table
           columns={[
-            { key: 'reference_code', label: 'Reference' },
-            { key: 'full_name', label: 'Referee' },
-            { key: 'category', label: 'Category' },
-            { key: 'relationship', label: 'Relationship' },
-            { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
-            { key: 'responded_at', label: 'Responded', render: (row) => formatDateTime(row.responded_at) },
+            { key: 'reference_code', label: 'errReference' },
+            { key: 'full_name', label: 'appReferee' },
+            { key: 'category', label: 'ofcAgCategory' },
+            { key: 'relationship', label: 'ofcAgRelationship' },
+            { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+            { key: 'responded_at', label: 'ofcAgResponded', render: (row) => formatDateTime(row.responded_at) },
             {
               key: 'action',
               label: '',
@@ -379,9 +369,7 @@ export function AgentDetailScreen({
                           return 'Referee cleared.';
                         })
                       }
-                    >
-                      Clear
-                    </button>
+                    >{t.ofcAgClear}</button>
                     <button
                       type="button"
                       className="small danger"
@@ -395,48 +383,43 @@ export function AgentDetailScreen({
                           return 'Referee rejected.';
                         })
                       }
-                    >
-                      Reject
-                    </button>
+                    >{t.ofcAgReject}</button>
                   </div>
                 ) : null,
             },
           ]}
           rows={detail.referees}
-          empty="No referee has been nominated."
+          empty="ofcNoneRefereeNominated"
         />
       </div>
 
       <div className="grid-2">
         <div className="card card--flush">
           <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Training</h2>
+            <h2 className="card__title">{t.appTraining}</h2>
           </div>
           <Table
             columns={[
-              { key: 'code', label: 'Module' },
-              { key: 'title', label: 'Title' },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
-              { key: 'score', label: 'Score', numeric: true, render: (row) => (row.score ?? '—') },
+              { key: 'code', label: 'ofcAgModule' },
+              { key: 'title', label: 'ofcAgTitleHeading' },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+              { key: 'score', label: 'ofcAgScore', numeric: true, render: (row) => (row.score ?? '—') },
             ]}
             rows={detail.training}
-            empty="No training records."
+            empty="ofcNoneTrainingRecords"
           />
         </div>
 
         <div className="card card--flush">
           <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Devices</h2>
-            <p className="card__hint">
-              A phone an agent has just registered waits here as PENDING and cannot be used to
-              collect until it is approved. Revoking a device ends its sessions immediately.
-            </p>
+            <h2 className="card__title">{t.ofcAgDevices}</h2>
+            <p className="card__hint">{t.ofcAgDevicesBody}</p>
           </div>
           <Table
             columns={[
-              { key: 'device_name', label: 'Device', render: (row) => row.device_name ?? 'Unnamed' },
-              { key: 'pwa_version', label: 'Version' },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'device_name', label: 'appDeviceLabel', render: (row) => row.device_name ?? 'Unnamed' },
+              { key: 'pwa_version', label: 'ofcAgVersion' },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
                 label: '',
@@ -460,9 +443,7 @@ export function AgentDetailScreen({
                               return 'Device approved. The agent can now collect from it.';
                             })
                           }
-                        >
-                          Approve
-                        </button>
+                        >{t.ofcRhApprove}</button>
                       )}
                       {/*
                         * Pausing sits before revoking, and reads as the lesser
@@ -484,9 +465,7 @@ export function AgentDetailScreen({
                               return 'Device suspended and its sessions ended. It can be restored.';
                             })
                           }
-                        >
-                          Suspend
-                        </button>
+                        >{t.ofcAgSuspend}</button>
                       )}
                       {row.status === 'SUSPENDED' && (
                         <button
@@ -499,9 +478,7 @@ export function AgentDetailScreen({
                               return 'Device restored. The agent can collect from it again.';
                             })
                           }
-                        >
-                          Restore
-                        </button>
+                        >{t.ofcAgRestore}</button>
                       )}
                       {row.status !== 'REVOKED' && (
                         <button
@@ -514,34 +491,30 @@ export function AgentDetailScreen({
                               return 'Device revoked and its sessions ended.';
                             })
                           }
-                        >
-                          Revoke
-                        </button>
+                        >{t.ofcAgRevoke}</button>
                       )}
                     </div>
                   ) : null,
               },
             ]}
             rows={detail.devices}
-            empty="No devices registered."
+            empty="ofcNoneDevicesRegistered"
           />
         </div>
       </div>
 
       {(can('agent:approve') || can('agent:manage') || can('agent:suspend')) && (
         <div className="card">
-          <h2 className="card__title">Decision</h2>
-          <p className="card__hint">
-            Every decision is recorded against your name in the audit log and requires a reason.
-          </p>
+          <h2 className="card__title">{t.ofcAgDecision}</h2>
+          <p className="card__hint">{t.ofcAgDecisionRecorded}</p>
 
           <div className="field">
-            <label htmlFor="reason">Reason (minimum 10 characters)</label>
+            <label htmlFor="reason">{t.ofcAgReasonMinimum}</label>
             <textarea
               id="reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Identity verified against NIN; referee confirmed by district head; records in order."
+              placeholder={t.ofcAgSampleKycNote}
             />
           </div>
 
@@ -556,9 +529,7 @@ export function AgentDetailScreen({
                     return 'Application approved.';
                   })
                 }
-              >
-                Approve application
-              </button>
+              >{t.ofcAgApproveApplication}</button>
               <button
                 type="button"
                 className="secondary"
@@ -569,9 +540,7 @@ export function AgentDetailScreen({
                     return 'More information requested from the applicant.';
                   })
                 }
-              >
-                Request more information
-              </button>
+              >{t.ofcAgRequestMoreInformation}</button>
               <button
                 type="button"
                 className="danger"
@@ -582,32 +551,27 @@ export function AgentDetailScreen({
                     return 'Application rejected.';
                   })
                 }
-              >
-                Reject
-              </button>
+              >{t.ofcAgReject}</button>
             </div>
           )}
 
           {checklist.governmentApproved && !detail.canCollectRevenue && can('agent:manage') && (
             <>
               <div className="field">
-                <label htmlFor="territory">Assign territory</label>
+                <label htmlFor="territory">{t.ofcAgAssignTerritory}</label>
                 <select
                   id="territory"
                   value={territoryId}
                   onChange={(event) => setTerritoryId(event.target.value)}
                 >
-                  <option value="">Select a territory</option>
+                  <option value="">{t.ofcAgSelectTerritory}</option>
                   {territories.map((territory) => (
                     <option key={territory.id} value={territory.id}>
                       {territory.name} ({territory.lga_name})
                     </option>
                   ))}
                 </select>
-                <p className="field__hint">
-                  Every transaction is attributed to a territory, so one must be assigned before
-                  activation.
-                </p>
+                <p className="field__hint">{t.ofcAgTerritoryRequired}</p>
               </div>
               <button
                 type="button"
@@ -618,14 +582,9 @@ export function AgentDetailScreen({
                     return 'Agent activated.';
                   })
                 }
-              >
-                Activate agent
-              </button>
+              >{t.ofcAgActivateAgent}</button>
               {detail.outstanding.length > 0 && (
-                <p className="field__hint" style={{ marginTop: 8 }}>
-                  Activation is blocked until every clearance item is satisfied. An exception
-                  requires an approved government override.
-                </p>
+                <p className="field__hint" style={{ marginTop: 8 }}>{t.ofcAgActivationBlocked}</p>
               )}
             </>
           )}
@@ -643,23 +602,20 @@ export function AgentDetailScreen({
             */}
           {detail.canCollectRevenue && can('agent:assign_territory') && (
             <div className="field">
-              <label htmlFor="reassign-territory">Move to another territory</label>
+              <label htmlFor="reassign-territory">{t.ofcAgMoveTerritory}</label>
               <select
                 id="reassign-territory"
                 value={territoryId}
                 onChange={(event) => setTerritoryId(event.target.value)}
               >
-                <option value="">Select a territory</option>
+                <option value="">{t.ofcAgSelectTerritory}</option>
                 {territories.map((territory) => (
                   <option key={territory.id} value={territory.id}>
                     {territory.name} ({territory.lga_name})
                   </option>
                 ))}
               </select>
-              <p className="field__hint">
-                Collections already made keep the territory they were collected under. This decides
-                where the next ones are attributed.
-              </p>
+              <p className="field__hint">{t.ofcAgMoveTerritoryBody}</p>
               <button
                 type="button"
                 className="secondary"
@@ -671,9 +627,7 @@ export function AgentDetailScreen({
                     return 'Territory reassigned. Future collections are attributed to it.';
                   })
                 }
-              >
-                Reassign territory
-              </button>
+              >{t.ofcAgReassignTerritory}</button>
             </div>
           )}
 
@@ -689,25 +643,23 @@ export function AgentDetailScreen({
                   return 'Agent suspended. Their sessions and devices have been disabled.';
                 })
               }
-            >
-              Suspend agent
-            </button>
+            >{t.ofcAgSuspendAgent}</button>
           )}
         </div>
       )}
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Clearance history</h2>
+          <h2 className="card__title">{t.ofcAgClearanceHistory}</h2>
         </div>
         <Table
           columns={[
-            { key: 'created_at', label: 'When', render: (row) => formatDateTime(row.created_at) },
-            { key: 'event_type', label: 'Event', render: (row) => <Badge status={row.event_type} /> },
-            { key: 'reason', label: 'Reason', render: (row) => row.reason ?? '—' },
+            { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
+            { key: 'event_type', label: 'ofcAgEvent', render: (row) => <Badge status={row.event_type} /> },
+            { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
           ]}
           rows={detail.history}
-          empty="No clearance events recorded."
+          empty="ofcNoneClearanceEventsRecorded"
         />
       </div>
     </>
@@ -717,6 +669,7 @@ export function AgentDetailScreen({
 // ---------------------------------------------------------------------------
 
 export function RefereesScreen() {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<any | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [reviewing, setReviewing] = useState<any | null>(null);
@@ -783,11 +736,11 @@ export function RefereesScreen() {
         </Alert>
       )}
       <div className="stat-grid">
-        <Stat label="Total referees" value={data.counts.total} />
-        <Stat label="Pending" value={data.counts.pending} />
-        <Stat label="Cleared" value={data.counts.cleared} />
+        <Stat label="ofcAgTotalReferees" value={data.counts.total} />
+        <Stat label="ofcAgPending" value={data.counts.pending} />
+        <Stat label="ofcAgCleared" value={data.counts.cleared} />
         <Stat
-          label="Failed or rejected"
+          label="ofcAgFailedRejected"
           value={data.counts.failed}
           variant={Number(data.counts.failed) > 0 ? 'alert' : undefined}
         />
@@ -795,22 +748,18 @@ export function RefereesScreen() {
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Referee risk flags</h2>
-          <p className="card__hint">
-            Patterns that suggest a referee relationship is not genuine. Nothing is blocked while a
-            flag is merely open — but a flag you uphold stops that referee being cleared until
-            somebody dismisses it with their findings.
-          </p>
+          <h2 className="card__title">{t.ofcAgRefereeRiskFlags}</h2>
+          <p className="card__hint">{t.ofcAgRefereeRiskBody}</p>
         </div>
         <Table
           columns={[
-            { key: 'full_name', label: 'Referee' },
-            { key: 'reference_code', label: 'Reference' },
-            { key: 'rule', label: 'Signal', render: (row) => <Badge status={row.rule} /> },
-            { key: 'severity', label: 'Severity', render: (row) => <Badge status={row.severity} /> },
+            { key: 'full_name', label: 'appReferee' },
+            { key: 'reference_code', label: 'errReference' },
+            { key: 'rule', label: 'ofcAgSignal', render: (row) => <Badge status={row.rule} /> },
+            { key: 'severity', label: 'ofcAgSeverity', render: (row) => <Badge status={row.severity} /> },
             {
               key: 'detail',
-              label: 'Detail',
+              label: 'ofcAgDetail',
               render: (row) => (
                 <span className="mono">{JSON.stringify(row.detail)}</span>
               ),
@@ -829,14 +778,12 @@ export function RefereesScreen() {
                       setNote('');
                       setMessage(null);
                     }}
-                  >
-                    Review
-                  </button>
+                  >{t.tpStepReview}</button>
                 ) : null,
             },
           ]}
           rows={data.suspiciousReferees}
-          empty="No referee risk flags are open."
+          empty="ofcNoneRefereeRiskFlagsOpen"
         />
       </div>
 
@@ -849,26 +796,26 @@ export function RefereesScreen() {
           </p>
 
           <div className="field">
-            <label htmlFor="flag-decision">What you found</label>
+            <label htmlFor="flag-decision">{t.ofcAgWhatYouFound}</label>
             <select
               id="flag-decision"
               value={decision}
               onChange={(event) => setDecision(event.target.value as typeof decision)}
             >
-              <option value="UNDER_REVIEW">Looking into it</option>
-              <option value="CONFIRMED">Upheld — this referee cannot be relied on</option>
-              <option value="DISMISSED">Dismissed — the pattern is innocent</option>
+              <option value="UNDER_REVIEW">{t.ofcAgLookingIntoIt}</option>
+              <option value="CONFIRMED">{t.ofcAgUpheld}</option>
+              <option value="DISMISSED">{t.ofcAgDismissed}</option>
             </select>
           </div>
 
           <div className="field">
-            <label htmlFor="flag-note">What you found</label>
+            <label htmlFor="flag-note">{t.ofcAgWhatYouFound}</label>
             <textarea
               id="flag-note"
               value={note}
               rows={3}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Called all six applicants; four have never met him."
+              placeholder={t.ofcAgSampleRefereeNote}
             />
           </div>
 
@@ -883,25 +830,23 @@ export function RefereesScreen() {
                 setReviewing(null);
                 setNote('');
               }}
-            >
-              Cancel
-            </button>
+            >{t.camCancel}</button>
           </div>
         </div>
       )}
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Referees supporting more than one applicant</h2>
+          <h2 className="card__title">{t.ofcAgRefereesMultiple}</h2>
         </div>
         <Table
           columns={[
-            { key: 'full_name', label: 'Referee' },
-            { key: 'phone', label: 'Phone' },
-            { key: 'agent_count', label: 'Applicants supported', numeric: true },
+            { key: 'full_name', label: 'appReferee' },
+            { key: 'phone', label: 'tpPhone' },
+            { key: 'agent_count', label: 'ofcAgApplicantsSupported', numeric: true },
           ]}
           rows={data.refereesSupportingMultipleAgents}
-          empty="No referee supports more than one applicant."
+          empty="ofcNoneRefereeSupportsMoreApplicant"
         />
       </div>
     </>
@@ -942,6 +887,7 @@ interface PendingBankChange {
  * officer is never invited to press something that cannot work.
  */
 export function BankChangesCard() {
+  const { t } = usePortalI18n();
   const [changes, setChanges] = useState<PendingBankChange[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -1011,18 +957,16 @@ export function BankChangesCard() {
 
   return (
     <div className="card">
-      <h2 className="card__title">Bank account changes</h2>
+      <h2 className="card__title">{t.ofcAgBankAccountChanges}</h2>
       <p className="card__hint">
-        Where an agent&rsquo;s commission is paid. Nothing moves until the bank confirms the new
-        account and an officer other than the one who asked approves it. The account in use keeps
-        being used until then.
+        {t.ofcAgBankChangeBody}
       </p>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
       {changes.length === 0 ? (
-        <p className="empty">No bank account changes are waiting.</p>
+        <p className="empty">{t.ofcAgNoBankChanges}</p>
       ) : (
         <ul className="list">
           {changes.map((change) => {
@@ -1067,7 +1011,7 @@ export function BankChangesCard() {
                 />
 
                 {nameDiffers && (
-                  <Alert kind="warning" title="The bank returned a different name">
+                  <Alert kind="warning" title="ofcAgBankDifferentName">
                     <p style={{ margin: 0 }}>
                       The agent gave &ldquo;{change.accountName}&rdquo; and the bank holds this
                       account as &ldquo;{change.verificationResolvedName}&rdquo;. Confirm with the
@@ -1077,7 +1021,7 @@ export function BankChangesCard() {
                 )}
 
                 {!confirmed && (
-                  <Alert kind="warning" title="The bank has not confirmed this account">
+                  <Alert kind="warning" title="moreBankNotConfirmed">
                     <p style={{ margin: 0 }}>
                       {change.verificationStatus === 'PENDING'
                         ? 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.'
@@ -1103,9 +1047,7 @@ export function BankChangesCard() {
                             : `The bank still did not confirm it (${result.outcome.toLowerCase()}).`;
                         })
                       }
-                    >
-                      Ask the bank again
-                    </button>
+                    >{t.ofcAgAskBankAgain}</button>
                   )}
                   {can('approval:authorise') && confirmed && (
                     <button
@@ -1113,9 +1055,7 @@ export function BankChangesCard() {
                       className="small"
                       disabled={busy === change.approvalId}
                       onClick={() => decide(change, 'APPROVE')}
-                    >
-                      Approve
-                    </button>
+                    >{t.ofcRhApprove}</button>
                   )}
                   {can('approval:review') && (
                     <button
@@ -1123,9 +1063,7 @@ export function BankChangesCard() {
                       className="small danger"
                       disabled={busy === change.approvalId}
                       onClick={() => decide(change, 'REJECT')}
-                    >
-                      Refuse
-                    </button>
+                    >{t.ofcAgRefuse}</button>
                   )}
                 </div>
               </li>

@@ -128,7 +128,7 @@ export function FieldAppScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Field application</h2>
+        <h2 className="card__title">{t.ofcNavFieldApp}</h2>
         <p className="card__hint">
           A handset below the minimum version cannot start a payment or renew a vehicle. It is
           refused before any money moves, and the agent is told to update. Raise the minimum when
@@ -169,7 +169,7 @@ export function FieldAppScreen() {
             },
           ]}
           rows={history.fleet}
-          empty="No handset has been registered yet."
+          empty="ofcNoneHandsetRegistered"
         />
       </div>
 
@@ -264,7 +264,7 @@ export function FieldAppScreen() {
             { key: 'recommendedVersion', label: 'Recommended' },
             {
               key: 'inForce',
-              label: 'Status',
+              label: 'appStatus',
               render: (row: PublishedVersion) => (
                 <Badge
                   status={
@@ -288,7 +288,7 @@ export function FieldAppScreen() {
             { key: 'notes', label: 'Why' },
           ]}
           rows={history.published}
-          empty="Nothing has been published yet."
+          empty="ofcNoneNothingPublished"
         />
       </div>
     </>

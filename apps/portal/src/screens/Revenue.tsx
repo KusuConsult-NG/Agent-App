@@ -136,7 +136,7 @@ export function RevenueScreen() {
           hint="Wards that produced revenue"
         />
         <Stat
-          label="MDAs collecting nothing"
+          label="ofcRhMdasCollectingNothing"
           value={String(emptyMdas.length)}
           hint="Arms of government with no catalogue item"
         />
@@ -200,7 +200,7 @@ export function RevenueScreen() {
             },
           ]}
           rows={data.byMda}
-          empty="No MDA is configured."
+          empty="ofcNoneMdaConfigured"
         />
       </div>
 
@@ -234,7 +234,7 @@ export function RevenueScreen() {
             },
           ]}
           rows={data.localGovernment ?? []}
-          empty="No local government revenue has been collected in this period."
+          empty="ofcNoneLocalGovernmentRevenueCollected"
         />
       </div>
 
@@ -248,8 +248,8 @@ export function RevenueScreen() {
         </p>
         <Table
           columns={[
-            { key: 'lga', label: 'LGA' },
-            { key: 'ward', label: 'Ward' },
+            { key: 'lga', label: 'tpLgaShort' },
+            { key: 'ward', label: 'tpWard' },
             { key: 'zone', label: 'Zone' },
             {
               key: 'amount_kobo',
@@ -257,7 +257,7 @@ export function RevenueScreen() {
               render: (row: AreaRow) => <Money kobo={row.amount_kobo} />,
             },
             { key: 'transactions', label: 'Collections' },
-            { key: 'taxpayers', label: 'Taxpayers' },
+            { key: 'taxpayers', label: 'ofcRhTaxpayers' },
             { key: 'agents', label: 'Agents' },
             {
               key: 'located_transactions',
@@ -266,7 +266,7 @@ export function RevenueScreen() {
             },
           ]}
           rows={data.areas}
-          empty="No revenue has been collected in this period."
+          empty="ofcNoneRevenueCollectedPeriod"
         />
       </div>
 
@@ -281,8 +281,8 @@ export function RevenueScreen() {
         </p>
         <Table
           columns={[
-            { key: 'agent_code', label: 'Agent' },
-            { key: 'full_name', label: 'Name' },
+            { key: 'agent_code', label: 'ofcRhAgent' },
+            { key: 'full_name', label: 'tpName' },
             { key: 'territory', label: 'Territory' },
             {
               key: 'amount_kobo',
@@ -302,7 +302,7 @@ export function RevenueScreen() {
             },
           ]}
           rows={data.agents}
-          empty="No agent has collected in this period."
+          empty="ofcNoneAgentCollectedPeriod"
         />
       </div>
     </>

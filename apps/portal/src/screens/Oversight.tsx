@@ -200,8 +200,8 @@ export function FraudScreen() {
           </div>
           <Table
             columns={[
-              { key: 'agent_code', label: 'Agent' },
-              { key: 'full_name', label: 'Name' },
+              { key: 'agent_code', label: 'ofcRhAgent' },
+              { key: 'full_name', label: 'tpName' },
               { key: 'flag_count', label: 'Open flags', numeric: true },
               {
                 key: 'highest_severity',
@@ -221,16 +221,16 @@ export function FraudScreen() {
               <h2 className="card__title">Fraud signals</h2>
             </div>
             <div className="field" style={{ marginBottom: 0, minWidth: 160 }}>
-              <label htmlFor="flag-status">Status</label>
+              <label htmlFor="flag-status">{t.appStatus}</label>
               <select
                 id="flag-status"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
               >
-                <option value="">All</option>
-                <option value="OPEN">Open</option>
+                <option value="">{t.ofcAgAll}</option>
+                <option value="OPEN">{t.ofcRhOpen}</option>
                 <option value="UNDER_REVIEW">Under review</option>
-                <option value="CONFIRMED">Confirmed</option>
+                <option value="CONFIRMED">{t.moreBankCheckConfirmed}</option>
                 <option value="DISMISSED">Dismissed</option>
               </select>
             </div>
@@ -243,21 +243,21 @@ export function FraudScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'rule', label: 'Signal', render: (row) => <Badge status={row.rule} /> },
-              { key: 'severity', label: 'Severity', render: (row) => <Badge status={row.severity} /> },
+              { key: 'rule', label: 'ofcAgSignal', render: (row) => <Badge status={row.rule} /> },
+              { key: 'severity', label: 'ofcAgSeverity', render: (row) => <Badge status={row.severity} /> },
               { key: 'entity_type', label: 'Subject' },
-              { key: 'agent_name', label: 'Agent', render: (row) => row.agent_name ?? '—' },
+              { key: 'agent_name', label: 'ofcRhAgent', render: (row) => row.agent_name ?? '—' },
               {
                 key: 'transaction_reference',
-                label: 'Transaction',
+                label: 'supTransactionLabel',
                 render: (row) => <span className="mono">{row.transaction_reference ?? '—'}</span>,
               },
               {
                 key: 'detail',
-                label: 'Detail',
+                label: 'ofcAgDetail',
                 render: (row) => <SignalDetail detail={row.detail} />,
               },
-              { key: 'created_at', label: 'Raised', render: (row) => formatDateTime(row.created_at) },
+              { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
               {
                 key: 'action',
                 label: '',
@@ -285,7 +285,7 @@ export function FraudScreen() {
               },
             ]}
             rows={flags}
-            empty="No fraud signals match this filter."
+            empty="ofcNoneFraudSignalsMatchFilter"
           />
         )}
       </div>
@@ -450,7 +450,7 @@ export function BackgroundWorkPanel() {
           { key: 'message', label: 'What that means' },
         ]}
         rows={health.jobs}
-        empty="No background jobs are declared."
+        empty="ofcNoneBackgroundJobsDeclared"
       />
     </div>
   );
@@ -600,7 +600,7 @@ export function AuditScreen() {
                 ),
             }))}
             rows={queryResult.rows}
-            empty="No records match this query."
+            empty="ofcNoneRecordsMatchQuery"
           />
         </div>
       )}
@@ -652,13 +652,13 @@ export function AuditScreen() {
           <Table
             columns={[
               { key: 'sequence_no', label: '#', numeric: true },
-              { key: 'created_at', label: 'When', render: (row) => formatDateTime(row.created_at) },
+              { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
               { key: 'actor_name', label: 'Actor', render: (row) => row.actor_name ?? 'System' },
-              { key: 'actor_role', label: 'Role' },
+              { key: 'actor_role', label: 'ofcRhRole' },
               { key: 'action', label: 'Action', render: (row) => <span className="mono">{row.action}</span> },
               { key: 'entity_type', label: 'Entity' },
               { key: 'result', label: 'Result', render: (row) => <Badge status={row.result} /> },
-              { key: 'reason', label: 'Reason', render: (row) => row.reason ?? '—' },
+              { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
               {
                 key: 'hash',
                 label: 'Hash',
@@ -666,7 +666,7 @@ export function AuditScreen() {
               },
             ]}
             rows={entries}
-            empty="No audit entries match these filters."
+            empty="ofcNoneAuditEntriesMatchThese"
           />
         )}
       </div>
@@ -792,9 +792,7 @@ function AuditQueryParameters({
     <div className="card">
       <div className="card__header">
         <h2 className="card__title">{query.label}</h2>
-        <button type="button" className="small secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
       {source === 'taxpayerSearch' && (
@@ -804,16 +802,14 @@ function AuditQueryParameters({
             <input
               id="taxpayer-search"
               value={search}
-              placeholder="Name, phone or TIN"
+              placeholder={t.colNamePhoneTin}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void runSearch();
               }}
             />
           </div>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void runSearch()}>
-            Search
-          </button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => void runSearch()}>{t.search}</button>
         </div>
       )}
 

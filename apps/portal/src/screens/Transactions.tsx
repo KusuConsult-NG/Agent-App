@@ -78,7 +78,7 @@ export function TransactionsScreen() {
       <div className="card">
         <div className="filters">
           <div className="field">
-            <label htmlFor="status">Status</label>
+            <label htmlFor="status">{t.appStatus}</label>
             <select
               id="status"
               value={filters.status}
@@ -94,7 +94,7 @@ export function TransactionsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="lga">Local Government Area</label>
+            <label htmlFor="lga">{t.pubVerifyLga}</label>
             <select
               id="lga"
               value={filters.lgaId}
@@ -147,20 +147,20 @@ export function TransactionsScreen() {
             columns={[
               {
                 key: 'transaction_reference',
-                label: 'Reference',
+                label: 'errReference',
                 render: (row) => <span className="mono">{row.transaction_reference}</span>,
               },
-              { key: 'taxpayer_name', label: 'Taxpayer' },
-              { key: 'revenue_item', label: 'Revenue item' },
-              { key: 'lga', label: 'LGA' },
-              { key: 'agent_code', label: 'Agent', render: (row) => row.agent_code ?? 'Direct' },
+              { key: 'taxpayer_name', label: 'colTaxpayerLabel' },
+              { key: 'revenue_item', label: 'colRevenueItem' },
+              { key: 'lga', label: 'tpLgaShort' },
+              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? 'Direct' },
               {
                 key: 'amount_kobo',
-                label: 'Amount',
+                label: 'pubVerifyAmount',
                 numeric: true,
                 render: (row) => <Money kobo={row.amount_kobo} />,
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'receipt_number',
                 label: 'Receipt',
@@ -174,7 +174,7 @@ export function TransactionsScreen() {
               },
             ]}
             rows={rows}
-            empty="No transactions match these filters."
+            empty="ofcNoneTransactionsMatchTheseFilters"
           />
         )}
       </div>

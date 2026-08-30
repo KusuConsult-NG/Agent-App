@@ -104,11 +104,9 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
         </div>
 
         <div className="filters">
-          <label>
-            Status
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="">All</option>
-              <option value="OPEN">Open</option>
+          <label>{t.appStatus}<select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="OPEN">{t.ofcRhOpen}</option>
               <option value="ASSIGNED">Assigned</option>
               <option value="IN_PROGRESS">In progress</option>
               <option value="RESOLVED">Resolved</option>
@@ -132,9 +130,9 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                   </button>
                 ),
               },
-              { key: 'category', label: 'About', render: (row) => humanise(row.category) },
+              { key: 'category', label: 'supAbout', render: (row) => humanise(row.category) },
               { key: 'priority', label: 'Priority', render: (row) => <Badge status={row.priority} /> },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'raised_by_name',
                 label: 'Reported by',
@@ -142,10 +140,10 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
               },
               { key: 'assigned_to_name', label: 'Assigned', render: (row) => row.assigned_to_name ?? '—' },
               { key: 'message_count', label: 'Replies', numeric: true },
-              { key: 'created_at', label: 'Raised', render: (row) => formatDateTime(row.created_at) },
+              { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
             ]}
             rows={tickets}
-            empty="No tickets match this filter."
+            empty="ofcNoneTicketsMatchFilter"
           />
         )}
       </div>
@@ -268,7 +266,7 @@ export function TicketDetailScreen({
       </div>
 
       <div className="card">
-        <h2 className="card__title">Conversation</h2>
+        <h2 className="card__title">{t.supConversation}</h2>
         <ol className="thread">
           <li className="thread__item">
             <p className="thread__meta">
