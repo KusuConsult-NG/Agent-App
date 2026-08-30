@@ -135,6 +135,205 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcRhBlockedCount: string;
+  ofcRhInvoicesStillOpen: string;
+  colShareTitle: string;
+  colShareBody: string;
+  ofcRhNothingWaiting: string;
+  ofcNothingToShow: string;
+
+  /**
+   * The figures on the role home screen, and the queues an officer works
+   * straight from it.
+   */
+  ofcRhActiveRecords: string;
+  ofcRhRegisteredByBoth: string;
+  ofcRhTinNoTracking: string;
+  ofcRhCollectedForCouncils: string;
+  ofcRhAccruedNotPaid: string;
+  ofcRhExpectedLessReceived: string;
+  ofcRhBankPlatformDisagree: string;
+  ofcRhHashChainedShort: string;
+  ofcRhEntriesSinceMidnight: string;
+  ofcRhRaisedNotReviewed: string;
+  ofcRhAgentsAwaitingClearance: string;
+  ofcRhApplicationsComplete: string;
+  ofcRhAgentsAskedForMore: string;
+  ofcRhWaitingOnApplicant: string;
+  ofcRhDevicesAwaitingApproval: string;
+  ofcRhAgentNeedsHandset: string;
+  ofcRhSupervisorsNoTerritory: string;
+  ofcRhNoFiguresUntilTerritory: string;
+  ofcRhItemsNoRate: string;
+  ofcRhNotCollectableYet: string;
+  ofcRhMdasCollectingNothing: string;
+  ofcRhNoItemForMda: string;
+  ofcRhOfficersWithAccess: string;
+  ofcRhExcludingFieldAgents: string;
+  ofcRhSupportTicketsOpen: string;
+  ofcRhRaisedByAgents: string;
+  ofcRhTinApplicationsFailed: string;
+  ofcRhRegisterRefusedThese: string;
+  ofcRhAppliedNotIssued: string;
+  ofcRhCorrectionsAwaiting: string;
+  ofcRhSomeoneAskedChange: string;
+  ofcRhInvoicesUnpaid: string;
+  ofcRhRaisedStillOpen: string;
+  ofcRhInvoicesExpired: string;
+  ofcRhNeverPaidOutOfTime: string;
+  ofcRhRegisteredThisWeek: string;
+  ofcRhNewTaxpayers: string;
+  ofcRhTaxpayersOnRegister: string;
+  ofcRhReconciliationExceptions: string;
+  ofcRhDisagreeAboutThese: string;
+  ofcRhSettlementsUnreconciled: string;
+  ofcRhReceivedNotMatched: string;
+  ofcRhPayoutsToApprove: string;
+  ofcRhAgentsWaitingShort: string;
+  ofcRhRefundsOwed: string;
+  ofcRhMoneyStateShouldNotHave: string;
+  ofcRhMoneyBackOutQuery: string;
+  ofcRhActionsRefusedWeek: string;
+  ofcRhSomeoneTriedNotPermitted: string;
+  ofcRhRateChangesMonth: string;
+  ofcRhEveryChangeCharged: string;
+  ofcRhReceiptsCheckedPublic: string;
+  ofcRhVerificationLookups: string;
+  ofcRhAuditEntriesToday: string;
+  ofcRhHashChainedLong: string;
+  ofcRhAuditEntriesTotal: string;
+  ofcRhSincePlatformStarted: string;
+  ofcRhTaxpayersOnRecord: string;
+  ofcRhWaiting: string;
+  ofcRhAgent: string;
+  ofcRhWaitingSince: string;
+  ofcRhApprovedFromHome: string;
+  ofcRhRegistered: string;
+  ofcRhOfficer: string;
+  ofcRhWhyFailed: string;
+  ofcRhExpires: string;
+  ofcRhKind: string;
+  ofcRhExpected: string;
+  ofcRhReceived: string;
+  ofcRhRaisedHeading: string;
+  ofcRhRequested: string;
+  ofcRhWhen: string;
+  ofcRhRole: string;
+  ofcRhAttempted: string;
+  ofcRhAgainst: string;
+  ofcRhOutcome: string;
+
+  /**
+   * The home screen, which differs per role: what is waiting on this officer
+   * and what their job is for.
+   */
+  ofcRhToday: string;
+  ofcRhNewThisWeek: string;
+  ofcRhOpen: string;
+  ofcRhOpenFile: string;
+  ofcRhApprove: string;
+  ofcRhTaxpayers: string;
+  ofcRhExceptions: string;
+  ofcRhAuditEntries: string;
+  ofcRhAgentsWaiting: string;
+  ofcRhAgentsWaitingBody: string;
+  ofcRhClearanceBody: string;
+  ofcRhHandsetsWaiting: string;
+  ofcRhHandsetsBody: string;
+  ofcRhCommissionPayouts: string;
+  ofcRhCommissionLiability: string;
+  ofcRhAssessedUnpaid: string;
+  ofcRhTinsOutstanding: string;
+  ofcRhTinsBody: string;
+  ofcRhTinRefused: string;
+  ofcRhTheRegister: string;
+  ofcRhRegisterBody: string;
+  ofcRhMoneyInOut: string;
+  ofcRhMoneyBody: string;
+  ofcRhOwedToCouncils: string;
+  ofcRhSettlementVariance: string;
+  ofcRhBankDisagree: string;
+  ofcRhReconciliationOpen: string;
+  ofcRhReconciliationBody: string;
+  ofcRhExceptionQueueBody: string;
+  ofcRhWorkExceptionQueue: string;
+  ofcRhReversedRefunded: string;
+  ofcRhMoneyBackOut: string;
+  ofcRhReversedBody: string;
+  ofcRhFraudOpen: string;
+  ofcRhInvoicesExpiring: string;
+  ofcRhInvoicesBody: string;
+  ofcRhRefusedActions: string;
+  ofcRhRefusedBody: string;
+  ofcRhSupervisorsNothing: string;
+  ofcRhSupervisorsBody: string;
+  ofcRhAssignTerritories: string;
+  ofcRhWhatToExamine: string;
+  ofcRhReadOnlyBody: string;
+  ofcRhAdminBody: string;
+  ofcRhAdminIntro: string;
+  ofcRevenueAdministration: string;
+  ofcDistributionRound: string;
+  ofcLanguage: string;
+
+  /**
+   * The officer portal: its navigation, the frame around every screen, and
+   * the sign-in that turns somebody away when they belong in the agent app.
+   */
+  ofcNavDashboard: string;
+  ofcNavIntelligence: string;
+  ofcNavRevenue: string;
+  ofcNavLevies: string;
+  ofcNavTransactions: string;
+  ofcNavAgents: string;
+  ofcNavReferees: string;
+  ofcNavPerformance: string;
+  ofcNavReconciliation: string;
+  ofcNavCommissions: string;
+  ofcNavApprovals: string;
+  ofcNavFraud: string;
+  ofcNavSupport: string;
+  ofcNavOutstanding: string;
+  ofcNavAudit: string;
+  ofcNavUsage: string;
+  ofcNavCatalogue: string;
+  ofcNavProgrammes: string;
+  ofcNavGroups: string;
+  ofcNavTaxpayerRecords: string;
+  ofcNavUsers: string;
+  ofcNavFieldApp: string;
+  ofcNavAllocations: string;
+  ofcGroupAdministration: string;
+  ofcGroupAgentsProgrammes: string;
+  ofcGroupAssessment: string;
+  ofcGroupConfiguration: string;
+  ofcGroupEverything: string;
+  ofcGroupExamination: string;
+  ofcGroupMyTerritory: string;
+  ofcGroupOversight: string;
+  ofcGroupRevenueHere: string;
+  ofcGroupRevenue: string;
+  ofcGroupSettlement: string;
+  ofcGroupTheMoney: string;
+  ofcGroupTheRegister: string;
+  ofcGroupWhatCharged: string;
+  ofcGroupWhoCollected: string;
+  ofcGroupWhoDidIt: string;
+  ofcPortalName: string;
+  ofcStateGovernment: string;
+  ofcReturnToDashboard: string;
+  ofcSignOut: string;
+  ofcPageNotFound: string;
+  ofcReadOnly: string;
+  ofcDailyTrend: string;
+  ofcNoDataForPeriod: string;
+  ofcLoginTitle: string;
+  ofcLoginPhone: string;
+  ofcLoginPassword: string;
+  ofcLoginMonitored: string;
+  ofcLoginWrongPlace: string;
+  ofcLoginSignInWorked: string;
+  ofcLoginUseAgentApp: string;
   shellSyncFailed: string;
   grpNameHint: string;
   grpCommunityHint: string;
@@ -1029,6 +1228,190 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcRhBlockedCount: "{{n}} thing(s) are stopping somebody working",
+    ofcRhInvoicesStillOpen: "{{n}} invoice(s) still open",
+    colShareTitle: "PSIRS receipt",
+    colShareBody: "PSIRS receipt {{number}} for {{name}}. Verify with code {{code}}.",
+    ofcRhNothingWaiting: "Nothing is waiting.",
+    ofcNothingToShow: "Nothing to show.",
+    ofcRhActiveRecords: "Active records",
+    ofcRhRegisteredByBoth: "Registered by agents and officers",
+    ofcRhTinNoTracking: "A taxpayer without one cannot be tracked across years",
+    ofcRhCollectedForCouncils: "Collected on their behalf, not the state’s own",
+    ofcRhAccruedNotPaid: "Accrued and not yet paid",
+    ofcRhExpectedLessReceived: "Expected less received, on unreconciled settlements",
+    ofcRhBankPlatformDisagree: "The bank and the platform disagree",
+    ofcRhHashChainedShort: "Hash-chained, append-only",
+    ofcRhEntriesSinceMidnight: "Entries since midnight",
+    ofcRhRaisedNotReviewed: "Raised and not yet reviewed",
+    ofcRhAgentsAwaitingClearance: "Agents awaiting clearance",
+    ofcRhApplicationsComplete: "Applications complete and waiting on a decision",
+    ofcRhAgentsAskedForMore: "Agents asked for more",
+    ofcRhWaitingOnApplicant: "Waiting on the applicant, not on you",
+    ofcRhDevicesAwaitingApproval: "Devices awaiting approval",
+    ofcRhAgentNeedsHandset: "An agent cannot collect until their handset is approved",
+    ofcRhSupervisorsNoTerritory: "Supervisors with no territory",
+    ofcRhNoFiguresUntilTerritory: "They see no revenue figures at all until one is assigned",
+    ofcRhItemsNoRate: "Revenue items with no rate",
+    ofcRhNotCollectableYet: "Catalogued and not collectable until government sets the amount",
+    ofcRhMdasCollectingNothing: "MDAs collecting nothing",
+    ofcRhNoItemForMda: "No revenue item exists for them in this platform",
+    ofcRhOfficersWithAccess: "Officers with access",
+    ofcRhExcludingFieldAgents: "Excluding field agents",
+    ofcRhSupportTicketsOpen: "Support tickets open",
+    ofcRhRaisedByAgents: "Raised by agents in the field",
+    ofcRhTinApplicationsFailed: "TIN applications failed",
+    ofcRhRegisterRefusedThese: "The register refused these — they need a person",
+    ofcRhAppliedNotIssued: "Applied for and not yet issued",
+    ofcRhCorrectionsAwaiting: "Corrections awaiting review",
+    ofcRhSomeoneAskedChange: "Someone has asked to change who a record says they are",
+    ofcRhInvoicesUnpaid: "Invoices unpaid",
+    ofcRhRaisedStillOpen: "Raised and still open",
+    ofcRhInvoicesExpired: "Invoices expired",
+    ofcRhNeverPaidOutOfTime: "Never paid and now out of time",
+    ofcRhRegisteredThisWeek: "Registered this week",
+    ofcRhNewTaxpayers: "New taxpayers on the register",
+    ofcRhTaxpayersOnRegister: "Taxpayers on the register",
+    ofcRhReconciliationExceptions: "Reconciliation exceptions",
+    ofcRhDisagreeAboutThese: "The bank and the platform disagree about these",
+    ofcRhSettlementsUnreconciled: "Settlements unreconciled",
+    ofcRhReceivedNotMatched: "Money received and not yet matched",
+    ofcRhPayoutsToApprove: "Commission payouts to approve",
+    ofcRhAgentsWaitingShort: "Agents are waiting on these",
+    ofcRhRefundsOwed: "Refunds a taxpayer is still owed",
+    ofcRhMoneyStateShouldNotHave: "Money the state has and should not",
+    ofcRhMoneyBackOutQuery: "Money that came back out — the query worth running first",
+    ofcRhActionsRefusedWeek: "Actions refused this week",
+    ofcRhSomeoneTriedNotPermitted: "Someone tried something their role does not permit",
+    ofcRhRateChangesMonth: "Rate changes this month",
+    ofcRhEveryChangeCharged: "Every change to what a citizen is charged",
+    ofcRhReceiptsCheckedPublic: "Receipts checked by the public",
+    ofcRhVerificationLookups: "Verification page lookups",
+    ofcRhAuditEntriesToday: "Audit entries today",
+    ofcRhHashChainedLong: "Hash-chained and append-only",
+    ofcRhAuditEntriesTotal: "Audit entries in total",
+    ofcRhSincePlatformStarted: "Since the platform started",
+    ofcRhTaxpayersOnRecord: "Taxpayers on record",
+    ofcRhWaiting: "Waiting",
+    ofcRhAgent: "Agent",
+    ofcRhWaitingSince: "Waiting since",
+    ofcRhApprovedFromHome: "Approved from the administrator home screen.",
+    ofcRhRegistered: "Registered",
+    ofcRhOfficer: "Officer",
+    ofcRhWhyFailed: "Why it failed",
+    ofcRhExpires: "Expires",
+    ofcRhKind: "Kind",
+    ofcRhExpected: "Expected",
+    ofcRhReceived: "Received",
+    ofcRhRaisedHeading: "Raised",
+    ofcRhRequested: "Requested",
+    ofcRhWhen: "When",
+    ofcRhRole: "Role",
+    ofcRhAttempted: "Attempted",
+    ofcRhAgainst: "Against",
+    ofcRhOutcome: "Outcome",
+    ofcRhToday: "Today",
+    ofcRhNewThisWeek: "New this week",
+    ofcRhOpen: "Open",
+    ofcRhOpenFile: "Open file",
+    ofcRhApprove: "Approve",
+    ofcRhTaxpayers: "Taxpayers",
+    ofcRhExceptions: "Exceptions",
+    ofcRhAuditEntries: "Audit entries",
+    ofcRhAgentsWaiting: "Agents waiting on a decision",
+    ofcRhAgentsWaitingBody: "Agents are waiting on these. Approving needs a fresh code, because it is the action that moves money out.",
+    ofcRhClearanceBody: "Approving here does what the clearance screen does — same endpoint, same audit entry. Asking for more information needs a reason, so that one opens the file.",
+    ofcRhHandsetsWaiting: "Handsets waiting for approval",
+    ofcRhHandsetsBody: "A cleared agent still cannot collect until the device in their hand is approved.",
+    ofcRhCommissionPayouts: "Commission payouts requested",
+    ofcRhCommissionLiability: "Commission liability",
+    ofcRhAssessedUnpaid: "Assessed and unpaid",
+    ofcRhTinsOutstanding: "TINs outstanding",
+    ofcRhTinsBody: "These taxpayers exist and have no TIN, so nothing can follow them across years. Re-asking is safe: the platform sends the same application, and a TIN already issued comes back rather than a second one being made.",
+    ofcRhTinRefused: "TIN applications the register refused",
+    ofcRhTheRegister: "The taxpayer register",
+    ofcRhRegisterBody: "Who is on it, who is missing a TIN, and what has been assessed and not paid.",
+    ofcRhMoneyInOut: "Money in, money out, money held",
+    ofcRhMoneyBody: "Reconciliation, settlement and what the state owes — to its agents, to taxpayers owed a refund, and to the Councils it collects for.",
+    ofcRhOwedToCouncils: "Owed to the Councils",
+    ofcRhSettlementVariance: "Settlement variance",
+    ofcRhBankDisagree: "Where the bank and the platform disagree",
+    ofcRhReconciliationOpen: "Reconciliation exceptions are open",
+    ofcRhReconciliationBody: "Until these are resolved the platform’s figures and the bank’s do not agree, and commission on the affected collections stays held.",
+    ofcRhExceptionQueueBody: "Resolving an exception is a judgement with a note attached, so it happens on the reconciliation screen where there is room to write one. This is what is waiting.",
+    ofcRhWorkExceptionQueue: "Work the exception queue",
+    ofcRhReversedRefunded: "Reversed or refunded",
+    ofcRhMoneyBackOut: "Money that came back out",
+    ofcRhReversedBody: "Reversed or refunded after the fact. The first query worth running on any revenue platform.",
+    ofcRhFraudOpen: "Fraud flags open",
+    ofcRhInvoicesExpiring: "Invoices about to expire",
+    ofcRhInvoicesBody: "Raised, unpaid, and out of time within the week. After that the assessment has to be raised again.",
+    ofcRhRefusedActions: "Actions the platform refused",
+    ofcRhRefusedBody: "Somebody attempted something their role does not permit. Each is an audit entry in its own right.",
+    ofcRhSupervisorsNothing: "Supervisors covering nothing",
+    ofcRhSupervisorsBody: "They see no revenue figures at all until a territory is assigned. Choosing which needs the picker, so this one opens Officer access.",
+    ofcRhAssignTerritories: "Assign territories",
+    ofcRhWhatToExamine: "What there is to examine",
+    ofcRhReadOnlyBody: "Read-only, by role and by design. Nothing on this screen changes a record — every figure is a starting point for a query, and the audit log itself is hash-chained and append-only.",
+    ofcRhAdminBody: "An agent without clearance or an approved device cannot collect, and a supervisor with no territory sees no figures at all.",
+    ofcRhAdminIntro: "What is waiting on an administrator. Collections and revenue analysis are on the dashboard and the revenue summary; this screen is the platform itself.",
+    ofcRevenueAdministration: "Revenue administration",
+    ofcDistributionRound: "Distribution round",
+    ofcLanguage: "Language",
+    ofcNavDashboard: "Collections dashboard",
+    ofcNavIntelligence: "Revenue intelligence",
+    ofcNavRevenue: "Revenue summary",
+    ofcNavLevies: "Levies & categories",
+    ofcNavTransactions: "Transactions",
+    ofcNavAgents: "Agents & clearance",
+    ofcNavReferees: "Referees",
+    ofcNavPerformance: "Agent performance",
+    ofcNavReconciliation: "Reconciliation",
+    ofcNavCommissions: "Commissions",
+    ofcNavApprovals: "Approvals",
+    ofcNavFraud: "Fraud & leakage",
+    ofcNavSupport: "Support desk",
+    ofcNavOutstanding: "Outstanding work",
+    ofcNavAudit: "Audit log",
+    ofcNavUsage: "Product usage",
+    ofcNavCatalogue: "Revenue catalogue",
+    ofcNavProgrammes: "Social incentives",
+    ofcNavGroups: "Groups & cooperatives",
+    ofcNavTaxpayerRecords: "Taxpayer corrections",
+    ofcNavUsers: "Officer access",
+    ofcNavFieldApp: "Field application",
+    ofcNavAllocations: "Distribution rounds",
+    ofcGroupAdministration: "Administration",
+    ofcGroupAgentsProgrammes: "Agents and programmes",
+    ofcGroupAssessment: "Assessment",
+    ofcGroupConfiguration: "Configuration",
+    ofcGroupEverything: "Everything you may open",
+    ofcGroupExamination: "Examination",
+    ofcGroupMyTerritory: "My territory",
+    ofcGroupOversight: "Oversight",
+    ofcGroupRevenueHere: "Revenue here",
+    ofcGroupRevenue: "Revenue",
+    ofcGroupSettlement: "Settlement",
+    ofcGroupTheMoney: "The money",
+    ofcGroupTheRegister: "The register",
+    ofcGroupWhatCharged: "What was charged",
+    ofcGroupWhoCollected: "Who collected it",
+    ofcGroupWhoDidIt: "Who did it",
+    ofcPortalName: "PSIRS Portal",
+    ofcStateGovernment: "Plateau State Government",
+    ofcReturnToDashboard: "Return to the dashboard",
+    ofcSignOut: "Sign out",
+    ofcPageNotFound: "That page does not exist.",
+    ofcReadOnly: "read-only",
+    ofcDailyTrend: "Daily collection trend",
+    ofcNoDataForPeriod: "No data for this period.",
+    ofcLoginTitle: "PSIRS Revenue Portal",
+    ofcLoginPhone: "Phone number",
+    ofcLoginPassword: "Password",
+    ofcLoginMonitored: "Access is monitored. Every action you take is recorded in the audit log.",
+    ofcLoginWrongPlace: "Your account belongs to the agent app",
+    ofcLoginSignInWorked: "Your sign-in worked — you are simply in the wrong place.",
+    ofcLoginUseAgentApp: "Field agents collect revenue in the PSIRS agent app, which works offline and holds your taxpayers, assessments and commission. This portal is for revenue, finance and oversight officers.",
     shellSyncFailed: "Your saved records could not be sent to PSIRS. They are still on this phone.",
     grpNameHint: "As the group itself gives it",
     grpCommunityHint: "Where the group meets. Optional.",
@@ -1814,6 +2197,190 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcRhBlockedCount: "Abubuwa {{n}} na hana wani yin aiki",
+    ofcRhInvoicesStillOpen: "Takardun biya {{n}} na nan a bude",
+    colShareTitle: "Rasit na PSIRS",
+    colShareBody: "Rasit na PSIRS {{number}} na {{name}}. Ka tantance da lambar {{code}}.",
+    ofcRhNothingWaiting: "Babu abin da ke jira.",
+    ofcNothingToShow: "Babu abin da za a nuna.",
+    ofcRhActiveRecords: "Rikodin da ke aiki",
+    ofcRhRegisteredByBoth: "Wakilai da jami’ai suka yi wa rajista",
+    ofcRhTinNoTracking: "Ba za a iya bin diddigin mai biyan haraji da babu shi ba tsawon shekaru",
+    ofcRhCollectedForCouncils: "An karba a madadinsu, ba na jihar kanta ba",
+    ofcRhAccruedNotPaid: "An tara kuma ba a biya ba tukuna",
+    ofcRhExpectedLessReceived: "Abin da ake tsammani ban da abin da aka karba, kan turawar da ba a daidaita ba",
+    ofcRhBankPlatformDisagree: "Banki da dandalin sun sabawa juna",
+    ofcRhHashChainedShort: "An sarkafa, ba a share komai",
+    ofcRhEntriesSinceMidnight: "Shigarwa tun tsakar dare",
+    ofcRhRaisedNotReviewed: "An daga kuma ba a duba ba tukuna",
+    ofcRhAgentsAwaitingClearance: "Wakilan da ke jiran izini",
+    ofcRhApplicationsComplete: "Bukatun sun cika kuma suna jiran shawara",
+    ofcRhAgentsAskedForMore: "An nemi wakilai karin bayani",
+    ofcRhWaitingOnApplicant: "Ana jiran mai nema, ba kai ba",
+    ofcRhDevicesAwaitingApproval: "Na’urorin da ke jiran amincewa",
+    ofcRhAgentNeedsHandset: "Wakili ba zai iya karba ba sai an amince da wayarsa",
+    ofcRhSupervisorsNoTerritory: "Masu kula da babu yanki",
+    ofcRhNoFiguresUntilTerritory: "Ba sa ganin adadin haraji ko kadan sai an ba su yanki",
+    ofcRhItemsNoRate: "Nau’in harajin da babu kudinsu",
+    ofcRhNotCollectableYet: "An jera su kuma ba a iya karbarsu ba sai gwamnati ta sanya adadin",
+    ofcRhMdasCollectingNothing: "Ma’aikatun da ba sa karban komai",
+    ofcRhNoItemForMda: "Babu wani nau’in haraji a gare su a wannan dandalin",
+    ofcRhOfficersWithAccess: "Jami’an da ke da izinin shiga",
+    ofcRhExcludingFieldAgents: "Ban da wakilan filin aiki",
+    ofcRhSupportTicketsOpen: "Rahotannin taimako a bude",
+    ofcRhRaisedByAgents: "Wakilai a filin aiki suka kai su",
+    ofcRhTinApplicationsFailed: "Bukatun TIN da suka gaza",
+    ofcRhRegisterRefusedThese: "Rajistar ta ki wadannan — suna bukatar mutum",
+    ofcRhAppliedNotIssued: "An nema kuma ba a bayar ba tukuna",
+    ofcRhCorrectionsAwaiting: "Gyare-gyaren da ke jiran dubawa",
+    ofcRhSomeoneAskedChange: "Wani ya nemi a canza wanda rikodin ya ce shi ne",
+    ofcRhInvoicesUnpaid: "Takardun biya da ba a biya ba",
+    ofcRhRaisedStillOpen: "An yi su kuma suna nan a bude",
+    ofcRhInvoicesExpired: "Takardun biya da suka kare",
+    ofcRhNeverPaidOutOfTime: "Ba a taba biyan su ba kuma lokacinsu ya kare",
+    ofcRhRegisteredThisWeek: "An yi rajista wannan makon",
+    ofcRhNewTaxpayers: "Sabbin masu biyan haraji a rajistar",
+    ofcRhTaxpayersOnRegister: "Masu biyan haraji a rajistar",
+    ofcRhReconciliationExceptions: "Kura-kuran daidaita lissafi",
+    ofcRhDisagreeAboutThese: "Banki da dandalin sun sabawa juna kan wadannan",
+    ofcRhSettlementsUnreconciled: "Turawar da ba a daidaita ba",
+    ofcRhReceivedNotMatched: "An karbi kudi kuma ba a dace da shi ba tukuna",
+    ofcRhPayoutsToApprove: "Biyan kwamishan da za a amince da su",
+    ofcRhAgentsWaitingShort: "Wakilai na jiran wadannan",
+    ofcRhRefundsOwed: "Mayarwar da ake bin mai biyan haraji",
+    ofcRhMoneyStateShouldNotHave: "Kudin da jiha ke da shi kuma bai kamata ba",
+    ofcRhMoneyBackOutQuery: "Kudin da ya sake fita — tambayar da ta cancanci a fara yi",
+    ofcRhActionsRefusedWeek: "Ayyukan da aka ki wannan makon",
+    ofcRhSomeoneTriedNotPermitted: "Wani ya gwada abin da matsayinsa bai ba shi izini ba",
+    ofcRhRateChangesMonth: "Canjin kudin haraji wannan watan",
+    ofcRhEveryChangeCharged: "Kowane canji ga abin da ake caji dan kasa",
+    ofcRhReceiptsCheckedPublic: "Rasit din da jama’a suka duba",
+    ofcRhVerificationLookups: "Binciken shafin tantancewa",
+    ofcRhAuditEntriesToday: "Shigarwar bincike na yau",
+    ofcRhHashChainedLong: "An sarkafa kuma ba a share komai",
+    ofcRhAuditEntriesTotal: "Jimlar shigarwar bincike",
+    ofcRhSincePlatformStarted: "Tun lokacin da dandalin ya fara",
+    ofcRhTaxpayersOnRecord: "Masu biyan haraji a rikodi",
+    ofcRhWaiting: "Ana jira",
+    ofcRhAgent: "Wakili",
+    ofcRhWaitingSince: "Yana jira tun",
+    ofcRhApprovedFromHome: "An amince daga shafin farko na mai gudanarwa.",
+    ofcRhRegistered: "An yi rajista",
+    ofcRhOfficer: "Jami’i",
+    ofcRhWhyFailed: "Dalilin da ya sa ya gaza",
+    ofcRhExpires: "Zai kare",
+    ofcRhKind: "Nau’i",
+    ofcRhExpected: "Ana tsammani",
+    ofcRhReceived: "An karba",
+    ofcRhRaisedHeading: "An daga",
+    ofcRhRequested: "An nema",
+    ofcRhWhen: "Yaushe",
+    ofcRhRole: "Matsayi",
+    ofcRhAttempted: "An yi kokari",
+    ofcRhAgainst: "A kan",
+    ofcRhOutcome: "Sakamako",
+    ofcRhToday: "Yau",
+    ofcRhNewThisWeek: "Sabbin wannan makon",
+    ofcRhOpen: "A bude",
+    ofcRhOpenFile: "Bude fayil",
+    ofcRhApprove: "Amince",
+    ofcRhTaxpayers: "Masu biyan haraji",
+    ofcRhExceptions: "Kura-kurai",
+    ofcRhAuditEntries: "Shigarwar bincike",
+    ofcRhAgentsWaiting: "Wakilan da ke jiran shawara",
+    ofcRhAgentsWaitingBody: "Wakilai na jiran wadannan. Amincewa yana bukatar sabuwar lamba, domin shi ne aikin da ke fitar da kudi.",
+    ofcRhClearanceBody: "Amincewa a nan yana yin abin da shafin izini ke yi — hanya daya, shigarwar bincike daya. Neman karin bayani yana bukatar dalili, don haka wannan yana bude fayil.",
+    ofcRhHandsetsWaiting: "Na’urorin da ke jiran amincewa",
+    ofcRhHandsetsBody: "Wakilin da aka bai wa izini ba zai iya karba ba sai an amince da na’urar da ke hannunsa.",
+    ofcRhCommissionPayouts: "Bukatun biyan kwamishan",
+    ofcRhCommissionLiability: "Bashin kwamishan",
+    ofcRhAssessedUnpaid: "An kima kuma ba a biya ba",
+    ofcRhTinsOutstanding: "TIN da suka rage",
+    ofcRhTinsBody: "Wadannan masu biyan haraji suna nan kuma babu TIN, don haka ba abin da zai bi su tsawon shekaru. Sake nema ba shi da hadari: dandalin yana tura bukata iri daya, kuma TIN da aka riga aka bayar shi ke dawowa maimakon a yi na biyu.",
+    ofcRhTinRefused: "Bukatun TIN da rajistar ta ki",
+    ofcRhTheRegister: "Rajistar masu biyan haraji",
+    ofcRhRegisterBody: "Wanda ke cikinta, wanda babu TIN, da abin da aka kima kuma ba a biya ba.",
+    ofcRhMoneyInOut: "Kudin shiga, kudin fita, kudin da aka rike",
+    ofcRhMoneyBody: "Daidaita lissafi, tura kudi da abin da jiha ke bin bashi — ga wakilanta, ga masu biyan haraji da ake bin su mayarwa, da ga Kananan Hukumomin da take karbar haraji domin su.",
+    ofcRhOwedToCouncils: "Ana bin Kananan Hukumomi",
+    ofcRhSettlementVariance: "Bambancin tura kudi",
+    ofcRhBankDisagree: "Inda banki da dandalin suka sabawa juna",
+    ofcRhReconciliationOpen: "Akwai kura-kuran daidaita lissafi a bude",
+    ofcRhReconciliationBody: "Har sai an warware wadannan, adadin dandalin da na banki ba za su yi daidai ba, kuma ana rike kwamishan kan karbar da abin ya shafa.",
+    ofcRhExceptionQueueBody: "Warware kuskure shawara ce mai dauke da bayani, don haka ana yin sa a shafin daidaita lissafi inda akwai wurin rubutu. Wannan shi ne abin da ke jira.",
+    ofcRhWorkExceptionQueue: "Yi aiki kan jerin kura-kurai",
+    ofcRhReversedRefunded: "An juyar ko an mayar",
+    ofcRhMoneyBackOut: "Kudin da ya sake fita",
+    ofcRhReversedBody: "An juyar ko an mayar bayan an gama. Tambaya ta farko da ta cancanci yi a kowane dandalin haraji.",
+    ofcRhFraudOpen: "Alamun zamba a bude",
+    ofcRhInvoicesExpiring: "Takardun biya da za su kare",
+    ofcRhInvoicesBody: "An yi su, ba a biya ba, kuma lokacinsu zai kare cikin makon. Bayan haka sai an sake yin kimar.",
+    ofcRhRefusedActions: "Ayyukan da dandalin ya ki",
+    ofcRhRefusedBody: "Wani ya yi kokarin abin da matsayinsa bai ba shi izini ba. Kowanne shigarwar bincike ce a kanta.",
+    ofcRhSupervisorsNothing: "Masu kula da babu yankin da suke kula",
+    ofcRhSupervisorsBody: "Ba sa ganin adadin haraji ko kadan sai an ba su yanki. Zabar wanne yana bukatar mai zabi, don haka wannan yana bude Izinin jami’ai.",
+    ofcRhAssignTerritories: "Ba da yankuna",
+    ofcRhWhatToExamine: "Abin da ake da shi don bincike",
+    ofcRhReadOnlyBody: "Karatu kawai, ta matsayi kuma da gangan. Babu abin da ke kan wannan shafin da ke canza rikodi — kowane adadi mafarin bincike ne, kuma rajistar bincike da kanta an sarkafa ta kuma ba a share komai a cikinta.",
+    ofcRhAdminBody: "Wakilin da babu izini ko na’urar da aka amince da ita ba zai iya karba ba, kuma mai kula da babu yanki ba ya ganin komai.",
+    ofcRhAdminIntro: "Abin da ke jiran mai gudanarwa. Karban kudi da nazarin haraji suna kan allon aiki da takaitaccen haraji; wannan shafin dandalin da kansa ne.",
+    ofcRevenueAdministration: "Gudanar da haraji",
+    ofcDistributionRound: "Zagayen rabo",
+    ofcLanguage: "Harshe",
+    ofcNavDashboard: "Allon karban haraji",
+    ofcNavIntelligence: "Nazarin haraji",
+    ofcNavRevenue: "Takaitaccen haraji",
+    ofcNavLevies: "Haraji da rukunoni",
+    ofcNavTransactions: "Ma’amaloli",
+    ofcNavAgents: "Wakilai da izini",
+    ofcNavReferees: "Masu shaida",
+    ofcNavPerformance: "Aikin wakilai",
+    ofcNavReconciliation: "Daidaita lissafi",
+    ofcNavCommissions: "Kwamishan",
+    ofcNavApprovals: "Amincewa",
+    ofcNavFraud: "Zamba da yoyon kudi",
+    ofcNavSupport: "Sashen taimako",
+    ofcNavOutstanding: "Aikin da ya rage",
+    ofcNavAudit: "Rajistar bincike",
+    ofcNavUsage: "Amfani da manhaja",
+    ofcNavCatalogue: "Jerin harajin",
+    ofcNavProgrammes: "Tallafin jama’a",
+    ofcNavGroups: "Kungiyoyi da hadin kai",
+    ofcNavTaxpayerRecords: "Gyaran bayanan mai biyan haraji",
+    ofcNavUsers: "Izinin jami’ai",
+    ofcNavFieldApp: "Manhajar filin aiki",
+    ofcNavAllocations: "Zagayen rabon kaya",
+    ofcGroupAdministration: "Gudanarwa",
+    ofcGroupAgentsProgrammes: "Wakilai da shirye-shirye",
+    ofcGroupAssessment: "Kima",
+    ofcGroupConfiguration: "Saituna",
+    ofcGroupEverything: "Duk abin da za ka iya budewa",
+    ofcGroupExamination: "Bincike",
+    ofcGroupMyTerritory: "Yankina",
+    ofcGroupOversight: "Sa ido",
+    ofcGroupRevenueHere: "Harajin nan",
+    ofcGroupRevenue: "Haraji",
+    ofcGroupSettlement: "Tura kudi",
+    ofcGroupTheMoney: "Kudin",
+    ofcGroupTheRegister: "Rajistar",
+    ofcGroupWhatCharged: "Abin da aka caje",
+    ofcGroupWhoCollected: "Wanda ya karba",
+    ofcGroupWhoDidIt: "Wanda ya yi",
+    ofcPortalName: "Shafin PSIRS",
+    ofcStateGovernment: "Gwamnatin Jihar Filato",
+    ofcReturnToDashboard: "Koma allon aiki",
+    ofcSignOut: "Fita",
+    ofcPageNotFound: "Wannan shafin babu shi.",
+    ofcReadOnly: "karatu kawai",
+    ofcDailyTrend: "Yanayin karban kudi na kullum",
+    ofcNoDataForPeriod: "Babu bayanai na wannan lokacin.",
+    ofcLoginTitle: "Shafin Harajin PSIRS",
+    ofcLoginPhone: "Lambar waya",
+    ofcLoginPassword: "Kalmar sirri",
+    ofcLoginMonitored: "Ana sa ido kan shiga. Ana rubuta duk abin da ka yi a rajistar bincike.",
+    ofcLoginWrongPlace: "Asusunka na manhajar wakilai ne",
+    ofcLoginSignInWorked: "Shigarka ta yi aiki — kawai ba wurin da ya dace ba ne.",
+    ofcLoginUseAgentApp: "Wakilan filin aiki suna karbar haraji a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba kuma tana rike da masu biyan harajinka, kimarka da kwamishan dinka. Wannan shafin na jami’an haraji, kudi da sa ido ne.",
     shellSyncFailed: "Ba a iya tura rikodin da ka adana zuwa PSIRS ba. Suna nan a wannan wayar.",
     grpNameHint: "Kamar yadda kungiyar da kanta ta bayar",
     grpCommunityHint: "Inda kungiyar ke haduwa. Ba dole ba.",

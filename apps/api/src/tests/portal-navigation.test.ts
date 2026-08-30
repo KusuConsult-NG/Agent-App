@@ -26,6 +26,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PERMISSIONS, ROLES, permissionsForRole } from '@psirs/shared';
+import { translations } from '@psirs/shared';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 /**
@@ -41,6 +42,15 @@ const GOVERNMENT_ROUTES = join(REPO_ROOT, 'apps', 'api', 'src', 'routes', 'gover
 
 interface NavItem {
   path: string;
+  /**
+   * The English label, resolved from the dictionary key the catalogue holds.
+   *
+   * The portal's menu is translated, so the source carries keys. Reading the
+   * key into a failure message would say `ofcNavReconciliation` where a person
+   * needs to see "Reconciliation" — and resolving it here also means a key
+   * added to the menu and never to the dictionary shows up as `undefined` in
+   * the message rather than passing unnoticed.
+   */
   label: string;
   /**
    * Every permission that opens the item. A menu item may name several,
@@ -62,9 +72,10 @@ function navigationItems(): NavItem[] {
   const source = readFileSync(PORTAL_NAV, 'utf8');
   const pattern =
     /\{\s*path:\s*'([^']+)',\s*label:\s*'([^']+)',\s*permission:\s*(\[[^\]]*\]|'[^']+')\s*,?\s*\}/g;
+  const en = translations.en as unknown as Record<string, string>;
   return [...source.matchAll(pattern)].map((match) => ({
     path: match[1]!,
-    label: match[2]!,
+    label: en[match[2]!] ?? match[2]!,
     permissions: [...match[3]!.matchAll(/'([^']+)'/g)].map((entry) => entry[1]!),
   }));
 }

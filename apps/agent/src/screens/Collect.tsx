@@ -716,11 +716,15 @@ export function TransactionScreen({
             type="button"
             className="secondary"
             onClick={async () => {
-              const text =
-                `PSIRS receipt ${transaction.receipt_number} for ${name}. ` +
-                `Verify with code ${transaction.receipt_code}.`;
+              // Shared into WhatsApp or SMS, so it goes in the agent's language
+              // rather than the platform's — they are the one typing a covering
+              // line above it.
+              const text = t.colShareBody
+                .replace('{{number}}', transaction.receipt_number ?? '')
+                .replace('{{name}}', name)
+                .replace('{{code}}', transaction.receipt_code ?? '');
               if (navigator.share) {
-                await navigator.share({ title: 'PSIRS receipt', text }).catch(() => undefined);
+                await navigator.share({ title: t.colShareTitle, text }).catch(() => undefined);
               } else {
                 await navigator.clipboard.writeText(text).catch(() => undefined);
                 setNotice(t.colReceiptCopied);

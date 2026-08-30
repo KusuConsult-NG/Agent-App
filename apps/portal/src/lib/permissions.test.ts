@@ -30,6 +30,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, type Role } from '@psirs/shared';
+import { translations, type TranslationDictionary } from '@psirs/shared';
 import {
   MUTATING_PERMISSIONS,
   READ_ONLY_PERMISSIONS,
@@ -46,8 +47,20 @@ function principal(role: Role) {
   return { role, permissions: ROLE_PERMISSIONS[role] as readonly string[] };
 }
 
+/*
+ * Menus read back in English, through the dictionary.
+ *
+ * The catalogue holds dictionary keys now, so that officers can read the menu
+ * in Hausa. Asserting on the raw keys would make these tests unreadable —
+ * `ofcNavReconciliation` says nothing about whether a finance officer can
+ * reach reconciliation — and asserting on English resolved through
+ * `translations.en` keeps them saying what they said, while also failing if a
+ * key is added to the catalogue and never to the dictionary.
+ */
+const english = (key: keyof TranslationDictionary) => translations.en[key];
+
 function menu(role: Role): string[] {
-  return availableItems(principal(role)).map((item) => item.label);
+  return availableItems(principal(role)).map((item) => english(item.label));
 }
 
 // ===========================================================================
@@ -73,12 +86,12 @@ describe('each role gets a distinct portal', () => {
    * must have and must not.
    */
   const groupsFor = (role: Role) =>
-    availableGroups({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map(
-      (g) => g.group,
+    availableGroups({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map((g) =>
+      english(g.group),
     );
   const menu = (role: Role) =>
-    availableItems({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map(
-      (i) => i.label,
+    availableItems({ id: 'u', role, permissions: ROLE_PERMISSIONS[role] } as never).map((i) =>
+      english(i.label),
     );
 
   it('opens each role’s menu with the work that role does', () => {
@@ -154,7 +167,7 @@ describe('each role gets a distinct portal', () => {
         if (!item.permission) continue;
         expect(
           can({ id: 'u', role, permissions: ROLE_PERMISSIONS[role as Role] } as never, item.permission),
-          `${role} is offered ${item.label} without the permission for it`,
+          `${role} is offered ${english(item.label)} without the permission for it`,
         ).toBe(true);
       }
     }

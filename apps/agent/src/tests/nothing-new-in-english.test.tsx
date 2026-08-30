@@ -84,19 +84,21 @@ const SHOWN_MESSAGES =
  * on a list of specific strings keeps the check from going quiet as the code
  * around it changes.
  *
- * The rules are deliberately narrow. An earlier version treated any text
- * containing a parenthesis as code, which would have let `Occupation
- * (optional)` and every other parenthesised label through unchecked — the
- * blind spot was wider than the noise it removed. So only brackets that do
- * not appear in prose are matched, and the false positives left over — the
- * seams between two JSX branches, `) : condition ? (` and its variants — are
- * recognised by starting with a close parenthesis, which no visible string
- * does, rather than by widening the rule until it swallows real text.
+ * The rules are deliberately narrow, and have been narrowed twice. Treating
+ * any parenthesis as code would have excluded `Occupation (optional)` and
+ * every other parenthesised label; treating any semicolon or equals sign as
+ * code excluded prose that contains one — which is how a sentence ending
+ * "...the revenue summary; this screen is the platform itself" sat unchecked.
+ * What is matched now is punctuation that appears in expressions and not in
+ * writing: braces, brackets, arrows, and the boolean operators. The one
+ * prose-shaped leftover, the seam between two JSX branches, starts with a
+ * close parenthesis or ends with an open one, which no visible string does.
  */
 function looksLikeCode(text: string): boolean {
   return (
-    /[;={}[\]]/.test(text) ||
+    /[{}[\]]|=>|\);|\(\{|\}\)|&&|\|\||\?\?/.test(text) ||
     text.startsWith(')') ||
+    text.endsWith('(') ||
     /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
   );
 }

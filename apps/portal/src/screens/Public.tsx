@@ -11,6 +11,7 @@
 import React, { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
+import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
 
 interface VerificationResult {
@@ -26,38 +27,6 @@ interface VerificationResult {
   message: string;
 }
 
-/**
- * The language toggle these screens carry.
- *
- * On the screen rather than in a menu: the people who need it have no account,
- * no settings page and no second visit. It is rendered before anything else on
- * the card so that somebody who cannot read the heading can still change the
- * heading.
- */
-function LanguageToggle() {
-  const { lang, t, setLanguage } = usePublicI18n();
-  return (
-    <div
-      className="public__lang"
-      role="group"
-      aria-label={t.pubLanguage}
-      style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}
-    >
-      {(['en', 'ha'] as const).map((option) => (
-        <button
-          key={option}
-          type="button"
-          className={lang === option ? '' : 'secondary'}
-          aria-pressed={lang === option}
-          onClick={() => setLanguage(option)}
-          style={{ padding: '4px 12px', fontSize: '0.76rem' }}
-        >
-          {option === 'en' ? t.pubEnglish : t.pubHausa}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 export function VerifyScreen({ code }: { code?: string }) {
   const { t } = usePublicI18n();

@@ -43,16 +43,26 @@ const RENDERED_PROPS = /\b(?:title|placeholder|aria-label|label|hint|alt)="([^"]
 /**
  * Fragments of TypeScript the text-run pattern picks up by accident.
  *
- * Kept identical to the agent's copy, and narrow for the same reason: an
- * earlier version treated any parenthesis as code, which would have let every
- * parenthesised label through unchecked. The seams between two JSX branches
- * are recognised by starting with a close parenthesis, which no visible
- * string does.
+ * `>` and `<` are comparison and generics as well as tags, so a run like
+ * `= 0 && (index` sits between two of them. Filtering on syntax rather than
+ * on a list of specific strings keeps the check from going quiet as the code
+ * around it changes.
+ *
+ * The rules are deliberately narrow, and have been narrowed twice. Treating
+ * any parenthesis as code would have excluded `Occupation (optional)` and
+ * every other parenthesised label; treating any semicolon or equals sign as
+ * code excluded prose that contains one — which is how a sentence ending
+ * "...the revenue summary; this screen is the platform itself" sat unchecked.
+ * What is matched now is punctuation that appears in expressions and not in
+ * writing: braces, brackets, arrows, and the boolean operators. The one
+ * prose-shaped leftover, the seam between two JSX branches, starts with a
+ * close parenthesis or ends with an open one, which no visible string does.
  */
 function looksLikeCode(text: string): boolean {
   return (
-    /[;={}[\]]/.test(text) ||
+    /[{}[\]]|=>|\);|\(\{|\}\)|&&|\|\||\?\?/.test(text) ||
     text.startsWith(')') ||
+    text.endsWith('(') ||
     /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
   );
 }

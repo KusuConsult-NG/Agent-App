@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { ApiRequestError, login, logout, type ApiError, type User } from '../lib/api';
 import { belongsInPortal } from '../lib/permissions';
-import { Alert, ErrorAlert } from '../ui';
+import { Alert, ErrorAlert, LanguageToggle } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }) {
+  const { t } = usePortalI18n();
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [shown, setShown] = useState(false);
@@ -58,31 +60,35 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
   return (
     <div className="login">
       <form className="login__card" onSubmit={submit}>
+        {/*
+          * Before the heading, for the same reason the public screens put it
+          * there: an officer who cannot read "PSIRS Revenue Portal" cannot
+          * find a control described in those words either.
+          */}
+        <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <img src="/icon.svg" alt="" width={54} height={54} />
-          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>PSIRS Revenue Portal</h1>
+          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.ofcLoginTitle}</h1>
           <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
-            Plateau State Internal Revenue Service
+            {t.authPsirsFull}
           </p>
         </div>
 
         <ErrorAlert error={error} />
 
         {wrongApp && (
-          <Alert kind="info" title="Your account belongs to the agent app">
+          <Alert kind="info" title="ofcLoginWrongPlace">
             <p style={{ margin: '4px 0 0' }}>
-              Field agents collect revenue in the PSIRS agent app, which works offline and holds
-              your taxpayers, assessments and commission. This portal is for revenue, finance and
-              oversight officers.
+              {t.ofcLoginUseAgentApp}
             </p>
             <p style={{ margin: '6px 0 0' }}>
-              Your sign-in worked — you are simply in the wrong place.
+              {t.ofcLoginSignInWorked}
             </p>
           </Alert>
         )}
 
         <div className="field">
-          <label htmlFor="phone">Phone number</label>
+          <label htmlFor="phone">{t.ofcLoginPhone}</label>
           <input
             id="phone"
             type="tel"
@@ -95,7 +101,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
         </div>
 
         <div className="field">
-          <label htmlFor="password">Password</label>
+          <label htmlFor="password">{t.ofcLoginPassword}</label>
           <div className="password">
             <input
               id="password"
@@ -119,11 +125,11 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
         </div>
 
         <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-          {busy ? 'Signing in…' : 'Sign in'}
+          {busy ? t.authSigningIn : t.authSignIn}
         </button>
 
         <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 16, textAlign: 'center' }}>
-          Access is monitored. Every action you take is recorded in the audit log.
+          {t.ofcLoginMonitored}
         </p>
       </form>
     </div>

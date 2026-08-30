@@ -29,6 +29,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 type Counts = Record<string, string>;
 
@@ -45,8 +47,16 @@ interface Home {
 /** A queue: what it is, where it goes, and when it deserves attention. */
 interface Queue {
   key: string;
-  label: string;
-  hint: string;
+  /**
+   * Dictionary keys, not text.
+   *
+   * These arrays are module-level and cannot reach a hook, so `QueueTable`
+   * resolves them where it renders. Typing them as `keyof
+   * TranslationDictionary` is what stops a queue being added with an English
+   * label no dictionary could reach.
+   */
+  label: keyof TranslationDictionary;
+  hint: keyof TranslationDictionary;
   path?: string;
   /** Non-zero is work. For some rows zero is the thing that is wrong. */
   attentionWhen?: (value: number) => boolean;
@@ -72,6 +82,7 @@ function useAction(reload: () => void) {
 
   const act = useCallback(
     async (key: string, run: () => Promise<unknown>, said: string) => {
+  const { t } = usePortalI18n();
       setBusy(key);
       setError(null);
       setDone(null);
@@ -106,105 +117,105 @@ function Worked({ error, done }: { error: ApiError | null; done: string | null }
 const ADMIN_QUEUES: Queue[] = [
   {
     key: 'agents_awaiting_review',
-    label: 'Agents awaiting clearance',
-    hint: 'Applications complete and waiting on a decision',
+    label: 'ofcRhAgentsAwaitingClearance',
+    hint: 'ofcRhApplicationsComplete',
     path: '/agents',
     attentionWhen: nonZero,
   },
   {
     key: 'agents_needing_information',
-    label: 'Agents asked for more',
-    hint: 'Waiting on the applicant, not on you',
+    label: 'ofcRhAgentsAskedForMore',
+    hint: 'ofcRhWaitingOnApplicant',
     path: '/agents',
   },
   {
     key: 'devices_awaiting_approval',
-    label: 'Devices awaiting approval',
-    hint: 'An agent cannot collect until their handset is approved',
+    label: 'ofcRhDevicesAwaitingApproval',
+    hint: 'ofcRhAgentNeedsHandset',
     path: '/agents',
     attentionWhen: nonZero,
   },
   {
     key: 'supervisors_without_a_territory',
-    label: 'Supervisors with no territory',
-    hint: 'They see no revenue figures at all until one is assigned',
+    label: 'ofcRhSupervisorsNoTerritory',
+    hint: 'ofcRhNoFiguresUntilTerritory',
     path: '/users',
     attentionWhen: nonZero,
   },
   {
     key: 'revenue_items_awaiting_a_rate',
-    label: 'Revenue items with no rate',
-    hint: 'Catalogued and not collectable until government sets the amount',
+    label: 'ofcRhItemsNoRate',
+    hint: 'ofcRhNotCollectableYet',
     path: '/catalogue',
   },
   {
     key: 'mdas_with_no_revenue_item',
-    label: 'MDAs collecting nothing',
-    hint: 'No revenue item exists for them in this platform',
+    label: 'ofcRhMdasCollectingNothing',
+    hint: 'ofcRhNoItemForMda',
     path: '/revenue',
   },
-  { key: 'active_officers', label: 'Officers with access', hint: 'Excluding field agents', path: '/users' },
-  { key: 'open_tickets', label: 'Support tickets open', hint: 'Raised by agents in the field', path: '/support' },
+  { key: 'active_officers', label: 'ofcRhOfficersWithAccess', hint: 'ofcRhExcludingFieldAgents', path: '/users' },
+  { key: 'open_tickets', label: 'ofcRhSupportTicketsOpen', hint: 'ofcRhRaisedByAgents', path: '/support' },
 ];
 
 const REVENUE_QUEUES: Queue[] = [
   {
     key: 'tins_failed',
-    label: 'TIN applications failed',
-    hint: 'The register refused these — they need a person',
+    label: 'ofcRhTinApplicationsFailed',
+    hint: 'ofcRhRegisterRefusedThese',
     path: '/taxpayer-records',
     attentionWhen: nonZero,
   },
   {
     key: 'tins_outstanding',
-    label: 'TINs outstanding',
-    hint: 'Applied for and not yet issued',
+    label: 'ofcRhTinsOutstanding',
+    hint: 'ofcRhAppliedNotIssued',
     path: '/taxpayer-records',
   },
   {
     key: 'corrections_awaiting_review',
-    label: 'Corrections awaiting review',
-    hint: 'Someone has asked to change who a record says they are',
+    label: 'ofcRhCorrectionsAwaiting',
+    hint: 'ofcRhSomeoneAskedChange',
     path: '/approvals',
     attentionWhen: nonZero,
   },
-  { key: 'invoices_unpaid', label: 'Invoices unpaid', hint: 'Raised and still open', path: '/outstanding' },
+  { key: 'invoices_unpaid', label: 'ofcRhInvoicesUnpaid', hint: 'ofcRhRaisedStillOpen', path: '/outstanding' },
   {
     key: 'invoices_expired',
-    label: 'Invoices expired',
-    hint: 'Never paid and now out of time',
+    label: 'ofcRhInvoicesExpired',
+    hint: 'ofcRhNeverPaidOutOfTime',
     path: '/outstanding',
   },
-  { key: 'registered_this_week', label: 'Registered this week', hint: 'New taxpayers on the register' },
-  { key: 'taxpayers', label: 'Taxpayers on the register', hint: 'Active records' },
+  { key: 'registered_this_week', label: 'ofcRhRegisteredThisWeek', hint: 'ofcRhNewTaxpayers' },
+  { key: 'taxpayers', label: 'ofcRhTaxpayersOnRegister', hint: 'ofcRhActiveRecords' },
 ];
 
 const FINANCE_QUEUES: Queue[] = [
   {
     key: 'reconciliation_exceptions',
-    label: 'Reconciliation exceptions',
-    hint: 'The bank and the platform disagree about these',
+    label: 'ofcRhReconciliationExceptions',
+    hint: 'ofcRhDisagreeAboutThese',
     path: '/reconciliation',
     attentionWhen: nonZero,
   },
   {
     key: 'settlements_unreconciled',
-    label: 'Settlements unreconciled',
-    hint: 'Money received and not yet matched',
+    label: 'ofcRhSettlementsUnreconciled',
+    hint: 'ofcRhReceivedNotMatched',
     path: '/reconciliation',
     attentionWhen: nonZero,
   },
   {
     key: 'payouts_awaiting_approval',
-    label: 'Commission payouts to approve',
-    hint: 'Agents are waiting on these',
+    label: 'ofcRhPayoutsToApprove',
+    hint: 'ofcRhAgentsWaitingShort',
     path: '/commissions',
     attentionWhen: nonZero,
   },
   {
     key: 'refunds_outstanding',
-    label: 'Refunds a taxpayer is still owed',
-    hint: 'Money the state has and should not',
+    label: 'ofcRhRefundsOwed',
+    hint: 'ofcRhMoneyStateShouldNotHave',
     path: '/outstanding',
     attentionWhen: nonZero,
   },
@@ -213,33 +224,33 @@ const FINANCE_QUEUES: Queue[] = [
 const AUDIT_QUEUES: Queue[] = [
   {
     key: 'fraud_flags_open',
-    label: 'Fraud flags open',
-    hint: 'Raised and not yet reviewed',
+    label: 'ofcRhFraudOpen',
+    hint: 'ofcRhRaisedNotReviewed',
     path: '/fraud',
     attentionWhen: nonZero,
   },
   {
     key: 'reversed_or_refunded',
-    label: 'Reversed or refunded',
-    hint: 'Money that came back out — the query worth running first',
+    label: 'ofcRhReversedRefunded',
+    hint: 'ofcRhMoneyBackOutQuery',
     path: '/audit',
   },
   {
     key: 'refused_this_week',
-    label: 'Actions refused this week',
-    hint: 'Someone tried something their role does not permit',
+    label: 'ofcRhActionsRefusedWeek',
+    hint: 'ofcRhSomeoneTriedNotPermitted',
     path: '/audit',
   },
   {
     key: 'rate_changes_this_month',
-    label: 'Rate changes this month',
-    hint: 'Every change to what a citizen is charged',
+    label: 'ofcRhRateChangesMonth',
+    hint: 'ofcRhEveryChangeCharged',
     path: '/audit',
   },
-  { key: 'receipt_checks_this_week', label: 'Receipts checked by the public', hint: 'Verification page lookups' },
-  { key: 'entries_today', label: 'Audit entries today', hint: 'Hash-chained and append-only' },
-  { key: 'audit_entries', label: 'Audit entries in total', hint: 'Since the platform started' },
-  { key: 'taxpayers_on_record', label: 'Taxpayers on record', hint: 'Active records' },
+  { key: 'receipt_checks_this_week', label: 'ofcRhReceiptsCheckedPublic', hint: 'ofcRhVerificationLookups' },
+  { key: 'entries_today', label: 'ofcRhAuditEntriesToday', hint: 'ofcRhHashChainedLong' },
+  { key: 'audit_entries', label: 'ofcRhAuditEntriesTotal', hint: 'ofcRhSincePlatformStarted' },
+  { key: 'taxpayers_on_record', label: 'ofcRhTaxpayersOnRecord', hint: 'ofcRhActiveRecords' },
 ];
 
 function QueueTable({
@@ -251,24 +262,25 @@ function QueueTable({
   queues: Queue[];
   navigate: (path: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const rows = queues.map((queue) => ({ ...queue, value: counts[queue.key] ?? '0' }));
   return (
     <Table
       columns={[
         {
           key: 'label',
-          label: 'Waiting',
+          label: 'ofcRhWaiting',
           render: (row: (typeof rows)[number]) => (
             <>
-              <strong>{row.label}</strong>
+              <strong>{t[row.label]}</strong>
               <br />
-              <span className="list__meta">{row.hint}</span>
+              <span className="list__meta">{t[row.hint]}</span>
             </>
           ),
         },
         {
           key: 'value',
-          label: '',
+          label: { text: '' },
           render: (row: (typeof rows)[number]) => {
             const needsAttention = row.attentionWhen?.(Number(row.value)) ?? false;
             return (
@@ -286,17 +298,15 @@ function QueueTable({
         },
         {
           key: 'open',
-          label: '',
+          label: { text: '' },
           render: (row: (typeof rows)[number]) =>
             row.path ? (
-              <button type="button" className="small secondary" onClick={() => navigate(row.path!)}>
-                Open
-              </button>
+              <button type="button" className="small secondary" onClick={() => navigate(row.path!)}>{t.ofcRhOpen}</button>
             ) : null,
         },
       ]}
       rows={rows}
-      empty="Nothing is waiting."
+      empty="ofcRhNothingWaiting"
     />
   );
 }
@@ -308,6 +318,7 @@ export function RoleHomeScreen({
   user: User;
   navigate: (path: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<Home | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -338,39 +349,28 @@ export function RoleHomeScreen({
       <>
         <div className="card">
           <h2 className="card__title">Administration — {user.fullName ?? 'signed in'}</h2>
-          <p className="card__hint">
-            What is waiting on an administrator. Collections and revenue analysis are on the
-            dashboard and the revenue summary; this screen is the platform itself.
-          </p>
+          <p className="card__hint">{t.ofcRhAdminIntro}</p>
         </div>
         {blocked > 0 && (
-          <Alert kind="warning" title={`${blocked} thing(s) are stopping somebody working`}>
-            <p style={{ margin: 0 }}>
-              An agent without clearance or an approved device cannot collect, and a supervisor
-              with no territory sees no figures at all.
-            </p>
+          <Alert kind="warning" title={{ text: t.ofcRhBlockedCount.replace('{{n}}', String(blocked)) }}>
+            <p style={{ margin: 0 }}>{t.ofcRhAdminBody}</p>
           </Alert>
         )}
         <Worked error={action.error} done={action.done} />
 
         {(work.agents ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Agents waiting on a decision
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Approving here does what the clearance screen does — same endpoint, same audit
-              entry. Asking for more information needs a reason, so that one opens the file.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhAgentsWaiting}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhClearanceBody}</p>
             <Table
               columns={[
-                { key: 'agent_code', label: 'Agent' },
-                { key: 'full_name', label: 'Name' },
-                { key: 'lga', label: 'LGA' },
-                { key: 'waiting_since', label: 'Waiting since' },
+                { key: 'agent_code', label: 'ofcRhAgent' },
+                { key: 'full_name', label: 'tpName' },
+                { key: 'lga', label: 'tpLgaShort' },
+                { key: 'waiting_since', label: 'ofcRhWaitingSince' },
                 {
                   key: 'act',
-                  label: '',
+                  label: { text: '' },
                   render: (row: Record<string, string>) => (
                     <>
                       <button
@@ -383,48 +383,40 @@ export function RoleHomeScreen({
                             () =>
                               api.post(`/agents/${row.id}/review`, {
                                 decision: 'APPROVE',
-                                note: 'Approved from the administrator home screen.',
+                                note: 'ofcRhApprovedFromHome',
                               }),
                             `${row.full_name} approved.`,
                           )
                         }
-                      >
-                        Approve
-                      </button>{' '}
+                      >{t.ofcRhApprove}</button>{' '}
                       <button
                         type="button"
                         className="small secondary"
                         onClick={() => navigate('/agents')}
-                      >
-                        Open file
-                      </button>
+                      >{t.ofcRhOpenFile}</button>
                     </>
                   ),
                 },
               ]}
               rows={work.agents!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}
 
         {(work.devices ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Handsets waiting for approval
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              A cleared agent still cannot collect until the device in their hand is approved.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhHandsetsWaiting}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhHandsetsBody}</p>
             <Table
               columns={[
-                { key: 'agent_code', label: 'Agent' },
-                { key: 'full_name', label: 'Name' },
-                { key: 'device_name', label: 'Device' },
-                { key: 'registered', label: 'Registered' },
+                { key: 'agent_code', label: 'ofcRhAgent' },
+                { key: 'full_name', label: 'tpName' },
+                { key: 'device_name', label: 'appDeviceLabel' },
+                { key: 'registered', label: 'ofcRhRegistered' },
                 {
                   key: 'act',
-                  label: '',
+                  label: { text: '' },
                   render: (row: Record<string, string>) => (
                     <button
                       type="button"
@@ -437,47 +429,38 @@ export function RoleHomeScreen({
                           'Device approved.',
                         )
                       }
-                    >
-                      Approve
-                    </button>
+                    >{t.ofcRhApprove}</button>
                   ),
                 },
               ]}
               rows={work.devices!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}
 
         {(work.supervisors ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Supervisors covering nothing
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              They see no revenue figures at all until a territory is assigned. Choosing which
-              needs the picker, so this one opens Officer access.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhSupervisorsNothing}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhSupervisorsBody}</p>
             <Table
               columns={[
-                { key: 'full_name', label: 'Officer' },
-                { key: 'phone', label: 'Phone' },
+                { key: 'full_name', label: 'ofcRhOfficer' },
+                { key: 'phone', label: 'tpPhone' },
                 {
                   key: 'act',
-                  label: '',
+                  label: { text: '' },
                   render: () => (
                     <button
                       type="button"
                       className="small secondary"
                       onClick={() => navigate('/users')}
-                    >
-                      Assign territories
-                    </button>
+                    >{t.ofcRhAssignTerritories}</button>
                   ),
                 },
               ]}
               rows={work.supervisors!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}
@@ -494,46 +477,38 @@ export function RoleHomeScreen({
     return (
       <>
         <div className="card">
-          <h2 className="card__title">The taxpayer register</h2>
-          <p className="card__hint">
-            Who is on it, who is missing a TIN, and what has been assessed and not paid.
-          </p>
+          <h2 className="card__title">{t.ofcRhTheRegister}</h2>
+          <p className="card__hint">{t.ofcRhRegisterBody}</p>
         </div>
         <div className="stat-grid">
           <Stat
-            label="Assessed and unpaid"
+            label="ofcRhAssessedUnpaid"
             value={<Money kobo={c.unpaid_kobo} />}
             variant="accent"
-            hint={`${c.invoices_unpaid} invoice(s) still open`}
+            hint={{ text: t.ofcRhInvoicesStillOpen.replace('{{n}}', String(c.invoices_unpaid)) }}
           />
-          <Stat label="Taxpayers" value={c.taxpayers} hint="Active records" />
-          <Stat label="New this week" value={c.registered_this_week} hint="Registered by agents and officers" />
+          <Stat label="ofcRhTaxpayers" value={c.taxpayers} hint="ofcRhActiveRecords" />
+          <Stat label="ofcRhNewThisWeek" value={c.registered_this_week} hint="ofcRhRegisteredByBoth" />
           <Stat
-            label="TINs outstanding"
+            label="ofcRhTinsOutstanding"
             value={c.tins_outstanding}
-            hint="A taxpayer without one cannot be tracked across years"
+            hint="ofcRhTinNoTracking"
           />
         </div>
         <Worked error={action.error} done={action.done} />
 
         {(work.failedTins ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              TIN applications the register refused
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              These taxpayers exist and have no TIN, so nothing can follow them across years.
-              Re-asking is safe: the platform sends the same application, and a TIN already
-              issued comes back rather than a second one being made.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhTinRefused}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhTinsBody}</p>
             <Table
               columns={[
-                { key: 'name', label: 'Taxpayer' },
-                { key: 'phone', label: 'Phone' },
-                { key: 'tin_reason', label: 'Why it failed' },
+                { key: 'name', label: 'colTaxpayerLabel' },
+                { key: 'phone', label: 'tpPhone' },
+                { key: 'tin_reason', label: 'ofcRhWhyFailed' },
               ]}
               rows={work.failedTins!}
-              empty=""
+              empty={{ text: '' }}
             />
             <div style={{ padding: '0 18px 16px' }}>
               <button
@@ -555,26 +530,21 @@ export function RoleHomeScreen({
 
         {(work.expiring ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Invoices about to expire
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Raised, unpaid, and out of time within the week. After that the assessment has to
-              be raised again.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhInvoicesExpiring}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhInvoicesBody}</p>
             <Table
               columns={[
-                { key: 'invoice_number', label: 'Invoice' },
-                { key: 'taxpayer', label: 'Taxpayer' },
+                { key: 'invoice_number', label: 'colInvoiceLabel' },
+                { key: 'taxpayer', label: 'colTaxpayerLabel' },
                 {
                   key: 'amount_kobo',
-                  label: 'Amount',
+                  label: 'pubVerifyAmount',
                   render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
                 },
-                { key: 'expires_on', label: 'Expires' },
+                { key: 'expires_on', label: 'ofcRhExpires' },
                 {
                   key: 'doc',
-                  label: '',
+                  label: { text: '' },
                   render: (row: Record<string, string>) => (
                     <button
                       type="button"
@@ -594,7 +564,7 @@ export function RoleHomeScreen({
                 },
               ]}
               rows={work.expiring!}
-              empty=""
+              empty={{ text: '' }}
             />
             <div style={{ padding: '0 18px 16px' }}>
               <button
@@ -626,104 +596,86 @@ export function RoleHomeScreen({
     return (
       <>
         <div className="card">
-          <h2 className="card__title">Money in, money out, money held</h2>
-          <p className="card__hint">
-            Reconciliation, settlement and what the state owes — to its agents, to taxpayers owed
-            a refund, and to the Councils it collects for.
-          </p>
+          <h2 className="card__title">{t.ofcRhMoneyInOut}</h2>
+          <p className="card__hint">{t.ofcRhMoneyBody}</p>
         </div>
         <div className="stat-grid">
           <Stat
-            label="Owed to the Councils"
+            label="ofcRhOwedToCouncils"
             value={<Money kobo={c.owed_to_councils_kobo} />}
             variant="accent"
-            hint="Collected on their behalf, not the state's own"
+            hint="ofcRhCollectedForCouncils"
           />
           <Stat
-            label="Commission liability"
+            label="ofcRhCommissionLiability"
             value={<Money kobo={c.commission_liability_kobo} />}
-            hint="Accrued and not yet paid"
+            hint="ofcRhAccruedNotPaid"
           />
           <Stat
-            label="Settlement variance"
+            label="ofcRhSettlementVariance"
             value={<Money kobo={c.settlement_variance_kobo} />}
-            hint="Expected less received, on unreconciled settlements"
+            hint="ofcRhExpectedLessReceived"
           />
           <Stat
-            label="Exceptions"
+            label="ofcRhExceptions"
             value={c.reconciliation_exceptions}
-            hint="The bank and the platform disagree"
+            hint="ofcRhBankPlatformDisagree"
           />
         </div>
         {Number(c.reconciliation_exceptions) > 0 && (
-          <Alert kind="warning" title="Reconciliation exceptions are open">
-            <p style={{ margin: 0 }}>
-              Until these are resolved the platform's figures and the bank's do not agree, and
-              commission on the affected collections stays held.
-            </p>
+          <Alert kind="warning" title="ofcRhReconciliationOpen">
+            <p style={{ margin: 0 }}>{t.ofcRhReconciliationBody}</p>
           </Alert>
         )}
         <Worked error={action.error} done={action.done} />
 
         {(work.exceptions ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Where the bank and the platform disagree
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Resolving an exception is a judgement with a note attached, so it happens on the
-              reconciliation screen where there is room to write one. This is what is waiting.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhBankDisagree}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhExceptionQueueBody}</p>
             <Table
               columns={[
-                { key: 'status', label: 'Kind' },
-                { key: 'gateway_reference', label: 'Gateway reference' },
+                { key: 'status', label: 'ofcRhKind' },
+                { key: 'gateway_reference', label: 'colGatewayReference' },
                 {
                   key: 'expected_kobo',
-                  label: 'Expected',
+                  label: 'ofcRhExpected',
                   render: (row: Record<string, string>) => <Money kobo={row.expected_kobo ?? '0'} />,
                 },
                 {
                   key: 'received_kobo',
-                  label: 'Received',
+                  label: 'ofcRhReceived',
                   render: (row: Record<string, string>) => <Money kobo={row.received_kobo ?? '0'} />,
                 },
-                { key: 'raised', label: 'Raised' },
+                { key: 'raised', label: 'ofcRhRaisedHeading' },
               ]}
               rows={work.exceptions!}
-              empty=""
+              empty={{ text: '' }}
             />
             <div style={{ padding: '0 18px 16px' }}>
-              <button type="button" className="secondary" onClick={() => navigate('/reconciliation')}>
-                Work the exception queue
-              </button>
+              <button type="button" className="secondary" onClick={() => navigate('/reconciliation')}>{t.ofcRhWorkExceptionQueue}</button>
             </div>
           </div>
         )}
 
         {(work.payouts ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Commission payouts requested
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Agents are waiting on these. Approving needs a fresh code, because it is the
-              action that moves money out.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhCommissionPayouts}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhAgentsWaitingBody}</p>
             <Table
               columns={[
-                { key: 'agent', label: 'Agent' },
-                { key: 'payout_reference', label: 'Reference' },
+                { key: 'agent', label: 'ofcRhAgent' },
+                { key: 'payout_reference', label: 'errReference' },
                 {
                   key: 'amount_kobo',
-                  label: 'Amount',
+                  label: 'pubVerifyAmount',
                   render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
                 },
-                { key: 'commissions', label: 'Commissions' },
-                { key: 'requested', label: 'Requested' },
+                { key: 'commissions', label: 'ofcNavCommissions' },
+                { key: 'requested', label: 'ofcRhRequested' },
                 {
                   key: 'act',
-                  label: '',
+                  label: { text: '' },
                   render: (row: Record<string, string>) => (
                     <button
                       type="button"
@@ -739,14 +691,12 @@ export function RoleHomeScreen({
                           `Payout ${row.payout_reference} approved.`,
                         )
                       }
-                    >
-                      Approve
-                    </button>
+                    >{t.ofcRhApprove}</button>
                   ),
                 },
               ]}
               rows={work.payouts!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}
@@ -763,64 +713,50 @@ export function RoleHomeScreen({
     return (
       <>
         <div className="card">
-          <h2 className="card__title">What there is to examine</h2>
-          <p className="card__hint">
-            Read-only, by role and by design. Nothing on this screen changes a record — every
-            figure is a starting point for a query, and the audit log itself is hash-chained and
-            append-only.
-          </p>
+          <h2 className="card__title">{t.ofcRhWhatToExamine}</h2>
+          <p className="card__hint">{t.ofcRhReadOnlyBody}</p>
         </div>
         <div className="stat-grid">
-          <Stat label="Audit entries" value={c.audit_entries} variant="accent" hint="Hash-chained, append-only" />
-          <Stat label="Today" value={c.entries_today} hint="Entries since midnight" />
-          <Stat label="Reversed or refunded" value={c.reversed_or_refunded} hint="Money that came back out" />
-          <Stat label="Fraud flags open" value={c.fraud_flags_open} hint="Raised and not yet reviewed" />
+          <Stat label="ofcRhAuditEntries" value={c.audit_entries} variant="accent" hint="ofcRhHashChainedShort" />
+          <Stat label="ofcRhToday" value={c.entries_today} hint="ofcRhEntriesSinceMidnight" />
+          <Stat label="ofcRhReversedRefunded" value={c.reversed_or_refunded} hint="ofcRhMoneyBackOut" />
+          <Stat label="ofcRhFraudOpen" value={c.fraud_flags_open} hint="ofcRhRaisedNotReviewed" />
         </div>
         {(work.refusals ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Actions the platform refused
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Somebody attempted something their role does not permit. Each is an audit entry
-              in its own right.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhRefusedActions}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhRefusedBody}</p>
             <Table
               columns={[
-                { key: 'at', label: 'When' },
-                { key: 'actor_role', label: 'Role' },
-                { key: 'action', label: 'Attempted' },
-                { key: 'entity_type', label: 'Against' },
+                { key: 'at', label: 'ofcRhWhen' },
+                { key: 'actor_role', label: 'ofcRhRole' },
+                { key: 'action', label: 'ofcRhAttempted' },
+                { key: 'entity_type', label: 'ofcRhAgainst' },
               ]}
               rows={work.refusals!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}
 
         {(work.reversals ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-              Money that came back out
-            </h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>
-              Reversed or refunded after the fact. The first query worth running on any revenue
-              platform.
-            </p>
+            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhMoneyBackOut}</h2>
+            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhReversedBody}</p>
             <Table
               columns={[
-                { key: 'at', label: 'When' },
-                { key: 'transaction_reference', label: 'Transaction' },
-                { key: 'taxpayer', label: 'Taxpayer' },
+                { key: 'at', label: 'ofcRhWhen' },
+                { key: 'transaction_reference', label: 'supTransactionLabel' },
+                { key: 'taxpayer', label: 'colTaxpayerLabel' },
                 {
                   key: 'amount_kobo',
-                  label: 'Amount',
+                  label: 'pubVerifyAmount',
                   render: (row: Record<string, string>) => <Money kobo={row.amount_kobo!} />,
                 },
-                { key: 'status', label: 'Outcome' },
+                { key: 'status', label: 'ofcRhOutcome' },
               ]}
               rows={work.reversals!}
-              empty=""
+              empty={{ text: '' }}
             />
           </div>
         )}

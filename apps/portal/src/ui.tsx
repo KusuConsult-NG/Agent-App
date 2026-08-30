@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react';
 import { formatNaira, statusSeverity } from '@psirs/shared';
 import type { ApiError } from './lib/api';
+import { usePortalI18n } from './lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 export function Money({ kobo }: { kobo: string | number | bigint | null | undefined }) {
   if (kobo === null || kobo === undefined || kobo === '') return <>—</>;
@@ -13,22 +15,44 @@ export function Money({ kobo }: { kobo: string | number | bigint | null | undefi
   }
 }
 
+/**
+ * Labels are dictionary keys throughout this file.
+ *
+ * `Stat`, `Table` and `BarList` are what the twenty officer screens are built
+ * out of, and most of the portal's visible English used to sit in the props
+ * passed to them. Taking keys rather than strings translates all of it in one
+ * place — and, because the type is `keyof TranslationDictionary`, makes a new
+ * screen with an English label a compile error rather than a thing an officer
+ * reads.
+ *
+ * Where a label is genuinely data — an LGA's name, a revenue item, a column
+ * headed by something the server sent — the prop takes `{ text: string }`
+ * instead, which says "this is not translatable and is not meant to be".
+ */
+export type Label = keyof TranslationDictionary | { text: string };
+
+export function useLabel(): (label: Label) => string {
+  const { t } = usePortalI18n();
+  return (label: Label) => (typeof label === 'object' ? label.text : t[label]);
+}
+
 export function Stat({
   label,
   value,
   hint,
   variant,
 }: {
-  label: string;
+  label: Label;
   value: ReactNode;
-  hint?: string;
+  hint?: Label;
   variant?: 'accent' | 'alert';
 }) {
+  const text = useLabel();
   return (
     <div className={`stat ${variant ? `stat--${variant}` : ''}`}>
-      <p className="stat__label">{label}</p>
+      <p className="stat__label">{text(label)}</p>
       <p className="stat__value">{value}</p>
-      {hint && <p className="stat__hint">{hint}</p>}
+      {hint && <p className="stat__hint">{text(hint)}</p>}
     </div>
   );
 }
@@ -48,12 +72,13 @@ export function Alert({
   children,
 }: {
   kind: 'success' | 'warning' | 'error' | 'info';
-  title?: string;
+  title?: Label;
   children: ReactNode;
 }) {
+  const text = useLabel();
   return (
     <div className={`alert alert--${kind}`} role={kind === 'error' ? 'alert' : 'status'}>
-      {title && <strong>{title}</strong>}
+      {title && <strong>{text(title)}</strong>}
       {children}
     </div>
   );
@@ -81,7 +106,7 @@ function fieldLabel(field: string): string {
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   if (!error) return null;
   return (
-    <Alert kind="error" title={error.message}>
+    <Alert kind="error" title={{ text: error.message }}>
       {error.nextStep && <p style={{ margin: '4px 0 0' }}>{error.nextStep}</p>}
       {error.details && error.details.length > 0 && (
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
@@ -101,8 +126,9 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
 }
 
 export function Loading({ rows = 4 }: { rows?: number }) {
+  const { t } = usePortalI18n();
   return (
-    <div aria-busy="true" aria-label="Loading">
+    <div aria-busy="true" aria-label={t.uiLoading}>
       {Array.from({ length: rows }, (_, index) => (
         <div key={index} className="skeleton" style={{ width: `${100 - index * 9}%` }} />
       ))}
@@ -119,11 +145,13 @@ export function Table({
   rows,
   empty,
 }: {
-  columns: { key: string; label: string; numeric?: boolean; render?: (row: any) => ReactNode }[];
+  columns: { key: string; label: Label; numeric?: boolean; render?: (row: any) => ReactNode }[];
   rows: any[];
-  empty?: string;
+  empty?: Label;
 }) {
-  if (rows.length === 0) return <Empty>{empty ?? 'Nothing to show.'}</Empty>;
+  const text = useLabel();
+  const { t } = usePortalI18n();
+  if (rows.length === 0) return <Empty>{empty ? text(empty) : t.ofcNothingToShow}</Empty>;
 
   return (
     <div className="table-wrap">
@@ -132,7 +160,7 @@ export function Table({
           <tr>
             {columns.map((column) => (
               <th key={column.key} className={column.numeric ? 'numeric' : undefined}>
-                {column.label}
+                {text(column.label)}
               </th>
             ))}
           </tr>
@@ -164,18 +192,20 @@ export function BarList({
   items,
   formatValue,
 }: {
-  items: { label: string; value: number; sublabel?: string }[];
+  items: { label: Label; value: number; sublabel?: string }[];
   formatValue: (value: number) => ReactNode;
 }) {
+  const { t } = usePortalI18n();
+  const text = useLabel();
   const max = Math.max(...items.map((item) => item.value), 1);
-  if (items.length === 0) return <Empty>No data for this period.</Empty>;
+  if (items.length === 0) return <Empty>{t.ofcNoDataForPeriod}</Empty>;
 
   return (
     <div>
       {items.map((item) => (
-        <div className="bar-row" key={item.label}>
-          <span title={item.label}>
-            {item.label}
+        <div className="bar-row" key={text(item.label)}>
+          <span title={text(item.label)}>
+            {text(item.label)}
             {item.sublabel && (
               <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}> · {item.sublabel}</span>
             )}
@@ -191,9 +221,10 @@ export function BarList({
 }
 
 export function Sparkline({ points }: { points: { label: string; value: number }[] }) {
+  const { t } = usePortalI18n();
   const max = Math.max(...points.map((point) => point.value), 1);
   return (
-    <div className="spark" role="img" aria-label="Daily collection trend">
+    <div className="spark" role="img" aria-label={t.ofcDailyTrend}>
       {points.map((point) => (
         <span
           key={point.label}
@@ -252,4 +283,43 @@ export function formatDate(value: string | null | undefined): string {
     month: 'short',
     day: '2-digit',
   });
+}
+
+/**
+ * The language toggle, on both halves of the portal.
+ *
+ * It lived in `Public.tsx`, where the reasoning was that the people who need
+ * it have no account, no settings page and no second visit. That is still
+ * true of a referee following one link; it turned out to be true of an
+ * officer too, once the officer screens were translated — a supervisor in
+ * Bokkos has an account, but nothing on it holds a language, and burying the
+ * choice behind a settings page nobody opens is the same failure in a
+ * different building.
+ *
+ * So one control, rendered before anything else on the surface that carries
+ * it, so somebody who cannot read the heading can still change the heading.
+ */
+export function LanguageToggle({ align = 'flex-end' }: { align?: 'flex-end' | 'flex-start' }) {
+  const { lang, t, setLanguage } = usePortalI18n();
+  return (
+    <div
+      className="public__lang"
+      role="group"
+      aria-label={t.pubLanguage}
+      style={{ display: 'flex', justifyContent: align, gap: 6, marginBottom: 10 }}
+    >
+      {(['en', 'ha'] as const).map((option) => (
+        <button
+          key={option}
+          type="button"
+          className={lang === option ? '' : 'secondary'}
+          aria-pressed={lang === option}
+          onClick={() => setLanguage(option)}
+          style={{ padding: '4px 12px', fontSize: '0.76rem' }}
+        >
+          {option === 'en' ? t.pubEnglish : t.pubHausa}
+        </button>
+      ))}
+    </div>
+  );
 }

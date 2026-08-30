@@ -39,6 +39,8 @@
  * Hiding a link or a control is a convenience. The API is the control.
  */
 
+import type { TranslationDictionary } from '@psirs/shared';
+
 export interface Principal {
   role: string;
   permissions: readonly string[];
@@ -184,7 +186,15 @@ export function isReadOnly(user: Principal | null): boolean {
 
 export interface NavItem {
   path: string;
-  label: string;
+  /**
+   * A dictionary key, not a label.
+   *
+   * This catalogue is module-level and cannot reach a hook, so the menu
+   * resolves `t[label]` where it renders. Typing it as `keyof
+   * TranslationDictionary` is what stops a screen being added with an English
+   * label that no dictionary and no reviewer could reach.
+   */
+  label: keyof TranslationDictionary;
   /**
    * The permission that opens this item, or any one of several.
    *
@@ -205,20 +215,20 @@ export interface NavItem {
  * avoids.
  */
 const SCREEN: Record<string, NavItem> = {
-  home: { path: '/', label: 'Home', permission: ['report:read:all', 'report:read:territory'] },
+  home: { path: '/', label: 'home', permission: ['report:read:all', 'report:read:territory'] },
   dashboard: {
     path: '/dashboard',
-    label: 'Collections dashboard',
+    label: 'ofcNavDashboard',
     permission: ['report:read:all', 'report:read:territory'],
   },
   intelligence: {
     path: '/intelligence',
-    label: 'Revenue intelligence',
+    label: 'ofcNavIntelligence',
     permission: ['report:read:all', 'report:read:territory'],
   },
   revenue: {
     path: '/revenue',
-    label: 'Revenue summary',
+    label: 'ofcNavRevenue',
     permission: ['report:read:all', 'report:read:territory'],
   },
   /*
@@ -232,43 +242,43 @@ const SCREEN: Record<string, NavItem> = {
    */
   levies: {
     path: '/levies',
-    label: 'Levies & categories',
+    label: 'ofcNavLevies',
     permission: ['report:read:all', 'report:read:territory'],
   },
-  transactions: { path: '/transactions', label: 'Transactions', permission: 'payment:read:all' },
-  agents: { path: '/agents', label: 'Agents & clearance', permission: 'agent:read:all' },
-  referees: { path: '/referees', label: 'Referees', permission: 'agent:read:all' },
+  transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
+  agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
+  referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
   performance: {
     path: '/performance',
-    label: 'Agent performance',
+    label: 'ofcNavPerformance',
     permission: ['report:read:all', 'report:read:territory'],
   },
-  reconciliation: { path: '/reconciliation', label: 'Reconciliation', permission: 'report:financial' },
-  commissions: { path: '/commissions', label: 'Commissions', permission: 'commission:read:all' },
-  approvals: { path: '/approvals', label: 'Approvals', permission: 'approval:review' },
-  fraud: { path: '/fraud', label: 'Fraud & leakage', permission: 'fraud:read' },
-  support: { path: '/support', label: 'Support desk', permission: 'support:read:all' },
-  outstanding: { path: '/outstanding', label: 'Outstanding work', permission: 'payment:read:all' },
-  audit: { path: '/audit', label: 'Audit log', permission: 'audit:read' },
-  usage: { path: '/usage', label: 'Product usage', permission: 'report:read:all' },
-  catalogue: { path: '/catalogue', label: 'Revenue catalogue', permission: 'catalogue:read' },
-  programmes: { path: '/programmes', label: 'Social incentives', permission: 'incentive:read:all' },
+  reconciliation: { path: '/reconciliation', label: 'ofcNavReconciliation', permission: 'report:financial' },
+  commissions: { path: '/commissions', label: 'ofcNavCommissions', permission: 'commission:read:all' },
+  approvals: { path: '/approvals', label: 'ofcNavApprovals', permission: 'approval:review' },
+  fraud: { path: '/fraud', label: 'ofcNavFraud', permission: 'fraud:read' },
+  support: { path: '/support', label: 'ofcNavSupport', permission: 'support:read:all' },
+  outstanding: { path: '/outstanding', label: 'ofcNavOutstanding', permission: 'payment:read:all' },
+  audit: { path: '/audit', label: 'ofcNavAudit', permission: 'audit:read' },
+  usage: { path: '/usage', label: 'ofcNavUsage', permission: 'report:read:all' },
+  catalogue: { path: '/catalogue', label: 'ofcNavCatalogue', permission: 'catalogue:read' },
+  programmes: { path: '/programmes', label: 'ofcNavProgrammes', permission: 'incentive:read:all' },
   // group:manage, not group:read:all. Agents hold the read permission because
   // they register groups in the field; managing them is an officer's job.
-  groups: { path: '/groups', label: 'Groups & cooperatives', permission: 'group:manage' },
+  groups: { path: '/groups', label: 'ofcNavGroups', permission: 'group:manage' },
   taxpayerRecords: {
     path: '/taxpayer-records',
-    label: 'Taxpayer corrections',
+    label: 'ofcNavTaxpayerRecords',
     permission: 'taxpayer:correct',
   },
-  users: { path: '/users', label: 'Officer access', permission: 'user:manage' },
+  users: { path: '/users', label: 'ofcNavUsers', permission: 'user:manage' },
   /*
    * `system:configure`, held by administrators alone. Raising the minimum app
    * version stops every agent still on an older build from collecting; that is
    * a different size of decision from suspending one agent, and it is not on a
    * revenue officer's menu.
    */
-  fieldApp: { path: '/field-app', label: 'Field application', permission: 'system:configure' },
+  fieldApp: { path: '/field-app', label: 'ofcNavFieldApp', permission: 'system:configure' },
   /*
    * `allocation:manage`, held by administrators and revenue officers only. A
    * finance officer settles money; they do not decide who gets fertiliser, and
@@ -276,12 +286,12 @@ const SCREEN: Record<string, NavItem> = {
    */
   allocations: {
     path: '/allocations',
-    label: 'Distribution rounds',
+    label: 'ofcNavAllocations',
     permission: 'allocation:manage',
   },
 };
 
-type NavGroup = { group: string; items: readonly NavItem[] };
+type NavGroup = { group: keyof TranslationDictionary; items: readonly NavItem[] };
 
 /**
  * A menu per role, not one menu with things taken out.
@@ -305,20 +315,20 @@ type NavGroup = { group: string; items: readonly NavItem[] };
 const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   admin: [
     {
-      group: 'Administration',
+      group: 'ofcGroupAdministration',
       items: [SCREEN.home!, SCREEN.users!, SCREEN.agents!, SCREEN.referees!],
     },
     {
-      group: 'Configuration',
+      group: 'ofcGroupConfiguration',
       items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!,
               SCREEN.fieldApp!],
     },
     {
-      group: 'Oversight',
+      group: 'ofcGroupOversight',
       items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!],
     },
     {
-      group: 'Revenue',
+      group: 'ofcGroupRevenue',
       items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!,
               SCREEN.transactions!, SCREEN.performance!],
     },
@@ -326,65 +336,65 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   revenue_officer: [
     {
-      group: 'The register',
+      group: 'ofcGroupTheRegister',
       items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
-      group: 'Assessment',
+      group: 'ofcGroupAssessment',
       items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.transactions!],
     },
     {
-      group: 'Revenue',
+      group: 'ofcGroupRevenue',
       items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!],
     },
     {
-      group: 'Agents and programmes',
+      group: 'ofcGroupAgentsProgrammes',
       items: [SCREEN.agents!, SCREEN.referees!, SCREEN.performance!, SCREEN.programmes!,
               SCREEN.allocations!, SCREEN.groups!],
     },
     {
-      group: 'Oversight',
+      group: 'ofcGroupOversight',
       items: [SCREEN.fraud!, SCREEN.support!, SCREEN.audit!, SCREEN.usage!],
     },
   ],
 
   finance_officer: [
     {
-      group: 'Settlement',
+      group: 'ofcGroupSettlement',
       items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!,
               SCREEN.approvals!],
     },
     {
-      group: 'Revenue',
+      group: 'ofcGroupRevenue',
       items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.transactions!,
               SCREEN.intelligence!],
     },
     {
-      group: 'Who collected it',
+      group: 'ofcGroupWhoCollected',
       items: [SCREEN.performance!, SCREEN.agents!, SCREEN.referees!],
     },
     {
-      group: 'Oversight',
+      group: 'ofcGroupOversight',
       items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!],
     },
   ],
 
   auditor: [
     {
-      group: 'Examination',
+      group: 'ofcGroupExamination',
       items: [SCREEN.home!, SCREEN.audit!, SCREEN.fraud!, SCREEN.transactions!],
     },
     {
-      group: 'The money',
+      group: 'ofcGroupTheMoney',
       items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!],
     },
     {
-      group: 'What was charged',
+      group: 'ofcGroupWhatCharged',
       items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.dashboard!,
               SCREEN.intelligence!],
     },
     {
-      group: 'Who did it',
+      group: 'ofcGroupWhoDidIt',
       items: [SCREEN.agents!, SCREEN.referees!, SCREEN.performance!, SCREEN.usage!,
               SCREEN.support!, SCREEN.programmes!],
     },
@@ -392,16 +402,16 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   supervisor: [
     {
-      group: 'My territory',
+      group: 'ofcGroupMyTerritory',
       items: [SCREEN.home!, SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
     },
     {
-      group: 'Revenue here',
+      group: 'ofcGroupRevenueHere',
       items: [SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!,
               SCREEN.commissions!],
     },
     {
-      group: 'Oversight',
+      group: 'ofcGroupOversight',
       items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!],
     },
   ],
@@ -415,7 +425,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
  * designed one and a much better outcome than an empty portal.
  */
 const NAV_FALLBACK: readonly NavGroup[] = [
-  { group: 'Everything you may open', items: Object.values(SCREEN) },
+  { group: 'ofcGroupEverything', items: Object.values(SCREEN) },
 ];
 
 export function navFor(role: string | undefined): readonly NavGroup[] {
@@ -433,7 +443,9 @@ export function availableItems(user: Principal | null): NavItem[] {
 }
 
 /** The nav groups this officer may open, with empty groups dropped. */
-export function availableGroups(user: Principal | null): { group: string; items: NavItem[] }[] {
+export function availableGroups(
+  user: Principal | null,
+): { group: keyof TranslationDictionary; items: NavItem[] }[] {
   if (!user) return [];
   return navFor(user.role).map((group) => ({
     group: group.group,

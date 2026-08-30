@@ -38,8 +38,12 @@ import { LeviesScreen } from './screens/Levies';
 import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
+import { LanguageToggle } from './ui';
+import { usePortalI18n } from './lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 export function App() {
+  const { t } = usePortalI18n();
   const [route, navigate] = useRoute();
   const [user, setUser] = useState<User | null>(getUser());
   const [restoring, setRestoring] = useState(hasStoredSession());
@@ -93,7 +97,7 @@ export function App() {
       <div className="login">
         <div className="login__card">
           <p style={{ margin: 0, textAlign: 'center', color: 'var(--muted)' }}>
-            Restoring your session…
+            {t.shellRestoring}
           </p>
         </div>
       </div>
@@ -115,11 +119,11 @@ export function App() {
    * and therefore useful on none. Falling back to the section the route sits
    * under says where they are.
    */
-  const activeLabel =
+  const activeLabel: keyof TranslationDictionary =
     available.find((item) => item.path === route)?.label ??
     available.find((item) => item.path !== '/' && route.startsWith(item.path))?.label ??
     SECTION_LABELS[`/${route.split('/')[1]}`] ??
-    'Revenue administration';
+    'ofcRevenueAdministration';
 
   return (
     <div className="shell">
@@ -127,21 +131,21 @@ export function App() {
         <div className="sidebar__brand">
           <img src="/icon.svg" alt="" width={32} height={32} />
           <div>
-            <strong>PSIRS Portal</strong>
-            <span>Plateau State Government</span>
+            <strong>{t.ofcPortalName}</strong>
+            <span>{t.ofcStateGovernment}</span>
           </div>
         </div>
 
         {groups.map((group) => (
-          <nav className="sidebar__group" key={group.group} aria-label={group.group}>
-            <p className="sidebar__group-title">{group.group}</p>
+          <nav className="sidebar__group" key={group.group} aria-label={t[group.group]}>
+            <p className="sidebar__group-title">{t[group.group]}</p>
             {group.items.map((item) => (
               <a
                 key={item.path}
                 href={`#${item.path}`}
                 aria-current={route === item.path ? 'page' : undefined}
               >
-                {item.label}
+                {t[item.label]}
               </a>
             ))}
           </nav>
@@ -160,7 +164,7 @@ export function App() {
              * portal expressed it only by not rendering buttons, which is
              * indistinguishable from a portal that forgot to.
              */}
-            {readOnly && <span className="sidebar__tag">read-only</span>}
+            {readOnly && <span className="sidebar__tag">{t.ofcReadOnly}</span>}
           </p>
           <button
             type="button"
@@ -170,17 +174,23 @@ export function App() {
               setUser(null);
             }}
           >
-            Sign out
+            {t.ofcSignOut}
           </button>
+          {/*
+            * The signed-in half of the same choice. An officer who set the
+            * portal to Hausa at the sign-in screen keeps it; one who did not,
+            * and finds they want it, should not have to sign out to say so.
+            */}
+          <LanguageToggle align="flex-start" />
         </div>
       </aside>
 
       <div className="main">
         <header className="topbar">
-          <h1>{activeLabel}</h1>
+          <h1>{t[activeLabel]}</h1>
           <div className="topbar__meta">
             <div>{new Date().toLocaleDateString('en-NG', { dateStyle: 'full' })}</div>
-            <div>Plateau State Internal Revenue Service</div>
+            <div>{t.authPsirsFull}</div>
           </div>
         </header>
 
@@ -193,8 +203,8 @@ export function App() {
 }
 
 /** Headings for screens reached from a list rather than from the menu. */
-const SECTION_LABELS: Record<string, string> = {
-  '/allocations': 'Distribution round',
+const SECTION_LABELS: Record<string, keyof TranslationDictionary> = {
+  '/allocations': 'ofcDistributionRound',
 };
 
 function Routes({
@@ -206,6 +216,7 @@ function Routes({
   navigate: (path: string) => void;
   user: User;
 }) {
+  const { t } = usePortalI18n();
   const agentMatch = matchRoute(route, '/agents/:id');
   const ticketMatch = matchRoute(route, '/support/:id');
   const roundMatch = matchRoute(route, '/allocations/:id');
@@ -258,7 +269,7 @@ function Routes({
   return (
     <div className="card">
       <p style={{ margin: 0 }}>
-        That page does not exist. <a href="#/">Return to the dashboard</a>.
+        {t.ofcPageNotFound} <a href="#/">{t.ofcReturnToDashboard}</a>.
       </p>
     </div>
   );

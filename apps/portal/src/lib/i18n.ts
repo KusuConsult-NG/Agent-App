@@ -1,12 +1,15 @@
 /**
- * Language for the account-free public screens.
+ * Language for everything this deployment serves — the account-free public
+ * screens and the officer portal behind them.
  *
- * Deliberately narrower than the agent application's version. An officer signs
- * in, works all day and has a profile to keep a preference in; a referee opens
- * one link, answers one question and never returns. So the choice lives in
- * `localStorage` only as a convenience for somebody who reloads or follows a
- * second link, and the toggle sits on the screen itself rather than behind a
- * settings page nobody without an account would look for.
+ * It began as the public half alone, on the reasoning that a referee opens one
+ * link and never returns while an officer signs in and has a profile to keep a
+ * preference in. The officer half then stayed in English for a year, so the
+ * distinction bought nothing and cost a second mechanism nobody built.
+ *
+ * One key, one toggle, one language per browser. A citizen checking a receipt
+ * and an officer signing in are different people, but they are not usually the
+ * same browser, and when they are, the second one changes the toggle.
  *
  * English remains the default. Guessing from `navigator.language` was
  * considered and rejected: a cheap Android handset sold in Jos reports `en-US`
@@ -17,7 +20,7 @@
 import { useEffect, useState } from 'react';
 import { getTranslation, type Language, type TranslationDictionary } from '@psirs/shared';
 
-const LANG_KEY = 'psirs_public_lang';
+const LANG_KEY = 'psirs_portal_lang';
 
 function stored(): Language {
   try {
@@ -32,7 +35,7 @@ function stored(): Language {
 let current: Language = typeof localStorage === 'undefined' ? 'en' : stored();
 const listeners = new Set<(lang: Language) => void>();
 
-export function setPublicLanguage(lang: Language): void {
+export function setPortalLanguage(lang: Language): void {
   current = lang;
   try {
     localStorage.setItem(LANG_KEY, lang);
@@ -42,11 +45,11 @@ export function setPublicLanguage(lang: Language): void {
   for (const listener of listeners) listener(lang);
 }
 
-export function getPublicLanguage(): Language {
+export function getPortalLanguage(): Language {
   return current;
 }
 
-export function usePublicI18n(): {
+export function usePortalI18n(): {
   lang: Language;
   t: TranslationDictionary;
   setLanguage: (lang: Language) => void;
@@ -60,5 +63,16 @@ export function usePublicI18n(): {
     };
   }, []);
 
-  return { lang, t: getTranslation(lang), setLanguage: setPublicLanguage };
+  return { lang, t: getTranslation(lang), setLanguage: setPortalLanguage };
 }
+
+/**
+ * The names the public screens were written against.
+ *
+ * Kept so `Public.tsx` and its tests read as they did — the language is the
+ * same language now, and renaming every call site would be a diff about
+ * nothing.
+ */
+export const setPublicLanguage = setPortalLanguage;
+export const getPublicLanguage = getPortalLanguage;
+export const usePublicI18n = usePortalI18n;
