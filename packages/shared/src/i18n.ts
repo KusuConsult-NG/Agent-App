@@ -135,6 +135,52 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+
+  /**
+   * The revenue catalogue — what a citizen may be charged and at what rate —
+   * and the social programmes that add an entitlement on top of it.
+   */
+  ofcCfCatalogueIntro: string;
+  ofcCfAddRevenueItem: string;
+  ofcCfHistoricalAssessments: string;
+  ofcCfChangeRate: string;
+  ofcCfNewRevenueItem: string;
+  ofcCfCreatedWithoutPrice: string;
+  ofcCfChooseCategory: string;
+  ofcCfHowOften: string;
+  ofcCfWhatItIsFor: string;
+  ofcCfWhoItApplies: string;
+  ofcCfSelfAssessable: string;
+  ofcCfCommissionable: string;
+  ofcCfWhatIsHappening: string;
+  ofcCfSuspendOption: string;
+  ofcCfRetireOption: string;
+  ofcCfRetireWarning: string;
+  ofcCfCurrentVersionStays: string;
+  ofcCfRateType: string;
+  ofcCfFixedAmount: string;
+  ofcCfPercentage: string;
+  ofcCfNewAmount: string;
+  ofcCfNewRate: string;
+  ofcCfEffectiveFrom: string;
+  ofcCfReasonForChange: string;
+  ofcCfRate: string;
+  ofcCfChangedBy: string;
+  ofcCfFrequency: string;
+  ofcCfCurrentRate: string;
+  ofcCfOnSale: string;
+  ofcCfSampleReason: string;
+  ofcCfProgrammesTitle: string;
+  ofcCfProgrammesIntro: string;
+  ofcCfEssentialServiceLink: string;
+  ofcCfBeneficiaries: string;
+  ofcCfNoEligibleYet: string;
+  ofcCfEssentialProtected: string;
+  ofcCfBenefit: string;
+  ofcCfMinScore: string;
+  ofcCfRequiresNoArrears: string;
+  ofcCfEligible: string;
+  ofcCfEvaluated: string;
   ofcOvTransactionCount: string;
   ofcOvSettlementsOutstanding: string;
   ofcOvIntact: string;
@@ -1775,6 +1821,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcCfCatalogueIntro: "Revenue items and their rates are government configuration, not code. Changing a rate creates a new version with an effective date — it never rewrites what was already assessed.",
+    ofcCfAddRevenueItem: "Add a revenue item",
+    ofcCfHistoricalAssessments: "Historical assessments remain attached to the version in force when they were raised.",
+    ofcCfChangeRate: "Change rate",
+    ofcCfNewRevenueItem: "New revenue item",
+    ofcCfCreatedWithoutPrice: "The item is created without a price. Set its rate afterwards with “Change rate” — until you do, an agent cannot assess it in the field.",
+    ofcCfChooseCategory: "Choose a category",
+    ofcCfHowOften: "How often it is charged",
+    ofcCfWhatItIsFor: "What it is for",
+    ofcCfWhoItApplies: "Who it applies to",
+    ofcCfSelfAssessable: "A taxpayer may assess this themselves",
+    ofcCfCommissionable: "An agent earns commission on it",
+    ofcCfWhatIsHappening: "What is happening to this item",
+    ofcCfSuspendOption: "Suspend — pause collection while something is settled",
+    ofcCfRetireOption: "Retire — the charge has ended, and cannot be brought back",
+    ofcCfRetireWarning: "Retiring cannot be undone. If the charge is reintroduced later it needs a new revenue item, with its own code and rate.",
+    ofcCfCurrentVersionStays: "The current version stays on record and keeps applying to assessments already raised.",
+    ofcCfRateType: "Rate type",
+    ofcCfFixedAmount: "Fixed amount",
+    ofcCfPercentage: "Percentage",
+    ofcCfNewAmount: "New amount (₦)",
+    ofcCfNewRate: "New rate (%)",
+    ofcCfEffectiveFrom: "Effective from",
+    ofcCfReasonForChange: "Reason for the change (minimum 10 characters)",
+    ofcCfRate: "Rate",
+    ofcCfChangedBy: "Changed by",
+    ofcCfFrequency: "Frequency",
+    ofcCfCurrentRate: "Current rate",
+    ofcCfOnSale: "On sale",
+    ofcCfSampleReason: "Approved under the 2026 revenue review, Executive Council minute 14/2026.",
+    ofcCfProgrammesTitle: "Social incentive programmes",
+    ofcCfProgrammesIntro: "Programmes record who qualifies for a government benefit and why. They add entitlement — they never withdraw a service. Each citizen with a TIN who meets the criteria automatically qualifies when evaluated.",
+    ofcCfEssentialServiceLink: "A programme that links an essential public service to tax compliance can only be created if the legal or policy authority for that linkage is recorded against it.",
+    ofcCfBeneficiaries: "Beneficiaries",
+    ofcCfNoEligibleYet: "No eligible taxpayers yet. Run \"Evaluate all\" to assess the active taxpayer population.",
+    ofcCfEssentialProtected: "Essential services are protected",
+    ofcCfBenefit: "Benefit",
+    ofcCfMinScore: "Min. score",
+    ofcCfRequiresNoArrears: "Requires no arrears",
+    ofcCfEligible: "Eligible",
+    ofcCfEvaluated: "Evaluated",
     ofcOvTransactionCount: "{{n}} transaction(s)",
     ofcOvSettlementsOutstanding: "{{n}} settlement(s) outstanding",
     ofcOvIntact: "Audit trail intact",
@@ -3247,6 +3334,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcCfCatalogueIntro: "Nau’ikan haraji da kudinsu saitin gwamnati ne, ba lambar kwamfuta ba. Canza kudi yana samar da sabuwar siga da ranar fara aiki — ba ya taba sake rubuta abin da aka riga aka kima.",
+    ofcCfAddRevenueItem: "Kara nau’in haraji",
+    ofcCfHistoricalAssessments: "Kimar tarihi tana nan a hade da sigar da ke aiki a lokacin da aka yi su.",
+    ofcCfChangeRate: "Canza kudi",
+    ofcCfNewRevenueItem: "Sabon nau’in haraji",
+    ofcCfCreatedWithoutPrice: "Ana samar da nau’in ba tare da kudi ba. Ka saita kudinsa daga baya da “Canza kudi” — har sai ka yi, wakili ba zai iya kima da shi a filin aiki ba.",
+    ofcCfChooseCategory: "Zabi rukuni",
+    ofcCfHowOften: "Sau nawa ake caji",
+    ofcCfWhatItIsFor: "Don me ne shi",
+    ofcCfWhoItApplies: "Wa ya shafa",
+    ofcCfSelfAssessable: "Mai biyan haraji zai iya kima wannan da kansa",
+    ofcCfCommissionable: "Wakili yana samun kwamishan a kansa",
+    ofcCfWhatIsHappening: "Me ke faruwa da wannan nau’in",
+    ofcCfSuspendOption: "Dakatar — a tsayar da karba yayin da ake sasanta wani abu",
+    ofcCfRetireOption: "Yi ritaya — cajin ya kare, kuma ba za a iya mayar da shi ba",
+    ofcCfRetireWarning: "Ba za a iya soke ritaya ba. Idan aka sake kawo cajin daga baya yana bukatar sabon nau’in haraji, da lambarsa da kudinsa.",
+    ofcCfCurrentVersionStays: "Sigar yanzu tana nan a rikodi kuma tana ci gaba da shafar kimar da aka riga aka yi.",
+    ofcCfRateType: "Nau’in kudi",
+    ofcCfFixedAmount: "Adadi tsayayye",
+    ofcCfPercentage: "Kaso cikin dari",
+    ofcCfNewAmount: "Sabon adadi (₦)",
+    ofcCfNewRate: "Sabon kudi (%)",
+    ofcCfEffectiveFrom: "Zai fara aiki daga",
+    ofcCfReasonForChange: "Dalilin canjin (akalla haruffa 10)",
+    ofcCfRate: "Kudi",
+    ofcCfChangedBy: "Wanda ya canza",
+    ofcCfFrequency: "Yawan lokaci",
+    ofcCfCurrentRate: "Kudin yanzu",
+    ofcCfOnSale: "A kan sayarwa",
+    ofcCfSampleReason: "An amince a karkashin nazarin harajin 2026, rubutun Majalisar Zartaswa 14/2026.",
+    ofcCfProgrammesTitle: "Shirye-shiryen tallafin jama’a",
+    ofcCfProgrammesIntro: "Shirye-shirye suna rubuta wanda ya cancanci tallafin gwamnati da dalilin haka. Suna kara hakki — ba sa taba janye hidima. Kowane dan kasa mai TIN da ya cika sharuda yana cancanta ta atomatik idan aka duba.",
+    ofcCfEssentialServiceLink: "Ana iya samar da shirin da ke hada muhimmiyar hidimar jama’a da biyan haraji ne kawai idan an rubuta ikon doka ko manufa na wannan hadin a kansa.",
+    ofcCfBeneficiaries: "Masu amfana",
+    ofcCfNoEligibleYet: "Babu masu biyan haraji da suka cancanta tukuna. Ka gudanar da “Duba duka” domin auna masu biyan harajin da ke aiki.",
+    ofcCfEssentialProtected: "An kare muhimman hidimomi",
+    ofcCfBenefit: "Tallafi",
+    ofcCfMinScore: "Mafi karancin maki",
+    ofcCfRequiresNoArrears: "Yana bukatar babu bashi",
+    ofcCfEligible: "Ya cancanta",
+    ofcCfEvaluated: "An duba",
     ofcOvTransactionCount: "Ma’amaloli {{n}}",
     ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
     ofcOvIntact: "Rajistar bincike ba ta lalace ba",

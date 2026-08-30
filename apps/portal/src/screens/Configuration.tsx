@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { formatNaira, nairaToKobo } from '@psirs/shared';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface RevenueItem {
   id: string;
@@ -39,6 +40,7 @@ function describeRate(item: RevenueItem): string {
 }
 
 export function CatalogueScreen({ user }: { user: User }) {
+  const { t } = usePortalI18n();
   const [items, setItems] = useState<RevenueItem[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -83,16 +85,10 @@ export function CatalogueScreen({ user }: { user: User }) {
         <div className="card__header">
           <div>
             <h2 className="card__title">{t.ofcNavCatalogue}</h2>
-            <p className="card__hint">
-              Revenue items and their rates are government configuration, not code. Changing a rate
-              creates a new version with an effective date — it never rewrites what was already
-              assessed.
-            </p>
+            <p className="card__hint">{t.ofcCfCatalogueIntro}</p>
           </div>
           {can('catalogue:configure') && !creating && (
-            <button type="button" className="small" onClick={() => setCreating(true)}>
-              Add a revenue item
-            </button>
+            <button type="button" className="small" onClick={() => setCreating(true)}>{t.ofcCfAddRevenueItem}</button>
           )}
         </div>
       </div>
@@ -142,14 +138,9 @@ export function CatalogueScreen({ user }: { user: User }) {
             <div className="card__header">
               <div>
                 <h2 className="card__title">Rate history — {history.item.name}</h2>
-                <p className="card__hint">
-                  Historical assessments remain attached to the version in force when they were
-                  raised.
-                </p>
+                <p className="card__hint">{t.ofcCfHistoricalAssessments}</p>
               </div>
-              <button type="button" className="small secondary" onClick={() => setHistory(null)}>
-                Close
-              </button>
+              <button type="button" className="small secondary" onClick={() => setHistory(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
           <Table
@@ -158,24 +149,24 @@ export function CatalogueScreen({ user }: { user: User }) {
               { key: 'rate_type', label: 'tpType' },
               {
                 key: 'fixed_amount_kobo',
-                label: 'Fixed amount',
+                label: 'ofcCfFixedAmount',
                 numeric: true,
                 render: (row) => <Money kobo={row.fixed_amount_kobo} />,
               },
               {
                 key: 'rate_basis_points',
-                label: 'Rate',
+                label: 'ofcCfRate',
                 numeric: true,
                 render: (row) =>
                   row.rate_basis_points ? `${(row.rate_basis_points / 100).toFixed(2)}%` : '—',
               },
-              { key: 'effective_from', label: 'From', render: (row) => formatDate(row.effective_from) },
+              { key: 'effective_from', label: 'ofcFrom', render: (row) => formatDate(row.effective_from) },
               {
                 key: 'effective_to',
-                label: 'To',
+                label: 'ofcTo',
                 render: (row) => (row.effective_to ? formatDate(row.effective_to) : 'Current'),
               },
-              { key: 'changed_by', label: 'Changed by', render: (row) => row.changed_by ?? 'System' },
+              { key: 'changed_by', label: 'ofcCfChangedBy', render: (row) => row.changed_by ?? 'System' },
               {
                 key: 'requested_reason',
                 label: 'ofcAgReason',
@@ -199,8 +190,8 @@ export function CatalogueScreen({ user }: { user: User }) {
               { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
               { key: 'name', label: 'colRevenueItem' },
               { key: 'category_name', label: 'ofcAgCategory' },
-              { key: 'frequency', label: 'Frequency', render: (row) => <Badge status={row.frequency} /> },
-              { key: 'rate', label: 'Current rate', render: (row) => describeRate(row) },
+              { key: 'frequency', label: 'ofcCfFrequency', render: (row) => <Badge status={row.frequency} /> },
+              { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row) },
               {
                 key: 'version',
                 label: 'ofcAgVersion',
@@ -214,7 +205,7 @@ export function CatalogueScreen({ user }: { user: User }) {
               },
               {
                 key: 'status',
-                label: 'On sale',
+                label: 'ofcCfOnSale',
                 render: (row) =>
                   row.status === 'ACTIVE' ? (
                     <Badge status="ACTIVE" />
@@ -226,7 +217,7 @@ export function CatalogueScreen({ user }: { user: User }) {
               },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div className="button-row">
                     {canReadRateHistory && (
@@ -242,9 +233,7 @@ export function CatalogueScreen({ user }: { user: User }) {
                       >{t.colHistory}</button>
                     )}
                     {can('catalogue:configure') && row.status === 'ACTIVE' && (
-                      <button type="button" className="small" onClick={() => setEditing(row)}>
-                        Change rate
-                      </button>
+                      <button type="button" className="small" onClick={() => setEditing(row)}>{t.ofcCfChangeRate}</button>
                     )}
                     {can('catalogue:configure') && row.status !== 'RETIRED' && (
                       <button
@@ -292,6 +281,7 @@ function NewItemForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -325,11 +315,8 @@ function NewItemForm({
     <div className="card">
       <div className="card__header">
         <div>
-          <h2 className="card__title">New revenue item</h2>
-          <p className="card__hint">
-            The item is created without a price. Set its rate afterwards with “Change rate” — until
-            you do, an agent cannot assess it in the field.
-          </p>
+          <h2 className="card__title">{t.ofcCfNewRevenueItem}</h2>
+          <p className="card__hint">{t.ofcCfCreatedWithoutPrice}</p>
         </div>
         <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
@@ -375,7 +362,7 @@ function NewItemForm({
               value={form.categoryId}
               onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
             >
-              <option value="">Choose a category</option>
+              <option value="">{t.ofcCfChooseCategory}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
@@ -410,7 +397,7 @@ function NewItemForm({
           </div>
 
           <div className="field">
-            <label htmlFor="new-item-frequency">How often it is charged</label>
+            <label htmlFor="new-item-frequency">{t.ofcCfHowOften}</label>
             <select
               id="new-item-frequency"
               value={form.frequency}
@@ -426,7 +413,7 @@ function NewItemForm({
         </div>
 
         <div className="field">
-          <label htmlFor="new-item-description">What it is for</label>
+          <label htmlFor="new-item-description">{t.ofcCfWhatItIsFor}</label>
           <input
             id="new-item-description"
             maxLength={1000}
@@ -436,7 +423,7 @@ function NewItemForm({
         </div>
 
         <fieldset style={{ border: 0, padding: 0, margin: '0 0 14px' }}>
-          <legend style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>Who it applies to</legend>
+          <legend style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{t.ofcCfWhoItApplies}</legend>
           <div className="button-row">
             {['INDIVIDUAL', 'BUSINESS'].map((type) => (
               <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -457,17 +444,13 @@ function NewItemForm({
               type="checkbox"
               checked={form.selfAssessable}
               onChange={(event) => setForm({ ...form, selfAssessable: event.target.checked })}
-            />
-            A taxpayer may assess this themselves
-          </label>
+            />{t.ofcCfSelfAssessable}</label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <input
               type="checkbox"
               checked={form.commissionEligible}
               onChange={(event) => setForm({ ...form, commissionEligible: event.target.checked })}
-            />
-            An agent earns commission on it
-          </label>
+            />{t.ofcCfCommissionable}</label>
         </div>
 
         <button
@@ -497,6 +480,7 @@ function WithdrawItemForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const restoring = item.status !== 'ACTIVE';
   const [status, setStatus] = useState(restoring ? 'ACTIVE' : 'SUSPENDED');
   const [reason, setReason] = useState('');
@@ -543,11 +527,9 @@ function WithdrawItemForm({
         }}
       >
         {!restoring && (
-          <label>
-            What is happening to this item
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="SUSPENDED">Suspend — pause collection while something is settled</option>
-              <option value="RETIRED">Retire — the charge has ended, and cannot be brought back</option>
+          <label>{t.ofcCfWhatIsHappening}<select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="SUSPENDED">{t.ofcCfSuspendOption}</option>
+              <option value="RETIRED">{t.ofcCfRetireOption}</option>
             </select>
           </label>
         )}
@@ -567,10 +549,7 @@ function WithdrawItemForm({
         </label>
 
         {status === 'RETIRED' && (
-          <Alert kind="warning">
-            Retiring cannot be undone. If the charge is reintroduced later it needs a new revenue
-            item, with its own code and rate.
-          </Alert>
+          <Alert kind="warning">{t.ofcCfRetireWarning}</Alert>
         )}
 
         <div className="button-row">
@@ -594,6 +573,7 @@ function RateChangeForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [rateType, setRateType] = useState(item.rate_type ?? 'FIXED');
   const [amount, setAmount] = useState('');
   const [percent, setPercent] = useState('');
@@ -680,24 +660,22 @@ function RateChangeForm({
   return (
     <div className="card">
       <h2 className="card__title">Change rate — {item.name}</h2>
-      <p className="card__hint">
-        The current version stays on record and keeps applying to assessments already raised.
-      </p>
+      <p className="card__hint">{t.ofcCfCurrentVersionStays}</p>
 
       <ErrorAlert error={error} />
 
       <div className="filters">
         <div className="field">
-          <label htmlFor="rate-type">Rate type</label>
+          <label htmlFor="rate-type">{t.ofcCfRateType}</label>
           <select id="rate-type" value={rateType} onChange={(event) => setRateType(event.target.value)}>
-            <option value="FIXED">Fixed amount</option>
-            <option value="PERCENTAGE">Percentage</option>
+            <option value="FIXED">{t.ofcCfFixedAmount}</option>
+            <option value="PERCENTAGE">{t.ofcCfPercentage}</option>
           </select>
         </div>
 
         {rateType === 'FIXED' ? (
           <div className="field">
-            <label htmlFor="amount">New amount (₦)</label>
+            <label htmlFor="amount">{t.ofcCfNewAmount}</label>
             <input
               id="amount"
               inputMode="decimal"
@@ -708,7 +686,7 @@ function RateChangeForm({
           </div>
         ) : (
           <div className="field">
-            <label htmlFor="percent">New rate (%)</label>
+            <label htmlFor="percent">{t.ofcCfNewRate}</label>
             <input
               id="percent"
               inputMode="decimal"
@@ -720,7 +698,7 @@ function RateChangeForm({
         )}
 
         <div className="field">
-          <label htmlFor="effective">Effective from</label>
+          <label htmlFor="effective">{t.ofcCfEffectiveFrom}</label>
           <input
             id="effective"
             type="date"
@@ -732,12 +710,12 @@ function RateChangeForm({
       </div>
 
       <div className="field">
-        <label htmlFor="rate-reason">Reason for the change (minimum 10 characters)</label>
+        <label htmlFor="rate-reason">{t.ofcCfReasonForChange}</label>
         <textarea
           id="rate-reason"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Approved under the 2026 revenue review, Executive Council minute 14/2026."
+          placeholder={t.ofcCfSampleReason}
         />
       </div>
 
@@ -760,6 +738,7 @@ function RateChangeForm({
 // ---------------------------------------------------------------------------
 
 export function ProgrammesScreen() {
+  const { t } = usePortalI18n();
   const [programmes, setProgrammes] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -808,17 +787,10 @@ export function ProgrammesScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Social incentive programmes</h2>
-        <p className="card__hint">
-          Programmes record who qualifies for a government benefit and why. They add entitlement —
-          they never withdraw a service. Each citizen with a TIN who meets the criteria automatically
-          qualifies when evaluated.
-        </p>
-        <Alert kind="info" title="Essential services are protected">
-          <p style={{ margin: 0 }}>
-            A programme that links an essential public service to tax compliance can only be created
-            if the legal or policy authority for that linkage is recorded against it.
-          </p>
+        <h2 className="card__title">{t.ofcCfProgrammesTitle}</h2>
+        <p className="card__hint">{t.ofcCfProgrammesIntro}</p>
+        <Alert kind="info" title="ofcCfEssentialProtected">
+          <p style={{ margin: 0 }}>{t.ofcCfEssentialServiceLink}</p>
         </Alert>
       </div>
 
@@ -833,29 +805,27 @@ export function ProgrammesScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'name', label: 'Programme' },
+              { key: 'name', label: 'ofcAlProgramme' },
               { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
-              { key: 'benefit_type', label: 'Benefit' },
-              { key: 'minimum_score', label: 'Min. score', numeric: true },
+              { key: 'benefit_type', label: 'ofcCfBenefit' },
+              { key: 'minimum_score', label: 'ofcCfMinScore', numeric: true },
               {
                 key: 'requires_no_arrears',
-                label: 'Requires no arrears',
+                label: 'ofcCfRequiresNoArrears',
                 render: (row) => (row.requires_no_arrears ? 'Yes' : 'No'),
               },
-              { key: 'eligible_taxpayers', label: 'Eligible', numeric: true },
+              { key: 'eligible_taxpayers', label: 'ofcCfEligible', numeric: true },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
                       className="small secondary"
                       onClick={() => void viewBeneficiaries(row)}
-                    >
-                      Beneficiaries
-                    </button>
+                    >{t.ofcCfBeneficiaries}</button>
                     {can('incentive:configure') && (
                       <>
                         <button
@@ -918,16 +888,12 @@ export function ProgrammesScreen() {
             <h3 style={{ margin: 0 }}>
               Beneficiaries — {selectedProgramme.name}
             </h3>
-            <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>
-              Close
-            </button>
+            <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>{t.ofcKycClose}</button>
           </div>
           {!beneficiaries ? (
             <Loading rows={3} />
           ) : beneficiaries.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: '0.87rem' }}>
-              No eligible taxpayers yet. Run "Evaluate all" to assess the active taxpayer population.
-            </p>
+            <p style={{ color: 'var(--muted)', fontSize: '0.87rem' }}>{t.ofcCfNoEligibleYet}</p>
           ) : (
             <Table
               columns={[
@@ -937,7 +903,7 @@ export function ProgrammesScreen() {
                 { key: 'score', label: 'ofcAgScore', numeric: true, render: (row) => row.score ?? '—' },
                 {
                   key: 'eligible',
-                  label: 'Eligible',
+                  label: 'ofcCfEligible',
                   render: (row) => (
                     <span style={{ color: row.eligible ? 'var(--success, #1a7f3c)' : 'var(--danger, #c0392b)', fontWeight: 600 }}>
                       {row.eligible ? '✓ Yes' : '✗ No'}
@@ -946,7 +912,7 @@ export function ProgrammesScreen() {
                 },
                 {
                   key: 'evaluated_at',
-                  label: 'Evaluated',
+                  label: 'ofcCfEvaluated',
                   render: (row) => new Date(row.evaluated_at).toLocaleDateString('en-NG'),
                 },
               ]}
