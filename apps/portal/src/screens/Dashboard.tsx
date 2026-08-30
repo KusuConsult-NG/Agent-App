@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { formatNaira } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, BarList, ErrorAlert, KeyValue, Loading, Money, Sparkline, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface Dashboard {
   collections: {
@@ -35,6 +36,7 @@ interface Dashboard {
 }
 
 export function DashboardScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -60,35 +62,39 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
   return (
     <>
       {territories && territories.length === 0 && (
-        <Alert kind="warning" title="No territory has been assigned to you">
-          <p style={{ margin: 0 }}>
-            These figures are empty because your account covers no territory yet, not because
-            nothing was collected. Ask an administrator to assign yours.
-          </p>
+        <Alert kind="warning" title="ofcDbNoTerritoryTitle">
+          <p style={{ margin: 0 }}>{t.ofcDbNoTerritoryBody}</p>
         </Alert>
       )}
 
       {territories && territories.length > 0 && (
-        <Alert kind="info" title={`Showing ${territories.map((t) => t.name).join(', ')}`}>
+        <Alert
+          kind="info"
+          title={{
+            text: t.ofcDbShowing.replace(
+              '{{territories}}',
+              territories.map((territory) => territory.name).join(', '),
+            ),
+          }}
+        >
           <p style={{ margin: 0 }}>
-            Every figure on this page covers your {territories.length === 1 ? 'territory' : 'territories'} only,
-            not the whole state.
+            {territories.length === 1 ? t.ofcDbCoversYourTerritory : t.ofcDbCoversYourTerritories}
           </p>
         </Alert>
       )}
 
       {openExceptions > 0 && (
-        <Alert kind="warning" title={`${openExceptions} item(s) need attention`}>
+        <Alert
+          kind="warning"
+          title={{ text: t.ofcDbNeedAttention.replace('{{n}}', String(openExceptions)) }}
+        >
           <p style={{ margin: 0 }}>
-            {data.exceptions.reconciliation_exceptions} reconciliation exception(s) and{' '}
-            {data.exceptions.open_fraud_flags} open fraud flag(s).{' '}
-            <button type="button" className="link" onClick={() => navigate('/reconciliation')}>
-              Review reconciliation
-            </button>{' '}
+            {t.ofcDbExceptionsAnd
+              .replace('{{exceptions}}', String(data.exceptions.reconciliation_exceptions))
+              .replace('{{flags}}', String(data.exceptions.open_fraud_flags))}{' '}
+            <button type="button" className="link" onClick={() => navigate('/reconciliation')}>{t.ofcDbReviewReconciliation}</button>{' '}
             or{' '}
-            <button type="button" className="link" onClick={() => navigate('/fraud')}>
-              review flags
-            </button>
+            <button type="button" className="link" onClick={() => navigate('/fraud')}>{t.ofcDbReviewFlags}</button>
             .
           </p>
         </Alert>
@@ -99,23 +105,23 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           label="homeCollectedToday"
           value={<Money kobo={data.collections.today_kobo} />}
           variant="accent"
-          hint="Verified revenue only"
+          hint="ofcDbVerifiedOnly"
         />
-        <Stat label="This month" value={<Money kobo={data.collections.month_kobo} />} />
-        <Stat label="Year to date" value={<Money kobo={data.collections.ytd_kobo} />} />
+        <Stat label="ofcDbThisMonth" value={<Money kobo={data.collections.month_kobo} />} />
+        <Stat label="ofcDbYearToDate" value={<Money kobo={data.collections.ytd_kobo} />} />
         <Stat
           label="ofcRhCommissionLiability"
           value={<Money kobo={data.counts.commission_liability_kobo} />}
-          hint="Accrued but not yet paid"
+          hint="ofcDbAccruedNotPaid"
         />
       </div>
 
       <div className="stat-grid">
-        <Stat label="Registered taxpayers" value={Number(data.counts.taxpayers).toLocaleString()} hint={`${data.counts.new_taxpayers_this_month} new this month`} />
-        <Stat label="ofcAgActiveAgents" value={data.counts.active_agents} hint={`${data.counts.agents_awaiting_review} awaiting review`} />
-        <Stat label="Successful transactions" value={Number(data.counts.successful_transactions).toLocaleString()} hint={`${data.counts.failed_transactions} failed`} />
+        <Stat label="ofcDbRegisteredTaxpayers" value={Number(data.counts.taxpayers).toLocaleString()} hint={{ text: t.ofcDbNewThisMonth.replace('{{n}}', String(data.counts.new_taxpayers_this_month)) }} />
+        <Stat label="ofcAgActiveAgents" value={data.counts.active_agents} hint={{ text: t.ofcDbAwaitingReview.replace('{{n}}', String(data.counts.agents_awaiting_review)) }} />
+        <Stat label="ofcDbSuccessfulTransactions" value={Number(data.counts.successful_transactions).toLocaleString()} hint={{ text: t.ofcDbFailedCount.replace('{{n}}', String(data.counts.failed_transactions)) }} />
         <Stat
-          label="Awaiting reconciliation"
+          label="ofcDbAwaitingReconciliation"
           value={data.counts.pending_reconciliation}
           variant={Number(data.counts.pending_reconciliation) > 0 ? 'alert' : undefined}
         />
@@ -124,8 +130,8 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Collections over the last 30 days</h2>
-            <p className="card__hint">Only payments confirmed by the payment gateway are counted.</p>
+            <h2 className="card__title">{t.ofcDbCollectionsLast30}</h2>
+            <p className="card__hint">{t.ofcDbOnlyConfirmed}</p>
           </div>
         </div>
         <Sparkline
@@ -141,11 +147,11 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
 
       <div className="grid-2">
         <div className="card">
-          <h2 className="card__title">Revenue by Local Government Area</h2>
-          <p className="card__hint">Identifies areas where collection is below potential.</p>
+          <h2 className="card__title">{t.ofcDbRevenueByLga}</h2>
+          <p className="card__hint">{t.ofcDbBelowPotential}</p>
           <BarList
             items={data.revenueByLga.slice(0, 10).map((row) => ({
-              label: row.lga,
+              label: { text: row.lga },
               sublabel: row.zone,
               value: Number(row.amount_kobo),
             }))}
@@ -154,11 +160,11 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
         </div>
 
         <div className="card">
-          <h2 className="card__title">Revenue by category</h2>
-          <p className="card__hint">Which heads of revenue are actually producing.</p>
+          <h2 className="card__title">{t.ofcDbRevenueByCategory}</h2>
+          <p className="card__hint">{t.ofcDbWhichHeads}</p>
           <BarList
             items={data.revenueByCategory.slice(0, 10).map((row) => ({
-              label: row.category,
+              label: { text: row.category },
               sublabel: `${row.transactions} txn`,
               value: Number(row.amount_kobo),
             }))}
@@ -169,10 +175,8 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Top performing agents</h2>
-          <p className="card__hint">
-            Ranked by verified collections. Personal details beyond name and code are not shown here.
-          </p>
+          <h2 className="card__title">{t.ofcDbTopAgents}</h2>
+          <p className="card__hint">{t.ofcDbTopAgentsBody}</p>
         </div>
         <Table
           columns={[
@@ -181,7 +185,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
             { key: 'transactions', label: 'ofcNavTransactions', numeric: true },
             {
               key: 'amount_kobo',
-              label: 'Collected',
+              label: 'ofcPfCollected',
               numeric: true,
               render: (row) => <Money kobo={row.amount_kobo} />,
             },
@@ -193,14 +197,14 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
 
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Revenue by MDA</h2>
+          <h2 className="card__title">{t.ofcDbRevenueByMda}</h2>
         </div>
         <Table
           columns={[
-            { key: 'mda', label: 'MDA' },
+            { key: 'mda', label: 'ofcDbMda' },
             {
               key: 'amount_kobo',
-              label: 'Collected',
+              label: 'ofcPfCollected',
               numeric: true,
               render: (row) => <Money kobo={row.amount_kobo} />,
             },
@@ -229,6 +233,7 @@ interface GeoRow {
 }
 
 export function IntelligenceScreen() {
+  const { t } = usePortalI18n();
   const [rows, setRows] = useState<GeoRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [drill, setDrill] = useState<{ lgaId?: string; lgaName?: string; wardId?: string; wardName?: string }>({});
@@ -252,15 +257,10 @@ export function IntelligenceScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Geographic revenue intelligence</h2>
-        <p className="card__hint">
-          Drill from State to LGA to Ward to Community to see where revenue is and is not being
-          collected.
-        </p>
+        <h2 className="card__title">{t.ofcDbIntelligenceTitle}</h2>
+        <p className="card__hint">{t.ofcDbDrill}</p>
         <p style={{ fontSize: '0.85rem', marginTop: 12 }}>
-          <button type="button" className="link" onClick={() => setDrill({})}>
-            Plateau State
-          </button>
+          <button type="button" className="link" onClick={() => setDrill({})}>{t.ofcDbPlateauState}</button>
           {drill.lgaName && (
             <>
               {' › '}
@@ -287,7 +287,7 @@ export function IntelligenceScreen() {
             columns={[
               {
                 key: 'level',
-                label: rows[0]?.level_type ?? 'Area',
+                label: { text: rows[0]?.level_type ?? t.ofcRvArea },
                 render: (row: GeoRow) =>
                   row.level_id && row.level_type !== 'COMMUNITY' ? (
                     <button
@@ -305,12 +305,12 @@ export function IntelligenceScreen() {
                     row.level
                   ),
               },
-              { key: 'zone', label: 'Zone' },
+              { key: 'zone', label: 'ofcUsZone' },
               { key: 'taxpayers', label: 'ofcRhTaxpayers', numeric: true },
               { key: 'transactions', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'amount_kobo',
-                label: 'Collected',
+                label: 'ofcPfCollected',
                 numeric: true,
                 render: (row: GeoRow) => <Money kobo={row.amount_kobo} />,
               },
@@ -335,6 +335,7 @@ export function IntelligenceScreen() {
  * counts of taxpayers.
  */
 function PlatformKpis() {
+  const { t } = usePortalI18n();
   const [kpis, setKpis] = useState<Record<string, string> | null>(null);
 
   useEffect(() => {
@@ -357,31 +358,31 @@ function PlatformKpis() {
     <>
       <div className="stat-grid">
         <Stat
-          label="Payments verified"
+          label="ofcDbPaymentsVerified"
           value={percent(kpis.payment_success_rate_percent)}
-          hint="Of every payment attempted"
+          hint="ofcDbOfEveryAttempted"
         />
         <Stat
-          label="Reconciled"
+          label="ofcDbReconciled"
           value={percent(kpis.reconciliation_rate_percent)}
-          hint="Matched across platform, gateway and settlement"
+          hint="ofcDbMatchedAcross"
         />
         <Stat
-          label="Awaiting reconciliation"
+          label="ofcDbAwaitingReconciliation"
           value={unreconciled.toLocaleString()}
           variant={unreconciled > 0 ? 'alert' : undefined}
         />
         <Stat
-          label="Receipts issued"
+          label="ofcDbReceiptsIssued"
           value={percent(kpis.receipt_generation_rate_percent)}
-          hint="Of transactions that counted as revenue"
+          hint="ofcDbOfTransactions"
         />
       </div>
 
       <div className="card">
         <div className="card__header">
-          <h2 className="card__title">Platform KPIs</h2>
-          <p className="card__hint">Since the platform began collecting.</p>
+          <h2 className="card__title">{t.ofcDbPlatformKpis}</h2>
+          <p className="card__hint">{t.ofcDbSinceBegan}</p>
         </div>
         <KeyValue
           items={[

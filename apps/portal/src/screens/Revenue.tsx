@@ -19,6 +19,7 @@
 import { useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface MdaRow {
   mda: string;
@@ -84,6 +85,7 @@ const share = (part: string, whole: string) => {
 };
 
 export function RevenueScreen() {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -111,8 +113,13 @@ export function RevenueScreen() {
           kind="info"
           title={
             territories.length === 0
-              ? 'No territory has been assigned to you'
-              : `Showing ${territories.map((t) => t.name).join(', ')}`
+              ? 'ofcDbNoTerritoryTitle'
+              : {
+                  text: t.ofcDbShowing.replace(
+                    '{{territories}}',
+                    territories.map((territory) => territory.name).join(', '),
+                  ),
+                }
           }
         >
           <p style={{ margin: 0 }}>
@@ -125,23 +132,23 @@ export function RevenueScreen() {
 
       <div className="stat-grid">
         <Stat
-          label="Collected"
+          label="ofcPfCollected"
           value={<Money kobo={data.coverage.total_amount_kobo} />}
           variant="accent"
-          hint="Verified revenue in the last year"
+          hint="ofcRvVerifiedLastYear"
         />
         <Stat
-          label="Generating areas"
+          label="ofcRvGeneratingAreas"
           value={String(new Set(data.areas.map((a) => `${a.lga}/${a.ward}`)).size)}
-          hint="Wards that produced revenue"
+          hint="ofcRvWardsProduced"
         />
         <Stat
           label="ofcRhMdasCollectingNothing"
           value={String(emptyMdas.length)}
-          hint="Arms of government with no catalogue item"
+          hint="ofcRvArmsNoItem"
         />
         <Stat
-          label="Owed to Councils"
+          label="ofcRvOwedCouncils"
           value={
             <Money
               kobo={String(
@@ -152,50 +159,37 @@ export function RevenueScreen() {
               )}
             />
           }
-          hint="Collected on their behalf"
+          hint="ofcRvCollectedOnBehalf"
         />
         <Stat
-          label="Placed on a map"
+          label="ofcRvPlacedOnMap"
           value={total ? share(data.coverage.located, data.coverage.transactions) : '—'}
-          hint="Collections with a recorded point"
+          hint="ofcRvWithRecordedPoint"
         />
       </div>
 
       {total > 0 && mapped === 0 && (
-        <Alert kind="warning" title="No collection has recorded where it happened">
-          <p style={{ margin: 0 }}>
-            Every figure below is grouped by the LGA and ward on the assessment, which is
-            reliable. The map coordinates are separate and are captured by the agent
-            application at the moment of collection — none has arrived yet, which usually means
-            no version carrying that has been deployed, or agents have not granted location
-            permission on their handsets.
-          </p>
+        <Alert kind="warning" title="ofcRvNoPointRecorded">
+          <p style={{ margin: 0 }}>{t.ofcRvGroupedByAssessment}</p>
         </Alert>
       )}
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Whose revenue this is
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          PSIRS collects the state's revenue; this is the arm of government each naira is
-          collected <em>for</em>. An MDA with no revenue item is listed rather than hidden —
-          it means nothing is being collected on its behalf through this platform, which is a
-          finding rather than an absence.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhoseRevenue}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
         <Table
           columns={[
-            { key: 'mda', label: 'Ministry, Department or Agency' },
-            { key: 'revenue_items', label: 'Revenue items' },
-            { key: 'transactions', label: 'Collections' },
+            { key: 'mda', label: 'ofcRvMinistryDepartment' },
+            { key: 'revenue_items', label: 'ofcRvRevenueItems' },
+            { key: 'transactions', label: 'ofcLvCollections' },
             {
               key: 'amount_kobo',
-              label: 'Collected',
+              label: 'ofcPfCollected',
               render: (row: MdaRow) => <Money kobo={row.amount_kobo} />,
             },
             {
               key: 'share',
-              label: 'Share',
+              label: 'ofcRvShare',
               render: (row: MdaRow) => share(row.amount_kobo, data.coverage.total_amount_kobo),
             },
           ]}
@@ -205,28 +199,21 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Owed to the Local Government Councils
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          PSIRS collects this on the Councils' behalf, so it is theirs rather than the State's.
-          Only items whose rate a Council sets are counted — a State levy collected in a
-          Council's area is the State's. Every Council is listed, including those that collected
-          nothing, because a remittance run has to account for all seventeen.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvOwedToCouncils}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvCouncilsBody}</p>
         <Table
           columns={[
-            { key: 'lga', label: 'Council' },
-            { key: 'zone', label: 'Zone' },
+            { key: 'lga', label: 'ofcRvCouncil' },
+            { key: 'zone', label: 'ofcUsZone' },
             {
               key: 'amount_kobo',
-              label: 'Owed',
+              label: 'ofcOsOwed',
               render: (row: CouncilRow) => <Money kobo={row.amount_kobo} />,
             },
-            { key: 'transactions', label: 'Collections' },
+            { key: 'transactions', label: 'ofcLvCollections' },
             {
               key: 'items',
-              label: 'From',
+              label: 'ofcFrom',
               render: (row: CouncilRow) =>
                 row.items.length === 0
                   ? '—'
@@ -239,29 +226,24 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Where the revenue is generated
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          By ward, with the agents working each one. "Mapped" counts the collections that
-          recorded a point; a ward earning well with none mapped is unmapped, not suspicious.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhereGenerated}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhereGeneratedBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
             { key: 'ward', label: 'tpWard' },
-            { key: 'zone', label: 'Zone' },
+            { key: 'zone', label: 'ofcUsZone' },
             {
               key: 'amount_kobo',
-              label: 'Collected',
+              label: 'ofcPfCollected',
               render: (row: AreaRow) => <Money kobo={row.amount_kobo} />,
             },
-            { key: 'transactions', label: 'Collections' },
+            { key: 'transactions', label: 'ofcLvCollections' },
             { key: 'taxpayers', label: 'ofcRhTaxpayers' },
-            { key: 'agents', label: 'Agents' },
+            { key: 'agents', label: 'ofcRvAgents' },
             {
               key: 'located_transactions',
-              label: 'Mapped',
+              label: 'ofcRvMapped',
               render: (row: AreaRow) => share(row.located_transactions, row.transactions),
             },
           ]}
@@ -271,30 +253,24 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Each agent, and the ground they cover
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          Agent performance reports how much. This reports where — an agent working one market
-          and an agent covering forty kilometres of road are doing different jobs on the same
-          commission.
-        </p>
+        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvEachAgentGround}</h2>
+        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvGroundBody}</p>
         <Table
           columns={[
             { key: 'agent_code', label: 'ofcRhAgent' },
             { key: 'full_name', label: 'tpName' },
-            { key: 'territory', label: 'Territory' },
+            { key: 'territory', label: 'ofcRvTerritory' },
             {
               key: 'amount_kobo',
-              label: 'Collected',
+              label: 'ofcPfCollected',
               render: (row: AgentRow) => <Money kobo={row.amount_kobo} />,
             },
-            { key: 'transactions', label: 'Collections' },
-            { key: 'lgas_worked', label: 'LGAs' },
-            { key: 'wards_worked', label: 'Wards' },
+            { key: 'transactions', label: 'ofcLvCollections' },
+            { key: 'lgas_worked', label: 'ofcRvLgas' },
+            { key: 'wards_worked', label: 'ofcRvWards' },
             {
               key: 'centre',
-              label: 'Centre of collection',
+              label: 'ofcRvCentreOfCollection',
               render: (row: AgentRow) =>
                 row.centre_latitude && row.centre_longitude
                   ? `${row.centre_latitude}, ${row.centre_longitude}`

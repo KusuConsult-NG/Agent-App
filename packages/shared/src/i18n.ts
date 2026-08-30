@@ -135,6 +135,81 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+  ofcDbShowing: string;
+  ofcDbCoversYourTerritory: string;
+  ofcDbCoversYourTerritories: string;
+  ofcDbNeedAttention: string;
+  ofcDbExceptionsAnd: string;
+  ofcDbNewThisMonth: string;
+  ofcDbAwaitingReview: string;
+  ofcDbFailedCount: string;
+  ofcRvArea: string;
+
+  /**
+   * The collections dashboard, and the revenue intelligence behind it: whose
+   * revenue each naira is, and where in the state it came from.
+   */
+  ofcDbNoTerritoryBody: string;
+  ofcDbNoTerritoryTitle: string;
+  ofcDbReviewReconciliation: string;
+  ofcDbReviewFlags: string;
+  ofcDbCollectionsLast30: string;
+  ofcDbOnlyConfirmed: string;
+  ofcDbRevenueByLga: string;
+  ofcDbBelowPotential: string;
+  ofcDbRevenueByCategory: string;
+  ofcDbWhichHeads: string;
+  ofcDbTopAgents: string;
+  ofcDbTopAgentsBody: string;
+  ofcDbRevenueByMda: string;
+  ofcDbIntelligenceTitle: string;
+  ofcDbDrill: string;
+  ofcDbPlateauState: string;
+  ofcDbPlatformKpis: string;
+  ofcDbSinceBegan: string;
+  ofcDbVerifiedOnly: string;
+  ofcDbThisMonth: string;
+  ofcDbYearToDate: string;
+  ofcDbAccruedNotPaid: string;
+  ofcDbRegisteredTaxpayers: string;
+  ofcDbSuccessfulTransactions: string;
+  ofcDbAwaitingReconciliation: string;
+  ofcDbPaymentsVerified: string;
+  ofcDbOfEveryAttempted: string;
+  ofcDbReconciled: string;
+  ofcDbMatchedAcross: string;
+  ofcDbReceiptsIssued: string;
+  ofcDbOfTransactions: string;
+  ofcDbMda: string;
+  ofcRvGroupedByAssessment: string;
+  ofcRvWhoseRevenue: string;
+  ofcRvWhoseRevenueBody: string;
+  ofcRvMdaNoItem: string;
+  ofcRvOwedToCouncils: string;
+  ofcRvCouncilsBody: string;
+  ofcRvWhereGenerated: string;
+  ofcRvWhereGeneratedBody: string;
+  ofcRvEachAgentGround: string;
+  ofcRvGroundBody: string;
+  ofcRvVerifiedLastYear: string;
+  ofcRvGeneratingAreas: string;
+  ofcRvWardsProduced: string;
+  ofcRvArmsNoItem: string;
+  ofcRvOwedCouncils: string;
+  ofcRvCollectedOnBehalf: string;
+  ofcRvPlacedOnMap: string;
+  ofcRvWithRecordedPoint: string;
+  ofcRvNoPointRecorded: string;
+  ofcRvMinistryDepartment: string;
+  ofcRvRevenueItems: string;
+  ofcRvShare: string;
+  ofcRvCouncil: string;
+  ofcRvAgents: string;
+  ofcRvMapped: string;
+  ofcRvTerritory: string;
+  ofcRvLgas: string;
+  ofcRvWards: string;
+  ofcRvCentreOfCollection: string;
   ofcOsCleared: string;
   ofcOsStillOutstanding: string;
   ofcUsStartedCount: string;
@@ -1650,6 +1725,76 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcDbShowing: "Showing {{territories}}",
+    ofcDbCoversYourTerritory: "Every figure on this page covers your territory only, not the whole state.",
+    ofcDbCoversYourTerritories: "Every figure on this page covers your territories only, not the whole state.",
+    ofcDbNeedAttention: "{{n}} item(s) need attention",
+    ofcDbExceptionsAnd: "{{exceptions}} reconciliation exception(s) and {{flags}} open fraud flag(s).",
+    ofcDbNewThisMonth: "{{n}} new this month",
+    ofcDbAwaitingReview: "{{n}} awaiting review",
+    ofcDbFailedCount: "{{n}} failed",
+    ofcRvArea: "Area",
+    ofcDbNoTerritoryBody: "These figures are empty because your account covers no territory yet, not because nothing was collected. Ask an administrator to assign yours.",
+    ofcDbNoTerritoryTitle: "No territory has been assigned to you",
+    ofcDbReviewReconciliation: "Review reconciliation",
+    ofcDbReviewFlags: "review flags",
+    ofcDbCollectionsLast30: "Collections over the last 30 days",
+    ofcDbOnlyConfirmed: "Only payments confirmed by the payment gateway are counted.",
+    ofcDbRevenueByLga: "Revenue by Local Government Area",
+    ofcDbBelowPotential: "Identifies areas where collection is below potential.",
+    ofcDbRevenueByCategory: "Revenue by category",
+    ofcDbWhichHeads: "Which heads of revenue are actually producing.",
+    ofcDbTopAgents: "Top performing agents",
+    ofcDbTopAgentsBody: "Ranked by verified collections. Personal details beyond name and code are not shown here.",
+    ofcDbRevenueByMda: "Revenue by MDA",
+    ofcDbIntelligenceTitle: "Geographic revenue intelligence",
+    ofcDbDrill: "Drill from State to LGA to Ward to Community to see where revenue is and is not being collected.",
+    ofcDbPlateauState: "Plateau State",
+    ofcDbPlatformKpis: "Platform KPIs",
+    ofcDbSinceBegan: "Since the platform began collecting.",
+    ofcDbVerifiedOnly: "Verified revenue only",
+    ofcDbThisMonth: "This month",
+    ofcDbYearToDate: "Year to date",
+    ofcDbAccruedNotPaid: "Accrued but not yet paid",
+    ofcDbRegisteredTaxpayers: "Registered taxpayers",
+    ofcDbSuccessfulTransactions: "Successful transactions",
+    ofcDbAwaitingReconciliation: "Awaiting reconciliation",
+    ofcDbPaymentsVerified: "Payments verified",
+    ofcDbOfEveryAttempted: "Of every payment attempted",
+    ofcDbReconciled: "Reconciled",
+    ofcDbMatchedAcross: "Matched across platform, gateway and settlement",
+    ofcDbReceiptsIssued: "Receipts issued",
+    ofcDbOfTransactions: "Of transactions that counted as revenue",
+    ofcDbMda: "MDA",
+    ofcRvGroupedByAssessment: "Every figure below is grouped by the LGA and ward on the assessment, which is reliable. The map coordinates are separate and are captured by the agent application at the moment of collection — none has arrived yet, which usually means no version carrying that has been deployed, or agents have not granted location permission on their handsets.",
+    ofcRvWhoseRevenue: "Whose revenue this is",
+    ofcRvWhoseRevenueBody: "PSIRS collects the state’s revenue; this is the arm of government each naira is collected",
+    ofcRvMdaNoItem: ". An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence.",
+    ofcRvOwedToCouncils: "Owed to the Local Government Councils",
+    ofcRvCouncilsBody: "PSIRS collects this on the Councils’ behalf, so it is theirs rather than the State’s. Only items whose rate a Council sets are counted — a State levy collected in a Council’s area is the State’s. Every Council is listed, including those that collected nothing, because a remittance run has to account for all seventeen.",
+    ofcRvWhereGenerated: "Where the revenue is generated",
+    ofcRvWhereGeneratedBody: "By ward, with the agents working each one. \"Mapped\" counts the collections that recorded a point; a ward earning well with none mapped is unmapped, not suspicious.",
+    ofcRvEachAgentGround: "Each agent, and the ground they cover",
+    ofcRvGroundBody: "Agent performance reports how much. This reports where — an agent working one market and an agent covering forty kilometres of road are doing different jobs on the same commission.",
+    ofcRvVerifiedLastYear: "Verified revenue in the last year",
+    ofcRvGeneratingAreas: "Generating areas",
+    ofcRvWardsProduced: "Wards that produced revenue",
+    ofcRvArmsNoItem: "Arms of government with no catalogue item",
+    ofcRvOwedCouncils: "Owed to Councils",
+    ofcRvCollectedOnBehalf: "Collected on their behalf",
+    ofcRvPlacedOnMap: "Placed on a map",
+    ofcRvWithRecordedPoint: "Collections with a recorded point",
+    ofcRvNoPointRecorded: "No collection has recorded where it happened",
+    ofcRvMinistryDepartment: "Ministry, Department or Agency",
+    ofcRvRevenueItems: "Revenue items",
+    ofcRvShare: "Share",
+    ofcRvCouncil: "Council",
+    ofcRvAgents: "Agents",
+    ofcRvMapped: "Mapped",
+    ofcRvTerritory: "Territory",
+    ofcRvLgas: "LGAs",
+    ofcRvWards: "Wards",
+    ofcRvCentreOfCollection: "Centre of collection",
     ofcOsCleared: "Cleared",
     ofcOsStillOutstanding: "Still outstanding",
     ofcUsStartedCount: "{{n}} started",
@@ -3006,6 +3151,76 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcDbShowing: "Ana nuna {{territories}}",
+    ofcDbCoversYourTerritory: "Kowane adadi a wannan shafin ya shafi yankinka kadai, ba dukkan jihar ba.",
+    ofcDbCoversYourTerritories: "Kowane adadi a wannan shafin ya shafi yankunanka kadai, ba dukkan jihar ba.",
+    ofcDbNeedAttention: "Abubuwa {{n}} na bukatar kulawa",
+    ofcDbExceptionsAnd: "Kura-kuran daidaita lissafi {{exceptions}} da alamun zamba {{flags}} a bude.",
+    ofcDbNewThisMonth: "Sabbi {{n}} wannan watan",
+    ofcDbAwaitingReview: "{{n}} na jiran dubawa",
+    ofcDbFailedCount: "{{n}} sun gaza",
+    ofcRvArea: "Yanki",
+    ofcDbNoTerritoryBody: "Wadannan adadi babu komai saboda asusunka bai rufe wani yanki ba tukuna, ba don ba a karbi komai ba. Ka nemi mai gudanarwa ya ba ka naka.",
+    ofcDbNoTerritoryTitle: "Ba a ba ka wani yanki ba",
+    ofcDbReviewReconciliation: "Duba daidaita lissafi",
+    ofcDbReviewFlags: "duba alamu",
+    ofcDbCollectionsLast30: "Karba a cikin kwanaki 30 na karshe",
+    ofcDbOnlyConfirmed: "Biyan kudin da tashar biyan kudi ta tabbatar kawai ake kirgawa.",
+    ofcDbRevenueByLga: "Haraji bisa ga Karamar Hukuma",
+    ofcDbBelowPotential: "Yana nuna yankunan da karba ke kasa da abin da ake tsammani.",
+    ofcDbRevenueByCategory: "Haraji bisa ga rukuni",
+    ofcDbWhichHeads: "Wadanne nau’ikan haraji ne ke bayar da amfani a hakika.",
+    ofcDbTopAgents: "Wakilai mafi kyawun aiki",
+    ofcDbTopAgentsBody: "An jera bisa karban da aka tabbatar. Ba a nuna bayanan mutum banda suna da lamba a nan ba.",
+    ofcDbRevenueByMda: "Haraji bisa ga ma’aikata",
+    ofcDbIntelligenceTitle: "Nazarin harajin yankuna",
+    ofcDbDrill: "Ka sauka daga Jiha zuwa Karamar Hukuma zuwa Unguwa zuwa Al’umma domin ganin inda ake karbar haraji da inda ba a karba ba.",
+    ofcDbPlateauState: "Jihar Filato",
+    ofcDbPlatformKpis: "Ma’aunan aikin dandali",
+    ofcDbSinceBegan: "Tun lokacin da dandalin ya fara karba.",
+    ofcDbVerifiedOnly: "Harajin da aka tabbatar kawai",
+    ofcDbThisMonth: "Wannan watan",
+    ofcDbYearToDate: "Daga farkon shekara",
+    ofcDbAccruedNotPaid: "An tara amma ba a biya ba tukuna",
+    ofcDbRegisteredTaxpayers: "Masu biyan haraji da aka yi wa rajista",
+    ofcDbSuccessfulTransactions: "Ma’amalolin da suka yi nasara",
+    ofcDbAwaitingReconciliation: "Ana jiran daidaita lissafi",
+    ofcDbPaymentsVerified: "Biyan kudin da aka tabbatar",
+    ofcDbOfEveryAttempted: "Cikin kowane biyan kudi da aka gwada",
+    ofcDbReconciled: "An daidaita",
+    ofcDbMatchedAcross: "An dace a dandali, tashar biya da turawa",
+    ofcDbReceiptsIssued: "Rasit din da aka bayar",
+    ofcDbOfTransactions: "Cikin ma’amalolin da aka kirga a matsayin haraji",
+    ofcDbMda: "Ma’aikata",
+    ofcRvGroupedByAssessment: "An hada kowane adadi a kasa bisa ga Karamar Hukuma da unguwar da ke kan kimar, wanda abin dogaro ne. Wurin taswira daban ne kuma manhajar wakilai ce ke daukar sa a lokacin karba — babu wanda ya iso tukuna, wanda yawanci yana nufin ba a tura sigar da ke dauke da shi ba, ko wakilai ba su ba da izinin wuri a wayoyinsu ba.",
+    ofcRvWhoseRevenue: "Harajin wa ne wannan",
+    ofcRvWhoseRevenueBody: "PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira",
+    ofcRvMdaNoItem: ". Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba.",
+    ofcRvOwedToCouncils: "Ana bin Kananan Hukumomi",
+    ofcRvCouncilsBody: "PSIRS na karbar wannan a madadin Kananan Hukumomi, don haka nasu ne ba na Jiha ba. Nau’ikan da Karamar Hukuma ke sanya kudinsu kawai ake kirgawa — harajin Jiha da aka karba a yankin Karamar Hukuma na Jiha ne. Ana jera kowace Karamar Hukuma, hade da wadanda ba su karbi komai ba, saboda turawar kudi dole ta yi lissafin dukkan goma sha bakwai.",
+    ofcRvWhereGenerated: "Inda ake samar da harajin",
+    ofcRvWhereGeneratedBody: "Bisa ga unguwa, tare da wakilan da ke aiki a kowace. “An sanya a taswira” yana kirga karban da ya rubuta wuri; unguwar da ke samun kudi da kyau ba tare da an sanya ta a taswira ba, ba a taswira take ba, ba abin tuhuma ba.",
+    ofcRvEachAgentGround: "Kowane wakili, da yankin da yake rufewa",
+    ofcRvGroundBody: "Aikin wakilai yana bayar da rahoton nawa. Wannan yana bayar da rahoton ina — wakili da ke aiki a kasuwa daya da wakili da ke rufe kilomita arba’in na hanya suna aiki daban a kan kwamishan iri daya.",
+    ofcRvVerifiedLastYear: "Harajin da aka tabbatar a shekarar da ta gabata",
+    ofcRvGeneratingAreas: "Yankunan da ke samarwa",
+    ofcRvWardsProduced: "Unguwannin da suka samar da haraji",
+    ofcRvArmsNoItem: "Bangarorin gwamnati da babu nau’in haraji",
+    ofcRvOwedCouncils: "Ana bin Kananan Hukumomi",
+    ofcRvCollectedOnBehalf: "An karba a madadinsu",
+    ofcRvPlacedOnMap: "An sanya a taswira",
+    ofcRvWithRecordedPoint: "Karban da aka rubuta wurinsa",
+    ofcRvNoPointRecorded: "Babu karban da ya rubuta inda ya faru",
+    ofcRvMinistryDepartment: "Ma’aikata, Sashe ko Hukuma",
+    ofcRvRevenueItems: "Nau’ikan haraji",
+    ofcRvShare: "Rabo",
+    ofcRvCouncil: "Karamar Hukuma",
+    ofcRvAgents: "Wakilai",
+    ofcRvMapped: "An sanya a taswira",
+    ofcRvTerritory: "Yanki",
+    ofcRvLgas: "Kananan Hukumomi",
+    ofcRvWards: "Unguwanni",
+    ofcRvCentreOfCollection: "Tsakiyar karba",
     ofcOsCleared: "An share",
     ofcOsStillOutstanding: "Har yanzu ya rage",
     ofcUsStartedCount: "An fara {{n}}",
