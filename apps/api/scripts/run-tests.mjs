@@ -235,6 +235,62 @@ for (const shard of failedShards) {
 }
 
 /*
+ * Say again, at the end, what actually failed.
+ *
+ * The shard output above is complete, and on a full suite it is a hundred
+ * thousand lines of it. GitHub's log API serves only a tail, the raw archive
+ * is not always reachable, and shard 1 prints first — so a failure in the
+ * first shard of a long run is, in practice, unreadable. One run failed
+ * `1398/1399` with no way to learn which test that was.
+ *
+ * The summary is what a person reads, so the diagnosis belongs beside it. This
+ * repeats each failing shard's `not ok` lines and the diagnostic block under
+ * them, which is the part with the assertion in it.
+ */
+function failureDigest(output) {
+  const lines = output.split('\n');
+  const blocks = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const header = /^(\s*)not ok \d+ - /.exec(lines[i]);
+    if (!header) continue;
+    const indent = header[1];
+    const block = [lines[i]];
+    /*
+     * The YAML diagnostic node that follows carries the assertion, the
+     * expected and actual values, and the stack. It opens with `---` and
+     * closes with `...` at the same indent as the `not ok`; stopping at that
+     * terminator is what keeps the digest from running on into the next
+     * test's server logs.
+     */
+    for (let j = i + 1; j < lines.length; j += 1) {
+      block.push(lines[j]);
+      if (lines[j] === `${indent}  ...`) break;
+      if (/^\s*(not )?ok \d+ - /.test(lines[j])) break;
+    }
+    const text = block.join('\n');
+    // A parent suite fails because a child did, and the child has already
+    // printed the assertion. Repeating the parent says only "1 subtest
+    // failed", which is the one thing the summary line already told you.
+    if (/failureType: 'subtestsFailed'/.test(text)) continue;
+    blocks.push(text);
+  }
+  return blocks;
+}
+
+for (const shard of failedShards) {
+  const blocks = failureDigest(shard.output);
+  if (blocks.length === 0) {
+    // Exit code but no `not ok`: the process died rather than a test failing.
+    // The last of its output is the only evidence there is.
+    console.log(`\n--- shard ${shard.index} failed without reporting a test ---`);
+    console.log(shard.output.split('\n').slice(-40).join('\n'));
+    continue;
+  }
+  console.log(`\n--- shard ${shard.index}: ${blocks.length} failing test(s) ---`);
+  for (const block of blocks) console.log(block);
+}
+
+/*
  * What the suite never wrote.
  *
  * Runs here rather than as a test file because no single shard sees more than
