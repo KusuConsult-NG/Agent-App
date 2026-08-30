@@ -34,7 +34,13 @@ const GLOSSARY: { term: string; english: RegExp; hausa: RegExp }[] = [
   { term: 'receipt', english: /receipt/i, hausa: /rasit/i },
   { term: 'confirm', english: /confirm/i, hausa: /tabbatar/i },
   { term: 'device', english: /\bdevice\b/i, hausa: /na.?ura/i },
-  { term: 'account', english: /\baccount\b/i, hausa: /asusu/i },
+  /*
+   * The noun, not the verb. "A remittance run has to account for all
+   * seventeen" is not a sentence about a bank account, and demanding `asusu`
+   * in its translation would have forced a wrong word into the one place the
+   * glossary exists to keep right.
+   */
+  { term: 'account', english: /\baccounts?\b(?!\s+for)/i, hausa: /asusu/i },
   { term: 'commission', english: /commission/i, hausa: /kwamishan/i },
   { term: 'cash', english: /\bcash\b/i, hausa: /kudi/i },
 ];
@@ -63,7 +69,13 @@ describe('the Hausa dictionary holds together', () => {
    * Hausa, and the toggle offering it has to be readable to somebody who
    * cannot yet read the page.
    */
-  const SAME_IN_BOTH = ['pubHausa'];
+  const SAME_IN_BOTH = [
+    'pubHausa',
+    // A literal an auditor types into the audit-log filter. It is the name of
+    // an event the API emits, not a phrase — translating it would return no
+    // rows.
+    'ofcOvActionPlaceholder',
+  ];
 
   it('passes no English off as Hausa', () => {
     const copied = keys.filter(

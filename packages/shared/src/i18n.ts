@@ -137,6 +137,52 @@ export interface TranslationDictionary {
   errReference: string;
 
   /**
+   * Settlement: reconciling the platform against the gateway against the
+   * government account, and paying agents what they have earned.
+   */
+  ofcFnThreeWay: string;
+  ofcFnThreeWayBody: string;
+  ofcFnRunReconciliation: string;
+  ofcFnRecoverMissed: string;
+  ofcFnRecoverMissedBody: string;
+  ofcFnStatementBody: string;
+  ofcFnValueDate: string;
+  ofcFnBankReference: string;
+  ofcFnCredited: string;
+  ofcFnGatewayReferences: string;
+  ofcFnAwaitingSettlement: string;
+  ofcFnAwaitingSettlementBody: string;
+  ofcFnExceptionQueue: string;
+  ofcFnExceptionQueueBody: string;
+  ofcFnResolve: string;
+  ofcFnSettlements: string;
+  ofcFnCloseDispute: string;
+  ofcFnDisputeBody: string;
+  ofcFnCommissionPayouts: string;
+  ofcFnCommissionBody: string;
+  ofcFnPromoteEligible: string;
+  ofcFnTransferFailed: string;
+  ofcFnMakerChecker: string;
+  ofcFnMakerCheckerBody: string;
+  ofcFnApproved: string;
+  ofcFnRejected: string;
+  ofcFnExecuted: string;
+  ofcFnYourRequest: string;
+  ofcFnExecuteReversal: string;
+  ofcFnNotYourRole: string;
+  ofcFnTotalExpected: string;
+  ofcFnTotalReceived: string;
+  ofcFnVariance: string;
+  ofcFnAsOnStatement: string;
+  ofcFnOnePerLine: string;
+  ofcFnException: string;
+  ofcFnDate: string;
+  ofcFnPayout: string;
+  ofcFnEntries: string;
+  ofcFnBankAccount: string;
+  ofcFnRequestedBy: string;
+
+  /**
    * The revenue catalogue — what a citizen may be charged and at what rate —
    * and the social programmes that add an entitlement on top of it.
    */
@@ -1821,6 +1867,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcFnThreeWay: "Three-way reconciliation",
+    ofcFnThreeWayBody: "Platform transaction against gateway transaction against government settlement. Anything that does not match becomes an exception below.",
+    ofcFnRunReconciliation: "Run reconciliation",
+    ofcFnRecoverMissed: "Recover missed confirmations",
+    ofcFnRecoverMissedBody: "\"Recover missed confirmations\" re-checks payments the gateway completed but the platform never confirmed — normally a webhook that never arrived — and issues the receipts owed.",
+    ofcFnStatementBody: "What the gateway paid into the government account, and the collections it covers. The platform adds up those collections itself; if the credit does not match, the batch is recorded as disputed and none of it is settled.",
+    ofcFnValueDate: "Value date",
+    ofcFnBankReference: "Bank reference",
+    ofcFnCredited: "Credited (₦)",
+    ofcFnGatewayReferences: "Gateway references",
+    ofcFnAwaitingSettlement: "Awaiting settlement from the gateway",
+    ofcFnAwaitingSettlementBody: "Confirmed by the gateway and not yet paid into the government account. Normal for a day or two; nobody has to do anything with these. Anything older than three days has moved to the exception queue below, because by then the money should have arrived.",
+    ofcFnExceptionQueue: "Exception queue",
+    ofcFnExceptionQueueBody: "Every exception is a finance officer’s task. Nothing here is written off automatically. Money still inside the gateway’s settlement window is above, not here.",
+    ofcFnResolve: "Resolve",
+    ofcFnSettlements: "Settlements to government accounts",
+    ofcFnCloseDispute: "Close dispute",
+    ofcFnDisputeBody: "A settlement whose credit does not match the collections it covers settles none of them: the money has not arrived, so the commission on it is not payable. Closing the dispute needs a second finance officer and a credit that accounts for the batch in full.",
+    ofcFnCommissionPayouts: "Commission payouts",
+    ofcFnCommissionBody: "Commission is calculated by the platform from verified government revenue. It is never deducted from what a taxpayer pays, and never payable on a reversed transaction.",
+    ofcFnPromoteEligible: "Promote eligible commission",
+    ofcFnTransferFailed: "Transfer failed",
+    ofcFnMakerChecker: "Maker-checker approvals",
+    ofcFnMakerCheckerBody: "The officer who raises a request can never review or authorise it. Reversals need a third officer to execute, with step-up authentication.",
+    ofcFnApproved: "Approved",
+    ofcFnRejected: "Rejected",
+    ofcFnExecuted: "Executed",
+    ofcFnYourRequest: "Your request",
+    ofcFnExecuteReversal: "Execute reversal",
+    ofcFnNotYourRole: "Settlement figures are not available to your role",
+    ofcFnTotalExpected: "Total expected",
+    ofcFnTotalReceived: "Total received",
+    ofcFnVariance: "Variance",
+    ofcFnAsOnStatement: "As it appears on the statement",
+    ofcFnOnePerLine: "One per line, or separated by commas",
+    ofcFnException: "Exception",
+    ofcFnDate: "Date",
+    ofcFnPayout: "Payout",
+    ofcFnEntries: "Entries",
+    ofcFnBankAccount: "Bank account",
+    ofcFnRequestedBy: "Requested by",
     ofcCfCatalogueIntro: "Revenue items and their rates are government configuration, not code. Changing a rate creates a new version with an effective date — it never rewrites what was already assessed.",
     ofcCfAddRevenueItem: "Add a revenue item",
     ofcCfHistoricalAssessments: "Historical assessments remain attached to the version in force when they were raised.",
@@ -3334,6 +3421,47 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcFnThreeWay: "Daidaita lissafi ta hanyoyi uku",
+    ofcFnThreeWayBody: "Ma’amalar dandali a kan ma’amalar tashar biya a kan turawar gwamnati. Duk abin da bai dace ba yana zama kuskure a kasa.",
+    ofcFnRunReconciliation: "Gudanar da daidaita lissafi",
+    ofcFnRecoverMissed: "Dawo da tabbatarwar da aka rasa",
+    ofcFnRecoverMissedBody: "“Dawo da tabbatarwar da aka rasa” yana sake duba biyan kudin da tashar ta kammala amma dandalin bai taba tabbatarwa ba — yawanci sakon da bai iso ba — kuma yana bayar da rasit din da ake bin sa.",
+    ofcFnStatementBody: "Abin da tashar ta biya cikin asusun gwamnati, da karban da ya shafa. Dandalin da kansa yana hada wadannan karban; idan kudin bai dace ba, ana rubuta rukunin a matsayin mai takaddama kuma ba a tura komai daga cikinsa.",
+    ofcFnValueDate: "Ranar darajar kudi",
+    ofcFnBankReference: "Lambar banki",
+    ofcFnCredited: "An shigar (₦)",
+    ofcFnGatewayReferences: "Lambobin tashar biya",
+    ofcFnAwaitingSettlement: "Ana jiran turawa daga tashar biya",
+    ofcFnAwaitingSettlementBody: "Tashar ta tabbatar kuma ba a biya cikin asusun gwamnati ba tukuna. Abu ne na yau da kullum na kwana daya ko biyu; babu wanda ya kamata ya yi wani abu da wadannan. Duk abin da ya wuce kwana uku ya koma jerin kura-kurai a kasa, saboda a lokacin kudin ya kamata ya iso.",
+    ofcFnExceptionQueue: "Jerin kura-kurai",
+    ofcFnExceptionQueueBody: "Kowane kuskure aikin jami’in kudi ne. Ba a share komai a nan ta atomatik ba. Kudin da har yanzu yake cikin lokacin turawa na tashar yana sama, ba nan ba.",
+    ofcFnResolve: "Warware",
+    ofcFnSettlements: "Turawa zuwa asusun gwamnati",
+    ofcFnCloseDispute: "Rufe takaddama",
+    ofcFnDisputeBody: "Turawar da kudinta bai dace da karban da ta shafa ba, ba ta tura ko daya daga cikinsu: kudin bai iso ba, don haka ba a biyan kwamishan a kansa. Rufe takaddamar yana bukatar jami’in kudi na biyu da kudin da ya yi lissafin rukunin gaba daya.",
+    ofcFnCommissionPayouts: "Biyan kwamishan",
+    ofcFnCommissionBody: "Dandalin ne ke lissafa kwamishan daga harajin gwamnati da aka tabbatar. Ba a taba cire shi daga abin da mai biyan haraji ya biya ba, kuma ba a taba biyan sa a kan ma’amalar da aka juyar ba.",
+    ofcFnPromoteEligible: "Daga kwamishan da ya cancanta",
+    ofcFnTransferFailed: "Turawa ta gaza",
+    ofcFnMakerChecker: "Amincewar mai yi da mai duba",
+    ofcFnMakerCheckerBody: "Jami’in da ya daga bukata ba zai taba duba ta ko ba ta izini ba. Juyarwa tana bukatar jami’i na uku ya aiwatar, tare da karin tantancewa.",
+    ofcFnApproved: "An amince",
+    ofcFnRejected: "An ki",
+    ofcFnExecuted: "An aiwatar",
+    ofcFnYourRequest: "Bukatarka",
+    ofcFnExecuteReversal: "Aiwatar da juyarwa",
+    ofcFnNotYourRole: "Adadin turawa ba ya samuwa ga matsayinka",
+    ofcFnTotalExpected: "Jimlar da ake tsammani",
+    ofcFnTotalReceived: "Jimlar da aka karba",
+    ofcFnVariance: "Bambanci",
+    ofcFnAsOnStatement: "Kamar yadda yake a takardar banki",
+    ofcFnOnePerLine: "Daya a kowane layi, ko a raba da wakafi",
+    ofcFnException: "Kuskure",
+    ofcFnDate: "Rana",
+    ofcFnPayout: "Biya",
+    ofcFnEntries: "Shigarwa",
+    ofcFnBankAccount: "Asusun banki",
+    ofcFnRequestedBy: "Wanda ya nema",
     ofcCfCatalogueIntro: "Nau’ikan haraji da kudinsu saitin gwamnati ne, ba lambar kwamfuta ba. Canza kudi yana samar da sabuwar siga da ranar fara aiki — ba ya taba sake rubuta abin da aka riga aka kima.",
     ofcCfAddRevenueItem: "Kara nau’in haraji",
     ofcCfHistoricalAssessments: "Kimar tarihi tana nan a hade da sigar da ke aiki a lokacin da aka yi su.",
