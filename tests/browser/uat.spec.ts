@@ -21,6 +21,7 @@
 
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+import { translations } from '@psirs/shared';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:5174';
 const AGENT = process.env.AGENT_URL ?? 'http://localhost:5173';
@@ -701,6 +702,184 @@ test.describe('What a citizen sees without an account', () => {
     await page.goto(`${PORTAL}/#/citizen`);
     await page.waitForTimeout(1800);
     await shot(page, 'public-02-citizen');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
+
+// ===========================================================================
+/*
+ * BOTH APPLICATIONS, IN THE OTHER LANGUAGE.
+ *
+ * Everything above this line runs in English, which is how the whole Hausa
+ * side of the platform went unphotographed. The unit tests render screens in
+ * Hausa and the source lint reads the source, but neither one drives the
+ * running application, and the failure mode this catches is exactly the one
+ * neither can see: a screen that fetches its labels before the language is
+ * settled, or a string that only appears once there is data behind it.
+ *
+ * The check is the reverse of the usual one. Rather than asking whether Hausa
+ * appears, it asks whether *English* is still on screen — by looking for the
+ * English side of any dictionary entry long enough that a coincidence is not
+ * plausible. If one is there, that string did not go through the dictionary
+ * on its way to the officer.
+ */
+/**
+ * Two entries whose English is also the name of a thing in the database.
+ *
+ * "Plateau State Internal Revenue Service" is a row in `mdas` — the agency
+ * revenue is collected on behalf of — and the revenue summary lists
+ * collections by MDA. That name arrives as data, and translating a
+ * ministry's registered name inside a revenue report would be wrong, not
+ * helpful. The dictionary translates the phrase where it is the platform's
+ * own heading; the report shows the entity as it is registered.
+ */
+const NAMED_IN_THE_REGISTER = ['authPsirsFull', 'pubService'];
+
+const ENGLISH_LEFT_ON_SCREEN = Object.keys(translations.en).filter((key) => {
+  const english = translations.en[key as keyof typeof translations.en];
+  const hausa = translations.ha[key as keyof typeof translations.ha];
+  return (
+    english.length >= 30 &&
+    !english.includes('{{') &&
+    !NAMED_IN_THE_REGISTER.includes(key) &&
+    english.trim() !== hausa.trim()
+  );
+});
+
+function englishStillShowing(text: string): string[] {
+  return ENGLISH_LEFT_ON_SCREEN.filter((key) =>
+    text.includes(translations.en[key as keyof typeof translations.en]),
+  );
+}
+
+/** The agent app's language switch, which announces itself differently. */
+const languageButton = (page: Page, text: string) =>
+  page.getByRole('button').filter({ hasText: text }).first();
+
+test.describe('The agent PWA in Hausa', () => {
+  test.use({ viewport: PHONE });
+
+  test('switches language and keeps it, screen after screen', async ({ page }) => {
+    const console_ = watchConsole(page);
+    await signInToAgentApp(page);
+
+    /*
+     * Found by the text on it rather than by its accessible name: the button
+     * carries an `aria-label` saying what it does, so what a screen reader
+     * announces and what an agent reads are deliberately different. The agent
+     * is the one being tested here.
+     */
+    await languageButton(page, 'HA (Hausa)').click();
+    await page.waitForTimeout(1500);
+
+    /*
+     * That the switch actually happened, before asking what is left in
+     * English. Without this the check below passes on a blank page, which is
+     * the one result that would look like success and mean the opposite.
+     */
+    await expect(
+      page.getByText(translations.ha.homeCollectedToday).first(),
+      'the money bar is in Hausa after the switch',
+    ).toBeVisible({ timeout: 15_000 });
+    await shot(page, 'agent-ha-01-home');
+
+    const screens: [string, string][] = [
+      ['collect', 'agent-ha-02-collect'],
+      ['taxpayers', 'agent-ha-03-taxpayers'],
+      ['receipts', 'agent-ha-04-receipts'],
+      ['commission', 'agent-ha-05-commission'],
+      ['more', 'agent-ha-06-more'],
+      ['support', 'agent-ha-07-support'],
+    ];
+
+    const offenders: string[] = [];
+    for (const [route, name] of screens) {
+      await page.goto(`${AGENT}/#/${route}`);
+      await page.waitForTimeout(1800);
+      const text = await page.locator('body').innerText();
+      expect(text.length, `/${route} rendered something`).toBeGreaterThan(0);
+      for (const key of englishStillShowing(text)) offenders.push(`/${route}: ${key}`);
+      await shot(page, name, { fullPage: false });
+    }
+
+    expect(offenders, 'English left on screen in the Hausa app').toEqual([]);
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('goes back to English, and stays there', async ({ page }) => {
+    // The toggle has to work in both directions: an agent who pressed it by
+    // accident is otherwise stranded in a language they cannot read.
+    const console_ = watchConsole(page);
+    await signInToAgentApp(page);
+    await languageButton(page, 'HA (Hausa)').click();
+    await page.waitForTimeout(1200);
+    await languageButton(page, 'EN (English)').click();
+    await page.waitForTimeout(1200);
+
+    await page.goto(`${AGENT}/#/collect`);
+    await page.waitForTimeout(1500);
+    await expect(languageButton(page, 'HA (Hausa)')).toBeVisible();
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
+
+test.describe('The officer portal in Hausa', () => {
+  test.use({ viewport: DESKTOP });
+
+  test('an administrator can work every screen in Hausa', async ({ page }) => {
+    const console_ = watchConsole(page);
+    await signInToPortal(page, 'admin');
+
+    await page.getByRole('button', { name: 'Hausa' }).first().click();
+    await page.waitForTimeout(1200);
+
+    // Same reason as the agent app: prove the switch, then look for what did
+    // not come with it.
+    await expect(
+      page.locator('.sidebar').getByText(translations.ha.ofcGroupAdministration).first(),
+      'the menu is in Hausa after the switch',
+    ).toBeVisible({ timeout: 15_000 });
+    await shot(page, 'portal-ha-01-home');
+
+    /*
+     * Walking the menu rather than a list, for the same reason the English
+     * walk does: a screen added tomorrow is covered without anybody
+     * remembering, and a screen added tomorrow is exactly the one whose
+     * strings will not have been translated.
+     */
+    const links = await menu(page);
+    expect(links.length, 'the administrator is offered screens').toBeGreaterThan(10);
+
+    const offenders: string[] = [];
+    for (const [index, link] of links.entries()) {
+      await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
+      await page.waitForTimeout(1200);
+      const text = await page.locator('.content').innerText().catch(() => '');
+      for (const key of englishStillShowing(text)) offenders.push(`${link.label}: ${key}`);
+      if (index < 6) {
+        await shot(page, `portal-ha-${String(index + 2).padStart(2, '0')}-${slug(link.label)}`);
+      }
+    }
+
+    expect(offenders, 'English left on screen in the Hausa portal').toEqual([]);
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('the public verification page answers in Hausa', async ({ page }) => {
+    /*
+     * The page a citizen reaches with no account and no help, and the one
+     * where the language matters most: it is where somebody standing in a
+     * market finds out whether the receipt in their hand is real.
+     */
+    const console_ = watchConsole(page);
+    await page.goto(`${PORTAL}/#/verify`);
+    await page.waitForTimeout(1200);
+    await page.getByRole('button', { name: 'Hausa' }).first().click();
+    await page.waitForTimeout(800);
+
+    const text = await page.locator('body').innerText();
+    expect(englishStillShowing(text), 'English on the public verification page').toEqual([]);
+    await shot(page, 'public-ha-01-verify');
     expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
   });
 });
