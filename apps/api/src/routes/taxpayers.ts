@@ -31,6 +31,78 @@ import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 import { queueNotification } from '../services/notifications';
 
+/** What a citizen can hand an agent, once the search box has recognised it. */
+type PresentedIdentifier =
+  | { phone: string }
+  | { tin: string }
+  | { vehicleRegistration: string }
+  | { receiptNumber: string }
+  | { transactionReference: string };
+
+/**
+ * The identifier a search box was handed, or null if it holds a name fragment.
+ *
+ * The hint under that box tells the agent, in both languages, that a citizen
+ * registered in another area can still be found "by their phone number, TIN,
+ * vehicle registration or a receipt number" — so those are the shapes read
+ * here, and the acknowledgement reference besides, because an acknowledgement
+ * is numbered by its transaction and that is the number the SMS gives the
+ * citizen to quote.
+ *
+ * Each shape is specific enough that no plausible name or business name is
+ * one: two of them are all digits, two carry a prefix and a slash or dash,
+ * and the plate is letters-digits-letters with no space. Recognising a string
+ * as an identifier is therefore not a guess about what the agent meant. What
+ * falls through — including a partial identifier, which is a fragment by
+ * definition — stays a fragment and stays scoped.
+ */
+export function promoteExactIdentifier(q: string | undefined): PresentedIdentifier | null {
+  const text = (q ?? '').trim();
+  if (!text) return null;
+  const upper = text.toUpperCase();
+
+  // A government receipt: PSIRS/2026/000001.
+  if (/^PSIRS\/\d{4}\/\d{4,}$/.test(upper)) return { receiptNumber: upper };
+
+  /*
+   * The acknowledgement a citizen holds while a payment is still in flight.
+   * It is numbered by its transaction — TXN-2026-000005 — deliberately, so a
+   * receipt number from the government series is never spent on money that
+   * may never arrive.
+   */
+  if (/^TXN-\d{4}-\d{4,}$/.test(upper)) return { transactionReference: upper };
+
+  /*
+   * A phone number in any form a Nigerian writes one. `phoneSchema` is the
+   * platform's single definition of that, punctuation and all, and it hands
+   * back the +234 form the column stores — which is the whole point, because
+   * an agent who types 08031000014 is looking for +2348031000014 and a LIKE
+   * on the raw text never finds them.
+   */
+  const phone = phoneSchema.safeParse(text);
+  if (phone.success) return { phone: phone.data };
+
+  /*
+   * A TIN is digits and nothing else, in the length the registry issues.
+   * Checked after the phone shapes, so an eleven-digit local number is never
+   * mistaken for one. A shorter run of digits is a fragment and stays one.
+   */
+  const digits = text.replace(/[\s-]/g, '');
+  if (/^\d{8,12}$/.test(digits)) return { tin: digits };
+
+  /*
+   * A plate, in the shape the registry issues them: letters, digits, letters,
+   * with or without the separators a person writes. Anchored at both ends and
+   * required to start with letters, so a business name that happens to carry a
+   * number — 9JAFOODS — is still searched for as a name.
+   */
+  if (/^[A-Z]{2,3}[- ]?\d{2,4}[- ]?[A-Z]{2,3}$/.test(upper)) {
+    return { vehicleRegistration: upper.replace(/[\s-]/g, '') };
+  }
+
+  return null;
+}
+
 export const taxpayerRouter = Router();
 
 /**
@@ -298,6 +370,24 @@ taxpayerRouter.get(
     }),
     async (req, res, data) => {
       /*
+       * A SEARCH BOX IS ONE BOX.
+       *
+       * Every screen that looks a taxpayer up — the collection flow, the
+       * register, the picker inside the group and vehicle screens — offers a
+       * single field labelled "Name, phone or TIN" and sends whatever was
+       * typed as `q`. A citizen recites their phone number, the agent types it
+       * into that one box, and it arrives here as a name fragment.
+       *
+       * The scoping rule below turns on exactly that distinction, so it is
+       * settled here, once, before anything reads the search: a `q` that *is*
+       * an identifier is treated as the identifier it is. That is not a guess
+       * about what the caller meant, it is a fact about the string, and a
+       * fragment stays a fragment.
+       */
+      const promoted = promoteExactIdentifier(data.q);
+      const search = promoted ? { ...data, ...promoted, q: undefined } : data;
+
+      /*
        * A filter counts as something to search for.
        *
        * The guard tested for a non-empty *string*, which an item id satisfies
@@ -305,7 +395,7 @@ taxpayerRouter.get(
        * unpaid" is a legitimate question. It now asks whether any criterion was
        * given at all, rather than whether any of them happened to be text.
        */
-      const { limit: _limit, ...criteria } = data;
+      const { limit: _limit, ...criteria } = search;
       const searched = Object.values(criteria).some((value) =>
         typeof value === 'string' ? value.length > 0 : value !== undefined && value !== false,
       );
@@ -354,6 +444,13 @@ taxpayerRouter.get(
        * patient caller. So a fragment is answered from the caller's own
        * territory, and an agent's territory is one LGA that the schema will
        * not let them be active without.
+       *
+       * The promotion at the top of this handler is what makes the first half
+       * of that reachable. Without it the carve-out lived on the API and no
+       * client could get to it: an agent in a Jos South market, holding the
+       * TIN of a trader registered in Jos North, typed that TIN into the one
+       * search box there is and was told nobody matched — precisely the
+       * outcome this paragraph calls worse than the one being prevented.
        */
       const identifiedExactly =
         given('tin') || given('phone') || given('vehicleRegistration') ||
@@ -399,7 +496,7 @@ taxpayerRouter.get(
       res.json(
         await taxpayers.searchTaxpayers(
           pool,
-          data,
+          search,
           identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
         ),
       );

@@ -104,6 +104,7 @@ function fieldLabel(field: string): string {
 }
 
 export function ErrorAlert({ error }: { error: ApiError | null }) {
+  const { t } = usePortalI18n();
   if (!error) return null;
   return (
     <Alert kind="error" title={{ text: error.message }}>
@@ -119,7 +120,9 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
         </ul>
       )}
       {error.reference && (
-        <p style={{ margin: '6px 0 0', fontSize: '0.75rem' }}>Reference: {error.reference}</p>
+        <p style={{ margin: '6px 0 0', fontSize: '0.75rem' }}>
+          {t.errReference}: {error.reference}
+        </p>
       )}
     </Alert>
   );

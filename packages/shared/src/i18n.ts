@@ -135,6 +135,74 @@ export interface TranslationDictionary {
   errRateLimited: string;
   errUpdateRequired: string;
   errReference: string;
+
+  /**
+   * The five role descriptions an administrator reads before changing
+   * somebody's access, and the sentences around them. They sat in a
+   * module-level object, which no pattern in the check looks at.
+   */
+  ofcUaSuspendOrCloseBody: string;
+  ofcUaCoverNothingBody: string;
+  ofcUaChangeAccessFor: string;
+  ofcUaCurrentlyRole: string;
+  ofcUaAccountFor: string;
+  ofcUaCannotReopenBody: string;
+  ofcUaTerritoriesFor: string;
+  ofcUaRoleAdmin: string;
+  ofcUaRoleSupervisor: string;
+  ofcUaRoleRevenueOfficer: string;
+  ofcUaRoleFinanceOfficer: string;
+  ofcUaRoleAuditor: string;
+
+  /**
+   * Officer-portal strings the English guard could not see until it learned
+   * to read text beside an interpolation. Most are card titles of the form
+   * "Section — {{name}}", which is the portal's commonest heading shape and
+   * was English on eleven screens.
+   */
+  ofcAgRiskFlagFor: string;
+  ofcAlAwardsFor: string;
+  ofcAlAwardsIntro: string;
+  ofcCfRateHistoryFor: string;
+  ofcCfChangeRateFor: string;
+  ofcCfBeneficiariesFor: string;
+  ofcFnRecordSettlementTitle: string;
+  ofcFnRecordSettlementAction: string;
+  ofcFnRecordPayment: string;
+  ofcGpRecordDeparture: string;
+  ofcGpAwardedNotCollected: string;
+  ofcGpMembersFor: string;
+  ofcGpEnoughForMore: string;
+  ofcKycFileType: string;
+  ofcLvIntroAll: string;
+  ofcLvIntroNoRegister: string;
+  ofcLvChooseOnce: string;
+  ofcLvBroughtIn: string;
+  ofcLvBehindOn: string;
+  ofcLvRegisteredUnder: string;
+  ofcLvShowingLargest: string;
+  pubAttestProgress: string;
+  ofcRhAdministrationFor: string;
+  ofcRhSignedIn: string;
+  ofcTrRegisterFor: string;
+  ofcUsPrivacyBody: string;
+
+  /**
+   * Strings the English guard could not see until it learned to read text
+   * beside an interpolation — a button label after a spinner, a sentence
+   * wrapped around a bank account, the countdown under a step-up prompt.
+   * Every one of them was rendering English to an agent working in Hausa.
+   */
+  actionSearch: string;
+  colReceiptNumbered: string;
+  pickNoTaxpayerMatch: string;
+  grpNotActiveYet: string;
+  grpLeaderMustConfirm: string;
+  moreDraftCaptured: string;
+  moreCommissionRateOf: string;
+  moreBankChangeAsking: string;
+  supYouAt: string;
+  stepUpExpiresIn: string;
   pubRefereeNamedYou: string;
 
   /**
@@ -1903,6 +1971,54 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcUaSuspendOrCloseBody: "Suspending or closing an account signs the officer out everywhere and stops them signing in again. Suspension is a pause pending an answer; closing is the end of the appointment and cannot be undone — create a new account if they return.",
+    ofcUaCoverNothingBody: "{{name}} will see no revenue figures at all until a territory is assigned.",
+    ofcUaChangeAccessFor: "Change access — {{name}}",
+    ofcUaCurrentlyRole: "Currently {{role}}.",
+    ofcUaAccountFor: "Account — {{name}}",
+    ofcUaCannotReopenBody: "A closed account can never be reopened. If {{name}} returns to the service they will need a new account.",
+    ofcUaTerritoriesFor: "Territories — {{name}}",
+    ofcUaRoleAdmin: "Administers agents, users and the revenue catalogue. Cannot authorise payouts.",
+    ofcUaRoleSupervisor: "Authorises approvals and oversees agents in their territory.",
+    ofcUaRoleRevenueOfficer: "Registers and corrects taxpayer records, and reviews approvals.",
+    ofcUaRoleFinanceOfficer: "Reconciles settlements and authorises commission payouts.",
+    ofcUaRoleAuditor: "Reads everything and changes nothing.",
+    ofcAgRiskFlagFor: "Risk flag — {{name}}",
+    ofcAlAwardsFor: "Awards — {{name}}",
+    ofcAlAwardsIntro: "Who has been awarded under this round, and who has collected.",
+    ofcCfRateHistoryFor: "Rate history — {{name}}",
+    ofcCfChangeRateFor: "Change rate — {{name}}",
+    ofcCfBeneficiariesFor: "Beneficiaries — {{name}}",
+    ofcFnRecordSettlementTitle: "Record a settlement",
+    ofcFnRecordSettlementAction: "Record settlement",
+    ofcFnRecordPayment: "Record payment",
+    ofcGpRecordDeparture: "Record departure",
+    ofcGpAwardedNotCollected: "{{n}} beneficiaries were awarded and have not turned up. That is either a distribution that is not reaching people, or names on a list that do not correspond to anybody — worth establishing which before the next round.",
+    ofcGpMembersFor: "Members — {{name}}",
+    ofcGpEnoughForMore: "enough for {{n}} more",
+    ofcKycFileType: "This is a {{type}} file.",
+    ofcLvIntroAll: "What each levy has brought in, who is registered under it, and who is behind.",
+    ofcLvIntroNoRegister: "What each levy has brought in, and who is behind on it.",
+    ofcLvChooseOnce: "Choose a category or an item once and every section below answers for it.",
+    ofcLvBroughtIn: "What {{levy}} brought in",
+    ofcLvBehindOn: "Who is behind on {{levy}}",
+    ofcLvRegisteredUnder: "Who is registered under {{levy}}",
+    ofcLvShowingLargest: "Showing the {{n}} largest debts. Narrow by category, levy or LGA to see the rest — the totals above cover only what is listed.",
+    pubAttestProgress: "({{answered}} of {{total}} answered)",
+    ofcRhAdministrationFor: "Administration — {{name}}",
+    ofcRhSignedIn: "signed in",
+    ofcTrRegisterFor: "The register — {{name}}",
+    ofcUsPrivacyBody: "How the software is being used, not who is using it. These figures carry no identity: no officer, agent or taxpayer is named in them, and groups smaller than {{n}} are withheld rather than shown, because a small enough count singles somebody out even without a name. For an individual agent's work, see",
+    actionSearch: "Search",
+    colReceiptNumbered: "Receipt {{number}}",
+    pickNoTaxpayerMatch: "No taxpayer matches that search. They must be registered before a payment can be attributed to them.",
+    grpNotActiveYet: "This group is {{status}}. Members can be recorded once an officer has approved it — there is nothing more to do here until then.",
+    grpLeaderMustConfirm: "{{name}} can open it on any phone. Until they confirm, the members you recorded are not counted.",
+    moreDraftCaptured: "Captured {{when}}",
+    moreCommissionRateOf: "{{rate}}% of",
+    moreBankChangeAsking: "You are asking PSIRS to pay your commission into this account: {{destination}}.",
+    supYouAt: "You · {{when}}",
+    stepUpExpiresIn: "Expires in {{time}}",
     pubRefereeNamedYou: "{{name}} has named you as their referee",
     ofcTrTitle: "Correct a taxpayer record",
     ofcTrIntro: "Every correction is recorded against the officer who made it, with the reason given, and the taxpayer is sent a message telling them their record was changed. Only the fields you fill in are altered.",
@@ -3488,6 +3604,54 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcUaSuspendOrCloseBody: "Dakatarwa ko rufe asusu yana fitar da jami’in daga ko’ina kuma yana hana shi sake shiga. Dakatarwa hutu ne har sai an sami amsa; rufewa shi ne karshen aikin kuma ba a iya warwarewa — sai an bude sabon asusu idan ya dawo.",
+    ofcUaCoverNothingBody: "{{name}} ba zai ga wata lambar kudaden shiga ba ko kadan har sai an ba shi yanki.",
+    ofcUaChangeAccessFor: "Canja izini — {{name}}",
+    ofcUaCurrentlyRole: "A halin yanzu {{role}}.",
+    ofcUaAccountFor: "Asusu — {{name}}",
+    ofcUaCannotReopenBody: "Ba a taba sake bude asusun da aka rufe ba. Idan {{name}} ya dawo aiki zai bukaci sabon asusu.",
+    ofcUaTerritoriesFor: "Yankuna — {{name}}",
+    ofcUaRoleAdmin: "Yana gudanar da wakilai, masu amfani da kundin kudaden shiga. Ba zai iya ba da izinin fitar da kudi ba.",
+    ofcUaRoleSupervisor: "Yana ba da izinin amincewa kuma yana kula da wakilai a yankinsa.",
+    ofcUaRoleRevenueOfficer: "Yana yin rajista da gyara bayanan mai biyan haraji, kuma yana duba amincewa.",
+    ofcUaRoleFinanceOfficer: "Yana daidaita biyan kudi kuma yana ba da izinin fitar da kwamishan.",
+    ofcUaRoleAuditor: "Yana karanta komai kuma ba ya canja komai.",
+    ofcAgRiskFlagFor: "Alamar hadari — {{name}}",
+    ofcAlAwardsFor: "Kyautuka — {{name}}",
+    ofcAlAwardsIntro: "Wa aka ba kyauta a wannan zagayen, kuma wa ya karba.",
+    ofcCfRateHistoryFor: "Tarihin kudin — {{name}}",
+    ofcCfChangeRateFor: "Canja kudin — {{name}}",
+    ofcCfBeneficiariesFor: "Masu amfana — {{name}}",
+    ofcFnRecordSettlementTitle: "Rubuta biyan kudi",
+    ofcFnRecordSettlementAction: "Rubuta biya",
+    ofcFnRecordPayment: "Rubuta biyan kudi",
+    ofcGpRecordDeparture: "Rubuta ficewa",
+    ofcGpAwardedNotCollected: "An ba {{n}} masu amfana kyauta amma ba su zo ba. Ko dai rabon bai isa ga mutane ba, ko kuma sunaye ne a jerin da ba su dace da kowa ba — ya kamata a tabbatar da wanne kafin zagaye na gaba.",
+    ofcGpMembersFor: "Mambobi — {{name}}",
+    ofcGpEnoughForMore: "ya isa ga wasu {{n}}",
+    ofcKycFileType: "Wannan fayil na {{type}} ne.",
+    ofcLvIntroAll: "Abin da kowane haraji ya shigar, wa aka yi wa rajista karkashinsa, da wa ke baya.",
+    ofcLvIntroNoRegister: "Abin da kowane haraji ya shigar, da wa ke baya a kansa.",
+    ofcLvChooseOnce: "Zabi rukuni ko abu sau daya kuma kowane sashe a kasa zai amsa a kansa.",
+    ofcLvBroughtIn: "Abin da {{levy}} ya shigar",
+    ofcLvBehindOn: "Wa ke baya a kan {{levy}}",
+    ofcLvRegisteredUnder: "Wa aka yi wa rajista karkashin {{levy}}",
+    ofcLvShowingLargest: "Ana nuna manyan bashi {{n}}. Ka tace da rukuni, haraji ko Karamar Hukuma domin ganin sauran — jimillar da ke sama ta kunshi abin da aka lissafa kadai.",
+    pubAttestProgress: "(an amsa {{answered}} daga {{total}})",
+    ofcRhAdministrationFor: "Gudanarwa — {{name}}",
+    ofcRhSignedIn: "wanda ya shiga",
+    ofcTrRegisterFor: "Rajistar — {{name}}",
+    ofcUsPrivacyBody: "Yadda ake amfani da manhajar, ba wanda ke amfani da ita ba. Wadannan lambobi ba su dauke da shaidar kowa: ba a ambaci sunan wani jami’i, wakili ko mai biyan haraji a cikinsu ba, kuma ana boye kungiyoyi kasa da {{n}} maimakon nuna su, domin kidaya karama tana bayyana mutum ko da ba a ambaci sunansa ba. Domin aikin wakili daya, duba",
+    actionSearch: "Nema",
+    colReceiptNumbered: "Rasit {{number}}",
+    pickNoTaxpayerMatch: "Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi.",
+    grpNotActiveYet: "Wannan kungiya tana {{status}}. Za a iya rubuta mambobi bayan jami’i ya amince da ita — babu sauran abin yi a nan har sai lokacin.",
+    grpLeaderMustConfirm: "{{name}} zai iya budewa a kowace waya. Har sai ya tabbatar, ba a kirga mambobin da ka rubuta ba.",
+    moreDraftCaptured: "An dauka {{when}}",
+    moreCommissionRateOf: "{{rate}}% na",
+    moreBankChangeAsking: "Kana neman PSIRS ta biya kwamishanka cikin wannan asusun: {{destination}}.",
+    supYouAt: "Kai · {{when}}",
+    stepUpExpiresIn: "Zai kare cikin {{time}}",
     pubRefereeNamedYou: "{{name}} ya sanya ka a matsayin mai shaidarsa",
     ofcTrTitle: "Gyara rikodin mai biyan haraji",
     ofcTrIntro: "Ana rubuta kowane gyara da sunan jami’in da ya yi shi, tare da dalilin, kuma ana tura wa mai biyan haraji sako yana gaya masa an canza rikodinsa. Filayen da ka cika kawai ake canzawa.",

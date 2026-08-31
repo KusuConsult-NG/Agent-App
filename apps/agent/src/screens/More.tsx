@@ -563,7 +563,11 @@ export function CommissionScreen() {
                 <div className="list__body">
                   <p className="list__title">{entry.revenue_item}</p>
                   <p className="list__meta">
-                    {entry.transaction_reference} · {(entry.rate_basis_points / 100).toFixed(2)}% of{' '}
+                    {entry.transaction_reference} ·{' '}
+                    {t.moreCommissionRateOf.replace(
+                      '{{rate}}',
+                      (entry.rate_basis_points / 100).toFixed(2),
+                    )}{' '}
                     <Money kobo={entry.basis_amount_kobo} />
                   </p>
                 </div>
@@ -785,7 +789,10 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
                 <div className="list__body">
                   <p className="list__title">{draft.draftType.replace(/_/g, ' ').toLowerCase()}</p>
                   <p className="list__meta">
-                    Captured {new Date(draft.capturedAt).toLocaleString('en-NG')}
+                    {t.moreDraftCaptured.replace(
+                      '{{when}}',
+                      new Date(draft.capturedAt).toLocaleString('en-NG'),
+                    )}
                     {draft.message ? ` · ${draft.message}` : ''}
                   </p>
                 </div>
@@ -914,8 +921,10 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
         description={
           <>
             <p style={{ margin: '0 0 4px' }}>
-              You are asking PSIRS to pay your commission into {form.bankName}{' '}
-              {form.accountNumber.slice(-4).padStart(8, '·')}.
+              {t.moreBankChangeAsking.replace(
+                '{{destination}}',
+                `${form.bankName} ${form.accountNumber.slice(-4).padStart(8, '·')}`,
+              )}
             </p>
             <p style={{ margin: 0 }}>{t.moreNothingChangesYet}</p>
           </>

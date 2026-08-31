@@ -83,10 +83,7 @@ export function UsageScreen() {
       <div className="card">
         <h2 className="card__title">{t.ofcUsTitle}</h2>
         <p className="card__hint">
-          How the software is being used, not who is using it. These figures carry no identity:
-          no officer, agent or taxpayer is named in them, and groups smaller than{' '}
-          {USAGE_MIN_GROUP_SIZE} are withheld rather than shown, because a small enough count
-          singles somebody out even without a name. For an individual agent's work, see{' '}
+          {t.ofcUsPrivacyBody.replace('{{n}}', String(USAGE_MIN_GROUP_SIZE))}{' '}
           <strong>{t.ofcNavPerformance}</strong>{t.ofcUsReportsCollections}</p>
       </div>
 

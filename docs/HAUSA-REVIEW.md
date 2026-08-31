@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1483 strings, grouped by where an agent meets them. Lower stakes
+1531 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -374,6 +374,8 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcRhAdministrationFor` | Administration — {{name}} | Gudanarwa — {{name}} | ☐ | |
+| `ofcRhSignedIn` | signed in | wanda ya shiga | ☐ | |
 | `ofcRhBlockedCount` | {{n}} thing(s) are stopping somebody working | Abubuwa {{n}} na hana wani yin aiki | ☐ | |
 | `ofcRhInvoicesStillOpen` | {{n}} invoice(s) still open | Takardun biya {{n}} na nan a bude | ☐ | |
 | `ofcRhNothingWaiting` | Nothing is waiting. | Babu abin da ke jira. | ☐ | |
@@ -503,6 +505,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcAgRiskFlagFor` | Risk flag — {{name}} | Alamar hadari — {{name}} | ☐ | |
 | `ofcAgAwaitingGovernmentReview` | Awaiting government review | Na jiran nazarin gwamnati | ☐ | |
 | `ofcAgApplicantsCompleted` | These applicants have completed identity verification and referee clearance. | Wadannan masu nema sun kammala tabbatar da shaida da izinin mai shaida. | ☐ | |
 | `ofcAgAllAgents` | All agents | Dukkan wakilai | ☐ | |
@@ -594,6 +597,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcKycFileType` | This is a {{type}} file. | Wannan fayil na {{type}} ne. | ☐ | |
 | `ofcKycNotReviewed` | {{n}} document(s) not yet reviewed | Takardu {{n}} ba a duba ba tukuna | ☐ | |
 | `ofcKycAlready` | Already {{status}} | An riga an {{status}} | ☐ | |
 | `ofcKycIdentityDocuments` | Identity documents | Takardun shaida | ☐ | |
@@ -650,6 +654,18 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcUaSuspendOrCloseBody` | Suspending or closing an account signs the officer out everywhere and stops them signing in again. Suspension is a pause pending an answer; closing is the end of the appointment and cannot be undone — create a new account if they return. | Dakatarwa ko rufe asusu yana fitar da jami’in daga ko’ina kuma yana hana shi sake shiga. Dakatarwa hutu ne har sai an sami amsa; rufewa shi ne karshen aikin kuma ba a iya warwarewa — sai an bude sabon asusu idan ya dawo. | ☐ | |
+| `ofcUaCoverNothingBody` | {{name}} will see no revenue figures at all until a territory is assigned. | {{name}} ba zai ga wata lambar kudaden shiga ba ko kadan har sai an ba shi yanki. | ☐ | |
+| `ofcUaChangeAccessFor` | Change access — {{name}} | Canja izini — {{name}} | ☐ | |
+| `ofcUaCurrentlyRole` | Currently {{role}}. | A halin yanzu {{role}}. | ☐ | |
+| `ofcUaAccountFor` | Account — {{name}} | Asusu — {{name}} | ☐ | |
+| `ofcUaCannotReopenBody` | A closed account can never be reopened. If {{name}} returns to the service they will need a new account. | Ba a taba sake bude asusun da aka rufe ba. Idan {{name}} ya dawo aiki zai bukaci sabon asusu. | ☐ | |
+| `ofcUaTerritoriesFor` | Territories — {{name}} | Yankuna — {{name}} | ☐ | |
+| `ofcUaRoleAdmin` | Administers agents, users and the revenue catalogue. Cannot authorise payouts. | Yana gudanar da wakilai, masu amfani da kundin kudaden shiga. Ba zai iya ba da izinin fitar da kudi ba. | ☐ | |
+| `ofcUaRoleSupervisor` | Authorises approvals and oversees agents in their territory. | Yana ba da izinin amincewa kuma yana kula da wakilai a yankinsa. | ☐ | |
+| `ofcUaRoleRevenueOfficer` | Registers and corrects taxpayer records, and reviews approvals. | Yana yin rajista da gyara bayanan mai biyan haraji, kuma yana duba amincewa. | ☐ | |
+| `ofcUaRoleFinanceOfficer` | Reconciles settlements and authorises commission payouts. | Yana daidaita biyan kudi kuma yana ba da izinin fitar da kwamishan. | ☐ | |
+| `ofcUaRoleAuditor` | Reads everything and changes nothing. | Yana karanta komai kuma ba ya canja komai. | ☐ | |
 | `ofcUaRoleChangeIntro` | Changing a role signs the officer out of every device immediately, because their current access travels in the session they are holding. They sign in again with the new role. Agents are not listed: their access follows the clearance pipeline, not a role. | Canza matsayi yana fitar da jami’i daga kowace na’ura nan take, saboda izininsa na yanzu yana tafiya cikin zaman da yake rike da shi. Zai sake shiga da sabon matsayin. Ba a jera wakilai: izininsu yana bin tsarin izini, ba matsayi ba. | ☐ | |
 | `ofcUaNewRole` | New role | Sabon matsayi | ☐ | |
 | `ofcUaSelectRole` | Select a role | Zabi matsayi | ☐ | |
@@ -756,6 +772,9 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcFnRecordSettlementTitle` | Record a settlement | Rubuta biyan kudi | ☐ | |
+| `ofcFnRecordSettlementAction` | Record settlement | Rubuta biya | ☐ | |
+| `ofcFnRecordPayment` | Record payment | Rubuta biyan kudi | ☐ | |
 | `ofcFnThreeWay` | Three-way reconciliation | Daidaita lissafi ta hanyoyi uku | ☐ | |
 | `ofcFnThreeWayBody` | Platform transaction against gateway transaction against government settlement. Anything that does not match becomes an exception below. | Ma’amalar dandali a kan ma’amalar tashar biya a kan turawar gwamnati. Duk abin da bai dace ba yana zama kuskure a kasa. | ☐ | |
 | `ofcFnRunReconciliation` | Run reconciliation | Gudanar da daidaita lissafi | ☐ | |
@@ -853,6 +872,9 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcCfRateHistoryFor` | Rate history — {{name}} | Tarihin kudin — {{name}} | ☐ | |
+| `ofcCfChangeRateFor` | Change rate — {{name}} | Canja kudin — {{name}} | ☐ | |
+| `ofcCfBeneficiariesFor` | Beneficiaries — {{name}} | Masu amfana — {{name}} | ☐ | |
 | `ofcCfCatalogueIntro` | Revenue items and their rates are government configuration, not code. Changing a rate creates a new version with an effective date — it never rewrites what was already assessed. | Nau’ikan haraji da kudinsu saitin gwamnati ne, ba lambar kwamfuta ba. Canza kudi yana samar da sabuwar siga da ranar fara aiki — ba ya taba sake rubuta abin da aka riga aka kima. | ☐ | |
 | `ofcCfAddRevenueItem` | Add a revenue item | Kara nau’in haraji | ☐ | |
 | `ofcCfHistoricalAssessments` | Historical assessments remain attached to the version in force when they were raised. | Kimar tarihi tana nan a hade da sigar da ke aiki a lokacin da aka yi su. | ☐ | |
@@ -899,6 +921,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcTrRegisterFor` | The register — {{name}} | Rajistar — {{name}} | ☐ | |
 | `ofcTrTitle` | Correct a taxpayer record | Gyara rikodin mai biyan haraji | ☐ | |
 | `ofcTrIntro` | Every correction is recorded against the officer who made it, with the reason given, and the taxpayer is sent a message telling them their record was changed. Only the fields you fill in are altered. | Ana rubuta kowane gyara da sunan jami’in da ya yi shi, tare da dalilin, kuma ana tura wa mai biyan haraji sako yana gaya masa an canza rikodinsa. Filayen da ka cika kawai ake canzawa. | ☐ | |
 | `ofcTrNoMatch` | No taxpayer matches that search. | Babu mai biyan haraji da ya dace da wannan binciken. | ☐ | |
@@ -968,6 +991,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcUsPrivacyBody` | How the software is being used, not who is using it. These figures carry no identity: no officer, agent or taxpayer is named in them, and groups smaller than {{n}} are withheld rather than shown, because a small enough count singles somebody out even without a name. For an individual agent's work, see | Yadda ake amfani da manhajar, ba wanda ke amfani da ita ba. Wadannan lambobi ba su dauke da shaidar kowa: ba a ambaci sunan wani jami’i, wakili ko mai biyan haraji a cikinsu ba, kuma ana boye kungiyoyi kasa da {{n}} maimakon nuna su, domin kidaya karama tana bayyana mutum ko da ba a ambaci sunansa ba. Domin aikin wakili daya, duba | ☐ | |
 | `ofcUsStartedCount` | {{n}} started | An fara {{n}} | ☐ | |
 | `ofcUsNoAttempts` | No attempts recorded | Ba a rubuta wani yunkuri ba | ☐ | |
 | `ofcUsNoAbandonment` | No abandonment point reached {{n}} attempts. | Babu wurin watsarwa da ya kai yunkuri {{n}}. | ☐ | |
@@ -1037,6 +1061,10 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcGpRecordDeparture` | Record departure | Rubuta ficewa | ☐ | |
+| `ofcGpAwardedNotCollected` | {{n}} beneficiaries were awarded and have not turned up. That is either a distribution that is not reaching people, or names on a list that do not correspond to anybody — worth establishing which before the next round. | An ba {{n}} masu amfana kyauta amma ba su zo ba. Ko dai rabon bai isa ga mutane ba, ko kuma sunaye ne a jerin da ba su dace da kowa ba — ya kamata a tabbatar da wanne kafin zagaye na gaba. | ☐ | |
+| `ofcGpMembersFor` | Members — {{name}} | Mambobi — {{name}} | ☐ | |
+| `ofcGpEnoughForMore` | enough for {{n}} more | ya isa ga wasu {{n}} | ☐ | |
 | `ofcGpConfirmationLinkFor` | Confirmation link for {{group}} | Hanyar tabbatarwa ta {{group}} | ☐ | |
 | `ofcGpLeaderCodeOnce` | Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so it cannot be read back later. Request another if it is lost. | Ka tura wannan ga shugaban kungiyar. Ana nuna shi sau daya — PSIRS na adana sa hannunsa kawai, don haka ba za a iya sake karanta shi ba. Ka nemi wani idan ya bata. | ☐ | |
 | `ofcGpWaitingDecision` | Waiting for a decision | Ana jiran shawara | ☐ | |
@@ -1064,6 +1092,13 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcLvIntroAll` | What each levy has brought in, who is registered under it, and who is behind. | Abin da kowane haraji ya shigar, wa aka yi wa rajista karkashinsa, da wa ke baya. | ☐ | |
+| `ofcLvIntroNoRegister` | What each levy has brought in, and who is behind on it. | Abin da kowane haraji ya shigar, da wa ke baya a kansa. | ☐ | |
+| `ofcLvChooseOnce` | Choose a category or an item once and every section below answers for it. | Zabi rukuni ko abu sau daya kuma kowane sashe a kasa zai amsa a kansa. | ☐ | |
+| `ofcLvBroughtIn` | What {{levy}} brought in | Abin da {{levy}} ya shigar | ☐ | |
+| `ofcLvBehindOn` | Who is behind on {{levy}} | Wa ke baya a kan {{levy}} | ☐ | |
+| `ofcLvRegisteredUnder` | Who is registered under {{levy}} | Wa aka yi wa rajista karkashin {{levy}} | ☐ | |
+| `ofcLvShowingLargest` | Showing the {{n}} largest debts. Narrow by category, levy or LGA to see the rest — the totals above cover only what is listed. | Ana nuna manyan bashi {{n}}. Ka tace da rukuni, haraji ko Karamar Hukuma domin ganin sauran — jimillar da ke sama ta kunshi abin da aka lissafa kadai. | ☐ | |
 | `ofcLvTitle` | Levies and tax categories | Haraji da rukunonin haraji | ☐ | |
 | `ofcLvTaxCategory` | Tax category | Rukunin haraji | ☐ | |
 | `ofcLvAllCategories` | All categories | Dukkan rukunoni | ☐ | |
@@ -1088,6 +1123,8 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcAlAwardsFor` | Awards — {{name}} | Kyautuka — {{name}} | ☐ | |
+| `ofcAlAwardsIntro` | Who has been awarded under this round, and who has collected. | Wa aka ba kyauta a wannan zagayen, kuma wa ya karba. | ☐ | |
 | `ofcAlIntro` | A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point. | Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba. | ☐ | |
 | `ofcAlNewRound` | New round | Sabon zagaye | ☐ | |
 | `ofcAlProgramme` | Programme | Shiri | ☐ | |
@@ -1269,6 +1306,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `colReceiptNumbered` | Receipt {{number}} | Rasit {{number}} | ☐ | |
 | `colShareTitle` | PSIRS receipt | Rasit na PSIRS | ☐ | |
 | `colShareBody` | PSIRS receipt {{number}} for {{name}}. Verify with code {{code}}. | Rasit na PSIRS {{number}} na {{name}}. Ka tantance da lambar {{code}}. | ☐ | |
 | `colChangeChoice` | Change | Canza | ☐ | |
@@ -1530,6 +1568,8 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `grpNotActiveYet` | This group is {{status}}. Members can be recorded once an officer has approved it — there is nothing more to do here until then. | Wannan kungiya tana {{status}}. Za a iya rubuta mambobi bayan jami’i ya amince da ita — babu sauran abin yi a nan har sai lokacin. | ☐ | |
+| `grpLeaderMustConfirm` | {{name}} can open it on any phone. Until they confirm, the members you recorded are not counted. | {{name}} zai iya budewa a kowace waya. Har sai ya tabbatar, ba a kirga mambobin da ka rubuta ba. | ☐ | |
 | `grpNameHint` | As the group itself gives it | Kamar yadda kungiyar da kanta ta bayar | ☐ | |
 | `grpCommunityHint` | Where the group meets. Optional. | Inda kungiyar ke haduwa. Ba dole ba. | ☐ | |
 | `grpLeaderNameHint` | The person who can confirm who belongs | Mutumin da zai iya tabbatar da wanda ke cikinta | ☐ | |
@@ -1611,6 +1651,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `supYouAt` | You · {{when}} | Kai · {{when}} | ☐ | |
 | `supGetHelpHint` | Report a problem to PSIRS. You will get a reply here, and a message when there is something to read. | Ka kai rahoton matsala ga PSIRS. Za ka samu amsa a nan, da sako idan akwai abin karantawa. | ☐ | |
 | `supNormal` | Normal | Na yau da kullum | ☐ | |
 | `supProblemCameBack` | If the problem has come back, | Idan matsalar ta dawo, | ☐ | |
@@ -1659,6 +1700,9 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `moreDraftCaptured` | Captured {{when}} | An dauka {{when}} | ☐ | |
+| `moreCommissionRateOf` | {{rate}}% of | {{rate}}% na | ☐ | |
+| `moreBankChangeAsking` | You are asking PSIRS to pay your commission into this account: {{destination}}. | Kana neman PSIRS ta biya kwamishanka cikin wannan asusun: {{destination}}. | ☐ | |
 | `moreMonths` | {{n}} months | Watanni {{n}} | ☐ | |
 | `moreSearchVehicleFirst` | Search the vehicle first. Records confirmed by the vehicle authority are marked as such. | Ka fara neman motar. An yiwa rikodin da hukumar motoci ta tabbatar alama. | ☐ | |
 | `moreOwnerName` | Owner’s name | Sunan mai motar | ☐ | |
@@ -1822,6 +1866,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `stepUpExpiresIn` | Expires in {{time}} | Zai kare cikin {{time}} | ☐ | |
 | `stepUpCodeFailed` | Could not send a code. | Ba a iya tura lamba ba. | ☐ | |
 | `stepUpAuthoriseFailed` | Could not authorise this. | Ba a iya bada izinin wannan ba. | ☐ | |
 | `stepUpNoSms` | No real SMS is configured, so the code is shown here: | Ba a saita SMS na gaske ba, don haka an nuna lambar a nan: | ☐ | |
@@ -1875,6 +1920,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `pubAttestProgress` | ({{answered}} of {{total}} answered) | (an amsa {{answered}} daga {{total}}) | ☐ | |
 | `pubRefereeNamedYou` | {{name}} has named you as their referee | {{name}} ya sanya ka a matsayin mai shaidarsa | ☐ | |
 | `pubService` | Plateau State Internal Revenue Service | Hukumar Karbar Haraji ta Jihar Filato | ☐ | |
 | `pubLanguage` | Language | Harshe | ☐ | |
@@ -2000,6 +2046,8 @@ instructions — but they are what an agent reads all day.
 | `searchAnotherArea` | A name search covers your own Local Government Area. If they are registered elsewhere, search by their phone number, TIN, vehicle registration or a receipt number. | Binciken suna yana rufe Karamar Hukumar da kake aiki a ciki kadai. Idan an yi masa rajista a wata Karamar Hukuma, ka nemo shi da lambar wayarsa, TIN, lambar mota ko lambar rasit. | ☐ | |
 | `languageForMessages` | Language for their messages | Harshen sakonnin sa | ☐ | |
 | `languageForMessagesHint` | Ask the taxpayer. Their receipt arrives by SMS and it is the only copy they will have. | Ka tambayi mai biyan haraji. Rasit dinsa yana zuwa ta SMS, kuma shi ne kwafin da zai samu kadai. | ☐ | |
+| `actionSearch` | Search | Nema | ☐ | |
+| `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |

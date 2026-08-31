@@ -247,10 +247,8 @@ export function LeviesScreen() {
           * what it is meant to.
           */}
         <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
-          {canReadTaxpayers
-            ? 'What each levy has brought in, who is registered under it, and who is behind.'
-            : 'What each levy has brought in, and who is behind on it.'}{' '}
-          Choose a category or an item once and every section below answers for it.
+          {canReadTaxpayers ? t.ofcLvIntroAll : t.ofcLvIntroNoRegister}{' '}
+          {t.ofcLvChooseOnce}
         </p>
 
         <div className="filters">
@@ -345,7 +343,7 @@ export function LeviesScreen() {
 
       {canReadRevenue && (
         <div className="card">
-          <h2 className="card__title">What {chosenLevy} brought in</h2>
+          <h2 className="card__title">{t.ofcLvBroughtIn.replace('{{levy}}', chosenLevy)}</h2>
           {revenue === null ? (
             <Loading />
           ) : (
@@ -418,7 +416,7 @@ export function LeviesScreen() {
 
       {canReadDefaulters && (
         <div className="card">
-          <h2 className="card__title">Who is behind on {chosenLevy}</h2>
+          <h2 className="card__title">{t.ofcLvBehindOn.replace('{{levy}}', chosenLevy)}</h2>
           {defaulters === null ? (
             <Loading />
           ) : (
@@ -429,8 +427,7 @@ export function LeviesScreen() {
               </div>
               {defaulters.rows.length === 100 || defaulters.rows.length === 500 ? (
                 <Alert kind="info">
-                  Showing the {defaulters.rows.length} largest debts. Narrow by category, levy or
-                  LGA to see the rest — the totals above cover only what is listed.
+                  {t.ofcLvShowingLargest.replace('{{n}}', String(defaulters.rows.length))}
                 </Alert>
               ) : null}
               <Table
@@ -463,7 +460,9 @@ export function LeviesScreen() {
 
       {canReadTaxpayers && (
         <div className="card">
-          <h2 className="card__title">Who is registered under {chosenLevy}</h2>
+          <h2 className="card__title">
+            {t.ofcLvRegisteredUnder.replace('{{levy}}', chosenLevy)}
+          </h2>
           <div className="filters">
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
               <input

@@ -594,7 +594,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
 
   return (
     <div className="card">
-      <h2 className="card__title">The register — {name}</h2>
+      <h2 className="card__title">{t.ofcTrRegisterFor.replace('{{name}}', name)}</h2>
       <p className="card__hint">{t.ofcTrEndedBody}</p>
 
       {error && <ErrorAlert error={error} />}

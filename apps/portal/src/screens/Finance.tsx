@@ -305,7 +305,7 @@ export function ReconciliationScreen() {
 
       {can('payment:reconcile') && (
         <div className="card">
-          <h2 className="card__title">Record a settlement</h2>
+          <h2 className="card__title">{t.ofcFnRecordSettlementTitle}</h2>
           <p className="card__hint">{t.ofcFnStatementBody}</p>
           <div className="field-row">
             <div className="field">
@@ -348,7 +348,7 @@ export function ReconciliationScreen() {
             />
           </div>
           <button type="button" disabled={busy} onClick={record}>
-            Record settlement
+            {t.ofcFnRecordSettlementAction}
           </button>
         </div>
       )}
@@ -663,7 +663,7 @@ export function CommissionsScreen() {
                           })
                         }
                       >
-                        Record payment
+                        {t.ofcFnRecordPayment}
                       </button>
                     )}
                     {row.status === 'APPROVED' && can('commission:manage') && (

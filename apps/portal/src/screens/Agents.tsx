@@ -789,7 +789,9 @@ export function RefereesScreen() {
 
       {reviewing && (
         <div className="card">
-          <h2 className="card__title">Risk flag — {reviewing.full_name}</h2>
+          <h2 className="card__title">
+            {t.ofcAgRiskFlagFor.replace('{{name}}', reviewing.full_name)}
+          </h2>
           <p className="card__hint">
             {String(reviewing.rule).replace(/_/g, ' ').toLowerCase()}. Record what you found: it is
             the only account of why this flag was left open, upheld or set aside.

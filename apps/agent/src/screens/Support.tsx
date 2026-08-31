@@ -333,7 +333,9 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         <h2 className="card__title">{t.supConversation}</h2>
         <ol className="thread">
           <li className="thread__item thread__item--mine">
-            <p className="thread__meta">You · {new Date(ticket.created_at).toLocaleString('en-NG')}</p>
+            <p className="thread__meta">
+              {t.supYouAt.replace('{{when}}', new Date(ticket.created_at).toLocaleString('en-NG'))}
+            </p>
             <p className="thread__body">{ticket.description}</p>
           </li>
           {ticket.messages.map((message) => (

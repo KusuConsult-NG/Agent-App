@@ -334,10 +334,10 @@ export function AllocationsScreen() {
       {awardsFor && (
         <div className="card card--flush">
           <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            Awards — {awardsFor.name}
+            {t.ofcAlAwardsFor.replace('{{name}}', awardsFor.name)}
           </h2>
           <p className="card__hint" style={{ padding: '0 18px' }}>
-            Who has been awarded under this round, and who has collected.{' '}
+            {t.ofcAlAwardsIntro}{' '}
             <button type="button" className="link" onClick={() => setAwardsFor(null)}>{t.ofcKycClose}</button>
           </p>
           {!awards ? (

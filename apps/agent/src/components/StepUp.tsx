@@ -161,7 +161,7 @@ export function StepUpPrompt({
           </Alert>
         ) : (
           <p className="field__hint">
-            Expires in {minutes}:{seconds}
+            {t.stepUpExpiresIn.replace('{{time}}', `${minutes}:${seconds}`)}
           </p>
         ))}
 

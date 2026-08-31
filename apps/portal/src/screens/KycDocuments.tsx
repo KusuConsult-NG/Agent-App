@@ -260,7 +260,7 @@ function DocumentViewer({
           <img className="document-viewer__image" src={url} alt={`${humanise(doc.document_type)} submitted by the applicant`} />
         ) : (
           <p className="card__hint">
-            This is a {doc.content_type} file.{' '}
+            {t.ofcKycFileType.replace('{{type}}', doc.content_type)}{' '}
             <a href={url} target="_blank" rel="noreferrer">{t.ofcKycOpenNewTab}</a>
             .
           </p>

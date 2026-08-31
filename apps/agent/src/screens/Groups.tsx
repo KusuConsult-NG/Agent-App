@@ -424,8 +424,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       {!active && (
         <Alert kind="info" title={t.grpWaitingOfficer}>
           <p style={{ margin: 0 }}>
-            This group is {group.status.toLowerCase()}. Members can be recorded once an officer
-            has approved it — there is nothing more to do here until then.
+            {t.grpNotActiveYet.replace('{{status}}', group.status.toLowerCase())}
           </p>
         </Alert>
       )}
@@ -468,8 +467,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
             <Alert kind="success" title={t.grpSendToLeader}>
               <p style={{ margin: 0, wordBreak: 'break-all' }}>{invitation}</p>
               <p style={{ margin: '0.5rem 0 0' }}>
-                {group.leader_name} can open it on any phone. Until they confirm, the members
-                you recorded are not counted.
+                {t.grpLeaderMustConfirm.replace('{{name}}', group.leader_name ?? '')}
               </p>
             </Alert>
           )}

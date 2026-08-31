@@ -682,8 +682,10 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         ) : (
           <>
             <p className="card__hint" style={{ marginTop: 18, fontWeight: 650, color: 'var(--ink)' }}>
-              {t.pubAttestQuestion} ({answered} of {pending.length}{' '}
-              answered)
+              {t.pubAttestQuestion}{' '}
+              {t.pubAttestProgress
+                .replace('{{answered}}', String(answered))
+                .replace('{{total}}', String(pending.length))}
             </p>
 
             {pending.map((member) => (

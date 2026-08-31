@@ -43,6 +43,7 @@ import {
   startTestServer,
   stopTestServer,
 } from './helpers';
+import { promoteExactIdentifier } from '../routes/taxpayers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -57,6 +58,9 @@ let agentDevice = '';
 let marketLevyId = '';
 let awayPhone = '';
 let awayTin = '';
+let awayPlate = '';
+let awayTransactionReference = '';
+let homeTin = '';
 
 /** A taxpayer with an unpaid Market Levy, in a named LGA. */
 async function plant(lgaId: string, suffix: string) {
@@ -69,8 +73,15 @@ async function plant(lgaId: string, suffix: string) {
   );
   marketLevyId = item!.id;
 
-  const tin = `PL${suffix}0000001`;
-  const phone = `+2348096100${suffix}`;
+  /*
+   * A TIN as the registry issues one: digits, and nothing but digits. The
+   * shape matters here — the search box has to be able to tell a TIN from a
+   * name, and it does that by looking at the string.
+   */
+  const tin = `9${suffix}0000001`;
+  // And a phone number of the length Nigerian numbers actually are: +234 and
+  // ten digits. The old fixture was one digit short, which no citizen's is.
+  const phone = `+23480961000${suffix}`;
   const taxpayer = await queryOne<{ id: string }>(
     pool,
     `INSERT INTO taxpayers (taxpayer_type, first_name, last_name, phone, tin, address, lga_id, status, source)
@@ -97,15 +108,31 @@ async function plant(lgaId: string, suffix: string) {
      RETURNING id`,
     [`INV-SRCH-${suffix}`, assessment!.id, taxpayer!.id, `SRCH${suffix}`, adminUserId],
   );
+  /*
+   * A transaction reference in the shape the platform issues, because the
+   * acknowledgement a citizen holds while a payment is in flight is numbered
+   * by its transaction and that is the number they quote back.
+   */
+  const transactionReference = `TXN-2026-00${suffix}01`;
   await query(
     pool,
     `INSERT INTO transactions
        (transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
         amount_kobo, total_amount_kobo, status, lga_id, channel, created_by)
      VALUES ($1,$2,$3,$4,$5,50000,50000,'INVOICE_GENERATED',$6,'AGENT_PWA',$7)`,
-    [`SRCH-${suffix}-0001`, taxpayer!.id, invoice!.id, assessment!.id, item!.id, lgaId, adminUserId],
+    [transactionReference, taxpayer!.id, invoice!.id, assessment!.id, item!.id, lgaId, adminUserId],
   );
-  return { tin, phone };
+
+  // And a vehicle, because a plate is the other thing a citizen hands over.
+  const plate = `PL0${suffix}JOS`;
+  await query(
+    pool,
+    `INSERT INTO vehicles (taxpayer_id, registration_number, vehicle_type, owner_name)
+     VALUES ($1,$2,'PRIVATE_CAR',$3)`,
+    [taxpayer!.id, plate, `Bitrus Danlami${suffix}`],
+  );
+
+  return { tin, phone, plate, transactionReference };
 }
 
 let adminUserId = '';
@@ -153,10 +180,12 @@ before(async () => {
   );
   awayLga = other!;
 
-  await plant(homeLga.id, '01');
+  homeTin = (await plant(homeLga.id, '01')).tin;
   const away = await plant(awayLga.id, '02');
   awayPhone = away.phone;
   awayTin = away.tin;
+  awayPlate = away.plate;
+  awayTransactionReference = away.transactionReference;
 
   // The supervisor supervises the agent's own LGA.
   const territory = await queryOne<{ id: string }>(
@@ -300,4 +329,188 @@ describe('an officer who may read every taxpayer', () => {
     assert.equal(response.status, 200);
     assert.equal(names(response.body).length, 2, JSON.stringify(response.body));
   });
+});
+
+/*
+ * THE CARVE-OUT NOTHING COULD REACH.
+ *
+ * Everything above is true of the API and was false of the product. Every
+ * screen that looks a taxpayer up — the collection flow, the register, the
+ * picker inside the group and vehicle screens — offers one field labelled
+ * "Name, phone or TIN" and sends whatever was typed as `q`. Nothing sends
+ * `tin=` or `phone=`. So the rule that an identifier reaches the whole state
+ * held only for a caller writing the query by hand: an agent in a Jos South
+ * market, holding the TIN of a trader registered in Jos North, typed that TIN
+ * into the only box there is and was told nobody matched.
+ *
+ * The browser test caught it, which is the point of having one — the unit
+ * tests above passed the entire time, because they were the only client that
+ * knew to use the parameter.
+ */
+describe('the one search box an agent actually has', () => {
+  it('reaches the other Local Government Area when the box holds a TIN', async () => {
+    const response = await get(`/taxpayers/search?q=${awayTin}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(
+      names(response.body).includes('Danlami02'),
+      'a TIN typed into the only search box did not reach the citizen it identifies',
+    );
+  });
+
+  it('reaches them when the box holds their phone number', async () => {
+    const response = await get(`/taxpayers/search?q=${encodeURIComponent(awayPhone)}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(names(response.body).includes('Danlami02'), JSON.stringify(response.body));
+  });
+
+  it('reaches them when the box holds the local form of that number', async () => {
+    /*
+     * A citizen says "zero eight zero...", not "plus two three four". The
+     * column holds +234, so the typed text has to be understood as a phone
+     * number rather than matched as characters — which is why this goes
+     * through `phoneSchema` and not through a LIKE.
+     */
+    const local = `0${awayPhone.slice(4)}`;
+    const response = await get(`/taxpayers/search?q=${local}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(
+      names(response.body).includes('Danlami02'),
+      `08... did not find the citizen stored as ${awayPhone}: ${JSON.stringify(response.body)}`,
+    );
+  });
+
+  it('reaches them when the number is typed with the spaces a person reads it in', async () => {
+    const spaced = `0${awayPhone.slice(4, 7)} ${awayPhone.slice(7, 10)} ${awayPhone.slice(10)}`;
+    const response = await get(`/taxpayers/search?q=${encodeURIComponent(spaced)}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(names(response.body).includes('Danlami02'), JSON.stringify(response.body));
+  });
+
+  it('reaches them when the box holds the plate on the vehicle in front of the agent', async () => {
+    const response = await get(`/taxpayers/search?q=${awayPlate}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(names(response.body).includes('Danlami02'), JSON.stringify(response.body));
+  });
+
+  it('reaches them when the box holds the reference off their acknowledgement', async () => {
+    const response = await get(`/taxpayers/search?q=${awayTransactionReference}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(names(response.body).includes('Danlami02'), JSON.stringify(response.body));
+  });
+
+  it('still does not let a name fragment out of the agent’s own area', async () => {
+    /*
+     * The direction that matters. Promoting an identifier must not have
+     * promoted the thing the scoping exists to stop — `a`, then `ab`, then
+     * `ac`, until the register falls out.
+     */
+    for (const fragment of ['Danlami', 'Dan', 'a', 'Bitrus']) {
+      const response = await get(`/taxpayers/search?q=${fragment}`, asAgent());
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      assert.deepEqual(
+        names(response.body).filter((name) => name === 'Danlami02'),
+        [],
+        `the fragment "${fragment}" reached across the state`,
+      );
+    }
+  });
+
+  it('does not treat part of a TIN as the whole of one', async () => {
+    /*
+     * A prefix is a fragment however numeric it looks, and a prefix that
+     * reached statewide would be the same enumeration with a smaller
+     * alphabet: ten digits, eight places.
+     */
+    const response = await get(`/taxpayers/search?q=${awayTin.slice(0, 5)}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.deepEqual(
+      names(response.body).filter((name) => name === 'Danlami02'),
+      [],
+      'part of a TIN reached across the state',
+    );
+  });
+
+  it('still searches a short run of digits as a fragment, in the agent’s own area', async () => {
+    /*
+     * The other direction of the same guard. Part of a TIN is a fragment, and
+     * a fragment is answered by matching it anywhere in the column — so an
+     * agent who has typed the first three digits of a TIN they are reading off
+     * a card still sees the trader in front of them. Treating that as a whole
+     * identifier would look up `tin = '901'`, find nobody, and tell the agent
+     * their own taxpayer does not exist.
+     */
+    const response = await get(`/taxpayers/search?q=${homeTin.slice(0, 3)}`, asAgent());
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.ok(
+      names(response.body).includes('Danlami01'),
+      `part of a TIN stopped finding the agent’s own taxpayer: ${JSON.stringify(response.body)}`,
+    );
+  });
+
+  it('still refuses to list the register when the box is empty', async () => {
+    const response = await get(`/taxpayers/search?revenueItemId=${marketLevyId}`, asAgent());
+    assert.equal(response.status, 403, JSON.stringify(response.body).slice(0, 200));
+  });
+});
+
+/*
+ * The shapes themselves, without a database in the way.
+ *
+ * The HTTP tests above prove that recognising an identifier widens the reach.
+ * This proves what is recognised, which is the half with the sharp edge: read
+ * too generously and a business name becomes a plate lookup that finds
+ * nobody; read too meanly and the citizen standing in front of the agent
+ * cannot be served. Both directions are here, and each shape is the one the
+ * platform actually issues — checked against the seeded data, not invented.
+ */
+describe('what the search box recognises as an identifier', () => {
+  const cases: [string, ReturnType<typeof promoteExactIdentifier>][] = [
+    // A receipt, and the acknowledgement that precedes one.
+    ['PSIRS/2026/000001', { receiptNumber: 'PSIRS/2026/000001' }],
+    ['psirs/2026/000001', { receiptNumber: 'PSIRS/2026/000001' }],
+    ['TXN-2026-000005', { transactionReference: 'TXN-2026-000005' }],
+    // A phone number, in each form a person writes one.
+    ['+2348031000014', { phone: '+2348031000014' }],
+    ['08031000014', { phone: '+2348031000014' }],
+    ['0803 100 0014', { phone: '+2348031000014' }],
+    ['234 803 100 0014', { phone: '+2348031000014' }],
+    // A TIN.
+    ['117212855', { tin: '117212855' }],
+    // A plate, written with and without the separators.
+    ['PL001JOS', { vehicleRegistration: 'PL001JOS' }],
+    ['pl001jos', { vehicleRegistration: 'PL001JOS' }],
+    ['ABC-123-DE', { vehicleRegistration: 'ABC123DE' }],
+  ];
+
+  for (const [typed, expected] of cases) {
+    it(`reads ${typed} as what it is`, () => {
+      assert.deepEqual(promoteExactIdentifier(typed), expected);
+    });
+  }
+
+  const fragments = [
+    '',
+    '   ',
+    'a',
+    'ab',
+    'Rifkatu',
+    'Rifkatu Choji',
+    // Part of a TIN, and part of a phone number. A prefix is a guess.
+    '117',
+    '1172128',
+    '0803100',
+    // A business name that carries a number, which a looser plate rule would
+    // have looked up in the vehicle register and reported as nobody.
+    '9JAFOODS',
+    'MTN241',
+    // A receipt number that has been half typed.
+    'PSIRS/2026',
+    'TXN-2026',
+  ];
+
+  for (const fragment of fragments) {
+    it(`treats ${JSON.stringify(fragment)} as a name fragment`, () => {
+      assert.equal(promoteExactIdentifier(fragment), null);
+    });
+  }
 });

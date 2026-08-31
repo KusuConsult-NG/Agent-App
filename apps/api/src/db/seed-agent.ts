@@ -55,7 +55,21 @@ export async function seedDemoAgent(): Promise<DemoAgent | null> {
     return { agentId: existing.id, phone, password, deviceIdentifier };
   }
 
-  const lga = await queryOne<{ id: string }>(pool, 'SELECT id FROM lgas ORDER BY name LIMIT 1');
+  /*
+   * The Local Government Area the demonstration is set in, not whichever one
+   * sorts first alphabetically.
+   *
+   * This used to be `ORDER BY name LIMIT 1`, which is Barkin Ladi — while this
+   * agent's own address is on Rwang Pam Street and every taxpayer the UAT seed
+   * registers is in Jos. Nobody noticed until the search was scoped by
+   * territory, and then the demonstration stack shipped a field agent who
+   * could not find a single one of the twelve traders in it. An agent works
+   * where the people they collect from are.
+   */
+  const lga = await queryOne<{ id: string }>(
+    pool,
+    `SELECT id FROM lgas ORDER BY (name = 'Jos North') DESC, name LIMIT 1`,
+  );
   if (!lga) {
     console.log('  skipping demonstration agent: reference data is not seeded yet');
     return null;

@@ -140,15 +140,14 @@ export function TaxpayerPicker({
         onClick={() => void run()}
       >
         {busy ? <Spinner /> : null}
-        Search
+        {t.actionSearch}
       </button>
 
       <ErrorAlert error={error} />
 
       {results && results.length === 0 && (
         <p className="empty">
-          No taxpayer matches that search. They must be registered before a payment can be
-          attributed to them. {t.searchAnotherArea}
+          {t.pickNoTaxpayerMatch} {t.searchAnotherArea}
         </p>
       )}
 

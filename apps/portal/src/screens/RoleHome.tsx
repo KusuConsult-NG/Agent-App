@@ -348,7 +348,9 @@ export function RoleHomeScreen({
     return (
       <>
         <div className="card">
-          <h2 className="card__title">Administration — {user.fullName ?? 'signed in'}</h2>
+          <h2 className="card__title">
+            {t.ofcRhAdministrationFor.replace('{{name}}', user.fullName ?? t.ofcRhSignedIn)}
+          </h2>
           <p className="card__hint">{t.ofcRhAdminIntro}</p>
         </div>
         {blocked > 0 && (

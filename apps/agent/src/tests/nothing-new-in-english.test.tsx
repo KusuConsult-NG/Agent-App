@@ -76,6 +76,10 @@ const ALLOWED = new Set([
   'BVN',
   'QR',
   'Bluetooth',
+  // The identity documents are known by their acronyms in both languages, and
+  // the words in front of them come from the dictionary.
+  '(NIN)',
+  '(BVN)',
 ]);
 
 /** Props whose value is rendered rather than used. */
@@ -112,25 +116,119 @@ const SHOWN_MESSAGES =
  * prose-shaped leftover, the seam between two JSX branches, starts with a
  * close parenthesis or ends with an open one, which no visible string does.
  */
+/*
+ * A WORD IN CODE IS ALSO A WORD IN ENGLISH.
+ *
+ * This rule used to name the identifiers bare — `const`, `return`, `api` and
+ * the rest — and a bare word matches prose. "…create a new account if they
+ * return." contains `return`, so the whole paragraph above the button that
+ * closes an officer's account was excused from the check and shipped in
+ * English. Matching the shape instead — `const ` with its space, `useState(`
+ * with its parenthesis, `Record<` with its angle bracket — keeps what the
+ * rule was for and takes back what it never meant to cover.
+ */
 function looksLikeCode(text: string): boolean {
   return (
     /[{}[\]]|=>|\);|\(\{|\}\)|&&|\|\||\?\?/.test(text) ||
     text.startsWith(')') ||
+    // A run that opens with a semicolon or a comma is the tail of a statement
+    // the pattern walked into, never a sentence somebody wrote.
+    /^[;,]/.test(text) ||
     text.endsWith('(') ||
     /^[a-z][A-Za-z0-9_]*$/.test(text) ||
-    /\b(?:const|return|useState|useRef|Record|Promise|api)\b/.test(text)
+    // `something.method(` — a call. No sentence contains one.
+    /[A-Za-z_]\w*\.[A-Za-z_]\w*\(/.test(text) ||
+    /\b(?:const|let|var)\s|\buseState\(|\buseRef\(|\bRecord<|\bPromise<|\bapi\.[a-z]/.test(text)
   );
+}
+
+/**
+ * Text that is a direct child of a JSX element, in all four of its shapes.
+ *
+ * The check began with one pattern — text between `>` and `<` — and that is
+ * only the case where the whole child is literal. As soon as a value is
+ * interpolated the literal half is bounded by a brace on one side:
+ *
+ *     <p>Expires in {minutes}:{seconds}</p>
+ *     <button>{busy ? <Spinner /> : null} Search</button>
+ *
+ * Both of those render English to an agent whose app is set to Hausa, and
+ * neither sits between two angle brackets, so the original pattern could not
+ * see them however carefully it was tuned. It missed twelve strings in the
+ * agent app and more in the portal, including whole sentences — the group
+ * screen's explanation of why members cannot be recorded yet, and the
+ * sentence above the button that changes where an agent's commission is paid.
+ */
+const BETWEEN_TAGS = /(?<![=!<>-])>([^<>{}]+)</g;
+const BESIDE_AN_EXPRESSION = [
+  /}([^<>{}]+)</g,
+  /(?<![=!<>-])>([^<>{}]+)\{/g,
+  /}([^<>{}]+)\{/g,
+];
+
+/**
+ * Code the three patterns above pick up that the original one cannot.
+ *
+ * Text between two angle brackets is nearly always JSX. Text beside a brace
+ * is not: two JSX attributes in a row put ` className=` between `}` and `{`,
+ * and a closing brace at the top of a file puts an `import` line before the
+ * next `<`. Both are noise, and both carry punctuation that writing does not.
+ *
+ * The semicolon is the reason this is a separate rule rather than an addition
+ * to `looksLikeCode`. Prose does contain semicolons — a sentence ending
+ * "...the revenue summary; this screen is the platform itself" was found by
+ * the original pattern and would be lost if that pattern started excluding
+ * them. Applied only to the brace-adjacent runs, it costs nothing: a sentence
+ * long enough to need a semicolon is not a fragment beside an interpolation.
+ */
+function isSurroundingCode(text: string): boolean {
+  return (
+    /[;=]/.test(text) ||
+    /^[:.]/.test(text) ||
+    // The opening of an argument list: `(path, ` between a generic's `>` and
+    // the object literal that follows it.
+    /^\(\w+,/.test(text) ||
+    /\.[A-Za-z_]\w*\(/.test(text) ||
+    /\b(?:import|export|interface|type|function|catch|async|await|if|else|typeof|new|extends|null|undefined|void)\b/.test(
+      text,
+    )
+  );
+}
+
+/**
+ * The source with the inside of every string and template literal blanked.
+ *
+ * `${…}` inside a template literal puts a `}` next to ordinary prose, which
+ * the patterns above would read as JSX text — so a URL built from a taxpayer
+ * id would be reported as an untranslated sentence. Blanking the contents and
+ * keeping the length means positions and the surrounding punctuation are
+ * unchanged, and the strings that genuinely are shown to an agent are picked
+ * up by the prop, field and message patterns, which read the original source.
+ */
+function withoutLiterals(code: string): string {
+  const blank = (match: string) => ' '.repeat(match.length);
+  return code
+    .replace(/`(?:[^`\\]|\\.)*`/g, blank)
+    .replace(/'(?:[^'\\\n]|\\.)*'/g, blank)
+    .replace(/"(?:[^"\\\n]|\\.)*"/g, blank);
 }
 
 function englishIn(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const found: string[] = [];
 
-  for (const match of code.matchAll(/(?<![=!<>-])>([^<>{}]+)</g)) {
+  const jsx = withoutLiterals(code);
+  for (const match of jsx.matchAll(BETWEEN_TAGS)) {
     // Two or more consecutive letters is the cheapest test for "a word rather
     // than punctuation, an entity, or a fragment of an expression".
     const text = match[1].replace(/\s+/g, ' ').trim();
     if (/[A-Za-z]{2}/.test(text)) found.push(text);
+  }
+  for (const pattern of BESIDE_AN_EXPRESSION) {
+    for (const match of jsx.matchAll(pattern)) {
+      const text = match[1].replace(/\s+/g, ' ').trim();
+      if (/[A-Za-z]{2}/.test(text) && !isSurroundingCode(text)) found.push(text);
+    }
   }
   for (const match of code.matchAll(RENDERED_PROPS)) found.push(match[1].trim());
   for (const match of code.matchAll(BRACED_PROPS)) found.push(match[1].trim());

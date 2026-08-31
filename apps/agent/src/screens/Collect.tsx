@@ -252,7 +252,7 @@ export function CollectScreen({
             }}
           >
             {busy ? <Spinner /> : null}
-            Search
+            {t.actionSearch}
           </button>
         </div>
 
@@ -607,7 +607,9 @@ export function TransactionScreen({
           <p className="amount-confirm__value">
             <Money kobo={transaction.amount_kobo} />
           </p>
-          <p className="amount-confirm__label">Receipt {transaction.receipt_number}</p>
+          <p className="amount-confirm__label">
+            {t.colReceiptNumbered.replace('{{number}}', transaction.receipt_number ?? '')}
+          </p>
         </div>
       ) : acknowledged ? (
         <Alert kind="info" title={t.paymentAcknowledged}>

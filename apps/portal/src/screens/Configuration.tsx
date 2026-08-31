@@ -137,7 +137,9 @@ export function CatalogueScreen({ user }: { user: User }) {
           <div style={{ padding: '18px 18px 0' }}>
             <div className="card__header">
               <div>
-                <h2 className="card__title">Rate history — {history.item.name}</h2>
+                <h2 className="card__title">
+                  {t.ofcCfRateHistoryFor.replace('{{name}}', history.item.name)}
+                </h2>
                 <p className="card__hint">{t.ofcCfHistoricalAssessments}</p>
               </div>
               <button type="button" className="small secondary" onClick={() => setHistory(null)}>{t.ofcKycClose}</button>
@@ -659,7 +661,7 @@ function RateChangeForm({
 
   return (
     <div className="card">
-      <h2 className="card__title">Change rate — {item.name}</h2>
+      <h2 className="card__title">{t.ofcCfChangeRateFor.replace('{{name}}', item.name)}</h2>
       <p className="card__hint">{t.ofcCfCurrentVersionStays}</p>
 
       <ErrorAlert error={error} />
@@ -886,7 +888,7 @@ export function ProgrammesScreen() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: 0 }}>
-              Beneficiaries — {selectedProgramme.name}
+              {t.ofcCfBeneficiariesFor.replace('{{name}}', selectedProgramme.name)}
             </h3>
             <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>{t.ofcKycClose}</button>
           </div>

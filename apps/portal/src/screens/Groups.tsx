@@ -261,7 +261,9 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
           <div style={{ padding: '18px 18px 0' }}>
             <div className="card__header">
               <div>
-                <h2 className="card__title">Members — {members.group.name}</h2>
+                <h2 className="card__title">
+                  {t.ofcGpMembersFor.replace('{{name}}', members.group.name)}
+                </h2>
                 <p className="card__hint">{t.ofcGpMembersIntro}</p>
               </div>
               <button type="button" className="small secondary" onClick={() => setMembers(null)}>{t.ofcKycClose}</button>
@@ -315,7 +317,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                         })
                       }
                     >
-                      Record departure
+                      {t.ofcGpRecordDeparture}
                     </button>
                   ) : null,
               },
@@ -481,17 +483,19 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div className="stat">
           <p className="stat__label">{t.ofcGpRemaining}</p>
           <p className="stat__value">{round.remainingQuantity}</p>
-          <p className="stat__hint">enough for {round.beneficiariesRemaining} more</p>
+          <p className="stat__hint">
+            {t.ofcGpEnoughForMore.replace('{{n}}', String(round.beneficiariesRemaining))}
+          </p>
         </div>
       </div>
 
       {round.awardedCount > 0 && collectionRate < 60 && (
         <Alert kind="warning" title="ofcGpMostNotCollected">
           <p style={{ margin: 0 }}>
-            {round.awardedCount - round.collectedCount} beneficiaries were awarded and have not
-            turned up. That is either a distribution that is not reaching people, or names on a
-            list that do not correspond to anybody — worth establishing which before the next
-            round.
+            {t.ofcGpAwardedNotCollected.replace(
+              '{{n}}',
+              String(round.awardedCount - round.collectedCount),
+            )}
           </p>
         </Alert>
       )}

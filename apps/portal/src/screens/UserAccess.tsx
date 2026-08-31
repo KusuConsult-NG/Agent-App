@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface PortalUser {
   id: string;
@@ -29,19 +30,26 @@ interface PortalUser {
 }
 
 /**
- * What each role is for, in one line.
+ * What each role is for, in one line, in the language being read.
  *
  * Deliberately about responsibilities rather than permission names: the
  * administrator choosing a role is deciding what somebody's job is, and
  * `approval:authorise` is not a job.
+ *
+ * This was a module-level object of English sentences, which is a shape no
+ * pattern in the translation check looks at — so it stayed English through
+ * two sweeps while the labels around it were translated.
  */
-const ROLE_SUMMARY: Record<string, string> = {
-  admin: 'Administers agents, users and the revenue catalogue. Cannot authorise payouts.',
-  supervisor: 'Authorises approvals and oversees agents in their territory.',
-  revenue_officer: 'Registers and corrects taxpayer records, and reviews approvals.',
-  finance_officer: 'Reconciles settlements and authorises commission payouts.',
-  auditor: 'Reads everything and changes nothing.',
-};
+function roleSummary(t: TranslationDictionary, role: string): string {
+  const summaries: Record<string, string> = {
+    admin: t.ofcUaRoleAdmin,
+    supervisor: t.ofcUaRoleSupervisor,
+    revenue_officer: t.ofcUaRoleRevenueOfficer,
+    finance_officer: t.ofcUaRoleFinanceOfficer,
+    auditor: t.ofcUaRoleAuditor,
+  };
+  return summaries[role] ?? '';
+}
 
 const ASSIGNABLE = ['admin', 'supervisor', 'revenue_officer', 'finance_officer', 'auditor'];
 
@@ -224,9 +232,12 @@ export function UserAccessScreen({ user }: { user: User }) {
 
       {editing && (
         <div className="card">
-          <h2 className="card__title">Change access — {editing.full_name}</h2>
+          <h2 className="card__title">
+            {t.ofcUaChangeAccessFor.replace('{{name}}', editing.full_name)}
+          </h2>
           <p className="card__hint">
-            Currently {readable(editing.role)}. {ROLE_SUMMARY[editing.role] ?? ''}
+            {t.ofcUaCurrentlyRole.replace('{{role}}', readable(editing.role))}{' '}
+            {roleSummary(t, editing.role)}
           </p>
 
           <div className="field">
@@ -244,7 +255,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               ))}
             </select>
             {chosenRole && (
-              <p className="field__hint">{ROLE_SUMMARY[chosenRole] ?? ''}</p>
+              <p className="field__hint">{roleSummary(t, chosenRole)}</p>
             )}
           </div>
 
@@ -284,12 +295,10 @@ export function UserAccessScreen({ user }: { user: User }) {
 
       {closing && (
         <div className="card">
-          <h2 className="card__title">Account — {closing.full_name}</h2>
-          <p className="card__hint">
-            Suspending or closing an account signs the officer out everywhere and stops them
-            signing in again. Suspension is a pause pending an answer; closing is the end of the
-            appointment and cannot be undone — create a new account if they return.
-          </p>
+          <h2 className="card__title">
+            {t.ofcUaAccountFor.replace('{{name}}', closing.full_name)}
+          </h2>
+          <p className="card__hint">{t.ofcUaSuspendOrCloseBody}</p>
 
           <div className="field">
             <label htmlFor="new-status">{t.ofcUaNewAccountStatus}</label>
@@ -318,8 +327,7 @@ export function UserAccessScreen({ user }: { user: User }) {
           {chosenStatus === 'CLOSED' && (
             <Alert kind="warning" title="ofcUaCannotBeUndone">
               <p style={{ margin: 0 }}>
-                A closed account can never be reopened. If {closing.full_name} returns to the
-                service they will need a new account.
+                {t.ofcUaCannotReopenBody.replace('{{name}}', closing.full_name)}
               </p>
             </Alert>
           )}
@@ -350,7 +358,9 @@ export function UserAccessScreen({ user }: { user: User }) {
 
       {coverage && (
         <div className="card">
-          <h2 className="card__title">Territories — {coverage.full_name}</h2>
+          <h2 className="card__title">
+            {t.ofcUaTerritoriesFor.replace('{{name}}', coverage.full_name)}
+          </h2>
           <p className="card__hint">{t.ofcUaTerritoryIntro}</p>
 
           {!territories ? (
@@ -404,8 +414,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               {chosenTerritories.length === 0 && (
                 <Alert kind="warning" title="ofcUaWillCoverNothing">
                   <p style={{ margin: 0 }}>
-                    {coverage.full_name} will see no revenue figures at all until a territory is
-                    assigned.
+                    {t.ofcUaCoverNothingBody.replace('{{name}}', coverage.full_name)}
                   </p>
                 </Alert>
               )}
@@ -436,7 +445,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               render: (row) => (
                 <>
                   <Badge status={row.role.toUpperCase()} />{' '}
-                  <span className="list__meta">{ROLE_SUMMARY[row.role] ?? ''}</span>
+                  <span className="list__meta">{roleSummary(t, row.role)}</span>
                 </>
               ),
             },
