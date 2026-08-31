@@ -205,8 +205,38 @@ async function main() {
     );
     taxpayers.push({ ...body, name: businessName });
   }
+  /*
+   * One trader from the next Local Government Area along.
+   *
+   * The reason the search is scoped by territory and the reason an exact
+   * identifier is not are the same case, and it is an ordinary one: somebody
+   * registered in Jos South sells at a Jos North market on a Thursday. A
+   * demonstration in which every taxpayer lives where the agent works cannot
+   * show either half — the agent searching a name and correctly not finding
+   * a stranger's record, or the same agent finding them the moment the
+   * trader reads out their TIN.
+   */
+  const nextLga = lgas.find((lga) => /jos south/i.test(lga.name));
+  if (!nextLga) throw new Error('Jos South is not in the reference data.');
+  const { body: visitor } = await post(
+    '/taxpayers',
+    {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: 'Talatu',
+      lastName: 'Bawa',
+      phone: '+2348031000099',
+      address: '4 Bukuru Express Way, Jos South',
+      lgaId: nextLga.id,
+      consentGiven: true,
+      declarationAccepted: true,
+    },
+    { ...agentAuth, idempotencyKey: key('tp') },
+  );
+  taxpayers.push({ ...visitor, name: 'Talatu Bawa' });
+
   const withTin = taxpayers.filter((taxpayer) => taxpayer.tin).length;
   log(`registered ${taxpayers.length} taxpayers (${withTin} received a TIN immediately)`);
+  log(`  one of them, Talatu Bawa, is registered in ${nextLga.name} rather than ${jos.name}`);
 
   // --- assessments, invoices and payments ---------------------------------
   const collected = [];

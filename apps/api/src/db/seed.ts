@@ -1151,6 +1151,33 @@ async function seedDemoUsers(): Promise<void> {
         [user.name, user.phone, user.email, passwordHash, user.role],
       );
     }
+
+    /*
+     * The supervisor gets the territory they supervise.
+     *
+     * A supervisor's reports are bounded to the territories they hold, and
+     * this one held none — so every scoped screen answered "Your account has
+     * no territory assigned, so there is no area to list taxpayers for."
+     * That message is correct, and it is the right one for a half-configured
+     * account, which is exactly what this was: a demonstration of the role
+     * showed a supervisor who could see nothing, and somebody watching cannot
+     * tell that from a supervisor who is not allowed to.
+     *
+     * Jos North, for the same reason the demonstration agent works there: it
+     * is where the seeded taxpayers and collections are.
+     */
+    await client.query(
+      `INSERT INTO user_territories (user_id, territory_id)
+       SELECT u.id, t.id
+         FROM users u
+         JOIN territories t ON t.lga_id = (
+           SELECT id FROM lgas ORDER BY (name = 'Jos North') DESC, name LIMIT 1
+         )
+        WHERE u.phone = $1
+        LIMIT 1
+       ON CONFLICT DO NOTHING`,
+      ['+2348000000004'],
+    );
   });
 
   console.log('\n  Demonstration sign-in details (development only):');

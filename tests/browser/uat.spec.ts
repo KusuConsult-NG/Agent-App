@@ -752,6 +752,160 @@ function englishStillShowing(text: string): string[] {
   );
 }
 
+// ===========================================================================
+test.describe('The levy screens, with a levy actually chosen', () => {
+  test.use({ viewport: DESKTOP });
+
+  /*
+   * The role walk opens this screen. It does not use it.
+   *
+   * "Levies & categories" answers three questions a revenue officer's job
+   * consists of — what a levy brought in, who is registered under it, who is
+   * behind on it — and all three are empty until a levy is picked. Opening
+   * the screen and photographing the filters proves the route resolves; it
+   * says nothing about whether the questions get answered. Two of the three
+   * are also permission-gated, and a field agent must not be able to reach
+   * the register at all, so what each role sees here is worth seeing.
+   */
+  const chooseALevy = async (page: Page): Promise<string> => {
+    await page.goto(`${PORTAL}/#/levies`);
+    await page.waitForTimeout(1800);
+    const item = page.locator('#levy-item');
+    await expect(item, 'the levy picker is on the screen').toBeVisible({ timeout: 20_000 });
+
+    const options = await item.locator('option').allTextContents();
+    const shops = options.find((option) => /Shops and Kiosks/i.test(option));
+    expect(shops, 'the shops and kiosks levy is offered').toBeTruthy();
+    await item.selectOption({ label: shops! });
+    await page.waitForTimeout(2500);
+    return shops!;
+  };
+
+  test('a revenue officer gets all three answers about one levy', async ({ page }) => {
+    const console_ = watchConsole(page);
+    await signInToPortal(page, 'revenue');
+    const levy = await chooseALevy(page);
+    const name = levy.replace(/\s*\(.*\)$/, '');
+
+    const text = await page.locator('.content').innerText();
+    /*
+     * The three headings name the levy that was chosen, which is the whole
+     * point: an officer looking at two numbers has to know which levy they
+     * belong to. Asserting on the heading rather than on a total also keeps
+     * this from breaking every time the seed collects a different amount.
+     */
+    expect(text, 'what the levy brought in').toContain(`What ${name} brought in`);
+    expect(text, 'who is behind on it').toContain(`Who is behind on ${name}`);
+    expect(text, 'who is registered under it').toContain(`Who is registered under ${name}`);
+    expect(text, 'nothing was refused').not.toContain('not permitted');
+
+    await shot(page, 'portal-levies-01-revenue-officer-one-levy');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('a supervisor gets the same three answers, bounded to their own territory', async ({
+    page,
+  }) => {
+    /*
+     * "Who is registered under the shop rate in my area" is the question a
+     * supervisor's job consists of, and the enumeration guard refused it to
+     * them for a while — they hold `taxpayer:read:assigned`, which reads like
+     * a field agent's access and is not. The section is theirs, bounded to
+     * the territories they hold rather than to the state.
+     *
+     * That boundary is also why the demonstration supervisor now has a
+     * territory. Holding none is a real state and the platform says so in
+     * words an administrator can act on, but a demonstration of the role that
+     * shows nothing but that message is a demonstration of an unfinished
+     * account.
+     */
+    const console_ = watchConsole(page);
+    await signInToPortal(page, 'supervisor');
+    const levy = await chooseALevy(page);
+    const name = levy.replace(/\s*\(.*\)$/, '');
+
+    const text = await page.locator('.content').innerText();
+    expect(text, 'what the levy brought in').toContain(`What ${name} brought in`);
+    expect(text, 'who is behind on it').toContain(`Who is behind on ${name}`);
+    expect(text, 'who is registered under it').toContain(`Who is registered under ${name}`);
+    expect(text, 'nothing was refused').not.toContain('not permitted');
+    expect(text, 'the supervisor has an area to be bounded to').not.toContain(
+      'no territory assigned',
+    );
+
+    await shot(page, 'portal-levies-02-supervisor-own-territory');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
+
+// ===========================================================================
+test.describe('A trader from the next Local Government Area', () => {
+  test.use({ viewport: PHONE });
+
+  /*
+   * The case the territory scoping exists for, and the case it must not
+   * prevent, in one screen.
+   *
+   * The agent works Jos North. Talatu Bawa is registered in Jos South and is
+   * selling at a Jos North market today, which is an ordinary Thursday. A
+   * name search must not reach her: `q` is a guess, it can be varied — `a`,
+   * then `ab` — and the register is walkable to anyone patient. The phone
+   * number she reads out must reach her, because an agent who cannot serve
+   * the person in front of them is a worse outcome than the one being
+   * prevented.
+   *
+   * The API has said both of those things since the search was scoped. Only
+   * the first was true of the application: every screen sends what was typed
+   * as `q`, so the identifier carve-out was unreachable from the one box
+   * there is, and this is the test that says otherwise from the outside.
+   */
+  const searchCollectFor = async (page: Page, typed: string) => {
+    await page.goto(`${AGENT}/#/collect`);
+    await page.waitForTimeout(1500);
+    await page.locator('input[type="search"]').first().fill(typed);
+    await page.getByRole('button', { name: /^search$/i }).click();
+    await page.waitForTimeout(2500);
+    return page.locator('body').innerText();
+  };
+
+  test('is not found by name, and is found by the number she reads out', async ({ page }) => {
+    const console_ = watchConsole(page);
+    await signInToAgentApp(page);
+
+    const byName = await searchCollectFor(page, 'Talatu');
+    expect(byName, 'a name search reached into another area').not.toContain('Talatu Bawa');
+    await shot(page, 'journey-20-name-search-stays-in-area', { fullPage: false });
+
+    /*
+     * The local form, because that is how a person says a phone number. The
+     * column holds +234, so this only works if the typed text is understood
+     * as a phone number rather than matched as characters.
+     */
+    const byPhone = await searchCollectFor(page, '08031000099');
+    expect(byPhone, 'the number she read out did not reach her').toContain('Talatu Bawa');
+    await shot(page, 'journey-21-identifier-reaches-her', { fullPage: false });
+
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('is found by the taxpayer register screen too, on the same number', async ({ page }) => {
+    // The collection flow is not the only box. The register has its own, and
+    // so does the picker inside the group and vehicle screens; they send the
+    // same parameter and must behave the same way.
+    const console_ = watchConsole(page);
+    await signInToAgentApp(page);
+    await page.goto(`${AGENT}/#/taxpayers`);
+    await page.waitForTimeout(1500);
+    await page.locator('input[type="search"]').first().fill('08031000099');
+    await page.getByRole('button', { name: /^search$/i }).click();
+    await page.waitForTimeout(2500);
+
+    const text = await page.locator('body').innerText();
+    expect(text, 'the register did not find her by her number').toContain('Talatu Bawa');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
+
 /** The agent app's language switch, which announces itself differently. */
 const languageButton = (page: Page, text: string) =>
   page.getByRole('button').filter({ hasText: text }).first();
