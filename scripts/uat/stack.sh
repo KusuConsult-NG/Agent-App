@@ -25,10 +25,18 @@ export JWT_SECRET="uat-jwt-secret-value-long-enough-for-32ch"
 export IDENTITY_HASH_SECRET="uat-identity-secret-long-enough-for-32ch"
 export PAYMENT_WEBHOOK_SECRET="uat-webhook-secret-long-enough-for-32chars"
 export STORAGE_PATH="/tmp/psirs-uat-storage"
-# The demonstration stack approves a handset on registration, so a presenter's
-# own browser can collect without a second person approving it from the portal.
-# config.ts refuses to boot in production with this set.
-export DEVICE_AUTO_APPROVE=true
+# DEVICE_AUTO_APPROVE is deliberately NOT set here.
+#
+# It was, so that a presenter's own browser could collect without a second
+# person approving the handset from the portal. But the seeded handset already
+# does that job — the URL printed at the end of this script points a browser at
+# a device an officer has approved — and the flag was quietly disabling the
+# control on the way past. The browser journey registers a fresh handset,
+# watches the platform refuse to take money on it, and has an officer approve
+# it, which is how it is cleared in the field; with the flag set the handset
+# was approved on registration and that journey proved nothing. A browser that
+# arrives without the seeded device identifier is a second handset and waits
+# for an officer, exactly as the closing message says.
 export RUN_MIGRATIONS_ON_BOOT=false
 export PORT=4000
 
