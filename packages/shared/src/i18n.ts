@@ -137,6 +137,17 @@ export interface TranslationDictionary {
   errReference: string;
 
   /**
+   * The sentence a referee reads once, with a subject.
+   *
+   * It was assembled as the applicant's Local Government Area, an em dash,
+   * and a clause beginning "has applied" — so the page told a stranger
+   * "Jos North — has applied to become an authorised revenue agent." Nobody
+   * is named in the one sentence explaining what is being asked, and the
+   * thing that appears to have applied is a place.
+   */
+  pubRefereeIntroOfLga: string;
+
+  /**
    * The five role descriptions an administrator reads before changing
    * somebody's access, and the sentences around them. They sat in a
    * module-level object, which no pattern in the check looks at.
@@ -1971,6 +1982,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    pubRefereeIntroOfLga: "{{name}}, of {{lga}}, has applied to become an authorised revenue agent. PSIRS needs somebody who knows them to confirm their identity and suitability.",
     ofcUaSuspendOrCloseBody: "Suspending or closing an account signs the officer out everywhere and stops them signing in again. Suspension is a pause pending an answer; closing is the end of the appointment and cannot be undone — create a new account if they return.",
     ofcUaCoverNothingBody: "{{name}} will see no revenue figures at all until a territory is assigned.",
     ofcUaChangeAccessFor: "Change access — {{name}}",
@@ -3446,7 +3458,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyNoMatch: 'Does not match the original',
     pubVerifyPrivacy: 'For privacy, taxpayer names, phone numbers and TINs are never shown on this page.',
     pubRefereeTitle: 'Agent verification request',
-    pubRefereeIntro: 'has applied to become an authorised revenue agent. PSIRS needs someone who knows them to confirm their identity and suitability.',
+    pubRefereeIntro:
+      '{{name}} has applied to become an authorised revenue agent. PSIRS needs somebody who knows them to confirm their identity and suitability.',
     pubRefereeApplicant: 'Applicant',
     pubRefereeYouAre: 'You are recorded as',
     pubRefereeRelationship: 'Stated relationship',
@@ -3604,6 +3617,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    pubRefereeIntroOfLga: "{{name}}, na {{lga}}, ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa.",
     ofcUaSuspendOrCloseBody: "Dakatarwa ko rufe asusu yana fitar da jami’in daga ko’ina kuma yana hana shi sake shiga. Dakatarwa hutu ne har sai an sami amsa; rufewa shi ne karshen aikin kuma ba a iya warwarewa — sai an bude sabon asusu idan ya dawo.",
     ofcUaCoverNothingBody: "{{name}} ba zai ga wata lambar kudaden shiga ba ko kadan har sai an ba shi yanki.",
     ofcUaChangeAccessFor: "Canja izini — {{name}}",
@@ -5079,7 +5093,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubVerifyNoMatch: 'Bai yi daidai da na asali ba',
     pubVerifyPrivacy: 'Domin sirri, ba a taba nuna sunan mai biyan haraji, lambar waya ko TIN a wannan shafi ba.',
     pubRefereeTitle: 'Bukatar tantance wakili',
-    pubRefereeIntro: 'ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa.',
+    pubRefereeIntro:
+      '{{name}} ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa.',
     pubRefereeApplicant: 'Mai neman',
     pubRefereeYouAre: 'An rubuta ka a matsayin',
     pubRefereeRelationship: 'Alakar da aka bayyana',

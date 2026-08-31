@@ -395,8 +395,11 @@ export function RefereePortalScreen({ token }: { token: string }) {
 
         <Alert kind="info" title={{ text: t.pubRefereeNamedYou.replace('{{name}}', invitation.applicantName) }}>
           <p style={{ margin: 0 }}>
-            {invitation.applicantLga ? `${invitation.applicantLga} — ` : ''}
-            {t.pubRefereeIntro}
+            {invitation.applicantLga
+              ? t.pubRefereeIntroOfLga
+                  .replace('{{name}}', invitation.applicantName)
+                  .replace('{{lga}}', invitation.applicantLga)
+              : t.pubRefereeIntro.replace('{{name}}', invitation.applicantName)}
           </p>
         </Alert>
 
@@ -657,9 +660,14 @@ export function GroupAttestationScreen({ token }: { token: string }) {
         </div>
 
         <Alert kind="info" title={{ text: view.groupName }}>
-          <p style={{ margin: 0 }}>
-            {view.lga} — {t.pubAttestIntro}
-          </p>
+          {/*
+            * The area, which used to be pasted in front of this sentence
+            * followed by an em dash — "Jos North — PSIRS needs you to
+            * confirm..." — is three rows below in the detail list, where it
+            * is labelled. A place name is not the subject of the sentence
+            * explaining what somebody is being asked to do.
+            */}
+          <p style={{ margin: 0 }}>{t.pubAttestIntro}</p>
         </Alert>
 
         <KeyValue

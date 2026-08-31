@@ -19,6 +19,8 @@
  * Usage:  node scripts/uat/seed-uat.mjs [--api http://localhost:4000]
  */
 
+import { writeFileSync, mkdirSync } from 'node:fs';
+
 const API = process.argv.includes('--api')
   ? process.argv[process.argv.indexOf('--api') + 1]
   : (process.env.UAT_API ?? 'http://localhost:4000');
@@ -27,6 +29,16 @@ const API = process.argv.includes('--api')
 const BASE = `${API}/api/v1`;
 
 const AGENT_DEVICE = 'uat-agent-device-000001';
+
+/**
+ * Where the one-time links this run issues are written.
+ *
+ * A referee invitation and a group-leader attestation are each a token that
+ * exists in plaintext for the length of one HTTP response and is stored only
+ * as a hash. Whatever wants to open those screens later — a presenter, the
+ * browser walkthrough — has to be told by the run that created them.
+ */
+const LINKS_FILE = process.env.UAT_LINKS_FILE ?? '/tmp/psirs-uat/seed-links.json';
 const APP_VERSION = '1.0.0';
 
 let step = 0;
@@ -479,6 +491,123 @@ async function main() {
     : null;
   const ack = ackDoc?.body?.transaction ?? null;
 
+  /*
+   * THE TWO SURFACES A PERSON REACHES BY LINK AND NOTHING ELSE.
+   *
+   * A referee answering for an agent, and a group leader confirming that the
+   * members an agent recorded are real. Neither has an account; both arrive
+   * on a one-time link sent to their phone, and each is the only check on a
+   * claim nobody else can verify — that this applicant is who they say, and
+   * that these ninety names are ninety people.
+   *
+   * Both had no fixture at all. The plaintext token exists once, at the
+   * moment it is issued, and is stored only as a hash; without capturing it
+   * here neither screen can be opened in a browser by anybody, which is why
+   * neither had ever been.
+   */
+  const links = {};
+  mkdirSync(LINKS_FILE.replace(/\/[^/]+$/, ''), { recursive: true });
+
+  /*
+   * A second applicant, part way through clearance.
+   *
+   * The demonstration had exactly one agent and they were already cleared, so
+   * "Agents & clearance" and "Field application" showed an officer nothing to
+   * decide — and a referee cannot be nominated for a cleared applicant at all,
+   * which is correct and left the referee portal unreachable. This is somebody
+   * mid-application: identity submitted, referee asked, waiting.
+   */
+  const applicantPhone = '+2347010000002';
+  const applicantPassword = 'FieldAgent2026';
+  await post(
+    '/agents/apply',
+    {
+      fullName: 'Grace Dachung',
+      phone: applicantPhone,
+      email: 'grace.dachung@psirs.demo',
+      password: applicantPassword,
+      dateOfBirth: '1995-08-19',
+      gender: 'FEMALE',
+      address: '22 Zaria Road, Jos',
+      lgaId: jos.id,
+      occupation: 'Trader',
+      bankName: 'Zenith Bank',
+      bankCode: '057',
+      accountName: 'Grace Dachung',
+      accountNumber: '0123456799',
+    },
+    { allow: [400, 409, 422] },
+  );
+  const applicantToken = await login(applicantPhone, applicantPassword);
+  const nomination = await post(
+    '/agents/me/referees',
+    {
+      fullName: 'Yusuf Gyang',
+      phone: '+2348051000021',
+      email: 'yusuf.gyang@psirs.demo',
+      occupation: 'Head teacher',
+      category: 'COMMUNITY_LEADER',
+      relationship: 'Knows the applicant through the market association',
+    },
+    { token: applicantToken, idempotencyKey: key('ref'), allow: [400, 409, 422] },
+  );
+  if (nomination.body?.invitationUrl) {
+    links.referee = nomination.body.invitationUrl;
+    log('a second applicant is part way through clearance, with a referee still to answer');
+  }
+
+  const group = await post(
+    '/groups',
+    {
+      name: 'Rukuba Road Traders Association',
+      groupType: 'TRADERS_ASSOCIATION',
+      lgaId: jos.id,
+      community: 'Rukuba Road',
+      leaderName: 'Comfort Dalyop',
+      leaderPhone: '+2348051000022',
+      memberEstimate: 60,
+    },
+    { ...agentAuth, idempotencyKey: key('grp'), allow: [400, 409, 422] },
+  );
+  if (group.body?.groupId ?? group.body?.id) {
+    const groupId = group.body.groupId ?? group.body.id;
+    // An officer approves it, because members cannot be recorded until one has.
+    await post(
+      `/groups/${groupId}/review`,
+      { decision: 'APPROVE', reason: 'Demonstration fixture: a market association on file.' },
+      { token: admin, allow: [400, 409, 422] },
+    );
+    /*
+     * Members are taxpayers on the register, not names typed into a form.
+     * That is the point of the whole screen: a cooperative's membership list
+     * has to be people the platform already knows, so an allocation cannot be
+     * awarded to a name somebody invented.
+     */
+    for (const member of taxpayers.slice(0, 3)) {
+      await post(
+        `/groups/${groupId}/members`,
+        { taxpayerId: member.taxpayerId },
+        { ...agentAuth, idempotencyKey: key('mem'), allow: [400, 409, 422] },
+      );
+    }
+    const attestation = await post(
+      `/groups/${groupId}/attestation-request`,
+      {},
+      { ...agentAuth, idempotencyKey: key('att'), allow: [400, 409, 422] },
+    );
+    if (attestation.body?.invitationUrl) {
+      links.groupAttestation = attestation.body.invitationUrl;
+      log('registered a cooperative whose leader has not yet confirmed its members');
+    }
+  }
+
+  /*
+   * Written down as well as printed. A one-time link cannot be recovered from
+   * the database, so the browser walkthrough has no way to reach either screen
+   * unless the run that created them says where they are.
+   */
+  writeFileSync(LINKS_FILE, `${JSON.stringify(links, null, 2)}\n`);
+
   console.log('\nTo demonstrate public verification, at http://localhost:5174/#/verify');
   if (receipt) {
     console.log(`  receipt          ${receipt.verification_code}  (${receipt.receipt_number})`);
@@ -489,6 +618,13 @@ async function main() {
     console.log('                   answers VALID - NOT A RECEIPT, money not yet received');
   }
   console.log('  anything else    answers NOT FOUND');
+
+  if (links.referee || links.groupAttestation) {
+    console.log('\nTwo screens a person reaches only by link, both awaiting an answer:');
+    if (links.referee) console.log(`  referee        ${links.referee}`);
+    if (links.groupAttestation) console.log(`  group leader   ${links.groupAttestation}`);
+    console.log(`  (also written to ${LINKS_FILE})`);
+  }
 
   console.log('\nOpen the agent app at:');
   console.log(`  http://localhost:5173/?device=${AGENT_DEVICE}`);

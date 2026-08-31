@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1531 strings, grouped by where an agent meets them. Lower stakes
+1532 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1920,6 +1920,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `pubRefereeIntroOfLga` | {{name}}, of {{lga}}, has applied to become an authorised revenue agent. PSIRS needs somebody who knows them to confirm their identity and suitability. | {{name}}, na {{lga}}, ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa. | ☐ | |
 | `pubAttestProgress` | ({{answered}} of {{total}} answered) | (an amsa {{answered}} daga {{total}}) | ☐ | |
 | `pubRefereeNamedYou` | {{name}} has named you as their referee | {{name}} ya sanya ka a matsayin mai shaidarsa | ☐ | |
 | `pubService` | Plateau State Internal Revenue Service | Hukumar Karbar Haraji ta Jihar Filato | ☐ | |
@@ -1941,7 +1942,7 @@ instructions — but they are what an agent reads all day.
 | `pubVerifyNoMatch` | Does not match the original | Bai yi daidai da na asali ba | ☐ | |
 | `pubVerifyPrivacy` | For privacy, taxpayer names, phone numbers and TINs are never shown on this page. | Domin sirri, ba a taba nuna sunan mai biyan haraji, lambar waya ko TIN a wannan shafi ba. | ☐ | |
 | `pubRefereeTitle` | Agent verification request | Bukatar tantance wakili | ☐ | |
-| `pubRefereeIntro` | has applied to become an authorised revenue agent. PSIRS needs someone who knows them to confirm their identity and suitability. | ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa. | ☐ | |
+| `pubRefereeIntro` | {{name}} has applied to become an authorised revenue agent. PSIRS needs somebody who knows them to confirm their identity and suitability. | {{name}} ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa. | ☐ | |
 | `pubRefereeApplicant` | Applicant | Mai neman | ☐ | |
 | `pubRefereeYouAre` | You are recorded as | An rubuta ka a matsayin | ☐ | |
 | `pubRefereeRelationship` | Stated relationship | Alakar da aka bayyana | ☐ | |

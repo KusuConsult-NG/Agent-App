@@ -20,7 +20,7 @@
  */
 
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { translations } from '@psirs/shared';
 
 const PORTAL = process.env.PORTAL_URL ?? 'http://localhost:5174';
@@ -751,6 +751,118 @@ function englishStillShowing(text: string): string[] {
     text.includes(translations.en[key as keyof typeof translations.en]),
   );
 }
+
+// ===========================================================================
+/*
+ * THE TWO SURFACES A PERSON REACHES BY LINK AND NOTHING ELSE.
+ *
+ * A referee answering for an agent, and a group leader confirming that the
+ * members an agent recorded are real people. Neither has an account. Each is
+ * the only check on a claim nobody else is in a position to verify — that
+ * this applicant is who they say they are, and that these names are people —
+ * and each is the whole reason its part of the platform can be trusted.
+ *
+ * Neither had ever been opened by a test. Not for want of trying: the token
+ * in the link exists in plaintext for the length of one HTTP response and is
+ * stored only as a hash, so a fixture that does not capture it at the moment
+ * it is issued cannot reach the screen afterwards. The seed captures both
+ * now and writes them down.
+ */
+const seedLinks = (): { referee?: string; groupAttestation?: string } => {
+  const path = process.env.UAT_LINKS_FILE ?? '/tmp/psirs-uat/seed-links.json';
+  if (!existsSync(path)) return {};
+  return JSON.parse(readFileSync(path, 'utf8')) as { referee?: string; groupAttestation?: string };
+};
+
+test.describe('The two screens reached only by a link', () => {
+  test('a referee is asked about an applicant, without an account', async ({ page }) => {
+    const link = seedLinks().referee;
+    /*
+     * Skipped rather than failed when the link is absent, because it is only
+     * issued by a run that created the applicant: `stack.sh reseed` on an
+     * existing database finds the nomination already made and the token gone.
+     * `stack.sh up` recreates the database and issues both.
+     */
+    test.skip(!link, 'no referee link in this seed run — use scripts/uat/stack.sh up');
+
+    const console_ = watchConsole(page);
+    await page.goto(link!);
+    await page.waitForTimeout(2000);
+
+    const text = await page.locator('body').innerText();
+    expect(text, 'the referee is told who is asking').toContain('Grace Dachung');
+    /*
+     * And told it in a sentence with a subject. The explanation was built as
+     * the applicant's area, an em dash, and a clause starting "has applied",
+     * so the one sentence saying what is being asked named nobody and
+     * appeared to be about a Local Government Area.
+     */
+    expect(text, 'the applicant, not their area, is the one who applied').toContain(
+      'Grace Dachung, of Jos North, has applied',
+    );
+    expect(text.toLowerCase(), 'the link resolves to the questions').not.toContain(
+      'that page does not exist',
+    );
+    /*
+     * What a referee must not be shown. They are answering about a person,
+     * not being given the person's file — and the account number is the
+     * detail an applicant is least entitled to have circulated.
+     */
+    expect(text, 'no bank details on a page anybody with the link can open').not.toContain(
+      '0123456799',
+    );
+
+    await shot(page, 'public-01-referee-invitation');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('a group leader is shown the members recorded in their name', async ({ page }) => {
+    const link = seedLinks().groupAttestation;
+    test.skip(!link, 'no attestation link in this seed run — use scripts/uat/stack.sh up');
+
+    const console_ = watchConsole(page);
+    await page.goto(link!);
+    await page.waitForTimeout(2000);
+
+    const text = await page.locator('body').innerText();
+    expect(text, 'the leader is told which group this is').toContain(
+      'Rukuba Road Traders Association',
+    );
+    expect(text.toLowerCase(), 'the link resolves to the list').not.toContain(
+      'that page does not exist',
+    );
+    /*
+     * The area belongs in the labelled detail list below, not pasted in
+     * front of the sentence that explains what is being asked. It read
+     * "Jos North — PSIRS needs you to confirm which of these people..."
+     */
+    expect(text, 'the area is not the subject of the explanation').not.toContain(
+      'Jos North — PSIRS',
+    );
+    expect(text, 'the area is still shown, where it is labelled').toContain('Jos North');
+
+    await shot(page, 'public-02-group-attestation');
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  test('a token that was never issued is refused, and says nothing', async ({ page }) => {
+    /*
+     * Both screens are reachable by anybody who has the URL, so a wrong or
+     * guessed token has to be a dead end rather than a hint. "No such
+     * invitation" and "expired" are different answers and one of them tells
+     * a guesser they were close.
+     */
+    const console_ = watchConsole(page);
+    await page.goto(`${PORTAL}/#/referee/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`);
+    await page.waitForTimeout(1800);
+    const text = await page.locator('body').innerText();
+    expect(text, 'a made-up token is not answered with somebody\u2019s name').not.toContain(
+      'Grace Dachung',
+    );
+    expect(text.length, 'the page renders something rather than nothing').toBeGreaterThan(0);
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
 
 // ===========================================================================
 test.describe('The levy screens, with a levy actually chosen', () => {
