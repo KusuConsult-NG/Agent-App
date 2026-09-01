@@ -17,7 +17,7 @@ import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } fr
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { useI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -35,12 +35,12 @@ interface VehicleLookup {
 }
 
 export function VehiclesScreen({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [registration, setRegistration] = useState('');
   const [lookup, setLookup] = useState<VehicleLookup | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [items, setItems] = useState<{ id: string; name: string; code: string }[]>([]);
+  const [items, setItems] = useState<{ id: string; name: string; name_ha: string | null; code: string }[]>([]);
   const [revenueItemId, setRevenueItemId] = useState('');
   const [months, setMonths] = useState<6 | 12 | 24>(12);
   const [taxpayer, setTaxpayer] = useState<PickedTaxpayer | null>(null);
@@ -51,7 +51,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
 
   useEffect(() => {
     api
-      .get<{ id: string; name: string; code: string }[]>('/revenue/items?search=Vehicle')
+      .get<{ id: string; name: string; name_ha: string | null; code: string }[]>('/revenue/items?search=Vehicle')
       .then(setItems)
       .catch(() => setItems([]));
   }, []);
@@ -281,7 +281,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                   <option value="">{t.moreSelectRenewalType}</option>
                   {items.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.name}
+                      {localName(lang, item.name, item.name_ha)}
                     </option>
                   ))}
                 </select>
@@ -334,12 +334,13 @@ interface ReceiptRow {
   issued_at: string;
   status: string;
   revenue_item: string;
+  revenue_item_ha: string | null;
   taxpayer_name: string;
   verification_code: string;
 }
 
 export function ReceiptsScreen() {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [receipts, setReceipts] = useState<ReceiptRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -382,7 +383,7 @@ export function ReceiptsScreen() {
                   <div className="list__body">
                     <p className="list__title">{receipt.receipt_number}</p>
                     <p className="list__meta">
-                      {receipt.taxpayer_name} · {receipt.revenue_item}
+                      {receipt.taxpayer_name} · {localName(lang, receipt.revenue_item, receipt.revenue_item_ha)}
                     </p>
                   </div>
                   <span className="list__amount">
@@ -421,12 +422,13 @@ interface Wallet {
     status: string;
     transaction_reference: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
   }[];
   note: string;
 }
 
 export function CommissionScreen() {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [data, setData] = useState<Wallet | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
@@ -562,7 +564,7 @@ export function CommissionScreen() {
             {data.entries.map((entry) => (
               <li key={entry.id} className="list__item">
                 <div className="list__body">
-                  <p className="list__title">{entry.revenue_item}</p>
+                  <p className="list__title">{localName(lang, entry.revenue_item, entry.revenue_item_ha)}</p>
                   <p className="list__meta">
                     {entry.transaction_reference} ·{' '}
                     {t.moreCommissionRateOf.replace(
