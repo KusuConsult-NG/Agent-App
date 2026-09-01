@@ -34,7 +34,7 @@ export type ReportScope =
    */
   | {
       kind: 'TERRITORIES';
-      territories: { id: string; name: string; code: string; lgaId: string }[];
+      territories: { id: string; name: string; nameHa: string | null; code: string; lgaId: string }[];
     };
 
 export interface ScopeHolder {
@@ -45,9 +45,9 @@ export interface ScopeHolder {
 export async function resolveReportScope(db: Db, auth: ScopeHolder): Promise<ReportScope> {
   if (auth.permissions.includes('report:read:all')) return { kind: 'STATEWIDE' };
 
-  const rows = await query<{ id: string; name: string; code: string; lga_id: string }>(
+  const rows = await query<{ id: string; name: string; name_ha: string | null; code: string; lga_id: string }>(
     db,
-    `SELECT t.id, t.name, t.code, t.lga_id
+    `SELECT t.id, t.name, t.name_ha, t.code, t.lga_id
        FROM user_territories ut
        JOIN territories t ON t.id = ut.territory_id
       WHERE ut.user_id = $1 AND t.status = 'ACTIVE'
@@ -60,6 +60,7 @@ export async function resolveReportScope(db: Db, auth: ScopeHolder): Promise<Rep
     territories: rows.map((row) => ({
       id: row.id,
       name: row.name,
+      nameHa: row.name_ha,
       code: row.code,
       lgaId: row.lga_id,
     })),
@@ -125,9 +126,9 @@ export function lgaScopeSql(alias: string, flagIndex: number, idsIndex: number):
  * is a different question with a different answer for the same person.
  */
 export async function territoriesForOfficer(db: Db, userId: string) {
-  return query<{ id: string; name: string; code: string; lga_name: string }>(
+  return query<{ id: string; name: string; name_ha: string | null; code: string; lga_name: string }>(
     db,
-    `SELECT t.id, t.name, t.code, l.name AS lga_name
+    `SELECT t.id, t.name, t.name_ha, t.code, l.name AS lga_name
        FROM user_territories ut
        JOIN territories t ON t.id = ut.territory_id
        JOIN lgas l ON l.id = t.lga_id
@@ -177,9 +178,9 @@ export async function resolveTaxpayerReach(db: Db, auth: ScopeHolder & { userId:
    * is still an agent, and answering OFFICER for them would offer them the
    * register of any territory somebody later assigned to their user account.
    */
-  const agent = await query<{ id: string; name: string; code: string; lga_id: string }>(
+  const agent = await query<{ id: string; name: string; name_ha: string | null; code: string; lga_id: string }>(
     db,
-    `SELECT t.id, t.name, t.code, t.lga_id
+    `SELECT t.id, t.name, t.name_ha, t.code, t.lga_id
        FROM agents a
        LEFT JOIN territories t ON t.id = a.territory_id AND t.status = 'ACTIVE'
       WHERE a.user_id = $1`,
@@ -199,9 +200,9 @@ export async function resolveTaxpayerReach(db: Db, auth: ScopeHolder & { userId:
    * list: "no record matches" and "your account has no territory" are
    * different facts, and only one of them is about the person searched for.
    */
-  const officer = await query<{ id: string; name: string; code: string; lga_id: string }>(
+  const officer = await query<{ id: string; name: string; name_ha: string | null; code: string; lga_id: string }>(
     db,
-    `SELECT t.id, t.name, t.code, t.lga_id
+    `SELECT t.id, t.name, t.name_ha, t.code, t.lga_id
        FROM user_territories ut
        JOIN territories t ON t.id = ut.territory_id
       WHERE ut.user_id = $1 AND t.status = 'ACTIVE'
@@ -212,13 +213,14 @@ export async function resolveTaxpayerReach(db: Db, auth: ScopeHolder & { userId:
 }
 
 function territoriesScope(
-  rows: { id: string; name: string; code: string; lga_id: string }[],
+  rows: { id: string; name: string; name_ha: string | null; code: string; lga_id: string }[],
 ): ReportScope {
   return {
     kind: 'TERRITORIES',
     territories: rows.map((row) => ({
       id: row.id,
       name: row.name,
+      nameHa: row.name_ha,
       code: row.code,
       lgaId: row.lga_id,
     })),

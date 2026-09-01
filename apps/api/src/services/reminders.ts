@@ -71,6 +71,7 @@ interface DueInvoice {
   id: string;
   taxpayer_id: string;
   revenue_item_name: string;
+  revenue_item_name_ha: string | null;
   total_amount_kobo: string;
   expires_at: Date;
   tin: string | null;
@@ -102,6 +103,7 @@ async function processWindow(
        i.id,
        i.taxpayer_id,
        ri.name AS revenue_item_name,
+       ri.name_ha AS revenue_item_name_ha,
        i.total_amount_kobo::text,
        i.expires_at,
        t.tin
@@ -171,6 +173,7 @@ async function processWindow(
             dueDate,
             amount: invoice.total_amount_kobo,
             revenueItem: invoice.revenue_item_name,
+            revenueItemHa: invoice.revenue_item_name_ha ?? invoice.revenue_item_name,
             tinNumber: invoice.tin ?? 'Pending',
             portalUrl: citizenPortalUrl(),
           },

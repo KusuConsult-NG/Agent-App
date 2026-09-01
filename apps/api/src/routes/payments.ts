@@ -271,7 +271,7 @@ receiptRouter.get(
           pool,
           `SELECT r.id, r.receipt_number, r.amount_kobo, r.issued_at, r.status,
                   r.verification_code, r.document_id,
-                  t.transaction_reference, ri.name AS revenue_item,
+                  t.transaction_reference, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
                   COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name
              FROM receipts r
              JOIN transactions t ON t.id = r.transaction_id
@@ -289,7 +289,7 @@ receiptRouter.get(
 
 const RECEIPT_DETAIL_SQL = `
   SELECT r.*, t.transaction_reference, t.agent_id AS collected_by_agent_id,
-         ri.name AS revenue_item,
+         ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
          p.gateway_reference, p.payment_method, p.paid_at
     FROM receipts r
     JOIN transactions t ON t.id = r.transaction_id

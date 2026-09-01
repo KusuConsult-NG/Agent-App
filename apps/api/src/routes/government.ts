@@ -266,7 +266,8 @@ governmentRouter.get(
         pool,
         `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.status,
                 t.created_at, t.verified_at, t.settled_at,
-                ri.name AS revenue_item, rc.name AS revenue_category,
+                ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+                rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
                 l.name AS lga, ag.agent_code,
                 COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name,
                 tp.tin, r.receipt_number, p.gateway_reference, p.payment_method
@@ -834,7 +835,7 @@ governmentRouter.get(
       assigned: await territoriesForOfficer(pool, req.params.id),
       available: await query(
         pool,
-        `SELECT t.id, t.name, t.code, l.name AS lga_name
+        `SELECT t.id, t.name, t.name_ha, t.code, l.name AS lga_name
            FROM territories t JOIN lgas l ON l.id = t.lga_id
           WHERE t.status = 'ACTIVE'
           ORDER BY l.name, t.name`,
@@ -1560,9 +1561,9 @@ governmentRouter.post(
   '/programmes/:id/evaluate-all',
   requirePermission('incentive:configure'),
   asyncHandler(async (req, res) => {
-    const programme = await queryOne<{ id: string; name: string }>(
+    const programme = await queryOne<{ id: string; name: string; name_ha: string | null }>(
       pool,
-      `SELECT id, name FROM incentive_programmes WHERE id = $1`,
+      `SELECT id, name, name_ha FROM incentive_programmes WHERE id = $1`,
       [req.params.id],
     );
     if (!programme) throw notFound('Incentive programme');
@@ -1680,7 +1681,7 @@ governmentRouter.get(
     res.json(
       await query(
         pool,
-        `SELECT t.id, t.name, t.code, l.name AS lga_name,
+        `SELECT t.id, t.name, t.name_ha, t.code, l.name AS lga_name,
                 (SELECT count(*) FROM agents a WHERE a.territory_id = t.id) AS agent_count
            FROM territories t JOIN lgas l ON l.id = t.lga_id
           WHERE t.status = 'ACTIVE' ORDER BY l.name, t.name`,

@@ -88,13 +88,14 @@ export async function executiveDashboard(
     ),
     query(
       db,
-      `SELECT rc.name AS category, count(t.id)::text AS transactions,
+      `SELECT rc.name AS category, rc.name_ha AS category_ha,
+              count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
         WHERE t.status IN ${REVENUE_STATES} AND ${tx}
-        GROUP BY rc.name ORDER BY SUM(t.amount_kobo) DESC`,
+        GROUP BY rc.name, rc.name_ha ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
     query(
@@ -124,13 +125,15 @@ export async function executiveDashboard(
     ),
     query(
       db,
-      `SELECT COALESCE(m.name, 'PSIRS (direct)') AS mda, count(t.id)::text AS transactions,
+      `SELECT COALESCE(m.name, 'PSIRS (direct)') AS mda,
+              COALESCE(m.name_ha, 'PSIRS (kai tsaye)') AS mda_ha,
+              count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          LEFT JOIN mdas m ON m.id = ri.mda_id
         WHERE t.status IN ${REVENUE_STATES} AND ${tx}
-        GROUP BY m.name ORDER BY SUM(t.amount_kobo) DESC`,
+        GROUP BY m.name, m.name_ha ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
     query(
@@ -332,7 +335,7 @@ export async function agentToday(db: Db, agentId: string) {
     query(
       db,
       `SELECT t.transaction_reference, t.amount_kobo, t.status, t.created_at,
-              ri.name AS revenue_item,
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
               COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name,
               r.receipt_number
          FROM transactions t
@@ -368,7 +371,8 @@ export async function transactionsByAgent(
   return query(
     db,
     `SELECT t.transaction_reference, t.amount_kobo, t.status, t.created_at, t.verified_at,
-            ri.name AS revenue_item, l.name AS lga, r.receipt_number,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            l.name AS lga, r.receipt_number,
             p.gateway_reference, p.payment_method
        FROM transactions t
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -409,7 +413,7 @@ export async function reversedAfterSuccess(
 export async function rateChangeHistory(db: Db, params: { revenueItemId?: string } = {}) {
   return query(
     db,
-    `SELECT ri.code, ri.name, r.version, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
+    `SELECT ri.code, ri.name, ri.name_ha, r.version, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
             r.minimum_amount_kobo, r.maximum_amount_kobo, r.effective_from, r.effective_to,
             u.full_name AS changed_by, r.created_at, ap.id AS approval_id,
             ap.requested_reason, ap.decision_reason
@@ -582,7 +586,7 @@ export async function revenueByMda(
   const { statewide, territoryIds } = scopeParams(scope);
   return query(
     db,
-    `SELECT m.name AS mda, m.code,
+    `SELECT m.name AS mda, m.name_ha AS mda_ha, m.code,
             count(DISTINCT ri.id)::text AS revenue_items,
             count(t.id)::text AS transactions,
             COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
@@ -592,7 +596,7 @@ export async function revenueByMda(
             AND t.status IN ${REVENUE_STATES}
             AND t.created_at BETWEEN $1 AND $2
             AND ${transactionScopeSql('t', 3, 4)}
-      GROUP BY m.name, m.code
+      GROUP BY m.name, m.name_ha, m.code
       ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC, m.name`,
     [from, to, statewide, territoryIds],
   );
@@ -663,6 +667,7 @@ export async function agentCollectionMap(
     db,
     `SELECT a.agent_code, u.full_name,
             COALESCE(ter.name, 'No territory') AS territory,
+            COALESCE(ter.name_ha, 'Babu yanki') AS territory_ha,
             count(t.id)::text AS transactions,
             COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
             count(DISTINCT t.lga_id)::text AS lgas_worked,
@@ -751,7 +756,7 @@ export async function localGovernmentRemittance(
   return query(
     db,
     `WITH council_revenue AS (
-       SELECT t.lga_id, ri.id AS item_id, ri.code, ri.name,
+       SELECT t.lga_id, ri.id AS item_id, ri.code, ri.name, ri.name_ha,
               count(t.id) AS transactions,
               SUM(t.amount_kobo) AS amount_kobo
          FROM transactions t
@@ -766,7 +771,7 @@ export async function localGovernmentRemittance(
             SELECT 1 FROM revenue_item_rates r
              WHERE r.revenue_item_id = ri.id AND r.lga_id IS NOT NULL
           )
-        GROUP BY t.lga_id, ri.id, ri.code, ri.name
+        GROUP BY t.lga_id, ri.id, ri.code, ri.name, ri.name_ha
      )
      SELECT l.name AS lga, l.zone,
             COALESCE(SUM(cr.transactions),0)::text AS transactions,
@@ -1154,13 +1159,14 @@ export async function revenueByCategory(
     query<{
       category_id: string;
       category: string;
+      category_ha: string | null;
       transactions: string;
       amount_kobo: string;
       settled_kobo: string;
       taxpayers: string;
     }>(
       db,
-      `SELECT rc.id AS category_id, rc.name AS category,
+      `SELECT rc.id AS category_id, rc.name AS category, rc.name_ha AS category_ha,
               count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
               COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status = 'SETTLED'),0)::text
@@ -1170,15 +1176,17 @@ export async function revenueByCategory(
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
         WHERE ${where}
-        GROUP BY rc.id, rc.name
+        GROUP BY rc.id, rc.name, rc.name_ha
         ORDER BY SUM(t.amount_kobo) DESC`,
       values,
     ),
     query<{
       category_id: string;
       category: string;
+      category_ha: string | null;
       revenue_item_id: string;
       revenue_item: string;
+      revenue_item_ha: string | null;
       code: string;
       transactions: string;
       amount_kobo: string;
@@ -1186,8 +1194,9 @@ export async function revenueByCategory(
       taxpayers: string;
     }>(
       db,
-      `SELECT rc.id AS category_id, rc.name AS category,
-              ri.id AS revenue_item_id, ri.name AS revenue_item, ri.code,
+      `SELECT rc.id AS category_id, rc.name AS category, rc.name_ha AS category_ha,
+              ri.id AS revenue_item_id, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              ri.code,
               count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
               COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status = 'SETTLED'),0)::text
@@ -1197,7 +1206,7 @@ export async function revenueByCategory(
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
         WHERE ${where}
-        GROUP BY rc.id, rc.name, ri.id, ri.name, ri.code
+        GROUP BY rc.id, rc.name, rc.name_ha, ri.id, ri.name, ri.name_ha, ri.code
         ORDER BY SUM(t.amount_kobo) DESC`,
       values,
     ),
@@ -1282,7 +1291,9 @@ export async function defaultersByCategory(
     phone: string;
     lga: string;
     category: string;
+    category_ha: string | null;
     revenue_item: string;
+    revenue_item_ha: string | null;
     invoices: string;
     outstanding_kobo: string;
     oldest_due: Date | null;
@@ -1292,7 +1303,8 @@ export async function defaultersByCategory(
             COALESCE(tp.business_name,
                      trim(COALESCE(tp.first_name,'') || ' ' || COALESCE(tp.last_name,''))) AS name,
             tp.tin, tp.phone, l.name AS lga,
-            rc.name AS category, ri.name AS revenue_item,
+            rc.name AS category, rc.name_ha AS category_ha,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             count(DISTINCT i.id)::text AS invoices,
             SUM(i.total_amount_kobo - i.amount_paid_kobo)::text AS outstanding_kobo,
             min(i.expires_at) AS oldest_due
@@ -1303,10 +1315,8 @@ export async function defaultersByCategory(
        JOIN taxpayers tp ON tp.id = i.taxpayer_id
        JOIN lgas l ON l.id = tp.lga_id
       WHERE ${conditions.join(' AND ')}
-      -- Grouped on the source columns rather than the output alias: "name" is
-      -- ambiguous against l.name and rc.name, which are in the select list too.
       GROUP BY tp.id, tp.business_name, tp.first_name, tp.last_name,
-               tp.tin, tp.phone, l.name, rc.name, ri.name
+               tp.tin, tp.phone, l.name, rc.name, rc.name_ha, ri.name, ri.name_ha
       ORDER BY SUM(i.total_amount_kobo - i.amount_paid_kobo) DESC
       LIMIT $${values.length}`,
     values,

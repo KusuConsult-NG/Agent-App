@@ -6288,3 +6288,14 @@ export const translations: Record<Language, TranslationDictionary> = {
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {
   return translations[lang] || translations.en;
 }
+
+/**
+ * Pick the Hausa name when the UI language is Hausa, falling back to English.
+ *
+ * Every reference-data row now carries `name` (English) and `name_ha`
+ * (Hausa, nullable). This helper keeps the fallback in one place so
+ * thirty rendering sites don't each re-implement it.
+ */
+export function localName(lang: Language, name: string, nameHa: string | null | undefined): string {
+  return lang === 'ha' && nameHa ? nameHa : name;
+}

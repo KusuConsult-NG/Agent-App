@@ -37,8 +37,10 @@ export interface ObligationRecord {
   revenueItemId: string;
   code: string;
   name: string;
+  name_ha: string | null;
   frequency: string;
   categoryName: string;
+  categoryNameHa: string | null;
   source: string;
   status: string;
   notes: string | null;
@@ -103,8 +105,10 @@ export async function getObligationsForTaxpayer(
        o.revenue_item_id  AS "revenueItemId",
        ri.code,
        ri.name,
+       ri.name_ha,
        ri.frequency,
        rc.name            AS "categoryName",
+       rc.name_ha         AS "categoryNameHa",
        o.source,
        o.status,
        o.notes,

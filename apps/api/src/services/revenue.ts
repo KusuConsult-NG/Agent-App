@@ -28,7 +28,7 @@ import { recordAudit } from './audit';
 export async function listCategories(db: Db, options: { authorityId?: string } = {}) {
   return query(
     db,
-    `SELECT rc.id, rc.name, rc.code, rc.description, ra.name AS authority_name, ra.tier,
+    `SELECT rc.id, rc.name, rc.name_ha, rc.code, rc.description, ra.name AS authority_name, ra.name_ha AS authority_name_ha, ra.tier,
             (SELECT count(*) FROM revenue_items ri
               WHERE ri.category_id = rc.id AND ri.status = 'ACTIVE') AS item_count
        FROM revenue_categories rc
@@ -64,10 +64,11 @@ export async function listItems(
 ) {
   return query(
     db,
-    `SELECT ri.id, ri.code, ri.name, ri.description, ri.frequency, ri.self_assessable,
+    `SELECT ri.id, ri.code, ri.name, ri.name_ha, ri.description, ri.frequency, ri.self_assessable,
             ri.required_documents, ri.assessment_rules, ri.commission_eligible,
-            rc.name AS category_name, rc.id AS category_id,
-            m.name AS mda_name, ra.name AS authority_name,
+            rc.name AS category_name, rc.name_ha AS category_name_ha, rc.id AS category_id,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
+            ra.name AS authority_name, ra.name_ha AS authority_name_ha,
             r.id AS rate_id, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
             r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version,
             ri.status, ri.status_reason, ri.status_changed_at
@@ -153,7 +154,9 @@ export async function resolveRate(
 export interface QuoteResult {
   revenueItemId: string;
   revenueItemName: string;
+  revenueItemNameHa: string | null;
   categoryName: string;
+  categoryNameHa: string | null;
   rateVersionId: string;
   rateVersion: number;
   amountKobo: Kobo;
@@ -176,11 +179,13 @@ export async function quote(
   const item = await queryOne<{
     id: string;
     name: string;
+    name_ha: string | null;
     category_name: string;
+    category_name_ha: string | null;
     assessment_rules: { serviceChargeKobo?: string } | null;
   }>(
     db,
-    `SELECT ri.id, ri.name, rc.name AS category_name, ri.assessment_rules
+    `SELECT ri.id, ri.name, ri.name_ha, rc.name AS category_name, rc.name_ha AS category_name_ha, ri.assessment_rules
        FROM revenue_items ri JOIN revenue_categories rc ON rc.id = ri.category_id
       WHERE ri.id = $1 AND ri.status = 'ACTIVE'`,
     [params.revenueItemId],
@@ -198,7 +203,9 @@ export async function quote(
   return {
     revenueItemId: item.id,
     revenueItemName: item.name,
+    revenueItemNameHa: item.name_ha,
     categoryName: item.category_name,
+    categoryNameHa: item.category_name_ha,
     rateVersionId: rate.id,
     rateVersion: rate.version,
     amountKobo: computation.amountKobo,
@@ -632,7 +639,8 @@ export async function getObligations(db: Db, taxpayerId: string) {
     `SELECT i.id AS invoice_id, i.invoice_number, i.total_amount_kobo, i.amount_paid_kobo,
             i.status, i.expires_at, i.issued_at,
             a.assessment_number, a.period_label,
-            ri.name AS revenue_item, rc.name AS revenue_category,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             t.id AS transaction_id, t.transaction_reference, t.status AS transaction_status
        FROM invoices i
        JOIN assessments a ON a.id = i.assessment_id

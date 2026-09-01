@@ -470,7 +470,7 @@ export async function listRounds(db: Db, options: { programmeId?: string; limit?
     db,
     `SELECT r.id, r.name, r.unit, r.total_quantity, r.quantity_per_beneficiary,
             r.status, r.collection_point, r.opens_at, r.closes_at,
-            p.name AS programme_name,
+            p.name AS programme_name, p.name_ha AS programme_name_ha,
             COALESCE(SUM(a.quantity) FILTER (WHERE a.status <> 'FORFEITED'), 0)::text AS awarded_quantity,
             count(a.id) FILTER (WHERE a.status = 'COLLECTED')::text AS collected_count,
             count(a.id) FILTER (WHERE a.status <> 'FORFEITED')::text AS awarded_count
@@ -478,7 +478,7 @@ export async function listRounds(db: Db, options: { programmeId?: string; limit?
        JOIN incentive_programmes p ON p.id = r.programme_id
        LEFT JOIN incentive_awards a ON a.round_id = r.id
       WHERE ($1::uuid IS NULL OR r.programme_id = $1)
-      GROUP BY r.id, p.name
+      GROUP BY r.id, p.name, p.name_ha
       ORDER BY r.created_at DESC
       LIMIT $2`,
     [options.programmeId ?? null, options.limit ?? 100],

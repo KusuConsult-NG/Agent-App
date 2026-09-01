@@ -67,8 +67,11 @@ export async function issueReceipt(
     business_name: string | null;
     tin: string | null;
     revenue_item: string;
+    revenue_item_ha: string | null;
     revenue_category: string;
+    revenue_category_ha: string | null;
     mda_name: string | null;
+    mda_name_ha: string | null;
     lga_name: string;
     period_label: string | null;
     agent_code: string | null;
@@ -80,7 +83,9 @@ export async function issueReceipt(
     client,
     `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.taxpayer_id,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
-            ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
             l.name AS lga_name, a.period_label, ag.agent_code,
             p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
        FROM transactions t
@@ -222,8 +227,11 @@ export async function issueAcknowledgement(
     business_name: string | null;
     tin: string | null;
     revenue_item: string;
+    revenue_item_ha: string | null;
     revenue_category: string;
+    revenue_category_ha: string | null;
     mda_name: string | null;
+    mda_name_ha: string | null;
     lga_name: string;
     period_label: string | null;
     agent_code: string | null;
@@ -235,7 +243,9 @@ export async function issueAcknowledgement(
     client,
     `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.taxpayer_id,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
-            ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
             l.name AS lga_name, a.period_label, ag.agent_code,
             p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
        FROM transactions t
@@ -307,6 +317,7 @@ export interface PublicVerificationResult {
   documentNumber?: string;
   documentType?: string;
   revenueType?: string;
+  revenueTypeHa?: string | null;
   amountKobo?: string;
   issuedAt?: string;
   lga?: string;
@@ -348,6 +359,7 @@ export async function verifyPublicly(
     issued_at: Date;
     status: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
     lga_name: string;
     storage_reference: string | null;
     checksum: string | null;
@@ -355,7 +367,8 @@ export async function verifyPublicly(
   }>(
     db,
     `SELECT r.receipt_number, r.amount_kobo, r.issued_at, r.status,
-            ri.name AS revenue_item, l.name AS lga_name,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            l.name AS lga_name,
             d.storage_reference, d.checksum, d.document_number
        FROM receipts r
        JOIN transactions t ON t.id = r.transaction_id
@@ -379,6 +392,7 @@ export async function verifyPublicly(
         status: receipt.status === 'REVERSED' || receipt.status === 'REFUNDED' ? 'REVERSED' : 'INVALID',
         receiptNumber: receipt.receipt_number,
         revenueType: receipt.revenue_item,
+        revenueTypeHa: receipt.revenue_item_ha,
         amountKobo: receipt.amount_kobo,
         issuedAt: receipt.issued_at.toISOString(),
         lga: receipt.lga_name,
@@ -406,6 +420,7 @@ export async function verifyPublicly(
       documentNumber: receipt.document_number ?? undefined,
       documentType: 'RECEIPT',
       revenueType: receipt.revenue_item,
+      revenueTypeHa: receipt.revenue_item_ha,
       amountKobo: receipt.amount_kobo,
       issuedAt: receipt.issued_at.toISOString(),
       lga: receipt.lga_name,
