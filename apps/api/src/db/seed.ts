@@ -411,7 +411,7 @@ const STATE_CATALOGUE: {
       {
         code: 'ROAD-TAX',
         mda: 'MDA-TRANS',
-        name: 'Road Taxes',
+        name: 'Road Tax',
         nameHa: 'Harajin Hanya',
         rateType: 'FIXED',
         fixedNaira: '7500',
@@ -427,8 +427,8 @@ const STATE_CATALOGUE: {
       { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', nameHa: 'Kudin Hakkin Zama', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
       { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', nameHa: 'Kudin Amfani da Fili', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
       { code: 'PROPERTY-TAX', name: 'Property Tax', nameHa: 'Harajin Kadarori', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
-      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', nameHa: 'Kudin Rajista Sunan Titi', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
-      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', nameHa: 'Kudin Kula da Kayayyakin More Rayuwa', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'STREET-NAMING', name: 'Street Naming Registration Fees', nameHa: 'Kudin Rajista Sunan Titi', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
+      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Levy', nameHa: 'Kudin Kula da Kayayyakin More Rayuwa', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
     ],
   },
   {
@@ -436,10 +436,10 @@ const STATE_CATALOGUE: {
     categoryHa: 'Ciniki, Kasuwanni da Kayayyaki',
     code: 'TRADE',
     items: [
-      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', nameHa: 'Harajin Kasuwa', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'MARKET-LEVY', name: 'Market Tax and Levy', nameHa: 'Harajin Kasuwa', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
       { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', nameHa: 'Harajin Cinikin Dabbobi', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
       { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', nameHa: 'Harajin Sayar da Kayayyaki', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
-      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', nameHa: 'Kudin Mahauta / Wurin Yanka', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
+      { code: 'ABATTOIR-FEE', name: 'Slaughter/Abattoir Fees', nameHa: 'Kudin Mahauta / Wurin Yanka', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
     ],
   },
   {
@@ -457,7 +457,7 @@ const STATE_CATALOGUE: {
     categoryHa: 'Muhalli, Hakar Ma\'adinai da Tsaro',
     code: 'ENV',
     items: [
-      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', nameHa: 'Kudin Kare Muhalli', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'ECOLOGICAL-FEE', name: 'Environmental/Ecological Fees', nameHa: 'Kudin Kare Muhalli', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
       { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', nameHa: 'Kudin Hakar Ma\'adinai da Dutse', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
       { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', nameHa: 'Kudin Kashe Gobara', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
     ],
@@ -481,7 +481,7 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
     { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', nameHa: 'Kudin Shaguna da Rumfuna', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
     { code: 'TENEMENT-RATES', name: 'Tenement Rates', nameHa: 'Kudin Gidaje', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
     { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', nameHa: 'Kudin Wurin Yanka', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
-    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', nameHa: 'Kudin Tasha', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
+    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levy', nameHa: 'Kudin Tasha', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
     { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', nameHa: 'Kudin Lasisin Dabbobin Gida', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
     { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', nameHa: 'Kudin Rajista Aure, Haihuwa da Mutuwa', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
   ],
@@ -1038,7 +1038,7 @@ async function seedReferenceData(): Promise<void> {
       `INSERT INTO commission_policies
          (name, code, rate_basis_points, hold_period_hours, settlement_schedule,
           requires_settlement_confirmation, effective_from)
-       VALUES ('Standard grassroots agent incentive','STANDARD',$1,$2,'WEEKLY',true, now())
+       VALUES ('Standard Grassroots Agent Incentive','STANDARD',$1,$2,'WEEKLY',true, now())
        ON CONFLICT (code) DO NOTHING`,
       [config.commission.defaultBasisPoints, config.commission.defaultHoldPeriodHours],
     );
