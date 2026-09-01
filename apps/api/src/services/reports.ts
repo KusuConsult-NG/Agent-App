@@ -682,7 +682,7 @@ export async function agentCollectionMap(
       WHERE t.status IN ${REVENUE_STATES}
         AND t.created_at BETWEEN $1 AND $2
         AND ${transactionScopeSql('t', 3, 4)}
-      GROUP BY a.agent_code, u.full_name, ter.name
+      GROUP BY a.agent_code, u.full_name, ter.name, ter.name_ha
       ORDER BY SUM(t.amount_kobo) DESC
       LIMIT $5`,
     [from, to, statewide, territoryIds, params.limit ?? 100],
