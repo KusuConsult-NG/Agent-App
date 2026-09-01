@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
 import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface TransactionRow {
   transaction_reference: string;
@@ -89,7 +90,7 @@ export function TransactionsScreen() {
               <option value="">{t.ofcAllStatuses}</option>
               {STATUSES.map((status) => (
                 <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
+                  {enumLabel(status, t)}
                 </option>
               ))}
             </select>

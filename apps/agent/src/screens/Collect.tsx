@@ -20,6 +20,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+import { enumLabel } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -796,7 +797,7 @@ export function TransactionScreen({
           {data.events.map((event, index) => (
             <li key={index} className="list__item">
               <div className="list__body">
-                <p className="list__title">{event.to_status.replace(/_/g, ' ')}</p>
+                <p className="list__title">{enumLabel(event.to_status, t)}</p>
                 <p className="list__meta">
                   {new Date(event.created_at).toLocaleString('en-NG')}
                   {event.reason ? ` · ${event.reason}` : ''}

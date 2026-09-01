@@ -13,6 +13,7 @@ import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../
 import { KycDocumentsCard } from './KycDocuments';
 import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface KycDashboard {
   counts: Record<string, string>;
@@ -793,8 +794,7 @@ export function RefereesScreen() {
             {t.ofcAgRiskFlagFor.replace('{{name}}', reviewing.full_name)}
           </h2>
           <p className="card__hint">
-            {String(reviewing.rule).replace(/_/g, ' ').toLowerCase()}. Record what you found: it is
-            the only account of why this flag was left open, upheld or set aside.
+            {enumLabel(String(reviewing.rule), t)}. {t.ofcAgRecordWhatYouFound}
           </p>
 
           <div className="field">

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel, type TranslationDictionary } from '@psirs/shared';
 
 interface PortalUser {
   id: string;
@@ -52,8 +52,6 @@ function roleSummary(t: TranslationDictionary, role: string): string {
 }
 
 const ASSIGNABLE = ['admin', 'supervisor', 'revenue_officer', 'finance_officer', 'auditor'];
-
-const readable = (role: string) => role.replace(/_/g, ' ');
 
 type AccountStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 
@@ -107,13 +105,13 @@ export function UserAccessScreen({ user }: { user: User }) {
   useEffect(load, [load]);
 
   const blockedBecause = ((): string | null => {
-    if (!chosenRole) return 'Choose the role this officer should hold.';
+    if (!chosenRole) return t.ofcUaChooseRoleFirst;
     if (editing && chosenRole === editing.role) {
-      return `${editing.full_name} already holds the ${readable(chosenRole)} role.`;
+      return t.ofcUaAlreadyHolds
+        .replace('{{name}}', editing.full_name)
+        .replace('{{role}}', enumLabel(chosenRole, t));
     }
-    if (reason.trim().length < 10) {
-      return 'Say why this access is changing, in at least 10 characters. It is the only record of why.';
-    }
+    if (reason.trim().length < 10) return t.ofcUaSayWhy;
     return null;
   })();
 
@@ -236,7 +234,7 @@ export function UserAccessScreen({ user }: { user: User }) {
             {t.ofcUaChangeAccessFor.replace('{{name}}', editing.full_name)}
           </h2>
           <p className="card__hint">
-            {t.ofcUaCurrentlyRole.replace('{{role}}', readable(editing.role))}{' '}
+            {t.ofcUaCurrentlyRole.replace('{{role}}', enumLabel(editing.role, t))}{' '}
             {roleSummary(t, editing.role)}
           </p>
 
@@ -250,7 +248,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               <option value="">{t.ofcUaSelectRole}</option>
               {ASSIGNABLE.map((role) => (
                 <option key={role} value={role}>
-                  {readable(role)}
+                  {enumLabel(role, t)}
                 </option>
               ))}
             </select>

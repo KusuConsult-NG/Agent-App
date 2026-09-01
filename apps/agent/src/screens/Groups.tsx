@@ -32,6 +32,7 @@ import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicke
 import { Alert, Badge, Empty, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel } from '@psirs/shared';
 
 interface GroupRow {
   id: string;
@@ -76,13 +77,13 @@ const GROUP_TYPES: { value: string; label: keyof TranslationDictionary }[] = [
   { value: 'OTHER', label: 'grpOther' },
 ];
 
-const readable = (value: string, t: TranslationDictionary) => {
-  const type = GROUP_TYPES.find((candidate) => candidate.value === value);
-  // A type the app does not know still has to read as something.
-  return type
-    ? t[type.label]
-    : value.replace(/_/g, ' ').toLowerCase().replace(/^./, (c) => c.toUpperCase());
-};
+/*
+ * This screen used to carry its own value-to-key list, and so did the support
+ * screen, and so did four screens in the portal. Every one of them was a copy
+ * of the same idea with its own gaps — the group types were translated here
+ * and rendered in English by the officer looking at the same group.
+ */
+const readable = (value: string, t: TranslationDictionary) => enumLabel(value, t);
 
 // ===========================================================================
 // The list

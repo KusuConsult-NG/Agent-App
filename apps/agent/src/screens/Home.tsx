@@ -5,6 +5,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel } from '@psirs/shared';
 
 interface HomeData {
   today: { collected_kobo: string; successful: string; total: string; pending: string };
@@ -151,7 +152,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
                     <p className="list__title">{transaction.taxpayer_name}</p>
                     <p className="list__meta">
                       {transaction.revenue_item} ·{' '}
-                      {transaction.receipt_number ?? transaction.status.replace(/_/g, ' ').toLowerCase()}
+                      {transaction.receipt_number ?? enumLabel(transaction.status, t)}
                     </p>
                   </div>
                   <span className="list__amount">

@@ -41,6 +41,7 @@ import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel } from '@psirs/shared';
 
 export function App() {
   const { t } = usePortalI18n();
@@ -154,7 +155,7 @@ export function App() {
         <div className="sidebar__footer">
           <p style={{ margin: '0 0 2px', color: '#fff', fontWeight: 650 }}>{user.fullName}</p>
           <p style={{ margin: '0 0 10px', opacity: 0.7 }}>
-            {user.role.replace(/_/g, ' ')}
+            {enumLabel(user.role, t)}
             {/*
              * Say it, rather than leaving it to be inferred from an absence.
              *

@@ -18,6 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface FoundTaxpayer {
   id: string;
@@ -376,7 +377,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
           { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
           { key: 'name', label: 'colRevenueItem' },
           { key: 'categoryName', label: 'ofcAgCategory' },
-          { key: 'source', label: 'ofcTrRecordedBy', render: (row) => readableSource(row.source) },
+          { key: 'source', label: 'ofcTrRecordedBy', render: (row) => enumLabel(row.source, t) },
           { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
           {
             key: 'action',
@@ -399,12 +400,6 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
   );
 }
 
-const readableSource = (source: string) =>
-  source === 'AGENT_ONBOARDING'
-    ? 'Agent, at registration'
-    : source === 'AUTO_RECOMMENDATION'
-      ? 'Suggested by sector'
-      : 'Officer review';
 
 interface VehicleRow {
   id: string;

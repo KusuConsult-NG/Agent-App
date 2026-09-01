@@ -22,6 +22,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, KeyValue, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface TicketSummary {
   id: string;
@@ -55,7 +56,6 @@ interface TicketDetail extends TicketSummary {
   }[];
 }
 
-const humanise = (value: string) => value.replace(/_/g, ' ').toLowerCase();
 
 /** Complaints about the collection itself, which need to be seen as such. */
 const CONDUCT_CATEGORIES = new Set(['AGENT_MISCONDUCT', 'UNAUTHORISED_CHARGE']);
@@ -126,13 +126,13 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                   </button>
                 ),
               },
-              { key: 'category', label: 'supAbout', render: (row) => humanise(row.category) },
+              { key: 'category', label: 'supAbout', render: (row) => enumLabel(row.category, t) },
               { key: 'priority', label: 'ofcSpPriority', render: (row) => <Badge status={row.priority} /> },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'raised_by_name',
                 label: 'ofcSpReportedBy',
-                render: (row) => `${row.raised_by_name} (${humanise(row.raiser_role)})`,
+                render: (row) => `${row.raised_by_name} (${enumLabel(row.raiser_role, t)})`,
               },
               { key: 'assigned_to_name', label: 'ofcSpAssigned', render: (row) => row.assigned_to_name ?? '—' },
               { key: 'message_count', label: 'ofcSpReplies', numeric: true },
@@ -211,7 +211,7 @@ export function TicketDetailScreen({
         ...(status === 'RESOLVED' ? { resolution } : {}),
       });
       setResolution('');
-      setMessage(`Ticket moved to ${humanise(status)}.`);
+      setMessage(`Ticket moved to ${enumLabel(status, t)}.`);
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -243,8 +243,8 @@ export function TicketDetailScreen({
           items={[
             ['Status', <Badge status={ticket.status} key="s" />],
             ['Priority', <Badge status={ticket.priority} key="p" />],
-            ['About', humanise(ticket.category)],
-            ['Reported by', `${ticket.raised_by_name} (${humanise(ticket.raiser_role)})`],
+            ['About', enumLabel(ticket.category, t)],
+            ['Reported by', `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
             ['Contact', ticket.raised_by_phone],
             ['Transaction', ticket.transaction_reference ?? '—'],
             ['Raised', formatDateTime(ticket.created_at)],
@@ -276,7 +276,7 @@ export function TicketDetailScreen({
                 className={`thread__item${entry.internal ? ' thread__item--internal' : ''}`}
               >
                 <p className="thread__meta">
-                  {entry.author_name} · {humanise(entry.author_role)} ·{' '}
+                  {entry.author_name} · {enumLabel(entry.author_role, t)} ·{' '}
                   {formatDateTime(entry.created_at)}
                   {entry.internal && ' · internal note, not visible to the reporter'}
                 </p>

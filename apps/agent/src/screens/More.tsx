@@ -17,6 +17,7 @@ import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } fr
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { useI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -787,7 +788,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
             {drafts.map((draft) => (
               <li key={draft.clientReference} className="list__item" style={{ paddingLeft: 0, paddingRight: 0 }}>
                 <div className="list__body">
-                  <p className="list__title">{draft.draftType.replace(/_/g, ' ').toLowerCase()}</p>
+                  <p className="list__title">{enumLabel(draft.draftType, t)}</p>
                   <p className="list__meta">
                     {t.moreDraftCaptured.replace(
                       '{{when}}',

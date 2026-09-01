@@ -1,7 +1,7 @@
 /** Shared presentation components for the government portal. */
 
 import type { ReactNode } from 'react';
-import { formatNaira, statusSeverity } from '@psirs/shared';
+import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -58,12 +58,15 @@ export function Stat({
 }
 
 export function Badge({ status }: { status: string | null | undefined }) {
+  const { t } = usePortalI18n();
   if (!status) return <>—</>;
   // `statusSeverity` lives in @psirs/shared because both front ends had their
   // own copy of it and both had the same bug: INACTIVE contains ACTIVE.
-  return (
-    <span className={`badge badge--${statusSeverity(status)}`}>{status.replace(/_/g, ' ')}</span>
-  );
+  //
+  // The word inside the badge comes from the same package for the same
+  // reason: it was the status as the database spells it, underscores taken
+  // out, which is English on a screen an officer set to Hausa.
+  return <span className={`badge badge--${statusSeverity(status)}`}>{enumLabel(status, t)}</span>;
 }
 
 export function Alert({

@@ -19,6 +19,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel } from '@psirs/shared';
 
 /** The categories the API accepts, in the words an agent would use. */
 const CATEGORIES: {
@@ -45,12 +46,7 @@ const CATEGORIES: {
   },
 ];
 
-const categoryLabel = (value: string, t: TranslationDictionary) => {
-  const entry = CATEGORIES.find((candidate) => candidate.value === value);
-  // An unrecognised category still has to read as something; the server's own
-  // enum name, spaced out, is the only honest thing left to show.
-  return entry ? t[entry.label] : value.replace(/_/g, ' ').toLowerCase();
-};
+const categoryLabel = (value: string, t: TranslationDictionary) => enumLabel(value, t);
 
 interface TicketSummary {
   id: string;

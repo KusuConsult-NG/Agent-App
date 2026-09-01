@@ -1,7 +1,7 @@
 /** Revenue catalogue and social incentive programmes (PRD §9, §41). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatNaira, nairaToKobo } from '@psirs/shared';
+import { enumLabel, formatNaira, nairaToKobo } from '@psirs/shared';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -407,7 +407,7 @@ function NewItemForm({
             >
               {['ONE_OFF', 'DAILY', 'MONTHLY', 'QUARTERLY', 'ANNUAL'].map((frequency) => (
                 <option key={frequency} value={frequency}>
-                  {frequency.replace(/_/g, ' ')}
+                  {enumLabel(frequency, t)}
                 </option>
               ))}
             </select>

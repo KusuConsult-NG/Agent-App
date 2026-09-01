@@ -23,8 +23,9 @@
 import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import { statusSeverity, GOOD_STATUS_WORDS } from '@psirs/shared';
+import { statusSeverity, translations, GOOD_STATUS_WORDS } from '@psirs/shared';
 import { Badge } from '../ui';
+import { setPortalLanguage } from '../lib/i18n';
 
 describe('a badge in the colour of what happened', () => {
   it('does not read a negated word as the word inside it', () => {
@@ -106,6 +107,13 @@ describe('a badge in the colour of what happened', () => {
   });
 
   it('puts the colour on the chip the officer actually sees', () => {
+    /*
+     * Found by the word the dictionary gives the status rather than by the
+     * status itself, which is the second thing this now holds: the chip used
+     * to print the database's own spelling, so an officer reading Hausa met
+     * VALID and INVALID in English at the one moment they are deciding
+     * whether a receipt is real.
+     */
     cleanup();
     render(
       <>
@@ -113,7 +121,18 @@ describe('a badge in the colour of what happened', () => {
         <Badge status="VALID" />
       </>,
     );
-    expect(screen.getByText('INVALID').className).toContain('badge--danger');
-    expect(screen.getByText('VALID').className).toContain('badge--success');
+    expect(screen.getByText(translations.en.enumInvalid).className).toContain('badge--danger');
+    expect(screen.getByText(translations.en.enumValid).className).toContain('badge--success');
+  });
+
+  it('says the status in the language the officer is reading', () => {
+    cleanup();
+    setPortalLanguage('ha');
+    try {
+      render(<Badge status="VALID" />);
+      expect(screen.getByText(translations.ha.enumValid)).toBeTruthy();
+    } finally {
+      setPortalLanguage('en');
+    }
   });
 });

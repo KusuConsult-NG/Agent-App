@@ -2,7 +2,7 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { formatNaira, statusSeverity } from '@psirs/shared';
+import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
 import type { TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { useI18n } from './lib/i18n';
@@ -185,6 +185,7 @@ export function Field({
 }
 
 export function Badge({ status }: { status: string }) {
+  const { t } = useI18n();
   /*
    * The classification is in @psirs/shared, and it used to be here.
    *
@@ -194,7 +195,12 @@ export function Badge({ status }: { status: string }) {
    * invoice was rendered in the colour of a paid one — on the handset of the
    * person collecting the money.
    */
-  return <span className={`badge badge--${statusSeverity(status)}`}>{status.replace(/_/g, ' ')}</span>;
+  /*
+   * And the word itself comes from the dictionary. A badge is what somebody
+   * looks at when they are in a hurry, and it was the one part of the screen
+   * that stayed in English however the app was set.
+   */
+  return <span className={`badge badge--${statusSeverity(status)}`}>{enumLabel(status, t)}</span>;
 }
 
 export function Spinner() {

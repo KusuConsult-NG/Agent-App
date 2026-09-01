@@ -143,11 +143,13 @@ export function AllocationsScreen() {
     await withJustification({
       question: `Why is ${awardRow.taxpayer_name ?? 'this beneficiary'}'s ${awardRow.quantity} forfeited?`,
       minimum: 10,
-      tooShort: 'Give at least ten characters saying why this share is being released.',
+      tooShort: t.ofcAlForfeitTooShort,
       run: async (reason) => {
         await api.post(`/allocations/awards/${awardRow.id}/forfeit`, { reason });
       },
-      onSuccess: `Released. The ${awardRow.quantity} is back in ${round.name} for another beneficiary.`,
+      onSuccess: t.ofcAlReleased
+        .replace('{{quantity}}', String(awardRow.quantity))
+        .replace('{{round}}', round.name),
       setError,
       setMessage,
     });

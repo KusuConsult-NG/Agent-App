@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface RoundRow {
   id: string;
@@ -49,8 +50,6 @@ interface MemberRow {
   left_reason: string | null;
 }
 
-const readable = (value: string | null) =>
-  value ? value.replace(/_/g, ' ').toLowerCase() : '—';
 
 export function GroupsScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = usePortalI18n();
@@ -151,7 +150,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             columns={[
               { key: 'code', label: 'ofcAgCode' },
               { key: 'name', label: 'pubAttestGroup' },
-              { key: 'group_type', label: 'tpType', render: (row) => readable(row.group_type) },
+              { key: 'group_type', label: 'tpType', render: (row) => enumLabel(row.group_type, t) },
               { key: 'lga_name', label: 'tpLgaShort' },
               { key: 'leader_name', label: 'grpLeader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
               {
@@ -210,7 +209,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               {
                 key: 'total_quantity',
                 label: 'ofcGpTotal',
-                render: (row) => `${row.total_quantity} ${readable(row.unit)}`,
+                render: (row) => `${row.total_quantity} ${enumLabel(row.unit, t)}`,
               },
               {
                 key: 'awarded_quantity',
@@ -332,8 +331,8 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
           columns={[
             { key: 'code', label: 'ofcAgCode' },
             { key: 'name', label: 'pubAttestGroup' },
-            { key: 'group_type', label: 'tpType', render: (row) => readable(row.group_type) },
-            { key: 'economic_sector', label: 'ofcGpSector', render: (row) => readable(row.economic_sector) },
+            { key: 'group_type', label: 'tpType', render: (row) => enumLabel(row.group_type, t) },
+            { key: 'economic_sector', label: 'ofcGpSector', render: (row) => enumLabel(row.economic_sector, t) },
             { key: 'lga_name', label: 'tpLgaShort' },
             { key: 'attested_members', label: 'ofcGpConfirmedMembers' },
             { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
@@ -465,7 +464,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div className="stat">
           <p className="stat__label">{t.ofcGpTotal}</p>
           <p className="stat__value">
-            {round.total_quantity} <span style={{ fontSize: '0.7em' }}>{readable(round.unit)}</span>
+            {round.total_quantity} <span style={{ fontSize: '0.7em' }}>{enumLabel(round.unit, t)}</span>
           </p>
         </div>
         <div className="stat">
@@ -504,7 +503,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div style={{ padding: '18px 18px 0' }}>
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
-            {round.quantity_per_beneficiary} {readable(round.unit)} each
+            {round.quantity_per_beneficiary} {enumLabel(round.unit, t)} each
             {round.collection_point ? ` · collected at ${round.collection_point}` : ''} ·{' '}
             <Badge status={round.status} />
           </p>

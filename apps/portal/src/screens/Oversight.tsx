@@ -5,6 +5,8 @@ import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/ap
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
+import type { TranslationDictionary } from '@psirs/shared';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -20,6 +22,7 @@ import { usePortalI18n } from '../lib/i18n';
  * when escalating, but they are not what they reason with.
  */
 function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
+  const { t } = usePortalI18n();
   if (!detail || typeof detail !== 'object') return <span>—</span>;
 
   const entries = Object.entries(detail);
@@ -32,7 +35,7 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
     <div className="signal-detail">
       {(readable.length > 0 ? readable : identifiers).map(([key, value]) => (
         <div key={key}>
-          <span className="signal-detail__key">{humanise(key)}</span>{' '}
+          <span className="signal-detail__key">{humanise(key, t)}</span>{' '}
           <span className="signal-detail__value">{formatValue(value)}</span>
         </div>
       ))}
@@ -41,7 +44,7 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
           <summary>identifiers</summary>
           {identifiers.map(([key, value]) => (
             <div key={key} className="mono">
-              {humanise(key)} {formatValue(value)}
+              {humanise(key, t)} {formatValue(value)}
             </div>
           ))}
         </details>
@@ -50,8 +53,32 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
   );
 }
 
-/** `agentAssignedTo` → `Agent assigned to`. */
-function humanise(key: string): string {
+/**
+ * What a fraud signal's evidence is called, in the language being read.
+ *
+ * The keys come from the detection code's own `detail` object, so this is a
+ * map rather than an enumeration: a new signal can attach a new key without a
+ * migration, and the fallback below — the key spaced out — is what it will
+ * show until somebody names it. That is the right trade for diagnostic
+ * evidence and the wrong one for a status, which is why statuses go through
+ * `enumLabel` and are checked against the schema.
+ */
+const SIGNAL_KEYS: Record<string, keyof TranslationDictionary> = {
+  count: 'ofcOvSignalCount',
+  windowSeconds: 'ofcOvSignalWindowSeconds',
+  threshold: 'ofcOvSignalThreshold',
+  reason: 'ofcOvSignalReason',
+  agentsSupported: 'ofcOvSignalAgentsSupported',
+  agentAssignedTo: 'ofcOvSignalAgentAssignedTo',
+  collectedIn: 'ofcOvSignalCollectedIn',
+  agentTerritoryLgaId: 'ofcOvSignalAgentTerritory',
+  transactionLgaId: 'ofcOvSignalTransactionArea',
+};
+
+/** `agentAssignedTo` → `Agent assigned to`, when nothing has named it. */
+function humanise(key: string, t: TranslationDictionary): string {
+  const named = SIGNAL_KEYS[key];
+  if (named) return t[named];
   const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
@@ -104,16 +131,15 @@ export function FraudScreen() {
     await withJustification({
       question: 'Record what you found (at least 10 characters):',
       minimum: 10,
-      tooShort:
-        'Record what you found, in at least 10 characters. It is the only account of why this flag was settled the way it was.',
+      tooShort: t.ofcOvFlagNoteTooShort,
       run: async (note) => {
         await api.post(`/government/fraud/flags/${id}/review`, { decision, note });
         load();
       },
       onSuccess:
         decision === 'CONFIRMED'
-          ? 'Flag confirmed. The agent\u2019s commission has been placed on hold pending resolution.'
-          : `Flag marked ${decision.toLowerCase().replace(/_/g, ' ')}.`,
+          ? t.ofcOvFlagConfirmed
+          : t.ofcOvFlagMarked.replace('{{decision}}', enumLabel(decision, t)),
       setError,
       setMessage,
     });

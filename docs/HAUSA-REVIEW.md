@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1532 strings, grouped by where an agent meets them. Lower stakes
+1889 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -505,6 +505,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcAgRecordWhatYouFound` | Record what you found: it is the only record of why this flag was left open, upheld or set aside. | Ka rubuta abin da ka gano: shi ne kadai bayanin dalilin da ya sa aka bar wannan alamar a bude, aka tabbatar da ita, ko aka yi watsi da ita. | ☐ | |
 | `ofcAgRiskFlagFor` | Risk flag — {{name}} | Alamar hadari — {{name}} | ☐ | |
 | `ofcAgAwaitingGovernmentReview` | Awaiting government review | Na jiran nazarin gwamnati | ☐ | |
 | `ofcAgApplicantsCompleted` | These applicants have completed identity verification and referee clearance. | Wadannan masu nema sun kammala tabbatar da shaida da izinin mai shaida. | ☐ | |
@@ -654,6 +655,9 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcUaChooseRoleFirst` | Choose the role this officer should hold. | Ka zabi matsayin da wannan jami’in zai rike. | ☐ | |
+| `ofcUaAlreadyHolds` | {{name}} already holds the {{role}} role. | {{name}} ya riga ya rike matsayin {{role}}. | ☐ | |
+| `ofcUaSayWhy` | Say why this access is changing, in at least 10 characters. It is the only record of why. | Ka fada dalilin canja wannan izini, da akalla haruffa 10. Shi ne kadai bayanin dalilin. | ☐ | |
 | `ofcUaSuspendOrCloseBody` | Suspending or closing an account signs the officer out everywhere and stops them signing in again. Suspension is a pause pending an answer; closing is the end of the appointment and cannot be undone — create a new account if they return. | Dakatarwa ko rufe asusu yana fitar da jami’in daga ko’ina kuma yana hana shi sake shiga. Dakatarwa hutu ne har sai an sami amsa; rufewa shi ne karshen aikin kuma ba a iya warwarewa — sai an bude sabon asusu idan ya dawo. | ☐ | |
 | `ofcUaCoverNothingBody` | {{name}} will see no revenue figures at all until a territory is assigned. | {{name}} ba zai ga wata lambar kudaden shiga ba ko kadan har sai an ba shi yanki. | ☐ | |
 | `ofcUaChangeAccessFor` | Change access — {{name}} | Canja izini — {{name}} | ☐ | |
@@ -772,6 +776,16 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcFnResolveTooShort` | Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed. | Ka fada yadda aka warware matsalar, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan bambancin. | ☐ | |
+| `ofcFnExceptionResolved` | Exception recorded as resolved. | An rubuta cewa an warware matsalar. | ☐ | |
+| `ofcFnApprovePayoutTooShort` | Give a reason for approving this payout, in at least 5 characters. | Ka ba da dalilin amincewa da wannan fitar da kudi, da akalla haruffa 5. | ☐ | |
+| `ofcFnPayoutApproved` | Payout approved. | An amince da fitar da kudin. | ☐ | |
+| `ofcFnTransferReferenceTooShort` | Enter the bank transfer reference. It is what ties this payout to the money that actually left the account. | Ka shigar da lambar turawar banki. Ita ce ke hada wannan biyan da kudin da suka fita daga asusun da gaske. | ☐ | |
+| `ofcFnPayoutPaid` | Payout recorded as paid. | An rubuta cewa an biya kudin. | ☐ | |
+| `ofcFnPayoutFailedTooShort` | Record what the bank said. The agent has to be told why they were not paid, and the next attempt depends on knowing. | Ka rubuta abin da banki ya ce. Dole a gaya wa wakili dalilin da ya sa ba a biya shi ba, kuma yunkuri na gaba ya dogara da sanin hakan. | ☐ | |
+| `ofcFnPayoutFailedRecorded` | Recorded as failed. The commission in it is payable again, and any clawback it had netted off is owed again. | An rubuta cewa ya gaza. Kwamishan da ke cikinsa ya sake zama abin biya, kuma duk wani cirewa da aka yi a ciki ya sake zama bashi. | ☐ | |
+| `ofcFnDecisionTooShort` | Give a reason for this decision, in at least 10 characters. | Ka ba da dalilin wannan shawarar, da akalla haruffa 10. | ☐ | |
+| `ofcFnRequestDecided` | Request {{decision}}. | An {{decision}} bukatar. | ☐ | |
 | `ofcFnRecordSettlementTitle` | Record a settlement | Rubuta biyan kudi | ☐ | |
 | `ofcFnRecordSettlementAction` | Record settlement | Rubuta biya | ☐ | |
 | `ofcFnRecordPayment` | Record payment | Rubuta biyan kudi | ☐ | |
@@ -821,6 +835,18 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcOvSignalCount` | How many | Nawa | ☐ | |
+| `ofcOvSignalWindowSeconds` | Within, in seconds | A cikin, da dakiku | ☐ | |
+| `ofcOvSignalThreshold` | Threshold | Iyaka | ☐ | |
+| `ofcOvSignalReason` | Reason | Dalili | ☐ | |
+| `ofcOvSignalAgentsSupported` | Agents supported | Wakilan da aka goyi baya | ☐ | |
+| `ofcOvSignalAgentAssignedTo` | Agent assigned to | Wakilin da aka ba | ☐ | |
+| `ofcOvSignalCollectedIn` | Collected in | An karba a | ☐ | |
+| `ofcOvSignalAgentTerritory` | The agent’s area | Yankin wakili | ☐ | |
+| `ofcOvSignalTransactionArea` | Where the collection happened | Inda aka karbi kudin | ☐ | |
+| `ofcOvFlagNoteTooShort` | Record what you found, in at least 10 characters. It is the only record of why this flag was settled the way it was. | Ka rubuta abin da ka gano, da akalla haruffa 10. Shi ne kadai bayanin dalilin da ya sa aka warware wannan alamar haka. | ☐ | |
+| `ofcOvFlagConfirmed` | Flag confirmed. The agent’s commission has been placed on hold pending resolution. | An tabbatar da alamar. An dakatar da kwamishan wakilin har sai an warware. | ☐ | |
+| `ofcOvFlagMarked` | Flag marked {{decision}}. | An sanya wa alamar {{decision}}. | ☐ | |
 | `ofcOvTransactionCount` | {{n}} transaction(s) | Ma’amaloli {{n}} | ☐ | |
 | `ofcOvSettlementsOutstanding` | {{n}} settlement(s) outstanding | Turawar kudi {{n}} da ta rage | ☐ | |
 | `ofcOvIntact` | Audit trail intact | Rajistar bincike ba ta lalace ba | ☐ | |
@@ -1123,6 +1149,8 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcAlForfeitTooShort` | Give at least ten characters saying why this share is being released. | Ka ba da akalla haruffa goma da ke fadin dalilin sakin wannan rabon. | ☐ | |
+| `ofcAlReleased` | Released. The {{quantity}} is back in {{round}} for another beneficiary. | An sake shi. {{quantity}} ya koma cikin {{round}} domin wani mai amfana. | ☐ | |
 | `ofcAlAwardsFor` | Awards — {{name}} | Kyautuka — {{name}} | ☐ | |
 | `ofcAlAwardsIntro` | Who has been awarded under this round, and who has collected. | Wa aka ba kyauta a wannan zagayen, kuma wa ya karba. | ☐ | |
 | `ofcAlIntro` | A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point. | Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba. | ☐ | |
@@ -2047,6 +2075,335 @@ instructions — but they are what an agent reads all day.
 | `searchAnotherArea` | A name search covers your own Local Government Area. If they are registered elsewhere, search by their phone number, TIN, vehicle registration or a receipt number. | Binciken suna yana rufe Karamar Hukumar da kake aiki a ciki kadai. Idan an yi masa rajista a wata Karamar Hukuma, ka nemo shi da lambar wayarsa, TIN, lambar mota ko lambar rasit. | ☐ | |
 | `languageForMessages` | Language for their messages | Harshen sakonnin sa | ☐ | |
 | `languageForMessagesHint` | Ask the taxpayer. Their receipt arrives by SMS and it is the only copy they will have. | Ka tambayi mai biyan haraji. Rasit dinsa yana zuwa ta SMS, kuma shi ne kwafin da zai samu kadai. | ☐ | |
+| `enumDeviceVelocity` | One handset, too many collections | Na’ura daya, karbar kudi da yawa | ☐ | |
+| `enumSharedPhoneNumber` | One phone number on several taxpayers | Lambar waya daya a kan masu biyan haraji da yawa | ☐ | |
+| `enumDuplicateTaxpayerDetails` | Details already on another record | Bayanan da suke a wani bayanin | ☐ | |
+| `enumOutOfTerritory` | Collected outside the agent’s area | An karba a wajen yankin wakili | ☐ | |
+| `enumRepeatedFailedPayments` | Payments that keep failing | Biyan kudi da ke ci gaba da gazawa | ☐ | |
+| `enumReversalPattern` | A pattern of reversals | Yanayin mayar da kudi akai-akai | ☐ | |
+| `enumUnusualVolume` | More collections than usual | Karbar kudi fiye da yadda aka saba | ☐ | |
+| `enumRapidSuccession` | Collections one after another, too fast | Karbar kudi a jere, da sauri sosai | ☐ | |
+| `enumCommissionAnomaly` | Commission that does not add up | Kwamishan da bai yi daidai ba | ☐ | |
+| `enumSettlementVariance` | The gateway paid a different amount | Hanyar biya ta biya wani adadi daban | ☐ | |
+| `enumAbandoned` | Abandoned | An yashe | ☐ | |
+| `enumAborted` | Aborted | An dakatar da shi | ☐ | |
+| `enumAccepted` | Accepted | An karba | ☐ | |
+| `enumAccountTransfer` | Account transfer | Tura kudi daga asusu | ☐ | |
+| `enumActionRequired` | Action required | Ana bukatar mataki | ☐ | |
+| `enumActivated` | Activated | An kunna | ☐ | |
+| `enumActive` | Active | Mai aiki | ☐ | |
+| `enumAdditionalIdentification` | Additional identification | Karin shaida | ☐ | |
+| `enumAdditiveBenefit` | Extra benefit | Karin amfani | ☐ | |
+| `enumAdmin` | Administrator | Mai gudanarwa | ☐ | |
+| `enumAgent` | Agent | Wakili | ☐ | |
+| `enumAgentActivation` | Activating an agent | Kunna wakili | ☐ | |
+| `enumAgentAssisted` | With an agent | Tare da wakili | ☐ | |
+| `enumAgentMisconduct` | An agent behaving wrongly | Wakili mai mummunan hali | ☐ | |
+| `enumAgentOnboarding` | Registered by an agent | Wakili ya yi rajista | ☐ | |
+| `enumAgentOverrideActivation` | Activating an agent by override | Kunna wakili ta hanyar kebewa | ☐ | |
+| `enumAgentPwa` | Agent app | Manhajar wakili | ☐ | |
+| `enumAgentSuspension` | Suspending an agent | Dakatar da wakili | ☐ | |
+| `enumAgreementAccepted` | Agreement accepted | An karbi yarjejeniya | ☐ | |
+| `enumAgriculture` | Farming | Noma | ☐ | |
+| `enumAgricultureProcessing` | Processing farm produce | Sarrafa amfanin gona | ☐ | |
+| `enumAmountMismatch` | Amount does not match | Adadin bai dace ba | ☐ | |
+| `enumAnnual` | Yearly | Kowace shekara | ☐ | |
+| `enumApi` | API | API | ☐ | |
+| `enumApplicationSubmitted` | Application submitted | An tura takardar neman aiki | ☐ | |
+| `enumApproved` | Approved | An amince | ☐ | |
+| `enumArchived` | Archived | An ajiye | ☐ | |
+| `enumArtisanCraft` | Craft and trade work | Sana’ar hannu | ☐ | |
+| `enumArtisanGuild` | Artisan guild | Kungiyar masu sana’a | ☐ | |
+| `enumAssessment` | Assessment | Kimantawa | ☐ | |
+| `enumAssessmentCreated` | Assessment made | An yi kimantawa | ☐ | |
+| `enumAssigned` | Assigned | An ba wa wani | ☐ | |
+| `enumAttested` | Attested | An shaida | ☐ | |
+| `enumAuditor` | Auditor | Mai binciken lissafi | ☐ | |
+| `enumAuthorityLookup` | Vehicle authority | Hukumar motoci | ☐ | |
+| `enumAutoRecommendation` | Suggested automatically | An ba da shawara ta atomatik | ☐ | |
+| `enumAwarded` | Awarded | An ba da kyauta | ☐ | |
+| `enumBag25kg` | 25kg bag | Buhu 25kg | ☐ | |
+| `enumBag50kg` | 50kg bag | Buhu 50kg | ☐ | |
+| `enumBankAccountChange` | Changing a bank account | Canja asusun banki | ☐ | |
+| `enumBankChangeApplied` | Bank account changed | An canja asusun banki | ☐ | |
+| `enumBankChangeRefused` | Bank account change refused | An ki canja asusun banki | ☐ | |
+| `enumBankChangeRequested` | Bank account change requested | An nemi canja asusun banki | ☐ | |
+| `enumBankTransfer` | Bank transfer | Tura kudi ta banki | ☐ | |
+| `enumBankVerified` | Bank account verified | An tabbatar da asusun banki | ☐ | |
+| `enumBase` | Base | Tushe | ☐ | |
+| `enumBlocked` | Blocked | An hana | ☐ | |
+| `enumBoth` | Both | Duka biyu | ☐ | |
+| `enumBusiness` | Business | Kasuwanci | ☐ | |
+| `enumBvn` | Bank Verification Number | Lambar Tabbatar da Banki | ☐ | |
+| `enumCamera` | Camera | Kamara | ☐ | |
+| `enumCancelled` | Cancelled | An soke | ☐ | |
+| `enumCard` | Card | Katin banki | ☐ | |
+| `enumCivilServant` | Civil servant | Ma’aikacin gwamnati | ☐ | |
+| `enumCleared` | Cleared | An tantance | ☐ | |
+| `enumClosed` | Closed | An rufe | ☐ | |
+| `enumCollected` | Collected | An karba | ☐ | |
+| `enumCommission` | Commission | Kwamishan | ☐ | |
+| `enumCommissionAdjustment` | Adjusting commission | Gyara kwamishan | ☐ | |
+| `enumCommissionPayout` | Paying out commission | Fitar da kwamishan | ☐ | |
+| `enumCommunityLeader` | Community leader | Shugaban al’umma | ☐ | |
+| `enumCompleted` | Completed | An kammala | ☐ | |
+| `enumConfirmed` | Confirmed | An tabbatar | ☐ | |
+| `enumConstruction` | Building work | Aikin gini | ☐ | |
+| `enumCritical` | Critical | Mai matukar hatsari | ☐ | |
+| `enumDaily` | Daily | Kullum | ☐ | |
+| `enumDelivered` | Delivered | An isar | ☐ | |
+| `enumDenied` | Refused | An hana | ☐ | |
+| `enumDevice` | Device | Na’ura | ☐ | |
+| `enumDeviceRegistered` | Device registered | An yi rajistar na’ura | ☐ | |
+| `enumDismissed` | Dismissed | An yi watsi da shi | ☐ | |
+| `enumDisputed` | Disputed | Ana jayayya | ☐ | |
+| `enumDocument` | Document | Takarda | ☐ | |
+| `enumDocumentCapture` | Document photograph | Hoton takarda | ☐ | |
+| `enumDownload` | Download | Sauke | ☐ | |
+| `enumDraft` | Draft | Daftari | ☐ | |
+| `enumDriversLicence` | Driver’s licence | Lasisin tuki | ☐ | |
+| `enumDuplicate` | Duplicate | Kwafi | ☐ | |
+| `enumDuplicatePayment` | Duplicate payment | Biyan kudi sau biyu | ☐ | |
+| `enumEducation` | Education | Ilimi | ☐ | |
+| `enumEligibilityGate` | Condition of eligibility | Sharadin cancanta | ☐ | |
+| `enumEligible` | Eligible | Ya cancanta | ☐ | |
+| `enumEmail` | Email | Imel | ☐ | |
+| `enumEmployer` | Employer | Ma’aikaci | ☐ | |
+| `enumEn` | English | Turanci | ☐ | |
+| `enumEntertainmentArts` | Entertainment and the arts | Nishadi da fasaha | ☐ | |
+| `enumExecuted` | Executed | An zartar | ☐ | |
+| `enumExisting` | Already held | Ana da shi | ☐ | |
+| `enumExpired` | Expired | Ya kare | ☐ | |
+| `enumFailed` | Failed | Ya gaza | ☐ | |
+| `enumFailure` | Failure | Gazawa | ☐ | |
+| `enumFarmersCooperative` | Farmers’ cooperative | Kungiyar manoma | ☐ | |
+| `enumFederal` | Federal | Tarayya | ☐ | |
+| `enumFemale` | Female | Mace | ☐ | |
+| `enumFile` | File | Fayil | ☐ | |
+| `enumFinanceOfficer` | Finance officer | Jami’in kudi | ☐ | |
+| `enumFinancialServices` | Financial services | Ayyukan kudi | ☐ | |
+| `enumFisheriesGroup` | Fisheries group | Kungiyar masunta | ☐ | |
+| `enumFishing` | Fishing | Kamun kifi | ☐ | |
+| `enumFixed` | Fixed amount | Adadi kayyadadde | ☐ | |
+| `enumFoodBeverage` | Food and drink | Abinci da abin sha | ☐ | |
+| `enumForfeited` | Forfeited | An rasa | ☐ | |
+| `enumFormula` | Formula | Tsari na lissafi | ☐ | |
+| `enumFortnightly` | Every two weeks | Kowane mako biyu | ☐ | |
+| `enumFound` | Found | An samu | ☐ | |
+| `enumFull` | Full | Cikakke | ☐ | |
+| `enumGamingBetting` | Gaming and betting | Caca | ☐ | |
+| `enumGateway` | Payment gateway | Hanyar biyan kudi | ☐ | |
+| `enumGatewayWebhook` | Gateway notice | Sanarwar hanyar biya | ☐ | |
+| `enumGovernment` | Government | Gwamnati | ☐ | |
+| `enumGovernmentApproved` | Approved by the government | Gwamnati ta amince | ☐ | |
+| `enumGovernmentRejected` | Refused by the government | Gwamnati ta ki | ☐ | |
+| `enumHa` | Hausa | Hausa | ☐ | |
+| `enumHealthcare` | Health care | Kiwon lafiya | ☐ | |
+| `enumHigh` | High | Mai yawa | ☐ | |
+| `enumHotelHospitality` | Hotels and hospitality | Otal da masauki | ☐ | |
+| `enumIctTelecoms` | Computers and telephones | Kwamfuta da waya | ☐ | |
+| `enumIdentityDocument` | Identity document | Takardar shaida | ☐ | |
+| `enumIgnored` | Ignored | An yi watsi da shi | ☐ | |
+| `enumInProgress` | In progress | Ana ci gaba | ☐ | |
+| `enumInactive` | Inactive | Ba ya aiki | ☐ | |
+| `enumIncorrectAssessment` | An assessment that is wrong | Kimantawa mara kyau | ☐ | |
+| `enumIndividual` | Individual | Mutum | ☐ | |
+| `enumInfoRequested` | Information requested | An nemi karin bayani | ☐ | |
+| `enumInformalWorker` | Informal work | Aikin da ba na hukuma ba | ☐ | |
+| `enumInitiated` | Started | An fara | ☐ | |
+| `enumInvalid` | Not valid | Ba sahihi ba | ☐ | |
+| `enumInvited` | Invited | An gayyata | ☐ | |
+| `enumInvoice` | Invoice | Takardar biya | ☐ | |
+| `enumInvoiceGenerated` | Invoice issued | An fitar da takardar biya | ☐ | |
+| `enumInvoiced` | Invoiced | An fitar da takardar biya | ☐ | |
+| `enumIssued` | Issued | An bayar | ☐ | |
+| `enumKilogram` | Kilogram | Kilogiram | ☐ | |
+| `enumKycCleared` | Identity cleared | An tantance shaida | ☐ | |
+| `enumKycFailed` | Identity check failed | Tantance shaida ya gaza | ☐ | |
+| `enumKycInfoRequired` | More identity information needed | Ana bukatar karin shaida | ☐ | |
+| `enumKycSubmitted` | Identity submitted | An tura shaida | ☐ | |
+| `enumLeft` | Left the group | Ya bar kungiyar | ☐ | |
+| `enumLimited` | Weak signal | Sigina mai rauni | ☐ | |
+| `enumLinkedExisting` | Linked to an existing record | An hade da bayanin da ake da shi | ☐ | |
+| `enumLitre` | Litre | Lita | ☐ | |
+| `enumLivestock` | Livestock | Kiwon dabbobi | ☐ | |
+| `enumLivestockAssociation` | Livestock association | Kungiyar masu dabbobi | ☐ | |
+| `enumLocalGovernment` | Local government | Karamar hukuma | ☐ | |
+| `enumLogin` | Sign in | Shiga | ☐ | |
+| `enumLow` | Low | Kadan | ☐ | |
+| `enumMale` | Male | Namiji | ☐ | |
+| `enumManualCorrection` | Correcting a record by hand | Gyara bayani da hannu | ☐ | |
+| `enumManualEntry` | Entered by hand | An shigar da hannu | ☐ | |
+| `enumManualReview` | Needs a person to look | Yana bukatar mutum ya duba | ☐ | |
+| `enumManufacturing` | Manufacturing | Masana’antu | ☐ | |
+| `enumMarketAssociation` | Market association | Kungiyar kasuwa | ☐ | |
+| `enumMatched` | Matched | Ya dace | ☐ | |
+| `enumMedium` | Medium | Matsakaici | ☐ | |
+| `enumMerged` | Merged | An hade | ☐ | |
+| `enumMigration` | Migration | Canja bayanai | ☐ | |
+| `enumMining` | Mining | Hakar ma’adinai | ☐ | |
+| `enumMissingPayment` | Payment missing | Babu biyan kudi | ☐ | |
+| `enumMissingPlatformTransaction` | No record on the platform | Babu bayani a dandalin | ☐ | |
+| `enumMonthly` | Monthly | Kowane wata | ☐ | |
+| `enumMotorVehicle` | Motor vehicles | Motoci | ☐ | |
+| `enumNin` | National Identification Number | Lambar Shaidar Kasa | ☐ | |
+| `enumNormal` | Normal | Na yau da kullum | ☐ | |
+| `enumNotAttempted` | Not attempted | Ba a gwada ba | ☐ | |
+| `enumNotFound` | Not found | Ba a samu ba | ☐ | |
+| `enumNotPerformed` | Not performed | Ba a yi ba | ☐ | |
+| `enumNotRequested` | Not requested | Ba a nema ba | ☐ | |
+| `enumNotStarted` | Not started | Ba a fara ba | ☐ | |
+| `enumOfficer` | Officer | Jami’i | ☐ | |
+| `enumOfficerReview` | Officer review | Dubawar jami’i | ☐ | |
+| `enumOffline` | Offline | Babu layi | ☐ | |
+| `enumOnHold` | On hold | An dakatar na dan lokaci | ☐ | |
+| `enumOneOff` | One off | Sau daya | ☐ | |
+| `enumOnline` | Online | Yana kan layi | ☐ | |
+| `enumOpen` | Open | A bude | ☐ | |
+| `enumOpened` | Opened | An bude | ☐ | |
+| `enumOther` | Other | Wani | ☐ | |
+| `enumOverrideApplied` | Override applied | An yi amfani da kebewa | ☐ | |
+| `enumPaid` | Paid | An biya | ☐ | |
+| `enumPartial` | Part | Wani bangare | ☐ | |
+| `enumPartiallyPaid` | Partly paid | An biya wani bangare | ☐ | |
+| `enumPassed` | Passed | Ya wuce | ☐ | |
+| `enumPassport` | Passport | Fasfo | ☐ | |
+| `enumPassportPhotograph` | Passport photograph | Hoton fasfo | ☐ | |
+| `enumPasswordReset` | Password reset | Sauya kalmar sirri | ☐ | |
+| `enumPaymentAcknowledgement` | Acknowledgement of payment | Sanarwar karbar biyan kudi | ☐ | |
+| `enumPaymentEvidence` | Evidence of payment | Shaidar biyan kudi | ☐ | |
+| `enumPaymentInitiated` | Payment started | An fara biyan kudi | ☐ | |
+| `enumPaymentIssue` | A payment problem | Matsalar biyan kudi | ☐ | |
+| `enumPaymentPending` | Payment pending | Ana jiran biyan kudi | ☐ | |
+| `enumPaymentReversal` | Reversing a payment | Mayar da biyan kudi | ☐ | |
+| `enumPaymentSuccessful` | Payment successful | Biyan kudi ya yi nasara | ☐ | |
+| `enumPaymentVerified` | Payment verified | An tabbatar da biyan kudi | ☐ | |
+| `enumPending` | Pending | Ana jira | ☐ | |
+| `enumPendingAttestation` | Waiting for the leader to confirm | Ana jiran shugaba ya tabbatar | ☐ | |
+| `enumPendingPayment` | Waiting for payment | Ana jiran biyan kudi | ☐ | |
+| `enumPendingSettlement` | Waiting for settlement | Ana jiran biya | ☐ | |
+| `enumPendingSync` | Waiting to be sent | Ana jiran a tura | ☐ | |
+| `enumPercentage` | Percentage | Kaso | ☐ | |
+| `enumPoll` | Gateway check | Duba hanyar biya | ☐ | |
+| `enumPortal` | Officer portal | Tashar jami’i | ☐ | |
+| `enumPos` | POS | POS | ☐ | |
+| `enumPrivateEmployee` | Employed privately | Ma’aikacin kamfani | ☐ | |
+| `enumProceeded` | Proceeded | An ci gaba | ☐ | |
+| `enumProcessed` | Processed | An sarrafa | ☐ | |
+| `enumProcessing` | Processing | Ana aiwatarwa | ☐ | |
+| `enumProfessionalServices` | Professional services | Ayyukan kwararru | ☐ | |
+| `enumProofOfAddress` | Proof of address | Shaidar adireshi | ☐ | |
+| `enumProposed` | Proposed | An gabatar | ☐ | |
+| `enumPsirsSync` | PSIRS records | Bayanan PSIRS | ☐ | |
+| `enumPublicServant` | Public servant | Ma’aikacin gwamnati | ☐ | |
+| `enumPush` | App notification | Sanarwar manhaja | ☐ | |
+| `enumQuarterly` | Quarterly | Kowane wata uku | ☐ | |
+| `enumQueued` | Queued | Yana layi | ☐ | |
+| `enumRead` | Read | An karanta | ☐ | |
+| `enumReadyForReview` | Ready for review | A shirye don dubawa | ☐ | |
+| `enumRealProperty` | Land and buildings | Filaye da gine-gine | ☐ | |
+| `enumReceipt` | Receipt | Rasit | ☐ | |
+| `enumReceiptGenerated` | Receipt issued | An fitar da rasit | ☐ | |
+| `enumReceiptIssue` | A receipt problem | Matsalar rasit | ☐ | |
+| `enumReceived` | Received | An karba | ☐ | |
+| `enumRecognisedProfessional` | Recognised professional | Kwararre da aka amince da shi | ☐ | |
+| `enumReconciled` | Reconciled | An daidaita lissafi | ☐ | |
+| `enumReconciliation` | Reconciliation | Daidaita lissafi | ☐ | |
+| `enumReconciliationPending` | Waiting for reconciliation | Ana jiran daidaita lissafi | ☐ | |
+| `enumReferee` | Referee | Mai shaida | ☐ | |
+| `enumRefereeCleared` | Referee cleared | Mai shaida ya tabbatar | ☐ | |
+| `enumRefereeFailed` | Referee did not clear | Mai shaida bai tabbatar ba | ☐ | |
+| `enumRefereeInvited` | Referee invited | An gayyaci mai shaida | ☐ | |
+| `enumRefereeReplaced` | Referee replaced | An maye gurbin mai shaida | ☐ | |
+| `enumRefereeVerify` | Referee verification | Tabbatar da mai shaida | ☐ | |
+| `enumRefund` | Refund | Mayar da kudi | ☐ | |
+| `enumRefunded` | Refunded | An mayar da kudi | ☐ | |
+| `enumRegistration` | Registration | Rajista | ☐ | |
+| `enumReinstated` | Reinstated | An mayar da shi aiki | ☐ | |
+| `enumRejected` | Rejected | An ki | ☐ | |
+| `enumReligiousLeader` | Religious leader | Shugaban addini | ☐ | |
+| `enumReligiousNgo` | Religious body or charity | Kungiyar addini ko agaji | ☐ | |
+| `enumReplaced` | Replaced | An maye gurbinsa | ☐ | |
+| `enumRequested` | Requested | An nema | ☐ | |
+| `enumResolved` | Resolved | An warware | ☐ | |
+| `enumResponded` | Responded | An amsa | ☐ | |
+| `enumRetailTrade` | Retail trade | Sayarwa kanana | ☐ | |
+| `enumRetired` | Retired | An janye | ☐ | |
+| `enumRevenueOfficer` | Revenue officer | Jami’in kudaden shiga | ☐ | |
+| `enumRevenueRateChange` | Changing a rate | Canja kudin haraji | ☐ | |
+| `enumReversal` | Reversal | Mayarwa | ☐ | |
+| `enumReversed` | Reversed | An mayar da shi | ☐ | |
+| `enumReview` | Review | Dubawa | ☐ | |
+| `enumReviewed` | Reviewed | An duba | ☐ | |
+| `enumRevoked` | Revoked | An janye izini | ☐ | |
+| `enumRunning` | Running | Yana gudana | ☐ | |
+| `enumSeedling` | Seedling | Tsiro | ☐ | |
+| `enumSelfAssessment` | Self assessment | Kimanta kai | ☐ | |
+| `enumSelfEmployed` | Self employed | Mai aikin kansa | ☐ | |
+| `enumSelfie` | Photograph of yourself | Hoton kanka | ☐ | |
+| `enumSent` | Sent | An aika | ☐ | |
+| `enumServiceRequest` | Service request | Neman hidima | ☐ | |
+| `enumSettled` | Settled | An daidaita | ☐ | |
+| `enumSettlement` | Settlement | Biyan kudi | ☐ | |
+| `enumShare` | Share | Rabawa | ☐ | |
+| `enumSms` | SMS | SMS | ☐ | |
+| `enumStarted` | Started | An fara | ☐ | |
+| `enumState` | State | Jiha | ☐ | |
+| `enumStepUp` | Extra confirmation | Karin tabbatarwa | ☐ | |
+| `enumStudentUnemployed` | Student or not working | Dalibi ko marar aikin yi | ☐ | |
+| `enumSubmitted` | Submitted | An tura | ☐ | |
+| `enumSucceeded` | Succeeded | Ya yi nasara | ☐ | |
+| `enumSuccess` | Success | Nasara | ☐ | |
+| `enumSuccessful` | Successful | Ya yi nasara | ☐ | |
+| `enumSuperseded` | Superseded | An maye gurbinsa | ☐ | |
+| `enumSupervisor` | Supervisor | Shugaba | ☐ | |
+| `enumSupportingDocument` | Supporting document | Takardar tallafi | ☐ | |
+| `enumSuspended` | Suspended | An dakatar | ☐ | |
+| `enumSynced` | Sent | An tura | ☐ | |
+| `enumSystem` | System | Tsarin | ☐ | |
+| `enumTaxpayer` | Taxpayer | Mai biyan haraji | ☐ | |
+| `enumTaxpayerAdjustment` | Adjusting a taxpayer record | Gyara bayanin mai biyan haraji | ☐ | |
+| `enumTaxpayerComplaint` | A complaint from a taxpayer | Korafin mai biyan haraji | ☐ | |
+| `enumTaxpayerRegistration` | Taxpayer registration | Rajistar mai biyan haraji | ☐ | |
+| `enumTechnicalIssue` | A problem with the app | Matsalar manhaja | ☐ | |
+| `enumTiered` | Tiered | Matakai | ☐ | |
+| `enumTinConfirmation` | TIN confirmation | Tabbatar da TIN | ☐ | |
+| `enumTinIssue` | A TIN problem | Matsalar TIN | ☐ | |
+| `enumTractorDay` | Tractor day | Ranar tarakta | ☐ | |
+| `enumTradersAssociation` | Traders’ association | Kungiyar ’yan kasuwa | ☐ | |
+| `enumTraditionalAuthority` | Traditional authority | Sarauta | ☐ | |
+| `enumTrainingCompleted` | Training completed | An kammala horo | ☐ | |
+| `enumTransaction` | Transaction | Ciniki | ☐ | |
+| `enumTransportHaulage` | Carrying goods | Daukar kaya | ☐ | |
+| `enumTransportPassenger` | Carrying passengers | Daukar fasinja | ☐ | |
+| `enumTransportUnion` | Transport union | Kungiyar masu sufuri | ☐ | |
+| `enumUnauthorisedCharge` | A charge nobody authorised | Kudin da ba a ba da izini ba | ☐ | |
+| `enumUnavailable` | Unavailable | Ba ya samuwa | ☐ | |
+| `enumUnchecked` | Not checked | Ba a duba ba | ☐ | |
+| `enumUnderReview` | Under review | Ana dubawa | ☐ | |
+| `enumUnit` | Unit | Guda | ☐ | |
+| `enumUnknown` | Unknown | Ba a sani ba | ☐ | |
+| `enumUnpaid` | Unpaid | Ba a biya ba | ☐ | |
+| `enumUnspecified` | Not stated | Ba a fada ba | ☐ | |
+| `enumUnverified` | Not verified | Ba a tabbatar ba | ☐ | |
+| `enumUpload` | Upload | Tura | ☐ | |
+| `enumUrgent` | Urgent | Na gaggawa | ☐ | |
+| `enumUssd` | USSD | USSD | ☐ | |
+| `enumValid` | Valid | Sahihi | ☐ | |
+| `enumVehicle` | Vehicle | Mota | ☐ | |
+| `enumVehicleCapture` | Vehicle details | Bayanin mota | ☐ | |
+| `enumVehicleIssue` | A vehicle problem | Matsalar mota | ☐ | |
+| `enumVehicleRenewal` | Vehicle renewal | Sabunta takardun mota | ☐ | |
+| `enumVerificationRequired` | Verification required | Ana bukatar tabbatarwa | ☐ | |
+| `enumVerified` | Verified | An tabbatar | ☐ | |
+| `enumVerify` | Verify | Tabbatar | ☐ | |
+| `enumView` | View | Duba | ☐ | |
+| `enumVotersCard` | Voter’s card | Katin zabe | ☐ | |
+| `enumWaived` | Waived | An yafe | ☐ | |
+| `enumWebhook` | Gateway notice | Sanarwar hanyar biya | ☐ | |
+| `enumWeekly` | Weekly | Kowane mako | ☐ | |
+| `enumWhatsapp` | WhatsApp | WhatsApp | ☐ | |
+| `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
