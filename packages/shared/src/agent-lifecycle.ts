@@ -187,18 +187,18 @@ export function canActivate(flags: AgentClearanceFlags): boolean {
 
 /** §18 — mandatory training curriculum. */
 export const TRAINING_MODULES = [
-  { code: 'TRN-01', title: 'Revenue collection process', assessed: true, passMark: 70 },
-  { code: 'TRN-02', title: 'Taxpayer registration', assessed: true, passMark: 70 },
-  { code: 'TRN-03', title: 'TIN process', assessed: true, passMark: 70 },
-  { code: 'TRN-04', title: 'Payment process', assessed: true, passMark: 80 },
-  { code: 'TRN-05', title: 'Receipt verification', assessed: true, passMark: 80 },
-  { code: 'TRN-06', title: 'Vehicle renewal', assessed: false, passMark: 0 },
-  { code: 'TRN-07', title: 'Agent commission', assessed: false, passMark: 0 },
-  { code: 'TRN-08', title: 'Fraud prevention', assessed: true, passMark: 80 },
-  { code: 'TRN-09', title: 'Data protection', assessed: true, passMark: 80 },
-  { code: 'TRN-10', title: 'Customer service', assessed: false, passMark: 0 },
-  { code: 'TRN-11', title: 'Government ethics', assessed: true, passMark: 80 },
-  { code: 'TRN-12', title: 'Escalation procedures', assessed: false, passMark: 0 },
+  { code: 'TRN-01', title: 'Revenue Collection Process', assessed: true, passMark: 70 },
+  { code: 'TRN-02', title: 'Taxpayer Registration', assessed: true, passMark: 70 },
+  { code: 'TRN-03', title: 'TIN Process', assessed: true, passMark: 70 },
+  { code: 'TRN-04', title: 'Payment Process', assessed: true, passMark: 80 },
+  { code: 'TRN-05', title: 'Receipt Verification', assessed: true, passMark: 80 },
+  { code: 'TRN-06', title: 'Vehicle Renewal', assessed: false, passMark: 0 },
+  { code: 'TRN-07', title: 'Agent Commission', assessed: false, passMark: 0 },
+  { code: 'TRN-08', title: 'Fraud Prevention', assessed: true, passMark: 80 },
+  { code: 'TRN-09', title: 'Data Protection', assessed: true, passMark: 80 },
+  { code: 'TRN-10', title: 'Customer Service', assessed: false, passMark: 0 },
+  { code: 'TRN-11', title: 'Government Ethics', assessed: true, passMark: 80 },
+  { code: 'TRN-12', title: 'Escalation Procedures', assessed: false, passMark: 0 },
 ] as const;
 
 /** §8 — referee categories; configurable by PSIRS, seeded with these defaults. */
