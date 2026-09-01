@@ -2097,9 +2097,9 @@ instructions — but they are what an agent reads all day.
 | `enumAdmin` | Administrator | Mai gudanarwa | ☐ | |
 | `enumAgent` | Agent | Wakili | ☐ | |
 | `enumAgentActivation` | Activating an agent | Kunna wakili | ☐ | |
-| `enumAgentAssisted` | Agent-assisted | Tare da wakili | ☐ | |
-| `enumAgentMisconduct` | Agent misconduct | Wakili mai mummunan hali | ☐ | |
-| `enumAgentOnboarding` | Agent onboarding | Wakili ya yi rajista | ☐ | |
+| `enumAgentAssisted` | Agent-assisted | Taimakon wakili | ☐ | |
+| `enumAgentMisconduct` | Agent misconduct | Rashin da’a na wakili | ☐ | |
+| `enumAgentOnboarding` | Agent onboarding | Shigar da sabon wakili | ☐ | |
 | `enumAgentOverrideActivation` | Activating an agent by override | Kunna wakili ta hanyar kebewa | ☐ | |
 | `enumAgentPwa` | Agent app | Manhajar wakili | ☐ | |
 | `enumAgentSuspension` | Suspending an agent | Dakatar da wakili | ☐ | |
@@ -2119,7 +2119,7 @@ instructions — but they are what an agent reads all day.
 | `enumAssigned` | Assigned | An ba wa wani | ☐ | |
 | `enumAttested` | Attested | An shaida | ☐ | |
 | `enumAuditor` | Auditor | Mai binciken lissafi | ☐ | |
-| `enumAuthorityLookup` | Authority lookup | Hukumar motoci | ☐ | |
+| `enumAuthorityLookup` | Authority lookup | Binciken hukuma | ☐ | |
 | `enumAutoRecommendation` | Suggested automatically | An ba da shawara ta atomatik | ☐ | |
 | `enumAwarded` | Awarded | An ba da kyauta | ☐ | |
 | `enumBag25kg` | 25kg bag | Buhu 25kg | ☐ | |
@@ -2148,7 +2148,7 @@ instructions — but they are what an agent reads all day.
 | `enumCommunityLeader` | Community leader | Shugaban al’umma | ☐ | |
 | `enumCompleted` | Completed | An kammala | ☐ | |
 | `enumConfirmed` | Confirmed | An tabbatar | ☐ | |
-| `enumConstruction` | Construction | Aikin gini | ☐ | |
+| `enumConstruction` | Construction | Gine-gine | ☐ | |
 | `enumCritical` | Critical | Mai matukar hatsari | ☐ | |
 | `enumDaily` | Daily | Kullum | ☐ | |
 | `enumDelivered` | Delivered | An isar | ☐ | |
@@ -2201,15 +2201,15 @@ instructions — but they are what an agent reads all day.
 | `enumHealthcare` | Healthcare | Kiwon lafiya | ☐ | |
 | `enumHigh` | High | Mai yawa | ☐ | |
 | `enumHotelHospitality` | Hotels and hospitality | Otal da masauki | ☐ | |
-| `enumIctTelecoms` | ICT & Telecommunications | Kwamfuta da waya | ☐ | |
+| `enumIctTelecoms` | ICT & Telecommunications | Fasahar sadarwa da na’ura | ☐ | |
 | `enumIdentityDocument` | Identity document | Takardar shaida | ☐ | |
 | `enumIgnored` | Ignored | An yi watsi da shi | ☐ | |
 | `enumInProgress` | In progress | Ana ci gaba | ☐ | |
 | `enumInactive` | Inactive | Ba ya aiki | ☐ | |
-| `enumIncorrectAssessment` | Incorrect assessment | Kimantawa mara kyau | ☐ | |
+| `enumIncorrectAssessment` | Incorrect assessment | Kimantawa mara daidai | ☐ | |
 | `enumIndividual` | Individual | Mutum | ☐ | |
 | `enumInfoRequested` | Information requested | An nemi karin bayani | ☐ | |
-| `enumInformalWorker` | Informal worker | Aikin da ba na hukuma ba | ☐ | |
+| `enumInformalWorker` | Informal worker | Mai aiki ba bisa ka’ida ba | ☐ | |
 | `enumInitiated` | Started | An fara | ☐ | |
 | `enumInvalid` | Not valid | Ba sahihi ba | ☐ | |
 | `enumInvited` | Invited | An gayyata | ☐ | |
@@ -2223,7 +2223,7 @@ instructions — but they are what an agent reads all day.
 | `enumKycInfoRequired` | More identity information needed | Ana bukatar karin shaida | ☐ | |
 | `enumKycSubmitted` | Identity submitted | An tura shaida | ☐ | |
 | `enumLeft` | Left the group | Ya bar kungiyar | ☐ | |
-| `enumLimited` | Limited connectivity | Sigina mai rauni | ☐ | |
+| `enumLimited` | Limited connectivity | Hanyar sadarwa mai iyaka | ☐ | |
 | `enumLinkedExisting` | Linked to an existing record | An hade da bayanin da ake da shi | ☐ | |
 | `enumLitre` | Litre | Lita | ☐ | |
 | `enumLivestock` | Livestock | Kiwon dabbobi | ☐ | |
@@ -2232,9 +2232,9 @@ instructions — but they are what an agent reads all day.
 | `enumLogin` | Sign in | Shiga | ☐ | |
 | `enumLow` | Low | Kadan | ☐ | |
 | `enumMale` | Male | Namiji | ☐ | |
-| `enumManualCorrection` | Manual correction | Gyara bayani da hannu | ☐ | |
+| `enumManualCorrection` | Manual correction | Gyara da hannu | ☐ | |
 | `enumManualEntry` | Entered by hand | An shigar da hannu | ☐ | |
-| `enumManualReview` | Manual review | Yana bukatar mutum ya duba | ☐ | |
+| `enumManualReview` | Manual review | Bitar hannu | ☐ | |
 | `enumManufacturing` | Manufacturing | Masana’antu | ☐ | |
 | `enumMarketAssociation` | Market association | Kungiyar kasuwa | ☐ | |
 | `enumMatched` | Matched | Ya dace | ☐ | |
@@ -2264,7 +2264,7 @@ instructions — but they are what an agent reads all day.
 | `enumOther` | Other | Wani | ☐ | |
 | `enumOverrideApplied` | Override applied | An yi amfani da kebewa | ☐ | |
 | `enumPaid` | Paid | An biya | ☐ | |
-| `enumPartial` | Partial | Wani bangare | ☐ | |
+| `enumPartial` | Partial | Bangare | ☐ | |
 | `enumPartiallyPaid` | Partially paid | An biya wani bangare | ☐ | |
 | `enumPassed` | Passed | Ya wuce | ☐ | |
 | `enumPassport` | Passport | Fasfo | ☐ | |
@@ -2287,7 +2287,7 @@ instructions — but they are what an agent reads all day.
 | `enumPoll` | Gateway check | Duba hanyar biya | ☐ | |
 | `enumPortal` | Officer portal | Tashar jami’i | ☐ | |
 | `enumPos` | POS | POS | ☐ | |
-| `enumPrivateEmployee` | Private sector employee | Ma’aikacin kamfani | ☐ | |
+| `enumPrivateEmployee` | Private sector employee | Ma’aikacin kamfani mai zaman kansa | ☐ | |
 | `enumProceeded` | Proceeded | An ci gaba | ☐ | |
 | `enumProcessed` | Processed | An sarrafa | ☐ | |
 | `enumProcessing` | Processing | Ana aiwatarwa | ☐ | |
