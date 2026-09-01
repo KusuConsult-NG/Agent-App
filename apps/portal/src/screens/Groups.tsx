@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface RoundRow {
   id: string;
@@ -21,6 +21,7 @@ interface RoundRow {
   total_quantity: string;
   status: string;
   programme_name: string;
+  programme_name_ha: string | null;
   awarded_quantity: string;
   awarded_count: string;
   collected_count: string;
@@ -52,7 +53,7 @@ interface MemberRow {
 
 
 export function GroupsScreen({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -205,7 +206,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
           <Table
             columns={[
               { key: 'name', label: 'ofcAlRound' },
-              { key: 'programme_name', label: 'ofcAlProgramme' },
+              { key: 'programme_name', label: 'ofcAlProgramme', render: (row: RoundRow) => localName(lang, row.programme_name, row.programme_name_ha) },
               {
                 key: 'total_quantity',
                 label: 'ofcGpTotal',

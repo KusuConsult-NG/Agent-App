@@ -28,10 +28,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { localName } from '@psirs/shared';
 
 interface Category {
   id: string;
   name: string;
+  name_ha: string | null;
   code: string;
 }
 
@@ -39,7 +41,9 @@ interface Item {
   id: string;
   code: string;
   name: string;
+  name_ha: string | null;
   category_name: string;
+  category_name_ha: string | null;
 }
 
 interface Lga {
@@ -50,6 +54,7 @@ interface Lga {
 interface CategoryRow {
   category_id: string;
   category: string;
+  category_ha: string | null;
   transactions: string;
   amount_kobo: string;
   settled_kobo: string;
@@ -59,6 +64,7 @@ interface CategoryRow {
 interface ItemRow extends CategoryRow {
   revenue_item_id: string;
   revenue_item: string;
+  revenue_item_ha: string | null;
   code: string;
 }
 
@@ -77,7 +83,9 @@ interface DefaulterRow {
   phone: string;
   lga: string;
   category: string;
+  category_ha: string | null;
   revenue_item: string;
+  revenue_item_ha: string | null;
   invoices: string;
   outstanding_kobo: string;
   oldest_due: string | null;
@@ -106,7 +114,7 @@ const displayName = (row: Registrant) =>
   row.business_name ?? `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() ?? '—';
 
 export function LeviesScreen() {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const canReadRevenue =
     can('report:read:all') || can('report:read:territory') || can('dashboard:executive');
   const canReadDefaulters =
@@ -228,10 +236,13 @@ export function LeviesScreen() {
     load();
   }, [load]);
 
-  const chosenLevy =
-    itemsInScope.find((item) => item.id === filters.revenueItemId)?.name ??
-    categories.find((entry) => entry.id === filters.categoryId)?.name ??
-    'every levy';
+  const chosenLevy = (() => {
+    const item = itemsInScope.find((i) => i.id === filters.revenueItemId);
+    if (item) return localName(lang, item.name, item.name_ha);
+    const cat = categories.find((entry) => entry.id === filters.categoryId);
+    if (cat) return localName(lang, cat.name, cat.name_ha);
+    return 'every levy';
+  })();
 
   return (
     <>
@@ -264,7 +275,7 @@ export function LeviesScreen() {
               <option value="">{t.ofcLvAllCategories}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {localName(lang, category.name, category.name_ha)}
                 </option>
               ))}
             </select>
@@ -280,7 +291,7 @@ export function LeviesScreen() {
               <option value="">{t.ofcLvAllItems}</option>
               {itemsInScope.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.name} ({item.code})
+                  {localName(lang, item.name, item.name_ha)} ({item.code})
                 </option>
               ))}
             </select>
@@ -366,7 +377,7 @@ export function LeviesScreen() {
 
               <Table
                 columns={[
-                  { key: 'category', label: 'ofcAgCategory' },
+                  { key: 'category', label: 'ofcAgCategory', render: (row: CategoryRow) => localName(lang, row.category, row.category_ha) },
                   { key: 'transactions', label: 'ofcLvCollections', numeric: true },
                   { key: 'taxpayers', label: 'ofcRhTaxpayers', numeric: true },
                   {
@@ -390,8 +401,8 @@ export function LeviesScreen() {
               <Table
                 columns={[
                   { key: 'code', label: 'ofcAgCode' },
-                  { key: 'revenue_item', label: 'ofcLvLevy' },
-                  { key: 'category', label: 'ofcAgCategory' },
+                  { key: 'revenue_item', label: 'ofcLvLevy', render: (row: ItemRow) => localName(lang, row.revenue_item, row.revenue_item_ha) },
+                  { key: 'category', label: 'ofcAgCategory', render: (row: ItemRow) => localName(lang, row.category, row.category_ha) },
                   { key: 'transactions', label: 'ofcLvCollections', numeric: true },
                   {
                     key: 'amount_kobo',
@@ -436,7 +447,7 @@ export function LeviesScreen() {
                   { key: 'tin', label: 'tpStepTin' },
                   { key: 'phone', label: 'tpPhone' },
                   { key: 'lga', label: 'tpLgaShort' },
-                  { key: 'revenue_item', label: 'ofcLvLevy' },
+                  { key: 'revenue_item', label: 'ofcLvLevy', render: (row: DefaulterRow) => localName(lang, row.revenue_item, row.revenue_item_ha) },
                   { key: 'invoices', label: 'ofcLvInvoices', numeric: true },
                   {
                     key: 'outstanding_kobo',

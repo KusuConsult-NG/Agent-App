@@ -5,7 +5,7 @@ import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/ap
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 import type { TranslationDictionary } from '@psirs/shared';
 
 /**
@@ -711,7 +711,7 @@ function AuditQueryParameters({
   onRan: (rows: any[]) => void;
   onError: (error: ApiError) => void;
 }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
   const [value, setValue] = useState('');
   const [search, setSearch] = useState('');
@@ -757,7 +757,7 @@ function AuditQueryParameters({
           setOptions(
             (Array.isArray(list) ? list : []).map((item: any) => ({
               value: item.code,
-              label: `${item.name} (${item.code})`,
+              label: `${localName(lang, item.name, item.name_ha)} (${item.code})`,
             })),
           ),
         )

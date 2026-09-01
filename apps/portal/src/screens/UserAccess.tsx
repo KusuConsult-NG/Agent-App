@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, localName, type TranslationDictionary } from '@psirs/shared';
 
 interface PortalUser {
   id: string;
@@ -58,6 +58,7 @@ type AccountStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 interface Territory {
   id: string;
   name: string;
+  name_ha: string | null;
   code: string;
   lga_name: string;
 }
@@ -73,7 +74,7 @@ interface Territory {
 const TERRITORY_SCOPED_ROLES = ['supervisor'];
 
 export function UserAccessScreen({ user }: { user: User }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [users, setUsers] = useState<PortalUser[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -386,7 +387,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                             }
                           />
                           <div className="list__body">
-                            <p className="list__title">{territory.name}</p>
+                            <p className="list__title">{localName(lang, territory.name, territory.name_ha)}</p>
                             <p className="list__meta">
                               {territory.lga_name} · {territory.code}
                             </p>

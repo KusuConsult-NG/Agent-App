@@ -13,7 +13,7 @@ import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../
 import { KycDocumentsCard } from './KycDocuments';
 import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface KycDashboard {
   counts: Record<string, string>;
@@ -217,13 +217,13 @@ export function AgentDetailScreen({
   user: User;
   navigate: (path: string) => void;
 }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
-  const [territories, setTerritories] = useState<{ id: string; name: string; lga_name: string }[]>([]);
+  const [territories, setTerritories] = useState<{ id: string; name: string; name_ha: string | null; lga_name: string }[]>([]);
   const [territoryId, setTerritoryId] = useState('');
 
   const load = useCallback(() => {
@@ -238,7 +238,7 @@ export function AgentDetailScreen({
   useEffect(() => {
     load();
     api
-      .get<{ id: string; name: string; lga_name: string }[]>('/government/reference/territories')
+      .get<{ id: string; name: string; name_ha: string | null; lga_name: string }[]>('/government/reference/territories')
       .then(setTerritories)
       .catch(() => setTerritories([]));
   }, [load]);
@@ -568,7 +568,7 @@ export function AgentDetailScreen({
                   <option value="">{t.ofcAgSelectTerritory}</option>
                   {territories.map((territory) => (
                     <option key={territory.id} value={territory.id}>
-                      {territory.name} ({territory.lga_name})
+                      {localName(lang, territory.name, territory.name_ha)} ({territory.lga_name})
                     </option>
                   ))}
                 </select>

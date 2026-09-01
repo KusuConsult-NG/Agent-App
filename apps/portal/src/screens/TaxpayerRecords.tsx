@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface FoundTaxpayer {
   id: string;
@@ -295,7 +295,9 @@ interface ObligationRow {
   revenueItemId: string;
   code: string;
   name: string;
+  nameHa: string | null;
   categoryName: string;
+  categoryNameHa: string | null;
   frequency: string;
   source: string;
   status: string;
@@ -316,7 +318,7 @@ interface ObligationRow {
  * rather than a delete.
  */
 function Obligations({ taxpayerId }: { taxpayerId: string }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<ObligationRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -374,9 +376,9 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 
       <Table
         columns={[
-          { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
-          { key: 'name', label: 'colRevenueItem' },
-          { key: 'categoryName', label: 'ofcAgCategory' },
+          { key: 'code', label: 'ofcAgCode', render: (row: ObligationRow) => <span className="mono">{row.code}</span> },
+          { key: 'name', label: 'colRevenueItem', render: (row: ObligationRow) => localName(lang, row.name, row.nameHa) },
+          { key: 'categoryName', label: 'ofcAgCategory', render: (row: ObligationRow) => localName(lang, row.categoryName, row.categoryNameHa) },
           { key: 'source', label: 'ofcTrRecordedBy', render: (row) => enumLabel(row.source, t) },
           { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
           {
