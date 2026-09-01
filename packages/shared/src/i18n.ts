@@ -137,6 +137,419 @@ export interface TranslationDictionary {
   errReference: string;
 
   /**
+   * The evidence under a fraud flag, named.
+   *
+   * The detection code attaches a small object to each flag — how many, in
+   * how many seconds, against what threshold — and the screen turned its JSON
+   * keys into English words. An auditor deciding whether an agent kept money
+   * is reading exactly this, so it is worth the nine lines.
+   */
+  ofcOvSignalCount: string;
+  ofcOvSignalWindowSeconds: string;
+  ofcOvSignalThreshold: string;
+  ofcOvSignalReason: string;
+  ofcOvSignalAgentsSupported: string;
+  ofcOvSignalAgentAssignedTo: string;
+  ofcOvSignalCollectedIn: string;
+  ofcOvSignalAgentTerritory: string;
+  ofcOvSignalTransactionArea: string;
+
+  /**
+   * What an officer reads after acting, and why the button will not move.
+   *
+   * These sat in `onSuccess:` and `tooShort:` fields — the shape the step-up
+   * confirmation helper takes — which no pattern in the translation check
+   * looked at. Fifteen messages about money moving, an agent's commission
+   * being held, and a share being taken back, all in English on a screen an
+   * officer had set to Hausa.
+   */
+  ofcFnResolveTooShort: string;
+  ofcFnExceptionResolved: string;
+  ofcFnApprovePayoutTooShort: string;
+  ofcFnPayoutApproved: string;
+  ofcFnTransferReferenceTooShort: string;
+  ofcFnPayoutPaid: string;
+  ofcFnPayoutFailedTooShort: string;
+  ofcFnPayoutFailedRecorded: string;
+  ofcFnDecisionTooShort: string;
+  ofcFnRequestDecided: string;
+  ofcOvFlagNoteTooShort: string;
+  ofcOvFlagConfirmed: string;
+  ofcOvFlagMarked: string;
+  ofcAlForfeitTooShort: string;
+  ofcAlReleased: string;
+
+  /**
+   * The three reasons the button that changes an officer's access stays
+   * disabled. They were English literals inside a function, which is a shape
+   * no pattern in the translation check looks at — and the middle one also
+   * spelled the role out in English inside a Hausa sentence.
+   */
+  ofcUaChooseRoleFirst: string;
+  ofcUaAlreadyHolds: string;
+  ofcUaSayWhy: string;
+
+  /**
+   * The instruction under a risk flag an officer is deciding on. It sat as a
+   * literal beside the rule's name, which is how the rule's name came to be
+   * rendered in English too.
+   */
+  ofcAgRecordWhatYouFound: string;
+
+  /**
+   * The fraud signals, which are a list in code rather than a constraint in
+   * the database — and were therefore the ten this map missed on the first
+   * pass. An officer deciding whether to uphold a flag reads the rule's name
+   * as the first line of the reason, so it is the last place an untranslated
+   * identifier belongs.
+   */
+  enumDeviceVelocity: string;
+  enumSharedPhoneNumber: string;
+  enumDuplicateTaxpayerDetails: string;
+  enumOutOfTerritory: string;
+  enumRepeatedFailedPayments: string;
+  enumReversalPattern: string;
+  enumUnusualVolume: string;
+  enumRapidSuccession: string;
+  enumCommissionAnomaly: string;
+  enumSettlementVariance: string;
+
+  /**
+   * WHAT THE DATABASE CALLS A THING, AND WHAT A PERSON CALLS IT.
+   *
+   * Every value the schema's CHECK constraints allow, in both languages.
+   * They reached the screen as themselves — `PARTIALLY_PAID` with its
+   * underscore taken out — which is English however the app is set, and in
+   * several places is not even good English: an officer working in Hausa read
+   * "partially paid", "revenue officer" and "farmers cooperative" in the
+   * middle of Hausa sentences.
+   *
+   * Kept in one block and looked up by value through `enumLabel`, so a screen
+   * cannot render one of these without going through the dictionary, and a
+   * value added to the schema tomorrow fails the check that reads the
+   * constraints rather than arriving on a screen in English.
+   */
+  enumAbandoned: string;
+  enumAborted: string;
+  enumAccepted: string;
+  enumAccountTransfer: string;
+  enumActionRequired: string;
+  enumActivated: string;
+  enumActive: string;
+  enumAdditionalIdentification: string;
+  enumAdditiveBenefit: string;
+  enumAdmin: string;
+  enumAgent: string;
+  enumAgentActivation: string;
+  enumAgentAssisted: string;
+  enumAgentMisconduct: string;
+  enumAgentOnboarding: string;
+  enumAgentOverrideActivation: string;
+  enumAgentPwa: string;
+  enumAgentSuspension: string;
+  enumAgreementAccepted: string;
+  enumAgriculture: string;
+  enumAgricultureProcessing: string;
+  enumAmountMismatch: string;
+  enumAnnual: string;
+  enumApi: string;
+  enumApplicationSubmitted: string;
+  enumApproved: string;
+  enumArchived: string;
+  enumArtisanCraft: string;
+  enumArtisanGuild: string;
+  enumAssessment: string;
+  enumAssessmentCreated: string;
+  enumAssigned: string;
+  enumAttested: string;
+  enumAuditor: string;
+  enumAuthorityLookup: string;
+  enumAutoRecommendation: string;
+  enumAwarded: string;
+  enumBag25kg: string;
+  enumBag50kg: string;
+  enumBankAccountChange: string;
+  enumBankChangeApplied: string;
+  enumBankChangeRefused: string;
+  enumBankChangeRequested: string;
+  enumBankTransfer: string;
+  enumBankVerified: string;
+  enumBase: string;
+  enumBlocked: string;
+  enumBoth: string;
+  enumBusiness: string;
+  enumBvn: string;
+  enumCamera: string;
+  enumCancelled: string;
+  enumCard: string;
+  enumCivilServant: string;
+  enumCleared: string;
+  enumClosed: string;
+  enumCollected: string;
+  enumCommission: string;
+  enumCommissionAdjustment: string;
+  enumCommissionPayout: string;
+  enumCommunityLeader: string;
+  enumCompleted: string;
+  enumConfirmed: string;
+  enumConstruction: string;
+  enumCritical: string;
+  enumDaily: string;
+  enumDelivered: string;
+  enumDenied: string;
+  enumDevice: string;
+  enumDeviceRegistered: string;
+  enumDismissed: string;
+  enumDisputed: string;
+  enumDocument: string;
+  enumDocumentCapture: string;
+  enumDownload: string;
+  enumDraft: string;
+  enumDriversLicence: string;
+  enumDuplicate: string;
+  enumDuplicatePayment: string;
+  enumEducation: string;
+  enumEligibilityGate: string;
+  enumEligible: string;
+  enumEmail: string;
+  enumEmployer: string;
+  enumEn: string;
+  enumEntertainmentArts: string;
+  enumExecuted: string;
+  enumExisting: string;
+  enumExpired: string;
+  enumFailed: string;
+  enumFailure: string;
+  enumFarmersCooperative: string;
+  enumFederal: string;
+  enumFemale: string;
+  enumFile: string;
+  enumFinanceOfficer: string;
+  enumFinancialServices: string;
+  enumFisheriesGroup: string;
+  enumFishing: string;
+  enumFixed: string;
+  enumFoodBeverage: string;
+  enumForfeited: string;
+  enumFormula: string;
+  enumFortnightly: string;
+  enumFound: string;
+  enumFull: string;
+  enumGamingBetting: string;
+  enumGateway: string;
+  enumGatewayWebhook: string;
+  enumGovernment: string;
+  enumGovernmentApproved: string;
+  enumGovernmentRejected: string;
+  enumHa: string;
+  enumHealthcare: string;
+  enumHigh: string;
+  enumHotelHospitality: string;
+  enumIctTelecoms: string;
+  enumIdentityDocument: string;
+  enumIgnored: string;
+  enumInProgress: string;
+  enumInactive: string;
+  enumIncorrectAssessment: string;
+  enumIndividual: string;
+  enumInfoRequested: string;
+  enumInformalWorker: string;
+  enumInitiated: string;
+  enumInvalid: string;
+  enumInvited: string;
+  enumInvoice: string;
+  enumInvoiceGenerated: string;
+  enumInvoiced: string;
+  enumIssued: string;
+  enumKilogram: string;
+  enumKycCleared: string;
+  enumKycFailed: string;
+  enumKycInfoRequired: string;
+  enumKycSubmitted: string;
+  enumLeft: string;
+  enumLimited: string;
+  enumLinkedExisting: string;
+  enumLitre: string;
+  enumLivestock: string;
+  enumLivestockAssociation: string;
+  enumLocalGovernment: string;
+  enumLogin: string;
+  enumLow: string;
+  enumMale: string;
+  enumManualCorrection: string;
+  enumManualEntry: string;
+  enumManualReview: string;
+  enumManufacturing: string;
+  enumMarketAssociation: string;
+  enumMatched: string;
+  enumMedium: string;
+  enumMerged: string;
+  enumMigration: string;
+  enumMining: string;
+  enumMissingPayment: string;
+  enumMissingPlatformTransaction: string;
+  enumMonthly: string;
+  enumMotorVehicle: string;
+  enumNin: string;
+  enumNormal: string;
+  enumNotAttempted: string;
+  enumNotFound: string;
+  enumNotPerformed: string;
+  enumNotRequested: string;
+  enumNotStarted: string;
+  enumOfficer: string;
+  enumOfficerReview: string;
+  enumOffline: string;
+  enumOnHold: string;
+  enumOneOff: string;
+  enumOnline: string;
+  enumOpen: string;
+  enumOpened: string;
+  enumOther: string;
+  enumOverrideApplied: string;
+  enumPaid: string;
+  enumPartial: string;
+  enumPartiallyPaid: string;
+  enumPassed: string;
+  enumPassport: string;
+  enumPassportPhotograph: string;
+  enumPasswordReset: string;
+  enumPaymentAcknowledgement: string;
+  enumPaymentEvidence: string;
+  enumPaymentInitiated: string;
+  enumPaymentIssue: string;
+  enumPaymentPending: string;
+  enumPaymentReversal: string;
+  enumPaymentSuccessful: string;
+  enumPaymentVerified: string;
+  enumPending: string;
+  enumPendingAttestation: string;
+  enumPendingPayment: string;
+  enumPendingSettlement: string;
+  enumPendingSync: string;
+  enumPercentage: string;
+  enumPoll: string;
+  enumPortal: string;
+  enumPos: string;
+  enumPrivateEmployee: string;
+  enumProceeded: string;
+  enumProcessed: string;
+  enumProcessing: string;
+  enumProfessionalServices: string;
+  enumProofOfAddress: string;
+  enumProposed: string;
+  enumPsirsSync: string;
+  enumPublicServant: string;
+  enumPush: string;
+  enumQuarterly: string;
+  enumQueued: string;
+  enumRead: string;
+  enumReadyForReview: string;
+  enumRealProperty: string;
+  enumReceipt: string;
+  enumReceiptGenerated: string;
+  enumReceiptIssue: string;
+  enumReceived: string;
+  enumRecognisedProfessional: string;
+  enumReconciled: string;
+  enumReconciliation: string;
+  enumReconciliationPending: string;
+  enumReferee: string;
+  enumRefereeCleared: string;
+  enumRefereeFailed: string;
+  enumRefereeInvited: string;
+  enumRefereeReplaced: string;
+  enumRefereeVerify: string;
+  enumRefund: string;
+  enumRefunded: string;
+  enumRegistration: string;
+  enumReinstated: string;
+  enumRejected: string;
+  enumReligiousLeader: string;
+  enumReligiousNgo: string;
+  enumReplaced: string;
+  enumRequested: string;
+  enumResolved: string;
+  enumResponded: string;
+  enumRetailTrade: string;
+  enumRetired: string;
+  enumRevenueOfficer: string;
+  enumRevenueRateChange: string;
+  enumReversal: string;
+  enumReversed: string;
+  enumReview: string;
+  enumReviewed: string;
+  enumRevoked: string;
+  enumRunning: string;
+  enumSeedling: string;
+  enumSelfAssessment: string;
+  enumSelfEmployed: string;
+  enumSelfie: string;
+  enumSent: string;
+  enumServiceRequest: string;
+  enumSettled: string;
+  enumSettlement: string;
+  enumShare: string;
+  enumSms: string;
+  enumStarted: string;
+  enumState: string;
+  enumStepUp: string;
+  enumStudentUnemployed: string;
+  enumSubmitted: string;
+  enumSucceeded: string;
+  enumSuccess: string;
+  enumSuccessful: string;
+  enumSuperseded: string;
+  enumSupervisor: string;
+  enumSupportingDocument: string;
+  enumSuspended: string;
+  enumSynced: string;
+  enumSystem: string;
+  enumTaxpayer: string;
+  enumTaxpayerAdjustment: string;
+  enumTaxpayerComplaint: string;
+  enumTaxpayerRegistration: string;
+  enumTechnicalIssue: string;
+  enumTiered: string;
+  enumTinConfirmation: string;
+  enumTinIssue: string;
+  enumTractorDay: string;
+  enumTradersAssociation: string;
+  enumTraditionalAuthority: string;
+  enumTrainingCompleted: string;
+  enumTransaction: string;
+  enumTransportHaulage: string;
+  enumTransportPassenger: string;
+  enumTransportUnion: string;
+  enumUnauthorisedCharge: string;
+  enumUnavailable: string;
+  enumUnchecked: string;
+  enumUnderReview: string;
+  enumUnit: string;
+  enumUnknown: string;
+  enumUnpaid: string;
+  enumUnspecified: string;
+  enumUnverified: string;
+  enumUpload: string;
+  enumUrgent: string;
+  enumUssd: string;
+  enumValid: string;
+  enumVehicle: string;
+  enumVehicleCapture: string;
+  enumVehicleIssue: string;
+  enumVehicleRenewal: string;
+  enumVerificationRequired: string;
+  enumVerified: string;
+  enumVerify: string;
+  enumView: string;
+  enumVotersCard: string;
+  enumWaived: string;
+  enumWebhook: string;
+  enumWeekly: string;
+  enumWhatsapp: string;
+  enumWholesaleTrade: string;
+
+  /**
    * The sentence a referee reads once, with a subject.
    *
    * It was assembled as the applicant's Local Government Area, an em dash,
@@ -1982,6 +2395,363 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Too many attempts. Wait a moment and try again.',
     errUpdateRequired: 'This version of the app is too old to collect with. Update it first.',
     errReference: 'Reference',
+    ofcOvSignalCount: "How many",
+    ofcOvSignalWindowSeconds: "Within, in seconds",
+    ofcOvSignalThreshold: "Threshold",
+    ofcOvSignalReason: "Reason",
+    ofcOvSignalAgentsSupported: "Agents supported",
+    ofcOvSignalAgentAssignedTo: "Agent assigned to",
+    ofcOvSignalCollectedIn: "Collected in",
+    ofcOvSignalAgentTerritory: "The agent’s area",
+    ofcOvSignalTransactionArea: "Where the collection happened",
+    ofcFnResolveTooShort: "Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed.",
+    ofcFnExceptionResolved: "Exception recorded as resolved.",
+    ofcFnApprovePayoutTooShort: "Give a reason for approving this payout, in at least 5 characters.",
+    ofcFnPayoutApproved: "Payout approved.",
+    ofcFnTransferReferenceTooShort: "Enter the bank transfer reference. It is what ties this payout to the money that actually left the account.",
+    ofcFnPayoutPaid: "Payout recorded as paid.",
+    ofcFnPayoutFailedTooShort: "Record what the bank said. The agent has to be told why they were not paid, and the next attempt depends on knowing.",
+    ofcFnPayoutFailedRecorded: "Recorded as failed. The commission in it is payable again, and any clawback it had netted off is owed again.",
+    ofcFnDecisionTooShort: "Give a reason for this decision, in at least 10 characters.",
+    ofcFnRequestDecided: "Request {{decision}}.",
+    ofcOvFlagNoteTooShort: "Record what you found, in at least 10 characters. It is the only record of why this flag was settled the way it was.",
+    ofcOvFlagConfirmed: "Flag confirmed. The agent’s commission has been placed on hold pending resolution.",
+    ofcOvFlagMarked: "Flag marked {{decision}}.",
+    ofcAlForfeitTooShort: "Give at least ten characters saying why this share is being released.",
+    ofcAlReleased: "Released. The {{quantity}} is back in {{round}} for another beneficiary.",
+    ofcUaChooseRoleFirst: "Choose the role this officer should hold.",
+    ofcUaAlreadyHolds: "{{name}} already holds the {{role}} role.",
+    ofcUaSayWhy: "Say why this access is changing, in at least 10 characters. It is the only record of why.",
+    ofcAgRecordWhatYouFound: "Record what you found: it is the only record of why this flag was left open, upheld or set aside.",
+    enumDeviceVelocity: "One handset, too many collections",
+    enumSharedPhoneNumber: "One phone number on several taxpayers",
+    enumDuplicateTaxpayerDetails: "Details already on another record",
+    enumOutOfTerritory: "Collected outside the agent’s area",
+    enumRepeatedFailedPayments: "Payments that keep failing",
+    enumReversalPattern: "A pattern of reversals",
+    enumUnusualVolume: "More collections than usual",
+    enumRapidSuccession: "Collections one after another, too fast",
+    enumCommissionAnomaly: "Commission that does not add up",
+    enumSettlementVariance: "The gateway paid a different amount",
+    enumAbandoned: "Abandoned",
+    enumAborted: "Aborted",
+    enumAccepted: "Accepted",
+    enumAccountTransfer: "Account transfer",
+    enumActionRequired: "Action required",
+    enumActivated: "Activated",
+    enumActive: "Active",
+    enumAdditionalIdentification: "Additional identification",
+    enumAdditiveBenefit: "Extra benefit",
+    enumAdmin: "Administrator",
+    enumAgent: "Agent",
+    enumAgentActivation: "Activating an agent",
+    enumAgentAssisted: "With an agent",
+    enumAgentMisconduct: "An agent behaving wrongly",
+    enumAgentOnboarding: "Registered by an agent",
+    enumAgentOverrideActivation: "Activating an agent by override",
+    enumAgentPwa: "Agent app",
+    enumAgentSuspension: "Suspending an agent",
+    enumAgreementAccepted: "Agreement accepted",
+    enumAgriculture: "Farming",
+    enumAgricultureProcessing: "Processing farm produce",
+    enumAmountMismatch: "Amount does not match",
+    enumAnnual: "Yearly",
+    enumApi: "API",
+    enumApplicationSubmitted: "Application submitted",
+    enumApproved: "Approved",
+    enumArchived: "Archived",
+    enumArtisanCraft: "Craft and trade work",
+    enumArtisanGuild: "Artisan guild",
+    enumAssessment: "Assessment",
+    enumAssessmentCreated: "Assessment made",
+    enumAssigned: "Assigned",
+    enumAttested: "Attested",
+    enumAuditor: "Auditor",
+    enumAuthorityLookup: "Vehicle authority",
+    enumAutoRecommendation: "Suggested automatically",
+    enumAwarded: "Awarded",
+    enumBag25kg: "25kg bag",
+    enumBag50kg: "50kg bag",
+    enumBankAccountChange: "Changing a bank account",
+    enumBankChangeApplied: "Bank account changed",
+    enumBankChangeRefused: "Bank account change refused",
+    enumBankChangeRequested: "Bank account change requested",
+    enumBankTransfer: "Bank transfer",
+    enumBankVerified: "Bank account verified",
+    enumBase: "Base",
+    enumBlocked: "Blocked",
+    enumBoth: "Both",
+    enumBusiness: "Business",
+    enumBvn: "Bank Verification Number",
+    enumCamera: "Camera",
+    enumCancelled: "Cancelled",
+    enumCard: "Card",
+    enumCivilServant: "Civil servant",
+    enumCleared: "Cleared",
+    enumClosed: "Closed",
+    enumCollected: "Collected",
+    enumCommission: "Commission",
+    enumCommissionAdjustment: "Adjusting commission",
+    enumCommissionPayout: "Paying out commission",
+    enumCommunityLeader: "Community leader",
+    enumCompleted: "Completed",
+    enumConfirmed: "Confirmed",
+    enumConstruction: "Building work",
+    enumCritical: "Critical",
+    enumDaily: "Daily",
+    enumDelivered: "Delivered",
+    enumDenied: "Refused",
+    enumDevice: "Device",
+    enumDeviceRegistered: "Device registered",
+    enumDismissed: "Dismissed",
+    enumDisputed: "Disputed",
+    enumDocument: "Document",
+    enumDocumentCapture: "Document photograph",
+    enumDownload: "Download",
+    enumDraft: "Draft",
+    enumDriversLicence: "Driver’s licence",
+    enumDuplicate: "Duplicate",
+    enumDuplicatePayment: "Duplicate payment",
+    enumEducation: "Education",
+    enumEligibilityGate: "Condition of eligibility",
+    enumEligible: "Eligible",
+    enumEmail: "Email",
+    enumEmployer: "Employer",
+    enumEn: "English",
+    enumEntertainmentArts: "Entertainment and the arts",
+    enumExecuted: "Executed",
+    enumExisting: "Already held",
+    enumExpired: "Expired",
+    enumFailed: "Failed",
+    enumFailure: "Failure",
+    enumFarmersCooperative: "Farmers’ cooperative",
+    enumFederal: "Federal",
+    enumFemale: "Female",
+    enumFile: "File",
+    enumFinanceOfficer: "Finance officer",
+    enumFinancialServices: "Financial services",
+    enumFisheriesGroup: "Fisheries group",
+    enumFishing: "Fishing",
+    enumFixed: "Fixed amount",
+    enumFoodBeverage: "Food and drink",
+    enumForfeited: "Forfeited",
+    enumFormula: "Formula",
+    enumFortnightly: "Every two weeks",
+    enumFound: "Found",
+    enumFull: "Full",
+    enumGamingBetting: "Gaming and betting",
+    enumGateway: "Payment gateway",
+    enumGatewayWebhook: "Gateway notice",
+    enumGovernment: "Government",
+    enumGovernmentApproved: "Approved by the government",
+    enumGovernmentRejected: "Refused by the government",
+    enumHa: "Hausa",
+    enumHealthcare: "Health care",
+    enumHigh: "High",
+    enumHotelHospitality: "Hotels and hospitality",
+    enumIctTelecoms: "Computers and telephones",
+    enumIdentityDocument: "Identity document",
+    enumIgnored: "Ignored",
+    enumInProgress: "In progress",
+    enumInactive: "Inactive",
+    enumIncorrectAssessment: "An assessment that is wrong",
+    enumIndividual: "Individual",
+    enumInfoRequested: "Information requested",
+    enumInformalWorker: "Informal work",
+    enumInitiated: "Started",
+    enumInvalid: "Not valid",
+    enumInvited: "Invited",
+    enumInvoice: "Invoice",
+    enumInvoiceGenerated: "Invoice issued",
+    enumInvoiced: "Invoiced",
+    enumIssued: "Issued",
+    enumKilogram: "Kilogram",
+    enumKycCleared: "Identity cleared",
+    enumKycFailed: "Identity check failed",
+    enumKycInfoRequired: "More identity information needed",
+    enumKycSubmitted: "Identity submitted",
+    enumLeft: "Left the group",
+    enumLimited: "Weak signal",
+    enumLinkedExisting: "Linked to an existing record",
+    enumLitre: "Litre",
+    enumLivestock: "Livestock",
+    enumLivestockAssociation: "Livestock association",
+    enumLocalGovernment: "Local government",
+    enumLogin: "Sign in",
+    enumLow: "Low",
+    enumMale: "Male",
+    enumManualCorrection: "Correcting a record by hand",
+    enumManualEntry: "Entered by hand",
+    enumManualReview: "Needs a person to look",
+    enumManufacturing: "Manufacturing",
+    enumMarketAssociation: "Market association",
+    enumMatched: "Matched",
+    enumMedium: "Medium",
+    enumMerged: "Merged",
+    enumMigration: "Migration",
+    enumMining: "Mining",
+    enumMissingPayment: "Payment missing",
+    enumMissingPlatformTransaction: "No record on the platform",
+    enumMonthly: "Monthly",
+    enumMotorVehicle: "Motor vehicles",
+    enumNin: "National Identification Number",
+    enumNormal: "Normal",
+    enumNotAttempted: "Not attempted",
+    enumNotFound: "Not found",
+    enumNotPerformed: "Not performed",
+    enumNotRequested: "Not requested",
+    enumNotStarted: "Not started",
+    enumOfficer: "Officer",
+    enumOfficerReview: "Officer review",
+    enumOffline: "Offline",
+    enumOnHold: "On hold",
+    enumOneOff: "One off",
+    enumOnline: "Online",
+    enumOpen: "Open",
+    enumOpened: "Opened",
+    enumOther: "Other",
+    enumOverrideApplied: "Override applied",
+    enumPaid: "Paid",
+    enumPartial: "Part",
+    enumPartiallyPaid: "Partly paid",
+    enumPassed: "Passed",
+    enumPassport: "Passport",
+    enumPassportPhotograph: "Passport photograph",
+    enumPasswordReset: "Password reset",
+    enumPaymentAcknowledgement: "Acknowledgement of payment",
+    enumPaymentEvidence: "Evidence of payment",
+    enumPaymentInitiated: "Payment started",
+    enumPaymentIssue: "A payment problem",
+    enumPaymentPending: "Payment pending",
+    enumPaymentReversal: "Reversing a payment",
+    enumPaymentSuccessful: "Payment successful",
+    enumPaymentVerified: "Payment verified",
+    enumPending: "Pending",
+    enumPendingAttestation: "Waiting for the leader to confirm",
+    enumPendingPayment: "Waiting for payment",
+    enumPendingSettlement: "Waiting for settlement",
+    enumPendingSync: "Waiting to be sent",
+    enumPercentage: "Percentage",
+    enumPoll: "Gateway check",
+    enumPortal: "Officer portal",
+    enumPos: "POS",
+    enumPrivateEmployee: "Employed privately",
+    enumProceeded: "Proceeded",
+    enumProcessed: "Processed",
+    enumProcessing: "Processing",
+    enumProfessionalServices: "Professional services",
+    enumProofOfAddress: "Proof of address",
+    enumProposed: "Proposed",
+    enumPsirsSync: "PSIRS records",
+    enumPublicServant: "Public servant",
+    enumPush: "App notification",
+    enumQuarterly: "Quarterly",
+    enumQueued: "Queued",
+    enumRead: "Read",
+    enumReadyForReview: "Ready for review",
+    enumRealProperty: "Land and buildings",
+    enumReceipt: "Receipt",
+    enumReceiptGenerated: "Receipt issued",
+    enumReceiptIssue: "A receipt problem",
+    enumReceived: "Received",
+    enumRecognisedProfessional: "Recognised professional",
+    enumReconciled: "Reconciled",
+    enumReconciliation: "Reconciliation",
+    enumReconciliationPending: "Waiting for reconciliation",
+    enumReferee: "Referee",
+    enumRefereeCleared: "Referee cleared",
+    enumRefereeFailed: "Referee did not clear",
+    enumRefereeInvited: "Referee invited",
+    enumRefereeReplaced: "Referee replaced",
+    enumRefereeVerify: "Referee verification",
+    enumRefund: "Refund",
+    enumRefunded: "Refunded",
+    enumRegistration: "Registration",
+    enumReinstated: "Reinstated",
+    enumRejected: "Rejected",
+    enumReligiousLeader: "Religious leader",
+    enumReligiousNgo: "Religious body or charity",
+    enumReplaced: "Replaced",
+    enumRequested: "Requested",
+    enumResolved: "Resolved",
+    enumResponded: "Responded",
+    enumRetailTrade: "Retail trade",
+    enumRetired: "Retired",
+    enumRevenueOfficer: "Revenue officer",
+    enumRevenueRateChange: "Changing a rate",
+    enumReversal: "Reversal",
+    enumReversed: "Reversed",
+    enumReview: "Review",
+    enumReviewed: "Reviewed",
+    enumRevoked: "Revoked",
+    enumRunning: "Running",
+    enumSeedling: "Seedling",
+    enumSelfAssessment: "Self assessment",
+    enumSelfEmployed: "Self employed",
+    enumSelfie: "Photograph of yourself",
+    enumSent: "Sent",
+    enumServiceRequest: "Service request",
+    enumSettled: "Settled",
+    enumSettlement: "Settlement",
+    enumShare: "Share",
+    enumSms: "SMS",
+    enumStarted: "Started",
+    enumState: "State",
+    enumStepUp: "Extra confirmation",
+    enumStudentUnemployed: "Student or not working",
+    enumSubmitted: "Submitted",
+    enumSucceeded: "Succeeded",
+    enumSuccess: "Success",
+    enumSuccessful: "Successful",
+    enumSuperseded: "Superseded",
+    enumSupervisor: "Supervisor",
+    enumSupportingDocument: "Supporting document",
+    enumSuspended: "Suspended",
+    enumSynced: "Sent",
+    enumSystem: "System",
+    enumTaxpayer: "Taxpayer",
+    enumTaxpayerAdjustment: "Adjusting a taxpayer record",
+    enumTaxpayerComplaint: "A complaint from a taxpayer",
+    enumTaxpayerRegistration: "Taxpayer registration",
+    enumTechnicalIssue: "A problem with the app",
+    enumTiered: "Tiered",
+    enumTinConfirmation: "TIN confirmation",
+    enumTinIssue: "A TIN problem",
+    enumTractorDay: "Tractor day",
+    enumTradersAssociation: "Traders’ association",
+    enumTraditionalAuthority: "Traditional authority",
+    enumTrainingCompleted: "Training completed",
+    enumTransaction: "Transaction",
+    enumTransportHaulage: "Carrying goods",
+    enumTransportPassenger: "Carrying passengers",
+    enumTransportUnion: "Transport union",
+    enumUnauthorisedCharge: "A charge nobody authorised",
+    enumUnavailable: "Unavailable",
+    enumUnchecked: "Not checked",
+    enumUnderReview: "Under review",
+    enumUnit: "Unit",
+    enumUnknown: "Unknown",
+    enumUnpaid: "Unpaid",
+    enumUnspecified: "Not stated",
+    enumUnverified: "Not verified",
+    enumUpload: "Upload",
+    enumUrgent: "Urgent",
+    enumUssd: "USSD",
+    enumValid: "Valid",
+    enumVehicle: "Vehicle",
+    enumVehicleCapture: "Vehicle details",
+    enumVehicleIssue: "A vehicle problem",
+    enumVehicleRenewal: "Vehicle renewal",
+    enumVerificationRequired: "Verification required",
+    enumVerified: "Verified",
+    enumVerify: "Verify",
+    enumView: "View",
+    enumVotersCard: "Voter’s card",
+    enumWaived: "Waived",
+    enumWebhook: "Gateway notice",
+    enumWeekly: "Weekly",
+    enumWhatsapp: "WhatsApp",
+    enumWholesaleTrade: "Wholesale trade",
     pubRefereeIntroOfLga: "{{name}}, of {{lga}}, has applied to become an authorised revenue agent. PSIRS needs somebody who knows them to confirm their identity and suitability.",
     ofcUaSuspendOrCloseBody: "Suspending or closing an account signs the officer out everywhere and stops them signing in again. Suspension is a pause pending an answer; closing is the end of the appointment and cannot be undone — create a new account if they return.",
     ofcUaCoverNothingBody: "{{name}} will see no revenue figures at all until a territory is assigned.",
@@ -3617,6 +4387,363 @@ export const translations: Record<Language, TranslationDictionary> = {
     errRateLimited: 'Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.',
     errUpdateRequired: 'Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.',
     errReference: 'Lamba',
+    ofcOvSignalCount: "Nawa",
+    ofcOvSignalWindowSeconds: "A cikin, da dakiku",
+    ofcOvSignalThreshold: "Iyaka",
+    ofcOvSignalReason: "Dalili",
+    ofcOvSignalAgentsSupported: "Wakilan da aka goyi baya",
+    ofcOvSignalAgentAssignedTo: "Wakilin da aka ba",
+    ofcOvSignalCollectedIn: "An karba a",
+    ofcOvSignalAgentTerritory: "Yankin wakili",
+    ofcOvSignalTransactionArea: "Inda aka karbi kudin",
+    ofcFnResolveTooShort: "Ka fada yadda aka warware matsalar, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan bambancin.",
+    ofcFnExceptionResolved: "An rubuta cewa an warware matsalar.",
+    ofcFnApprovePayoutTooShort: "Ka ba da dalilin amincewa da wannan fitar da kudi, da akalla haruffa 5.",
+    ofcFnPayoutApproved: "An amince da fitar da kudin.",
+    ofcFnTransferReferenceTooShort: "Ka shigar da lambar turawar banki. Ita ce ke hada wannan biyan da kudin da suka fita daga asusun da gaske.",
+    ofcFnPayoutPaid: "An rubuta cewa an biya kudin.",
+    ofcFnPayoutFailedTooShort: "Ka rubuta abin da banki ya ce. Dole a gaya wa wakili dalilin da ya sa ba a biya shi ba, kuma yunkuri na gaba ya dogara da sanin hakan.",
+    ofcFnPayoutFailedRecorded: "An rubuta cewa ya gaza. Kwamishan da ke cikinsa ya sake zama abin biya, kuma duk wani cirewa da aka yi a ciki ya sake zama bashi.",
+    ofcFnDecisionTooShort: "Ka ba da dalilin wannan shawarar, da akalla haruffa 10.",
+    ofcFnRequestDecided: "An {{decision}} bukatar.",
+    ofcOvFlagNoteTooShort: "Ka rubuta abin da ka gano, da akalla haruffa 10. Shi ne kadai bayanin dalilin da ya sa aka warware wannan alamar haka.",
+    ofcOvFlagConfirmed: "An tabbatar da alamar. An dakatar da kwamishan wakilin har sai an warware.",
+    ofcOvFlagMarked: "An sanya wa alamar {{decision}}.",
+    ofcAlForfeitTooShort: "Ka ba da akalla haruffa goma da ke fadin dalilin sakin wannan rabon.",
+    ofcAlReleased: "An sake shi. {{quantity}} ya koma cikin {{round}} domin wani mai amfana.",
+    ofcUaChooseRoleFirst: "Ka zabi matsayin da wannan jami’in zai rike.",
+    ofcUaAlreadyHolds: "{{name}} ya riga ya rike matsayin {{role}}.",
+    ofcUaSayWhy: "Ka fada dalilin canja wannan izini, da akalla haruffa 10. Shi ne kadai bayanin dalilin.",
+    ofcAgRecordWhatYouFound: "Ka rubuta abin da ka gano: shi ne kadai bayanin dalilin da ya sa aka bar wannan alamar a bude, aka tabbatar da ita, ko aka yi watsi da ita.",
+    enumDeviceVelocity: "Na’ura daya, karbar kudi da yawa",
+    enumSharedPhoneNumber: "Lambar waya daya a kan masu biyan haraji da yawa",
+    enumDuplicateTaxpayerDetails: "Bayanan da suke a wani bayanin",
+    enumOutOfTerritory: "An karba a wajen yankin wakili",
+    enumRepeatedFailedPayments: "Biyan kudi da ke ci gaba da gazawa",
+    enumReversalPattern: "Yanayin mayar da kudi akai-akai",
+    enumUnusualVolume: "Karbar kudi fiye da yadda aka saba",
+    enumRapidSuccession: "Karbar kudi a jere, da sauri sosai",
+    enumCommissionAnomaly: "Kwamishan da bai yi daidai ba",
+    enumSettlementVariance: "Hanyar biya ta biya wani adadi daban",
+    enumAbandoned: "An yashe",
+    enumAborted: "An dakatar da shi",
+    enumAccepted: "An karba",
+    enumAccountTransfer: "Tura kudi daga asusu",
+    enumActionRequired: "Ana bukatar mataki",
+    enumActivated: "An kunna",
+    enumActive: "Mai aiki",
+    enumAdditionalIdentification: "Karin shaida",
+    enumAdditiveBenefit: "Karin amfani",
+    enumAdmin: "Mai gudanarwa",
+    enumAgent: "Wakili",
+    enumAgentActivation: "Kunna wakili",
+    enumAgentAssisted: "Tare da wakili",
+    enumAgentMisconduct: "Wakili mai mummunan hali",
+    enumAgentOnboarding: "Wakili ya yi rajista",
+    enumAgentOverrideActivation: "Kunna wakili ta hanyar kebewa",
+    enumAgentPwa: "Manhajar wakili",
+    enumAgentSuspension: "Dakatar da wakili",
+    enumAgreementAccepted: "An karbi yarjejeniya",
+    enumAgriculture: "Noma",
+    enumAgricultureProcessing: "Sarrafa amfanin gona",
+    enumAmountMismatch: "Adadin bai dace ba",
+    enumAnnual: "Kowace shekara",
+    enumApi: "API",
+    enumApplicationSubmitted: "An tura takardar neman aiki",
+    enumApproved: "An amince",
+    enumArchived: "An ajiye",
+    enumArtisanCraft: "Sana’ar hannu",
+    enumArtisanGuild: "Kungiyar masu sana’a",
+    enumAssessment: "Kimantawa",
+    enumAssessmentCreated: "An yi kimantawa",
+    enumAssigned: "An ba wa wani",
+    enumAttested: "An shaida",
+    enumAuditor: "Mai binciken lissafi",
+    enumAuthorityLookup: "Hukumar motoci",
+    enumAutoRecommendation: "An ba da shawara ta atomatik",
+    enumAwarded: "An ba da kyauta",
+    enumBag25kg: "Buhu 25kg",
+    enumBag50kg: "Buhu 50kg",
+    enumBankAccountChange: "Canja asusun banki",
+    enumBankChangeApplied: "An canja asusun banki",
+    enumBankChangeRefused: "An ki canja asusun banki",
+    enumBankChangeRequested: "An nemi canja asusun banki",
+    enumBankTransfer: "Tura kudi ta banki",
+    enumBankVerified: "An tabbatar da asusun banki",
+    enumBase: "Tushe",
+    enumBlocked: "An hana",
+    enumBoth: "Duka biyu",
+    enumBusiness: "Kasuwanci",
+    enumBvn: "Lambar Tabbatar da Banki",
+    enumCamera: "Kamara",
+    enumCancelled: "An soke",
+    enumCard: "Katin banki",
+    enumCivilServant: "Ma’aikacin gwamnati",
+    enumCleared: "An tantance",
+    enumClosed: "An rufe",
+    enumCollected: "An karba",
+    enumCommission: "Kwamishan",
+    enumCommissionAdjustment: "Gyara kwamishan",
+    enumCommissionPayout: "Fitar da kwamishan",
+    enumCommunityLeader: "Shugaban al’umma",
+    enumCompleted: "An kammala",
+    enumConfirmed: "An tabbatar",
+    enumConstruction: "Aikin gini",
+    enumCritical: "Mai matukar hatsari",
+    enumDaily: "Kullum",
+    enumDelivered: "An isar",
+    enumDenied: "An hana",
+    enumDevice: "Na’ura",
+    enumDeviceRegistered: "An yi rajistar na’ura",
+    enumDismissed: "An yi watsi da shi",
+    enumDisputed: "Ana jayayya",
+    enumDocument: "Takarda",
+    enumDocumentCapture: "Hoton takarda",
+    enumDownload: "Sauke",
+    enumDraft: "Daftari",
+    enumDriversLicence: "Lasisin tuki",
+    enumDuplicate: "Kwafi",
+    enumDuplicatePayment: "Biyan kudi sau biyu",
+    enumEducation: "Ilimi",
+    enumEligibilityGate: "Sharadin cancanta",
+    enumEligible: "Ya cancanta",
+    enumEmail: "Imel",
+    enumEmployer: "Ma’aikaci",
+    enumEn: "Turanci",
+    enumEntertainmentArts: "Nishadi da fasaha",
+    enumExecuted: "An zartar",
+    enumExisting: "Ana da shi",
+    enumExpired: "Ya kare",
+    enumFailed: "Ya gaza",
+    enumFailure: "Gazawa",
+    enumFarmersCooperative: "Kungiyar manoma",
+    enumFederal: "Tarayya",
+    enumFemale: "Mace",
+    enumFile: "Fayil",
+    enumFinanceOfficer: "Jami’in kudi",
+    enumFinancialServices: "Ayyukan kudi",
+    enumFisheriesGroup: "Kungiyar masunta",
+    enumFishing: "Kamun kifi",
+    enumFixed: "Adadi kayyadadde",
+    enumFoodBeverage: "Abinci da abin sha",
+    enumForfeited: "An rasa",
+    enumFormula: "Tsari na lissafi",
+    enumFortnightly: "Kowane mako biyu",
+    enumFound: "An samu",
+    enumFull: "Cikakke",
+    enumGamingBetting: "Caca",
+    enumGateway: "Hanyar biyan kudi",
+    enumGatewayWebhook: "Sanarwar hanyar biya",
+    enumGovernment: "Gwamnati",
+    enumGovernmentApproved: "Gwamnati ta amince",
+    enumGovernmentRejected: "Gwamnati ta ki",
+    enumHa: "Hausa",
+    enumHealthcare: "Kiwon lafiya",
+    enumHigh: "Mai yawa",
+    enumHotelHospitality: "Otal da masauki",
+    enumIctTelecoms: "Kwamfuta da waya",
+    enumIdentityDocument: "Takardar shaida",
+    enumIgnored: "An yi watsi da shi",
+    enumInProgress: "Ana ci gaba",
+    enumInactive: "Ba ya aiki",
+    enumIncorrectAssessment: "Kimantawa mara kyau",
+    enumIndividual: "Mutum",
+    enumInfoRequested: "An nemi karin bayani",
+    enumInformalWorker: "Aikin da ba na hukuma ba",
+    enumInitiated: "An fara",
+    enumInvalid: "Ba sahihi ba",
+    enumInvited: "An gayyata",
+    enumInvoice: "Takardar biya",
+    enumInvoiceGenerated: "An fitar da takardar biya",
+    enumInvoiced: "An fitar da takardar biya",
+    enumIssued: "An bayar",
+    enumKilogram: "Kilogiram",
+    enumKycCleared: "An tantance shaida",
+    enumKycFailed: "Tantance shaida ya gaza",
+    enumKycInfoRequired: "Ana bukatar karin shaida",
+    enumKycSubmitted: "An tura shaida",
+    enumLeft: "Ya bar kungiyar",
+    enumLimited: "Sigina mai rauni",
+    enumLinkedExisting: "An hade da bayanin da ake da shi",
+    enumLitre: "Lita",
+    enumLivestock: "Kiwon dabbobi",
+    enumLivestockAssociation: "Kungiyar masu dabbobi",
+    enumLocalGovernment: "Karamar hukuma",
+    enumLogin: "Shiga",
+    enumLow: "Kadan",
+    enumMale: "Namiji",
+    enumManualCorrection: "Gyara bayani da hannu",
+    enumManualEntry: "An shigar da hannu",
+    enumManualReview: "Yana bukatar mutum ya duba",
+    enumManufacturing: "Masana’antu",
+    enumMarketAssociation: "Kungiyar kasuwa",
+    enumMatched: "Ya dace",
+    enumMedium: "Matsakaici",
+    enumMerged: "An hade",
+    enumMigration: "Canja bayanai",
+    enumMining: "Hakar ma’adinai",
+    enumMissingPayment: "Babu biyan kudi",
+    enumMissingPlatformTransaction: "Babu bayani a dandalin",
+    enumMonthly: "Kowane wata",
+    enumMotorVehicle: "Motoci",
+    enumNin: "Lambar Shaidar Kasa",
+    enumNormal: "Na yau da kullum",
+    enumNotAttempted: "Ba a gwada ba",
+    enumNotFound: "Ba a samu ba",
+    enumNotPerformed: "Ba a yi ba",
+    enumNotRequested: "Ba a nema ba",
+    enumNotStarted: "Ba a fara ba",
+    enumOfficer: "Jami’i",
+    enumOfficerReview: "Dubawar jami’i",
+    enumOffline: "Babu layi",
+    enumOnHold: "An dakatar na dan lokaci",
+    enumOneOff: "Sau daya",
+    enumOnline: "Yana kan layi",
+    enumOpen: "A bude",
+    enumOpened: "An bude",
+    enumOther: "Wani",
+    enumOverrideApplied: "An yi amfani da kebewa",
+    enumPaid: "An biya",
+    enumPartial: "Wani bangare",
+    enumPartiallyPaid: "An biya wani bangare",
+    enumPassed: "Ya wuce",
+    enumPassport: "Fasfo",
+    enumPassportPhotograph: "Hoton fasfo",
+    enumPasswordReset: "Sauya kalmar sirri",
+    enumPaymentAcknowledgement: "Sanarwar karbar biyan kudi",
+    enumPaymentEvidence: "Shaidar biyan kudi",
+    enumPaymentInitiated: "An fara biyan kudi",
+    enumPaymentIssue: "Matsalar biyan kudi",
+    enumPaymentPending: "Ana jiran biyan kudi",
+    enumPaymentReversal: "Mayar da biyan kudi",
+    enumPaymentSuccessful: "Biyan kudi ya yi nasara",
+    enumPaymentVerified: "An tabbatar da biyan kudi",
+    enumPending: "Ana jira",
+    enumPendingAttestation: "Ana jiran shugaba ya tabbatar",
+    enumPendingPayment: "Ana jiran biyan kudi",
+    enumPendingSettlement: "Ana jiran biya",
+    enumPendingSync: "Ana jiran a tura",
+    enumPercentage: "Kaso",
+    enumPoll: "Duba hanyar biya",
+    enumPortal: "Tashar jami’i",
+    enumPos: "POS",
+    enumPrivateEmployee: "Ma’aikacin kamfani",
+    enumProceeded: "An ci gaba",
+    enumProcessed: "An sarrafa",
+    enumProcessing: "Ana aiwatarwa",
+    enumProfessionalServices: "Ayyukan kwararru",
+    enumProofOfAddress: "Shaidar adireshi",
+    enumProposed: "An gabatar",
+    enumPsirsSync: "Bayanan PSIRS",
+    enumPublicServant: "Ma’aikacin gwamnati",
+    enumPush: "Sanarwar manhaja",
+    enumQuarterly: "Kowane wata uku",
+    enumQueued: "Yana layi",
+    enumRead: "An karanta",
+    enumReadyForReview: "A shirye don dubawa",
+    enumRealProperty: "Filaye da gine-gine",
+    enumReceipt: "Rasit",
+    enumReceiptGenerated: "An fitar da rasit",
+    enumReceiptIssue: "Matsalar rasit",
+    enumReceived: "An karba",
+    enumRecognisedProfessional: "Kwararre da aka amince da shi",
+    enumReconciled: "An daidaita lissafi",
+    enumReconciliation: "Daidaita lissafi",
+    enumReconciliationPending: "Ana jiran daidaita lissafi",
+    enumReferee: "Mai shaida",
+    enumRefereeCleared: "Mai shaida ya tabbatar",
+    enumRefereeFailed: "Mai shaida bai tabbatar ba",
+    enumRefereeInvited: "An gayyaci mai shaida",
+    enumRefereeReplaced: "An maye gurbin mai shaida",
+    enumRefereeVerify: "Tabbatar da mai shaida",
+    enumRefund: "Mayar da kudi",
+    enumRefunded: "An mayar da kudi",
+    enumRegistration: "Rajista",
+    enumReinstated: "An mayar da shi aiki",
+    enumRejected: "An ki",
+    enumReligiousLeader: "Shugaban addini",
+    enumReligiousNgo: "Kungiyar addini ko agaji",
+    enumReplaced: "An maye gurbinsa",
+    enumRequested: "An nema",
+    enumResolved: "An warware",
+    enumResponded: "An amsa",
+    enumRetailTrade: "Sayarwa kanana",
+    enumRetired: "An janye",
+    enumRevenueOfficer: "Jami’in kudaden shiga",
+    enumRevenueRateChange: "Canja kudin haraji",
+    enumReversal: "Mayarwa",
+    enumReversed: "An mayar da shi",
+    enumReview: "Dubawa",
+    enumReviewed: "An duba",
+    enumRevoked: "An janye izini",
+    enumRunning: "Yana gudana",
+    enumSeedling: "Tsiro",
+    enumSelfAssessment: "Kimanta kai",
+    enumSelfEmployed: "Mai aikin kansa",
+    enumSelfie: "Hoton kanka",
+    enumSent: "An aika",
+    enumServiceRequest: "Neman hidima",
+    enumSettled: "An daidaita",
+    enumSettlement: "Biyan kudi",
+    enumShare: "Rabawa",
+    enumSms: "SMS",
+    enumStarted: "An fara",
+    enumState: "Jiha",
+    enumStepUp: "Karin tabbatarwa",
+    enumStudentUnemployed: "Dalibi ko marar aikin yi",
+    enumSubmitted: "An tura",
+    enumSucceeded: "Ya yi nasara",
+    enumSuccess: "Nasara",
+    enumSuccessful: "Ya yi nasara",
+    enumSuperseded: "An maye gurbinsa",
+    enumSupervisor: "Shugaba",
+    enumSupportingDocument: "Takardar tallafi",
+    enumSuspended: "An dakatar",
+    enumSynced: "An tura",
+    enumSystem: "Tsarin",
+    enumTaxpayer: "Mai biyan haraji",
+    enumTaxpayerAdjustment: "Gyara bayanin mai biyan haraji",
+    enumTaxpayerComplaint: "Korafin mai biyan haraji",
+    enumTaxpayerRegistration: "Rajistar mai biyan haraji",
+    enumTechnicalIssue: "Matsalar manhaja",
+    enumTiered: "Matakai",
+    enumTinConfirmation: "Tabbatar da TIN",
+    enumTinIssue: "Matsalar TIN",
+    enumTractorDay: "Ranar tarakta",
+    enumTradersAssociation: "Kungiyar ’yan kasuwa",
+    enumTraditionalAuthority: "Sarauta",
+    enumTrainingCompleted: "An kammala horo",
+    enumTransaction: "Ciniki",
+    enumTransportHaulage: "Daukar kaya",
+    enumTransportPassenger: "Daukar fasinja",
+    enumTransportUnion: "Kungiyar masu sufuri",
+    enumUnauthorisedCharge: "Kudin da ba a ba da izini ba",
+    enumUnavailable: "Ba ya samuwa",
+    enumUnchecked: "Ba a duba ba",
+    enumUnderReview: "Ana dubawa",
+    enumUnit: "Guda",
+    enumUnknown: "Ba a sani ba",
+    enumUnpaid: "Ba a biya ba",
+    enumUnspecified: "Ba a fada ba",
+    enumUnverified: "Ba a tabbatar ba",
+    enumUpload: "Tura",
+    enumUrgent: "Na gaggawa",
+    enumUssd: "USSD",
+    enumValid: "Sahihi",
+    enumVehicle: "Mota",
+    enumVehicleCapture: "Bayanin mota",
+    enumVehicleIssue: "Matsalar mota",
+    enumVehicleRenewal: "Sabunta takardun mota",
+    enumVerificationRequired: "Ana bukatar tabbatarwa",
+    enumVerified: "An tabbatar",
+    enumVerify: "Tabbatar",
+    enumView: "Duba",
+    enumVotersCard: "Katin zabe",
+    enumWaived: "An yafe",
+    enumWebhook: "Sanarwar hanyar biya",
+    enumWeekly: "Kowane mako",
+    enumWhatsapp: "WhatsApp",
+    enumWholesaleTrade: "Sayarwa da yawa",
     pubRefereeIntroOfLga: "{{name}}, na {{lga}}, ya nemi ya zama wakilin karbar haraji da izini. PSIRS na bukatar wanda ya san shi don tabbatar da ko wanene shi da cancantarsa.",
     ofcUaSuspendOrCloseBody: "Dakatarwa ko rufe asusu yana fitar da jami’in daga ko’ina kuma yana hana shi sake shiga. Dakatarwa hutu ne har sai an sami amsa; rufewa shi ne karshen aikin kuma ba a iya warwarewa — sai an bude sabon asusu idan ya dawo.",
     ofcUaCoverNothingBody: "{{name}} ba zai ga wata lambar kudaden shiga ba ko kadan har sai an ba shi yanki.",
@@ -5160,4 +6287,15 @@ export const translations: Record<Language, TranslationDictionary> = {
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {
   return translations[lang] || translations.en;
+}
+
+/**
+ * Pick the Hausa name when the UI language is Hausa, falling back to English.
+ *
+ * Every reference-data row now carries `name` (English) and `name_ha`
+ * (Hausa, nullable). This helper keeps the fallback in one place so
+ * thirty rendering sites don't each re-implement it.
+ */
+export function localName(lang: Language, name: string, nameHa: string | null | undefined): string {
+  return lang === 'ha' && nameHa ? nameHa : name;
 }

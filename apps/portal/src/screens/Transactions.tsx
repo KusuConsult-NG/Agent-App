@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
 import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface TransactionRow {
   transaction_reference: string;
@@ -12,7 +13,9 @@ interface TransactionRow {
   created_at: string;
   verified_at: string | null;
   revenue_item: string;
+  revenue_item_ha: string | null;
   revenue_category: string;
+  revenue_category_ha: string | null;
   lga: string;
   agent_code: string | null;
   taxpayer_name: string;
@@ -36,7 +39,7 @@ const STATUSES = [
 ];
 
 export function TransactionsScreen() {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
@@ -89,7 +92,7 @@ export function TransactionsScreen() {
               <option value="">{t.ofcAllStatuses}</option>
               {STATUSES.map((status) => (
                 <option key={status} value={status}>
-                  {status.replace(/_/g, ' ')}
+                  {enumLabel(status, t)}
                 </option>
               ))}
             </select>
@@ -151,7 +154,7 @@ export function TransactionsScreen() {
                 render: (row) => <span className="mono">{row.transaction_reference}</span>,
               },
               { key: 'taxpayer_name', label: 'colTaxpayerLabel' },
-              { key: 'revenue_item', label: 'colRevenueItem' },
+              { key: 'revenue_item', label: 'colRevenueItem', render: (row: TransactionRow) => localName(lang, row.revenue_item, row.revenue_item_ha) },
               { key: 'lga', label: 'tpLgaShort' },
               { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? 'Direct' },
               {

@@ -950,7 +950,8 @@ export async function getTaxpayerProfile(
     query(
       db,
       `SELECT a.id, a.assessment_number, a.amount_kobo, a.status, a.period_label, a.created_at,
-              ri.name AS revenue_item, rc.name AS revenue_category
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
@@ -962,7 +963,7 @@ export async function getTaxpayerProfile(
     query(
       db,
       `SELECT tr.id, tr.transaction_reference, tr.amount_kobo, tr.status, tr.created_at,
-              ri.name AS revenue_item
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha
          FROM transactions tr
          JOIN revenue_items ri ON ri.id = tr.revenue_item_id
         WHERE tr.taxpayer_id = $1
@@ -998,7 +999,7 @@ export async function getTaxpayerProfile(
       ? Promise.resolve([])
       : query(
           db,
-          `SELECT p.id, p.name, p.benefit_type, p.benefit_description, p.linkage_mode,
+          `SELECT p.id, p.name, p.name_ha, p.benefit_type, p.benefit_description, p.linkage_mode,
                   e.eligible, e.reasons, e.benefit_tier
              FROM programme_eligibility e
              JOIN incentive_programmes p ON p.id = e.programme_id

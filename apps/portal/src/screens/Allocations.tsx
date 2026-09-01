@@ -29,6 +29,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { localName } from '@psirs/shared';
 
 interface Round {
   id: string;
@@ -41,6 +42,7 @@ interface Round {
   opens_at: string;
   closes_at: string | null;
   programme_name?: string;
+  programme_name_ha?: string | null;
   awarded_count?: string;
 }
 
@@ -66,9 +68,9 @@ const UNITS = [
 const UNIT_LABEL = Object.fromEntries(UNITS) as Record<string, string>;
 
 export function AllocationsScreen() {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [rounds, setRounds] = useState<Round[] | null>(null);
-  const [programmes, setProgrammes] = useState<{ id: string; name: string }[]>([]);
+  const [programmes, setProgrammes] = useState<{ id: string; name: string; name_ha: string | null }[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -97,7 +99,7 @@ export function AllocationsScreen() {
       });
     api
       .get<any[]>('/government/programmes')
-      .then((data) => setProgrammes(data.map((p) => ({ id: p.id, name: p.name }))))
+      .then((data) => setProgrammes(data.map((p) => ({ id: p.id, name: p.name, name_ha: p.name_ha ?? null }))))
       .catch(() => setProgrammes([]));
   }, []);
 
@@ -143,11 +145,13 @@ export function AllocationsScreen() {
     await withJustification({
       question: `Why is ${awardRow.taxpayer_name ?? 'this beneficiary'}'s ${awardRow.quantity} forfeited?`,
       minimum: 10,
-      tooShort: 'Give at least ten characters saying why this share is being released.',
+      tooShort: t.ofcAlForfeitTooShort,
       run: async (reason) => {
         await api.post(`/allocations/awards/${awardRow.id}/forfeit`, { reason });
       },
-      onSuccess: `Released. The ${awardRow.quantity} is back in ${round.name} for another beneficiary.`,
+      onSuccess: t.ofcAlReleased
+        .replace('{{quantity}}', String(awardRow.quantity))
+        .replace('{{round}}', round.name),
       setError,
       setMessage,
     });
@@ -205,7 +209,7 @@ export function AllocationsScreen() {
               <option value="">{t.ofcAlSelectProgramme}</option>
               {programmes.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {localName(lang, p.name, p.name_ha)}
                 </option>
               ))}
             </select>
@@ -384,7 +388,7 @@ export function AllocationsScreen() {
         <Table
           columns={[
             { key: 'name', label: 'ofcAlRound' },
-            { key: 'programme_name', label: 'ofcAlProgramme' },
+            { key: 'programme_name', label: 'ofcAlProgramme', render: (row: Round) => localName(lang, row.programme_name ?? '', row.programme_name_ha) },
             {
               key: 'quantity',
               label: 'ofcAlDistributing',

@@ -71,6 +71,17 @@ describe('the Hausa dictionary holds together', () => {
    */
   const SAME_IN_BOTH = [
     'pubHausa',
+    /*
+     * Acronyms and product names, which are what they are called in Hausa
+     * too. An agent looking for the USSD option is looking for the letters
+     * U-S-S-D, and a translated WhatsApp is a WhatsApp nobody can find.
+     */
+    'enumApi',
+    'enumHa',
+    'enumPos',
+    'enumSms',
+    'enumUssd',
+    'enumWhatsapp',
     // A literal an auditor types into the audit-log filter. It is the name of
     // an event the API emits, not a phrase — translating it would return no
     // rows.
@@ -113,7 +124,11 @@ describe('the Hausa dictionary holds together', () => {
     // `a’a` is the bare "no" — the answer to a yes/no question rather than a
     // negated sentence. It was missing here, and the first string that needed
     // it was the Yes/No pair asking whether a taxpayer already holds a TIN.
-    const hausaNegative = /(\b(ba|kada|babu|bai|banda)\b|a’a)/i;
+    // `marar`/`mara` — "one without" — is how Hausa negates an attribute
+    // rather than a verb: `marar aikin yi` is somebody with no work. It was
+    // missing here, and the first string that needed it was the sector a
+    // taxpayer chooses when they are a student or not working.
+    const hausaNegative = /(\b(ba|kada|babu|bai|banda|marar?)\b|a’a)/i;
     const dropped = keys.filter((k) => englishNegative.test(en[k]) && !hausaNegative.test(ha[k]));
     expect(dropped).toEqual([]);
   });

@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { birthDateMessage, birthDateProblem, type TranslationDictionary } from '@psirs/shared';
+import { birthDateMessage, birthDateProblem, localName, type TranslationDictionary } from '@psirs/shared';
 import {
   ApiRequestError,
   api,
@@ -172,7 +172,7 @@ export function RegisterTaxpayerScreen({
   navigate: (path: string) => void;
   connection: ConnectionState;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [step, setStep] = useState(0);
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
@@ -214,7 +214,7 @@ export function RegisterTaxpayerScreen({
     code: string;
     label: string;
     hausa: string;
-    suggestedItems: { id: string; code: string; name: string; frequency: string }[];
+    suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
   }[]>([]);
   // Obligation IDs the agent has confirmed for this registration.
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
@@ -780,7 +780,7 @@ export function RegisterTaxpayerScreen({
                         }}
                       />
                       <span>
-                        <strong>{item.name}</strong>{' '}
+                        <strong>{localName(lang, item.name, item.name_ha)}</strong>{' '}
                         <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {item.frequency.toLowerCase().replace('_', '-')}
                         </span>
@@ -922,6 +922,7 @@ interface Profile {
     amount_kobo: string;
     status: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
   }[];
   receipts: { id: string; receipt_number: string; amount_kobo: string; status: string }[];
   vehicles: { id: string; registration_number: string; current_expiry_date: string | null }[];
@@ -934,7 +935,7 @@ export function TaxpayerScreen({
   taxpayerId: string;
   navigate: (path: string) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -986,7 +987,7 @@ export function TaxpayerScreen({
                   onClick={() => navigate(`/transactions/${transaction.transaction_reference}`)}
                 >
                   <div className="list__body">
-                    <p className="list__title">{transaction.revenue_item}</p>
+                    <p className="list__title">{localName(lang, transaction.revenue_item, transaction.revenue_item_ha)}</p>
                     <p className="list__meta">{transaction.transaction_reference}</p>
                   </div>
                   <span className="list__amount">

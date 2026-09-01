@@ -691,7 +691,7 @@ export async function syncTaxpayerComplianceAndIncentives(
 export async function listProgrammes(db: Db, options: { status?: string } = {}) {
   return query(
     db,
-    `SELECT p.id, p.name, p.code, p.description, p.benefit_type, p.benefit_description,
+    `SELECT p.id, p.name, p.name_ha, p.code, p.description, p.benefit_type, p.benefit_description,
             p.minimum_score, p.minimum_compliance_periods, p.requires_no_arrears,
             p.start_date, p.end_date, p.approval_authority, p.status,
             -- Whether a programme denies on tax grounds is the PRD §40 decision
@@ -712,7 +712,7 @@ export async function getTaxpayerIncentives(db: Db, taxpayerId: string) {
     queryOne(db, 'SELECT * FROM taxpayer_compliance WHERE taxpayer_id = $1', [taxpayerId]),
     query(
       db,
-      `SELECT p.id, p.name, p.benefit_type, p.benefit_description, p.approval_authority,
+      `SELECT p.id, p.name, p.name_ha, p.benefit_type, p.benefit_description, p.approval_authority,
               p.linkage_mode,
               e.eligible, e.reasons, e.score_at_evaluation, e.evaluated_at,
               -- BASE or FULL. Computed, stored and unit-tested since the

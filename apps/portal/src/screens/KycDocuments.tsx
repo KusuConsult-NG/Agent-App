@@ -34,6 +34,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, can, fetchFile, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 export interface KycDocument {
   id: string;
@@ -58,7 +59,6 @@ interface AccessEntry {
   role: string | null;
 }
 
-const humanise = (value: string) => value.replace(/_/g, ' ').toLowerCase();
 
 const sizeOf = (bytes: number) =>
   bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -125,7 +125,7 @@ export function KycDocumentsCard({
 
           <Table
             columns={[
-              { key: 'document_type', label: 'ofcKycDocument', render: (row) => humanise(row.document_type) },
+              { key: 'document_type', label: 'ofcKycDocument', render: (row) => enumLabel(row.document_type, t) },
               {
                 key: 'verification_status',
                 label: 'appStatus',
@@ -136,7 +136,7 @@ export function KycDocumentsCard({
                     <Badge status={row.verification_status} />
                   ),
               },
-              { key: 'capture_source', label: 'ofcKycCaptured', render: (row) => humanise(row.capture_source ?? 'unknown') },
+              { key: 'capture_source', label: 'ofcKycCaptured', render: (row) => enumLabel(row.capture_source ?? 'unknown', t) },
               { key: 'byte_size', label: 'ofcKycSize', numeric: true, render: (row) => sizeOf(row.byte_size) },
               { key: 'uploaded_at', label: 'ofcAgSubmitted', render: (row) => formatDateTime(row.uploaded_at) },
               {
@@ -231,8 +231,8 @@ function DocumentViewer({
       await api.post(`/agents/kyc/documents/${doc.id}/review`, { decision, reason });
       onReviewed(
         decision === 'ACCEPT'
-          ? `${humanise(doc.document_type)} accepted.`
-          : `${humanise(doc.document_type)} rejected. The applicant can see the reason and submit a replacement.`,
+          ? `${enumLabel(doc.document_type, t)} accepted.`
+          : `${enumLabel(doc.document_type, t)} rejected. The applicant can see the reason and submit a replacement.`,
       );
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -247,7 +247,7 @@ function DocumentViewer({
   return (
     <div className="document-viewer">
       <div className="document-viewer__head">
-        <h3>{humanise(doc.document_type)}</h3>
+        <h3>{enumLabel(doc.document_type, t)}</h3>
         <button type="button" className="secondary" onClick={onClose}>{t.ofcKycClose}</button>
       </div>
 
@@ -257,7 +257,7 @@ function DocumentViewer({
         <Loading rows={2} />
       ) : url ? (
         isImage ? (
-          <img className="document-viewer__image" src={url} alt={`${humanise(doc.document_type)} submitted by the applicant`} />
+          <img className="document-viewer__image" src={url} alt={`${enumLabel(doc.document_type, t)} submitted by the applicant`} />
         ) : (
           <p className="card__hint">
             {t.ofcKycFileType.replace('{{type}}', doc.content_type)}{' '}
@@ -276,7 +276,7 @@ function DocumentViewer({
           <p style={{ margin: 0 }}>{t.ofcKycSuperseded}</p>
         </Alert>
       ) : decided ? (
-        <Alert kind="info" title={{ text: t.ofcKycAlready.replace('{{status}}', humanise(doc.verification_status)) }}>
+        <Alert kind="info" title={{ text: t.ofcKycAlready.replace('{{status}}', enumLabel(doc.verification_status, t)) }}>
           <p style={{ margin: 0 }}>
             {doc.rejection_reason
               ? `Reason given: ${doc.rejection_reason}`
@@ -318,8 +318,8 @@ function DocumentViewer({
             <Table
               columns={[
                 { key: 'full_name', label: 'ofcKycWho', render: (row) => row.full_name ?? 'the applicant' },
-                { key: 'role', label: 'ofcRhRole', render: (row) => humanise(row.role ?? 'unknown') },
-                { key: 'access_type', label: 'ofcKycWhat', render: (row) => humanise(row.access_type) },
+                { key: 'role', label: 'ofcRhRole', render: (row) => enumLabel(row.role ?? 'unknown', t) },
+                { key: 'access_type', label: 'ofcKycWhat', render: (row) => enumLabel(row.access_type, t) },
                 { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
                 { key: 'ip_address', label: 'ofcFrom', render: (row) => row.ip_address ?? '—' },
               ]}

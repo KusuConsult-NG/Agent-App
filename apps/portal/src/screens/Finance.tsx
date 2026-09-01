@@ -6,6 +6,7 @@ import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, form
 import { withJustification } from '../lib/justify';
 import { BankChangesCard } from './Agents';
 import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 // ------------------------------------------------------------ reconciliation
 
@@ -459,8 +460,7 @@ export function ReconciliationScreen() {
                         void withJustification({
                           question: 'Record how this exception was resolved (at least 10 characters):',
                           minimum: 10,
-                          tooShort:
-                            'Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed.',
+                          tooShort: t.ofcFnResolveTooShort,
                           run: async (resolution) => {
                             await api.post(
                               `/government/reconciliation/exceptions/${row.id}/resolve`,
@@ -468,7 +468,7 @@ export function ReconciliationScreen() {
                             );
                             load();
                           },
-                          onSuccess: 'Exception recorded as resolved.',
+                          onSuccess: t.ofcFnExceptionResolved,
                           setError,
                           setMessage,
                         })
@@ -625,7 +625,7 @@ export function CommissionsScreen() {
                           void withJustification({
                             question: 'Reason for approving this payout (at least 5 characters):',
                             minimum: 5,
-                            tooShort: 'Give a reason for approving this payout, in at least 5 characters.',
+                            tooShort: t.ofcFnApprovePayoutTooShort,
                             run: async (reason) => {
                               await api.post(
                                 `/government/commissions/payouts/${row.id}/approve`,
@@ -633,7 +633,7 @@ export function CommissionsScreen() {
                               );
                               load();
                             },
-                            onSuccess: 'Payout approved.',
+                            onSuccess: t.ofcFnPayoutApproved,
                             setError,
                             setMessage,
                           })
@@ -648,8 +648,7 @@ export function CommissionsScreen() {
                           void withJustification({
                             question: 'Bank transfer reference (at least 3 characters):',
                             minimum: 3,
-                            tooShort:
-                              'Enter the bank transfer reference. It is what ties this payout to the money that actually left the account.',
+                            tooShort: t.ofcFnTransferReferenceTooShort,
                             run: async (bankReference) => {
                               await api.post(
                                 `/government/commissions/payouts/${row.id}/complete`,
@@ -657,7 +656,7 @@ export function CommissionsScreen() {
                               );
                               load();
                             },
-                            onSuccess: 'Payout recorded as paid.',
+                            onSuccess: t.ofcFnPayoutPaid,
                             setError,
                             setMessage,
                           })
@@ -674,8 +673,7 @@ export function CommissionsScreen() {
                           void withJustification({
                             question: 'What did the bank say? (at least 10 characters)',
                             minimum: 10,
-                            tooShort:
-                              'Record what the bank said. The agent has to be told why they were not paid, and the next attempt depends on knowing.',
+                            tooShort: t.ofcFnPayoutFailedTooShort,
                             run: async (reason) => {
                               await api.post(
                                 `/government/commissions/payouts/${row.id}/fail`,
@@ -683,9 +681,7 @@ export function CommissionsScreen() {
                               );
                               load();
                             },
-                            onSuccess:
-                              'Recorded as failed. The commission in it is payable again, and ' +
-                              'any clawback it had netted off is owed again.',
+                            onSuccess: t.ofcFnPayoutFailedRecorded,
                             setError,
                             setMessage,
                           })
@@ -733,12 +729,12 @@ export function ApprovalsScreen({ user }: { user: User }) {
     await withJustification({
       question: 'Reason for this decision (at least 10 characters):',
       minimum: 10,
-      tooShort: 'Give a reason for this decision, in at least 10 characters.',
+      tooShort: t.ofcFnDecisionTooShort,
       run: async (reason) => {
         await api.post(`/government/approvals/${id}/decide`, { decision, reason });
         load();
       },
-      onSuccess: `Request ${decision.toLowerCase()}d.`,
+      onSuccess: t.ofcFnRequestDecided.replace('{{decision}}', enumLabel(decision, t)),
       setError,
       setMessage,
     });

@@ -13,6 +13,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
+import { enumLabel } from '@psirs/shared';
 
 interface VerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
@@ -408,7 +409,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
             [t.pubRefereeApplicant, invitation.applicantName],
             [t.pubRefereeYouAre, invitation.refereeName],
             [t.pubRefereeRelationship, invitation.relationship],
-            [t.pubRefereeCategory, invitation.category.replace(/_/g, ' ').toLowerCase()],
+            [t.pubRefereeCategory, enumLabel(invitation.category, t)],
             [t.pubRefereeRespondBefore, formatDate(invitation.expiresAt)],
           ]}
         />

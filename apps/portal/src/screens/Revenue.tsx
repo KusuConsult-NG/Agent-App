@@ -20,9 +20,11 @@ import { useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { localName } from '@psirs/shared';
 
 interface MdaRow {
   mda: string;
+  mda_ha: string | null;
   code: string;
   revenue_items: string;
   transactions: string;
@@ -44,6 +46,7 @@ interface AgentRow {
   agent_code: string;
   full_name: string;
   territory: string;
+  territory_ha: string | null;
   transactions: string;
   amount_kobo: string;
   lgas_worked: string;
@@ -58,7 +61,7 @@ interface CouncilRow {
   zone: string;
   transactions: string;
   amount_kobo: string;
-  items: { code: string; name: string; transactions: string; amount_kobo: string }[];
+  items: { code: string; name: string; name_ha: string | null; transactions: string; amount_kobo: string }[];
 }
 
 interface Summary {
@@ -75,7 +78,7 @@ interface Summary {
   };
   scope?:
     | { kind: 'STATEWIDE' }
-    | { kind: 'TERRITORIES'; territories: { id: string; name: string }[] };
+    | { kind: 'TERRITORIES'; territories: { id: string; name: string; name_ha: string | null }[] };
 }
 
 const share = (part: string, whole: string) => {
@@ -85,7 +88,7 @@ const share = (part: string, whole: string) => {
 };
 
 export function RevenueScreen() {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -117,7 +120,7 @@ export function RevenueScreen() {
               : {
                   text: t.ofcDbShowing.replace(
                     '{{territories}}',
-                    territories.map((territory) => territory.name).join(', '),
+                    territories.map((territory) => localName(lang, territory.name, territory.name_ha)).join(', '),
                   ),
                 }
           }
@@ -179,7 +182,7 @@ export function RevenueScreen() {
         <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
         <Table
           columns={[
-            { key: 'mda', label: 'ofcRvMinistryDepartment' },
+            { key: 'mda', label: 'ofcRvMinistryDepartment', render: (row: MdaRow) => localName(lang, row.mda, row.mda_ha) },
             { key: 'revenue_items', label: 'ofcRvRevenueItems' },
             { key: 'transactions', label: 'ofcLvCollections' },
             {
@@ -217,7 +220,7 @@ export function RevenueScreen() {
               render: (row: CouncilRow) =>
                 row.items.length === 0
                   ? '—'
-                  : row.items.map((item) => item.name).join(', '),
+                  : row.items.map((item) => localName(lang, item.name, item.name_ha)).join(', '),
             },
           ]}
           rows={data.localGovernment ?? []}
@@ -259,7 +262,7 @@ export function RevenueScreen() {
           columns={[
             { key: 'agent_code', label: 'ofcRhAgent' },
             { key: 'full_name', label: 'tpName' },
-            { key: 'territory', label: 'ofcRvTerritory' },
+            { key: 'territory', label: 'ofcRvTerritory', render: (row: AgentRow) => localName(lang, row.territory, row.territory_ha) },
             {
               key: 'amount_kobo',
               label: 'ofcPfCollected',

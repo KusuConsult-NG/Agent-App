@@ -5,6 +5,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface HomeData {
   today: { collected_kobo: string; successful: string; total: string; pending: string };
@@ -15,6 +16,7 @@ interface HomeData {
     amount_kobo: string;
     status: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
     taxpayer_name: string;
     receipt_number: string | null;
     created_at: string;
@@ -47,7 +49,7 @@ function greetingKey(): keyof TranslationDictionary {
 }
 
 export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [data, setData] = useState<HomeData | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,8 +152,8 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
                   <div className="list__body">
                     <p className="list__title">{transaction.taxpayer_name}</p>
                     <p className="list__meta">
-                      {transaction.revenue_item} ·{' '}
-                      {transaction.receipt_number ?? transaction.status.replace(/_/g, ' ').toLowerCase()}
+                      {localName(lang, transaction.revenue_item, transaction.revenue_item_ha)} ·{' '}
+                      {transaction.receipt_number ?? enumLabel(transaction.status, t)}
                     </p>
                   </div>
                   <span className="list__amount">

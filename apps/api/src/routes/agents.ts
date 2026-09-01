@@ -644,7 +644,7 @@ agentRouter.get(
         await query(
           pool,
           `SELECT t.transaction_reference, t.amount_kobo, t.status, t.created_at, t.verified_at,
-                  ri.name AS revenue_item,
+                  ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
                   COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name,
                   tp.tin, r.receipt_number, r.id AS receipt_id
              FROM transactions t
@@ -674,7 +674,8 @@ agentRouter.get(
         pool,
         `SELECT c.id, c.amount_kobo, c.rate_basis_points, c.basis_amount_kobo, c.status,
                 c.eligible_at, c.paid_at, c.reversal_reason,
-                t.transaction_reference, ri.name AS revenue_item, t.created_at
+                t.transaction_reference, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+                t.created_at
            FROM commissions c
            JOIN transactions t ON t.id = c.transaction_id
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -741,7 +742,8 @@ agentRouter.get(
           `SELECT a.id, a.agent_code, a.application_number, u.full_name, u.phone, u.email,
                   a.account_status, a.kyc_status, a.referee_status, a.training_status,
                   a.clearance_status, a.operational_status, l.name AS lga,
-                  ter.name AS territory, a.activated_at, a.created_at
+                  ter.name AS territory, ter.name_ha AS territory_ha,
+                  a.activated_at, a.created_at
              FROM agents a
              JOIN users u ON u.id = a.user_id
              LEFT JOIN lgas l ON l.id = a.lga_id

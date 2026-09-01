@@ -51,10 +51,12 @@ const WARDS: Record<string, string[]> = {
  */
 const STATE_CATALOGUE: {
   category: string;
+  categoryHa: string;
   code: string;
   items: {
     code: string;
     name: string;
+    nameHa: string;
     rateType: 'FIXED' | 'PERCENTAGE' | 'TIERED' | 'FORMULA';
     fixedNaira?: string;
     basisPoints?: number;
@@ -103,6 +105,7 @@ const STATE_CATALOGUE: {
 }[] = [
   {
     category: 'Personal Income Tax',
+    categoryHa: 'Harajin Samun Kudin Shiga',
     code: 'PIT',
     items: [
       /*
@@ -127,6 +130,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-PRESUMPTIVE-MICRO',
         name: 'Presumptive Income Tax (micro enterprise)',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (kananan sana\'a)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
@@ -135,6 +139,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-PRESUMPTIVE-SMALL',
         name: 'Presumptive Income Tax (small enterprise)',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (karamar sana\'a)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
@@ -143,6 +148,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-PRESUMPTIVE-MEDIUM',
         name: 'Presumptive Income Tax (medium enterprise)',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (matsakaiciyar sana\'a)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
@@ -174,6 +180,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-DIRECT',
         name: 'Direct Assessment / Self-Assessment',
+        nameHa: 'Tantance Kai / Kididdigar Kai',
         rateType: 'TIERED',
         tiers: {
           tiers: [
@@ -192,6 +199,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-PAYE',
         name: 'Pay As You Earn (PAYE)',
+        nameHa: 'Biyan Haraji Daga Albashi (PAYE)',
         rateType: 'TIERED',
         // The same schedule: PAYE is this tax collected at source, not a
         // different one. It sat at a flat 7%, which was wrong before the
@@ -213,6 +221,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-WHT',
         name: 'Withholding Tax (individuals)',
+        nameHa: 'Harajin Cire Daga Tushe (mutane)',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
         /*
@@ -229,6 +238,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-CGT',
         name: 'Capital Gains Tax (individuals)',
+        nameHa: 'Harajin Ribar Jari (mutane)',
         rateType: 'TIERED',
         /*
          * The Nigeria Tax Act, 2025 repealed the flat 10% of the Capital
@@ -252,6 +262,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-STAMP',
         name: 'Stamp Duties on instruments executed by individuals',
+        nameHa: 'Kudin Hatimi kan takardun mutane',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
         /*
@@ -268,12 +279,14 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Business Premises and Development',
+    categoryHa: 'Wuraren Kasuwanci da Raya Kasa',
     code: 'BPD',
     items: [
       {
         code: 'BP-REG-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (urban)',
+        nameHa: 'Rajista Wurin Kasuwanci (birni)',
         rateType: 'FIXED',
         fixedNaira: '10000',
         frequency: 'ONE_OFF',
@@ -283,6 +296,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (urban)',
+        nameHa: 'Sabunta Wurin Kasuwanci (birni)',
         rateType: 'FIXED',
         fixedNaira: '5000',
         frequency: 'ANNUAL',
@@ -301,6 +315,7 @@ const STATE_CATALOGUE: {
         code: 'BP-REG-SEMI-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (semi-urban)',
+        nameHa: 'Rajista Wurin Kasuwanci (matsakaicin birni)',
         rateType: 'FIXED',
         frequency: 'ONE_OFF',
         taxpayerTypes: ['BUSINESS'],
@@ -310,6 +325,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-SEMI-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (semi-urban)',
+        nameHa: 'Sabunta Wurin Kasuwanci (matsakaicin birni)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
         taxpayerTypes: ['BUSINESS'],
@@ -319,6 +335,7 @@ const STATE_CATALOGUE: {
         code: 'BP-REG-RURAL',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (rural)',
+        nameHa: 'Rajista Wurin Kasuwanci (karkara)',
         rateType: 'FIXED',
         fixedNaira: '2000',
         frequency: 'ONE_OFF',
@@ -328,6 +345,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-RURAL',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (rural)',
+        nameHa: 'Sabunta Wurin Kasuwanci (karkara)',
         rateType: 'FIXED',
         fixedNaira: '1000',
         frequency: 'ANNUAL',
@@ -336,6 +354,7 @@ const STATE_CATALOGUE: {
       {
         code: 'DEV-LEVY',
         name: 'Development Levy',
+        nameHa: 'Kudin Raya Kasa',
         rateType: 'FIXED',
         fixedNaira: '2000',
         frequency: 'ANNUAL',
@@ -344,6 +363,7 @@ const STATE_CATALOGUE: {
       {
         code: 'ECON-DEV-LEVY',
         name: 'Economic Development Levy',
+        nameHa: 'Kudin Raya Tattalin Arziki',
         rateType: 'FIXED',
         fixedNaira: '5000',
         frequency: 'ANNUAL',
@@ -353,6 +373,7 @@ const STATE_CATALOGUE: {
         code: 'SOCIAL-SVC-LEVY',
         mda: 'MDA-EDU',
         name: 'Social Services Contribution Levy',
+        nameHa: 'Kudin Gudummawar Ayyukan Zamantakewa',
         rateType: 'PERCENTAGE',
         basisPoints: 50,
         minimumNaira: '1000',
@@ -362,12 +383,14 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Road Taxes and Vehicle Services',
+    categoryHa: 'Harajin Hanya da Ayyukan Motoci',
     code: 'ROAD',
     items: [
       {
         code: 'VEH-RENEW-PRIVATE',
         mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (private)',
+        nameHa: 'Sabunta Takardun Mota (mai zaman kansa)',
         rateType: 'FORMULA',
         // Monthly rate scaled by the requested period. renewalPeriodMonths is
         // supplied by the renewal flow, never typed as an amount by an agent.
@@ -379,6 +402,7 @@ const STATE_CATALOGUE: {
         code: 'VEH-RENEW-COMMERCIAL',
         mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (commercial)',
+        nameHa: 'Sabunta Takardun Mota (kasuwanci)',
         rateType: 'FORMULA',
         formula: '1250 * renewalPeriodMonths * 100',
         minimumNaira: '7500',
@@ -388,6 +412,7 @@ const STATE_CATALOGUE: {
         code: 'ROAD-TAX',
         mda: 'MDA-TRANS',
         name: 'Road Taxes',
+        nameHa: 'Harajin Hanya',
         rateType: 'FIXED',
         fixedNaira: '7500',
         frequency: 'ANNUAL',
@@ -396,48 +421,53 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Land, Property and Occupancy',
+    categoryHa: 'Filaye, Kadarori da Zama',
     code: 'LAND',
     items: [
-      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
-      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
-      { code: 'PROPERTY-TAX', name: 'Property Tax', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
-      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
-      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', nameHa: 'Kudin Hakkin Zama', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
+      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', nameHa: 'Kudin Amfani da Fili', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'PROPERTY-TAX', name: 'Property Tax', nameHa: 'Harajin Kadarori', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', nameHa: 'Kudin Rajista Sunan Titi', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
+      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', nameHa: 'Kudin Kula da Kayayyakin More Rayuwa', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
     ],
   },
   {
     category: 'Trade, Markets and Produce',
+    categoryHa: 'Ciniki, Kasuwanni da Kayayyaki',
     code: 'TRADE',
     items: [
-      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
-      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
-      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
-      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
+      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', nameHa: 'Harajin Kasuwa', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', nameHa: 'Harajin Cinikin Dabbobi', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
+      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', nameHa: 'Harajin Sayar da Kayayyaki', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', nameHa: 'Kudin Mahauta / Wurin Yanka', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
     ],
   },
   {
     category: 'Hospitality, Entertainment and Gaming',
+    categoryHa: 'Masaukai, Nishaɗi da Caca',
     code: 'HOSP',
     items: [
-      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
-      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
-      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
+      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', nameHa: 'Harajin Amfani da Otal, Gidan Abinci ko Wurin Biki', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
+      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', nameHa: 'Harajin Nishaɗi', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', nameHa: 'Harajin Caca da Toto', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
     ],
   },
   {
     category: 'Environment, Mining and Safety',
+    categoryHa: 'Muhalli, Hakar Ma\'adinai da Tsaro',
     code: 'ENV',
     items: [
-      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
-      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
-      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', nameHa: 'Kudin Kare Muhalli', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', nameHa: 'Kudin Hakar Ma\'adinai da Dutse', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
+      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', nameHa: 'Kudin Kashe Gobara', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
     ],
   },
   {
     category: 'Advertising and Signage',
+    categoryHa: 'Talla da Alamu',
     code: 'ADVERT',
     items: [
-      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', nameHa: 'Alamun Talla da Mota', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, mda: 'MDA-COMMERCE', },
     ],
   },
 ];
@@ -445,14 +475,15 @@ const STATE_CATALOGUE: {
 /** Local-government revenue heads PSIRS identifies separately (PRD §8). */
 const LOCAL_GOVERNMENT_CATALOGUE = {
   category: 'Local Government Rates and Fees',
+  categoryHa: 'Kudade da Haraji na Kananan Hukumomi',
   code: 'LGR',
   items: [
-    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
-    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
-    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
-    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
-    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
-    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
+    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', nameHa: 'Kudin Shaguna da Rumfuna', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
+    { code: 'TENEMENT-RATES', name: 'Tenement Rates', nameHa: 'Kudin Gidaje', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
+    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', nameHa: 'Kudin Wurin Yanka', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', nameHa: 'Kudin Tasha', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
+    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', nameHa: 'Kudin Lasisin Dabbobin Gida', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', nameHa: 'Kudin Rajista Aure, Haihuwa da Mutuwa', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
   ],
 };
 
@@ -486,6 +517,7 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
 const INCENTIVE_PROGRAMMES = [
   {
     name: 'Plateau State Health Insurance Scheme',
+    nameHa: 'Shirin Inshorar Lafiya na Jihar Filato',
     code: 'PLASHIA',
     description:
       'Subsidised health insurance cover for registered taxpayers and their immediate ' +
@@ -513,6 +545,7 @@ const INCENTIVE_PROGRAMMES = [
   },
   {
     name: 'Input Fertilizer Distribution Programme',
+    nameHa: 'Shirin Rabon Takin Zamani',
     code: 'FERTILIZER-SUBSIDY',
     description:
       'Subsidised agricultural inputs (fertilizer, seed, pesticide) distributed through ' +
@@ -538,6 +571,7 @@ const INCENTIVE_PROGRAMMES = [
   },
   {
     name: 'State Housing Fund (Low-Income Subsidy)',
+    nameHa: 'Asusun Gidaje na Jiha (Tallafin Masu Karamin Kudin Shiga)',
     code: 'STATE-HOUSING-FUND',
     description:
       'Access to the Plateau State Housing Corporation low-income loan scheme for ' +
@@ -557,6 +591,7 @@ const INCENTIVE_PROGRAMMES = [
   },
   {
     name: 'Scholarship and Bursary Scheme',
+    nameHa: 'Shirin Tallafin Karatu da Guraben Karatu',
     code: 'SCHOLARSHIP-BURSARY',
     description:
       'Annual bursary for children and dependants of compliant taxpayers, awarded ' +
@@ -779,9 +814,9 @@ async function seedReferenceData(): Promise<void> {
 
       // One default territory per LGA so agents can be assigned immediately.
       await client.query(
-        `INSERT INTO territories (name, code, lga_id) VALUES ($1,$2,$3)
-         ON CONFLICT (code) DO NOTHING`,
-        [`${lga.name} Territory`, `TER-${lga.code}`, row!.id],
+        `INSERT INTO territories (name, name_ha, code, lga_id) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (code) DO UPDATE SET name_ha = EXCLUDED.name_ha`,
+        [`${lga.name} Territory`, `Yankin ${lga.name}`, `TER-${lga.code}`, row!.id],
       );
     }
   });
@@ -790,24 +825,25 @@ async function seedReferenceData(): Promise<void> {
   await withTransaction(async (client) => {
     const stateAuthority = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO revenue_authorities (name, code, tier)
-       VALUES ($1,'PSIRS','STATE')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [config.branding.agencyName],
+      `INSERT INTO revenue_authorities (name, name_ha, code, tier)
+       VALUES ($1,$2,'PSIRS','STATE')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      [config.branding.agencyName, 'Hukumar Haraji ta Cikin Gida ta Jihar Filato'],
     );
 
     const lgAuthority = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO revenue_authorities (name, code, tier)
-       VALUES ('Plateau State Local Governments','PLG','LOCAL_GOVERNMENT')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      `INSERT INTO revenue_authorities (name, name_ha, code, tier)
+       VALUES ('Plateau State Local Governments',$1,'PLG','LOCAL_GOVERNMENT')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      ['Kananan Hukumomin Jihar Filato'],
     );
 
     const mda = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO mdas (authority_id, name, code) VALUES ($1,$2,'PSIRS-HQ')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [stateAuthority!.id, config.branding.agencyName],
+      `INSERT INTO mdas (authority_id, name, name_ha, code) VALUES ($1,$2,$3,'PSIRS-HQ')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      [stateAuthority!.id, config.branding.agencyName, 'Hukumar Haraji ta Cikin Gida ta Jihar Filato'],
     );
 
     /*
@@ -827,36 +863,36 @@ async function seedReferenceData(): Promise<void> {
      * exists to show a zero against.
      */
     const MDAS = [
-      { code: 'MDA-EDU', name: 'Ministry of Education' },
-      { code: 'MDA-LANDS', name: 'Ministry of Lands, Survey and Town Planning' },
-      { code: 'MDA-TRANS', name: 'Ministry of Transport' },
-      { code: 'MDA-HEALTH', name: 'Ministry of Health' },
-      { code: 'MDA-WATER', name: 'Ministry of Water Resources and Energy' },
-      { code: 'MDA-ENV', name: 'Ministry of Environment' },
-      { code: 'MDA-COMMERCE', name: 'Ministry of Commerce and Industry' },
-      { code: 'MDA-LG', name: 'Local Government Councils' },
+      { code: 'MDA-EDU', name: 'Ministry of Education', nameHa: 'Ma\'aikatar Ilimi' },
+      { code: 'MDA-LANDS', name: 'Ministry of Lands, Survey and Town Planning', nameHa: 'Ma\'aikatar Filaye da Tsara Gari' },
+      { code: 'MDA-TRANS', name: 'Ministry of Transport', nameHa: 'Ma\'aikatar Sufuri' },
+      { code: 'MDA-HEALTH', name: 'Ministry of Health', nameHa: 'Ma\'aikatar Lafiya' },
+      { code: 'MDA-WATER', name: 'Ministry of Water Resources and Energy', nameHa: 'Ma\'aikatar Ruwa da Makamashi' },
+      { code: 'MDA-ENV', name: 'Ministry of Environment', nameHa: 'Ma\'aikatar Muhalli' },
+      { code: 'MDA-COMMERCE', name: 'Ministry of Commerce and Industry', nameHa: 'Ma\'aikatar Kasuwanci da Masana\'antu' },
+      { code: 'MDA-LG', name: 'Local Government Councils', nameHa: 'Kananan Hukumomi' },
     ] as const;
 
     const mdaByCode = new Map<string, string>([['PSIRS-HQ', mda!.id]]);
     for (const entry of MDAS) {
       const row = await queryOne<{ id: string }>(
         client,
-        `INSERT INTO mdas (authority_id, name, code) VALUES ($1,$2,$3)
-         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-        [entry.code === 'MDA-LG' ? lgAuthority!.id : stateAuthority!.id, entry.name, entry.code],
+        `INSERT INTO mdas (authority_id, name, name_ha, code) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+        [entry.code === 'MDA-LG' ? lgAuthority!.id : stateAuthority!.id, entry.name, entry.nameHa, entry.code],
       );
       mdaByCode.set(entry.code, row!.id);
     }
 
     const seedCategory = async (
       authorityId: string,
-      definition: { category: string; code: string; items: unknown[] },
+      definition: { category: string; categoryHa: string; code: string; items: unknown[] },
     ) => {
       const category = await queryOne<{ id: string }>(
         client,
-        `INSERT INTO revenue_categories (authority_id, name, code)
-         VALUES ($1,$2,$3) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-        [authorityId, definition.category, definition.code],
+        `INSERT INTO revenue_categories (authority_id, name, name_ha, code)
+         VALUES ($1,$2,$3,$4) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+        [authorityId, definition.category, definition.categoryHa, definition.code],
       );
       return category!.id;
     };
@@ -866,6 +902,7 @@ async function seedReferenceData(): Promise<void> {
       item: {
         code: string;
         name: string;
+        nameHa: string;
         rateType: 'FIXED' | 'PERCENTAGE' | 'TIERED' | 'FORMULA';
         fixedNaira?: string;
         basisPoints?: number;
@@ -911,14 +948,15 @@ async function seedReferenceData(): Promise<void> {
       const row = await queryOne<{ id: string }>(
         client,
         `INSERT INTO revenue_items
-           (category_id, mda_id, code, name, applicable_taxpayer_types, frequency,
+           (category_id, mda_id, code, name, name_ha, applicable_taxpayer_types, frequency,
             self_assessable, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE') RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE') RETURNING id`,
         [
           categoryId,
           mdaByCode.get(item.mda ?? 'PSIRS-HQ') ?? mda!.id,
           item.code,
           item.name,
+          item.nameHa,
           item.taxpayerTypes ?? ['INDIVIDUAL', 'BUSINESS'],
           item.frequency ?? 'ANNUAL',
           item.selfAssessable ?? false,
@@ -1071,13 +1109,14 @@ async function seedReferenceData(): Promise<void> {
     for (const programme of INCENTIVE_PROGRAMMES) {
       await client.query(
         `INSERT INTO incentive_programmes
-           (name, code, description, benefit_type, benefit_description, eligibility_rules,
+           (name, name_ha, code, description, benefit_type, benefit_description, eligibility_rules,
             minimum_score, minimum_compliance_periods, requires_no_arrears,
             start_date, approval_authority, status, linkage_mode)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,CURRENT_DATE,$10,'DRAFT',$11)
-         ON CONFLICT (code) DO NOTHING`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,CURRENT_DATE,$11,'DRAFT',$12)
+         ON CONFLICT (code) DO UPDATE SET name_ha = EXCLUDED.name_ha`,
         [
           programme.name,
+          programme.nameHa,
           programme.code,
           programme.description,
           programme.benefitType,

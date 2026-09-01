@@ -16,6 +16,7 @@ import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../l
 import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
 import { Alert, ErrorAlert, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface Collected {
   awardId: string;
@@ -24,8 +25,6 @@ interface Collected {
   unit: string;
   message: string;
 }
-
-const readable = (unit: string) => unit.replace(/_/g, ' ').toLowerCase();
 
 export function CollectionScreen() {
   const { t } = useI18n();
@@ -167,7 +166,7 @@ export function CollectionScreen() {
           <Alert kind="success" title={t.allocRecorded}>
             <p style={{ margin: 0 }}>
               {t.allocGive} <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
-              {readable(collected.unit)}.
+              {enumLabel(collected.unit, t)}.
             </p>
           </Alert>
           <p className="card__hint" style={{ marginTop: 10 }}>

@@ -90,9 +90,18 @@ const RENDERED_PROPS =
 const BRACED_PROPS =
   /\b(?:title|placeholder|aria-label|label|hint|empty|patternHint|confirmLabel|alt)=\{'((?:[^'\\]|\\.)+)'\}/g;
 
-/** Object-literal fields that are rendered rather than used. */
+/**
+ * Object-literal fields that are rendered rather than used.
+ *
+ * `onSuccess` and `tooShort` were added after they were found holding fifteen
+ * English messages between them — what an officer reads once a payout is
+ * approved, a fraud flag is settled or an allocation is taken back, and why
+ * the button refuses to move until they have said why. They are the fields
+ * the step-up confirmation helper takes, so every screen that guards a money
+ * decision passes its words through one of them.
+ */
 const RENDERED_FIELDS =
-  /\b(?:label|hint|title|description|blurb|note|caption|help)\s*:\s*'((?:[^'\\]|\\.){2,})'/g;
+  /\b(?:label|hint|title|description|blurb|note|caption|help|onSuccess|tooShort)\s*:\s*'((?:[^'\\]|\\.){2,})'/g;
 
 /** Messages the agent is shown when something goes wrong or completes. */
 const SHOWN_MESSAGES =

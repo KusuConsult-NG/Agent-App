@@ -20,12 +20,15 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
   code: string;
   name: string;
+  name_ha: string | null;
   category_name: string;
+  category_name_ha: string | null;
   rate_type: string | null;
   frequency: string;
   self_assessable: boolean;
@@ -33,7 +36,9 @@ interface RevenueItem {
 
 interface Quote {
   revenueItemName: string;
+  revenueItemNameHa: string | null;
   categoryName: string;
+  categoryNameHa: string | null;
   amountKobo: string;
   serviceChargeKobo: string;
   totalKobo: string;
@@ -62,7 +67,7 @@ export function CollectScreen({
   navigate: (path: string) => void;
   connection: ConnectionState;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [route] = useRoute();
   const initialTaxpayerId = queryParams(route).get('taxpayerId');
 
@@ -325,7 +330,7 @@ export function CollectScreen({
               <option value="">{t.colSelectItem}</option>
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.category_name} — {item.name}
+                  {localName(lang, item.category_name, item.category_name_ha)} — {localName(lang, item.name, item.name_ha)}
                 </option>
               ))}
             </select>
@@ -380,7 +385,7 @@ export function CollectScreen({
               <p className="amount-confirm__value">
                 <Money kobo={quote.totalKobo} />
               </p>
-              <p className="amount-confirm__label">{quote.revenueItemName}</p>
+              <p className="amount-confirm__label">{localName(lang, quote.revenueItemName, quote.revenueItemNameHa)}</p>
             </div>
           )}
 
@@ -389,7 +394,7 @@ export function CollectScreen({
               items={[
                 [t.colTaxpayerLabel, taxpayerName(taxpayer)],
                 ['TIN', taxpayer.tin ?? t.tpNotYetAssigned],
-                [t.colRevenueLabel, `${quote.categoryName} — ${quote.revenueItemName}`],
+                [t.colRevenueLabel, `${localName(lang, quote.categoryName, quote.categoryNameHa)} — ${localName(lang, quote.revenueItemName, quote.revenueItemNameHa)}`],
                 [t.colGovernmentRevenue, <Money key="a" kobo={quote.amountKobo} />],
                 ...(BigInt(quote.serviceChargeKobo) > 0n
                   ? ([[t.colServiceCharge, <Money key="s" kobo={quote.serviceChargeKobo} />]] as [
@@ -460,7 +465,9 @@ interface TransactionStatus {
     invoice_number: string;
     expires_at: string | null;
     revenue_item: string;
+    revenue_item_ha: string | null;
     revenue_category: string;
+    revenue_category_ha: string | null;
     first_name: string | null;
     last_name: string | null;
     business_name: string | null;
@@ -495,7 +502,7 @@ export function TransactionScreen({
   reference: string;
   navigate: (path: string) => void;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [data, setData] = useState<TransactionStatus | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -641,7 +648,7 @@ export function TransactionScreen({
           items={[
             [t.colTaxpayerLabel, name],
             ['TIN', transaction.tin ?? t.tpNotYetAssigned],
-            [t.colRevenueLabel, `${transaction.revenue_category} — ${transaction.revenue_item}`],
+            [t.colRevenueLabel, `${localName(lang, transaction.revenue_category, transaction.revenue_category_ha)} — ${localName(lang, transaction.revenue_item, transaction.revenue_item_ha)}`],
             [t.amount, <Money key="a" kobo={transaction.total_amount_kobo} />],
             [t.colInvoiceLabel, transaction.invoice_number],
             [t.supTransactionLabel, transaction.transaction_reference],
@@ -796,7 +803,7 @@ export function TransactionScreen({
           {data.events.map((event, index) => (
             <li key={index} className="list__item">
               <div className="list__body">
-                <p className="list__title">{event.to_status.replace(/_/g, ' ')}</p>
+                <p className="list__title">{enumLabel(event.to_status, t)}</p>
                 <p className="list__meta">
                   {new Date(event.created_at).toLocaleString('en-NG')}
                   {event.reason ? ` · ${event.reason}` : ''}

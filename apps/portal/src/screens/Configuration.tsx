@@ -1,7 +1,7 @@
 /** Revenue catalogue and social incentive programmes (PRD §9, §41). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatNaira, nairaToKobo } from '@psirs/shared';
+import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -10,7 +10,9 @@ interface RevenueItem {
   id: string;
   code: string;
   name: string;
+  name_ha: string | null;
   category_name: string;
+  category_name_ha: string | null;
   frequency: string;
   rate_type: string | null;
   fixed_amount_kobo: string | null;
@@ -40,7 +42,7 @@ function describeRate(item: RevenueItem): string {
 }
 
 export function CatalogueScreen({ user }: { user: User }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [items, setItems] = useState<RevenueItem[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -138,7 +140,7 @@ export function CatalogueScreen({ user }: { user: User }) {
             <div className="card__header">
               <div>
                 <h2 className="card__title">
-                  {t.ofcCfRateHistoryFor.replace('{{name}}', history.item.name)}
+                  {t.ofcCfRateHistoryFor.replace('{{name}}', localName(lang, history.item.name, history.item.name_ha))}
                 </h2>
                 <p className="card__hint">{t.ofcCfHistoricalAssessments}</p>
               </div>
@@ -190,8 +192,8 @@ export function CatalogueScreen({ user }: { user: User }) {
           <Table
             columns={[
               { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
-              { key: 'name', label: 'colRevenueItem' },
-              { key: 'category_name', label: 'ofcAgCategory' },
+              { key: 'name', label: 'colRevenueItem', render: (row: RevenueItem) => localName(lang, row.name, row.name_ha) },
+              { key: 'category_name', label: 'ofcAgCategory', render: (row: RevenueItem) => localName(lang, row.category_name, row.category_name_ha) },
               { key: 'frequency', label: 'ofcCfFrequency', render: (row) => <Badge status={row.frequency} /> },
               { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row) },
               {
@@ -283,8 +285,8 @@ function NewItemForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
-  const { t } = usePortalI18n();
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const { lang, t } = usePortalI18n();
+  const [categories, setCategories] = useState<{ id: string; name: string; name_ha: string | null }[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -300,7 +302,7 @@ function NewItemForm({
 
   useEffect(() => {
     api
-      .get<{ id: string; name: string }[]>('/revenue/categories')
+      .get<{ id: string; name: string; name_ha: string | null }[]>('/revenue/categories')
       .then(setCategories)
       .catch(() => setCategories([]));
   }, []);
@@ -367,7 +369,7 @@ function NewItemForm({
               <option value="">{t.ofcCfChooseCategory}</option>
               {categories.map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {localName(lang, category.name, category.name_ha)}
                 </option>
               ))}
             </select>
@@ -407,7 +409,7 @@ function NewItemForm({
             >
               {['ONE_OFF', 'DAILY', 'MONTHLY', 'QUARTERLY', 'ANNUAL'].map((frequency) => (
                 <option key={frequency} value={frequency}>
-                  {frequency.replace(/_/g, ' ')}
+                  {enumLabel(frequency, t)}
                 </option>
               ))}
             </select>
@@ -482,7 +484,7 @@ function WithdrawItemForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const restoring = item.status !== 'ACTIVE';
   const [status, setStatus] = useState(restoring ? 'ACTIVE' : 'SUSPENDED');
   const [reason, setReason] = useState('');
@@ -494,7 +496,7 @@ function WithdrawItemForm({
       <div className="card__header">
         <div>
           <h2 className="card__title">
-            {restoring ? 'Restore' : 'Withdraw'} — {item.name}
+            {restoring ? 'Restore' : 'Withdraw'} — {localName(lang, item.name, item.name_ha)}
           </h2>
           <p className="card__hint">
             {restoring
@@ -575,7 +577,7 @@ function RateChangeForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [rateType, setRateType] = useState(item.rate_type ?? 'FIXED');
   const [amount, setAmount] = useState('');
   const [percent, setPercent] = useState('');
@@ -646,7 +648,7 @@ function RateChangeForm({
       });
 
       onDone(
-        `A new rate version for "${item.name}" has been recorded, effective ${effectiveFrom}. ` +
+        `A new rate version for "${localName(lang, item.name, item.name_ha)}" has been recorded, effective ${effectiveFrom}. ` +
           'Existing assessments are unaffected.',
       );
     } catch (caught) {
@@ -661,7 +663,7 @@ function RateChangeForm({
 
   return (
     <div className="card">
-      <h2 className="card__title">{t.ofcCfChangeRateFor.replace('{{name}}', item.name)}</h2>
+      <h2 className="card__title">{t.ofcCfChangeRateFor.replace('{{name}}', localName(lang, item.name, item.name_ha))}</h2>
       <p className="card__hint">{t.ofcCfCurrentVersionStays}</p>
 
       <ErrorAlert error={error} />
@@ -740,7 +742,7 @@ function RateChangeForm({
 // ---------------------------------------------------------------------------
 
 export function ProgrammesScreen() {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [programmes, setProgrammes] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -807,8 +809,8 @@ export function ProgrammesScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'name', label: 'ofcAlProgramme' },
-              { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
+              { key: 'name', label: 'ofcAlProgramme', render: (row: any) => localName(lang, row.name, row.name_ha) },
+              { key: 'code', label: 'ofcAgCode', render: (row: any) => <span className="mono">{row.code}</span> },
               { key: 'benefit_type', label: 'ofcCfBenefit' },
               { key: 'minimum_score', label: 'ofcCfMinScore', numeric: true },
               {

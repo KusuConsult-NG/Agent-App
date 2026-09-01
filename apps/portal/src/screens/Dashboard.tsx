@@ -1,7 +1,7 @@
 /** Executive dashboard and revenue intelligence (PRD §37, §38, §59, §73). */
 
 import { useEffect, useState } from 'react';
-import { formatNaira } from '@psirs/shared';
+import { formatNaira, localName } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, BarList, ErrorAlert, KeyValue, Loading, Money, Sparkline, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -15,10 +15,10 @@ interface Dashboard {
     total_kobo: string;
   };
   counts: Record<string, string>;
-  revenueByCategory: { category: string; transactions: string; amount_kobo: string }[];
+  revenueByCategory: { category: string; category_ha: string | null; transactions: string; amount_kobo: string }[];
   revenueByLga: { lga: string; zone: string; transactions: string; amount_kobo: string }[];
   revenueByAgent: { agent_code: string; full_name: string; transactions: string; amount_kobo: string }[];
-  revenueByMda: { mda: string; amount_kobo: string }[];
+  revenueByMda: { mda: string; mda_ha: string | null; amount_kobo: string }[];
   dailyTrend: { day: string; amount_kobo: string; transactions: string }[];
   exceptions: Record<string, string>;
   /**
@@ -32,11 +32,11 @@ interface Dashboard {
    */
   scope?:
     | { kind: 'STATEWIDE' }
-    | { kind: 'TERRITORIES'; territories: { id: string; name: string; code: string }[] };
+    | { kind: 'TERRITORIES'; territories: { id: string; name: string; name_ha: string | null; code: string }[] };
 }
 
 export function DashboardScreen({ navigate }: { navigate: (path: string) => void }) {
-  const { t } = usePortalI18n();
+  const { lang, t } = usePortalI18n();
   const [data, setData] = useState<Dashboard | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -73,7 +73,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           title={{
             text: t.ofcDbShowing.replace(
               '{{territories}}',
-              territories.map((territory) => territory.name).join(', '),
+              territories.map((territory) => localName(lang, territory.name, territory.name_ha)).join(', '),
             ),
           }}
         >
@@ -164,7 +164,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           <p className="card__hint">{t.ofcDbWhichHeads}</p>
           <BarList
             items={data.revenueByCategory.slice(0, 10).map((row) => ({
-              label: { text: row.category },
+              label: { text: localName(lang, row.category, row.category_ha) },
               sublabel: `${row.transactions} txn`,
               value: Number(row.amount_kobo),
             }))}
@@ -201,7 +201,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
         </div>
         <Table
           columns={[
-            { key: 'mda', label: 'ofcDbMda' },
+            { key: 'mda', label: 'ofcDbMda', render: (row: Dashboard['revenueByMda'][number]) => localName(lang, row.mda, row.mda_ha) },
             {
               key: 'amount_kobo',
               label: 'ofcPfCollected',

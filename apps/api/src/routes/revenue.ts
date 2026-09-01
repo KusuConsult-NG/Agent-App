@@ -27,7 +27,7 @@ revenueRouter.get(
     res.json(
       await query(
         pool,
-        `SELECT id, name, code, tier FROM revenue_authorities WHERE status = 'ACTIVE' ORDER BY tier, name`,
+        `SELECT id, name, name_ha, code, tier FROM revenue_authorities WHERE status = 'ACTIVE' ORDER BY tier, name`,
       ),
     );
   }),
@@ -421,7 +421,8 @@ revenueRouter.get(
   asyncHandler(async (req, res) => {
     const assessment = await queryOne(
       pool,
-      `SELECT a.*, ri.name AS revenue_item, rc.name AS revenue_category,
+      `SELECT a.*, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
               i.invoice_number, i.status AS invoice_status, i.expires_at
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
@@ -448,7 +449,8 @@ revenueRouter.get(
     const invoice = await queryOne(
       pool,
       `SELECT i.*, a.assessment_number, a.period_label, a.computation_trace,
-              ri.name AS revenue_item, rc.name AS revenue_category,
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
               t.transaction_reference, t.status AS transaction_status
          FROM invoices i
          JOIN assessments a ON a.id = i.assessment_id
@@ -475,7 +477,9 @@ revenueRouter.post(
         `SELECT i.id, i.invoice_number, i.amount_kobo, i.service_charge_kobo, i.total_amount_kobo,
                 i.verification_code, i.issued_at, i.expires_at, i.taxpayer_id,
                 a.assessment_number, a.period_label, a.computation_trace,
-                ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
+                ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+                rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+                m.name AS mda_name, m.name_ha AS mda_name_ha,
                 l.name AS lga_name, ag.agent_code, i.agent_id,
                 tp.first_name, tp.last_name, tp.business_name, tp.tin
            FROM invoices i
