@@ -49,20 +49,28 @@ function requestFrom(ip: string, token?: string): Request {
 
 const noopRes = { setHeader() {} } as unknown as Response;
 
-/** Drives the middleware once; returns true if the request was let through. */
-function allows(limiter: ReturnType<typeof rateLimit>, req: Request): boolean {
-  let error: unknown = null;
-  const next: NextFunction = (err?: unknown) => {
-    error = err ?? null;
-  };
-  limiter(req, noopRes, next);
-  return error === null;
+/**
+ * Drives the middleware once; resolves true if the request was let through.
+ *
+ * Asynchronous because the limiter's counts moved to a store that may be the
+ * database — see `middleware/rate-limit-store.ts`. The verdict still arrives
+ * before the request proceeds; only the waiting is now explicit.
+ */
+function allows(limiter: ReturnType<typeof rateLimit>, req: Request): Promise<boolean> {
+  return new Promise((resolve) => {
+    const next: NextFunction = (err?: unknown) => resolve((err ?? null) === null);
+    limiter(req, noopRes, next);
+  });
 }
 
 /** Spends a whole budget, then returns whether the next request is refused. */
-function exhaust(limiter: ReturnType<typeof rateLimit>, req: Request, max: number): boolean {
-  for (let i = 0; i < max; i++) allows(limiter, req);
-  return !allows(limiter, req);
+async function exhaust(
+  limiter: ReturnType<typeof rateLimit>,
+  req: Request,
+  max: number,
+): Promise<boolean> {
+  for (let i = 0; i < max; i++) await allows(limiter, req);
+  return !(await allows(limiter, req));
 }
 
 describe('rate limiting identifies the caller, not the connection', () => {
@@ -76,36 +84,36 @@ describe('rate limiting identifies the caller, not the connection', () => {
     tokenB = issueAccessToken({ sub: 'user-b', role: 'AGENT', sid: 'session-b' } as never);
   });
 
-  it('does not let one agent spend the budget of another behind the same address', () => {
+  it('does not let one agent spend the budget of another behind the same address', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'shared-nat' });
     const ip = '10.0.0.7';
 
     assert.equal(
-      exhaust(limiter, requestFrom(ip, tokenA), MAX),
+      await exhaust(limiter, requestFrom(ip, tokenA), MAX),
       true,
       'the first agent should be limited once they have spent their own budget',
     );
 
     assert.equal(
-      allows(limiter, requestFrom(ip, tokenB)),
+      await allows(limiter, requestFrom(ip, tokenB)),
       true,
       'a second agent on the same address has spent nothing and must be served',
     );
   });
 
-  it('still falls back to the address when there is no token', () => {
+  it('still falls back to the address when there is no token', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'anonymous' });
     const ip = '10.0.0.8';
 
-    assert.equal(exhaust(limiter, requestFrom(ip), MAX), true);
+    assert.equal(await exhaust(limiter, requestFrom(ip), MAX), true);
     assert.equal(
-      allows(limiter, requestFrom(ip)),
+      await allows(limiter, requestFrom(ip)),
       false,
       'unauthenticated traffic from one address shares one budget',
     );
   });
 
-  it('cannot be sidestepped by inventing a subject', () => {
+  it('cannot be sidestepped by inventing a subject', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'forged' });
     const ip = '10.0.0.9';
 
@@ -115,20 +123,20 @@ describe('rate limiting identifies the caller, not the connection', () => {
       audience: 'psirs-clients',
     });
 
-    assert.equal(exhaust(limiter, requestFrom(ip), MAX), true);
+    assert.equal(await exhaust(limiter, requestFrom(ip), MAX), true);
     assert.equal(
-      allows(limiter, requestFrom(ip, forged)),
+      await allows(limiter, requestFrom(ip, forged)),
       false,
       'an unverifiable token must not buy a fresh budget',
     );
     assert.equal(
-      allows(limiter, requestFrom(ip, 'not-a-jwt-at-all')),
+      await allows(limiter, requestFrom(ip, 'not-a-jwt-at-all')),
       false,
       'nor must a malformed one',
     );
   });
 
-  it('does not accept a token issued for somewhere else', () => {
+  it('does not accept a token issued for somewhere else', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'foreign' });
     const ip = '10.0.0.10';
 
@@ -138,15 +146,15 @@ describe('rate limiting identifies the caller, not the connection', () => {
       audience: 'someone-else',
     });
 
-    assert.equal(exhaust(limiter, requestFrom(ip), MAX), true);
+    assert.equal(await exhaust(limiter, requestFrom(ip), MAX), true);
     assert.equal(
-      allows(limiter, requestFrom(ip, foreign)),
+      await allows(limiter, requestFrom(ip, foreign)),
       false,
       'a token this API did not issue must not buy a fresh budget',
     );
   });
 
-  it('honours an already-resolved identity without re-verifying', () => {
+  it('honours an already-resolved identity without re-verifying', async () => {
     // Route-level limiters mounted after `authenticate` already have `req.auth`.
     // Those must keep working off it rather than parsing the header again.
     const limiter = rateLimit({ max: MAX, keyPrefix: 'resolved' });
@@ -157,9 +165,9 @@ describe('rate limiting identifies the caller, not the connection', () => {
       return req;
     };
 
-    assert.equal(exhaust(limiter, withAuth('user-d'), MAX), true);
+    assert.equal(await exhaust(limiter, withAuth('user-d'), MAX), true);
     assert.equal(
-      allows(limiter, withAuth('user-e')),
+      await allows(limiter, withAuth('user-e')),
       true,
       'a different resolved user has their own budget',
     );

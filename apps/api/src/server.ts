@@ -23,6 +23,7 @@ import { expireLapsedInvoices } from './services/revenue';
 import { BACKGROUND_JOBS, runJob, type JobName } from './services/jobs';
 import { expireSettledKeys } from './middleware/idempotency';
 import { expireOldEvents } from './services/usage';
+import { sweepExpiredBuckets } from './middleware/rate-limit-store';
 import { log } from './lib/logger';
 import { metrics } from './lib/metrics';
 import { reportError } from './services/error-reporting';
@@ -232,6 +233,11 @@ async function main() {
     schedule('usage-retention', async () => {
       const result = await expireOldEvents(pool);
       return result.deleted > 0 ? `${result.deleted} telemetry row(s) deleted` : null;
+    }),
+
+    schedule('rate-limit-sweep', async () => {
+      const deleted = await sweepExpiredBuckets();
+      return deleted > 0 ? `${deleted} expired rate limit bucket(s) deleted` : null;
     }),
   ];
 

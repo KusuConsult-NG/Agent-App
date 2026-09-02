@@ -209,6 +209,13 @@ frame and connect origins — everything they need is bundled.
 
 CORS is an explicit origin allowlist. Rate limits are keyed by user where known
 so one shared NAT address in a rural LGA does not throttle every agent behind it.
+Their counts are shared through PostgreSQL (`RATE_LIMIT_STORE=postgres`, which
+production requires), so the cap is the cap however many instances are running
+rather than that number multiplied by the replica count. A caller already over
+their limit is refused from memory until their window ends, so a flood costs one
+round trip rather than one per request; and the store fails open, because a
+bookkeeping table being unreachable must not stop collection statewide while
+account lockout still holds underneath.
 
 ## Documents
 
@@ -242,13 +249,12 @@ in the incentive engine withdraws a service; programmes only add entitlement.
 
 These are integration and operations tasks, not design gaps:
 
-1. Rate limiting is in-process; multi-instance deployment needs the Redis store.
-2. The TIN, KYC, vehicle registry, bank verification and payment gateway adapters
+1. The TIN, KYC, vehicle registry, bank verification and payment gateway adapters
    are development mocks. `config.ts` refuses to boot in production while any is
    still `mock`.
-3. Object storage is local disk; production needs S3-compatible storage with
+2. Object storage is local disk; production needs S3-compatible storage with
    server-side encryption. The `StorageDriver` interface is the swap point.
-4. Backups, point-in-time recovery, monitoring and alerting are deployment
+3. Backups, point-in-time recovery, monitoring and alerting are deployment
    concerns not covered by this repository.
-5. Independent security testing and penetration testing (PRD §88.35) have not
+4. Independent security testing and penetration testing (PRD §88.35) have not
    been performed.

@@ -167,11 +167,14 @@ and all three were fixed for it:
   racing and crash-looping.
 - **Sessions** are database-backed, so any instance can serve any request.
 
-One thing is still per-instance: **rate limiting** keeps its buckets in process
-memory, so the effective limit is N times the configured maximum. The impact is
-bounded because account lockout — the control that actually stops credential
-stuffing — is database-backed. A shared store is the remaining work; see
-`docs/SECURITY.md`.
+- **Rate limiting** shares its buckets through PostgreSQL, so N instances
+  enforce one limit rather than N times the configured maximum. Set
+  `RATE_LIMIT_STORE=postgres`; production refuses to start without it, because
+  a per-process limiter advertises a cap in `x-ratelimit-limit` that the
+  deployment does not hold. A caller already over their limit is refused from
+  memory for the rest of their window, so a flood costs one round trip rather
+  than one per request, and the store fails open — a bookkeeping table being
+  unreachable must not stop collection statewide.
 
 Recommended shape:
 

@@ -438,6 +438,15 @@ export const config = {
   },
 
   security: {
+    /**
+     * Where the rate limiter keeps its counts: `postgres` or `memory`.
+     *
+     * `memory` is per-process, so with N instances the effective cap is N
+     * times `rateLimitMax` — correct for development and for a single-instance
+     * deployment, wrong for the recommended two-or-more topology. Production
+     * refuses to boot on `memory` for that reason.
+     */
+    rateLimitStore: process.env.RATE_LIMIT_STORE ?? 'memory',
     rateLimitWindowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax: int('RATE_LIMIT_MAX', 120),
     authRateLimitMax: int('AUTH_RATE_LIMIT_MAX', 10),
@@ -529,6 +538,20 @@ if (isProduction) {
   }
   if (config.integrations.tinService === 'mock') problems.push('TIN_SERVICE is still "mock"');
   if (config.storage.driver === 'local') problems.push('STORAGE_DRIVER is still "local"');
+
+  /*
+   * A per-process limiter advertises a cap in `x-ratelimit-limit` that the
+   * deployment does not enforce: two instances mean twice the budget for
+   * enumerating TINs, guessing receipt codes and farming applications. The
+   * recommended topology is two or more replicas, so in production this is
+   * wrong by default rather than by misconfiguration.
+   */
+  if (config.security.rateLimitStore !== 'postgres') {
+    problems.push(
+      `RATE_LIMIT_STORE is "${config.security.rateLimitStore}" — per-instance counts, so the ` +
+        'advertised limit is multiplied by the number of replicas',
+    );
+  }
 
   // The mock providers hand out deterministic verdicts. In production they
   // would clear agents nobody checked and confirm vehicles nobody looked up.
