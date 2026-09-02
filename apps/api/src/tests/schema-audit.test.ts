@@ -154,6 +154,23 @@ const DELIBERATELY_MUTABLE = new Set([
    * see", and the wrong one would be the one a query found first.
    */
   'user_territories',
+  /*
+   * A counter for the current minute, not a record of anything.
+   *
+   * One row per key per window, and deletion is how the table stays finite —
+   * the `rate-limit-sweep` job removes windows that have ended, and the upsert
+   * restarts a live one in place. Protecting it from deletion would make a
+   * table that exists to be discarded grow for ever, which is the failure mode
+   * rather than the safeguard.
+   *
+   * Deleting from it fails safe in the direction that matters: a bucket that
+   * is gone starts the count again from zero, so removal can only give a
+   * caller more budget in the current minute, never fabricate a refusal or
+   * erase evidence. Nothing here says what anyone did — the record of what a
+   * caller was refused is the request log, and what they achieved is in
+   * `audit_logs`, which is hash-chained and protected.
+   */
+  'rate_limit_buckets',
   // Reference and configuration data, edited by officers through the portal.
   'lgas',
   'wards',

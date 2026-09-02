@@ -1200,6 +1200,9 @@ const PRODUCTION_ENV: Record<string, string> = {
   ERROR_REPORTING: 'webhook',
   ERROR_REPORTING_URL: 'https://alerts.psirs.pl.gov.ng/hook',
   METRICS_TOKEN: 'a-scrape-token',
+  // Per-process counts mean the advertised cap is multiplied by the replica
+  // count, and the recommended topology is two or more.
+  RATE_LIMIT_STORE: 'postgres',
 };
 
 /**

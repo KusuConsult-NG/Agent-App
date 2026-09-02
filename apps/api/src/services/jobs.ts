@@ -116,6 +116,19 @@ export const BACKGROUND_JOBS = {
     intervalMs: 24 * 60 * 60_000,
     purpose: 'Deletes product telemetry past its ninety-day retention window.',
   },
+  /*
+   * Rate limit buckets whose window ended and which nothing came back to.
+   *
+   * A live key never needs collecting — the upsert restarts its window in
+   * place — so this only clears addresses that appeared once and went away.
+   * Hourly rather than daily because a spray of addresses is exactly the
+   * traffic that leaves them behind, and each row is small enough that the
+   * cost of sweeping often is lower than the cost of a table that only grows.
+   */
+  'rate-limit-sweep': {
+    intervalMs: 60 * 60_000,
+    purpose: 'Deletes rate limit buckets whose window has ended.',
+  },
 } as const;
 
 export type JobName = keyof typeof BACKGROUND_JOBS;
