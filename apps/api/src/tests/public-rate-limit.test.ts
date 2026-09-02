@@ -47,46 +47,53 @@ function requestFrom(ip: string, token?: string): Request {
 
 const noopRes = { setHeader() {} } as unknown as Response;
 
-function allows(limiter: ReturnType<typeof rateLimit>, req: Request): boolean {
-  let error: unknown = null;
-  const next: NextFunction = (err?: unknown) => {
-    error = err ?? null;
-  };
-  limiter(req, noopRes, next);
-  return error === null;
+/**
+ * Asynchronous because the limiter's counts moved to a store that may be the
+ * database — see `middleware/rate-limit-store.ts`. The verdict still arrives
+ * before the request proceeds; only the waiting is now explicit.
+ */
+function allows(limiter: ReturnType<typeof rateLimit>, req: Request): Promise<boolean> {
+  return new Promise((resolve) => {
+    const next: NextFunction = (err?: unknown) => resolve((err ?? null) === null);
+    limiter(req, noopRes, next);
+  });
 }
 
-function exhaust(limiter: ReturnType<typeof rateLimit>, req: Request, max: number): void {
-  for (let i = 0; i < max; i++) allows(limiter, req);
+async function exhaust(
+  limiter: ReturnType<typeof rateLimit>,
+  req: Request,
+  max: number,
+): Promise<void> {
+  for (let i = 0; i < max; i++) await allows(limiter, req);
 }
 
 describe('a public limit meters the connection', () => {
   const MAX = 5;
 
-  it('does not hand a fresh budget to whoever holds an account', () => {
+  it('does not hand a fresh budget to whoever holds an account', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'public-probe', keyBy: 'ip' });
     const ip = '10.1.0.1';
     const token = issueAccessToken({ sub: 'someone', role: 'AGENT', sid: 'sid' } as never);
 
-    exhaust(limiter, requestFrom(ip), MAX);
+    await exhaust(limiter, requestFrom(ip), MAX);
 
     assert.equal(
-      allows(limiter, requestFrom(ip, token)),
+      await allows(limiter, requestFrom(ip, token)),
       false,
       'presenting a token must not reset an anti-enumeration budget',
     );
   });
 
-  it('still separates genuinely different addresses', () => {
+  it('still separates genuinely different addresses', async () => {
     const limiter = rateLimit({ max: MAX, keyPrefix: 'public-probe-2', keyBy: 'ip' });
 
-    exhaust(limiter, requestFrom('10.1.0.2'), MAX);
+    await exhaust(limiter, requestFrom('10.1.0.2'), MAX);
 
-    assert.equal(allows(limiter, requestFrom('10.1.0.2')), false);
-    assert.equal(allows(limiter, requestFrom('10.1.0.3')), true, 'another address is another caller');
+    assert.equal(await allows(limiter, requestFrom('10.1.0.2')), false);
+    assert.equal(await allows(limiter, requestFrom('10.1.0.3')), true, 'another address is another caller');
   });
 
-  it('leaves caller-keyed limits alone', () => {
+  it('leaves caller-keyed limits alone', async () => {
     // The platform-wide limiter must keep metering by user, which is what
     // stops one shared address throttling every agent behind it.
     const limiter = rateLimit({ max: MAX, keyPrefix: 'caller-keyed' });
@@ -94,10 +101,10 @@ describe('a public limit meters the connection', () => {
     const a = issueAccessToken({ sub: 'user-a', role: 'AGENT', sid: 'sa' } as never);
     const b = issueAccessToken({ sub: 'user-b', role: 'AGENT', sid: 'sb' } as never);
 
-    exhaust(limiter, requestFrom(ip, a), MAX);
+    await exhaust(limiter, requestFrom(ip, a), MAX);
 
-    assert.equal(allows(limiter, requestFrom(ip, a)), false);
-    assert.equal(allows(limiter, requestFrom(ip, b)), true, 'a different agent has their own budget');
+    assert.equal(await allows(limiter, requestFrom(ip, a)), false);
+    assert.equal(await allows(limiter, requestFrom(ip, b)), true, 'a different agent has their own budget');
   });
 });
 
