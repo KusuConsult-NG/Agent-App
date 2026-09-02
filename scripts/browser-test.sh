@@ -32,6 +32,16 @@ export STORAGE_PATH="/tmp/psirs-browser-storage"
 export RUN_MIGRATIONS_ON_BOOT=false
 export PORT=4000
 
+# The whole suite signs in from 127.0.0.1, and the login limiter is keyed by
+# address for callers who are not yet authenticated — correctly, since that is
+# what makes it brute-force protection. Ten sign-ins per window is the right
+# production default and the wrong one for a run that legitimately signs in
+# thirty times, so the harness raises it for its own throwaway stack. The
+# product default is untouched; this exports into this script's API process
+# only.
+export AUTH_RATE_LIMIT_MAX="${AUTH_RATE_LIMIT_MAX:-500}"
+export RATE_LIMIT_MAX="${RATE_LIMIT_MAX:-5000}"
+
 pids=()
 
 cleanup() {
@@ -58,6 +68,19 @@ wait_for() {
   echo "[browser-test] ${name} ready"
 }
 
+# A server already on one of these ports is worse than a missing one: the
+# health check passes, the suite runs happily against somebody else's process
+# — a different database, a different configuration — and the results are
+# meaningless in a way nothing reports. This cost an afternoon once.
+for port in 4000 5173 5174; do
+  if curl -sf -o /dev/null --max-time 2 "http://localhost:${port}/" 2>/dev/null ||
+     curl -sf -o /dev/null --max-time 2 "http://localhost:${port}/health" 2>/dev/null; then
+    echo "[browser-test] something is already listening on ${port}." >&2
+    echo "[browser-test] stop it first — this suite must own its own stack." >&2
+    exit 1
+  fi
+done
+
 echo "[browser-test] preparing ${DB_NAME}"
 psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres \
   -c "DROP DATABASE IF EXISTS \"${DB_NAME}\";" >/dev/null
@@ -82,6 +105,12 @@ setsid npm run dev --workspace @psirs/agent >/tmp/psirs-browser-agent.log 2>&1 &
 pids+=($!)
 wait_for "http://localhost:5174/" "portal"
 wait_for "http://localhost:5173/" "agent app"
+
+# Activity for the workflow specs: a verified payment and a reversal approved
+# by two officers, all walked through the real API rather than inserted.
+echo "[browser-test] building workflow fixtures"
+export BROWSER_FIXTURES="${BROWSER_FIXTURES:-/tmp/psirs-browser-fixtures.json}"
+npx tsx apps/api/src/db/seed-browser-fixtures.ts "${BROWSER_FIXTURES}"
 
 echo "[browser-test] running Playwright"
 npx playwright test "$@"

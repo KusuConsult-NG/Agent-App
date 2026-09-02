@@ -35,7 +35,7 @@ export interface PushSubscriptionData {
   };
 }
 
-interface StoredSubscription {
+export interface StoredSubscription {
   userId?: string;
   agentId?: string;
   subscription: PushSubscriptionData;
@@ -61,8 +61,35 @@ export function saveSubscription(
   });
 }
 
-export function removeSubscription(endpoint: string): void {
-  subscriptions.delete(endpoint);
+/**
+ * Remove a registration.
+ *
+ * Scoped to the owner: the endpoint URL is the only thing identifying a
+ * subscription, and it is not a secret the platform controls, so an
+ * unscoped delete lets anyone who learns an endpoint silence that device.
+ * An unowned registration (one saved before ownership was recorded) is
+ * removable by anyone, since there is nobody it could belong to.
+ */
+export function removeSubscription(
+  endpoint: string,
+  owner?: { userId?: string; agentId?: string },
+): boolean {
+  const existing = subscriptions.get(endpoint);
+  if (!existing) return false;
+
+  if (owner && (existing.userId || existing.agentId)) {
+    const mine =
+      (existing.userId !== undefined && existing.userId === owner.userId) ||
+      (existing.agentId !== undefined && existing.agentId === owner.agentId);
+    if (!mine) return false;
+  }
+
+  return subscriptions.delete(endpoint);
+}
+
+/** Read a stored registration. Exposed so the ownership rule can be asserted. */
+export function getSubscription(endpoint: string): Readonly<StoredSubscription> | undefined {
+  return subscriptions.get(endpoint);
 }
 
 export async function sendPushNotification(

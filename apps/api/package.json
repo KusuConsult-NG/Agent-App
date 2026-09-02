@@ -13,7 +13,8 @@
     "test": "tsx --test --test-concurrency=1 src/tests/*.test.ts",
     "pretest": "npm run build --workspace @psirs/shared",
     "verify:integrations": "tsx src/db/verify-integrations.ts",
-    "load-test": "tsx src/db/load-test.ts"
+    "load-test": "tsx src/db/load-test.ts",
+    "soak-test": "tsx src/db/soak-test.ts"
   },
   "dependencies": {
     "@psirs/shared": "*",

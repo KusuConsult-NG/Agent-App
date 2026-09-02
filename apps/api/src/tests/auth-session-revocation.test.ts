@@ -2,9 +2,11 @@
  * Signing out of every device, and single-use OTP codes.
  *
  * Both routes were found by enumerating the API surface rather than reading
- * tests: 141 routes are declared and 24 are exercised by nothing. Most of those
- * are reporting endpoints where the cost of a regression is an empty table.
- * These two are not.
+ * tests: of 141 declared routes, 14 were exercised by nothing. (An early pass
+ * put that at 24, but the script behind it mapped each file to its first
+ * router, so every route on `supportRouter` — declared alongside
+ * `governmentRouter` in one file — was attributed to the wrong mount.) Most of
+ * the fourteen are reference or maintenance endpoints. These two are not.
  *
  *   POST /auth/logout-all   what a person uses when they believe their account
  *                           is compromised. If it silently revokes nothing, the

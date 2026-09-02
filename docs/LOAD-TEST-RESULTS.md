@@ -125,3 +125,59 @@ LOAD_TAXPAYERS=50000 npm run load-test
 
 Additive against an existing database — it tops up to the target rather than
 resetting, so it can be pointed at a staging deployment that already has data.
+
+---
+
+## Sustained soak — 12 minutes, concurrency 8
+
+The load runs answer "how fast". This answers "does it stay that way". The
+failure modes it looks for are all accumulations, and none of them appear in a
+run measured in minutes: a client taken and never released, a cache with no
+bound, dead tuples building under a table that only grows.
+
+Run with `npm run soak-test --workspace @psirs/api`
+(`SOAK_SECONDS`, `SOAK_CONCURRENCY`, `SOAK_INTERVAL_SECONDS`).
+
+| win | writes | reads | w-p50 | r-p50 | rss MB | heap MB | pool t/i/w | dead tup | err |
+|----:|-------:|------:|------:|------:|-------:|--------:|-----------:|---------:|----:|
+| 1 | 42020 | 42020 | 10.85 | 0.27 | 125 | 14 | 8/0/0 | 0 | 0 |
+| 2 | 41014 | 41020 | 11.17 | 0.28 | 110 | 16 | 8/0/0 | 0 | 0 |
+| 3 | 41736 | 41744 | 10.95 | 0.28 | 125 | 13 | 8/0/0 | 0 | 0 |
+| 4 | 42020 | 42028 | 10.89 | 0.27 | 129 | 14 | 8/0/0 | 0 | 0 |
+| 5 | 42503 | 42509 | 10.75 | 0.27 | 130 | 20 | 8/0/0 | 0 | 0 |
+| 6 | 41426 | 41434 | 11.01 | 0.28 | 135 | 23 | 8/0/0 | 0 | 0 |
+| 7 | 41440 | 41447 | 10.97 | 0.28 | 134 | 22 | 8/0/0 | 0 | 0 |
+| 8 | 41362 | 41370 | 10.99 | 0.28 | 134 | 17 | 8/0/0 | 0 | 0 |
+| 9 | 40553 | 40559 | 11.23 | 0.29 | 134 | 17 | 8/0/0 | 0 | 0 |
+| 10 | 40967 | 40974 | 11.12 | 0.28 | 136 | 15 | 8/0/0 | 0 | 0 |
+| 11 | 39739 | 39747 | 11.46 | 0.29 | 135 | 16 | 8/0/0 | 0 | 0 |
+| 12 | 39220 | 39228 | 11.55 | 0.29 | 135 | 20 | 8/8/0 | 0 | 0 |
+
+**494,000 audit appends in 720s — 686 per second sustained.**
+
+| check | result |
+|---|---|
+| write latency held | 10.85ms → 11.55ms (**1.06×**) |
+| read latency held | 0.27ms → 0.29ms (**1.07×**) |
+| heap did not run away | 14MB → 20MB (**+6MB**) |
+| no connection leak | final total/idle/waiting 8/8/0, peak waiting **0** |
+| no errors | **0** across the run |
+
+### What this does and does not establish
+
+The write path here is `recordAuditStandalone`, deliberately: the audit chain
+hashes each entry against its predecessor under a global advisory lock, so it
+is the one point every write in the platform must pass through single-file.
+686 appends per second is therefore a **ceiling on total system write
+throughput**, not a figure for one endpoint. For context, Plateau State's entire
+collection volume is nowhere near that; the number matters because it is a
+hard ceiling that no amount of horizontal scaling moves.
+
+`waitingCount` never left zero, which is the result worth having: the pool was
+never the constraint, so the 11ms is the chain's own cost and not queueing.
+
+What a 12-minute run cannot see is anything with a longer period than 12
+minutes — index bloat on a table with months of data, a monthly reconciliation
+job, certificate rotation. Dead tuples stayed at zero throughout, but that is
+because this workload only appends; it is not evidence about the tables that
+are updated in place.
