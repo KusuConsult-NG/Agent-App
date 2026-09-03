@@ -582,8 +582,8 @@
         open code finding &mdash; the per-instance rate limiter, D-3 &mdash; was fixed.
         Adversarial reviews were commissioned to attack those changes, none written by the
         hand that made them. <strong>Fifteen defects came out of those reviews, two of them
-        critical; two more came out of the verification runs that followed. Every one is fixed
-        and pinned by a test</strong> (D-47 to D-63).
+        critical; three more came out of the verification runs that followed. Every one is fixed
+        and pinned by a test or by the run itself</strong> (D-47 to D-64).
       </p>
       <p style="margin-top:12px">
         Four of those sixteen are the same mistake in four places, and it is worth naming
@@ -728,7 +728,7 @@
     <div class="stats">
       <div class="stat"><span class="v">TESTTOTAL</span><span class="k">Tests passing<br>0 failing</span></div>
       <div class="stat"><span class="v">68</span><span class="k">Independent audit<br>tests added at rev 10</span></div>
-      <div class="stat"><span class="v">17</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
+      <div class="stat"><span class="v">18</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
       <div class="stat"><span class="v">1</span><span class="k">Screen clearing agents<br>with no test</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
       <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
@@ -1200,8 +1200,8 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         <code>certification-rev10-rate-limit.test.ts</code> (11).
       </p>
       <p>
-        <strong>They left twenty-four assertions failing.</strong> Seventeen defects came out of
-        this revision, listed as D-47 to D-63 and each now fixed; the rest were the reviews&rsquo; own
+        <strong>They left twenty-four assertions failing.</strong> Eighteen defects came out of
+        this revision, listed as D-47 to D-64 and each now fixed; the rest were the reviews&rsquo; own
         harnesses misreading the platform&rsquo;s contract, and are recorded as such rather
         than quietly dropped. Two of the sixteen are critical: a single finance officer
         could mint government receipts for money no bank ever sent (D-48), and a gateway
@@ -1952,6 +1952,36 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         </dl>
       </article>
 
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-64</span>
+          <h3 class="finding-title" style="margin:0">The coverage measurement carried its answers across runs</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The enum-coverage check that produced D-63 turned out to have the same shape of
+          fault as the route-counting tool D-21 recorded: the measurement was wrong, and in
+          the direction that makes a suite look better than it is.
+        </p>
+        <p>
+          It records every state the suite writes in a table called
+          <code>enum_writes</code>, then asks which of the states the schema allows nothing
+          produced. The shard databases are deliberately kept between runs &mdash; migrating
+          an empty one costs 357ms and re-running settled migrations costs 4 &mdash; and
+          nothing ever emptied that table. So the question it answered was <em>&ldquo;what
+          has nothing produced since this database was created&rdquo;</em>, which is a
+          different question and a more flattering one.
+        </p>
+        <dl>
+          <dt>Coverage that has already been lost still reads as present</dt>
+          <dd>A state a fixture wrote once and no longer writes goes on being reported as reached. Delete the only test that covers a state, and the check stays quiet &mdash; exactly when it should speak.</dd>
+          <dt>And a failure the run cannot clear</dt>
+          <dd><code>commissions.status: CANCELLED</code> was still reported after the fixture writing it had been removed and the suite had gone green. Nothing in the codebase could have made that go away; only somebody knowing to empty a table by hand. A check that fails for reasons the working tree cannot fix is one people learn to ignore.</dd>
+          <dt>Fix</dt>
+          <dd>The runner empties the table before any shard starts &mdash; there rather than in the per-file observer installation, which would discard what earlier files in the same shard had already recorded. The measurement is now about the run.</dd>
+        </dl>
+      </article>
+
       <article class="finding high">
         <div class="finding-head">
           <span class="finding-id">D-63</span>
@@ -2002,7 +2032,7 @@ trigger definition →
           <dt>And the test now proves what it claims</dt>
           <dd>6c inserts against a transaction with no commission row, asserts the settlement refusal specifically, checks its own precondition that the index cannot answer, and then shows the same insert accepted at <code>PENDING</code> &mdash; so what is refused is the payable status and not the insert.</dd>
           <dt>Why this one is worth reading twice</dt>
-          <dd>It was found not by an attack but by a <em>measurement</em> the platform takes of itself, in a run where all 1,523 API tests had just passed. An assertion with an over-broad pattern is indistinguishable from a passing test until something independent disagrees with it &mdash; here, a check that records which states the suite writes rather than which ones it asserts.</dd>
+          <dd>It was found not by an attack but by a <em>measurement</em> the platform takes of itself, in a run where all 1,523 API tests had just passed. An assertion with an over-broad pattern is indistinguishable from a passing test until something independent disagrees with it &mdash; here, a check that records which states the suite writes rather than which ones it asserts. That check turned out to have a fault of its own, which is D-64.</dd>
         </dl>
       </article>
 
@@ -3559,7 +3589,7 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
       </p>
       <p>
         Revision 10 qualifies that in one specific way, and it is worth being exact about
-        how. The seventeen defects it found were not a different platform from the one
+        how. The eighteen defects it found were not a different platform from the one
         described above; they were the <em>same</em> rules, correctly stated, enforced one
         step short. Migration 040 raised the standard from &ldquo;the gateway said so&rdquo;
         to &ldquo;the State has the money&rdquo;, and four separate places went on asking
@@ -3571,13 +3601,15 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         four places.
       </p>
       <p>
-        The uncomfortable finding is not any of the seventeen. It is that two of them were
-        <em>held in place by tests</em> &mdash; an assertion that an officer&rsquo;s private
-        note about a taxpayer was returned to anonymous callers, and one that accepted a
-        unique-index violation as proof of a settlement rule. Both passed on every run for
-        as long as they existed. A test suite is evidence about a platform only to the
-        extent that somebody has recently asked what each test would still catch, and this
-        report has now twice found the answer to be &ldquo;less than it appears&rdquo;.
+        The uncomfortable finding is not any of the eighteen. It is that three of them were
+        <em>held in place by the test apparatus itself</em> &mdash; an assertion that an
+        officer&rsquo;s private note about a taxpayer was returned to anonymous callers, one
+        that accepted a unique-index violation as proof of a settlement rule, and a coverage
+        measurement that answered for every run the database had ever seen rather than for
+        this one. All three passed, silently, for as long as they existed. A test suite is
+        evidence about a platform only to the extent that somebody has recently asked what
+        each test would still catch, and this report has now three times found the answer to
+        be &ldquo;less than it appears&rdquo;.
       </p>
       <p>
         What it said, in revision 1, was that a well-built application is not a
@@ -3601,14 +3633,14 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         and <code>docs/SECURITY.md</code> §Known gaps. That honesty is worth noting in a
         certification report, because the most common reason a platform like this fails in
         production is that nobody wrote down what was still missing. Here it was written
-        down, and this audit largely confirms it — with sixty-three defects added that
-        had not been recorded, seventeen of them at this revision.
+        down, and this audit largely confirms it — with sixty-four defects added that
+        had not been recorded, eighteen of them at this revision.
       </p>
       <p>
         Re-certification should be straightforward once the remaining items in §11 are
         complete. Nothing I found requires rearchitecting anything &mdash; including the
-        seventeen defects of revision 10, every one of which was a rule stated correctly
-        somewhere and enforced one step short of where it needed to be.
+        eighteen defects of revision 10, nearly every one of which was a rule stated
+        correctly somewhere and enforced one step short of where it needed to be.
       </p>
     </div>
 
