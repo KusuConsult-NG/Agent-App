@@ -269,11 +269,13 @@ export async function runReconciliation(params: {
       transaction_reference: string;
       settlement_id: string | null;
       settlement_reference: string | null;
+      settlement_status: string | null;
     }>(
       client,
       `SELECT p.id AS payment_id, p.transaction_id, p.gateway_reference, p.amount_kobo,
               p.status AS payment_status, t.status AS transaction_status,
-              t.transaction_reference, p.settlement_id, s.settlement_reference
+              t.transaction_reference, p.settlement_id, s.settlement_reference,
+              s.status AS settlement_status
          FROM payments p
          JOIN transactions t ON t.id = p.transaction_id
          LEFT JOIN settlements s ON s.id = p.settlement_id
@@ -352,13 +354,37 @@ export async function runReconciliation(params: {
             platformPaymentStatus: payment.payment_status,
           };
         } else {
-          // The third leg is the government's own settlement record, not the
-          // gateway's word for it: money is only reconciled once government
-          // can see it in its own account (PRD §46).
-          status = payment.settlement_id ? 'MATCHED' : 'PENDING_SETTLEMENT';
+          /*
+           * The third leg is the government's own settlement record, not the
+           * gateway's word for it: money is only reconciled once government
+           * can see it in its own account (PRD §46).
+           *
+           * And it has to be a settlement that settled something. This read
+           * `payment.settlement_id ? 'MATCHED' : ...` — the presence of a link,
+           * never the state of the batch linked to. `recordSettlement` links
+           * every payment in a batch whether or not the credit matched,
+           * deliberately, so an officer can see which collections a short
+           * payment was meant to cover. A batch the bank paid short is
+           * therefore DISPUTED, settles none of its collections, and every one
+           * of them still reported MATCHED — the sweep agreeing that money the
+           * State never received had been reconciled.
+           *
+           * The same gap migration 052 closed in the receipt trigger, in the
+           * other place that asked the question.
+           */
+          const settled = payment.settlement_status === 'RECONCILED';
+          status = settled ? 'MATCHED' : 'PENDING_SETTLEMENT';
           detail = {
             settlementReference: payment.settlement_reference,
             gatewaySettlementReference: line.settlementReference,
+            ...(payment.settlement_id && !settled
+              ? {
+                  note:
+                    `Banked under a settlement that is ${payment.settlement_status}, which ` +
+                    'settles none of its collections',
+                  settlementStatus: payment.settlement_status,
+                }
+              : {}),
           };
         }
       }
