@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">48879de</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">7ece146</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>22 August 2026 (rev. 8)</dd></div>
+      <div><dt>Date</dt><dd>2 September 2026 (rev. 10)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -573,6 +573,23 @@
         monitoring, and not one of the five external integrations has ever exchanged a
         packet with the real provider it will depend on. Certification fails on
         operational readiness, not on correctness.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Revision 10 &mdash; partial.</strong> Two hundred and twelve commits landed
+        after revision 9, four of them changing rules this report had certified: a receipt
+        now requires settlement rather than gateway confirmation, device binding acquired a
+        relaxation for demonstrations, an agent&rsquo;s commission account became changeable,
+        and the last open code finding &mdash; the per-instance rate limiter &mdash; was
+        fixed. Four adversarial reviews were commissioned to attack those changes, none of
+        them written by the hand that made them. <strong>All four terminated on an API rate
+        limit before returning a finding.</strong> What this revision therefore records is
+        what could be verified directly: a dependency advisory found and closed (D-46), the
+        Hausa translation now complete across both applications and pinned by eight
+        consistency tests (D-45), the portal at 111 tests with the KYC-review screen still
+        referenced by none (D-5), and the inventory recounted. The four changed rules are
+        marked <em>not re-verified at this revision</em> rather than carried forward as
+        passing, and D-3 stays open because an implementer&rsquo;s own tests are the weakest
+        evidence in this report. The verdict does not move: it was already FAIL on B-4.
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
@@ -692,10 +709,10 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">793</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">138</span><span class="k">Independent<br>audit tests added</span></div>
-      <div class="stat"><span class="v">96</span><span class="k">Database<br>integrity triggers</span></div>
-      <div class="stat"><span class="v">156</span><span class="k">API routes<br>traced</span></div>
+      <div class="stat"><span class="v">1,701</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">0</span><span class="k">Independent audit<br>tests added at rev 10</span></div>
+      <div class="stat"><span class="v">4</span><span class="k">Changed rules<br>not re-verified</span></div>
+      <div class="stat"><span class="v">1</span><span class="k">Screen clearing agents<br>with no test</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
       <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
     </div>
@@ -970,7 +987,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
     <div class="scroll">
       <table>
-        <caption>Assessed at commit 4ab5925 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision.</caption>
+        <caption>Assessed at commit 7ece146 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision. Rows re-verified at revision 10 say so in their evidence; a row that does not was carried forward on its committed test suite, which was re-run at this commit.</caption>
         <thead>
           <tr>
             <th scope="col">Area</th>
@@ -1003,7 +1020,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
           <tr><td>Append-only coverage</td><td><span class="pill p-pass">Pass</span></td><td>Three tables holding audit evidence had no delete protection while their siblings did, including the record that a reconciliation ran. Fixed, and a test now asserts the property so an unclassified new table fails the suite</td><td>D-19 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>API route coverage</td><td><span class="pill p-pass">Pass</span></td><td>156 routes declared, 156 exercised by at least one test; none left unexercised, down from 24. Reading the uncovered ones produced nine of revision 8&rsquo;s eleven defects, which was the argument for closing the rest &mdash; and closing them produced several more</td><td>D-21 (fixed)</td><td>&mdash;</td></tr>
-          <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
+          <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree. Re-verified at revision 10: one moderate advisory had appeared in <code>qs</code>, a transitive dependency this API never invokes; closed in this revision and re-audited to zero</td><td>D-46 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. The harness exists and is now scheduled daily, reporting <em>skipped</em> — neither pass nor fail — until credentials are configured</td><td>B-4</td><td><strong>Yes</strong></td></tr>
@@ -1015,7 +1032,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Test suite isolation</td><td><span class="pill p-pass">Pass</span></td><td>Two files ran against residue from whichever file preceded them, failing 16 tests elsewhere — including the receipt-forgery and webhook-replay audits. Both now reset; the same 534 pass with and without them</td><td>D-14 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Essential-service linkage (§40)</td><td><span class="pill p-pass">Pass</span></td><td>Health insurance and the bursary denied on tax arrears, bypassing the §40 guard twice over. Both are now additive: compliance sets the benefit tier and never withdraws the benefit. The guard matches by prefix and accepts either additive mode or a recorded legal basis</td><td>D-16 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
+          <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting moved to a shared PostgreSQL store at <code>7ece146</code> and production refuses the per-instance one &mdash; but the change is the implementer&rsquo;s own and the adversarial review of it did not complete, so it is not verified here</td><td>D-3</td><td>No</td></tr>
           <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
           <tr><td>Performance under load</td><td><span class="pill p-partial">Partial</span></td><td>Measured. Read paths healthy — TIN lookup under 5ms at p99 with 32 concurrent callers, every hot path on an index confirmed by the planner. The audit chain is a global serialisation point capping the platform at roughly 40 collections/second, which horizontal scaling cannot move. No sustained soak, and no production topology</td><td>D-20</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
@@ -1054,27 +1071,28 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
       <div class="inv-card">
         <h4>Agent PWA — <code>@psirs/agent</code></h4>
         <ul>
-          <li>6,811 lines, React 19 + Vite</li>
+          <li>10,104 lines, React 19 + Vite, 10 screens</li>
           <li>Service worker, manifest, IndexedDB drafts</li>
-          <li>60 tests passing</li>
+          <li>134 tests passing, in English and in Hausa</li>
           <li>Financial paths never cached</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Government portal — <code>@psirs/portal</code></h4>
         <ul>
-          <li>5,633 lines, React 19, hash router</li>
-          <li>12 screens incl. Finance, Oversight, KYC</li>
-          <li><strong>15 tests</strong> (permission model); screens untested</li>
+          <li>13,063 lines, React 19, hash router</li>
+          <li>21 screens incl. Finance, Oversight, Levies, KYC</li>
+          <li><strong>111 tests</strong>; 8 of 21 screens rendered under test, the money-releasing flows among them</li>
           <li>Also serves public verification &amp; referee</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Shared — <code>@psirs/shared</code></h4>
         <ul>
-          <li>RBAC: 6 roles, ~60 permissions</li>
+          <li>RBAC: 6 roles, 68 permissions</li>
           <li>Kobo arithmetic in <code>BigInt</code></li>
           <li>State machines for payment &amp; transaction</li>
+          <li>Dictionary of 1,955 strings and 322 enum labels, English and Hausa, held together by 8 consistency tests</li>
         </ul>
       </div>
       <div class="inv-card">
@@ -1103,16 +1121,19 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <li>Notification dispatch (30 s)</li>
           <li>Fraud sweep (15 min)</li>
           <li>TIN, authority, refund catch-up</li>
-          <li>Reconciliation sweep (6 h)</li>
+          <li>Reconciliation &amp; reminder sweeps (6 h)</li>
+          <li>Invoice expiry (1 h), rate-limit sweep (1 h)</li>
+          <li>Idempotency &amp; telemetry retention (24 h)</li>
+          <li>Twelve jobs; each under an advisory lock, each recording whether it ran</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Operations</h4>
         <ul>
-          <li>CI: build, typecheck, migrate, test</li>
+          <li>CI: build, typecheck, migrate, test, Hausa review check, four image builds, contention suite</li>
           <li>Dependabot configured</li>
-          <li><strong>No CD, no IaC, no container</strong></li>
-          <li><strong>No backup, no monitoring</strong></li>
+          <li>Dockerfile, compose, deploy pipeline with backup-before-migrate and automatic revert</li>
+          <li><strong>Pipeline secrets unwired; no target chosen; no infrastructure</strong></li>
         </ul>
       </div>
     </div>
@@ -1137,6 +1158,46 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         surface in a real browser — which is where nine of its eleven defects came from, and
         why several of them had survived every previous pass: they were all invisible to
         anyone reading the code with the assumption that a written route is a reached one.
+      </p>
+      <p>
+        <strong>Revision 10 is a partial revision, and says so.</strong> Two hundred and
+        twelve commits landed after revision 9, and among them were changes to the rules
+        themselves: a receipt now requires settlement rather than gateway confirmation,
+        device binding acquired a relaxation for demonstrations, an agent&rsquo;s commission
+        account became changeable, and the last open code finding &mdash; the per-instance
+        rate limiter, D-3 &mdash; was fixed in the same working session that produced this
+        revision, by the same hand that is writing it.
+      </p>
+      <p>
+        An auditor who marks their own fix as passing has certified nothing. So the
+        verification of D-3, and of every money-rule and access-control change since
+        revision 9, was delegated to four adversarial reviews, each on its own database,
+        each briefed to break the control rather than confirm it, each required to bypass
+        the service layer with raw SQL wherever the database is claimed to enforce
+        something, and each required to commit its attacks as tests that fail if the control
+        gives. <strong>All four terminated early on an API rate limit before reporting a
+        single finding.</strong> They are not evidence, their intended test suites do not
+        exist, and nothing in this revision rests on them.
+      </p>
+      <p>
+        What this revision therefore contains is only what was verified directly and can be
+        shown: the dependency advisory in D-46, traced to its two call sites in
+        <code>node_modules</code> and closed; the inventory counts, each read from the
+        codebase rather than carried forward; the Hausa coverage in D-45, counted in the
+        dictionary and pinned by eight consistency tests; and the portal&rsquo;s test
+        position in D-5, including the one screen &mdash; KYC review &mdash; that is
+        referenced by no test at all. The full suite was re-run at this commit and is green,
+        which is a statement about regression and not about the new rules.
+      </p>
+      <p>
+        Four areas changed since revision 9 and are <strong>not re-verified here</strong>:
+        the settlement-gated receipt and the acknowledgement that precedes it; the
+        device-binding relaxation and the demonstration path that uses it; the commission
+        bank-account change flow; and the route coverage claim in D-21, which was true of
+        156 routes and has not been recounted since routes were added. Their matrix rows
+        carry the evidence of the revision that last examined them, not of this one. A
+        reader deciding whether to deploy should treat those four as unaudited since the
+        code beneath them moved.
       </p>
       <p>
         Where a guarantee is claimed to be enforced in the database, the audit bypasses the
@@ -1421,16 +1482,44 @@ build      shared, api, agent, portal — all clean</div>
         <div class="finding-head">
           <span class="finding-id">D-3</span>
           <h3 class="finding-title" style="margin:0">Rate limiting is per-instance</h3>
-          <span class="pill p-partial">Medium</span>
+          <span class="pill p-partial">Code changed &mdash; not independently verified</span>
         </div>
         <p>
           The limiter keeps its buckets in a process-local <code>Map</code>. With N
-          instances the effective limit is N times the configured maximum. This is
+          instances the effective limit is N times the configured maximum. It was
           documented in <code>docs/SECURITY.md</code> as a known gap awaiting a Redis
           store. The impact is bounded because account lockout — the control that actually
           stops credential stuffing — is database-backed.
         </p>
-        <dl><dt>Location</dt><dd><code>apps/api/src/middleware/security.ts:19</code></dd></dl>
+        <dl>
+          <dt>Location</dt><dd><code>apps/api/src/middleware/security.ts:19</code></dd>
+          <dt>Changed in</dt>
+          <dd>
+            <code>7ece146</code>. Counts move to PostgreSQL rather than Redis, because the
+            platform&rsquo;s stated shape is that the only state is PostgreSQL and a Redis
+            would be the one component whose quiet loss weakens a security control without
+            anything failing. The increment is a single
+            <code>INSERT&nbsp;&hellip;&nbsp;ON CONFLICT DO UPDATE&nbsp;&hellip;&nbsp;RETURNING</code>
+            rather than a read and a write, so concurrent hits on one key serialise on the
+            row lock; a caller already over the limit is refused from a local cache until
+            their window ends, so a flood costs one round trip rather than one per request;
+            and the store fails open, because a bookkeeping table being unreachable must not
+            stop collection statewide. Production refuses to boot on the per-process store.
+          </dd>
+          <dt>Why this is not marked fixed</dt>
+          <dd>
+            <strong>The change and this revision were written by the same hand in the same
+            session.</strong> The four adversarial reviews commissioned to attack it &mdash;
+            concurrency overshoot across instances, the local cache as a bypass, the
+            fail-open path as an attacker-triggerable hole, raw-SQL manipulation of the
+            bucket table, clock skew between the application and the database &mdash; all
+            terminated on an API rate limit before returning a finding. The implementer&rsquo;s
+            own thirteen tests pass, and an implementer&rsquo;s own tests are the weakest
+            evidence in this report: they encode what the implementer thought to check. The
+            finding stays open until somebody who did not write the code has tried to break
+            it. <em>(&sect;11 item 7)</em>
+          </dd>
+        </dl>
       </article>
 
       <article class="finding med">
@@ -1503,6 +1592,20 @@ build      shared, api, agent, portal — all clean</div>
             exception resolution, payout approval, reversal execution and the rest — still
             have no rendered test, and the referee response form remains outside the suite.
             The finding stays open at reduced severity.
+          </dd>
+          <dt>At revision 10</dt>
+          <dd>
+            The portal has grown to 21 screens and 111 tests across 15 files. Eight screens
+            are rendered under test, and they are the right eight: Finance &mdash; where
+            settlement, payout approval and reversal live &mdash; Oversight, Levies,
+            Configuration, the role home, sign-in, the public verification screen, and the
+            field-application form. The referee response form is now inside the suite
+            (<code>referee-decline.test.tsx</code>). Of the four flows &sect;11 named,
+            three are covered; <strong>KYC review is not</strong> &mdash;
+            <code>KycDocuments.tsx</code> is referenced by no test, rendered or otherwise.
+            Thirteen screens have no rendered test, most of them reporting views where a
+            regression costs an empty table; agent approval and KYC review are the two that
+            do not fit that description. Medium, still.
           </dd>
         </dl>
       </article>
@@ -1809,11 +1912,106 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         </dl>
       </article>
 
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-47</span>
+          <h3 class="finding-title" style="margin:0">The new rate limiter could be switched off by the caller it was limiting</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The shared rate-limit store fails open: if the database cannot be reached it
+          allows the request and logs, on the reasoning that a bookkeeping table being
+          unavailable must not stop collection statewide. That reasoning is sound. What it
+          missed is that <strong>part of the key is written by the caller</strong>, so the
+          caller could produce the error themselves.
+        </p>
+        <p>
+          On an <code>ip</code>-keyed surface the key is
+          <code>&lt;prefix&gt;:&lt;req.clientIp&gt;</code>, and behind a load balancer
+          (<code>TRUST_PROXY=true</code> &mdash; the topology &sect;10 recommends)
+          <code>req.clientIp</code> comes from <code>X-Forwarded-For</code>, a header the
+          caller sends. <code>key</code> is the primary key of
+          <code>rate_limit_buckets</code> and therefore carries a btree index, whose tuples
+          cannot exceed 2704 bytes. A multi-kilobyte header made the insert fail, the store
+          failed open, and the request was allowed &mdash; <em>every</em> request, without
+          limit, on precisely the public surfaces the tight caps exist to protect:
+          <code>/citizen-status</code> against TIN and phone enumeration, public receipt
+          verification against code guessing, and <code>POST /agents/apply</code> against
+          application farming.
+        </p>
+        <div class="code">DEFECT (fail-open bypass): 15/15 oversized-key requests were allowed
+comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</div>
+        <dl>
+          <dt>How it was found, and why that matters</dt>
+          <dd>
+            By the adversarial review commissioned to attack the D-3 fix, on code written in
+            the same session as this revision. The implementer&rsquo;s own thirteen tests all
+            passed and none of them contemplated a caller-supplied key. This is the finding
+            that justifies the arrangement: an author does not attack their own reasoning,
+            because the blind spot and the code come from the same place.
+          </dd>
+          <dt>Two false negatives on the way to it</dt>
+          <dd>
+            The attack nearly failed to land, twice, for reasons that are worth recording
+            because both would have left the defect in place while appearing to clear it.
+            The auditor built its oversized key from a repeated character &mdash; which
+            TOAST compresses, so the row stored, the insert succeeded and the precondition
+            failed loudly. Corrected to random printable bytes, the unit case caught the
+            defect but the end-to-end case still passed: Express splits
+            <code>X-Forwarded-For</code> on commas, and random printable filler contains one
+            roughly every ninety bytes, so <code>req.ip</code> arrived as an 82-character
+            fragment. Only a comma-free value reaches <code>req.ip</code> at its full
+            length. <strong>A test can pass because the system is sound or because the
+            attack was malformed, and the two are indistinguishable from the result alone.</strong>
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            A key longer than 512 bytes is folded to a readable 128-character head plus a
+            SHA-256 of the whole, in the store, before the statement is built &mdash; so no
+            key can be un-storable and the fail-open path is no longer reachable by anything
+            a caller sends. Legitimate keys are far shorter and are returned untouched, so no
+            existing bucket changes. Both attack cases now pass, with the preconditions
+            corrected so they would fail if the fold were removed.
+          </dd>
+          <dt>Carried forward</dt>
+          <dd>
+            The limiter is fixed; <code>req.clientIp</code> is not. It still accepts three
+            kilobytes of caller-supplied text and that value is written to
+            <code>audit_logs.ip_address</code>, <code>sessions</code> and the payment
+            source-IP columns by a dozen call sites. Nothing there fails open, so this is
+            not a bypass &mdash; but an IP address field holding arbitrary attacker text is
+            worth bounding at the source. <em>(&sect;11 item 4)</em>
+          </dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-46</span>
+          <h3 class="finding-title" style="margin:0">One moderate advisory in a dependency the API never invokes</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          On this revision&rsquo;s first <code>npm audit</code>, the matrix row that said zero
+          said one: <code>qs</code> 6.15.3, reached through Express 5.2.1 and body-parser
+          2.3.0, carrying two moderate advisories &mdash; an array-limit bypass through
+          bracket-key comma parsing (GHSA-x5fp-wj9c-mxmx) and a denial of service through an
+          attacker-controlled <code>isBuffer</code> (GHSA-4mjr-xmp4-gh2g). Both are reached
+          through a crafted query string or form body.
+        </p>
+        <dl>
+          <dt>Reachability</dt>
+          <dd>Neither reaches this API. Express 5 parses query strings with Node&rsquo;s own parser unless told otherwise (<code>query parser: 'simple'</code>, set in its <code>application.js:97</code>), and loads <code>qs</code> only for the <code>extended</code> setting this application never selects. body-parser loads it only for <code>urlencoded</code> bodies, and the API registers no urlencoded parser &mdash; it accepts JSON and multipart uploads and nothing else. The vulnerable code is on disk and is never on the call stack.</dd>
+          <dt>Fixed anyway</dt>
+          <dd><code>npm audit fix</code> moved <code>qs</code> to 6.16.0, a one-line lockfile change; <code>npm audit</code> reports zero on the production and full trees. Recorded because a certification row that says zero has to keep saying zero, and because &ldquo;unreachable today&rdquo; is a property of two settings nobody has yet been tempted to change.</dd>
+        </dl>
+      </article>
+
       <article class="finding" style="border-left-color:var(--warn)">
         <div class="finding-head">
           <span class="finding-id">D-45</span>
           <h3 class="finding-title" style="margin:0">The language toggle offers more than the translation delivers</h3>
-          <span class="pill p-partial">Partly closed &mdash; drafted, awaiting native review</span>
+          <span class="pill p-partial">Translated in full &mdash; awaiting native review</span>
         </div>
         <p>
           The agent application carries a Hausa toggle, and a test asserts the dictionary is
@@ -1841,6 +2039,39 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The field trial (<code>UAT-FIELD-TRIAL.md</code> &sect;3.1) puts four Hausa-first agents through Phase 0 with one job: record the specific English sentence at every point where they stop. That produces a backlog ordered by how many agents each string stopped, which will be far shorter than 277 and can be translated with confidence. The alternative &mdash; a comparison of completion rates against the English cohort &mdash; would spend two weeks of their time confirming a gap already established here.</dd>
           <dt>Plateau State speaks more than two languages</dt>
           <dd>Berom, Ngas, Tarok and others are first languages for large populations in the state. Hausa is the lingua franca and the right second language to have chosen; whether the platform needs a third is a policy question, and it should be asked with the backlog in hand rather than in the abstract.</dd>
+          <dt>Since translated in full (revision 10)</dt>
+          <dd>
+            The field trial was not waited for. Between revisions 9 and 10 the whole of both
+            applications was translated: the dictionary now holds 1,955 strings in both
+            languages, every one of the 322 values the database schema permits in an enum
+            column has a label in each, and the reference data &mdash; revenue items,
+            categories, MDAs, training modules &mdash; carries a Hausa name returned by every
+            API query that returns the English one. The agent application and the officer
+            portal were each driven in a browser with the language set to Hausa, and a test
+            in each workspace fails if a screen leaks an English literal
+            (<code>nothing-new-in-english.test.tsx</code>).
+          </dd>
+          <dt>What holds it together</dt>
+          <dd>
+            Eight consistency tests on the dictionary itself: every key translated with
+            nothing left over; no English passed off as Hausa except the acronyms and product
+            names that are the same word in both; a negation in the English is never dropped
+            in the Hausa &mdash; the failure this finding called the worst possible; one Hausa
+            word for one English term throughout, held by a glossary the test asserts; no
+            hooked letters, because agents type on phone keyboards without them; and
+            apostrophes written one way, so a reviewer&rsquo;s correction matches the file.
+            Twenty-five English labels were themselves corrected in the same pass, and the
+            thirteen Hausa strings that had been translated from the wrong English were
+            re-translated from the right one.
+          </dd>
+          <dt>Still not approved</dt>
+          <dd>
+            Drafted without a native speaker remains true, and remains the reason this is
+            not marked closed. <code>HAUSA-REVIEW.md</code> is regenerated by a script the CI
+            runs, so it cannot fall behind the dictionary; it lists 66 safety strings first,
+            then the other 1,889, then 30 message templates, each beside its English. The
+            translation is complete. It is not yet checked by anybody who grew up speaking it.
+          </dd>
         </dl>
       </article>
 
@@ -2627,6 +2858,20 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         <p>Remita service type ID and the full status code set; the PSIRS TIN format, field paths and status vocabulary; the contracted KYC vendor's response shape; the vehicle registry; bank verification. Run <code>npm run verify:integrations</code> against each sandbox and attach its output to the go-live record; <code>docs/INTEGRATION-VERIFICATION.md</code> is the checklist. <em>(B-4)</em></p>
       </li>
       <li>
+        <strong>Audit the four rules that changed after revision 9 &mdash; NEW AT REVISION 10</strong>
+        <p>
+          Revision 10 could not complete this and does not claim to have. Four controls this
+          report previously certified now sit on changed code, and each needs somebody who
+          did not write it to try to break it:
+        </p>
+        <ul>
+          <li><strong>The settlement-gated receipt.</strong> A receipt now requires the money to have reached the State&rsquo;s account, not merely the gateway&rsquo;s confirmation, with an acknowledgement issued in between. The committed evidence at <code>certification-audit.test.ts</code> still tests the older, weaker rule &mdash; that a <code>PENDING</code> payment cannot be receipted. Nothing tests that a <code>VERIFIED</code>-but-unsettled one cannot be, which is the rule the platform now claims. <em>(migrations 040, 041)</em></li>
+          <li><strong>The device-binding relaxation.</strong> <code>DEVICE_AUTO_APPROVE</code> approves a handset with no officer. Production refuses to boot with it set, and revocation is documented as untouched &mdash; both need proving, in a child process and against a revoked agent respectively. <em>(<code>12096a5</code>)</em></li>
+          <li><strong>The commission bank-account change.</strong> Step-up, the bank&rsquo;s confirmation, a second officer, and a payout-in-flight block. Whether <code>requested_by &lt;&gt; approved_by</code> is a database constraint here or only a service check decides whether it survives a compromised service account. <em>(<code>600ecb7</code>)</em></li>
+          <li><strong>Route coverage.</strong> D-21 closed on 156 routes exercised by 156 tests. Routes were added afterwards &mdash; levies, push, citizen status &mdash; and the count has not been retaken. On this codebase &ldquo;exercised by nothing&rdquo; has predicted &ldquo;wrong&rdquo; at close to one defect per route.</li>
+        </ul>
+      </li>
+      <li>
         <strong><s>Build the deployment path</s> — done in <code>4ab5925</code></strong>
         <p>Dockerfile, compose, and a pipeline that backs up before migrating and reverts on failed health checks. Migrations are an explicit step. <strong>Remaining for PSIRS:</strong> wire the five deployment secrets named in <code>docs/DEPLOYMENT.md</code> to real infrastructure, and build the image once in an environment with registry access. <em>(B-1, D-2)</em></p>
       </li>
@@ -2640,11 +2885,11 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
       </li>
       <li>
         <strong>Finish making the platform safe for more than one instance</strong>
-        <p>Workers and migrations now take advisory locks (<s>D-1</s>, <s>D-2</s>). What remains is the shared rate-limit store already anticipated in the code comments — bounded in impact, because account lockout is database-backed. <em>(D-3)</em></p>
+        <p>Workers and migrations now take advisory locks (<s>D-1</s>, <s>D-2</s>). The shared rate-limit store is <s>built</s> — counts live in PostgreSQL at <code>7ece146</code> and production refuses to start on the per-process one. What remains is not code: <strong>somebody who did not write it must try to break it</strong>, because the change and the revision certifying it came from the same hand and the four adversarial reviews commissioned to attack it did not complete. Until then the impact remains bounded by database-backed account lockout, exactly as before. <em>(D-3)</em></p>
       </li>
       <li>
         <strong>Test the government portal's screens</strong>
-        <p>The workspace is now in the root test script and in CI, with 15 tests over the permission model (<s>half of D-5</s>). What is still untested is the behaviour of the screens themselves: at minimum the approval, reversal, reconciliation-exception and KYC-review flows, plus the two public surfaces it serves. <em>(D-5)</em></p>
+        <p>111 tests now, and eight of twenty-one screens rendered under them &mdash; the money-releasing flows, both public surfaces and the referee form among them (<s>approval, reversal, reconciliation-exception, public verification, referee response</s>). What is still untested is the KYC-review screen, through which an officer clears the identity behind every agent in the field, and the agent-approval screen beside it. <em>(D-5)</em></p>
       </li>
       <li>
         <strong>Commission an independent security assessment</strong>
@@ -2728,15 +2973,29 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
 
     <footer class="report-foot">
       <p>
-        Revision 8, assessed at commit <code>48879de</code>. Revision 3 was assessed at
-        <code>4ab5925</code> on branch
+        Revision 10, assessed at commit <code>7ece146</code>, 2 September 2026 &mdash; a
+        partial revision. Revisions 8 and 9 were assessed at <code>48879de</code>. Revision 3
+        was assessed at <code>4ab5925</code> on branch
         <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
         assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
         <code>173be39</code>, and B-1, B-2 and B-3 in <code>4ab5925</code>, each
         re-verified. Evidence suites committed as <code>certification-audit.test.ts</code>
         (39 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
-        (17) and <code>backup-restore.test.ts</code> (2). Full suite: 521 passing, 0
-        failing; agent PWA 51 passing; typecheck clean; 0 dependency vulnerabilities.
+        (17) and <code>backup-restore.test.ts</code> (2).
+      </p>
+      <p style="margin-top:10px">
+        <strong>Revision 10 verification run,</strong> at <code>7ece146</code>:
+        API 1,451 passing, 0 failing, across four sharded databases; agent PWA 134 passing;
+        government portal 111 passing; money-path contention suite 5 passing; typecheck
+        clean across all four projects; Hausa review sheet regenerated and checked;
+        <code>npm audit</code> 0 vulnerabilities after D-46 was closed. <strong>No new
+        evidence suite was added at this revision.</strong> The four adversarial reviews
+        commissioned to attack the rules that changed after revision 9 &mdash; the
+        settlement-gated receipt, the device-binding relaxation, the commission
+        bank-account change, and the shared rate-limit store &mdash; terminated on an API
+        rate limit before returning a finding, and their intended suites
+        (<code>certification-rev10-*.test.ts</code>) do not exist. Nothing in this revision
+        rests on them, and &sect;11 item 4 carries the work forward.
       </p>
     </footer>
   </section>
