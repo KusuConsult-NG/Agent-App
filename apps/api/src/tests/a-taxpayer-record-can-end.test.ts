@@ -301,9 +301,27 @@ describe('What the citizen is told about their own ended record', () => {
     assert.equal(lookup.body.found, true, 'a closed record is still this person’s record');
     assert.equal(lookup.body.hasOutstanding, true, 'and what they owe is unchanged');
     assert.equal(lookup.body.ended?.status, 'CLOSED');
-    assert.match(lookup.body.ended.reason, /Premises empty/);
     assert.match(lookup.body.ended.message, /still owed and can still be paid/i);
     assert.match(lookup.body.ended.message, /if this is wrong/i);
+
+    /*
+     * And not the officer's words. This asserted the reason was returned, which
+     * is how the leak survived: the endpoint is unauthenticated, so "Premises
+     * empty at three visits; neighbours say the trader moved" was going to
+     * whoever knew the phone number. The person still learns the record is
+     * closed, that the arrears stand, and that an office can reopen it — and is
+     * told they can have the reason once somebody has confirmed who they are.
+     */
+    assert.equal(
+      lookup.body.ended.reason,
+      undefined,
+      'an anonymous caller must not be handed the officer\'s note',
+    );
+    assert.ok(
+      !JSON.stringify(lookup.body).includes('Premises empty'),
+      'and it must not reach them by any other field either',
+    );
+    assert.match(lookup.body.ended.message, /confirmed who you are/i);
   });
 
   it('says nothing about an ending to somebody whose record is open', async () => {
