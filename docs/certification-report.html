@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">7ece146</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">fa8f454</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>2 September 2026 (rev. 10)</dd></div>
+      <div><dt>Date</dt><dd>3 September 2026 (rev. 10)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -586,23 +586,31 @@
         and pinned by a test or by the run itself</strong> (D-47 to D-64).
       </p>
       <p style="margin-top:12px">
-        Four of those sixteen are the same mistake in four places, and it is worth naming
-        because it is what this revision is really about. Each checked that a <em>link
-        existed</em> rather than what the link <em>pointed at</em>: the receipt trigger asked
-        whether a payment had a <code>settlement_id</code> and not whether that settlement
-        had received anything; the reconciliation sweep asked the same question and called a
-        batch the bank paid short &ldquo;matched&rdquo;; and two officer queues aged money
-        from the last time a sweep looked rather than from when the money came in. Migration
-        040 had raised the bar to &ldquo;the State has the money&rdquo; and the code beneath
-        it was still testing for &ldquo;paperwork exists&rdquo;. Two more of the sixteen were
-        tests that <em>protected</em> a defect rather than catching it &mdash; one asserted
-        that an officer&rsquo;s private note about a taxpayer was returned to anonymous
-        callers, which is how that leak survived every previous pass.
+        <strong>One mistake accounts for four of them, in four different places</strong>, and
+        it is worth naming because it is what this revision is really about. Each checked
+        that a <em>link existed</em> rather than what the link <em>pointed at</em>. The
+        receipt trigger asked whether a payment had a <code>settlement_id</code>, not whether
+        that settlement had received anything (D-49). The reconciliation sweep asked the same
+        question and called a batch the bank paid short &ldquo;matched&rdquo; (D-58). And
+        both officer queues &mdash; the exception list and the awaiting-settlement list
+        &mdash; went on reporting money that had since arrived, because they asked about the
+        newest paperwork instead (D-60). Migration 040 had raised the bar to &ldquo;the State
+        has the money&rdquo;, and the code beneath it was still testing for &ldquo;paperwork
+        exists&rdquo;.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Three more were held in place by the test apparatus itself.</strong> A test
+        asserted that an officer&rsquo;s private note about a taxpayer <em>was</em> returned
+        to anonymous callers (D-54), which is how that leak survived every previous pass. A
+        second accepted a unique-index violation as proof of a settlement rule the database
+        did not actually hold (D-63). And the coverage check that caught the second turned
+        out to be answering for every run the database had ever seen rather than for this one
+        (D-64). All three passed silently for as long as they existed.
       </p>
       <p style="margin-top:12px">
         Three rules the service enforced correctly are now held in the database as well
-        (migration 053), which is this report&rsquo;s own standard for what counts as an
-        invariant; the route count was retaken at 189 and the two routes nothing reached were
+        (migrations 053 and 054), which is this report&rsquo;s own standard for what counts
+        as an invariant; the route count was retaken at 189 and the two routes nothing reached were
         read and covered; and D-3 is closed &mdash; not because the implementer says so, but
         because a review that set out to break the shared rate limiter found a real bypass in
         it (D-47) and, once that was fixed, could not break it again. The verdict does not move: it was
@@ -726,7 +734,7 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">TESTTOTAL</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">1,773</span><span class="k">Tests passing<br>0 failing</span></div>
       <div class="stat"><span class="v">68</span><span class="k">Independent audit<br>tests added at rev 10</span></div>
       <div class="stat"><span class="v">18</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
       <div class="stat"><span class="v">1</span><span class="k">Screen clearing agents<br>with no test</span></div>
@@ -1004,7 +1012,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
     <div class="scroll">
       <table>
-        <caption>Assessed at commit COMMITSHA against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision. Rows re-verified at revision 10 say so in their evidence; a row that does not was carried forward on its committed test suite, which was re-run at this commit.</caption>
+        <caption>Assessed at commit <code>fa8f454</code> against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision. Rows re-verified at revision 10 say so in their evidence; a row that does not was carried forward on its committed test suite, which was re-run at this commit.</caption>
         <thead>
           <tr>
             <th scope="col">Area</th>
@@ -1252,21 +1260,40 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
     </div>
 
     <h3>Final verification run</h3>
-    <div class="evidence"># tests 502
-# suites 122
-# pass 502
-# fail 0
+    <div class="evidence">npm run verify — exit 0
 
-typecheck  clean  (tsc -b packages/shared apps/api && tsc --noEmit -p tsconfig.test.json)
-npm audit  0 vulnerabilities (production and full tree)
-build      shared, api, agent, portal — all clean</div>
+API            1523 passed, 0 failed, across 4 sharded databases (138 files, 307s)
+agent PWA       134 passed, 0 failed (18 files)
+officer portal  111 passed, 0 failed (16 files)
+money-path contention
+                  5 passed, 0 failed
+                ----
+                1773 passed, 0 failed
+
+enum coverage  462 of 537 declared states written; 0 unaccounted
+route coverage 189 routes declared, 189 exercised
+typecheck      clean (shared, api, api tests, agent, portal)
+hausa review   regenerated and checked
+npm audit      0 vulnerabilities (production and full tree)</div>
     <p class="measure" style="margin-top:16px">
-      The two audit suites are committed to this branch as
-      <code>apps/api/src/tests/certification-audit.test.ts</code> and
-      <code>apps/api/src/tests/certification-e2e.test.ts</code>, so the evidence behind
-      every <span class="pill p-pass">Pass</span> above is reproducible rather than
-      asserted. The six tests added in revision 2 cover the two fixed blockers, so a
-      regression on either fails the build rather than reaching production.
+      The evidence behind every <span class="pill p-pass">Pass</span> above is committed and
+      reproducible rather than asserted:
+      <code>certification-audit.test.ts</code> (40),
+      <code>certification-e2e.test.ts</code> (6),
+      <code>observability.test.ts</code> (17),
+      <code>backup-restore.test.ts</code> (2), and the three revision-10 adversarial suites
+      &mdash; <code>certification-rev10-money.test.ts</code> (28),
+      <code>certification-rev10-access.test.ts</code> (29) and
+      <code>certification-rev10-rate-limit.test.ts</code> (11). Every defect this revision
+      found fails the build if it returns.
+    </p>
+    <p class="measure" style="margin-top:16px">
+      <strong>On what a green run is worth.</strong> This one is reported in full because
+      two of the eighteen defects were found by it rather than by the attacks, and one was
+      found by a check that had been quietly passing on stale evidence. A verification run
+      is a measurement, and a measurement that has not itself been examined recently is
+      another thing to take on trust. The route count and the enum coverage above are both
+      re-derivable from committed scripts, for that reason.
     </p>
   </section>
 
@@ -1979,6 +2006,21 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd><code>commissions.status: CANCELLED</code> was still reported after the fixture writing it had been removed and the suite had gone green. Nothing in the codebase could have made that go away; only somebody knowing to empty a table by hand. A check that fails for reasons the working tree cannot fix is one people learn to ignore.</dd>
           <dt>Fix</dt>
           <dd>The runner empties the table before any shard starts &mdash; there rather than in the per-file observer installation, which would discard what earlier files in the same shard had already recorded. The measurement is now about the run.</dd>
+          <dt>And the thing the staleness had been hiding</dt>
+          <dd>
+            The first honest run reported <code>notification_templates.channel: PUSH</code>
+            as a state nothing wrote, while four push templates sat in the table. Reference
+            data is seeded once into a database that outlives the run and reseeded
+            <code>ON CONFLICT DO NOTHING</code>, so after the first run it writes nothing and
+            the observers see nothing. Nothing was wrong with the platform; the question had
+            stopped being answerable from writes alone, and the check would have taken a
+            classification for an answer &mdash; laundering a measurement fault into an
+            admission about the suite, which is the exact failure its own header warns
+            against. It now reads the standing contents of the reference tables as well. The
+            narrower staleness that reintroduces &mdash; a template removed from the seed
+            still counts while its row survives &mdash; is documented where it happens rather
+            than left for the next reader to find.
+          </dd>
         </dl>
       </article>
 
@@ -3036,8 +3078,8 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
       <article class="finding" style="border-left-color:var(--partial)">
         <div class="finding-head">
           <span class="finding-id">D-21</span>
-          <h3 class="finding-title" style="margin:0">Nine API routes are exercised by no test</h3>
-          <span class="pill p-partial">Partly closed</span>
+          <h3 class="finding-title" style="margin:0">Nine API routes were exercised by no test</h3>
+          <span class="pill p-pass">Closed, and recounted at rev 10</span>
         </div>
         <p>
           156 routes are declared; 9 are touched by nothing in the suite, down from 24 at
@@ -3066,6 +3108,22 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
           <dd>The coverage script matched test paths against a hardcoded list of mount prefixes, so every route on a newly added router read as untested. It reported 24 uncovered when the true figure was 9. Prefixes are now derived from what <code>app.ts</code> actually mounts: a measurement that silently misreports new work is worse than no measurement, because it is trusted.</dd>
           <dt>Since closed</dt>
           <dd>All nine were subsequently read and covered, including the two that touched money or access control directly — <code>POST /government/reconciliation/recover</code> and <code>POST /agents/devices/:deviceId/approve</code>. Every one of the 156 declared routes is now exercised by at least one test. The premise held: reading them produced further defects, and &ldquo;no test&rdquo; kept turning out to be a reliable predictor of &ldquo;no thought given to the failure case&rdquo;.</dd>
+          <dt>Recounted at revision 10</dt>
+          <dd>
+            Thirty-three routes were added after this closed &mdash; levies, push, citizen
+            status, the bank-account change &mdash; and nobody retook the count, which is how
+            a closed finding goes quietly stale. <strong>189 declared, 187 exercised, two
+            reached by nothing:</strong> <code>GET /agents/:id/kyc/documents</code>, the only
+            way an officer sees the identity file behind an applicant, and
+            <code>GET /government/reconciliation/awaiting-settlement</code>, the
+            officer&rsquo;s list of money the State has not received. Both feed screens D-5
+            records as untested, which is how they slipped: the portal calls them and nothing
+            else does, so each suite assumed the other had them. Both were read; neither was
+            wrong; both are now covered, and the count is 189 of 189. The counting tool is
+            committed this time as <code>apps/api/scripts/route-coverage.mjs</code>, so the
+            figure can be re-derived rather than remembered &mdash; which is the specific
+            failure recorded one entry above.
+          </dd>
         </dl>
       </article>
 
@@ -3646,29 +3704,37 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
 
     <footer class="report-foot">
       <p>
-        Revision 10, assessed at commit <code>7ece146</code>, 2 September 2026 &mdash; a
-        partial revision. Revisions 8 and 9 were assessed at <code>48879de</code>. Revision 3
-        was assessed at <code>4ab5925</code> on branch
+        Revision 10, assessed at commit <code>fa8f454</code>, 3 September 2026. Revisions 8 and 9
+        were assessed at <code>48879de</code>. Revision 3 was assessed at
+        <code>4ab5925</code> on branch
         <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
         assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
         <code>173be39</code>, and B-1, B-2 and B-3 in <code>4ab5925</code>, each
         re-verified. Evidence suites committed as <code>certification-audit.test.ts</code>
-        (39 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
-        (17) and <code>backup-restore.test.ts</code> (2).
+        (40 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
+        (17), <code>backup-restore.test.ts</code> (2) and the three revision-10 adversarial
+        suites (68).
       </p>
       <p style="margin-top:10px">
-        <strong>Revision 10 verification run,</strong> at <code>7ece146</code>:
-        API 1,451 passing, 0 failing, across four sharded databases; agent PWA 134 passing;
-        government portal 111 passing; money-path contention suite 5 passing; typecheck
-        clean across all four projects; Hausa review sheet regenerated and checked;
-        <code>npm audit</code> 0 vulnerabilities after D-46 was closed. <strong>No new
-        evidence suite was added at this revision.</strong> The four adversarial reviews
-        commissioned to attack the rules that changed after revision 9 &mdash; the
-        settlement-gated receipt, the device-binding relaxation, the commission
-        bank-account change, and the shared rate-limit store &mdash; terminated on an API
-        rate limit before returning a finding, and their intended suites
-        (<code>certification-rev10-*.test.ts</code>) do not exist. Nothing in this revision
-        rests on them, and &sect;11 item 4 carries the work forward.
+        <strong>Revision 10 verification run,</strong> at <code>fa8f454</code>:
+        <code>npm run verify</code> exit 0 &mdash; API 1,523 passing across four sharded
+        databases, agent PWA 134, officer portal 111, money-path contention suite 5;
+        <strong>1,773 passing, 0 failing.</strong> Typecheck clean across all five projects;
+        Hausa review sheet regenerated and checked; <code>npm audit</code> 0 vulnerabilities;
+        enum coverage 462 of 537 declared states with none unaccounted; 189 of 189 declared
+        routes exercised.
+      </p>
+      <p style="margin-top:10px">
+        The three adversarial reviews commissioned to attack the rules that changed after
+        revision 9 are committed as <code>certification-rev10-money.test.ts</code>,
+        <code>certification-rev10-access.test.ts</code> and
+        <code>certification-rev10-rate-limit.test.ts</code> &mdash; 68 assertions between
+        them, written to break the controls rather than confirm them. They left twenty-four
+        failing. Eighteen defects came out of this revision in total (D-47 to D-64), two of
+        them critical, and every one is fixed with a test that fails if it returns.
+        &sect;11&rsquo;s remaining items are operational: one blocker that can only close by
+        talking to a real provider, and the work that has to happen against something
+        deployed.
       </p>
     </footer>
   </section>
