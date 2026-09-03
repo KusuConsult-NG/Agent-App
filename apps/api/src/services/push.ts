@@ -28,6 +28,7 @@
 import { createPrivateKey, createPublicKey } from 'node:crypto';
 import webpush from 'web-push';
 import { pool, query } from '../db/pool';
+import { conflict } from '../lib/errors';
 import { log } from '../lib/logger';
 
 interface VapidKeys {
@@ -289,7 +290,28 @@ export async function saveSubscription(
   actor?: { userId?: string; agentId?: string },
 ): Promise<void> {
   if (!subscription.endpoint) return;
-  await pool.query(
+
+  /*
+   * An endpoint is not a claim on it.
+   *
+   * `ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id` rewrote
+   * the owner of any row whose endpoint was posted, with no check on who owned
+   * it. Posting somebody else's endpoint therefore transferred their
+   * subscription: they stopped receiving anything — measured, `sent=0` — and
+   * the sender's own notifications were delivered to their browser instead.
+   * That silences the alert this platform relies on to make a bank-account
+   * change nobody asked for get noticed, and it does so without any error.
+   *
+   * The rule already existed on the other half of the pair. `removeSubscription`
+   * has always matched `user_id` before expiring a row, on the reasoning
+   * recorded there that an endpoint being long and random "is not the same as
+   * checked". Subscribing was the half that never asked.
+   *
+   * The guard admits the two harmless cases and refuses the third: a row nobody
+   * owns can be claimed, the owner may re-post their own endpoint as often as
+   * the browser likes, and anyone else is refused.
+   */
+  const result = await pool.query(
     `INSERT INTO push_subscriptions (endpoint, p256dh, auth_secret, user_id, agent_id)
      VALUES ($1,$2,$3,$4,$5)
      ON CONFLICT (endpoint) DO UPDATE
@@ -299,7 +321,10 @@ export async function saveSubscription(
             agent_id = EXCLUDED.agent_id,
             -- Resubscribing revives a row that had been expired, rather than
             -- leaving a dead one shadowing the live endpoint.
-            expired_at = NULL`,
+            expired_at = NULL
+      WHERE push_subscriptions.user_id IS NULL
+         OR push_subscriptions.user_id IS NOT DISTINCT FROM EXCLUDED.user_id
+     RETURNING id`,
     [
       subscription.endpoint,
       subscription.keys?.p256dh ?? null,
@@ -308,6 +333,31 @@ export async function saveSubscription(
       actor?.agentId ?? null,
     ],
   );
+
+  /*
+   * Refused rather than silently ignored.
+   *
+   * A no-op would answer "subscribed" to a handset that will never be sent to,
+   * which is the failure mode this whole area was repaired for once already:
+   * a subscription that looks stored and reaches nobody.
+   *
+   * The owner is never named. Whoever posted the endpoint learns only that it
+   * is spoken for, which is what they need to know and no more than they could
+   * already infer from holding it.
+   */
+  if (result.rowCount === 0) {
+    log.warn('refused a subscribe against an endpoint another account holds', {
+      component: 'push',
+      endpoint: subscription.endpoint,
+      userId: actor?.userId,
+    });
+    throw conflict(
+      'PUSH_ENDPOINT_NOT_YOURS',
+      'That push endpoint is already registered to another account.',
+      'If this browser was previously signed in as somebody else, sign in as them to ' +
+        'unsubscribe it, or clear the site data and subscribe again to get a new endpoint.',
+    );
+  }
 }
 
 /**
