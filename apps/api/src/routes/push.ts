@@ -4,16 +4,45 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { getVapidPublicKey, removeSubscription, saveSubscription } from '../services/push';
+import {
+  getVapidPublicKey,
+  isAllowedPushEndpoint,
+  removeSubscription,
+  saveSubscription,
+} from '../services/push';
 import { authenticate } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
 import { serviceUnavailable } from '../lib/errors';
 
 export const pushRouter = Router();
 
+/*
+ * `z.string().url()` was the whole of it, and a URL is not an address this
+ * server should open a connection to.
+ *
+ * The endpoint is chosen by the browser but arrives in a request body, so it is
+ * caller-supplied text that the delivery path later dials. Any authenticated
+ * agent could name `169.254.169.254`, `127.0.0.1:4000` or their own collector,
+ * then fire the request themselves by collecting a levy — the seeded
+ * `COMMISSION_EARNED_PUSH` template sends on a real earning. `isAllowedPushEndpoint`
+ * holds it to the push services a browser can actually have been given.
+ *
+ * The refusal names no internal address back to the caller: a probe of one host
+ * and a probe of another get the same sentence, so this cannot be used to map
+ * what the server can reach.
+ */
+const pushEndpoint = z
+  .string()
+  .url()
+  .refine(isAllowedPushEndpoint, {
+    message:
+      'That is not a push service this platform delivers to. A subscription must name the ' +
+      'endpoint your browser was given.',
+  });
+
 const subscriptionSchema = z.object({
   subscription: z.object({
-    endpoint: z.string().url(),
+    endpoint: pushEndpoint,
     keys: z
       .object({
         p256dh: z.string().optional(),
@@ -23,8 +52,10 @@ const subscriptionSchema = z.object({
   }),
 });
 
+// Unsubscribe takes the same shape. It does not dial anything, but accepting an
+// address here that subscribe would refuse invites a row nothing can act on.
 const unsubscribeSchema = z.object({
-  endpoint: z.string().url(),
+  endpoint: pushEndpoint,
 });
 
 /*

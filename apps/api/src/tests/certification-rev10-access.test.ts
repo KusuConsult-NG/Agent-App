@@ -1615,22 +1615,24 @@ describe('ATTACK 5 — web push', () => {
       const endpoint = `https://127.0.0.1:${port}/push/${randomUUID()}`;
 
       // Through the front door, with nothing but an ordinary agent session.
+      // The route refuses it now: an internal address is not a push service.
       const session = await loginAs(caller.phone, 'Password123', caller.deviceIdentifier);
       const subscribed = await post(
         '/push/subscribe',
         { subscription: { endpoint, keys: subscriberKeys() } },
         { token: session.accessToken, deviceId: caller.deviceIdentifier },
       );
-      assert.equal(subscribed.status, 200, JSON.stringify(subscribed.body));
+      assert.equal(subscribed.status, 422, JSON.stringify(subscribed.body));
 
-      // PRECONDITION: the row is stored and will be selected for this user.
       const stored = await queryOne<{ endpoint: string }>(
         pool,
         'SELECT endpoint FROM push_subscriptions WHERE user_id = $1 AND expired_at IS NULL',
         [caller.userId],
       );
-      assert.equal(stored!.endpoint, endpoint, 'the attacker-chosen endpoint must be stored');
+      assert.equal(stored, null, 'a refused endpoint must not be stored');
 
+      // Nothing is stored, so nothing is sent; the count below covers the
+      // second half, where a row is planted behind the route's back.
       await sendPushNotification(
         { userId: caller.userId },
         { title: 'PSIRS', body: 'ssrf probe' },
@@ -1644,6 +1646,8 @@ describe('ATTACK 5 — web push', () => {
        * `http:` would not be what stopped this.
        */
       await pool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [caller.userId]);
+      // Planted directly, as a row written before this rule existed would be.
+      // The guard in the delivery loop is what has to stop this one.
       const plain = `http://127.0.0.1:${port}/push/${randomUUID()}`;
       await saveSubscription(
         { endpoint: plain, keys: subscriberKeys() },

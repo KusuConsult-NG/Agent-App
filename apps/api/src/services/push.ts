@@ -105,13 +105,99 @@ function fromEnvironment(): VapidKeys | null {
 }
 
 /**
+ * The push services a subscription may name.
+ *
+ * A push endpoint is chosen by the browser, but it arrives in a request body,
+ * which makes it caller-supplied text that the server later opens a connection
+ * to. Unconstrained, that is a server-side request forgery primitive with a
+ * trigger the caller controls: `COMMISSION_EARNED_PUSH` is a seeded active
+ * template, so an agent who has subscribed an endpoint of their choosing makes
+ * the API dial it by collecting one levy. An audit demonstrated it against
+ * `169.254.169.254`, `127.0.0.1`, `10.0.0.5`, `[::1]` and an external host, and
+ * confirmed connections landing on a local listener.
+ *
+ * A suffix allowlist rather than a private-range denylist. A denylist has to be
+ * right about every address family, every encoding of a loopback address, and
+ * every name that resolves to one after the check has passed; this has to be
+ * right about which companies operate push services, which is a list somebody
+ * can read. `PUSH_ENDPOINT_HOSTS` extends it without a deployment, for a
+ * browser this list has not met yet.
+ */
+const DEFAULT_PUSH_HOSTS = [
+  'fcm.googleapis.com',
+  'updates.push.services.mozilla.com',
+  'web.push.apple.com',
+  'notify.windows.com',
+  'push.services.mozilla.com',
+];
+
+function allowedPushHosts(): string[] {
+  const configured = (process.env.PUSH_ENDPOINT_HOSTS ?? '')
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  return configured.length > 0 ? configured : DEFAULT_PUSH_HOSTS;
+}
+
+/**
+ * Whether this is an address a push service could actually live at.
+ *
+ * Checked where the subscription is accepted *and* again before the connection
+ * is opened. Twice because they answer different questions: the first stops a
+ * bad row being stored, the second stops a bad row already stored — written
+ * before this rule existed, or by any path that does not go through the route —
+ * from being dialled.
+ */
+export function isAllowedPushEndpoint(raw: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return false;
+  }
+
+  // A plaintext endpoint would put a citizen's notification on the wire, and
+  // `web-push` would send it over TLS regardless — so the scheme in the string
+  // is a claim about intent that the transport does not honour. Require it to
+  // be honest.
+  if (url.protocol !== 'https:') return false;
+
+  // Credentials in the URL are never part of a push endpoint and are a way to
+  // make one host look like another to a careless reader.
+  if (url.username || url.password) return false;
+
+  // Real push services answer on 443. A port is how an internal service is
+  // usually addressed, and refusing one costs nothing a browser needs.
+  if (url.port !== '' && url.port !== '443') return false;
+
+  const host = url.hostname.toLowerCase();
+
+  /*
+   * No push service is addressed by a bare IP, and every address the audit
+   * reached was one. Rejecting the literal form closes those without needing to
+   * enumerate private ranges — and the allowlist below closes the rest,
+   * including a name that resolves to somewhere internal.
+   */
+  if (/^\d+(\.\d+){3}$/.test(host)) return false;
+  if (host.startsWith('[') || host.includes(':')) return false;
+
+  return allowedPushHosts().some((allowed) => host === allowed || host.endsWith(`.${allowed}`));
+}
+
+/**
  * The one call that leaves the building, behind a name.
  *
  * `web-push` speaks HTTPS unconditionally, which is right — every real push
  * endpoint is HTTPS and a plaintext one would put a citizen's notification on
- * the wire. It also means the delivery path cannot be aimed at a local server,
- * so the branch that decides whether a failure retires a handset is reachable
- * only through this seam.
+ * the wire.
+ *
+ * It was also claimed here that this "means the delivery path cannot be aimed
+ * at a local server". That was wrong, and it is the belief the defect above
+ * grew in: `web-push` builds its request with `https.request` and takes the
+ * hostname, port and path from the endpoint, so speaking HTTPS says nothing
+ * about *where*. `https://127.0.0.1:4000/…` dials 127.0.0.1 on port 4000.
+ * What keeps the delivery path off the local network is `isAllowedPushEndpoint`,
+ * not the protocol.
  *
  * That branch is worth reaching. Retiring a subscription cannot be undone from
  * this side — nothing here can recreate one, only the citizen opening the
@@ -373,6 +459,24 @@ export async function sendPushNotification(
         component: 'push',
         endpoint: subscription.endpoint,
       });
+      continue;
+    }
+
+    /*
+     * Nothing is dialled that this platform would not have accepted.
+     *
+     * The route refuses these now, so a row reaching here should be one stored
+     * before that rule existed. Checked anyway, because the cost of being wrong
+     * is a connection from a government server to an address a caller chose,
+     * and because the check at the boundary protects only the callers that go
+     * through the boundary.
+     */
+    if (!isAllowedPushEndpoint(subscription.endpoint)) {
+      log.warn('refusing to deliver to an endpoint outside the allowed push services', {
+        component: 'push',
+        endpoint: subscription.endpoint,
+      });
+      failed += 1;
       continue;
     }
 
