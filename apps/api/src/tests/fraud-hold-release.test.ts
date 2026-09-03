@@ -36,6 +36,7 @@ import {
   post,
   resetDatabase,
   revenueItemByCode,
+  settleTransaction,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -84,7 +85,7 @@ beforeEach(async () => {
  * way. Building the commission by hand would test a row rather than the path
  * that produces it.
  */
-async function collect(): Promise<string> {
+async function collect(): Promise<{ commissionId: string; transactionId: string }> {
   const suffix = String(++collected);
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
@@ -127,7 +128,7 @@ async function collect(): Promise<string> {
     [assessment.body.transactionId],
   );
   assert.ok(commission, 'a collection should accrue a commission');
-  return commission!.id;
+  return { commissionId: commission!.id, transactionId: assessment.body.transactionId as string };
 }
 
 /**
@@ -137,13 +138,19 @@ async function collect(): Promise<string> {
  * legitimately needs a settled transaction and an elapsed hold period, and
  * this test is about what a fraud decision does to money, not about how money
  * becomes eligible.
+ *
+ * Half of that setup is no longer forcible. Migration 053 holds the rule that
+ * a payable commission stands on settled revenue, so the transaction is
+ * settled through the route the State actually settles through; only the hold
+ * period, which is a clock and not a fact about money, is still skipped.
  */
 async function commissionWith(status: string): Promise<string> {
-  const id = await collect();
+  const { commissionId, transactionId } = await collect();
   if (status !== 'PENDING') {
-    await pool.query('UPDATE commissions SET status = $2 WHERE id = $1', [id, status]);
+    await settleTransaction(transactionId);
+    await pool.query('UPDATE commissions SET status = $2 WHERE id = $1', [commissionId, status]);
   }
-  return id;
+  return commissionId;
 }
 
 async function flagFor(agentIdValue: string) {
