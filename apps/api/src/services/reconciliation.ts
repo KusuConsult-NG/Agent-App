@@ -29,13 +29,23 @@ import { raiseFlag } from './fraud';
 import { log } from '../lib/logger';
 
 /**
- * Statuses on a statement line that mean the gateway paid the money out.
+ * The status on a statement line that means the gateway paid the money out.
  *
- * The same pair the matching loop treats as a successful collection, named once
- * so settlement and reconciliation cannot drift into disagreeing about what the
- * gateway's own words mean.
+ * This is the *gateway's* vocabulary, not the platform's, and the two are not
+ * the same words. A payment row is `VERIFIED`; a statement line is `SUCCESS`.
+ * Remita's `mapStatementStatus` emits `SUCCESS | FAILED | PENDING`, and the
+ * mock passes through its own `PENDING | SUCCESS | FAILED | ABANDONED |
+ * REVERSED` — neither ever says `VERIFIED`.
+ *
+ * Written as the platform's pair first, which was wrong in the direction that
+ * refuses real money: every legitimate settlement would have been rejected as
+ * uncorroborated the moment a genuine statement was imported. It survived the
+ * suite because the fixture that writes statement lines was written in the same
+ * hour and used the same wrong word, so the check and its evidence agreed with
+ * each other and disagreed with both adapters. Only a test that imported a real
+ * statement first — 5c in the revision-10 audit — put the two side by side.
  */
-const SETTLEABLE_STATEMENT_STATUSES = ['SUCCESSFUL', 'VERIFIED'];
+const SETTLEABLE_STATEMENT_STATUSES = ['SUCCESS'];
 
 export interface ReconciliationSummary {
   runId: string;

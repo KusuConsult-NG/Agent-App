@@ -206,8 +206,14 @@ async function collectAndVerify(options: { via?: 'webhook' | 'poll' } = {}): Pro
 async function settleViaApi(
   collections: Collection[],
   receivedKobo: bigint,
-  options: { token?: string; bankReference?: string } = {},
+  options: { token?: string; bankReference?: string; corroborate?: boolean } = {},
 ) {
+  // recordSettlement refuses a reference the gateway's statement does not
+  // confirm, so every case except the one testing that refusal has to import
+  // the statement first — which is the order production runs in.
+  if (options.corroborate !== false) {
+    await importStatementFor(collections.map((c) => c.gatewayReference));
+  }
   return post(
     '/government/settlements',
     {
@@ -455,10 +461,6 @@ describe('ATTACK 1 — a receipt for money the State has not received', () => {
      * whether the column is null.
      */
     const c = await collectAndVerify();
-    // The gateway confirms it paid the full amount; the bank credit is short.
-    // Without this the batch is now refused outright as uncorroborated, which
-    // is a different control and not the one under test here.
-    await importStatementFor([c.gatewayReference]);
     const short = await settleViaApi([c], BigInt(c.amountKobo) - 100n);
     assert.equal(short.status, 201, JSON.stringify(short.body));
     assert.equal(short.body.status, 'DISPUTED');
@@ -580,7 +582,10 @@ describe('ATTACK 2 — a forged settlement', () => {
     const statementLines = await queryOne<{ n: string }>(pool, 'SELECT count(*)::text AS n FROM gateway_statement_lines');
     assert.equal(statementLines!.n, '0', 'no statement has been imported for this period');
 
-    const settled = await settleViaApi([c], BigInt(c.amountKobo), { bankReference: 'TYPED-BY-ONE-OFFICER' });
+    const settled = await settleViaApi([c], BigInt(c.amountKobo), {
+      bankReference: 'TYPED-BY-ONE-OFFICER',
+      corroborate: false,
+    });
 
     const receipts = await receiptCount(c.transactionId);
     const status = await transactionStatus(c.transactionId);

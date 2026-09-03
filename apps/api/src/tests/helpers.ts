@@ -344,7 +344,7 @@ export async function importStatementFor(
   await pool.query(
     `INSERT INTO gateway_statement_lines
        (gateway, gateway_reference, amount_kobo, status, paid_at, settlement_reference, raw_line, imported_by)
-     SELECT $2, p.gateway_reference, p.amount_kobo, 'SUCCESSFUL', now(), NULL, '{}'::jsonb, $3
+     SELECT $2, p.gateway_reference, p.amount_kobo, 'SUCCESS', now(), NULL, '{}'::jsonb, $3
        FROM payments p
       WHERE p.gateway_reference = ANY($1::text[])
      ON CONFLICT (gateway, gateway_reference) DO NOTHING`,

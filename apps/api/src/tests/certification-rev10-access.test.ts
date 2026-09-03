@@ -66,6 +66,8 @@ before(async () => {
 });
 after(async () => {
   resetPushTransport();
+  // This file's own litter, so a shared shard database is left as it was found.
+  await pool.query('DELETE FROM push_subscriptions');
   await stopTestServer();
 });
 
@@ -496,14 +498,42 @@ describe('ATTACK 2 — a demonstration started in a browser nobody approved', ()
     assert.notEqual(other.agentId, demo!.agentId);
 
     const bSession = await loginAs(other.phone, 'Password123', other.deviceIdentifier);
+    const lgaId = await firstLgaId();
+    const registration = {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: 'Bindings',
+      lastName: 'Test',
+      phone: '+2348037000111',
+      gender: 'UNSPECIFIED',
+      address: '4 Audit Way, Jos',
+      lgaId,
+      consentGiven: true,
+      declarationAccepted: true,
+    };
 
-    // THE ATTACK: agent B presents agent A's approved identifier.
-    const stolen = await get('/agents/me/commission', {
+    // THE ATTACK: agent B presents agent A's approved identifier on a
+    // device-bound, revenue-collecting route.
+    const stolen = await post('/taxpayers', registration, {
       token: bSession.accessToken,
       deviceId: demo!.deviceIdentifier,
+      idempotencyKey: `audit-bind-stolen-${randomUUID()}`,
     });
     assert.equal(stolen.status, 403, JSON.stringify(stolen.body));
     assert.equal(stolen.body.error.code, 'DEVICE_NOT_REGISTERED');
+
+    // PRECONDITION, checked after the fact: the same request from agent B's
+    // OWN handset does not hit the device gate, so the refusal above is about
+    // the identifier and not about a malformed request.
+    const own = await post('/taxpayers', registration, {
+      token: bSession.accessToken,
+      deviceId: other.deviceIdentifier,
+      idempotencyKey: `audit-bind-own-${randomUUID()}`,
+    });
+    assert.notEqual(
+      own.body?.error?.code,
+      'DEVICE_NOT_REGISTERED',
+      `the request shape itself was refused: ${JSON.stringify(own.body)}`,
+    );
   });
 
   it('2: the demonstration seed is a closed door in production, not a second one', () => {
@@ -609,8 +639,8 @@ interface BankFixture {
 
 async function bankFixture(seq: string): Promise<BankFixture> {
   await reset();
-  const adminPhone = `+23480300${seq}`;
-  const supervisorPhone = `+23480301${seq}`;
+  const adminPhone = `+234803000${seq}`;
+  const supervisorPhone = `+234803001${seq}`;
   await createGovernmentUser({ role: 'admin', phone: adminPhone, fullName: 'Agent Administrator' });
   const supervisorId = await createGovernmentUser({
     role: 'supervisor',
@@ -658,7 +688,7 @@ async function proposeAsAgent(fixture: BankFixture, body: Record<string, unknown
 
 describe('ATTACK 3 — moving where an agent is paid', () => {
   it('3a: a signed-in session alone cannot move the destination', async () => {
-    const fixture = await bankFixture('009101');
+    const fixture = await bankFixture('9101');
     const before = await activeAccountOf(fixture.agentId);
     assert.ok(before, 'the agent must start with an account on record');
 
@@ -678,7 +708,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
   });
 
   it('3b: the same person cannot both raise and authorise the change (service)', async () => {
-    const fixture = await bankFixture('009102');
+    const fixture = await bankFixture('9102');
     const proposal = await proposeAsAgent(fixture);
     assert.equal(proposal.status, 201, JSON.stringify(proposal.body));
     assert.equal(proposal.body.verificationStatus, 'VERIFIED');
@@ -723,7 +753,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
   });
 
   it('3b: and the database refuses it too, so it is an invariant not a check', async () => {
-    const fixture = await bankFixture('009103');
+    const fixture = await bankFixture('9103');
     const proposal = await proposeAsAgent(fixture);
     assert.equal(proposal.status, 201, JSON.stringify(proposal.body));
 
@@ -743,6 +773,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
       message = (error as Error).message;
       code = (error as { code?: string }).code ?? '';
     }
+    console.log(`  raw self-approval → SQLSTATE ${code}: ${message}`);
     assert.equal(code, '23514', `expected a check-constraint violation, got "${code}" ${message}`);
     assert.match(message, /approvals_maker_not_approver/, message);
 
@@ -772,11 +803,108 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
     } catch (error) {
       mutateMessage = (error as Error).message;
     }
+    console.log(`  raw requester rewrite → ${mutateMessage}`);
     assert.match(mutateMessage, /requested_by/, mutateMessage);
   });
 
-  it('3c: a payout in flight blocks the change at both ends', async () => {
-    const fixture = await bankFixture('009104');
+  /**
+   * How far a psql connection gets when it stops pretending to be an approval.
+   *
+   * The maker-checker rule is an invariant — the constraints above prove it.
+   * What the schema does NOT claim is that the destination itself can only
+   * move behind one, so this measures the residue rather than inventing a
+   * requirement: which of the guarantees the schema does make still stand, and
+   * what a compromised service account is left able to do.
+   */
+  it('3b: the residue — what a psql connection can still reach', async () => {
+    const fixture = await bankFixture('9110');
+    const current = await activeAccountOf(fixture.agentId);
+    assert.ok(current, 'the agent must start with an account on record');
+
+    // CLAIMED: an account number never changes in place.
+    let inPlace = '';
+    try {
+      await pool.query(`UPDATE bank_accounts SET account_number = '9999999999' WHERE id = $1`, [
+        current!.id,
+      ]);
+    } catch (error) {
+      inPlace = (error as Error).message;
+    }
+    console.log(`  raw account-number edit → ${inPlace}`);
+    assert.match(inPlace, /account_number/, `an account number was edited in place: ${inPlace}`);
+
+    // CLAIMED: one account in use per owner at a time.
+    let twoActive = '';
+    try {
+      await pool.query(
+        `INSERT INTO bank_accounts (owner_type, owner_id, bank_name, bank_code, account_name,
+                                    account_number, verification_status, status)
+         VALUES ('AGENT', $1, 'Attacker Bank', '999', 'Not The Agent', '5555555555', 'VERIFIED', 'ACTIVE')`,
+        [fixture.agentId],
+      );
+    } catch (error) {
+      twoActive = (error as Error).message;
+    }
+    console.log(`  raw second ACTIVE account → ${twoActive}`);
+    assert.match(
+      twoActive,
+      /bank_accounts_one_active_per_owner/,
+      `two accounts became simultaneously in use: ${twoActive}`,
+    );
+
+    // NOT CLAIMED, and measured rather than asserted: whether the destination
+    // can be moved with no approval anywhere. Reported, not required.
+    let moved = false;
+    let movedError = '';
+    try {
+      await pool.query(
+        `UPDATE bank_accounts SET status = 'SUPERSEDED', superseded_at = now() WHERE id = $1`,
+        [current!.id],
+      );
+      const attacker = await queryOne<{ id: string }>(
+        pool,
+        `INSERT INTO bank_accounts (owner_type, owner_id, bank_name, bank_code, account_name,
+                                    account_number, verification_status, status)
+         VALUES ('AGENT', $1, 'Attacker Bank', '999', 'Not The Agent', '5555555555', 'VERIFIED', 'ACTIVE')
+         RETURNING id`,
+        [fixture.agentId],
+      );
+      await pool.query('UPDATE agents SET bank_account_id = $2 WHERE id = $1', [
+        fixture.agentId,
+        attacker!.id,
+      ]);
+      const now = await activeAccountOf(fixture.agentId);
+      moved = now!.account_number === '5555555555';
+    } catch (error) {
+      movedError = (error as Error).message;
+    }
+    const approvals = await query(
+      pool,
+      `SELECT id FROM approvals WHERE approval_type = 'BANK_ACCOUNT_CHANGE'`,
+    );
+    const trail = await query(
+      pool,
+      `SELECT id FROM audit_logs WHERE action = 'agent.bank_account_changed'`,
+    );
+    console.log(
+      `  raw destination move without any approval → moved=${moved} ` +
+        `approvals=${approvals.length} auditEntries=${trail.length}${movedError ? ` error=${movedError}` : ''}`,
+    );
+
+    // What IS still true afterwards, and is worth having: the account that was
+    // in use is kept rather than overwritten, so the trail of where money went
+    // is walkable even when the move itself went round the workflow.
+    const superseded = await queryOne<{ status: string; account_number: string }>(
+      pool,
+      'SELECT status, account_number FROM bank_accounts WHERE id = $1',
+      [current!.id],
+    );
+    assert.equal(superseded!.status, 'SUPERSEDED');
+    assert.equal(superseded!.account_number, current!.account_number);
+  });
+
+  it('3c: a payout in flight blocks the change being proposed at all', async () => {
+    const fixture = await bankFixture('9104');
     const account = await activeAccountOf(fixture.agentId);
 
     // A payout already authorised against the account money is going to.
@@ -798,17 +926,34 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
     assert.equal(blocked.body.error.code, 'PAYOUT_IN_FLIGHT');
     assert.match(blocked.body.error.message, /PO-AUDIT-REQ/);
 
-    // And the second half: a proposal raised while nothing was in flight must
-    // not be executable once a payout starts.
-    await pool.query(`DELETE FROM commission_payouts WHERE payout_reference = 'PO-AUDIT-REQ'`);
+    const proposals = await query(
+      pool,
+      `SELECT id FROM bank_accounts WHERE owner_id = $1 AND status = 'PROPOSED'`,
+      [fixture.agentId],
+    );
+    assert.equal(proposals.length, 0, 'a proposal was raised while a payout was in flight');
+  });
+
+  it('3c: and blocks one already raised from being carried out', async () => {
+    const fixture = await bankFixture('9109');
+    const account = await activeAccountOf(fixture.agentId);
+
+    // Raised while nothing was outstanding — the ordering an attacker wants.
     const proposal = await proposeAsAgent(fixture);
     assert.equal(proposal.status, 201, JSON.stringify(proposal.body));
+    assert.equal(proposal.body.verificationStatus, 'VERIFIED');
+
     await pool.query(
       `INSERT INTO commission_payouts
          (payout_reference, agent_id, bank_account_id, amount_kobo, commission_count, status)
        VALUES ('PO-AUDIT-APP', $1, $2, 250000, 3, 'APPROVED')`,
       [fixture.agentId, account!.id],
     );
+    const inFlight = await queryOne<{ status: string }>(
+      pool,
+      `SELECT status FROM commission_payouts WHERE payout_reference = 'PO-AUDIT-APP'`,
+    );
+    assert.equal(inFlight!.status, 'APPROVED', 'the payout must be in flight at the decision');
 
     const decided = await post(
       `/government/approvals/${proposal.body.approvalId}/decide`,
@@ -824,13 +969,17 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
       'SELECT status FROM approvals WHERE id = $1',
       [proposal.body.approvalId],
     );
-    assert.equal(approval!.status, 'REQUESTED', 'an approval was recorded for a change that did not happen');
+    assert.equal(
+      approval!.status,
+      'REQUESTED',
+      'an approval was recorded for a change that did not happen',
+    );
     const after = await activeAccountOf(fixture.agentId);
     assert.equal(after!.id, account!.id, 'the destination moved while a payout was in flight');
   });
 
   it('3d: agent A cannot move agent B\'s account, by path or by body', async () => {
-    const fixture = await bankFixture('009105');
+    const fixture = await bankFixture('9105');
     const victim = await seedSecondAgent('+2347099000301', 'agent-b-handset-000301');
     const victimAccount = await queryOne<{ id: string }>(
       pool,
@@ -894,7 +1043,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
   });
 
   it('3e: an account the bank says belongs to someone else cannot be approved', async () => {
-    const fixture = await bankFixture('009106');
+    const fixture = await bankFixture('9106');
     const before = await activeAccountOf(fixture.agentId);
 
     const proposal = await proposeAsAgent(fixture, MISMATCHING_ACCOUNT);
@@ -924,7 +1073,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
   });
 
   it('3e: "the bank could not be reached" is not a soft yes either', async () => {
-    const fixture = await bankFixture('009107');
+    const fixture = await bankFixture('9107');
     const before = await activeAccountOf(fixture.agentId);
 
     const proposal = await proposeAsAgent(fixture, UNREACHABLE_ACCOUNT);
@@ -944,7 +1093,7 @@ describe('ATTACK 3 — moving where an agent is paid', () => {
   });
 
   it('3: the agent is told on the number already on record, not one supplied', async () => {
-    const fixture = await bankFixture('009108');
+    const fixture = await bankFixture('9108');
     const notified = await proposeAsAgent(fixture, {
       ...NEW_ACCOUNT,
       phone: '+2349999999999',
@@ -1081,7 +1230,21 @@ describe('ATTACK 4 — the unauthenticated citizen-status read', () => {
       `the numeric compliance score appears in the body: ${serialised}`,
     );
     assert.ok(!serialised.includes(owed!.total), `the amount owed was disclosed: ${serialised}`);
-    assert.ok(!/Market|Levy|Cattle|Programme/i.test(serialised), `a tax or programme name leaked: ${serialised}`);
+
+    // The tax this person was actually assessed for, read out of the database
+    // rather than guessed, because "Cattle Dealer Levy" describes a livelihood.
+    const assessed = await query<{ name: string; code: string }>(
+      pool,
+      `SELECT DISTINCT ri.name, ri.code
+         FROM assessments a JOIN revenue_items ri ON ri.id = a.revenue_item_id
+        WHERE a.taxpayer_id = $1`,
+      [fixture.taxpayerId],
+    );
+    assert.ok(assessed.length > 0, 'the fixture must carry a named obligation to withhold');
+    for (const item of assessed) {
+      assert.ok(!serialised.includes(item.name), `the obligation name "${item.name}" leaked`);
+      assert.ok(!serialised.includes(item.code), `the obligation code "${item.code}" leaked`);
+    }
     assert.equal(byPhone.body.lastPaymentAt, undefined);
     assert.equal(byPhone.body.obligations, undefined);
     assert.equal(byPhone.body.programmes, undefined);
@@ -1133,6 +1296,34 @@ describe('ATTACK 4 — the unauthenticated citizen-status read', () => {
     assert.equal(absent.status, 200);
     assert.equal(present.body.found, true);
     assert.equal(absent.body.found, false);
+    console.log('  citizen-status (absent) →', JSON.stringify(absent.body));
+
+    // How loudly the two differ, measured rather than asserted. The shape
+    // already separates them — `found` plus three fields that only appear on a
+    // hit — so timing adds nothing an attacker did not already have.
+    const time = async (path: string): Promise<number> => {
+      const started = process.hrtime.bigint();
+      await get(path);
+      return Number(process.hrtime.bigint() - started) / 1e6;
+    };
+    const hits: number[] = [];
+    const misses: number[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      (__rateLimitStore as { reset?: () => void }).reset?.();
+      hits.push(await time(`/citizen-status?phone=${encodeURIComponent(fixture.phone)}`));
+      (__rateLimitStore as { reset?: () => void }).reset?.();
+      misses.push(await time('/citizen-status?phone=%2B2348039999998'));
+    }
+    const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+    console.log(
+      `  timing oracle: hit median ${median(hits).toFixed(1)}ms vs miss median ` +
+        `${median(misses).toFixed(1)}ms over ${hits.length} samples each`,
+    );
+    assert.equal(
+      Object.keys(absent.body).length < Object.keys(present.body).length,
+      true,
+      'the shapes already differ; the oracle is the design, not the timing',
+    );
 
     // Stated rather than discovered: this endpoint is an existence oracle by
     // design. The compensating control is the cap, so the cap is what is
@@ -1294,15 +1485,10 @@ describe('ATTACK 5 — web push', () => {
       'SELECT user_id, agent_id FROM push_subscriptions WHERE endpoint = $1',
       [victimEndpoint],
     );
-    assert.equal(
-      after!.user_id,
-      victim.userId,
-      `an endpoint registered to one person was reassigned to another (subscribe answered ${seized.status})`,
-    );
 
-    // The consequence, if the assertion above ever fails: the victim goes
-    // quiet. Their commission and bank-change alerts stop arriving and nothing
-    // tells them why.
+    // The consequence is measured before anything is asserted, so the failure
+    // report carries the impact and not merely the mismatch: does the victim
+    // still receive the alert that tells them their account is being moved?
     const reached: string[] = [];
     setPushTransportForTesting(async (subscription) => {
       reached.push(subscription.endpoint);
@@ -1312,9 +1498,24 @@ describe('ATTACK 5 — web push', () => {
       { userId: victim.userId },
       { title: 'Your bank account is being changed', body: 'If this was not you, call PSIRS now.' },
     );
+    const toAttacker = await sendPushNotification(
+      { userId: attacker.userId },
+      { title: 'Attacker traffic', body: 'delivered to whichever handset now holds the row' },
+    );
     resetPushTransport();
+    console.log(
+      `  endpoint takeover: subscribe answered ${seized.status}; owner ${before!.user_id} -> ` +
+        `${after!.user_id}; victim delivery sent=${toVictim.sent}, attacker delivery sent=` +
+        `${toAttacker.sent} to ${reached.length} endpoint(s)`,
+    );
+
+    assert.equal(
+      after!.user_id,
+      victim.userId,
+      `an endpoint registered to one person was reassigned to another (subscribe answered ${seized.status}); ` +
+        `the victim's own alerts then reached ${toVictim.sent} handset(s)`,
+    );
     assert.equal(toVictim.sent, 1, 'the victim was silenced by somebody else subscribing');
-    assert.deepEqual(reached, [victimEndpoint]);
   });
 
   it('5b: the VAPID endpoint serves the public key and nothing else', async () => {
@@ -1412,10 +1613,16 @@ describe('ATTACK 5 — web push', () => {
     try {
       resetPushTransport(); // the real web-push transport, not a stub
       const endpoint = `https://127.0.0.1:${port}/push/${randomUUID()}`;
-      await saveSubscription(
-        { endpoint, keys: subscriberKeys() },
-        { userId: caller.userId, agentId: caller.agentId },
+
+      // Through the front door, with nothing but an ordinary agent session.
+      const session = await loginAs(caller.phone, 'Password123', caller.deviceIdentifier);
+      const subscribed = await post(
+        '/push/subscribe',
+        { subscription: { endpoint, keys: subscriberKeys() } },
+        { token: session.accessToken, deviceId: caller.deviceIdentifier },
       );
+      assert.equal(subscribed.status, 200, JSON.stringify(subscribed.body));
+
       // PRECONDITION: the row is stored and will be selected for this user.
       const stored = await queryOne<{ endpoint: string }>(
         pool,
@@ -1427,6 +1634,25 @@ describe('ATTACK 5 — web push', () => {
       await sendPushNotification(
         { userId: caller.userId },
         { title: 'PSIRS', body: 'ssrf probe' },
+      );
+      const overTls = seen.length;
+
+      /*
+       * And again over plain http://. `web-push` builds every request with
+       * `https.request` and takes only the hostname, port and path from the
+       * endpoint, so the scheme is discarded — a filter that only rejected
+       * `http:` would not be what stopped this.
+       */
+      await pool.query('DELETE FROM push_subscriptions WHERE user_id = $1', [caller.userId]);
+      const plain = `http://127.0.0.1:${port}/push/${randomUUID()}`;
+      await saveSubscription(
+        { endpoint: plain, keys: subscriberKeys() },
+        { userId: caller.userId, agentId: caller.agentId },
+      );
+      await sendPushNotification({ userId: caller.userId }, { title: 'PSIRS', body: 'ssrf probe 2' });
+      console.log(
+        `  ssrf: ${overTls} connection(s) from an https:// endpoint, ` +
+          `${seen.length - overTls} from an http:// one, to 127.0.0.1:${port}`,
       );
 
       assert.deepEqual(
