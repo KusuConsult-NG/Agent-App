@@ -31,6 +31,7 @@ import {
   createGovernmentUser,
   firstLgaId,
   get,
+  importStatementFor,
   loginAs,
   pool,
   post,
@@ -454,6 +455,10 @@ describe('ATTACK 1 — a receipt for money the State has not received', () => {
      * whether the column is null.
      */
     const c = await collectAndVerify();
+    // The gateway confirms it paid the full amount; the bank credit is short.
+    // Without this the batch is now refused outright as uncorroborated, which
+    // is a different control and not the one under test here.
+    await importStatementFor([c.gatewayReference]);
     const short = await settleViaApi([c], BigInt(c.amountKobo) - 100n);
     assert.equal(short.status, 201, JSON.stringify(short.body));
     assert.equal(short.body.status, 'DISPUTED');
