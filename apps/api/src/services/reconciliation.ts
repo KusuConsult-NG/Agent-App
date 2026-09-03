@@ -1090,7 +1090,7 @@ export async function exceptionQueue(
        SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
               r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
               r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail,
-              r.created_at, r.transaction_id
+              r.created_at, r.transaction_id, r.payment_id
          FROM reconciliation_records r
         ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
                  r.created_at DESC, r.id DESC
@@ -1101,6 +1101,7 @@ export async function exceptionQueue(
             tp.first_name, tp.last_name, tp.business_name,
             ag.agent_code
        FROM newest n
+       LEFT JOIN payments p ON p.id = n.payment_id
        LEFT JOIN transactions t ON t.id = n.transaction_id
        LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
@@ -1128,7 +1129,11 @@ export async function exceptionQueue(
          * asking the gateway where the money is.
          */
         AND (n.status <> 'PENDING_SETTLEMENT'
-             OR n.created_at < now() - ($4 || ' hours')::interval)
+             OR (COALESCE(p.verified_at, p.paid_at, p.created_at, n.created_at)
+                   < now() - ($4 || ' hours')::interval
+                 AND NOT EXISTS (
+                   SELECT 1 FROM settlements s
+                    WHERE s.id = p.settlement_id AND s.status = 'RECONCILED')))
       ORDER BY n.created_at DESC
       LIMIT $2`,
     [
@@ -1159,24 +1164,31 @@ export async function awaitingSettlement(
     `WITH newest AS (
        SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
               r.id, r.status, r.expected_amount_kobo, r.gateway_reference, r.created_at,
-              r.reconciled_at, r.transaction_id
+              r.reconciled_at, r.transaction_id, r.payment_id
          FROM reconciliation_records r
         ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
                  r.created_at DESC, r.id DESC
      )
      SELECT n.id, n.expected_amount_kobo, n.gateway_reference, n.created_at,
-            ROUND(EXTRACT(EPOCH FROM (now() - n.created_at)) / 3600)::int AS age_hours,
-            (n.created_at < now() - ($2 || ' hours')::interval) AS overdue,
+            ROUND(EXTRACT(EPOCH FROM (now() - money.at)) / 3600)::int AS age_hours,
+            (money.at < now() - ($2 || ' hours')::interval) AS overdue,
             t.transaction_reference,
             tp.first_name, tp.last_name, tp.business_name,
             ag.agent_code
        FROM newest n
+       LEFT JOIN payments p ON p.id = n.payment_id
        LEFT JOIN transactions t ON t.id = n.transaction_id
        LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(p.verified_at, p.paid_at, p.created_at, n.created_at) AS at
+       ) AS money
       WHERE n.status = 'PENDING_SETTLEMENT'
         AND n.reconciled_at IS NULL
-      ORDER BY n.created_at ASC
+        AND NOT EXISTS (
+          SELECT 1 FROM settlements s
+           WHERE s.id = p.settlement_id AND s.status = 'RECONCILED')
+      ORDER BY money.at ASC
       LIMIT $1`,
     [options.limit ?? 100, String(options.settlementDueHours ?? SETTLEMENT_DUE_HOURS)],
   );

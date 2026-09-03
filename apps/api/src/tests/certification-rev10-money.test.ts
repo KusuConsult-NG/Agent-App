@@ -811,8 +811,31 @@ describe('ATTACK 4 — idempotency replay and double execution', () => {
 // ===========================================================================
 describe('ATTACK 5 — money in transit', () => {
   const window = () => ({ from: new Date(Date.now() - 24 * 60 * 60_000), to: new Date(Date.now() + 60_000) });
-  const ageRecord = (id: string, interval: string) =>
-    pool.query(`UPDATE reconciliation_records SET created_at = now() - $2::interval WHERE id = $1`, [id, interval]);
+  /*
+   * Age the money, not the paperwork.
+   *
+   * This aged `reconciliation_records.created_at` — the moment the sweep last
+   * looked — which is the very thing 5b says the 72 hours must not be counted
+   * from. Now that they are counted from the payment, a fixture that ages the
+   * record is ageing something the question no longer turns on. The record is
+   * aged alongside it because in reality a collection five days old was first
+   * seen days ago too, and leaving it fresh would model a sweep that had never
+   * run.
+   */
+  const ageMoney = async (paymentId: string, recordId: string, interval: string) => {
+    await pool.query(
+      `UPDATE payments
+          SET verified_at = now() - $2::interval,
+              paid_at = now() - $2::interval,
+              created_at = now() - $2::interval
+        WHERE id = $1`,
+      [paymentId, interval],
+    );
+    await pool.query(`UPDATE reconciliation_records SET created_at = now() - $2::interval WHERE id = $1`, [
+      recordId,
+      interval,
+    ]);
+  };
 
   it('5a. an unsettled collection is PENDING_SETTLEMENT, then an exception once 72 hours have passed', async () => {
     const c = await collectAndVerify({ via: 'poll' });
@@ -829,7 +852,7 @@ describe('ATTACK 5 — money in transit', () => {
     assert.equal(waiting.length, 1);
     assert.equal(waiting[0].overdue, false);
 
-    await ageRecord(record!.id, '73 hours');
+    await ageMoney(c.paymentId, record!.id, '73 hours');
     const queue = (await exceptionQueue(pool)) as Array<{ status: string; transaction_reference: string }>;
     assert.equal(queue.length, 1, 'past the window it is somebody\'s job');
     assert.equal(queue[0].status, 'PENDING_SETTLEMENT');
@@ -895,7 +918,7 @@ describe('ATTACK 5 — money in transit', () => {
     assert.equal(await transactionStatus(c.transactionId), 'SETTLED');
     assert.equal(await receiptCount(c.transactionId), 1);
 
-    await ageRecord(record!.id, '4 days');
+    await ageMoney(c.paymentId, record!.id, '4 days');
     const queue = (await exceptionQueue(pool)) as Array<{ status: string; transaction_status: string }>;
     const waiting = await awaitingSettlement(pool);
     assert.equal(
