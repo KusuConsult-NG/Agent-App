@@ -194,6 +194,103 @@ describe('AUDIT 1 — "No verified payment = no receipt" survives a direct datab
     assert.equal(count!.n, '0');
   });
 
+  /*
+   * The rule the platform holds today, which this suite did not carry evidence
+   * for.
+   *
+   * The case above is the rule as it stood before migration 040: a PENDING
+   * payment cannot be receipted. Migration 040 raised the bar — a receipt now
+   * asserts the money reached a government account, not merely that the
+   * gateway confirmed it — and migration 052 closed the gap that let a
+   * settlement which settled nothing satisfy it. Neither had a case here, so
+   * the strongest claim in this report was certified against the weaker rule
+   * it replaced. Found by the revision-10 money-path review, which read this
+   * file rather than the platform.
+   *
+   * Three states are attacked, because "unsettled" is not one condition:
+   * verified with no settlement at all, verified against a settlement that is
+   * still PENDING, and verified against one the bank paid short and an officer
+   * marked DISPUTED. The third is the one nobody has to forge — a short
+   * payment produces it in the ordinary course of business, and every payment
+   * in that batch carries a settlement_id like any other.
+   */
+  it('refuses a receipt for a VERIFIED payment the State has not been paid for', async () => {
+    const agent = await seedActiveAgent();
+    const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
+    const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
+    await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+
+    const payment = await queryOne<{ id: string; status: string; amount_kobo: string; settlement_id: string | null }>(
+      pool,
+      'SELECT id, status, amount_kobo, settlement_id FROM payments WHERE transaction_id = $1',
+      [transactionId],
+    );
+    assert.equal(payment!.status, 'VERIFIED', 'the gateway confirmed it');
+    assert.equal(payment!.settlement_id, null, 'and nothing has settled it');
+
+    const forge = (receiptNumber: string) =>
+      pool.query(
+        `INSERT INTO receipts
+           (receipt_number, transaction_id, payment_id, taxpayer_id, amount_kobo, verification_code)
+         SELECT $4, t.id, $2, t.taxpayer_id, $3, 'UNSETTLED' || substr($4, 6)
+           FROM transactions t WHERE t.id = $1`,
+        [transactionId, payment!.id, payment!.amount_kobo, receiptNumber],
+      );
+
+    // 1. Verified, with no settlement at all.
+    await assert.rejects(
+      forge('FAKE-0002'),
+      /has not been settled into a government account/,
+      'gateway confirmation alone must not earn a receipt',
+    );
+
+    // 2. Verified, pointed at a settlement that has received nothing. The link
+    //    exists; what it points at does not say the money arrived. Migration
+    //    052 names the state it found, which is a different refusal from the
+    //    unlinked case above and worth asserting separately.
+    const pending = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO settlements
+         (settlement_reference, gateway, settlement_date, expected_amount_kobo, received_amount_kobo, status)
+       VALUES ('AUDIT-UNSETTLED-1', 'mock', now(), $1, 0, 'PENDING') RETURNING id`,
+      [payment!.amount_kobo],
+    );
+    await pool.query('UPDATE payments SET settlement_id = $2 WHERE id = $1', [payment!.id, pending!.id]);
+    await assert.rejects(
+      forge('FAKE-0003'),
+      /settlement AUDIT-UNSETTLED-1 is PENDING, not RECONCILED/,
+      'a settlement that received nothing must not earn a receipt either',
+    );
+
+    // 3. Verified, pointed at a batch the bank paid short. recordSettlement
+    //    links every payment in a disputed batch on purpose, so an officer can
+    //    see which collections the short credit was meant to cover.
+    await pool.query(`UPDATE settlements SET status = 'DISPUTED', received_amount_kobo = 1 WHERE id = $1`, [
+      pending!.id,
+    ]);
+    await assert.rejects(
+      forge('FAKE-0004'),
+      /settlement AUDIT-UNSETTLED-1 is DISPUTED, not RECONCILED/,
+      'a disputed batch settles none of its collections, and the database must say so too',
+    );
+
+    const count = await queryOne<{ n: string }>(pool, 'SELECT count(*)::text AS n FROM receipts');
+    assert.equal(count!.n, '0', 'no receipt exists for money the State has not received');
+
+    // And a receipt does appear the moment a reconciled settlement covers it,
+    // so what is being proved is the rule and not a broken INSERT. The forged
+    // link is removed first: recordSettlement refuses to bank a payment twice,
+    // and the fixture above left this one pointing at a batch that never was.
+    await pool.query('UPDATE payments SET settlement_id = NULL WHERE id = $1', [payment!.id]);
+    await settleTransaction(transactionId);
+    const settled = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM receipts WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    assert.equal(settled!.n, '1', 'settlement issues the receipt through the ordinary path');
+  });
+
   it('refuses a receipt whose amount does not match the verified payment', async () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);

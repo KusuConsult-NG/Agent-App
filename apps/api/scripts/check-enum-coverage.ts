@@ -52,6 +52,7 @@
 
 import { Pool } from 'pg';
 import { DELIBERATELY_UNREACHABLE, NOT_EXERCISED_BY_TESTS } from '../src/tests/enum-coverage';
+import { TRANSACTIONAL_TABLES } from '../src/tests/transactional-tables';
 
 const OBSERVATION_SCHEMA = 'psirs_test_observations';
 
@@ -97,8 +98,53 @@ async function readShard(url: string) {
         WHERE table_schema = 'public' AND column_default IS NOT NULL`,
     );
 
+    /*
+     * THE STATES REFERENCE DATA IS STANDING IN, AS WELL AS THE ONES THIS RUN WROTE.
+     *
+     * The observation table is emptied before every run, so the report is
+     * about the run rather than about everything the database has ever seen
+     * (D-64). That is right for operational tables, which `resetDatabase`
+     * empties between files and the suite refills as it goes. It is wrong for
+     * reference data: geography, the revenue catalogue, notification
+     * templates. Those are seeded once into a shard database that outlives the
+     * run, `seedReferenceData` inserts them ON CONFLICT DO NOTHING, and on
+     * every run after the first it therefore writes nothing and the observers
+     * see nothing.
+     *
+     * The first run after the emptying was introduced duly reported
+     * `notification_templates.channel: PUSH` as a state nothing wrote — while
+     * four push templates sat in the table. Nothing was wrong with the
+     * platform; the question had become unanswerable from writes alone.
+     *
+     * So the standing contents of the non-transactional tables are read too.
+     * A state a reference row currently holds is a state the seed produced,
+     * which is what the report is trying to establish. The narrower staleness
+     * this reintroduces is real and worth naming: a template removed from
+     * `seed.ts` still counts while its row survives in a kept shard database.
+     * That is a much smaller window than counting every write since the
+     * database was created, and it closes the moment the database is dropped.
+     */
+    const referenceTables = declared.rows
+      .map((row) => row.table_name)
+      .filter((table, index, all) => all.indexOf(table) === index)
+      .filter((table) => !TRANSACTIONAL_TABLES.includes(table));
+
+    const standing: { key: string; value: string }[] = [];
+    for (const row of declared.rows) {
+      if (!referenceTables.includes(row.table_name)) continue;
+      const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
+      if (!column) continue;
+      const { rows } = await pool.query<{ value: string }>(
+        `SELECT DISTINCT "${column[1]}"::text AS value
+           FROM "${row.table_name}" WHERE "${column[1]}" IS NOT NULL`,
+      );
+      for (const found of rows) {
+        standing.push({ key: `${row.table_name}.${column[1]}`, value: found.value });
+      }
+    }
+
     return {
-      observed,
+      observed: [...observed, ...standing],
       declared: declared.rows,
       defaults: defaults.rows.filter((row) => row.value),
     };

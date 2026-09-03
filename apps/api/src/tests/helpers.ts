@@ -16,86 +16,15 @@ import { createApp } from '../app';
 import { pool, closePool, queryOne } from '../db/pool';
 import { runMigrations } from '../db/migrate';
 import { installEnumObservers } from './enum-observation';
+import { TRANSACTIONAL_TABLES } from './transactional-tables';
 import { hashPassword } from '../lib/crypto';
 import { recordSettlement } from '../services/reconciliation';
+import { gateway } from '../integrations/gateway';
 import { seedReferenceData } from '../db/seed';
 
 let server: Server | null = null;
 let baseUrl = '';
 
-/** Tables holding transactional state, cleared between suites. */
-const TRANSACTIONAL_TABLES = [
-  /*
-   * Operational state, not reference data.
-   *
-   * One row per background job, written by whichever instance ran it. A row
-   * left behind makes the next file's health assertions read a run from
-   * somebody else's test — and because the shard databases outlive a run, it
-   * would read one from yesterday.
-   */
-  'background_jobs',
-  'document_access_logs',
-  'verification_attempts',
-  'reconciliation_records',
-  'reconciliation_runs',
-  'gateway_statement_lines',
-  'refunds',
-  'commission_payouts',
-  'commissions',
-  'receipts',
-  'payment_webhook_events',
-  'payments',
-  'transaction_events',
-  'transactions',
-  'invoices',
-  'assessments',
-  'vehicle_renewals',
-  'vehicles',
-  'settlements',
-  'fraud_flags',
-  'referee_risk_flags',
-  'offline_drafts',
-  'programme_eligibility',
-  'incentive_programmes',
-  'taxpayer_compliance',
-  'taxpayer_duplicate_checks',
-  'taxpayers',
-  'documents',
-  'notifications',
-  'support_tickets',
-  'ticket_messages',
-  'agent_clearance_events',
-  'agent_clearance',
-  'agent_training_progress',
-  'agent_agreements',
-  'agent_devices',
-  'referee_invitations',
-  'referee_kyc',
-  'referees',
-  'kyc_documents',
-  'agent_kyc',
-  'approvals',
-  'agents',
-  'bank_accounts',
-  'sessions',
-  'step_up_grants',
-  'otp_codes',
-  'idempotency_keys',
-  'audit_logs',
-  'mock_gateway_transactions',
-  /*
-   * Reference data until an officer could add to it.
-   *
-   * `app_versions` was seeded once and never written again, so it sat outside
-   * this list with the geography and the catalogue. Publishing a new minimum
-   * version makes it operational state: the row carries `created_by`, and
-   * `resetDatabase` deletes exactly those users below — so a single published
-   * version left behind by one file broke every later file's reset with a
-   * foreign key violation, in a shard database that outlives the run. It is
-   * emptied here and the default row comes back with the rest of the seed.
-   */
-  'app_versions',
-];
 
 export async function startTestServer(): Promise<string> {
   if (server) return baseUrl;
@@ -308,9 +237,48 @@ export { pool };
  * needs a receipt therefore has to do what a finance officer does — record the
  * bank credit covering the collection — and this does it through the same
  * service the officer's screen calls rather than by writing rows.
+ *
+ * That now takes two steps rather than one, because `recordSettlement` will no
+ * longer take an officer's word for it: the gateway's statement has to confirm
+ * each reference first. So this imports the statement line the real gateway
+ * would have produced, then records the credit against it — the same order
+ * production runs in, where `runReconciliation` writes those lines from
+ * `fetchStatement` before any officer sees the batch.
+ *
+ * A fixture that wants the *un*corroborated case — money the gateway will not
+ * confirm — should skip this helper and call `recordSettlement` directly, which
+ * is what the settlement tests do.
  */
 let settlementOfficerId: string | null = null;
 let settlementSeq = 0;
+
+/**
+ * The gateway's own account of what it paid out, as `runReconciliation` would
+ * have imported it from `fetchStatement`.
+ *
+ * `recordSettlement` refuses a reference the statement does not confirm, so any
+ * fixture that settles has to do this first — which is the order production
+ * runs in. Each line carries the amount the platform recorded for that
+ * reference, so settling the true figure is corroborated while settling a
+ * different one still reaches the variance path and raises a dispute.
+ *
+ * A test that wants the refusal itself — money no statement confirms — simply
+ * does not call this.
+ */
+export async function importStatementFor(
+  gatewayReferences: string[],
+  importedBy: string | null = null,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO gateway_statement_lines
+       (gateway, gateway_reference, amount_kobo, status, paid_at, settlement_reference, raw_line, imported_by)
+     SELECT $2, p.gateway_reference, p.amount_kobo, 'SUCCESS', now(), NULL, '{}'::jsonb, $3
+       FROM payments p
+      WHERE p.gateway_reference = ANY($1::text[])
+     ON CONFLICT (gateway, gateway_reference) DO NOTHING`,
+    [gatewayReferences, gateway.name, importedBy],
+  );
+}
 
 export async function settleCollection(params: {
   gatewayReferences: string[];
@@ -334,6 +302,9 @@ export async function settleCollection(params: {
   }
 
   settlementSeq += 1;
+
+  await importStatementFor(params.gatewayReferences, actorId);
+
   const result = await recordSettlement({
     settlementDate: new Date(),
     gatewayReferences: params.gatewayReferences,

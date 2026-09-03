@@ -31,8 +31,47 @@
  *     path where being wrong would actually cost money.
  */
 
+import { createHash } from 'node:crypto';
+
 import { pool, query } from '../db/pool';
 import { log } from '../lib/logger';
+
+/**
+ * The longest key that is certainly storable.
+ *
+ * `rate_limit_buckets.key` is the primary key, so it carries a btree index, and
+ * a btree tuple cannot exceed 2704 bytes. Part of a key is attacker-controlled:
+ * on an `ip`-keyed surface it is `req.clientIp`, and behind a load balancer
+ * (`TRUST_PROXY=true`, which is the recommended topology) Express takes that
+ * from `X-Forwarded-For` — a header the caller sends. Express splits the header
+ * on commas but does not otherwise bound it, so a comma-free multi-kilobyte
+ * value arrives in `req.ip` whole.
+ *
+ * Left unbounded that is a bypass rather than an error: the oversized key fails
+ * the insert, the store fails open by design, and the caller is allowed every
+ * time — unlimited requests on exactly the public surfaces the tight caps exist
+ * to protect. So a key that could not be stored is folded to one that can be,
+ * rather than being allowed to fail.
+ *
+ * 512 is well under the limit with room for multi-byte UTF-8 in the prefix.
+ */
+const MAX_KEY_BYTES = 512;
+
+/**
+ * Fold an over-long key into a bounded one, deterministically.
+ *
+ * The readable head is kept so a key remains recognisable in a query or a log,
+ * and a SHA-256 of the whole distinguishes two keys that share it. Callers that
+ * were already short — every legitimate one — are returned untouched, so this
+ * changes no existing bucket.
+ */
+export function boundKey(key: string): string {
+  if (Buffer.byteLength(key, 'utf8') <= MAX_KEY_BYTES) return key;
+  const digest = createHash('sha256').update(key, 'utf8').digest('hex');
+  // Slice by characters on a byte-bounded prefix: `slice` never splits a
+  // surrogate pair mid-character, so the result is always valid UTF-8.
+  return `${key.slice(0, 128)}#${digest}`;
+}
 
 /** What one counted request did to its bucket. */
 export interface BucketState {
@@ -130,8 +169,11 @@ export class PostgresBucketStore implements RateLimitStore {
     setInterval(() => this.sweepBlocked(), 60_000).unref();
   }
 
-  async hit(key: string, windowMs: number, max: number): Promise<BucketState> {
+  async hit(rawKey: string, windowMs: number, max: number): Promise<BucketState> {
     const now = Date.now();
+    // Bounded before anything else, so an attacker-controlled key cannot reach
+    // the failure path and be allowed through it. See `boundKey`.
+    const key = boundKey(rawKey);
 
     const blockedUntil = this.blockedUntil.get(key);
     if (blockedUntil !== undefined && blockedUntil > now) {

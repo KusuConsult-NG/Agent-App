@@ -26,6 +26,7 @@ import {
   revenueItemByCode,
   startTestServer,
   stopTestServer,
+  importStatementFor,
 } from './helpers';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -354,6 +355,9 @@ describe('E2E — one complete revenue collection, verified record by record', (
     );
 
     // ---- 10. Government is actually paid --------------------------------
+    // The gateway's own statement has to confirm the reference before an
+    // officer can bank it; runReconciliation imports these in production.
+    await importStatementFor([payment!.gateway_reference!]);
     const settlement = await post(
       '/government/settlements',
       {

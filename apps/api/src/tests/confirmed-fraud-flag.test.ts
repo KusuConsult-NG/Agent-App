@@ -48,6 +48,7 @@ import {
   post,
   resetDatabase,
   revenueItemByCode,
+  settleTransaction,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -136,10 +137,13 @@ async function collect(): Promise<string> {
   );
   assert.ok(commission);
   // Settled, with the hold period behind it: what promoteEligibleCommissions
-  // is meant to find. Setup, not the behaviour under test.
+  // is meant to find. Setup, not the behaviour under test — but reached through
+  // the settlement route rather than by writing the status, because migration
+  // 053 refuses a transaction that becomes SETTLED with nothing having settled
+  // it. Only the clock is moved by hand afterwards.
+  await settleTransaction(assessment.body.transactionId);
   await pool.query(
-    `UPDATE transactions SET status = 'SETTLED', settled_at = now() - interval '30 days'
-      WHERE id = $1`,
+    `UPDATE transactions SET settled_at = now() - interval '30 days' WHERE id = $1`,
     [assessment.body.transactionId],
   );
   return commission!.id;

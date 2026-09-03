@@ -62,8 +62,20 @@ beforeEach(async () => {
    * test after it. Restoring the statuses here is what makes each case below
    * mean what it says; without it the second test passed against unfixed code
    * because the first had already switched its templates off.
+   *
+   * Restored by event rather than across the table. The blanket form was
+   * `UPDATE notification_templates SET status = 'ACTIVE'` with no WHERE, which
+   * repaired this file at the cost of every file after it in the same shard:
+   * it switched on the templates the seed deliberately ships INACTIVE, and
+   * `an-agent-paid-in-silence.test.ts` — which asserts that COMMISSION_EARNED
+   * goes out by push and that its retired SMS wording stays switched off — then
+   * failed against correct code. A fixture that reaches outside what its own
+   * file touches is the D-14 defect again, one table further along; the events
+   * below are the only ones this file moves.
    */
-  await pool.query(`UPDATE notification_templates SET status = 'ACTIVE'`);
+  await pool.query(
+    `UPDATE notification_templates SET status = 'ACTIVE' WHERE event LIKE 'TAX_REMINDER%'`,
+  );
   await createGovernmentUser({ fullName: 'Reminder Admin', phone: '+2348000000050', role: 'admin' });
   const demo = await seedDemoAgent();
   assert.ok(demo);

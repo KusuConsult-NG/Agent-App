@@ -28,6 +28,25 @@ import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
 import { log } from '../lib/logger';
 
+/**
+ * The status on a statement line that means the gateway paid the money out.
+ *
+ * This is the *gateway's* vocabulary, not the platform's, and the two are not
+ * the same words. A payment row is `VERIFIED`; a statement line is `SUCCESS`.
+ * Remita's `mapStatementStatus` emits `SUCCESS | FAILED | PENDING`, and the
+ * mock passes through its own `PENDING | SUCCESS | FAILED | ABANDONED |
+ * REVERSED` — neither ever says `VERIFIED`.
+ *
+ * Written as the platform's pair first, which was wrong in the direction that
+ * refuses real money: every legitimate settlement would have been rejected as
+ * uncorroborated the moment a genuine statement was imported. It survived the
+ * suite because the fixture that writes statement lines was written in the same
+ * hour and used the same wrong word, so the check and its evidence agreed with
+ * each other and disagreed with both adapters. Only a test that imported a real
+ * statement first — 5c in the revision-10 audit — put the two side by side.
+ */
+const SETTLEABLE_STATEMENT_STATUSES = ['SUCCESS'];
+
 export interface ReconciliationSummary {
   runId: string;
   periodStart: Date;
@@ -250,11 +269,13 @@ export async function runReconciliation(params: {
       transaction_reference: string;
       settlement_id: string | null;
       settlement_reference: string | null;
+      settlement_status: string | null;
     }>(
       client,
       `SELECT p.id AS payment_id, p.transaction_id, p.gateway_reference, p.amount_kobo,
               p.status AS payment_status, t.status AS transaction_status,
-              t.transaction_reference, p.settlement_id, s.settlement_reference
+              t.transaction_reference, p.settlement_id, s.settlement_reference,
+              s.status AS settlement_status
          FROM payments p
          JOIN transactions t ON t.id = p.transaction_id
          LEFT JOIN settlements s ON s.id = p.settlement_id
@@ -333,13 +354,37 @@ export async function runReconciliation(params: {
             platformPaymentStatus: payment.payment_status,
           };
         } else {
-          // The third leg is the government's own settlement record, not the
-          // gateway's word for it: money is only reconciled once government
-          // can see it in its own account (PRD §46).
-          status = payment.settlement_id ? 'MATCHED' : 'PENDING_SETTLEMENT';
+          /*
+           * The third leg is the government's own settlement record, not the
+           * gateway's word for it: money is only reconciled once government
+           * can see it in its own account (PRD §46).
+           *
+           * And it has to be a settlement that settled something. This read
+           * `payment.settlement_id ? 'MATCHED' : ...` — the presence of a link,
+           * never the state of the batch linked to. `recordSettlement` links
+           * every payment in a batch whether or not the credit matched,
+           * deliberately, so an officer can see which collections a short
+           * payment was meant to cover. A batch the bank paid short is
+           * therefore DISPUTED, settles none of its collections, and every one
+           * of them still reported MATCHED — the sweep agreeing that money the
+           * State never received had been reconciled.
+           *
+           * The same gap migration 052 closed in the receipt trigger, in the
+           * other place that asked the question.
+           */
+          const settled = payment.settlement_status === 'RECONCILED';
+          status = settled ? 'MATCHED' : 'PENDING_SETTLEMENT';
           detail = {
             settlementReference: payment.settlement_reference,
             gatewaySettlementReference: line.settlementReference,
+            ...(payment.settlement_id && !settled
+              ? {
+                  note:
+                    `Banked under a settlement that is ${payment.settlement_status}, which ` +
+                    'settles none of its collections',
+                  settlementStatus: payment.settlement_status,
+                }
+              : {}),
           };
         }
       }
@@ -368,7 +413,23 @@ export async function runReconciliation(params: {
       bump(status);
       if (status === 'MATCHED') matched += 1;
       else if (status === 'UNCHECKED') unchecked += 1;
-      else if (['MISSING_PAYMENT', 'AMOUNT_MISMATCH', 'DUPLICATE_PAYMENT'].includes(status)) {
+      else if (
+        (EXCEPTION_STATUSES as readonly string[]).includes(status) &&
+        status !== 'PENDING_SETTLEMENT'
+      ) {
+        /*
+         * Counted from the shared list, less the one status that is not an
+         * exception when it is written.
+         *
+         * PENDING_SETTLEMENT is in the list because it becomes an exception
+         * once the settlement window has passed — which is why the queue admits
+         * it only past that window. At the moment the sweep writes it the money
+         * is ordinary and inside the window, so counting it here would report
+         * every collection of the day as a fault. Its absence from the old
+         * literal was deliberate, not drift.
+         *
+         * REVERSED is the one that was genuinely missing from both.
+         */
         exceptions += 1;
       }
     }
@@ -694,6 +755,60 @@ export async function recordSettlement(params: {
       );
     }
 
+    /*
+     * The money has to be the gateway's word, not the officer's.
+     *
+     * Settlement is the moment a collection stops being a promise and becomes
+     * government revenue: it moves the transaction to SETTLED, which issues the
+     * receipt and releases the agent's commission. Everything downstream treats
+     * it as proof the State was actually paid.
+     *
+     * Nothing corroborated it. This function checked only that the same
+     * collections were not banked twice; the amount and the bank reference were
+     * whatever the officer typed. One person holding `payment:reconcile` could
+     * therefore mint receipts for money that never arrived — the insider PRD
+     * §68 is written against, needing no accomplice and no database access. The
+     * route beside this one already refuses to let the officer who recorded a
+     * disputed settlement be the one who closes it, so the separation of duties
+     * was understood; it simply was not applied to the entry itself.
+     *
+     * `gateway_statement_lines` is the gateway's own account of what it paid
+     * out, imported by `runReconciliation` and append-only by trigger. Migration
+     * 015 calls it "the one control that proves government actually received
+     * the money, rather than the platform believing it did". A reference the
+     * statement does not carry is a reference nobody outside this building has
+     * confirmed, so it cannot be settled here.
+     *
+     * This is a refusal, not a dispute. A dispute is what happens when the
+     * gateway and the platform disagree about an amount, and it still settles
+     * nothing; an unconfirmed reference is the prior question of whether there
+     * is anything to disagree about.
+     */
+    const unconfirmed = await query<{ gateway_reference: string }>(
+      client,
+      `SELECT r.gateway_reference
+         FROM unnest($1::text[]) AS r(gateway_reference)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM gateway_statement_lines l
+           WHERE l.gateway = $2
+             AND l.gateway_reference = r.gateway_reference
+             AND l.status = ANY($3::text[]))
+        ORDER BY 1`,
+      [params.gatewayReferences, gateway.name, SETTLEABLE_STATEMENT_STATUSES],
+    );
+    if (unconfirmed.length > 0) {
+      const named = unconfirmed.slice(0, 5).map((row) => row.gateway_reference).join(', ');
+      const more = unconfirmed.length > 5 ? ` and ${unconfirmed.length - 5} more` : '';
+      throw conflict(
+        'SETTLEMENT_NOT_CORROBORATED',
+        `The gateway's statement does not confirm ${unconfirmed.length} of the ` +
+          `${params.gatewayReferences.length} collections in this batch: ${named}${more}. ` +
+          'Recording it would issue receipts for money nobody outside this platform has confirmed arrived.',
+        'Import the statement covering this settlement date, then record the batch again. ' +
+          'If the gateway has settled money it will not confirm, raise it with the gateway rather than here.',
+      );
+    }
+
     const payments = await query<{ id: string; transaction_id: string; amount_kobo: string }>(
       client,
       `SELECT id, transaction_id, amount_kobo FROM payments
@@ -935,6 +1050,15 @@ export async function reconcileSettlement(params: {
  * are not exceptions — MATCHED is a row the sweep reconciled, and UNCHECKED is
  * a row that was never compared to anything because the gateway statement
  * could not be fetched.
+ *
+ * REVERSED was missing, and it is the most serious of them. The matching loop
+ * has always written it: a gateway line saying REVERSED against a payment the
+ * platform holds as VERIFIED is money that came in, was receipted, and went
+ * back. But it appeared in no list — not here, so the queue never showed it and
+ * `resolveException` refused to close it, and not in the run's own counter, so
+ * a sweep that found one reported `exceptions: 0`. The sweep noticed, wrote it
+ * down, and told nobody; the receipt went on verifying as valid to any citizen
+ * who scanned it.
  */
 export const EXCEPTION_STATUSES = [
   'MISSING_PAYMENT',
@@ -942,6 +1066,7 @@ export const EXCEPTION_STATUSES = [
   'AMOUNT_MISMATCH',
   'DUPLICATE_PAYMENT',
   'PENDING_SETTLEMENT',
+  'REVERSED',
 ] as const;
 
 /**
@@ -991,7 +1116,7 @@ export async function exceptionQueue(
        SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
               r.id, r.run_id, r.status, r.expected_amount_kobo, r.received_amount_kobo,
               r.variance_kobo, r.gateway_reference, r.settlement_reference, r.detail,
-              r.created_at, r.transaction_id
+              r.created_at, r.transaction_id, r.payment_id
          FROM reconciliation_records r
         ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
                  r.created_at DESC, r.id DESC
@@ -1002,6 +1127,7 @@ export async function exceptionQueue(
             tp.first_name, tp.last_name, tp.business_name,
             ag.agent_code
        FROM newest n
+       LEFT JOIN payments p ON p.id = n.payment_id
        LEFT JOIN transactions t ON t.id = n.transaction_id
        LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
@@ -1029,7 +1155,11 @@ export async function exceptionQueue(
          * asking the gateway where the money is.
          */
         AND (n.status <> 'PENDING_SETTLEMENT'
-             OR n.created_at < now() - ($4 || ' hours')::interval)
+             OR (COALESCE(p.verified_at, p.paid_at, p.created_at, n.created_at)
+                   < now() - ($4 || ' hours')::interval
+                 AND NOT EXISTS (
+                   SELECT 1 FROM settlements s
+                    WHERE s.id = p.settlement_id AND s.status = 'RECONCILED')))
       ORDER BY n.created_at DESC
       LIMIT $2`,
     [
@@ -1060,24 +1190,31 @@ export async function awaitingSettlement(
     `WITH newest AS (
        SELECT DISTINCT ON (COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text))
               r.id, r.status, r.expected_amount_kobo, r.gateway_reference, r.created_at,
-              r.reconciled_at, r.transaction_id
+              r.reconciled_at, r.transaction_id, r.payment_id
          FROM reconciliation_records r
         ORDER BY COALESCE(r.transaction_id::text, r.gateway_reference, r.id::text),
                  r.created_at DESC, r.id DESC
      )
      SELECT n.id, n.expected_amount_kobo, n.gateway_reference, n.created_at,
-            ROUND(EXTRACT(EPOCH FROM (now() - n.created_at)) / 3600)::int AS age_hours,
-            (n.created_at < now() - ($2 || ' hours')::interval) AS overdue,
+            ROUND(EXTRACT(EPOCH FROM (now() - money.at)) / 3600)::int AS age_hours,
+            (money.at < now() - ($2 || ' hours')::interval) AS overdue,
             t.transaction_reference,
             tp.first_name, tp.last_name, tp.business_name,
             ag.agent_code
        FROM newest n
+       LEFT JOIN payments p ON p.id = n.payment_id
        LEFT JOIN transactions t ON t.id = n.transaction_id
        LEFT JOIN taxpayers tp ON tp.id = t.taxpayer_id
        LEFT JOIN agents ag ON ag.id = t.agent_id
+       CROSS JOIN LATERAL (
+         SELECT COALESCE(p.verified_at, p.paid_at, p.created_at, n.created_at) AS at
+       ) AS money
       WHERE n.status = 'PENDING_SETTLEMENT'
         AND n.reconciled_at IS NULL
-      ORDER BY n.created_at ASC
+        AND NOT EXISTS (
+          SELECT 1 FROM settlements s
+           WHERE s.id = p.settlement_id AND s.status = 'RECONCILED')
+      ORDER BY money.at ASC
       LIMIT $1`,
     [options.limit ?? 100, String(options.settlementDueHours ?? SETTLEMENT_DUE_HOURS)],
   );

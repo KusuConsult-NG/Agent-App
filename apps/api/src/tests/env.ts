@@ -14,6 +14,15 @@ process.env.IDENTITY_HASH_SECRET ??= 'test-identity-secret-value-long-enough-32'
 process.env.PAYMENT_WEBHOOK_SECRET ??= 'test-webhook-secret-value-long-enough-32';
 process.env.STORAGE_PATH ??= '/tmp/psirs-test-storage';
 
+// Push endpoints are held to the services a browser could actually have named,
+// so the fixtures' invented host has to be declared like any other. Declared
+// here rather than by rewriting sixteen call sites as `fcm.googleapis.com`,
+// because it also exercises the setting PSIRS uses to add a push service the
+// default list has not met. `attacker.example.net` and the internal addresses
+// the audit probes stay refused, which is the point of the tests that use them.
+process.env.PUSH_ENDPOINT_HOSTS ??=
+  'fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,notify.windows.com,push.example.test';
+
 // The suite performs far more sign-ins and OTP requests in one minute than any
 // real user would. Rate limiting itself is covered by a dedicated test that
 // sets its own limit.

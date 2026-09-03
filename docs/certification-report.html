@@ -553,9 +553,9 @@
     </p>
     <dl class="meta">
       <div><dt>Repository</dt><dd>KusuConsult-NG/Agent-App</dd></div>
-      <div><dt>Commit assessed</dt><dd class="num">48879de</dd></div>
+      <div><dt>Commit assessed</dt><dd class="num">fa8f454</dd></div>
       <div><dt>Baseline</dt><dd class="num">a07aa72 (PR #44)</dd></div>
-      <div><dt>Date</dt><dd>22 August 2026 (rev. 8)</dd></div>
+      <div><dt>Date</dt><dd>3 September 2026 (rev. 10)</dd></div>
       <div><dt>Method</dt><dd>Live system + source trace</dd></div>
       <div><dt>Verdict</dt><dd style="color:var(--fail);font-weight:700">FAIL — 1 blocker</dd></div>
     </dl>
@@ -573,6 +573,48 @@
         monitoring, and not one of the five external integrations has ever exchanged a
         packet with the real provider it will depend on. Certification fails on
         operational readiness, not on correctness.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Revision 10.</strong> Two hundred and twelve commits landed after revision 9,
+        four of them changing rules this report had certified: a receipt now requires
+        settlement rather than gateway confirmation, device binding acquired a relaxation for
+        demonstrations, an agent&rsquo;s commission account became changeable, and the last
+        open code finding &mdash; the per-instance rate limiter, D-3 &mdash; was fixed.
+        Adversarial reviews were commissioned to attack those changes, none written by the
+        hand that made them. <strong>Fifteen defects came out of those reviews, two of them
+        critical; three more came out of the verification runs that followed. Every one is fixed
+        and pinned by a test or by the run itself</strong> (D-47 to D-64).
+      </p>
+      <p style="margin-top:12px">
+        <strong>One mistake accounts for four of them, in four different places</strong>, and
+        it is worth naming because it is what this revision is really about. Each checked
+        that a <em>link existed</em> rather than what the link <em>pointed at</em>. The
+        receipt trigger asked whether a payment had a <code>settlement_id</code>, not whether
+        that settlement had received anything (D-49). The reconciliation sweep asked the same
+        question and called a batch the bank paid short &ldquo;matched&rdquo; (D-58). And
+        both officer queues &mdash; the exception list and the awaiting-settlement list
+        &mdash; went on reporting money that had since arrived, because they asked about the
+        newest paperwork instead (D-60). Migration 040 had raised the bar to &ldquo;the State
+        has the money&rdquo;, and the code beneath it was still testing for &ldquo;paperwork
+        exists&rdquo;.
+      </p>
+      <p style="margin-top:12px">
+        <strong>Three more were held in place by the test apparatus itself.</strong> A test
+        asserted that an officer&rsquo;s private note about a taxpayer <em>was</em> returned
+        to anonymous callers (D-54), which is how that leak survived every previous pass. A
+        second accepted a unique-index violation as proof of a settlement rule the database
+        did not actually hold (D-63). And the coverage check that caught the second turned
+        out to be answering for every run the database had ever seen rather than for this one
+        (D-64). All three passed silently for as long as they existed.
+      </p>
+      <p style="margin-top:12px">
+        Three rules the service enforced correctly are now held in the database as well
+        (migrations 053 and 054), which is this report&rsquo;s own standard for what counts
+        as an invariant; the route count was retaken at 189 and the two routes nothing reached were
+        read and covered; and D-3 is closed &mdash; not because the implementer says so, but
+        because a review that set out to break the shared rate limiter found a real bypass in
+        it (D-47) and, once that was fixed, could not break it again. The verdict does not move: it was
+        already FAIL on B-4, and B-4 is not a code finding.
       </p>
       <p style="margin-top:12px">
         <strong>Revision 9.</strong> A form-by-form pass over both applications, asking of
@@ -692,10 +734,10 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">793</span><span class="k">Tests passing<br>0 failing</span></div>
-      <div class="stat"><span class="v">138</span><span class="k">Independent<br>audit tests added</span></div>
-      <div class="stat"><span class="v">96</span><span class="k">Database<br>integrity triggers</span></div>
-      <div class="stat"><span class="v">156</span><span class="k">API routes<br>traced</span></div>
+      <div class="stat"><span class="v">1,773</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">68</span><span class="k">Independent audit<br>tests added at rev 10</span></div>
+      <div class="stat"><span class="v">18</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
+      <div class="stat"><span class="v">1</span><span class="k">Screen clearing agents<br>with no test</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
       <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
     </div>
@@ -970,7 +1012,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
     <div class="scroll">
       <table>
-        <caption>Assessed at commit 4ab5925 against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision.</caption>
+        <caption>Assessed at commit <code>fa8f454</code> against a live PostgreSQL 16 database. Rows marked <em>(fixed)</em> were blockers in an earlier revision. Rows re-verified at revision 10 say so in their evidence; a row that does not was carried forward on its committed test suite, which was re-run at this commit.</caption>
         <thead>
           <tr>
             <th scope="col">Area</th>
@@ -981,30 +1023,30 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           </tr>
         </thead>
         <tbody>
-          <tr><td>Receipt requires verified payment</td><td><span class="pill p-pass">Pass</span></td><td>Direct <code>INSERT</code> into <code>receipts</code> for a PENDING payment rejected by trigger; forged amount rejected; no HTTP route creates receipts</td><td>—</td><td>No</td></tr>
+          <tr><td>Receipt requires settled money</td><td><span class="pill p-pass">Pass</span></td><td>Re-verified at revision 10 against the rule as it now stands, not the one it replaced. Direct <code>INSERT</code> refused for a PENDING payment, for a VERIFIED one with no settlement, for one pointed at a settlement that received nothing, and for one in a batch the bank paid short &mdash; then accepted through the ordinary path once a RECONCILED settlement covers it. Forged amount rejected; no HTTP route creates receipts</td><td>D-49 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Financial immutability &amp; no-delete</td><td><span class="pill p-pass">Pass</span></td><td>SQL <code>UPDATE</code>/<code>DELETE</code> on transactions, payments, receipts, commissions, audit logs all refused by trigger</td><td>—</td><td>No</td></tr>
-          <tr><td>Backend-only payment confirmation</td><td><span class="pill p-pass">Pass</span></td><td>Caller-supplied <code>status: VERIFIED</code> ignored; payment stayed PENDING; <code>confirmPayment</code> takes no outcome argument</td><td>—</td><td>No</td></tr>
+          <tr><td>Backend-only payment confirmation</td><td><span class="pill p-pass">Pass</span></td><td>Caller-supplied <code>status: VERIFIED</code> ignored; payment stayed PENDING; <code>confirmPayment</code> takes no outcome argument. Re-verified at revision 10: a gateway answering REVERSED reached the success path and produced a verified payment, an acknowledgement and accrued commission. All six declared statuses are now named and anything unrecognised is refused, so the default is no longer success</td><td>D-50 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Webhook idempotency</td><td><span class="pill p-pass">Pass</span></td><td>10 identical deliveries → 1 webhook row, 1 receipt, 1 commission, 9 reported duplicate</td><td>—</td><td>No</td></tr>
           <tr><td>Concurrency &amp; race conditions</td><td><span class="pill p-pass">Pass</span></td><td>10 concurrent initiations → 1 payment row; 8 racing confirmations → 1 receipt, 1 commission</td><td>—</td><td>No</td></tr>
-          <tr><td>Commission engine (1.5%)</td><td><span class="pill p-pass">Pass</span></td><td>Exact at ₦1k/₦10k/₦100k/₦1M; requires <code>SETTLED</code>, not merely verified; immutable; nil on failed payment</td><td>—</td><td>No</td></tr>
+          <tr><td>Commission engine (1.5%)</td><td><span class="pill p-pass">Pass</span></td><td>Exact at ₦1k/₦10k/₦100k/₦1M; requires <code>SETTLED</code>, not merely verified; immutable; nil on failed payment. Re-verified at revision 10 by raw SQL: both gates &mdash; the transaction reaching SETTLED, and the commission becoming payable &mdash; were service rules only, and are now database triggers, on insert as well as on promotion</td><td>D-55, D-56, D-63 <em>(all fixed)</em></td><td>No</td></tr>
           <tr><td>Historical record immutability</td><td><span class="pill p-pass">Pass</span></td><td>Rate raised tenfold after payment; transaction and receipt amounts unchanged; assessment pins its rate version</td><td>—</td><td>No</td></tr>
           <tr><td>Agent clearance gates</td><td><span class="pill p-pass">Pass</span></td><td>Uncleared applicant refused revenue APIs (403, zero rows written); suspension effective on next request; activation refused while any item outstanding</td><td>—</td><td>No</td></tr>
           <tr><td>Role-based access control</td><td><span class="pill p-pass">Pass</span></td><td>All 6 roles × 11 guarded endpoints; admin correctly denied <code>payment:reverse:approve</code>; auditor holds no mutating permission</td><td>—</td><td>No</td></tr>
           <tr><td>Role differentiation in the portal</td><td><span class="pill p-pass">Pass</span></td><td>Enforcement was already correct — every one of 19 mutating controls gated, every nav gate matching its endpoint. What was missing was legibility: the auditor's read-only standing is now stated, and a field agent is no longer admitted to a one-item shell. Each role's menu is pinned by test</td><td>D-11, D-12 <em>(both fixed)</em></td><td>No</td></tr>
           <tr><td>Authentication hardening</td><td><span class="pill p-pass">Pass</span></td><td>Foreign-key JWT rejected; <code>alg:none</code> rejected; revocation immediate; bcrypt; no user enumeration; DB-backed lockout</td><td>—</td><td>No</td></tr>
           <tr><td>Cross-agent / cross-role isolation</td><td><span class="pill p-pass">Pass</span></td><td>Second agent refused first agent's transaction; agent refused every government endpoint tested</td><td>—</td><td>No</td></tr>
-          <tr><td>Public receipt verification</td><td><span class="pill p-pass">Pass</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly; localhost QR defect fixed and pinned by test</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Public receipt verification</td><td><span class="pill p-pass">Pass</span></td><td>Discloses no phone, address or identity hash; unknown code answers cleanly; localhost QR defect fixed and pinned by test. Re-verified at revision 10: a REVOKED document could be returned to ISSUED in one <code>UPDATE</code>, after which this surface answered VALID for a refunded payment. Revocation is now terminal in the database</td><td>B-6, D-57 <em>(both fixed)</em></td><td>No</td></tr>
           <tr><td>Audit trail</td><td><span class="pill p-pass">Pass</span></td><td>18 distinct actions across the full lifecycle, append-only, with actor, entity, timestamp and values</td><td>—</td><td>No</td></tr>
           <tr><td>Injection &amp; input validation</td><td><span class="pill p-pass">Pass</span></td><td>Injection payload stored as literal data; zero, negative and non-numeric amounts rejected; consent enforced</td><td>—</td><td>No</td></tr>
-          <tr><td>Reconciliation (three-way)</td><td><span class="pill p-pass">Pass</span></td><td>Gateway-confirmed but unsettled correctly reported <code>PENDING_SETTLEMENT</code>, not <code>MATCHED</code>; settlement transitions to <code>SETTLED</code> and releases commission</td><td>—</td><td>No</td></tr>
+          <tr><td>Reconciliation (three-way)</td><td><span class="pill p-pass">Pass</span></td><td>Gateway-confirmed but unsettled correctly reported <code>PENDING_SETTLEMENT</code>; settlement transitions to <code>SETTLED</code> and releases commission. Re-verified at revision 10, which found four defects in this area: a disputed batch reported MATCHED, the overdue clock ran from the sweep rather than from the money, settled collections stayed on the unsettled queues, and a reversed receipted payment reached no queue at all</td><td>D-58 to D-61 <em>(all fixed)</em></td><td>No</td></tr>
           <tr><td>Reversal &amp; refund</td><td><span class="pill p-pass">Pass</span></td><td>Requires approval + step-up + <code>payment:reverse:approve</code>; receipt voided not deleted; commission clawed back; agent refused</td><td>—</td><td>No</td></tr>
           <tr><td>Vehicle renewal gating</td><td><span class="pill p-partial">Partial</span></td><td>No renewal document can exist without a verified payment (trigger + query verified); full happy path not driven against a real registry</td><td>D-4</td><td>No</td></tr>
           <tr><td>Offline / PWA financial safety</td><td><span class="pill p-pass">Pass</span></td><td>Service worker never caches financial paths; draft queue has no payment type and rejects financial keys at runtime</td><td>—</td><td>No</td></tr>
-          <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>83 triggers, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification</td><td>—</td><td>No</td></tr>
+          <tr><td>Database schema integrity</td><td><span class="pill p-pass">Pass</span></td><td>233 triggers across 77 tables, 194 CHECK constraints, foreign keys, unique constraints, partial unique index on in-flight payments, SERIALIZABLE on verification. Three service rules became triggers at revision 10, on this report&rsquo;s own standard that a rule which only holds through the service layer is not an invariant &mdash; and a fourth closed the insert half of one of them</td><td>D-55 to D-57, D-63 <em>(all fixed)</em></td><td>No</td></tr>
           <tr><td>Append-only coverage</td><td><span class="pill p-pass">Pass</span></td><td>Three tables holding audit evidence had no delete protection while their siblings did, including the record that a reconciliation ran. Fixed, and a test now asserts the property so an unclassified new table fails the suite</td><td>D-19 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>API route coverage</td><td><span class="pill p-pass">Pass</span></td><td>156 routes declared, 156 exercised by at least one test; none left unexercised, down from 24. Reading the uncovered ones produced nine of revision 8&rsquo;s eleven defects, which was the argument for closing the rest &mdash; and closing them produced several more</td><td>D-21 (fixed)</td><td>&mdash;</td></tr>
-          <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree</td><td>—</td><td>No</td></tr>
-          <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction</td><td>D-7 (push unimplemented)</td><td>No</td></tr>
+          <tr><td>API route coverage</td><td><span class="pill p-pass">Pass</span></td><td>Recounted at revision 10: <strong>189 routes declared, 189 exercised.</strong> Two were reached by nothing &mdash; an officer opening the identity file behind an applicant, and the officer&rsquo;s list of money the State has not received &mdash; and both are now covered. The counting tool is committed this time (<code>apps/api/scripts/route-coverage.mjs</code>), deriving mount prefixes from what <code>app.ts</code> mounts and attributing each test path to the route Express would pick, so the figure can be re-derived rather than remembered</td><td>D-21 <em>(fixed)</em></td><td>&mdash;</td></tr>
+          <tr><td>Dependency security</td><td><span class="pill p-pass">Pass</span></td><td><code>npm audit</code>: 0 vulnerabilities, production and full tree. Re-verified at revision 10: one moderate advisory had appeared in <code>qs</code>, a transitive dependency this API never invokes; closed in this revision and re-audited to zero</td><td>D-46 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Notification isolation</td><td><span class="pill p-pass">Pass</span></td><td>Queued, dispatched out-of-band with retry; a delivery failure cannot fail a transaction. Push is implemented since revision 9 and was audited at revision 10, which found two defects in it: the endpoint was an address the caller chose &mdash; six internal addresses accepted, two connections observed on a local listener &mdash; and a subscribe could seize an endpoint already belonging to somebody else. Both closed and measured at zero</td><td>D-52, D-53 <em>(both fixed)</em></td><td>No</td></tr>
           <tr><td>Production config guard</td><td><span class="pill p-pass">Pass</span></td><td>Refuses any mock adapter, and now any local, plain-HTTP or malformed public URL — all confirmed in a child process</td><td>B-6 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>External integrations</td><td><span class="pill p-fail">Fail</span></td><td>All five run against development mocks only; no provider sandbox exercised. The harness exists and is now scheduled daily, reporting <em>skipped</em> — neither pass nor fail — until credentials are configured</td><td>B-4</td><td><strong>Yes</strong></td></tr>
           <tr><td>Mapping-failure detection</td><td><span class="pill p-pass">Pass</span></td><td>A wrong mapping proven to fail closed and land on the outcome the harness reports as FAIL — so the sandbox run, when it happens, will mean something. Surfaced D-10</td><td>D-10 <em>(fixed)</em></td><td>No</td></tr>
@@ -1012,10 +1054,10 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Deployment &amp; rollback</td><td><span class="pill p-partial">Partial</span></td><td>Dockerfile, compose, and a pipeline with backup-before-migrate and automatic revert. The built artefact was booted in production config and verified; the <em>image build</em> could not be run here (registry blocked)</td><td>B-1 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Backup &amp; disaster recovery</td><td><span class="pill p-pass">Pass</span></td><td><strong>Restoration test performed:</strong> real payment dumped, database dropped, restored — identical receipt, 14 audit rows, and a forged receipt still refused. Automated in CI</td><td>B-2 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Continuous integration coverage</td><td><span class="pill p-pass">Pass</span></td><td>CI declared <code>push: branches: [main]</code> on a repository whose default branch is not <code>main</code>, so a direct push to the branch every PR merges into ran no CI whatsoever. Now every push is built, with push and PR runs deduplicated</td><td>D-13 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>Test suite isolation</td><td><span class="pill p-pass">Pass</span></td><td>Two files ran against residue from whichever file preceded them, failing 16 tests elsewhere — including the receipt-forgery and webhook-replay audits. Both now reset; the same 534 pass with and without them</td><td>D-14 <em>(fixed)</em></td><td>No</td></tr>
+          <tr><td>Test suite isolation</td><td><span class="pill p-pass">Pass</span></td><td>Two files ran against residue from whichever file preceded them, failing 16 tests elsewhere &mdash; including the receipt-forgery and webhook-replay audits. A third was found at revision 10: a blanket <code>UPDATE</code> on reference data switched on templates the seed ships inactive, failing a neighbouring file against correct code. All three now reset only what they touch</td><td>D-14, D-62 <em>(both fixed)</em></td><td>No</td></tr>
           <tr><td>Essential-service linkage (§40)</td><td><span class="pill p-pass">Pass</span></td><td>Health insurance and the bursary denied on tax arrears, bypassing the §40 guard twice over. Both are now additive: compliance sets the benefit tier and never withdraws the benefit. The guard matches by prefix and accepts either additive mode or a recorded legal basis</td><td>D-16 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>Horizontal scalability</td><td><span class="pill p-partial">Partial</span></td><td>Workers and migrations now take PostgreSQL advisory locks, verified by test. Rate limiting is still per-instance</td><td>D-3</td><td>No</td></tr>
+          <tr><td>Horizontal scalability</td><td><span class="pill p-pass">Pass</span></td><td>Workers and migrations take PostgreSQL advisory locks. Rate limiting moved to a shared PostgreSQL store and production refuses the per-instance one. Verified at revision 10 by a review that set out to break it and did: an unbounded key let a caller past the cap. Once that was fixed, all eleven of its attacks &mdash; multi-instance counting, the fail-open path, key collision, clock skew, raw-SQL manipulation of the bucket table &mdash; held</td><td>D-3 <em>(closed)</em>, D-47 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
           <tr><td>Performance under load</td><td><span class="pill p-partial">Partial</span></td><td>Measured. Read paths healthy — TIN lookup under 5ms at p99 with 32 concurrent callers, every hot path on an index confirmed by the planner. The audit chain is a global serialisation point capping the platform at roughly 40 collections/second, which horizontal scaling cannot move. No sustained soak, and no production topology</td><td>D-20</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
@@ -1035,9 +1077,9 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
       <div class="inv-card">
         <h4>Backend API — <code>@psirs/api</code></h4>
         <ul>
-          <li>22,202 lines TypeScript, Express 5, Node 22</li>
-          <li>156 routes across 12 routers</li>
-          <li>PostgreSQL 16, 20 migrations, 96 triggers, 72 tables</li>
+          <li>38,471 lines TypeScript excluding tests, Express 5, Node 22</li>
+          <li>189 routes across 21 routers, every one exercised by a test</li>
+          <li>PostgreSQL 16, 54 migrations, 233 triggers, 77 tables, 194 CHECK constraints</li>
           <li>Background workers in-process</li>
         </ul>
       </div>
@@ -1054,27 +1096,28 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
       <div class="inv-card">
         <h4>Agent PWA — <code>@psirs/agent</code></h4>
         <ul>
-          <li>6,811 lines, React 19 + Vite</li>
+          <li>11,838 lines, React 19 + Vite, 10 screens</li>
           <li>Service worker, manifest, IndexedDB drafts</li>
-          <li>60 tests passing</li>
+          <li>134 tests passing, in English and in Hausa</li>
           <li>Financial paths never cached</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Government portal — <code>@psirs/portal</code></h4>
         <ul>
-          <li>5,633 lines, React 19, hash router</li>
-          <li>12 screens incl. Finance, Oversight, KYC</li>
-          <li><strong>15 tests</strong> (permission model); screens untested</li>
+          <li>15,086 lines, React 19, hash router</li>
+          <li>21 screens incl. Finance, Oversight, Levies, KYC</li>
+          <li><strong>111 tests</strong>; 8 of 21 screens rendered under test, the money-releasing flows among them</li>
           <li>Also serves public verification &amp; referee</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Shared — <code>@psirs/shared</code></h4>
         <ul>
-          <li>RBAC: 6 roles, ~60 permissions</li>
+          <li>RBAC: 6 roles, 68 permissions</li>
           <li>Kobo arithmetic in <code>BigInt</code></li>
           <li>State machines for payment &amp; transaction</li>
+          <li>Dictionary of 1,955 strings and 322 enum labels, English and Hausa, held together by 8 consistency tests</li>
         </ul>
       </div>
       <div class="inv-card">
@@ -1103,16 +1146,19 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <li>Notification dispatch (30 s)</li>
           <li>Fraud sweep (15 min)</li>
           <li>TIN, authority, refund catch-up</li>
-          <li>Reconciliation sweep (6 h)</li>
+          <li>Reconciliation &amp; reminder sweeps (6 h)</li>
+          <li>Invoice expiry (1 h), rate-limit sweep (1 h)</li>
+          <li>Idempotency &amp; telemetry retention (24 h)</li>
+          <li>Twelve jobs; each under an advisory lock, each recording whether it ran</li>
         </ul>
       </div>
       <div class="inv-card">
         <h4>Operations</h4>
         <ul>
-          <li>CI: build, typecheck, migrate, test</li>
+          <li>CI: build, typecheck, migrate, test, Hausa review check, four image builds, contention suite</li>
           <li>Dependabot configured</li>
-          <li><strong>No CD, no IaC, no container</strong></li>
-          <li><strong>No backup, no monitoring</strong></li>
+          <li>Dockerfile, compose, deploy pipeline with backup-before-migrate and automatic revert</li>
+          <li><strong>Pipeline secrets unwired; no target chosen; no infrastructure</strong></li>
         </ul>
       </div>
     </div>
@@ -1139,6 +1185,63 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         anyone reading the code with the assumption that a written route is a reached one.
       </p>
       <p>
+        <strong>Revision 10 re-examined the rules that had changed underneath it.</strong>
+        Two hundred and twelve commits landed after revision 9, and among them were changes
+        to the rules themselves: a receipt now requires settlement rather than gateway
+        confirmation, device binding acquired a relaxation for demonstrations, an
+        agent&rsquo;s commission account became changeable, and the last open code finding
+        &mdash; the per-instance rate limiter, D-3 &mdash; was fixed in the same working
+        session that produced this revision, by the same hand that is writing it.
+      </p>
+      <p>
+        An auditor who marks their own fix as passing has certified nothing. So the
+        verification of D-3, and of every money-rule and access-control change since
+        revision 9, was delegated to adversarial reviews, each on its own database, each
+        briefed to break the control rather than confirm it, each required to bypass the
+        service layer with raw SQL wherever the database is claimed to enforce something,
+        and each required to commit its attacks as tests that fail if the control gives.
+        The first attempt at all four died on an API rate limit before reporting anything;
+        they were re-run, and the three that completed are the substance of this revision.
+        Their suites are committed as
+        <code>certification-rev10-money.test.ts</code> (28 assertions),
+        <code>certification-rev10-access.test.ts</code> (29) and
+        <code>certification-rev10-rate-limit.test.ts</code> (11).
+      </p>
+      <p>
+        <strong>They left twenty-four assertions failing.</strong> Eighteen defects came out of
+        this revision, listed as D-47 to D-64 and each now fixed; the rest were the reviews&rsquo; own
+        harnesses misreading the platform&rsquo;s contract, and are recorded as such rather
+        than quietly dropped. Two of the sixteen are critical: a single finance officer
+        could mint government receipts for money no bank ever sent (D-48), and a gateway
+        answering <code>REVERSED</code> &mdash; money given back &mdash; produced a verified
+        payment, an acknowledgement to the taxpayer and commission accruing to the agent
+        (D-50).
+      </p>
+      <p>
+        Triage was not always right first time. Three failures were reported to the reader
+        of this work as the auditor&rsquo;s harness being wrong, without the assertion
+        messages having been read; two of the three were real defects, and one was catching
+        a bug in the fix that had been written an hour earlier. That correction is recorded
+        in D-51, because a report whose method section insists on evidence should say when
+        its own author asserted something without it.
+      </p>
+      <p>
+        What this revision claims beyond the reviews, and can show: the dependency advisory
+        in D-46, traced to its two call sites in <code>node_modules</code> and closed; the
+        inventory counts, each read from the codebase rather than carried forward; the Hausa
+        coverage in D-45, counted in the dictionary and pinned by eight consistency tests;
+        the portal&rsquo;s test position in D-5; and the route count, retaken at 189 declared
+        and 189 exercised, with the counting tool committed this time so the figure can be
+        re-derived rather than remembered.
+      </p>
+      <p>
+        <strong>One area changed since revision 9 and is still not re-verified here:</strong>
+        the vehicle-renewal happy path against a real registry, which is D-4 and was already
+        open. The four that revision 10 set out to audit &mdash; the settlement-gated
+        receipt, the device-binding relaxation, the commission bank-account change, and route
+        coverage &mdash; have each been attacked and are reported above.
+      </p>
+      <p>
         Where a guarantee is claimed to be enforced in the database, the audit bypasses the
         application entirely and issues SQL directly — the position of a compromised
         service account or a DBA at a <code>psql</code> prompt. A rule that only holds when
@@ -1157,21 +1260,40 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
     </div>
 
     <h3>Final verification run</h3>
-    <div class="evidence"># tests 502
-# suites 122
-# pass 502
-# fail 0
+    <div class="evidence">npm run verify — exit 0
 
-typecheck  clean  (tsc -b packages/shared apps/api && tsc --noEmit -p tsconfig.test.json)
-npm audit  0 vulnerabilities (production and full tree)
-build      shared, api, agent, portal — all clean</div>
+API            1523 passed, 0 failed, across 4 sharded databases (138 files, 307s)
+agent PWA       134 passed, 0 failed (18 files)
+officer portal  111 passed, 0 failed (16 files)
+money-path contention
+                  5 passed, 0 failed
+                ----
+                1773 passed, 0 failed
+
+enum coverage  462 of 537 declared states written; 0 unaccounted
+route coverage 189 routes declared, 189 exercised
+typecheck      clean (shared, api, api tests, agent, portal)
+hausa review   regenerated and checked
+npm audit      0 vulnerabilities (production and full tree)</div>
     <p class="measure" style="margin-top:16px">
-      The two audit suites are committed to this branch as
-      <code>apps/api/src/tests/certification-audit.test.ts</code> and
-      <code>apps/api/src/tests/certification-e2e.test.ts</code>, so the evidence behind
-      every <span class="pill p-pass">Pass</span> above is reproducible rather than
-      asserted. The six tests added in revision 2 cover the two fixed blockers, so a
-      regression on either fails the build rather than reaching production.
+      The evidence behind every <span class="pill p-pass">Pass</span> above is committed and
+      reproducible rather than asserted:
+      <code>certification-audit.test.ts</code> (40),
+      <code>certification-e2e.test.ts</code> (6),
+      <code>observability.test.ts</code> (17),
+      <code>backup-restore.test.ts</code> (2), and the three revision-10 adversarial suites
+      &mdash; <code>certification-rev10-money.test.ts</code> (28),
+      <code>certification-rev10-access.test.ts</code> (29) and
+      <code>certification-rev10-rate-limit.test.ts</code> (11). Every defect this revision
+      found fails the build if it returns.
+    </p>
+    <p class="measure" style="margin-top:16px">
+      <strong>On what a green run is worth.</strong> This one is reported in full because
+      two of the eighteen defects were found by it rather than by the attacks, and one was
+      found by a check that had been quietly passing on stale evidence. A verification run
+      is a measurement, and a measurement that has not itself been examined recently is
+      another thing to take on trust. The route count and the enum coverage above are both
+      re-derivable from committed scripts, for that reason.
     </p>
   </section>
 
@@ -1420,17 +1542,51 @@ build      shared, api, agent, portal — all clean</div>
       <article class="finding med">
         <div class="finding-head">
           <span class="finding-id">D-3</span>
-          <h3 class="finding-title" style="margin:0">Rate limiting is per-instance</h3>
-          <span class="pill p-partial">Medium</span>
+          <h3 class="finding-title" style="margin:0">Rate limiting was per-instance</h3>
+          <span class="pill p-pass">Fixed</span>
         </div>
         <p>
           The limiter keeps its buckets in a process-local <code>Map</code>. With N
-          instances the effective limit is N times the configured maximum. This is
+          instances the effective limit is N times the configured maximum. It was
           documented in <code>docs/SECURITY.md</code> as a known gap awaiting a Redis
           store. The impact is bounded because account lockout — the control that actually
           stops credential stuffing — is database-backed.
         </p>
-        <dl><dt>Location</dt><dd><code>apps/api/src/middleware/security.ts:19</code></dd></dl>
+        <dl>
+          <dt>Location</dt><dd><code>apps/api/src/middleware/security.ts:19</code></dd>
+          <dt>Changed in</dt>
+          <dd>
+            <code>7ece146</code>. Counts move to PostgreSQL rather than Redis, because the
+            platform&rsquo;s stated shape is that the only state is PostgreSQL and a Redis
+            would be the one component whose quiet loss weakens a security control without
+            anything failing. The increment is a single
+            <code>INSERT&nbsp;&hellip;&nbsp;ON CONFLICT DO UPDATE&nbsp;&hellip;&nbsp;RETURNING</code>
+            rather than a read and a write, so concurrent hits on one key serialise on the
+            row lock; a caller already over the limit is refused from a local cache until
+            their window ends, so a flood costs one round trip rather than one per request;
+            and the store fails open, because a bookkeeping table being unreachable must not
+            stop collection statewide. Production refuses to boot on the per-process store.
+          </dd>
+          <dt>Why it is now marked fixed</dt>
+          <dd>
+            The change and this revision were written by the same hand in the same session,
+            and an implementer&rsquo;s own tests are the weakest evidence in this report:
+            they encode what the implementer thought to check. So the finding stayed open
+            until somebody who had not written the code tried to break it. That review ran
+            &mdash; concurrency overshoot across instances, the local cache as a bypass, the
+            fail-open path as an attacker-triggerable hole, raw-SQL manipulation of the
+            bucket table, clock skew between the application and the database &mdash; and
+            <strong>found a real bypass</strong>: an unbounded key, which the caller could
+            make long enough to break the store&rsquo;s own index and be let through
+            (D-47). With that closed, all eleven of its attacks hold. Those eleven are the
+            evidence for this finding, not the thirteen tests written alongside the fix.
+          </dd>
+          <dt>What is left, and it is not code</dt>
+          <dd>
+            The store is only shared if every instance points at the same database. Nothing
+            in the application can check that; the deployment has to arrange it.
+          </dd>
+        </dl>
       </article>
 
       <article class="finding med">
@@ -1503,6 +1659,20 @@ build      shared, api, agent, portal — all clean</div>
             exception resolution, payout approval, reversal execution and the rest — still
             have no rendered test, and the referee response form remains outside the suite.
             The finding stays open at reduced severity.
+          </dd>
+          <dt>At revision 10</dt>
+          <dd>
+            The portal has grown to 21 screens and 111 tests across 15 files. Eight screens
+            are rendered under test, and they are the right eight: Finance &mdash; where
+            settlement, payout approval and reversal live &mdash; Oversight, Levies,
+            Configuration, the role home, sign-in, the public verification screen, and the
+            field-application form. The referee response form is now inside the suite
+            (<code>referee-decline.test.tsx</code>). Of the four flows &sect;11 named,
+            three are covered; <strong>KYC review is not</strong> &mdash;
+            <code>KycDocuments.tsx</code> is referenced by no test, rendered or otherwise.
+            Thirteen screens have no rendered test, most of them reporting views where a
+            regression costs an empty table; agent approval and KYC review are the two that
+            do not fit that description. Medium, still.
           </dd>
         </dl>
       </article>
@@ -1809,11 +1979,719 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         </dl>
       </article>
 
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-64</span>
+          <h3 class="finding-title" style="margin:0">The coverage measurement carried its answers across runs</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The enum-coverage check that produced D-63 turned out to have the same shape of
+          fault as the route-counting tool D-21 recorded: the measurement was wrong, and in
+          the direction that makes a suite look better than it is.
+        </p>
+        <p>
+          It records every state the suite writes in a table called
+          <code>enum_writes</code>, then asks which of the states the schema allows nothing
+          produced. The shard databases are deliberately kept between runs &mdash; migrating
+          an empty one costs 357ms and re-running settled migrations costs 4 &mdash; and
+          nothing ever emptied that table. So the question it answered was <em>&ldquo;what
+          has nothing produced since this database was created&rdquo;</em>, which is a
+          different question and a more flattering one.
+        </p>
+        <dl>
+          <dt>Coverage that has already been lost still reads as present</dt>
+          <dd>A state a fixture wrote once and no longer writes goes on being reported as reached. Delete the only test that covers a state, and the check stays quiet &mdash; exactly when it should speak.</dd>
+          <dt>And a failure the run cannot clear</dt>
+          <dd><code>commissions.status: CANCELLED</code> was still reported after the fixture writing it had been removed and the suite had gone green. Nothing in the codebase could have made that go away; only somebody knowing to empty a table by hand. A check that fails for reasons the working tree cannot fix is one people learn to ignore.</dd>
+          <dt>Fix</dt>
+          <dd>The runner empties the table before any shard starts &mdash; there rather than in the per-file observer installation, which would discard what earlier files in the same shard had already recorded. The measurement is now about the run.</dd>
+          <dt>And the thing the staleness had been hiding</dt>
+          <dd>
+            The first honest run reported <code>notification_templates.channel: PUSH</code>
+            as a state nothing wrote, while four push templates sat in the table. Reference
+            data is seeded once into a database that outlives the run and reseeded
+            <code>ON CONFLICT DO NOTHING</code>, so after the first run it writes nothing and
+            the observers see nothing. Nothing was wrong with the platform; the question had
+            stopped being answerable from writes alone, and the check would have taken a
+            classification for an answer &mdash; laundering a measurement fault into an
+            admission about the suite, which is the exact failure its own header warns
+            against. It now reads the standing contents of the reference tables as well. The
+            narrower staleness that reintroduces &mdash; a template removed from the seed
+            still counts while its row survives &mdash; is documented where it happens rather
+            than left for the next reader to find.
+          </dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-63</span>
+          <h3 class="finding-title" style="margin:0">A commission could be written already payable, and the test that said otherwise was passing for the wrong reason</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The enum-coverage check &mdash; which records every state the suite actually writes
+          and fails when one classified as unreachable turns up &mdash; reported
+          <code>commissions.status: CANCELLED</code>. Its classification reads: &ldquo;a
+          commission follows its transaction; when that is reversed the commission is
+          <code>REVERSED</code>, and nothing else ends one.&rdquo; The only writer was an
+          audit fixture, and pulling that thread found something bigger.
+        </p>
+        <p>
+          The money review&rsquo;s 6c asserts that the database refuses an
+          <code>ELIGIBLE</code> commission written for money the State has not received. It
+          was passing, and not for that reason. Its fixture inserted against a transaction
+          that already had a commission, and <code>commissions.transaction_id</code> is
+          <code>UNIQUE</code>, so the index refused the row before any rule was consulted. The
+          fixture moved the existing row to <code>CANCELLED</code> believing that freed the
+          index &mdash; it is not a partial index, so it did not &mdash; and the assertion
+          accepted <code>/unique|duplicate|settle|SETTLED/</code>: four answers, one of which
+          is the rule and three of which are the index.
+        </p>
+        <div class="code">assertion tightened to /settle|SETTLED/ →
+  duplicate key value violates unique constraint "commissions_transaction_id_key"
+
+trigger definition →
+  BEFORE UPDATE ON commissions FOR EACH ROW
+  EXECUTE FUNCTION enforce_payable_commission_requires_settlement()</div>
+        <p>
+          <strong>The rule really was missing on insert.</strong> D-56 was written as an
+          <code>UPDATE</code> trigger because that is the shape the attack took &mdash; a row
+          accrues <code>PENDING</code> and is then promoted &mdash; and it closed that door
+          while leaving the other one open. A commission inserted already
+          <code>ELIGIBLE</code> never passes through the transition the rule watches, and
+          <code>requestPayout</code> selects exactly that status, so the row is payable the
+          moment it exists. The existing insert trigger asks a different and still correct
+          question &mdash; that the transaction is at least payment-verified &mdash; which
+          <code>RECONCILIATION_PENDING</code> satisfies deliberately, because that is how
+          every real commission begins. It was the <em>starting</em> status that nothing
+          examined.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd>Migration 054 fires the rule on <code>INSERT</code> as well as <code>UPDATE</code>. On insert there is no <code>OLD</code> and any payable starting status is a change from nothing; on update only a transition counts, so a row already <code>ELIGIBLE</code> updated for another reason is still left alone.</dd>
+          <dt>And the test now proves what it claims</dt>
+          <dd>6c inserts against a transaction with no commission row, asserts the settlement refusal specifically, checks its own precondition that the index cannot answer, and then shows the same insert accepted at <code>PENDING</code> &mdash; so what is refused is the payable status and not the insert.</dd>
+          <dt>Why this one is worth reading twice</dt>
+          <dd>It was found not by an attack but by a <em>measurement</em> the platform takes of itself, in a run where all 1,523 API tests had just passed. An assertion with an over-broad pattern is indistinguishable from a passing test until something independent disagrees with it &mdash; here, a check that records which states the suite writes rather than which ones it asserts. That check turned out to have a fault of its own, which is D-64.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-62</span>
+          <h3 class="finding-title" style="margin:0">Fixtures that could only exist by breaking the rule they were testing around</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Migration 053 turned three service rules into database invariants, and the full
+          verification run that followed reported nineteen failures where one was expected.
+          Sixteen were the new triggers doing exactly their job: four suites reached
+          <code>SETTLED</code>, or moved a commission to <code>ELIGIBLE</code>, with a raw
+          <code>UPDATE</code>. Each carried a comment calling this &ldquo;setup, not the
+          behaviour under test&rdquo;, and each was right while nothing enforced the rule.
+        </p>
+        <p>
+          It stopped being right the moment something did. A fixture that can only exist by
+          breaking an invariant is not describing setup; it is describing a state the
+          platform cannot reach, and every assertion built on it is asking what happens next
+          in a world that does not occur. All four now settle through the settlement route
+          &mdash; the statement, the credit, the reconciled batch &mdash; and move only the
+          clock by hand, because a hold period is a policy and not a fact about money.
+        </p>
+        <div class="code">Transaction TXN-2026-005194 cannot be SETTLED: no reconciled settlement covers it
+Commission cannot become ELIGIBLE: its transaction is RECONCILIATION_PENDING, not SETTLED</div>
+        <dl>
+          <dt>A regression check that was too narrow</dt>
+          <dd>
+            After migration 053 landed, the suites re-run were settlement, money-in-transit,
+            reversal, commission notification and end-to-end, and the result was reported as
+            no regression. Fraud and payout were not among them. &ldquo;No regression&rdquo;
+            was a claim about the suites chosen rather than about the platform, and only the
+            full run said so.
+          </dd>
+          <dt>A second isolation leak, of the D-14 kind</dt>
+          <dd>
+            Two more of the nineteen had nothing to do with settlement.
+            <code>reminder-sweep.test.ts</code> restored notification templates with
+            <code>UPDATE notification_templates SET status = 'ACTIVE'</code> and no
+            <code>WHERE</code>. That table is reference data and survives
+            <code>resetDatabase</code>, so the blanket form repaired this file at the cost of
+            every file after it in the same shard &mdash; switching on the templates the seed
+            deliberately ships inactive. <code>an-agent-paid-in-silence.test.ts</code>, which
+            asserts that a commission is announced by push and that its retired SMS wording
+            stays switched off, then failed against correct code. It surfaced now because the
+            three new audit files re-balanced the shards and put the two together. Restored by
+            event, so the file reaches only what it touches; verified by running the victim
+            alone and again immediately after its neighbour.
+          </dd>
+          <dt>And the evidence that was behind the rule</dt>
+          <dd>
+            The last of the nineteen was the money review&rsquo;s own 7a, which read
+            <code>certification-audit.test.ts</code> rather than the platform and found it
+            certifying the pre-040 rule: a <code>PENDING</code> payment cannot be receipted.
+            Nothing tested the rule the platform now holds. Documenting that would have left
+            the strongest claim in this report certified against the weaker rule it replaced,
+            so the suite now attacks three unsettled states &mdash; verified with no
+            settlement, verified against a <code>PENDING</code> one, and verified against a
+            batch the bank paid short &mdash; and then shows the receipt appearing through
+            the ordinary path once a reconciled settlement covers it. The third needs no
+            forgery: a short payment produces it in the ordinary course of business.
+          </dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">D-61</span>
+          <h3 class="finding-title" style="margin:0">A receipted payment the gateway had given back reached no queue at all</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The reconciliation matching loop has always been able to write
+          <code>REVERSED</code>: a statement line saying so against a payment the platform
+          holds as <code>VERIFIED</code> is money that came in, was receipted, and went back
+          out. Having written it, the sweep told nobody.
+        </p>
+        <p>
+          <code>REVERSED</code> was not in <code>EXCEPTION_STATUSES</code>, so the
+          officer&rsquo;s exception queue never showed it and <code>resolveException</code>
+          refused to close it; and it was not in the run&rsquo;s own counter, so a sweep that
+          found one reported <code>exceptions: 0</code>. The record existed and nothing read
+          it. Meanwhile the receipt went on verifying as valid to any citizen who scanned its
+          QR code &mdash; the public surface asserting that money is good, for money the
+          State had returned.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd><code>REVERSED</code> joins the shared list, and the run counter now reads from that list rather than from a second one maintained beside it. Two lists that must agree are a defect waiting for someone to edit one of them.</dd>
+          <dt>The one status that is not an exception when it is written</dt>
+          <dd><code>PENDING_SETTLEMENT</code> stays out of the counter and enters the queue only once the settlement window has passed, which is deliberate: money inside the window is ordinary, and counting it at write time would report every collection of the day as a fault. A first attempt at this fix removed that exclusion as drift and broke the case that says so. It was not drift.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-60</span>
+          <h3 class="finding-title" style="margin:0">Money that had arrived stayed on the list of money that had not</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The sweep writes what it saw. The officer records the bank credit days later. No
+          later run re-examined a payment outside its window &mdash; so a collection that had
+          since settled, been receipted and released its commission stayed in the exception
+          queue and on the awaiting-settlement list, reported as money that never arrived.
+        </p>
+        <p>
+          Both queues asked about the newest paperwork rather than about the money. They now
+          exclude any payment linked to a <code>RECONCILED</code> settlement, which is the
+          same question the receipt trigger and the sweep&rsquo;s third leg were taught to
+          ask &mdash; the fourth place in this revision where checking a link was replaced by
+          checking what it points at.
+        </p>
+        <dl>
+          <dt>Why it matters more than a cosmetic queue</dt>
+          <dd>An officer works the exception queue. A queue that keeps returning collections already settled is one that gets skimmed, and the case it exists for &mdash; money the gateway confirmed and never handed over &mdash; is then read past.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-59</span>
+          <h3 class="finding-title" style="margin:0">The settlement clock ran from the last time anybody looked</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The 72-hour window that decides whether unsettled money is overdue was measured
+          from <code>reconciliation_records.created_at</code> &mdash; the moment the sweep
+          last examined the payment &mdash; and not from the collection itself.
+        </p>
+        <p>
+          So a payment the gateway confirmed five days ago and the sweep looked at this
+          morning was nought hours old, and not overdue. The case the window exists to
+          surface, money confirmed days ago that the gateway has never handed over, was
+          precisely the case it hid: the longer a collection went unsettled, the more sweeps
+          looked at it, and every one of them reset its age. Both queues now age from the
+          payment &mdash; <code>verified_at</code>, then <code>paid_at</code>, then
+          <code>created_at</code>.
+        </p>
+        <dl>
+          <dt>The auditor&rsquo;s own fixture had the same confusion</dt>
+          <dd>It aged the reconciliation record, which is exactly what this finding says the answer must not depend on. It now ages the payment and the record together: a collection five days old was first seen days ago too, and leaving the record fresh models a sweep that had never run.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-58</span>
+          <h3 class="finding-title" style="margin:0">The three-way match called a disputed batch reconciled</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The third leg of the match read
+          <code>payment.settlement_id ? 'MATCHED' : 'PENDING_SETTLEMENT'</code>: the presence
+          of a link, never the state of the batch linked to.
+        </p>
+        <p>
+          <code>recordSettlement</code> links every payment in a batch whether or not the
+          credit matched, deliberately, so an officer can see which collections a short
+          payment was meant to cover. A batch the bank paid short is therefore
+          <code>DISPUTED</code>, settles none of its collections &mdash; and every one of
+          them still reported <code>MATCHED</code>. The sweep whose comment reads &ldquo;money
+          is only reconciled once government can see it in its own account&rdquo; was
+          agreeing that money the State never received had been reconciled.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd><code>MATCHED</code> now requires the settlement to be <code>RECONCILED</code>. Anything else is <code>PENDING_SETTLEMENT</code>, with the batch&rsquo;s status recorded in the record&rsquo;s detail so an officer reading the queue can see why it is still waiting.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-57</span>
+          <h3 class="finding-title" style="margin:0">A revoked acknowledgement could be returned to issued</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          A receipt or acknowledgement is revoked when the money behind it goes back. Public
+          verification reads <code>documents.status</code>, and nothing stopped a
+          <code>REVOKED</code> row being moved to <code>ISSUED</code> in one
+          <code>UPDATE</code> &mdash; after which the platform answered <strong>VALID</strong>
+          to any citizen scanning the code, for a payment the State had refunded.
+        </p>
+        <p>
+          It is the one surface that answers without asking who is looking, which is what
+          makes it the wrong place to be wrong. Revocation is now terminal.
+          <code>SUPERSEDED</code> is not: reissuing a document is an ordinary event, and the
+          rule refuses the transition rather than the record.
+        </p>
+        <dl>
+          <dt>Where it is enforced</dt>
+          <dd>A trigger, in migration 053. Not reachable through any route &mdash; which is the point: the controls above it are sound, and this is the layer that is supposed to hold when something has got past them.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-56</span>
+          <h3 class="finding-title" style="margin:0">A commission could become payable on revenue that had not settled</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>PENDING</code> and <code>ON_HOLD</code> say nothing about money leaving the
+          building. <code>ELIGIBLE</code> does: it is exactly what
+          <code>requestPayout</code> selects, and everything after it is a step towards a
+          bank transfer. One <code>UPDATE</code> moved a commission from
+          <code>PENDING</code> to <code>ELIGIBLE</code> on a transaction that had not
+          settled, and the agent&rsquo;s money was then requestable.
+        </p>
+        <p>
+          The existing trigger fires only <code>BEFORE INSERT</code> and asks only that the
+          transaction was verified &mdash; a different and still correct question, because
+          accrual at <code>PENDING</code> before settlement is deliberate. Nothing watched the
+          status afterwards. <code>ELIGIBLE</code>, <code>APPROVED</code> and
+          <code>PAID</code> now require a <code>SETTLED</code> transaction; the insert trigger
+          is left as it is.
+        </p>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-55</span>
+          <h3 class="finding-title" style="margin:0">A transaction could reach SETTLED with nothing having settled it</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>SETTLED</code> means the State has the money, and it is the gate on
+          commission. A single statement &mdash;
+          <code>UPDATE transactions SET status = 'SETTLED', settled_at = now() - interval '80
+          hours'</code> &mdash; put a transaction past that gate, and the promotion job then
+          released the agent&rsquo;s money.
+        </p>
+        <p>
+          D-49 closed the receipt against this attack. The receipt was not the only thing
+          <code>SETTLED</code> gates, and the other gate was still open. A transaction may now
+          only enter <code>SETTLED</code> when a payment on it is linked to a
+          <code>RECONCILED</code> settlement &mdash; the same question the receipt trigger
+          asks, put one step earlier, so the two cannot come to disagree about what settlement
+          means.
+        </p>
+        <dl>
+          <dt>Migrations that create triggers must drop them first</dt>
+          <dd><code>CREATE OR REPLACE</code> exists for functions and not for triggers, so a file that only creates them cannot be applied twice. Found by applying 053 by hand and then letting the runner apply it again; each trigger is now dropped before it is created, because the runner is not the only thing that ever applies one of these files.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-54</span>
+          <h3 class="finding-title" style="margin:0">An officer&rsquo;s note about a taxpayer was handed to whoever knew their phone number</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>/citizen-status</code> answers without a login. Its own header says officer
+          notes are <em>never</em> returned. It returned <code>status_reason</code> verbatim
+          &mdash; the officer&rsquo;s free text explaining why a taxpayer record had been
+          closed &mdash; to any caller who could guess a phone number.
+        </p>
+        <p>
+          The reasoning recorded beside it was sound: a person told the State has closed their
+          record is owed the reason, and the commonest cause of a wrongful closure is a shop
+          assumed shut that was not, which they can only correct if they are told. The intent
+          was right and the channel was wrong. This endpoint cannot tell the taxpayer from
+          anybody else who knows their number, which is the premise the rest of the file is
+          built on. An officer writing &ldquo;Trader died in April; family says the stall was
+          sold to settle a moneylender&rdquo; is writing to a colleague.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd>What survives is what the person needs in order to act: that the record is closed, whether anything is still owed, that any office can put it back, and that they can be told why once somebody has confirmed who they are. The reason stays on the agent and officer channels, which establish identity first &mdash; the same trade the <code>detail</code> field already explains for the TIN, the compliance score and the amount owed.</dd>
+          <dt>A test that protected the defect</dt>
+          <dd>The existing case asserted that the reason <em>was</em> returned. That is how this survived every previous pass: the leak was written down as the expected behaviour, so every run confirmed it. It now asserts the opposite, and that the officer&rsquo;s words do not reach the response through any other field.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-53</span>
+          <h3 class="finding-title" style="margin:0">Subscribing could seize a push endpoint that was already somebody else&rsquo;s</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>ON CONFLICT (endpoint) DO UPDATE SET user_id = EXCLUDED.user_id</code> rewrote
+          the owner of any row whose endpoint was posted, with no check on who owned it.
+          Posting somebody else&rsquo;s endpoint transferred their subscription: measured, the
+          victim&rsquo;s delivery went to <code>sent=0</code> and the sender&rsquo;s own
+          notification arrived in the victim&rsquo;s browser.
+        </p>
+        <p>
+          The harm is not only the read. It silences the alert this platform relies on to make
+          a bank-account change nobody asked for get noticed &mdash; one of the five controls
+          that flow is built from &mdash; and it does so with no error anywhere.
+        </p>
+        <dl>
+          <dt>The rule already existed on the other half of the pair</dt>
+          <dd><code>removeSubscription</code> has always matched <code>user_id</code> before expiring a row, on the reasoning recorded beside it that an endpoint being long and random &ldquo;is not the same as checked&rdquo;. Subscribing was the half that never asked.</dd>
+          <dt>Fix</dt>
+          <dd>The upsert admits the two harmless cases and refuses the third: a row nobody owns can be claimed, the owner may re-post their own endpoint as often as the browser likes, and anyone else is refused. Refused rather than silently ignored &mdash; a no-op would answer &ldquo;subscribed&rdquo; to a handset that will never be sent to, which is the failure this area was repaired for once already. The owner is never named.</dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-52</span>
+          <h3 class="finding-title" style="margin:0">The push endpoint was an address the caller chose</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          <code>endpoint: z.string().url()</code> was the whole of the validation, and a URL
+          is not an address this server should open a connection to. The endpoint is chosen by
+          the browser but arrives in a request body, so it is caller-supplied text that the
+          delivery path later dials.
+        </p>
+        <p>
+          Any authenticated agent could name <code>169.254.169.254</code>,
+          <code>127.0.0.1:4000</code>, <code>10.0.0.5</code>, <code>[::1]</code> or their own
+          collector &mdash; all six accepted with 200 &mdash; and then fire the request
+          themselves, because a commission notification is a seeded active template and
+          collecting one levy sends on a real earning. The audit confirmed two connections
+          landing on a local listener. The request is blind, but it carries a VAPID JWT signed
+          with the server&rsquo;s private key, addressed to whatever origin was named.
+        </p>
+        <div class="code">before: 6/6 internal addresses accepted (200), 2 connections observed on the local listener
+after:  0 accepted, 0 connections, from either the route or a row planted behind it</div>
+        <dl>
+          <dt>A belief that made the hole hard to see</dt>
+          <dd>The code carried a comment reading &ldquo;web-push speaks HTTPS unconditionally &hellip; It also means the delivery path cannot be aimed at a local server.&rdquo; The first half is true and the second does not follow: <code>web-push</code> builds its request with <code>https.request</code> and takes the hostname, port and path from the endpoint, so speaking HTTPS says nothing about <em>where</em>. The comment is corrected rather than deleted, because the wrong half is why nobody looked.</dd>
+          <dt>An allowlist, not a denylist</dt>
+          <dd>A denylist has to be right about every address family, every encoding of a loopback address, and every name that resolves to one after the check has passed. An allowlist has to be right about which companies run push services, which is a list somebody can read. <code>PUSH_ENDPOINT_HOSTS</code> extends it without a deployment.</dd>
+          <dt>Enforced twice</dt>
+          <dd>At the route, so a bad row is never stored, and in the delivery loop before the connection opens &mdash; because a boundary check protects only the callers that come through the boundary, and rows already stored predate the rule. The refusal names no internal address back to the caller, so it cannot be used to map what the server can reach.</dd>
+        </dl>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-51</span>
+          <h3 class="finding-title" style="margin:0">The settlement check was written in the platform&rsquo;s vocabulary, not the gateway&rsquo;s</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The corroboration rule that closed D-48 tested statement lines against
+          <code>['SUCCESSFUL', 'VERIFIED']</code>. Those are the words a <em>payment row</em>
+          uses. A statement line uses the gateway&rsquo;s: the Remita adapter emits
+          <code>SUCCESS | FAILED | PENDING</code> and the mock passes through its own
+          <code>PENDING | SUCCESS | FAILED | ABANDONED | REVERSED</code>. Neither ever says
+          <code>VERIFIED</code>.
+        </p>
+        <p>
+          <strong>So the fix for D-48 would have refused every legitimate settlement in
+          production</strong> the moment a genuine statement was imported &mdash; a worse
+          failure than the hole it closed, and one that would have stopped collection
+          statewide rather than leaking. It passed the entire suite because the test helper
+          that writes statement lines was written in the same hour and given the same wrong
+          word. The check and the evidence for it agreed with each other and disagreed with
+          both adapters.
+        </p>
+        <dl>
+          <dt>What caught it</dt>
+          <dd>One test that imports a real statement before settling, in the money review, which runs the reconciliation sweep first and so put the two vocabularies side by side. Nothing else in 1,500 tests did.</dd>
+          <dt>Recorded as self-inflicted</dt>
+          <dd>Introduced by this revision&rsquo;s own fix and caught before it reached anyone. It is listed rather than folded into D-48 because &ldquo;the fix was wrong for two hours&rdquo; is a fact about how this report was produced, and a reader weighing the other fifteen should be able to see it.</dd>
+          <dt>And a mis-triage, recorded for the same reason</dt>
+          <dd>Three of the review&rsquo;s failures were reported as the auditor&rsquo;s harness being wrong, without their assertion messages having been read. Two were real defects &mdash; D-58 and D-61 &mdash; and the third was the harness, catching this vocabulary bug. Calling a finding &ldquo;my harness&rdquo; without reading it is the same error as calling a test flaky, and it was made here.</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">D-50</span>
+          <h3 class="finding-title" style="margin:0">Money the gateway said it had given back was recorded as money received</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The gateway contract declares six answers &mdash; <code>PENDING</code>,
+          <code>SUCCESS</code>, <code>FAILED</code>, <code>ABANDONED</code>,
+          <code>REVERSED</code>, <code>UNKNOWN</code> &mdash; and both adapters can return the
+          fifth. <code>confirmPayment</code> handled four of the six.
+        </p>
+        <p>
+          <code>REVERSED</code> fell past every branch to the success path. A gateway saying
+          &ldquo;that money went back&rdquo; therefore produced a <code>VERIFIED</code>
+          payment, an acknowledgement handed to the taxpayer, and commission accruing to the
+          agent. No forged row and no database access: an ordinary gateway answer through the
+          ordinary API.
+        </p>
+        <div class="code">measured before the fix — payment=VERIFIED, transaction=RECONCILIATION_PENDING,
+acknowledgement issued, commission=PENDING</div>
+        <p>
+          The integration brief states the rule this broke: &ldquo;an answer the platform does
+          not recognise is treated as a failure, not as a success and not as &lsquo;probably
+          fine&rsquo;&rdquo;. Here it was a <em>recognised</em> answer, and it was treated as
+          the best possible one.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd><code>REVERSED</code> maps to <code>FAILED</code> rather than to the payment status of the same name. It is reachable only from <code>VERIFIED</code> &mdash; you cannot give back money you never confirmed receiving &mdash; and a payment reaching this branch is by definition not yet verified, because an already-confirmed one returns further up. The truthful record is that the attempt did not complete, carrying the gateway&rsquo;s own word for why.</dd>
+          <dt>The second half matters more than the first</dt>
+          <dd>Every declared status is now named, and anything still unaccounted for is refused rather than falling through: the default is no longer success. The cost of the original omission was not an error but a receipt, so adding a status to the gateway contract now fails closed instead of silently opening the money path, and the unknown word is logged rather than assumed.</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">D-49</span>
+          <h3 class="finding-title" style="margin:0">A receipt asked whether a settlement existed, not whether it had settled anything</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Migration 040 made a government receipt require settlement as well as gateway
+          confirmation, and said why in its own comment: the check is a trigger rather than an
+          application rule &ldquo;because it holds even against a compromised service account,
+          and there is no code path &mdash; route, admin screen or service function &mdash;
+          that can talk its way past it.&rdquo;
+        </p>
+        <p>
+          It stopped one join short. The test was <code>pay.settlement_id IS NULL</code>: the
+          presence of a link, never the state of the thing linked to.
+          <code>settlements</code> admits <code>PENDING</code>, <code>RECEIVED</code>,
+          <code>RECONCILED</code> and <code>DISPUTED</code>, and only <code>RECONCILED</code>
+          means the bank credit covered the collections. Two rows therefore defeated the
+          cardinal rule &mdash; an insert of a <code>PENDING</code> settlement that received
+          nothing, and an update pointing a payment at it. The receipt then inserted cleanly.
+        </p>
+        <p>
+          The same gap admitted a case nobody had to forge. A batch the bank paid short is
+          recorded <code>DISPUTED</code>, and <code>recordSettlement</code> deliberately
+          settles none of its collections; &ldquo;a disputed batch receipts nothing&rdquo; is
+          asserted in the suite and holds in the service. At the database it did not, because
+          those payments carry a <code>settlement_id</code> like any other. The rule the
+          trigger&rsquo;s own hint stated &mdash; &ldquo;until a bank credit covering this
+          collection is reconciled&rdquo; &mdash; was the rule it did not enforce.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd>The trigger loads the settlement and refuses anything but <code>RECONCILED</code>, naming the state it found so the two refusals are distinguishable.</dd>
+          <dt>What this does not claim</dt>
+          <dd>A writer with database credentials can still forge a settlement row that says <code>RECONCILED</code>. What is closed is every state meaning the money is not there &mdash; none received, part received, still in dispute &mdash; so reaching a receipt now requires asserting in the row itself that the State was paid in full, rather than pointing at a batch that merely exists.</dd>
+        </dl>
+      </article>
+
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">D-48</span>
+          <h3 class="finding-title" style="margin:0">One officer could mint government receipts for money that never arrived</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Settlement is the moment a collection stops being a promise and becomes
+          government revenue. Since <code>258ef0e</code> it is also the moment the receipt
+          is issued and the agent&rsquo;s commission is released &mdash; the platform was
+          deliberately strengthened so that neither happens until the money has reached the
+          State&rsquo;s account rather than merely the gateway&rsquo;s confirmation.
+        </p>
+        <p>
+          <strong>Nothing corroborated the arrival.</strong>
+          <code>POST /government/settlements</code> required the <code>payment:reconcile</code>
+          permission and nothing else. <code>recordSettlement</code> checked only that the
+          same collections were not banked twice; the amount and the bank reference were
+          whatever the officer typed. A single finance officer could therefore name any
+          verified collection, type a figure, and the platform would mark it SETTLED, issue
+          a government receipt carrying a QR code the public can verify, and make the
+          commission payable &mdash; for money no bank ever sent. No accomplice, no database
+          access, no forged token: the authorised insider PRD &sect;68 names first.
+        </p>
+        <div class="code">a lone finance officer recorded a settlement corroborated by nothing — no statement
+line, no second officer — and the platform answered 201 RECONCILED, moved the
+transaction to SETTLED and issued 1 government receipt(s)</div>
+        <p>
+          The evidence table for it already existed and was already trusted elsewhere.
+          <code>gateway_statement_lines</code> holds the gateway&rsquo;s own account of what
+          it paid out; migration 015 calls it &ldquo;the one control that proves government
+          actually received the money, rather than the platform believing it did&rdquo;, and
+          the reconciliation sweep refuses to run without it. The settlement route was never
+          asked the same question. The asymmetry was not a considered position: the route
+          <em>beside</em> this one already refuses to let the officer who recorded a disputed
+          settlement be the one who closes it, so separation of duties was understood here
+          &mdash; it simply was not applied to the entry itself.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd>
+            <code>recordSettlement</code> now refuses any batch containing a gateway
+            reference the statement does not confirm as paid, naming the references it
+            cannot corroborate and telling the officer to import the statement first. It is
+            a refusal rather than a dispute: a dispute is what happens when the gateway and
+            the platform disagree about an amount, and it still settles nothing; an
+            unconfirmed reference is the prior question of whether there is anything to
+            disagree about. The ten existing settlement tests &mdash; including the variance
+            path and the separation-of-duties refusal &mdash; pass unchanged once the fixture
+            imports the statement first, which is the order production already runs in.
+          </dd>
+          <dt>What this does not fix</dt>
+          <dd>
+            The rule is enforced in the service, not in the database, so it does not hold
+            against the position this report elsewhere insists on testing: a compromised
+            service account at a <code>psql</code> prompt can still
+            <code>UPDATE transactions SET status = 'SETTLED'</code> and let the promotion job
+            release the commission. The receipt itself is trigger-protected and survives
+            that attack; the SETTLED state that gates commission is not. Carried as an open
+            item rather than closed quietly. <em>(&sect;11 item 4)</em>
+          </dd>
+          <dt>Found by</dt>
+          <dd>
+            The adversarial money-path review, in one of twelve assertions it left failing.
+            The other eleven concern the same area &mdash; disputed settlements, revoked
+            acknowledgements, the age of money in transit &mdash; and are <strong>not yet
+            triaged</strong>: some will be defects and some will be the auditor&rsquo;s
+            harness misreading the platform&rsquo;s contract, and this revision does not
+            claim to know which are which. The suite is committed with them failing.
+          </dd>
+        </dl>
+      </article>
+
+      <article class="finding high">
+        <div class="finding-head">
+          <span class="finding-id">D-47</span>
+          <h3 class="finding-title" style="margin:0">The new rate limiter could be switched off by the caller it was limiting</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The shared rate-limit store fails open: if the database cannot be reached it
+          allows the request and logs, on the reasoning that a bookkeeping table being
+          unavailable must not stop collection statewide. That reasoning is sound. What it
+          missed is that <strong>part of the key is written by the caller</strong>, so the
+          caller could produce the error themselves.
+        </p>
+        <p>
+          On an <code>ip</code>-keyed surface the key is
+          <code>&lt;prefix&gt;:&lt;req.clientIp&gt;</code>, and behind a load balancer
+          (<code>TRUST_PROXY=true</code> &mdash; the topology &sect;10 recommends)
+          <code>req.clientIp</code> comes from <code>X-Forwarded-For</code>, a header the
+          caller sends. <code>key</code> is the primary key of
+          <code>rate_limit_buckets</code> and therefore carries a btree index, whose tuples
+          cannot exceed 2704 bytes. A multi-kilobyte header made the insert fail, the store
+          failed open, and the request was allowed &mdash; <em>every</em> request, without
+          limit, on precisely the public surfaces the tight caps exist to protect:
+          <code>/citizen-status</code> against TIN and phone enumeration, public receipt
+          verification against code guessing, and <code>POST /agents/apply</code> against
+          application farming.
+        </p>
+        <div class="code">DEFECT (fail-open bypass): 15/15 oversized-key requests were allowed
+comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</div>
+        <dl>
+          <dt>How it was found, and why that matters</dt>
+          <dd>
+            By the adversarial review commissioned to attack the D-3 fix, on code written in
+            the same session as this revision. The implementer&rsquo;s own thirteen tests all
+            passed and none of them contemplated a caller-supplied key. This is the finding
+            that justifies the arrangement: an author does not attack their own reasoning,
+            because the blind spot and the code come from the same place.
+          </dd>
+          <dt>Two false negatives on the way to it</dt>
+          <dd>
+            The attack nearly failed to land, twice, for reasons that are worth recording
+            because both would have left the defect in place while appearing to clear it.
+            The auditor built its oversized key from a repeated character &mdash; which
+            TOAST compresses, so the row stored, the insert succeeded and the precondition
+            failed loudly. Corrected to random printable bytes, the unit case caught the
+            defect but the end-to-end case still passed: Express splits
+            <code>X-Forwarded-For</code> on commas, and random printable filler contains one
+            roughly every ninety bytes, so <code>req.ip</code> arrived as an 82-character
+            fragment. Only a comma-free value reaches <code>req.ip</code> at its full
+            length. <strong>A test can pass because the system is sound or because the
+            attack was malformed, and the two are indistinguishable from the result alone.</strong>
+          </dd>
+          <dt>Fix</dt>
+          <dd>
+            A key longer than 512 bytes is folded to a readable 128-character head plus a
+            SHA-256 of the whole, in the store, before the statement is built &mdash; so no
+            key can be un-storable and the fail-open path is no longer reachable by anything
+            a caller sends. Legitimate keys are far shorter and are returned untouched, so no
+            existing bucket changes. Both attack cases now pass, with the preconditions
+            corrected so they would fail if the fold were removed.
+          </dd>
+          <dt>Carried forward</dt>
+          <dd>
+            The limiter is fixed; <code>req.clientIp</code> is not. It still accepts three
+            kilobytes of caller-supplied text and that value is written to
+            <code>audit_logs.ip_address</code>, <code>sessions</code> and the payment
+            source-IP columns by a dozen call sites. Nothing there fails open, so this is
+            not a bypass &mdash; but an IP address field holding arbitrary attacker text is
+            worth bounding at the source. <em>(&sect;11 item 4)</em>
+          </dd>
+        </dl>
+      </article>
+
+      <article class="finding" style="border-left-color:var(--pass)">
+        <div class="finding-head">
+          <span class="finding-id">D-46</span>
+          <h3 class="finding-title" style="margin:0">One moderate advisory in a dependency the API never invokes</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          On this revision&rsquo;s first <code>npm audit</code>, the matrix row that said zero
+          said one: <code>qs</code> 6.15.3, reached through Express 5.2.1 and body-parser
+          2.3.0, carrying two moderate advisories &mdash; an array-limit bypass through
+          bracket-key comma parsing (GHSA-x5fp-wj9c-mxmx) and a denial of service through an
+          attacker-controlled <code>isBuffer</code> (GHSA-4mjr-xmp4-gh2g). Both are reached
+          through a crafted query string or form body.
+        </p>
+        <dl>
+          <dt>Reachability</dt>
+          <dd>Neither reaches this API. Express 5 parses query strings with Node&rsquo;s own parser unless told otherwise (<code>query parser: 'simple'</code>, set in its <code>application.js:97</code>), and loads <code>qs</code> only for the <code>extended</code> setting this application never selects. body-parser loads it only for <code>urlencoded</code> bodies, and the API registers no urlencoded parser &mdash; it accepts JSON and multipart uploads and nothing else. The vulnerable code is on disk and is never on the call stack.</dd>
+          <dt>Fixed anyway</dt>
+          <dd><code>npm audit fix</code> moved <code>qs</code> to 6.16.0, a one-line lockfile change; <code>npm audit</code> reports zero on the production and full trees. Recorded because a certification row that says zero has to keep saying zero, and because &ldquo;unreachable today&rdquo; is a property of two settings nobody has yet been tempted to change.</dd>
+        </dl>
+      </article>
+
       <article class="finding" style="border-left-color:var(--warn)">
         <div class="finding-head">
           <span class="finding-id">D-45</span>
           <h3 class="finding-title" style="margin:0">The language toggle offers more than the translation delivers</h3>
-          <span class="pill p-partial">Partly closed &mdash; drafted, awaiting native review</span>
+          <span class="pill p-partial">Translated in full &mdash; awaiting native review</span>
         </div>
         <p>
           The agent application carries a Hausa toggle, and a test asserts the dictionary is
@@ -1841,6 +2719,39 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The field trial (<code>UAT-FIELD-TRIAL.md</code> &sect;3.1) puts four Hausa-first agents through Phase 0 with one job: record the specific English sentence at every point where they stop. That produces a backlog ordered by how many agents each string stopped, which will be far shorter than 277 and can be translated with confidence. The alternative &mdash; a comparison of completion rates against the English cohort &mdash; would spend two weeks of their time confirming a gap already established here.</dd>
           <dt>Plateau State speaks more than two languages</dt>
           <dd>Berom, Ngas, Tarok and others are first languages for large populations in the state. Hausa is the lingua franca and the right second language to have chosen; whether the platform needs a third is a policy question, and it should be asked with the backlog in hand rather than in the abstract.</dd>
+          <dt>Since translated in full (revision 10)</dt>
+          <dd>
+            The field trial was not waited for. Between revisions 9 and 10 the whole of both
+            applications was translated: the dictionary now holds 1,955 strings in both
+            languages, every one of the 322 values the database schema permits in an enum
+            column has a label in each, and the reference data &mdash; revenue items,
+            categories, MDAs, training modules &mdash; carries a Hausa name returned by every
+            API query that returns the English one. The agent application and the officer
+            portal were each driven in a browser with the language set to Hausa, and a test
+            in each workspace fails if a screen leaks an English literal
+            (<code>nothing-new-in-english.test.tsx</code>).
+          </dd>
+          <dt>What holds it together</dt>
+          <dd>
+            Eight consistency tests on the dictionary itself: every key translated with
+            nothing left over; no English passed off as Hausa except the acronyms and product
+            names that are the same word in both; a negation in the English is never dropped
+            in the Hausa &mdash; the failure this finding called the worst possible; one Hausa
+            word for one English term throughout, held by a glossary the test asserts; no
+            hooked letters, because agents type on phone keyboards without them; and
+            apostrophes written one way, so a reviewer&rsquo;s correction matches the file.
+            Twenty-five English labels were themselves corrected in the same pass, and the
+            thirteen Hausa strings that had been translated from the wrong English were
+            re-translated from the right one.
+          </dd>
+          <dt>Still not approved</dt>
+          <dd>
+            Drafted without a native speaker remains true, and remains the reason this is
+            not marked closed. <code>HAUSA-REVIEW.md</code> is regenerated by a script the CI
+            runs, so it cannot fall behind the dictionary; it lists 66 safety strings first,
+            then the other 1,889, then 30 message templates, each beside its English. The
+            translation is complete. It is not yet checked by anybody who grew up speaking it.
+          </dd>
         </dl>
       </article>
 
@@ -2167,8 +3078,8 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
       <article class="finding" style="border-left-color:var(--partial)">
         <div class="finding-head">
           <span class="finding-id">D-21</span>
-          <h3 class="finding-title" style="margin:0">Nine API routes are exercised by no test</h3>
-          <span class="pill p-partial">Partly closed</span>
+          <h3 class="finding-title" style="margin:0">Nine API routes were exercised by no test</h3>
+          <span class="pill p-pass">Closed, and recounted at rev 10</span>
         </div>
         <p>
           156 routes are declared; 9 are touched by nothing in the suite, down from 24 at
@@ -2197,6 +3108,22 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The coverage script matched test paths against a hardcoded list of mount prefixes, so every route on a newly added router read as untested. It reported 24 uncovered when the true figure was 9. Prefixes are now derived from what <code>app.ts</code> actually mounts: a measurement that silently misreports new work is worse than no measurement, because it is trusted.</dd>
           <dt>Since closed</dt>
           <dd>All nine were subsequently read and covered, including the two that touched money or access control directly — <code>POST /government/reconciliation/recover</code> and <code>POST /agents/devices/:deviceId/approve</code>. Every one of the 156 declared routes is now exercised by at least one test. The premise held: reading them produced further defects, and &ldquo;no test&rdquo; kept turning out to be a reliable predictor of &ldquo;no thought given to the failure case&rdquo;.</dd>
+          <dt>Recounted at revision 10</dt>
+          <dd>
+            Thirty-three routes were added after this closed &mdash; levies, push, citizen
+            status, the bank-account change &mdash; and nobody retook the count, which is how
+            a closed finding goes quietly stale. <strong>189 declared, 187 exercised, two
+            reached by nothing:</strong> <code>GET /agents/:id/kyc/documents</code>, the only
+            way an officer sees the identity file behind an applicant, and
+            <code>GET /government/reconciliation/awaiting-settlement</code>, the
+            officer&rsquo;s list of money the State has not received. Both feed screens D-5
+            records as untested, which is how they slipped: the portal calls them and nothing
+            else does, so each suite assumed the other had them. Both were read; neither was
+            wrong; both are now covered, and the count is 189 of 189. The counting tool is
+            committed this time as <code>apps/api/scripts/route-coverage.mjs</code>, so the
+            figure can be re-derived rather than remembered &mdash; which is the specific
+            failure recorded one entry above.
+          </dd>
         </dl>
       </article>
 
@@ -2608,9 +3535,11 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
     <h2 class="sec">Required before production</h2>
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:28px">
-      In the order I would sequence them. Items 1 and 2 are complete; item 1 leaves one
-      action for PSIRS. The rest are the substance of the remaining programme, and none of
-      them can be shortened by how good the code is.
+      In the order I would sequence them. Six are now complete, several leaving a
+      configuration step for PSIRS rather than a coding one. What is left is the substance of
+      the remaining programme, and none of it can be shortened by how good the code is: one
+      blocker that can only be closed by talking to a real provider, and the testing and
+      assessment work that has to happen against something deployed.
     </p>
 
     <ol class="required">
@@ -2627,6 +3556,27 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         <p>Remita service type ID and the full status code set; the PSIRS TIN format, field paths and status vocabulary; the contracted KYC vendor's response shape; the vehicle registry; bank verification. Run <code>npm run verify:integrations</code> against each sandbox and attach its output to the go-live record; <code>docs/INTEGRATION-VERIFICATION.md</code> is the checklist. <em>(B-4)</em></p>
       </li>
       <li>
+        <strong><s>Audit the four rules that changed after revision 9</s> &mdash; done at revision 10</strong>
+        <p>
+          Each was attacked by somebody who had not written it, and the attacks are committed
+          as <code>certification-rev10-money.test.ts</code>,
+          <code>certification-rev10-access.test.ts</code> and
+          <code>certification-rev10-rate-limit.test.ts</code>:
+        </p>
+        <ul>
+          <li><strong>The settlement-gated receipt &mdash; six defects.</strong> The trigger checked that a settlement was linked and not that it had received anything (D-49); a lone finance officer could record a settlement no bank statement corroborated (D-48); a gateway answering <code>REVERSED</code> produced a receipt (D-50); and the transaction and commission gates beside it were service rules only (D-55, D-56, D-57), the commission gate then turning out to cover promotion but not a row written payable from the start (D-63). The committed evidence tested the pre-040 rule and now tests the one the platform holds (D-62).</li>
+          <li><strong>The device-binding relaxation &mdash; no defect.</strong> Production refuses to boot with <code>DEVICE_AUTO_APPROVE</code> set, proven in a child process, and with the flag forced on a handset revoked for cause is still refused. One honest residue: with the flag on, a <em>replacement</em> handset goes live without an officer &mdash; which is what the flag is for, and why production will not start with it.</li>
+          <li><strong>The commission bank-account change &mdash; no defect.</strong> <code>requested_by &lt;&gt; approved_by</code> holds at the database and not only in the service, so it survives a compromised service account; a payout in flight blocks both proposing and carrying out a change; an account the bank disowns is refused, and &ldquo;the bank could not be reached&rdquo; is not a soft yes; and the agent is told on the number already on record rather than one supplied with the request.</li>
+          <li><strong>Route coverage &mdash; recounted.</strong> 189 declared, 189 exercised. The two that nothing reached were read; neither was wrong, and both are now covered. The counting tool is committed so the figure can be re-derived.</li>
+        </ul>
+        <p>
+          Three further defects came out of the same reviews in areas that were not on this
+          list: the unauthenticated citizen-status endpoint returned an officer&rsquo;s
+          private note (D-54), and web push accepted an endpoint pointing anywhere the caller
+          liked (D-52) with no check on who already owned it (D-53).
+        </p>
+      </li>
+      <li>
         <strong><s>Build the deployment path</s> — done in <code>4ab5925</code></strong>
         <p>Dockerfile, compose, and a pipeline that backs up before migrating and reverts on failed health checks. Migrations are an explicit step. <strong>Remaining for PSIRS:</strong> wire the five deployment secrets named in <code>docs/DEPLOYMENT.md</code> to real infrastructure, and build the image once in an environment with registry access. <em>(B-1, D-2)</em></p>
       </li>
@@ -2639,12 +3589,12 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         <p>Structured logging with correlation and redaction, an error-reporting adapter, and <code>/metrics</code> exporting every queue that must never go quiet — failed webhooks, aborted reconciliation, exception depth, unreturned refunds, worker liveness. <strong>Remaining for PSIRS:</strong> point <code>ERROR_REPORTING</code> at a real destination, scrape <code>/metrics</code>, and set alert thresholds on those gauges. <em>(B-3)</em></p>
       </li>
       <li>
-        <strong>Finish making the platform safe for more than one instance</strong>
-        <p>Workers and migrations now take advisory locks (<s>D-1</s>, <s>D-2</s>). What remains is the shared rate-limit store already anticipated in the code comments — bounded in impact, because account lockout is database-backed. <em>(D-3)</em></p>
+        <strong><s>Make the platform safe for more than one instance</s> &mdash; done, and independently attacked</strong>
+        <p>Workers and migrations take advisory locks (<s>D-1</s>, <s>D-2</s>). The shared rate-limit store is <s>built</s> and <s>verified by somebody who did not write it</s>: the review found a real bypass &mdash; a caller could send a key long enough to break the store&rsquo;s own index and be let through (D-47) &mdash; and once that was closed all eleven of its attacks, on multi-instance counting, the fail-open path, key collision and clock skew, hold. <s>D-3</s> is closed. What remains for PSIRS is operational rather than code: the store is only shared if every instance points at the same database, which the deployment must arrange.</p>
       </li>
       <li>
         <strong>Test the government portal's screens</strong>
-        <p>The workspace is now in the root test script and in CI, with 15 tests over the permission model (<s>half of D-5</s>). What is still untested is the behaviour of the screens themselves: at minimum the approval, reversal, reconciliation-exception and KYC-review flows, plus the two public surfaces it serves. <em>(D-5)</em></p>
+        <p>111 tests now, and eight of twenty-one screens rendered under them &mdash; the money-releasing flows, both public surfaces and the referee form among them (<s>approval, reversal, reconciliation-exception, public verification, referee response</s>). What is still untested is the KYC-review screen, through which an officer clears the identity behind every agent in the field, and the agent-approval screen beside it. <em>(D-5)</em></p>
       </li>
       <li>
         <strong>Commission an independent security assessment</strong>
@@ -2696,6 +3646,30 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         That is a well-built revenue platform.
       </p>
       <p>
+        Revision 10 qualifies that in one specific way, and it is worth being exact about
+        how. The eighteen defects it found were not a different platform from the one
+        described above; they were the <em>same</em> rules, correctly stated, enforced one
+        step short. Migration 040 raised the standard from &ldquo;the gateway said so&rdquo;
+        to &ldquo;the State has the money&rdquo;, and four separate places went on asking
+        whether a settlement was <em>linked</em> rather than whether it had received
+        anything. That is what a raised bar looks like on the way up: the statement of the
+        rule moves first and the enforcement catches up behind it, and the gap between the
+        two is invisible until somebody attacks it. Somebody has now attacked it, which is
+        why those four are closed and why the question is asked in the same words in all
+        four places.
+      </p>
+      <p>
+        The uncomfortable finding is not any of the eighteen. It is that three of them were
+        <em>held in place by the test apparatus itself</em> &mdash; an assertion that an
+        officer&rsquo;s private note about a taxpayer was returned to anonymous callers, one
+        that accepted a unique-index violation as proof of a settlement rule, and a coverage
+        measurement that answered for every run the database had ever seen rather than for
+        this one. All three passed, silently, for as long as they existed. A test suite is
+        evidence about a platform only to the extent that somebody has recently asked what
+        each test would still catch, and this report has now three times found the answer to
+        be &ldquo;less than it appears&rdquo;.
+      </p>
+      <p>
         What it said, in revision 1, was that a well-built application is not a
         production system. Four of those six gaps have since been closed in code, and the
         closing was worth doing properly: the restoration test was performed rather than
@@ -2717,26 +3691,50 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         and <code>docs/SECURITY.md</code> §Known gaps. That honesty is worth noting in a
         certification report, because the most common reason a platform like this fails in
         production is that nobody wrote down what was still missing. Here it was written
-        down, and this audit largely confirms it — with five defects added that had not
-        been recorded.
+        down, and this audit largely confirms it — with sixty-four defects added that
+        had not been recorded, eighteen of them at this revision.
       </p>
       <p>
-        Re-certification should be straightforward once the ten items in §11 are complete.
-        Nothing I found requires rearchitecting anything.
+        Re-certification should be straightforward once the remaining items in §11 are
+        complete. Nothing I found requires rearchitecting anything &mdash; including the
+        eighteen defects of revision 10, nearly every one of which was a rule stated
+        correctly somewhere and enforced one step short of where it needed to be.
       </p>
     </div>
 
     <footer class="report-foot">
       <p>
-        Revision 8, assessed at commit <code>48879de</code>. Revision 3 was assessed at
+        Revision 10, assessed at commit <code>fa8f454</code>, 3 September 2026. Revisions 8 and 9
+        were assessed at <code>48879de</code>. Revision 3 was assessed at
         <code>4ab5925</code> on branch
         <code>claude/production-readiness-cert-147aqs</code>, 21 August 2026. Revision 1
         assessed <code>ee88518</code> and reported six blockers; B-5 and B-6 were fixed in
         <code>173be39</code>, and B-1, B-2 and B-3 in <code>4ab5925</code>, each
         re-verified. Evidence suites committed as <code>certification-audit.test.ts</code>
-        (39 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
-        (17) and <code>backup-restore.test.ts</code> (2). Full suite: 521 passing, 0
-        failing; agent PWA 51 passing; typecheck clean; 0 dependency vulnerabilities.
+        (40 tests), <code>certification-e2e.test.ts</code> (6), <code>observability.test.ts</code>
+        (17), <code>backup-restore.test.ts</code> (2) and the three revision-10 adversarial
+        suites (68).
+      </p>
+      <p style="margin-top:10px">
+        <strong>Revision 10 verification run,</strong> at <code>fa8f454</code>:
+        <code>npm run verify</code> exit 0 &mdash; API 1,523 passing across four sharded
+        databases, agent PWA 134, officer portal 111, money-path contention suite 5;
+        <strong>1,773 passing, 0 failing.</strong> Typecheck clean across all five projects;
+        Hausa review sheet regenerated and checked; <code>npm audit</code> 0 vulnerabilities;
+        enum coverage 462 of 537 declared states with none unaccounted; 189 of 189 declared
+        routes exercised.
+      </p>
+      <p style="margin-top:10px">
+        The three adversarial reviews commissioned to attack the rules that changed after
+        revision 9 are committed as <code>certification-rev10-money.test.ts</code>,
+        <code>certification-rev10-access.test.ts</code> and
+        <code>certification-rev10-rate-limit.test.ts</code> &mdash; 68 assertions between
+        them, written to break the controls rather than confirm them. They left twenty-four
+        failing. Eighteen defects came out of this revision in total (D-47 to D-64), two of
+        them critical, and every one is fixed with a test that fails if it returns.
+        &sect;11&rsquo;s remaining items are operational: one blocker that can only close by
+        talking to a real provider, and the work that has to happen against something
+        deployed.
       </p>
     </footer>
   </section>

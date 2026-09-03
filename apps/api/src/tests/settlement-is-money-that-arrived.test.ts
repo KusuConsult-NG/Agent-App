@@ -35,6 +35,7 @@ import {
   get,
   loginAs,
   pool,
+  importStatementFor,
   post,
   resetDatabase,
   revenueItemByCode,
@@ -136,8 +137,22 @@ beforeEach(async () => {
   };
 });
 
-const settle = (receivedKobo: bigint, token = financeToken, bankReference = 'BNK-2026-0001') =>
-  post(
+/**
+ * Record the bank credit, having first imported the statement that confirms it.
+ *
+ * The import is what a reconciliation run does before an officer ever sees the
+ * batch: `recordSettlement` now refuses a reference the gateway's statement
+ * does not carry, so a fixture that skipped it would be testing the refusal
+ * rather than the settlement. The line states the amount the platform recorded,
+ * so passing a different `receivedKobo` here still reaches the variance path.
+ */
+const settle = async (
+  receivedKobo: bigint,
+  token = financeToken,
+  bankReference = 'BNK-2026-0001',
+) => {
+  await importStatementFor([collection.gatewayReference]);
+  return post(
     '/government/settlements',
     {
       settlementDate: new Date().toISOString().slice(0, 10),
@@ -147,6 +162,7 @@ const settle = (receivedKobo: bigint, token = financeToken, bankReference = 'BNK
     },
     { token },
   );
+};
 
 const transactionStatus = async () =>
   (

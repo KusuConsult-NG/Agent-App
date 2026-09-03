@@ -24,6 +24,7 @@ import {
   startTestServer,
   stopTestServer,
   territoryForLga,
+  importStatementFor,
 } from './helpers';
 import { seedDemoUsers, seedReferenceData } from '../db/seed';
 import * as notifications from '../services/notifications';
@@ -907,6 +908,9 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
   });
 
   it('records a settlement, issues the receipt and moves the transaction to SETTLED', async () => {
+    // The gateway's statement first: recordSettlement refuses a reference it
+    // does not confirm, and production imports it before an officer settles.
+    await importStatementFor([unsettled.gatewayReference]);
     const response = await post(
       '/government/settlements',
       {
@@ -966,6 +970,10 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
       { token: ctx.agentToken, deviceId: ctx.deviceId },
     );
 
+    // The gateway confirms it paid the full amount; the bank credit is short,
+    // which is the variance this case is about. Without the import the batch is
+    // refused as uncorroborated before the amounts are ever compared.
+    await importStatementFor([payment.body.gatewayReference]);
     const settlement = await post(
       '/government/settlements',
       {

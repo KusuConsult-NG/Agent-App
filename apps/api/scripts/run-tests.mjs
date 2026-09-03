@@ -130,6 +130,40 @@ async function ensureDatabases(count) {
       process.exit(1);
     }
   }
+
+  /*
+   * THE ENUM OBSERVATIONS ARE ABOUT THIS RUN, SO CLEAR THEM BEFORE IT.
+   *
+   * `enum_writes` records every state the suite writes, and the check at the
+   * end of this script reads it to answer "what did nothing produce". The
+   * shard databases are deliberately kept between runs, and nothing ever
+   * emptied that table — so the answer was really "what has nothing produced
+   * since this database was created", which is a different question and a
+   * more flattering one.
+   *
+   * Two ways it misleads, both seen. A state a fixture wrote and then stopped
+   * writing keeps being reported as reached, so deleting the only test that
+   * covered a state raises no complaint. And a state written once by a fixture
+   * that has since been corrected goes on being reported as an unreachable
+   * state the suite reached, which is a failure the run cannot clear by fixing
+   * the code — only by somebody knowing to go and empty a table by hand.
+   *
+   * Emptied here rather than in `installEnumObservers`, which runs once per
+   * test file: truncating there would discard whatever the earlier files in
+   * the same shard had already recorded.
+   */
+  for (let index = 1; index <= count; index += 1) {
+    const client = new pg.Client({ connectionString: databaseFor(index) });
+    await client.connect();
+    try {
+      await client.query('TRUNCATE psirs_test_observations.enum_writes');
+    } catch {
+      // The schema does not exist until the first test file installs the
+      // observers, which is the ordinary state of a fresh shard database.
+    } finally {
+      await client.end();
+    }
+  }
 }
 
 function runShard(shard, index) {

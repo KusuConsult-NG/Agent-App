@@ -36,6 +36,7 @@ import {
   stopTestServer,
   revenueItemByCode,
   settleTransaction,
+  importStatementFor,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -254,6 +255,7 @@ describe('Commission paid on a transaction later reversed is recovered', () => {
       'SELECT total_amount_kobo FROM transactions WHERE id = $1',
       [transactionId],
     );
+    await importStatementFor([gatewayReference]);
     await post(
       '/government/settlements',
       {

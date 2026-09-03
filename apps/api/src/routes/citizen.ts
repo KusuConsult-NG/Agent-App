@@ -248,12 +248,27 @@ citizenRouter.get(
     // they fed — syncTaxpayerComplianceAndIncentives above already refreshes
     // both, so nothing else depended on them.
     /*
-     * A record that has been taken off the register says so, and says why.
+     * A record that has been taken off the register says so, but not in the
+     * officer's words.
      *
-     * The officer's own words, because a person told the State has closed
-     * their record is owed the reason — and because the commonest cause of a
-     * record being closed in error is a shop that was assumed shut and was
-     * not, which the person can only correct if they are told.
+     * This returned `status_reason` verbatim, on the reasoning that a person
+     * told the State has closed their record is owed the reason, and that the
+     * commonest cause of a closure in error is a shop assumed shut that was
+     * not — which the person can only correct if they are told. The intent was
+     * right and the channel was wrong: this endpoint cannot tell the taxpayer
+     * from anybody else who knows their phone number, which is the premise the
+     * rest of this file is built on. An officer writing "Trader died in April;
+     * family says the stall was sold to settle a moneylender" is writing to a
+     * colleague, and it was being handed to any caller who could guess a
+     * number. The header three hundred lines above says officer notes are
+     * NEVER returned; this was the exception nobody had noticed making.
+     *
+     * What survives is everything the person needs in order to act: that the
+     * record is closed, whether anything is still owed, and that any office can
+     * put it back. The reason itself is on the agent and officer channels,
+     * which establish who they are speaking to first — the same trade the
+     * `detail` field below already explains for the TIN, the score and the
+     * amount.
      *
      * `hasOutstanding` is untouched by any of this. What is owed is owed
      * whether or not the record is still on the register.
@@ -263,14 +278,14 @@ citizenRouter.get(
         ? null
         : {
             status: taxpayer.status,
-            reason: taxpayer.status_reason,
             message:
               `This record has been ${taxpayer.status.toLowerCase()} and no new charge will be ` +
               'raised against it. ' +
               (hasOutstanding
                 ? 'What was already owed is still owed and can still be paid.'
                 : 'Nothing is outstanding.') +
-              ' If this is wrong, any PSIRS office can put the record back on the register.',
+              ' If this is wrong, any PSIRS office can put the record back on the register, and ' +
+              'they can tell you why it was closed once they have confirmed who you are.',
           };
 
     res.json({

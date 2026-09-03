@@ -572,12 +572,40 @@ async function verifyAndRecord(params: {
         throw paymentUnconfirmed(payment.transaction_reference);
       }
 
-      if (verification.status === 'FAILED' || verification.status === 'ABANDONED') {
+      /*
+       * REVERSED belongs here, and its absence was the whole defect.
+       *
+       * `verify()` may answer PENDING, SUCCESS, FAILED, ABANDONED, REVERSED or
+       * UNKNOWN — the contract says so, and both adapters can return the fifth.
+       * This function handled four of the six. REVERSED fell past every branch
+       * to the success path below, so a gateway saying "that money went back"
+       * produced a VERIFIED payment, an acknowledgement handed to the taxpayer,
+       * and commission accruing to the agent. The integration brief states the
+       * rule this broke: an answer the platform does not recognise is treated as
+       * a failure, not as a success and not as "probably fine". Here it was a
+       * recognised answer, and it was treated as the best possible one.
+       *
+       * It maps to FAILED rather than to the payment status of the same name.
+       * REVERSED is reachable only from VERIFIED — you cannot give back money
+       * you never confirmed receiving — and a payment arriving here is by
+       * definition not yet verified, because an already-confirmed one returned
+       * further up. So the truthful record is that this attempt did not
+       * complete, with the gateway's own word for why.
+       */
+      if (
+        verification.status === 'FAILED' ||
+        verification.status === 'ABANDONED' ||
+        verification.status === 'REVERSED'
+      ) {
         await transitionPayment(client, {
           paymentId: payment.id,
           from: payment.status,
-          to: verification.status === 'FAILED' ? 'FAILED' : 'ABANDONED',
-          failureReason: verification.failureReason ?? 'Gateway reported the payment did not succeed',
+          to: verification.status === 'ABANDONED' ? 'ABANDONED' : 'FAILED',
+          failureReason:
+            verification.failureReason ??
+            (verification.status === 'REVERSED'
+              ? 'The gateway reports this payment was reversed: the money has gone back'
+              : 'Gateway reported the payment did not succeed'),
           response: verification.raw,
         });
         await transitionTransaction(client, {
@@ -633,6 +661,34 @@ async function verifyAndRecord(params: {
           message:
             'The payment did not succeed. No money has been received and no receipt has been issued.',
         };
+      }
+
+      /*
+       * Anything still unaccounted for is not a success.
+       *
+       * The branches above name every status the contract declares, so nothing
+       * should reach this line. That is exactly why it is here: the defect it
+       * guards against was a status the contract declared and this function did
+       * not read, and the cost of that omission was not an error but a receipt.
+       * Falling through to the success path is the one outcome an unrecognised
+       * answer must never produce, so the default is refusal and the unknown
+       * word is logged rather than assumed.
+       *
+       * Adding a status to the gateway contract now fails closed here instead of
+       * silently opening the money path.
+       */
+      if (verification.status !== 'SUCCESS') {
+        log.error('gateway returned a status this platform does not handle', {
+          component: 'payments',
+          gatewayStatus: verification.status,
+          paymentId: payment.id,
+        });
+        await client.query(`UPDATE payments SET verification_response = $2 WHERE id = $1`, [
+          payment.id,
+          JSON.stringify(verification.raw),
+        ]);
+        metrics.paymentConfirmed('PENDING', params.source);
+        throw paymentUnconfirmed(payment.transaction_reference);
       }
 
       // ---- Amount check ----------------------------------------------------

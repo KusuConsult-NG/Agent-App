@@ -44,6 +44,7 @@ import {
   post,
   resetDatabase,
   revenueItemByCode,
+  settleTransaction,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -94,7 +95,7 @@ beforeEach(async () => {
 });
 
 /** One collection, which accrues a commission the ordinary way. */
-async function collect(): Promise<string> {
+async function collect(): Promise<{ commissionId: string; transactionId: string }> {
   const suffix = String(++collected);
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
@@ -136,7 +137,7 @@ async function collect(): Promise<string> {
     [assessment.body.transactionId],
   );
   assert.ok(commission, 'a collection accrues a commission');
-  return commission!.id;
+  return { commissionId: commission!.id, transactionId: assessment.body.transactionId as string };
 }
 
 /**
@@ -145,11 +146,18 @@ async function collect(): Promise<string> {
  * Setup, not the behaviour under test: reaching ELIGIBLE legitimately needs a
  * settled transaction and an elapsed hold, and this is about what a refusal
  * does to money rather than about how money becomes payable.
+ *
+ * The settlement half of that is no longer forcible, and should not be.
+ * Migration 053 holds "a payable commission stands on settled revenue" in the
+ * database, so the transaction is settled through the settlement route; the
+ * hold period, which is a clock rather than a fact about money, is still the
+ * part this fixture skips.
  */
 async function eligibleCommission(): Promise<string> {
-  const id = await collect();
-  await pool.query(`UPDATE commissions SET status = 'ELIGIBLE', eligible_at = now() WHERE id = $1`, [id]);
-  return id;
+  const { commissionId, transactionId } = await collect();
+  await settleTransaction(transactionId);
+  await pool.query(`UPDATE commissions SET status = 'ELIGIBLE', eligible_at = now() WHERE id = $1`, [commissionId]);
+  return commissionId;
 }
 
 async function requestPayout(): Promise<{ payoutId: string; approvalId: string }> {
@@ -220,7 +228,7 @@ describe('a refused payout gives the money back to where it came from', () => {
   it('puts a written-off clawback back on the books', async () => {
     // Commission that was paid and then reversed: money the agent holds and
     // does not own. requestPayout nets it off and marks it recovered.
-    const owed = await collect();
+    const { commissionId: owed } = await collect();
     await pool.query(
       `UPDATE commissions SET status = 'REVERSED', paid_at = now(), reversed_at = now()
         WHERE id = $1`,
@@ -340,7 +348,7 @@ describe('a payout the bank would not make', () => {
   });
 
   it('puts back a clawback the payout had netted off', async () => {
-    const reversed = await collect();
+    const { commissionId: reversed } = await collect();
     await pool.query(
       `UPDATE commissions SET status = 'REVERSED', paid_at = now() - interval '30 days',
               reversed_at = now() WHERE id = $1`,
