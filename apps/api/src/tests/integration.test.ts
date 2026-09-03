@@ -970,6 +970,10 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
       { token: ctx.agentToken, deviceId: ctx.deviceId },
     );
 
+    // The gateway confirms it paid the full amount; the bank credit is short,
+    // which is the variance this case is about. Without the import the batch is
+    // refused as uncorroborated before the amounts are ever compared.
+    await importStatementFor([payment.body.gatewayReference]);
     const settlement = await post(
       '/government/settlements',
       {
