@@ -1013,30 +1013,63 @@ describe('ATTACK 6 — commission on unsettled money', () => {
     const c = await collectAndVerify();
     const existing = (await commissionFor(c.transactionId))!;
     const policy = await queryOne<{ id: string }>(pool, `SELECT policy_id AS id FROM commissions WHERE id = $1`, [existing.id]);
-    // A second collection with no commission row yet is needed because
-    // commissions.transaction_id is UNIQUE — a payment with no agent would do,
-    // but an agent's own collection whose accrual we suppress is closer to the
-    // attack. Simplest honest fixture: another verified collection, then
-    // remove nothing and insert against a fresh transaction via a
-    // taxpayer-portal-style collection. Since every fixture here has an agent,
-    // test the equivalent: an INSERT for an unsettled transaction is refused
-    // for any status that means payable.
-    const second = await collectAndVerify();
-    const secondCommission = (await commissionFor(second.transactionId))!;
-    // Move the real row out of the way as the service would on hold, so the
-    // UNIQUE index is not what refuses the insert.
-    await pool.query(`UPDATE commissions SET status = 'CANCELLED', reversal_reason = 'audit fixture' WHERE id = $1`, [
-      secondCommission.id,
-    ]);
+
+    /*
+     * The insert has to land on a transaction that has no commission row.
+     *
+     * `commissions.transaction_id` is UNIQUE, so inserting against a collection
+     * that already accrued is refused by the index before any rule is
+     * consulted — and an assertion that accepts either answer cannot tell you
+     * which one it got. An earlier version of this test did exactly that,
+     * moved the existing row to CANCELLED believing that freed the index (it
+     * does not; the index is not partial), and reported the rule as holding
+     * when only the index had answered.
+     *
+     * So the fixture copies the verified transaction to a second row by SQL,
+     * which is the position this whole section tests from anyway. Its status is
+     * RECONCILIATION_PENDING — gateway-confirmed, not settled — which satisfies
+     * the existing accrual trigger, so nothing but the settlement rule is left
+     * to refuse the row.
+     */
+    const bare = (await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO transactions
+         (transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+          agent_id, device_id, lga_id, amount_kobo, total_amount_kobo, status, created_by)
+       SELECT transaction_reference || '-AUDIT6C', taxpayer_id, invoice_id, assessment_id,
+              revenue_item_id, agent_id, device_id, lga_id, amount_kobo, total_amount_kobo,
+              'RECONCILIATION_PENDING', created_by
+         FROM transactions WHERE id = $1
+       RETURNING id`,
+      [c.transactionId],
+    ))!;
+    const noCommissionYet = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM commissions WHERE transaction_id = $1`,
+      [bare.id],
+    );
+    assert.equal(noCommissionYet!.n, '0', 'the fixture must not leave the UNIQUE index able to answer');
+
     await assert.rejects(
       pool.query(
         `INSERT INTO commissions
            (agent_id, transaction_id, policy_id, rate_basis_points, basis_amount_kobo, amount_kobo, status, eligible_at)
          VALUES ($1, $2, $3, 150, $4, 1, 'ELIGIBLE', now())`,
-        [secondCommission.agent_id, second.transactionId, policy!.id, second.amountKobo],
+        [existing.agent_id, bare.id, policy!.id, c.amountKobo],
       ),
-      /unique|duplicate|settle|SETTLED/i,
-      'nothing stops an ELIGIBLE commission being written for money the State has not received (only the UNIQUE index on transaction_id, which we moved aside, ever refused it)',
+      /not SETTLED/i,
+      'a commission can be written already ELIGIBLE for money the State has not received — requestPayout ' +
+        'selects exactly this status, so the row is payable the moment it exists and never passes through ' +
+        'the transition the UPDATE rule watches',
+    );
+
+    // And the same insert is accepted at PENDING, so what is refused is the
+    // payable status and not the insert.
+    await pool.query(
+      `INSERT INTO commissions
+         (agent_id, transaction_id, policy_id, rate_basis_points, basis_amount_kobo, amount_kobo, status)
+       VALUES ($1, $2, $3, 150, $4, 1, 'PENDING')`,
+      [existing.agent_id, bare.id, policy!.id, c.amountKobo],
     );
   });
 });
