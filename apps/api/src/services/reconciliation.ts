@@ -413,7 +413,23 @@ export async function runReconciliation(params: {
       bump(status);
       if (status === 'MATCHED') matched += 1;
       else if (status === 'UNCHECKED') unchecked += 1;
-      else if (['MISSING_PAYMENT', 'AMOUNT_MISMATCH', 'DUPLICATE_PAYMENT'].includes(status)) {
+      else if (
+        (EXCEPTION_STATUSES as readonly string[]).includes(status) &&
+        status !== 'PENDING_SETTLEMENT'
+      ) {
+        /*
+         * Counted from the shared list, less the one status that is not an
+         * exception when it is written.
+         *
+         * PENDING_SETTLEMENT is in the list because it becomes an exception
+         * once the settlement window has passed — which is why the queue admits
+         * it only past that window. At the moment the sweep writes it the money
+         * is ordinary and inside the window, so counting it here would report
+         * every collection of the day as a fault. Its absence from the old
+         * literal was deliberate, not drift.
+         *
+         * REVERSED is the one that was genuinely missing from both.
+         */
         exceptions += 1;
       }
     }
@@ -1034,6 +1050,15 @@ export async function reconcileSettlement(params: {
  * are not exceptions — MATCHED is a row the sweep reconciled, and UNCHECKED is
  * a row that was never compared to anything because the gateway statement
  * could not be fetched.
+ *
+ * REVERSED was missing, and it is the most serious of them. The matching loop
+ * has always written it: a gateway line saying REVERSED against a payment the
+ * platform holds as VERIFIED is money that came in, was receipted, and went
+ * back. But it appeared in no list — not here, so the queue never showed it and
+ * `resolveException` refused to close it, and not in the run's own counter, so
+ * a sweep that found one reported `exceptions: 0`. The sweep noticed, wrote it
+ * down, and told nobody; the receipt went on verifying as valid to any citizen
+ * who scanned it.
  */
 export const EXCEPTION_STATUSES = [
   'MISSING_PAYMENT',
@@ -1041,6 +1066,7 @@ export const EXCEPTION_STATUSES = [
   'AMOUNT_MISMATCH',
   'DUPLICATE_PAYMENT',
   'PENDING_SETTLEMENT',
+  'REVERSED',
 ] as const;
 
 /**
