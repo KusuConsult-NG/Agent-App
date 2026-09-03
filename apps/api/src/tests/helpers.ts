@@ -18,6 +18,7 @@ import { runMigrations } from '../db/migrate';
 import { installEnumObservers } from './enum-observation';
 import { hashPassword } from '../lib/crypto';
 import { recordSettlement } from '../services/reconciliation';
+import { gateway } from '../integrations/gateway';
 import { seedReferenceData } from '../db/seed';
 
 let server: Server | null = null;
@@ -308,9 +309,48 @@ export { pool };
  * needs a receipt therefore has to do what a finance officer does — record the
  * bank credit covering the collection — and this does it through the same
  * service the officer's screen calls rather than by writing rows.
+ *
+ * That now takes two steps rather than one, because `recordSettlement` will no
+ * longer take an officer's word for it: the gateway's statement has to confirm
+ * each reference first. So this imports the statement line the real gateway
+ * would have produced, then records the credit against it — the same order
+ * production runs in, where `runReconciliation` writes those lines from
+ * `fetchStatement` before any officer sees the batch.
+ *
+ * A fixture that wants the *un*corroborated case — money the gateway will not
+ * confirm — should skip this helper and call `recordSettlement` directly, which
+ * is what the settlement tests do.
  */
 let settlementOfficerId: string | null = null;
 let settlementSeq = 0;
+
+/**
+ * The gateway's own account of what it paid out, as `runReconciliation` would
+ * have imported it from `fetchStatement`.
+ *
+ * `recordSettlement` refuses a reference the statement does not confirm, so any
+ * fixture that settles has to do this first — which is the order production
+ * runs in. Each line carries the amount the platform recorded for that
+ * reference, so settling the true figure is corroborated while settling a
+ * different one still reaches the variance path and raises a dispute.
+ *
+ * A test that wants the refusal itself — money no statement confirms — simply
+ * does not call this.
+ */
+export async function importStatementFor(
+  gatewayReferences: string[],
+  importedBy: string | null = null,
+): Promise<void> {
+  await pool.query(
+    `INSERT INTO gateway_statement_lines
+       (gateway, gateway_reference, amount_kobo, status, paid_at, settlement_reference, raw_line, imported_by)
+     SELECT $2, p.gateway_reference, p.amount_kobo, 'SUCCESSFUL', now(), NULL, '{}'::jsonb, $3
+       FROM payments p
+      WHERE p.gateway_reference = ANY($1::text[])
+     ON CONFLICT (gateway, gateway_reference) DO NOTHING`,
+    [gatewayReferences, gateway.name, importedBy],
+  );
+}
 
 export async function settleCollection(params: {
   gatewayReferences: string[];
@@ -334,6 +374,9 @@ export async function settleCollection(params: {
   }
 
   settlementSeq += 1;
+
+  await importStatementFor(params.gatewayReferences, actorId);
+
   const result = await recordSettlement({
     settlementDate: new Date(),
     gatewayReferences: params.gatewayReferences,

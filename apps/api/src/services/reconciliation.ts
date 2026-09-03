@@ -28,6 +28,15 @@ import { queueNotification } from './notifications';
 import { raiseFlag } from './fraud';
 import { log } from '../lib/logger';
 
+/**
+ * Statuses on a statement line that mean the gateway paid the money out.
+ *
+ * The same pair the matching loop treats as a successful collection, named once
+ * so settlement and reconciliation cannot drift into disagreeing about what the
+ * gateway's own words mean.
+ */
+const SETTLEABLE_STATEMENT_STATUSES = ['SUCCESSFUL', 'VERIFIED'];
+
 export interface ReconciliationSummary {
   runId: string;
   periodStart: Date;
@@ -691,6 +700,60 @@ export async function recordSettlement(params: {
         `Payment ${alreadySettled.gateway_reference} was already banked under settlement ` +
           `${alreadySettled.settlement_reference}. Recording it again would count the same money twice.`,
         'Check the bank statement against that settlement, and record only the collections it does not cover.',
+      );
+    }
+
+    /*
+     * The money has to be the gateway's word, not the officer's.
+     *
+     * Settlement is the moment a collection stops being a promise and becomes
+     * government revenue: it moves the transaction to SETTLED, which issues the
+     * receipt and releases the agent's commission. Everything downstream treats
+     * it as proof the State was actually paid.
+     *
+     * Nothing corroborated it. This function checked only that the same
+     * collections were not banked twice; the amount and the bank reference were
+     * whatever the officer typed. One person holding `payment:reconcile` could
+     * therefore mint receipts for money that never arrived — the insider PRD
+     * §68 is written against, needing no accomplice and no database access. The
+     * route beside this one already refuses to let the officer who recorded a
+     * disputed settlement be the one who closes it, so the separation of duties
+     * was understood; it simply was not applied to the entry itself.
+     *
+     * `gateway_statement_lines` is the gateway's own account of what it paid
+     * out, imported by `runReconciliation` and append-only by trigger. Migration
+     * 015 calls it "the one control that proves government actually received
+     * the money, rather than the platform believing it did". A reference the
+     * statement does not carry is a reference nobody outside this building has
+     * confirmed, so it cannot be settled here.
+     *
+     * This is a refusal, not a dispute. A dispute is what happens when the
+     * gateway and the platform disagree about an amount, and it still settles
+     * nothing; an unconfirmed reference is the prior question of whether there
+     * is anything to disagree about.
+     */
+    const unconfirmed = await query<{ gateway_reference: string }>(
+      client,
+      `SELECT r.gateway_reference
+         FROM unnest($1::text[]) AS r(gateway_reference)
+        WHERE NOT EXISTS (
+          SELECT 1 FROM gateway_statement_lines l
+           WHERE l.gateway = $2
+             AND l.gateway_reference = r.gateway_reference
+             AND l.status = ANY($3::text[]))
+        ORDER BY 1`,
+      [params.gatewayReferences, gateway.name, SETTLEABLE_STATEMENT_STATUSES],
+    );
+    if (unconfirmed.length > 0) {
+      const named = unconfirmed.slice(0, 5).map((row) => row.gateway_reference).join(', ');
+      const more = unconfirmed.length > 5 ? ` and ${unconfirmed.length - 5} more` : '';
+      throw conflict(
+        'SETTLEMENT_NOT_CORROBORATED',
+        `The gateway's statement does not confirm ${unconfirmed.length} of the ` +
+          `${params.gatewayReferences.length} collections in this batch: ${named}${more}. ` +
+          'Recording it would issue receipts for money nobody outside this platform has confirmed arrived.',
+        'Import the statement covering this settlement date, then record the batch again. ' +
+          'If the gateway has settled money it will not confirm, raise it with the gateway rather than here.',
       );
     }
 

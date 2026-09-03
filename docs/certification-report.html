@@ -1912,6 +1912,79 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
         </dl>
       </article>
 
+      <article class="finding crit">
+        <div class="finding-head">
+          <span class="finding-id">D-48</span>
+          <h3 class="finding-title" style="margin:0">One officer could mint government receipts for money that never arrived</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          Settlement is the moment a collection stops being a promise and becomes
+          government revenue. Since <code>258ef0e</code> it is also the moment the receipt
+          is issued and the agent&rsquo;s commission is released &mdash; the platform was
+          deliberately strengthened so that neither happens until the money has reached the
+          State&rsquo;s account rather than merely the gateway&rsquo;s confirmation.
+        </p>
+        <p>
+          <strong>Nothing corroborated the arrival.</strong>
+          <code>POST /government/settlements</code> required the <code>payment:reconcile</code>
+          permission and nothing else. <code>recordSettlement</code> checked only that the
+          same collections were not banked twice; the amount and the bank reference were
+          whatever the officer typed. A single finance officer could therefore name any
+          verified collection, type a figure, and the platform would mark it SETTLED, issue
+          a government receipt carrying a QR code the public can verify, and make the
+          commission payable &mdash; for money no bank ever sent. No accomplice, no database
+          access, no forged token: the authorised insider PRD &sect;68 names first.
+        </p>
+        <div class="code">a lone finance officer recorded a settlement corroborated by nothing — no statement
+line, no second officer — and the platform answered 201 RECONCILED, moved the
+transaction to SETTLED and issued 1 government receipt(s)</div>
+        <p>
+          The evidence table for it already existed and was already trusted elsewhere.
+          <code>gateway_statement_lines</code> holds the gateway&rsquo;s own account of what
+          it paid out; migration 015 calls it &ldquo;the one control that proves government
+          actually received the money, rather than the platform believing it did&rdquo;, and
+          the reconciliation sweep refuses to run without it. The settlement route was never
+          asked the same question. The asymmetry was not a considered position: the route
+          <em>beside</em> this one already refuses to let the officer who recorded a disputed
+          settlement be the one who closes it, so separation of duties was understood here
+          &mdash; it simply was not applied to the entry itself.
+        </p>
+        <dl>
+          <dt>Fix</dt>
+          <dd>
+            <code>recordSettlement</code> now refuses any batch containing a gateway
+            reference the statement does not confirm as paid, naming the references it
+            cannot corroborate and telling the officer to import the statement first. It is
+            a refusal rather than a dispute: a dispute is what happens when the gateway and
+            the platform disagree about an amount, and it still settles nothing; an
+            unconfirmed reference is the prior question of whether there is anything to
+            disagree about. The ten existing settlement tests &mdash; including the variance
+            path and the separation-of-duties refusal &mdash; pass unchanged once the fixture
+            imports the statement first, which is the order production already runs in.
+          </dd>
+          <dt>What this does not fix</dt>
+          <dd>
+            The rule is enforced in the service, not in the database, so it does not hold
+            against the position this report elsewhere insists on testing: a compromised
+            service account at a <code>psql</code> prompt can still
+            <code>UPDATE transactions SET status = 'SETTLED'</code> and let the promotion job
+            release the commission. The receipt itself is trigger-protected and survives
+            that attack; the SETTLED state that gates commission is not. Carried as an open
+            item rather than closed quietly. <em>(&sect;11 item 4)</em>
+          </dd>
+          <dt>Found by</dt>
+          <dd>
+            The adversarial money-path review, in one of twelve assertions it left failing.
+            The other eleven concern the same area &mdash; disputed settlements, revoked
+            acknowledgements, the age of money in transit &mdash; and are <strong>not yet
+            triaged</strong>: some will be defects and some will be the auditor&rsquo;s
+            harness misreading the platform&rsquo;s contract, and this revision does not
+            claim to know which are which. The suite is committed with them failing.
+          </dd>
+        </dl>
+      </article>
+
       <article class="finding high">
         <div class="finding-head">
           <span class="finding-id">D-47</span>

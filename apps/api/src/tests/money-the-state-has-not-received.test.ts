@@ -29,6 +29,7 @@ import {
   createGovernmentUser,
   firstLgaId,
   get,
+  importStatementFor,
   loginAs,
   pool,
   post,
@@ -385,6 +386,7 @@ describe('Before the money reaches a government account', () => {
 describe('When the money arrives', () => {
   it('issues the receipt, and only then', async () => {
     const collection = await collectAndConfirm();
+    await importStatementFor([collection.gatewayReference]);
 
     const settlement = await recordSettlement({
       settlementDate: new Date(),
@@ -415,6 +417,7 @@ describe('When the money arrives', () => {
 
   it('records the whole story in order, so an auditor can read it', async () => {
     const collection = await collectAndConfirm();
+    await importStatementFor([collection.gatewayReference]);
     await recordSettlement({
       settlementDate: new Date(),
       gatewayReferences: [collection.gatewayReference],
@@ -486,6 +489,7 @@ describe('When the money arrives', () => {
      */
     const collection = await collectAndConfirm();
     const short = BigInt(collection.amountKobo) - 100n;
+    await importStatementFor([collection.gatewayReference]);
 
     const settlement = await recordSettlement({
       settlementDate: new Date(),
@@ -513,6 +517,7 @@ describe('When the money arrives', () => {
 
   it('issues one receipt however many times settlement is recorded', async () => {
     const collection = await collectAndConfirm();
+    await importStatementFor([collection.gatewayReference]);
     const settle = () =>
       recordSettlement({
         settlementDate: new Date(),
