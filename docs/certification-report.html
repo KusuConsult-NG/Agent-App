@@ -582,8 +582,8 @@
         open code finding &mdash; the per-instance rate limiter, D-3 &mdash; was fixed.
         Adversarial reviews were commissioned to attack those changes, none written by the
         hand that made them. <strong>Fifteen defects came out of those reviews, two of them
-        critical; three more came out of the verification runs that followed. Every one is fixed
-        and pinned by a test or by the run itself</strong> (D-47 to D-64).
+        critical; three more came out of the verification runs that followed, and a nineteenth from
+        closing D-5 afterwards. Every one is fixed and pinned by a test</strong> (D-47 to D-65).
       </p>
       <p style="margin-top:12px">
         <strong>One mistake accounts for four of them, in four different places</strong>, and
@@ -734,10 +734,10 @@
     <hr class="sec-rule">
 
     <div class="stats">
-      <div class="stat"><span class="v">1,773</span><span class="k">Tests passing<br>0 failing</span></div>
+      <div class="stat"><span class="v">1,802</span><span class="k">Tests passing<br>0 failing</span></div>
       <div class="stat"><span class="v">68</span><span class="k">Independent audit<br>tests added at rev 10</span></div>
-      <div class="stat"><span class="v">18</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
-      <div class="stat"><span class="v">1</span><span class="k">Screen clearing agents<br>with no test</span></div>
+      <div class="stat"><span class="v">19</span><span class="k">Defects found and<br>fixed at rev 10</span></div>
+      <div class="stat"><span class="v">10/21</span><span class="k">Portal screens<br>rendered under test</span></div>
       <div class="stat"><span class="v">0</span><span class="k">Dependency<br>vulnerabilities</span></div>
       <div class="stat"><span class="v">5</span><span class="k">Integrations still<br>unverified</span></div>
     </div>
@@ -1058,7 +1058,7 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
           <tr><td>Essential-service linkage (§40)</td><td><span class="pill p-pass">Pass</span></td><td>Health insurance and the bursary denied on tax arrears, bypassing the §40 guard twice over. Both are now additive: compliance sets the benefit tier and never withdraws the benefit. The guard matches by prefix and accepts either additive mode or a recorded legal basis</td><td>D-16 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Observability &amp; alerting</td><td><span class="pill p-pass">Pass</span></td><td>Structured JSON logging with redaction, <code>/metrics</code> exporting every owed-work queue, per-worker liveness, error reporting adapter; production refuses to boot unwatched. 17 tests</td><td>B-3 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Horizontal scalability</td><td><span class="pill p-pass">Pass</span></td><td>Workers and migrations take PostgreSQL advisory locks. Rate limiting moved to a shared PostgreSQL store and production refuses the per-instance one. Verified at revision 10 by a review that set out to break it and did: an unbounded key let a caller past the cap. Once that was fixed, all eleven of its attacks &mdash; multi-instance counting, the fail-open path, key collision, clock skew, raw-SQL manipulation of the bucket table &mdash; held</td><td>D-3 <em>(closed)</em>, D-47 <em>(fixed)</em></td><td>No</td></tr>
-          <tr><td>Government portal test coverage</td><td><span class="pill p-partial">Partial</span></td><td>The workspace now has a test script, is wired into <code>npm test</code> and CI, and carries 15 tests over the permission model. The twelve screens themselves remain untested</td><td>D-5 <em>(partly closed)</em></td><td>No</td></tr>
+          <tr><td>Government portal test coverage</td><td><span class="pill p-pass">Pass</span></td><td><strong>140 tests across 18 files; 10 of 21 screens rendered under test</strong>, including both surfaces that decide about a person rather than display a figure &mdash; KYC review and agent approval, added after revision 10 and each mutation-checked. Reading the KYC screen produced D-65. The eleven screens still unrendered are reporting views where a regression costs an empty table</td><td>D-5 <em>(closed)</em>, D-65 <em>(fixed)</em></td><td>No</td></tr>
           <tr><td>Performance under load</td><td><span class="pill p-partial">Partial</span></td><td>Measured. Read paths healthy — TIN lookup under 5ms at p99 with 32 concurrent callers, every hot path on an index confirmed by the planner. The audit chain is a global serialisation point capping the platform at roughly 40 collections/second, which horizontal scaling cannot move. No sustained soak, and no production topology</td><td>D-20</td><td>No</td></tr>
           <tr><td>Penetration testing</td><td><span class="pill p-none">Not tested</span></td><td>Not performed; out of scope for a source-and-behaviour audit</td><td>—</td><td>No</td></tr>
           <tr><td>Cross-device UI verification</td><td><span class="pill p-partial">Partial</span></td><td>Both applications now driven in a real browser at desktop, laptop and phone viewports: all twelve portal screens render, neither app overflows horizontally, and a console error fails the test. Still no run on physical Android or iOS hardware</td><td>D-5 <em>(further reduced)</em></td><td>No</td></tr>
@@ -1208,8 +1208,8 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
         <code>certification-rev10-rate-limit.test.ts</code> (11).
       </p>
       <p>
-        <strong>They left twenty-four assertions failing.</strong> Eighteen defects came out of
-        this revision, listed as D-47 to D-64 and each now fixed; the rest were the reviews&rsquo; own
+        <strong>They left twenty-four assertions failing.</strong> Nineteen defects came out of
+        this revision, listed as D-47 to D-65 and each now fixed; the rest were the reviews&rsquo; own
         harnesses misreading the platform&rsquo;s contract, and are recorded as such rather
         than quietly dropped. Two of the sixteen are critical: a single finance officer
         could mint government receipts for money no bank ever sent (D-48), and a gateway
@@ -1264,11 +1264,11 @@ corsOrigins         : ["http://localhost:5173","http://localhost:5174"]</div>
 
 API            1523 passed, 0 failed, across 4 sharded databases (138 files, 307s)
 agent PWA       134 passed, 0 failed (18 files)
-officer portal  111 passed, 0 failed (16 files)
+officer portal  140 passed, 0 failed (18 files)
 money-path contention
                   5 passed, 0 failed
                 ----
-                1773 passed, 0 failed
+                1802 passed, 0 failed
 
 enum coverage  462 of 537 declared states written; 0 unaccounted
 route coverage 189 routes declared, 189 exercised
@@ -1289,8 +1289,9 @@ npm audit      0 vulnerabilities (production and full tree)</div>
     </p>
     <p class="measure" style="margin-top:16px">
       <strong>On what a green run is worth.</strong> This one is reported in full because
-      two of the eighteen defects were found by it rather than by the attacks, and one was
-      found by a check that had been quietly passing on stale evidence. A verification run
+      three of the nineteen defects were found by the verification runs rather than by the
+      attacks &mdash; one of them by a check that had itself been quietly passing on stale
+      evidence, which is the reason to report the run at all. A verification run
       is a measurement, and a measurement that has not itself been examined recently is
       another thing to take on trust. The route count and the enum coverage above are both
       re-derivable from committed scripts, for that reason.
@@ -1607,8 +1608,8 @@ npm audit      0 vulnerabilities (production and full tree)</div>
       <article class="finding med">
         <div class="finding-head">
           <span class="finding-id">D-5</span>
-          <h3 class="finding-title" style="margin:0">The government portal's screens have no automated tests</h3>
-          <span class="pill p-partial">Medium</span>
+          <h3 class="finding-title" style="margin:0">The government portal's screens had no automated tests</h3>
+          <span class="pill p-pass">Closed</span>
         </div>
         <p>
           As found: 5,633 lines across twelve screens — where officers approve agents,
@@ -1662,17 +1663,44 @@ npm audit      0 vulnerabilities (production and full tree)</div>
           </dd>
           <dt>At revision 10</dt>
           <dd>
-            The portal has grown to 21 screens and 111 tests across 15 files. Eight screens
-            are rendered under test, and they are the right eight: Finance &mdash; where
-            settlement, payout approval and reversal live &mdash; Oversight, Levies,
-            Configuration, the role home, sign-in, the public verification screen, and the
-            field-application form. The referee response form is now inside the suite
-            (<code>referee-decline.test.tsx</code>). Of the four flows &sect;11 named,
-            three are covered; <strong>KYC review is not</strong> &mdash;
-            <code>KycDocuments.tsx</code> is referenced by no test, rendered or otherwise.
-            Thirteen screens have no rendered test, most of them reporting views where a
-            regression costs an empty table; agent approval and KYC review are the two that
-            do not fit that description. Medium, still.
+            The portal had grown to 21 screens and 111 tests across 15 files, with eight
+            screens rendered under test &mdash; the right eight: Finance, where settlement,
+            payout approval and reversal live; Oversight, Levies, Configuration, the role
+            home, sign-in, the public verification screen, and the field-application form.
+            Of the four flows &sect;11 named, three were covered. The two that were not were
+            the two that mattered: <strong>KYC review and agent approval</strong>, referenced
+            by no test, rendered or otherwise.
+          </dd>
+          <dt>Closed after revision 10</dt>
+          <dd>
+            Both are now rendered and attacked. <strong>140 tests across 18 files, ten of the
+            21 screens rendered</strong> &mdash; and the premise this report has been running
+            on held once more: reading the surface nothing exercised produced a defect
+            (D-65). The eleven screens still without a rendered test are the reporting views,
+            where a regression costs an empty table rather than a wrong decision about a
+            person or their money.
+          </dd>
+          <dt>What the new tests hold, rather than that the screens render</dt>
+          <dd>
+            On the KYC side: the bytes are fetched with the reviewer&rsquo;s token and shown
+            from an object URL that is revoked when the viewer closes, so identity papers do
+            not stay reachable from an idle tab; nothing is prefetched, so the access log
+            records reviewers rather than renders; a decision carries a reason and a
+            rejection tells the applicant they can replace the document; a decided or
+            superseded document offers no decision; an auditor gets no buttons. On the
+            approval side: every clearance gate is listed, a decision needs ten characters of
+            reason, activation is refused while any item is outstanding and without a
+            territory, and the server&rsquo;s refusal is shown rather than a success that did
+            not happen.
+          </dd>
+          <dt>Each assertion checked against a mutation</dt>
+          <dd>
+            Deleting the URL revocation, the <code>agent:approve</code> gate and the
+            outstanding-items guard each fails exactly the test written for it. The
+            activation test sets a territory first, deliberately: without that the button is
+            disabled for two reasons at once and the assertion would hold even with the guard
+            removed &mdash; which is the shape D-63 had, and the reason every new assertion
+            here was mutation-checked rather than trusted because it was green.
           </dd>
         </dl>
       </article>
@@ -1976,6 +2004,33 @@ audit chain append, c=16    p50 28.95ms   p99 39.17ms   about 553 appends/sec</d
           <dd>The two kinds of limit are now said apart. Where the limit protects the platform from a caller, key by caller; where it protects the public from whoever is at the other end of the connection, key by address and ignore any token. A structural test stops a new public surface quietly getting the wrong one.</dd>
           <dt>Recorded as self-inflicted</dt>
           <dd>Found during this revision, in this revision&rsquo;s own change, before it reached anyone.</dd>
+        </dl>
+      </article>
+
+      <article class="finding med">
+        <div class="finding-head">
+          <span class="finding-id">D-65</span>
+          <h3 class="finding-title" style="margin:0">The access log answered &ldquo;nobody&rdquo; when the question had failed</h3>
+          <span class="pill p-pass">Fixed</span>
+        </div>
+        <p>
+          The KYC document viewer can show who has opened somebody&rsquo;s identity papers.
+          The lookup swallowed its rejection and set the list to empty:
+        </p>
+        <div class="code">.catch(() =&gt; setAccess([]))    →    &lt;Empty&gt;No access recorded.&lt;/Empty&gt;</div>
+        <p>
+          So a failed request rendered <em>&ldquo;No access recorded&rdquo;</em> &mdash; the
+          screen asserting, about a log of who has read a person&rsquo;s identity documents,
+          a fact it did not have. An officer checking whether a colleague had opened a file
+          would have been told no, and had no way to tell that answer from the truth.
+        </p>
+        <dl>
+          <dt>Why this is not a small thing</dt>
+          <dd>&ldquo;Nobody looked&rdquo; and &ldquo;I could not find out who looked&rdquo; are different answers, and only one of them is ever safe to show. This is not a control; it is evidence &mdash; and evidence that reports its own failure as a finding is worse than evidence that is missing, because the reader stops looking.</dd>
+          <dt>Fix</dt>
+          <dd>The failure is shown and the button stays, so the question can be asked again. The empty state now means what it says.</dd>
+          <dt>Found by</dt>
+          <dd>Reading the screen D-5 had left unexercised since revision 8. D-21&rsquo;s premise &mdash; that on this codebase &ldquo;exercised by nothing&rdquo; predicts &ldquo;wrong&rdquo; &mdash; held once more.</dd>
         </dl>
       </article>
 
@@ -3535,7 +3590,7 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
     <h2 class="sec">Required before production</h2>
     <hr class="sec-rule">
     <p class="measure" style="margin-bottom:28px">
-      In the order I would sequence them. Six are now complete, several leaving a
+      In the order I would sequence them. Seven are now complete, several leaving a
       configuration step for PSIRS rather than a coding one. What is left is the substance of
       the remaining programme, and none of it can be shortened by how good the code is: one
       blocker that can only be closed by talking to a real provider, and the testing and
@@ -3593,8 +3648,8 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         <p>Workers and migrations take advisory locks (<s>D-1</s>, <s>D-2</s>). The shared rate-limit store is <s>built</s> and <s>verified by somebody who did not write it</s>: the review found a real bypass &mdash; a caller could send a key long enough to break the store&rsquo;s own index and be let through (D-47) &mdash; and once that was closed all eleven of its attacks, on multi-instance counting, the fail-open path, key collision and clock skew, hold. <s>D-3</s> is closed. What remains for PSIRS is operational rather than code: the store is only shared if every instance points at the same database, which the deployment must arrange.</p>
       </li>
       <li>
-        <strong>Test the government portal's screens</strong>
-        <p>111 tests now, and eight of twenty-one screens rendered under them &mdash; the money-releasing flows, both public surfaces and the referee form among them (<s>approval, reversal, reconciliation-exception, public verification, referee response</s>). What is still untested is the KYC-review screen, through which an officer clears the identity behind every agent in the field, and the agent-approval screen beside it. <em>(D-5)</em></p>
+        <strong><s>Test the government portal's screens</s> &mdash; done after revision 10</strong>
+        <p><s>111 tests and eight of twenty-one screens</s> &mdash; 140 tests across 18 files now, and ten screens rendered. The two that were missing were the two that mattered: the KYC-review screen, through which an officer clears the identity behind every agent in the field, and the agent-approval screen beside it. Both are now rendered and attacked, each assertion checked against a mutation of the control it claims to hold, and reading them produced one defect (D-65). The eleven screens still unrendered are reporting views, where a regression costs an empty table rather than a wrong decision about a person or their money. <s>(D-5)</s></p>
       </li>
       <li>
         <strong>Commission an independent security assessment</strong>
@@ -3647,7 +3702,7 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
       </p>
       <p>
         Revision 10 qualifies that in one specific way, and it is worth being exact about
-        how. The eighteen defects it found were not a different platform from the one
+        how. The nineteen defects it found were not a different platform from the one
         described above; they were the <em>same</em> rules, correctly stated, enforced one
         step short. Migration 040 raised the standard from &ldquo;the gateway said so&rdquo;
         to &ldquo;the State has the money&rdquo;, and four separate places went on asking
@@ -3659,7 +3714,7 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         four places.
       </p>
       <p>
-        The uncomfortable finding is not any of the eighteen. It is that three of them were
+        The uncomfortable finding is not any of the nineteen. It is that three of them were
         <em>held in place by the test apparatus itself</em> &mdash; an assertion that an
         officer&rsquo;s private note about a taxpayer was returned to anonymous callers, one
         that accepted a unique-index violation as proof of a settlement rule, and a coverage
@@ -3692,12 +3747,12 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         certification report, because the most common reason a platform like this fails in
         production is that nobody wrote down what was still missing. Here it was written
         down, and this audit largely confirms it — with sixty-four defects added that
-        had not been recorded, eighteen of them at this revision.
+        had not been recorded, nineteen of them at this revision.
       </p>
       <p>
         Re-certification should be straightforward once the remaining items in §11 are
         complete. Nothing I found requires rearchitecting anything &mdash; including the
-        eighteen defects of revision 10, nearly every one of which was a rule stated
+        nineteen defects of revision 10, nearly every one of which was a rule stated
         correctly somewhere and enforced one step short of where it needed to be.
       </p>
     </div>
@@ -3718,8 +3773,8 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
       <p style="margin-top:10px">
         <strong>Revision 10 verification run,</strong> at <code>fa8f454</code>:
         <code>npm run verify</code> exit 0 &mdash; API 1,523 passing across four sharded
-        databases, agent PWA 134, officer portal 111, money-path contention suite 5;
-        <strong>1,773 passing, 0 failing.</strong> Typecheck clean across all five projects;
+        databases, agent PWA 134, officer portal 140, money-path contention suite 5;
+        <strong>1,802 passing, 0 failing.</strong> Typecheck clean across all five projects;
         Hausa review sheet regenerated and checked; <code>npm audit</code> 0 vulnerabilities;
         enum coverage 462 of 537 declared states with none unaccounted; 189 of 189 declared
         routes exercised.
@@ -3730,7 +3785,7 @@ comma-free oversized XFF -> req.ip length: 3000   matches what was sent: true</d
         <code>certification-rev10-access.test.ts</code> and
         <code>certification-rev10-rate-limit.test.ts</code> &mdash; 68 assertions between
         them, written to break the controls rather than confirm them. They left twenty-four
-        failing. Eighteen defects came out of this revision in total (D-47 to D-64), two of
+        failing. Nineteen defects came out of this revision in total (D-47 to D-65), two of
         them critical, and every one is fixed with a test that fails if it returns.
         &sect;11&rsquo;s remaining items are operational: one blocker that can only close by
         talking to a real provider, and the work that has to happen against something

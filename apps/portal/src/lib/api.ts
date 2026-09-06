@@ -285,6 +285,92 @@ export async function stepUp(action: string, phone: string): Promise<void> {
   await api.post('/auth/step-up', { action, destination: phone, code });
 }
 
+/**
+ * Send one file as the request body.
+ *
+ * The API takes the file itself rather than a multipart envelope -- one
+ * document at a time, its type declared in the header and checked against the
+ * bytes on the far side -- so this sets the Content-Type from the file and
+ * sends the bytes. Everything else about a request (the bearer token, the
+ * refresh-and-retry on a stale session, reading the API's own sentence out of
+ * a refusal) has to hold here too, and is why this sits beside the other
+ * clients rather than inside a screen.
+ */
+export async function uploadFile(path: string, file: File): Promise<unknown> {
+  const send = async (): Promise<Response> =>
+    fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        'content-type': file.type,
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+      },
+      body: file,
+    });
+
+  let response = await send();
+
+  if (response.status === 401) {
+    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    if (refreshToken) {
+      try {
+        const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(
+          '/auth/refresh',
+          { method: 'POST', body: { refreshToken }, authenticated: false },
+        );
+        setSession(session);
+        response = await send();
+      } catch {
+        setSession(null);
+      }
+    }
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new ApiRequestError(
+      response.status,
+      (payload as { error?: ApiError } | null)?.error ?? {
+        code: 'UPLOAD_FAILED',
+        message: `The file could not be uploaded (${response.status}).`,
+        moneyStatus: 'NOT_APPLICABLE',
+      },
+      payload,
+    );
+  }
+  return payload;
+}
+
+/**
+ * Ask the API for a report in one of the formats it can write, and save it.
+ *
+ * `downloadCsv` below takes rows the screen already has and turns them into a
+ * file in the browser, which is right for a table the officer is looking at.
+ * It cannot produce a workbook or a PDF, and it would be the wrong place to
+ * try: those are written by the server, counted against the role's export
+ * limit, and recorded in the audit log. A second, client-side writer would
+ * produce files that never appear in that record.
+ *
+ * Built on `fetchFile` rather than beside it, so an export inherits the same
+ * bearer token, the same refresh-and-retry on a stale session, and the same
+ * habit of reading the API's own sentence out of a refusal -- which for an
+ * export is usually the row limit for the officer's role, and is exactly what
+ * they need to be told.
+ */
+export async function downloadExport(
+  path: string,
+  format: 'csv' | 'xlsx' | 'pdf',
+  filename: string,
+): Promise<void> {
+  const separator = path.includes('?') ? '&' : '?';
+  const blob = await fetchFile(`${path}${separator}format=${format}`);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${filename}.${format}`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export function downloadCsv(filename: string, contents: string): void {
   const blob = new Blob([contents], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);

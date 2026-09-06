@@ -108,6 +108,20 @@ function looksLikeCode(text: string): boolean {
     // A run that opens with a semicolon or a comma is the tail of a statement
     // the pattern walked into, never a sentence somebody wrote.
     /^[;,]/.test(text) ||
+    /*
+     * A bare pipe: the middle of a type union.
+     *
+     * `field: Record<string, unknown> | null; next: Record<…>` puts the union
+     * tail between two angle brackets, which is exactly the shape the
+     * between-tags pattern is looking for. Four of these appeared with the
+     * transaction file and the case workspace, and none of them is a string an
+     * officer will ever read.
+     *
+     * Matched as a standalone `|` rather than by naming `Record`, because the
+     * next one will be a `string | null` or a `Date | undefined`. No sentence
+     * in this application contains a pipe surrounded by spaces.
+     */
+    /(^|\s)\|(\s|$)/.test(text) ||
     text.endsWith('(') ||
     /^[a-z][A-Za-z0-9_]*$/.test(text) ||
     // `something.method(` — a call. No sentence contains one.

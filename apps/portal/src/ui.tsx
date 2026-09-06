@@ -1,8 +1,8 @@
 /** Shared presentation components for the government portal. */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
-import type { ApiError } from './lib/api';
+import { ApiRequestError, downloadExport, type ApiError } from './lib/api';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -54,6 +54,45 @@ export function Stat({
       <p className="stat__value">{value}</p>
       {hint && <p className="stat__hint">{text(hint)}</p>}
     </div>
+  );
+}
+
+/**
+ * A change against the period before, or an honest silence.
+ *
+ * `null` basis points is not zero growth. A ward deployed this month, or a levy
+ * introduced last week, has nothing to compare against — and rendering that as
+ * "0%" is a claim the data does not support, on exactly the rows an officer is
+ * most likely to be looking at.
+ *
+ * The arrow and the sign both carry the direction, because colour alone fails
+ * for a reviewer who cannot distinguish red from green and prints badly.
+ */
+export function Growth({
+  basisPoints,
+  hint,
+}: {
+  basisPoints: number | string | null | undefined;
+  hint?: Label;
+}) {
+  const text = useLabel();
+  const { t } = usePortalI18n();
+  if (basisPoints === null || basisPoints === undefined || basisPoints === '') {
+    return <span className="muted">{t.ofcDbNoComparison}</span>;
+  }
+  const bp = Number(basisPoints);
+  if (!Number.isFinite(bp)) return <span className="muted">{t.ofcDbNoComparison}</span>;
+
+  const percent = bp / 100;
+  const rising = bp > 0;
+  const flat = bp === 0;
+  return (
+    <span className={flat ? 'muted' : rising ? 'growth growth--up' : 'growth growth--down'}>
+      {flat ? '' : rising ? '▲ ' : '▼ '}
+      {rising ? '+' : ''}
+      {percent.toFixed(1)}%
+      {hint && <span className="muted"> {text(hint)}</span>}
+    </span>
   );
 }
 
@@ -327,5 +366,152 @@ export function LanguageToggle({ align = 'flex-end' }: { align?: 'flex-end' | 'f
         </button>
       ))}
     </div>
+  );
+}
+
+/**
+ * The three ways a report leaves, offered together.
+ *
+ * Every screen that exported had its own button, its own filename convention
+ * and its own idea of what the file was for. Two more formats each would have
+ * been six buttons per screen and six chances to forget that the server, not
+ * the browser, is what writes them -- and a file the browser writes is a file
+ * that never appears in the export record.
+ *
+ * The formats are labelled by what they are for rather than by their
+ * extension, because that is the choice the officer is actually making: a
+ * spreadsheet to work in, a document to file, or the raw rows for another
+ * system.
+ *
+ * Refusals are shown here rather than thrown away. The commonest one by far is
+ * the row limit for the officer's role, which is a sentence they can act on --
+ * narrow the period, or ask for the limit to be raised -- and which a silent
+ * failure would turn into "the button does nothing".
+ */
+export function ExportButtons({
+  path,
+  filename,
+  disabled,
+}: {
+  /** The API path, with its filters already in the query string. */
+  path: string;
+  filename: string;
+  disabled?: boolean;
+}) {
+  const { t } = usePortalI18n();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const formats: { format: 'xlsx' | 'pdf' | 'csv'; label: keyof TranslationDictionary }[] = [
+    { format: 'xlsx', label: 'ofcExportExcel' },
+    { format: 'pdf', label: 'ofcExportPdf' },
+    { format: 'csv', label: 'ofcExportCsv' },
+  ];
+
+  return (
+    <div className="export-buttons">
+      <ErrorAlert error={error} />
+      {formats.map(({ format, label }) => (
+        <button
+          key={format}
+          type="button"
+          className="small secondary"
+          disabled={disabled || busy !== null}
+          onClick={async () => {
+            setBusy(format);
+            setError(null);
+            try {
+              await downloadExport(path, format, filename);
+            } catch (caught) {
+              setError(caught instanceof ApiRequestError ? caught.error : null);
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          {busy === format ? t.ofcExportWorking : t[label]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * What a change actually changed.
+ *
+ * `audit_logs.old_value` and `new_value` have been captured on every write
+ * since the platform started, and for most of that time nothing rendered them:
+ * an auditor asking "what did that action actually do" read JSON out of a CSV
+ * export. The Transaction 360 timeline started showing them; the general audit
+ * screen, which is where somebody goes when they do not already know which
+ * transaction to look at, still did not.
+ *
+ * IT SHOWS THE DIFFERENCE, NOT BOTH SIDES
+ *
+ * A row whose before and after are printed in full asks the reader to spot
+ * which of fourteen fields moved. Only the keys that differ are listed, as
+ * `field: was → now`, which is the question being asked. A key present on one
+ * side and not the other is shown with a dash for the missing side rather than
+ * omitted -- a field that appeared or disappeared is a change.
+ *
+ * WHERE IT SAYS NOTHING
+ *
+ * An action with neither side is a creation or a read, and renders as nothing
+ * at all rather than as "no changes": an empty diff on a row that never had
+ * one is noise on every line of the busiest screen in the portal.
+ */
+export function BeforeAfter({
+  before,
+  after,
+}: {
+  before: unknown;
+  after: unknown;
+}) {
+  const { t } = usePortalI18n();
+
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+
+  const oldRecord = asRecord(before);
+  const newRecord = asRecord(after);
+  if (!oldRecord && !newRecord) {
+    /*
+     * A value that is not an object at all -- a bare string or number in
+     * `new_value` -- still deserves to be shown rather than swallowed.
+     */
+    if (before === null || before === undefined) {
+      if (after === null || after === undefined) return null;
+    }
+    return (
+      <span className="before-after">
+        {t.ofcT3Before}: {String(before ?? '—')} → {t.ofcT3After}: {String(after ?? '—')}
+      </span>
+    );
+  }
+
+  const show = (value: unknown): string => {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+
+  const keys = [...new Set([...Object.keys(oldRecord ?? {}), ...Object.keys(newRecord ?? {})])];
+  const changed = keys.filter((key) => show(oldRecord?.[key]) !== show(newRecord?.[key]));
+
+  if (changed.length === 0) return null;
+
+  return (
+    <ul className="before-after">
+      {changed.map((key) => (
+        <li key={key}>
+          <span className="before-after__field">{key}</span>{' '}
+          <span className="before-after__was">{show(oldRecord?.[key])}</span>
+          {' → '}
+          <span className="before-after__now">{show(newRecord?.[key])}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

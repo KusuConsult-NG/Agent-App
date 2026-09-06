@@ -210,6 +210,11 @@ export interface TranslationDictionary {
   enumRepeatedFailedPayments: string;
   enumReversalPattern: string;
   enumUnusualVolume: string;
+  enumFrequentManualIntervention: string;
+  enumRepeatedReceiptRegeneration: string;
+  enumUnusualOfficerActivity: string;
+  enumUnusualTransactionTiming: string;
+  enumUser: string;
   enumRapidSuccession: string;
   enumCommissionAnomaly: string;
   enumSettlementVariance: string;
@@ -1129,6 +1134,66 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcRlExportLimit: string;
+  ofcRlExportsNothing: string;
+  ofcCwSave: string;
+  enumIntegrationAlert: string;
+  enumNeverCalled: string;
+  enumDegraded: string;
+  enumDown: string;
+  ofcOvChange: string;
+  enumApprovalWaiting: string;
+  enumCaseAssigned: string;
+  enumCaseEscalated: string;
+  enumCaseMention: string;
+  enumSystemAlert: string;
+  enumInfo: string;
+  enumWarning: string;
+  ofcNavInbox: string;
+  ofcInHint: string;
+  ofcInUnread: string;
+  ofcInCritical: string;
+  ofcInCriticalTitle: string;
+  ofcInSeverity: string;
+  ofcInKind: string;
+  ofcInSubject: string;
+  ofcInWhen: string;
+  ofcInRead: string;
+  ofcInMarkRead: string;
+  ofcInReadAll: string;
+  ofcInShowAll: string;
+  ofcInShowUnread: string;
+  ofcInToYourRole: string;
+  ofcInNothing: string;
+  ofcNavMyAccess: string;
+  ofcAcSessions: string;
+  ofcAcSessionsHint: string;
+  ofcAcDevices: string;
+  ofcAcDevicesHint: string;
+  ofcAcDevice: string;
+  ofcAcUnknownDevice: string;
+  ofcAcThisOne: string;
+  ofcAcAddress: string;
+  ofcAcSignedIn: string;
+  ofcAcLastUsed: string;
+  ofcAcFirstSeen: string;
+  ofcAcLastSeen: string;
+  ofcAcLiveSessions: string;
+  ofcAcEnd: string;
+  ofcAcEndThisOne: string;
+  ofcAcEnded: string;
+  ofcAcBlock: string;
+  ofcAcUnblock: string;
+  ofcAcNoSessions: string;
+  ofcAcNoDevices: string;
+  ofcCwUploadEvidence: string;
+  ofcCwUploadHint: string;
+  ofcCwUploadFile: string;
+  ofcCwUploadWhat: string;
+  ofcCwUploadWhere: string;
+  ofcExportExcel: string;
+  ofcExportPdf: string;
+  ofcExportWorking: string;
   ofcDownloadCsv: string;
   ofcTxReceipt: string;
   ofcTxCreated: string;
@@ -1470,6 +1535,438 @@ export interface TranslationDictionary {
   ofcNavUsers: string;
   ofcNavFieldApp: string;
   ofcNavAllocations: string;
+
+  // ---------------------------------------------------------------------
+  // The command centre: one search box, one work queue, one transaction.
+  //
+  // Added with the officer command centre. These name three surfaces that
+  // did not exist — a search that resolves any government reference, a case
+  // that carries work between departments, and the whole story of one
+  // collection on a single screen.
+  // ---------------------------------------------------------------------
+  ofcNavMyWork: string;
+  ofcNavCases: string;
+  ofcGroupYourDesk: string;
+  ofcSearchLabel: string;
+  ofcSearchPlaceholder: string;
+  ofcSearchSearching: string;
+  ofcSearchNoResults: string;
+  ofcSearchHint: string;
+  ofcSearchTransaction: string;
+  ofcSearchTaxpayer: string;
+  ofcSearchAgent: string;
+  ofcSearchOfficer: string;
+  ofcSearchInvoice: string;
+  ofcSearchReceipt: string;
+  ofcSearchPayment: string;
+  ofcSearchAssessment: string;
+  ofcSearchVehicle: string;
+  ofcSearchRevenueItem: string;
+  ofcSearchPlace: string;
+  ofcSearchCase: string;
+  ofcMwIntro: string;
+  ofcMwAssigned: string;
+  ofcMwAssignedBody: string;
+  ofcMwOpened: string;
+  ofcMwOpenedBody: string;
+  ofcMwMentions: string;
+  ofcMwMentionsBody: string;
+  ofcMwDepartment: string;
+  ofcMwDepartmentBody: string;
+  ofcMwApprovals: string;
+  ofcMwExceptions: string;
+  ofcMwFlags: string;
+  ofcMwOverdue: string;
+  ofcMwNothing: string;
+  ofcMwOpenQueue: string;
+  ofcCwTitle: string;
+  ofcCwIntro: string;
+  ofcCwOpenCase: string;
+  ofcCwStatus: string;
+  ofcNavRoles: string;
+  ofcRlTitle: string;
+  ofcRlIntro: string;
+  ofcRlCatalogueNote: string;
+  ofcRlRole: string;
+  ofcRlOfficers: string;
+  ofcRlPermissions: string;
+  ofcRlSystemRole: string;
+  ofcRlPortalRole: string;
+  ofcRlGrant: string;
+  ofcRlRevoke: string;
+  ofcRlGrantReason: string;
+  ofcRlRevokeReason: string;
+  ofcRlRevokeWarning: string;
+  ofcRlNewRole: string;
+  ofcRlRoleName: string;
+  ofcRlRoleLabel: string;
+  ofcRlCopyFrom: string;
+  ofcRlCopyFromBody: string;
+  ofcRlRetire: string;
+  ofcRlRestore: string;
+  ofcRlIsPortalRole: string;
+  ofcRlSignedOut: string;
+  ofcRlSearchPermission: string;
+  ofcNoneRoles: string;
+  enumClosing: string;
+  ofcNavPeriods: string;
+  enumClean: string;
+  enumException: string;
+  enumNotAvailable: string;
+  enumRandom: string;
+  enumSystematic: string;
+  enumHighestValue: string;
+  enumDrawn: string;
+  enumInReview: string;
+  enumGenerated: string;
+  enumSigned: string;
+  enumTransactionAudit: string;
+  enumAgentActivity: string;
+  enumRevenueCollection: string;
+  enumLgaPerformance: string;
+  enumPaymentReconciliation: string;
+  enumUserActivity: string;
+  enumAnomaly: string;
+  enumAuditSample: string;
+  enumRevenueTarget: string;
+  enumPeriodClosing: string;
+  enumDataChange: string;
+  ofcNavWorkbench: string;
+  ofcWbSamplesDrawn: string;
+  ofcWbItemsOutstanding: string;
+  ofcWbExceptionsFound: string;
+  ofcWbReportsHeld: string;
+  ofcWbSamples: string;
+  ofcWbSamplesHint: string;
+  ofcWbSampleNumber: string;
+  ofcWbTitle: string;
+  ofcWbMethod: string;
+  ofcWbMethodRandom: string;
+  ofcWbMethodSystematic: string;
+  ofcWbMethodHighestValue: string;
+  ofcWbDrawn: string;
+  ofcWbPending: string;
+  ofcWbExceptions: string;
+  ofcWbDrawnAt: string;
+  ofcWbDrawnBy: string;
+  ofcWbNoSamples: string;
+  ofcWbDraw: string;
+  ofcWbDrawHint: string;
+  ofcWbSize: string;
+  ofcWbFrom: string;
+  ofcWbTo: string;
+  ofcWbMinimumNaira: string;
+  ofcWbDrawIsFinal: string;
+  ofcWbDrawnNotice: string;
+  ofcWbSeed: string;
+  ofcWbPopulation: string;
+  ofcWbPosition: string;
+  ofcWbOutcome: string;
+  ofcWbFinding: string;
+  ofcWbRecord: string;
+  ofcWbNoItems: string;
+  ofcWbCompleteHint: string;
+  ofcWbComplete: string;
+  ofcWbReports: string;
+  ofcWbReportsHint: string;
+  ofcWbReportNumber: string;
+  ofcWbReportType: string;
+  ofcWbRows: string;
+  ofcWbPeriod: string;
+  ofcWbGeneratedAt: string;
+  ofcWbSignedBy: string;
+  ofcWbChecksum: string;
+  ofcWbNoReports: string;
+  ofcWbGenerate: string;
+  ofcWbGenerateHint: string;
+  ofcWbGenerated: string;
+  ofcWbSign: string;
+  ofcWbWithdraw: string;
+  ofcWbActions: string;
+  ofcWbClose: string;
+  ofcWbReference: string;
+  ofcWbTaxpayer: string;
+  ofcWbAmount: string;
+  ofcPeTitle: string;
+  ofcPeIntro: string;
+  ofcPeOpenPeriod: string;
+  ofcPePeriod: string;
+  ofcPeCollected: string;
+  ofcPeSettled: string;
+  ofcPeCommission: string;
+  ofcPeTransactions: string;
+  ofcPeClose: string;
+  ofcPeBeginClosing: string;
+  ofcPeReopen: string;
+  ofcPeClosedBy: string;
+  ofcPeReopenedBy: string;
+  ofcPeClosingNote: string;
+  ofcPeReopenReason: string;
+  ofcPeNotReady: string;
+  ofcPeNotReadyBody: string;
+  ofcPeOverride: string;
+  ofcPeUnreconciled: string;
+  ofcPePendingPayments: string;
+  ofcPeFiguresNow: string;
+  ofcPeFrozen: string;
+  ofcPeReopenSeparate: string;
+  ofcNonePeriods: string;
+  enumSupervisorChange: string;
+  enumRoleChange: string;
+  ofcNavOrganisation: string;
+  ofcOrTitle: string;
+  ofcOrIntro: string;
+  ofcOrDepartments: string;
+  ofcOrOffices: string;
+  ofcOrOfficesBody: string;
+  ofcOrNewDepartment: string;
+  ofcOrNewOffice: string;
+  ofcOrCode: string;
+  ofcOrFunction: string;
+  ofcOrHead: string;
+  ofcOrParent: string;
+  ofcOrOfficers: string;
+  ofcOrOpenCases: string;
+  ofcOrCovers: string;
+  ofcOrClose: string;
+  ofcOrPosting: string;
+  ofcOrPostingBody: string;
+  ofcOrMoveOfficer: string;
+  ofcOrDepartment: string;
+  ofcOrOffice: string;
+  ofcOrSupervisor: string;
+  ofcOrJobTitle: string;
+  ofcOrStaffNumber: string;
+  ofcOrWhyMoving: string;
+  ofcOrEffectiveFrom: string;
+  ofcOrHistory: string;
+  ofcOrHistoryBody: string;
+  ofcOrNobody: string;
+  ofcOrUnposted: string;
+  ofcCwEscalate: string;
+  ofcCwEscalateBody: string;
+  ofcCwEscalateReason: string;
+  ofcCwEscalatedTo: string;
+  ofcNoneDepartments: string;
+  ofcNoneOffices: string;
+  ofcNoneTransfers: string;
+  enumCollection: string;
+  enumFinance: string;
+  enumAudit: string;
+  enumEnforcement: string;
+  enumTaxpayerServices: string;
+  enumAdministration: string;
+  enumTechnology: string;
+  enumPosting: string;
+  enumDepartment: string;
+  enumOffice: string;
+  enumTerritory: string;
+  ofcDbByChannel: string;
+  ofcDbByChannelBody: string;
+  ofcDbByTaxpayerType: string;
+  ofcDbByItem: string;
+  ofcDbByItemBody: string;
+  ofcDbReversed: string;
+  ofcDbRefunded: string;
+  ofcDbAgentsOnline: string;
+  ofcDbAgentsOnlineHint: string;
+  ofcDbAgentsSuspended: string;
+  ofcDbExpectedRevenue: string;
+  ofcDbExpectedRevenueHint: string;
+  ofcNavTaxpayerAnalytics: string;
+  ofcTaTitle: string;
+  ofcTaIntro: string;
+  ofcTaActive: string;
+  ofcTaActiveHint: string;
+  ofcTaInactive: string;
+  ofcTaNeverPaid: string;
+  ofcTaTotal: string;
+  ofcTaNewThisMonth: string;
+  ofcTaAverageLifetime: string;
+  ofcTaFrequency: string;
+  ofcTaFrequencyBody: string;
+  ofcTaByLga: string;
+  ofcTaByCategory: string;
+  ofcTaTaxpayersAssessed: string;
+  ofcTaTaxpayersPaid: string;
+  ofcTaAveragePayment: string;
+  ofcTaComplianceScore: string;
+  ofcTaOutstanding: string;
+  ofcCmByPlace: string;
+  ofcCmByPeriod: string;
+  ofcCmAccrued: string;
+  ofcCmPaidOut: string;
+  ofcCmOutstandingCommission: string;
+  enumOnce: string;
+  enumTwoToThree: string;
+  enumFourToEleven: string;
+  enumTwelveOrMore: string;
+  ofcDbYesterday: string;
+  ofcDbThisWeek: string;
+  ofcDbVsYesterday: string;
+  ofcDbVsLastWeek: string;
+  ofcDbVsLastMonth: string;
+  ofcDbVsLastYear: string;
+  ofcDbNoComparison: string;
+  ofcDbLastMonthWhole: string;
+  ofcDbDeclining: string;
+  ofcDbDecliningBody: string;
+  ofcDbNoneDeclining: string;
+  ofcDbChange: string;
+  ofcDbShareOfMonth: string;
+  ofcRvAverageTransaction: string;
+  ofcRvCompliance: string;
+  ofcRvComplianceHint: string;
+  ofcPfGrowth: string;
+  ofcPfCategories: string;
+  enumCategory: string;
+  enumItem: string;
+  enumLga: string;
+  enumWithdrawn: string;
+  ofcNavTargets: string;
+  ofcTgTitle: string;
+  ofcTgIntro: string;
+  ofcTgSetTarget: string;
+  ofcTgScope: string;
+  ofcTgScopeState: string;
+  ofcTgScopeLga: string;
+  ofcTgScopeCategory: string;
+  ofcTgScopeItem: string;
+  ofcTgScopeAgent: string;
+  ofcTgPeriod: string;
+  ofcTgPeriodDaily: string;
+  ofcTgPeriodWeekly: string;
+  ofcTgPeriodMonthly: string;
+  ofcTgPeriodQuarterly: string;
+  ofcTgPeriodAnnual: string;
+  ofcTgAmount: string;
+  ofcTgNote: string;
+  ofcTgTarget: string;
+  ofcTgCollected: string;
+  ofcTgAchievement: string;
+  ofcTgGap: string;
+  ofcTgThroughPeriod: string;
+  ofcTgRollup: string;
+  ofcTgRollupBody: string;
+  ofcTgStateTarget: string;
+  ofcTgApportioned: string;
+  ofcTgLgasWithout: string;
+  ofcTgWithdraw: string;
+  ofcTgWithdrawReason: string;
+  ofcTgSuperseded: string;
+  ofcTgSetBy: string;
+  ofcTgShowSuperseded: string;
+  ofcNoneTargetsSet: string;
+  ofcFcTitle: string;
+  ofcFcNotATarget: string;
+  ofcFcProjected: string;
+  ofcFcBasis: string;
+  ofcFcConfidence: string;
+  ofcFcSeasonalShare: string;
+  ofcFcComparablePeriods: string;
+  ofcFcProjectedAchievement: string;
+  forecastSeasonal: string;
+  forecastRunRate: string;
+  forecastTooEarlyInCurve: string;
+  forecastPeriodComplete: string;
+  forecastNotStarted: string;
+  enumSeasonal: string;
+  enumRunRate: string;
+  enumInsufficientHistory: string;
+  enumAwaitingInformation: string;
+  enumEscalated: string;
+  enumInvestigating: string;
+  enumAgentConduct: string;
+  enumCommissionQuery: string;
+  enumDataCorrection: string;
+  enumFraudInvestigation: string;
+  enumGeneral: string;
+  enumReconciliationException: string;
+  enumRevenueAnomaly: string;
+  enumSystemIssue: string;
+  enumTaxpayerDispute: string;
+  enumApproval: string;
+  enumFraudFlag: string;
+  enumManual: string;
+  enumSupportTicket: string;
+  enumAssignment: string;
+  enumComment: string;
+  enumDueDateChange: string;
+  enumEscalation: string;
+  enumEvidence: string;
+  enumNote: string;
+  enumPriorityChange: string;
+  enumResolution: string;
+  enumRouted: string;
+  enumStatusChange: string;
+  ofcCwSubject: string;
+  ofcCwDescription: string;
+  ofcCwCategory: string;
+  ofcCwRisk: string;
+  ofcCwPriority: string;
+  ofcCwDepartment: string;
+  ofcCwAssignee: string;
+  ofcCwNobody: string;
+  ofcCwAnyDepartment: string;
+  ofcCwDue: string;
+  ofcCwOnlyOpen: string;
+  ofcCwOnlyOverdue: string;
+  ofcCwOpenedBy: string;
+  ofcCwCaseNumber: string;
+  ofcCwComments: string;
+  ofcCwEvidence: string;
+  ofcCwBackToQueue: string;
+  ofcCwHistory: string;
+  ofcCwAddComment: string;
+  ofcCwInternalNote: string;
+  ofcCwMention: string;
+  ofcCwPost: string;
+  ofcCwMoveCase: string;
+  ofcCwChangeStatus: string;
+  ofcCwResolution: string;
+  ofcCwResolutionRequired: string;
+  ofcCwSaved: string;
+  ofcCwNotYours: string;
+  ofcCwAbout: string;
+  ofcCwWhy: string;
+  ofcCwSubjectTooShort: string;
+  ofcCwSampleSubject: string;
+  ofcCwSampleDescription: string;
+  ofcCwAppendOnly: string;
+  ofcNoneCasesMatchFilter: string;
+  ofcT3Title: string;
+  ofcT3Intro: string;
+  ofcT3Find: string;
+  ofcT3FindBody: string;
+  ofcT3Chain: string;
+  ofcT3Assessment: string;
+  ofcT3Invoice: string;
+  ofcT3Payment: string;
+  ofcT3Gateway: string;
+  ofcT3Settlement: string;
+  ofcT3Reconciliation: string;
+  ofcT3Commission: string;
+  ofcT3Refunds: string;
+  ofcT3Timeline: string;
+  ofcT3TimelineBody: string;
+  ofcT3Platform: string;
+  ofcT3OfficerAction: string;
+  ofcT3Before: string;
+  ofcT3After: string;
+  ofcT3CasesAndFlags: string;
+  ofcT3OpenCaseAbout: string;
+  ofcT3Withheld: string;
+  ofcT3WithheldBody: string;
+  ofcT3NoPayment: string;
+  ofcT3NoReceipt: string;
+  ofcT3NoSettlement: string;
+  ofcT3NoCommission: string;
+  ofcT3NoReconciliation: string;
+  ofcT3Channel: string;
+  ofcT3Where: string;
+  ofcT3ServiceCharge: string;
+  ofcT3Verified: string;
+  ofcT3NothingLinked: string;
   ofcGroupAdministration: string;
   ofcGroupAgentsProgrammes: string;
   ofcGroupAssessment: string;
@@ -2430,6 +2927,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Payments that keep failing",
     enumReversalPattern: "A pattern of reversals",
     enumUnusualVolume: "More collections than usual",
+    enumFrequentManualIntervention: "Often changed by hand",
+    enumRepeatedReceiptRegeneration: "Receipt issued or fetched again and again",
+    enumUnusualOfficerActivity: "Busier than this officer's usual day",
+    enumUnusualTransactionTiming: "Collections written late at night",
+    enumUser: "Officer",
     enumRapidSuccession: "Collections one after another, too fast",
     enumCommissionAnomaly: "Commission that does not add up",
     enumSettlementVariance: "The gateway paid a different amount",
@@ -3255,6 +3757,66 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcRlExportLimit: "Rows it may export",
+    ofcRlExportsNothing: "Exports nothing",
+    ofcCwSave: "Save",
+    enumIntegrationAlert: "An outside service is not answering",
+    enumNeverCalled: "Not called yet",
+    enumDegraded: "A call went unanswered",
+    enumDown: "Not answering",
+    ofcOvChange: "What changed",
+    enumApprovalWaiting: "An approval is waiting for you",
+    enumCaseAssigned: "A case was assigned to you",
+    enumCaseEscalated: "A case was escalated to you",
+    enumCaseMention: "You were named on a case",
+    enumSystemAlert: "Something on the platform has stopped",
+    enumInfo: "For information",
+    enumWarning: "Worth looking at",
+    ofcNavInbox: "Inbox",
+    ofcInHint: "What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it.",
+    ofcInUnread: "Not yet read",
+    ofcInCritical: "Needing attention now",
+    ofcInCriticalTitle: "The platform needs attention",
+    ofcInSeverity: "How urgent",
+    ofcInKind: "What it is",
+    ofcInSubject: "What happened",
+    ofcInWhen: "When",
+    ofcInRead: "Read",
+    ofcInMarkRead: "Mark read",
+    ofcInReadAll: "Mark all read",
+    ofcInShowAll: "Show everything",
+    ofcInShowUnread: "Show unread only",
+    ofcInToYourRole: "to your role",
+    ofcInNothing: "Nothing has been raised for you.",
+    ofcNavMyAccess: "Where I am signed in",
+    ofcAcSessions: "Sessions",
+    ofcAcSessionsHint: "Every browser this account is signed in on. End any you do not recognise, then change your password.",
+    ofcAcDevices: "Machines",
+    ofcAcDevicesHint: "Recorded the first time this account signs in from a machine. Blocking one ends every session it holds and stops it opening another.",
+    ofcAcDevice: "Machine",
+    ofcAcUnknownDevice: "Unknown machine",
+    ofcAcThisOne: "this one",
+    ofcAcAddress: "Address",
+    ofcAcSignedIn: "Signed in",
+    ofcAcLastUsed: "Last used",
+    ofcAcFirstSeen: "First seen",
+    ofcAcLastSeen: "Last seen",
+    ofcAcLiveSessions: "Open sessions",
+    ofcAcEnd: "End",
+    ofcAcEndThisOne: "End and sign out",
+    ofcAcEnded: "Ended",
+    ofcAcBlock: "Block",
+    ofcAcUnblock: "Unblock",
+    ofcAcNoSessions: "This account has never been signed in.",
+    ofcAcNoDevices: "No machine has been recorded yet.",
+    ofcCwUploadEvidence: "Upload evidence",
+    ofcCwUploadHint: "For a document this platform did not issue: a bank advice, a letter, a photograph. Images and PDFs, up to 15 MB.",
+    ofcCwUploadFile: "The file",
+    ofcCwUploadWhat: "What it is",
+    ofcCwUploadWhere: "Where it came from",
+    ofcExportExcel: "Spreadsheet",
+    ofcExportPdf: "Document to file",
+    ofcExportWorking: "Preparing...",
     ofcDownloadCsv: "Download CSV",
     ofcTxReceipt: "Receipt",
     ofcTxCreated: "Created",
@@ -3570,6 +4132,429 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Officer access",
     ofcNavFieldApp: "Field application",
     ofcNavAllocations: "Distribution rounds",
+    ofcNavMyWork: "My work",
+    ofcNavCases: "Cases",
+    ofcGroupYourDesk: "Your desk",
+    ofcSearchLabel: "Search government records",
+    ofcSearchPlaceholder: "Reference, TIN, name or receipt number",
+    ofcSearchSearching: "Searching…",
+    ofcSearchNoResults: "Nothing matches that.",
+    ofcSearchHint: "Two characters or more.",
+    ofcSearchTransaction: "Transaction",
+    ofcSearchTaxpayer: "Taxpayer",
+    ofcSearchAgent: "Agent",
+    ofcSearchOfficer: "Officer",
+    ofcSearchInvoice: "Invoice",
+    ofcSearchReceipt: "Receipt",
+    ofcSearchPayment: "Payment",
+    ofcSearchAssessment: "Assessment",
+    ofcSearchVehicle: "Vehicle",
+    ofcSearchRevenueItem: "Revenue item",
+    ofcSearchPlace: "Local Government Area",
+    ofcSearchCase: "Case",
+    ofcMwIntro: "Everything waiting for you, wherever on the platform it came from.",
+    ofcMwAssigned: "Assigned to you",
+    ofcMwAssignedBody: "Cases somebody has put in your hands.",
+    ofcMwOpened: "Cases you opened",
+    ofcMwOpenedBody: "Now somebody else’s to work, and still yours to follow.",
+    ofcMwMentions: "Where you were named",
+    ofcMwMentionsBody: "An officer wrote your name on a case.",
+    ofcMwDepartment: "Waiting for your department",
+    ofcMwDepartmentBody: "Sent to your role and picked up by nobody yet.",
+    ofcMwApprovals: "Approvals awaiting a decision",
+    ofcMwExceptions: "Reconciliation exceptions",
+    ofcMwFlags: "Risk flags",
+    ofcMwOverdue: "Overdue",
+    ofcMwNothing: "Nothing is waiting for you.",
+    ofcMwOpenQueue: "Open the whole queue",
+    ofcCwTitle: "Government work queue",
+    ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
+    ofcCwOpenCase: "Open a case",
+    ofcCwStatus: "Status",
+    ofcNavRoles: "Roles & permissions",
+    ofcRlTitle: "Roles and permissions",
+    ofcRlIntro: "Who may do what. This is data now, so a change in the Service's delegation of authority does not wait for a release.",
+    ofcRlCatalogueNote: "The list of permissions that exist stays in code, because a permission is a name the routes check. A grant naming something no route checks would look like a control and be none.",
+    ofcRlRole: "Role",
+    ofcRlOfficers: "Officers holding it",
+    ofcRlPermissions: "Permissions",
+    ofcRlSystemRole: "Ships with the platform",
+    ofcRlPortalRole: "Signs in to this portal",
+    ofcRlGrant: "Grant",
+    ofcRlRevoke: "Take away",
+    ofcRlGrantReason: "Why this authority is being given",
+    ofcRlRevokeReason: "Why this authority is being taken away",
+    ofcRlRevokeWarning: "Everybody holding this role will be signed out. That is deliberate: the map is cached, and thirty seconds is a long time for somebody whose authority has just been withdrawn to keep exercising it.",
+    ofcRlNewRole: "Add a role",
+    ofcRlRoleName: "Name used in code",
+    ofcRlRoleLabel: "What officers see",
+    ofcRlCopyFrom: "Start from",
+    ofcRlCopyFromBody: "Starting from the nearest existing role and taking things away is safer than starting from nothing, which is how a role ends up with everything a week later, one emergency at a time.",
+    ofcRlRetire: "Retire",
+    ofcRlRestore: "Bring back",
+    ofcRlIsPortalRole: "This role signs in to the officer portal",
+    ofcRlSignedOut: "Officers signed out",
+    ofcRlSearchPermission: "Find a permission",
+    ofcNoneRoles: "No role is configured.",
+    enumClosing: "Being closed",
+    ofcNavPeriods: "Financial periods",
+    enumClean: "Clean",
+    enumException: "Exception",
+    enumNotAvailable: "Could not be examined",
+    enumRandom: "Random",
+    enumSystematic: "Every nth",
+    enumHighestValue: "Largest amounts",
+    enumDrawn: "Drawn",
+    enumInReview: "Being examined",
+    enumGenerated: "Generated",
+    enumSigned: "Signed",
+    enumTransactionAudit: "Transaction audit",
+    enumAgentActivity: "Agent activity",
+    enumRevenueCollection: "Revenue collected",
+    enumLgaPerformance: "Council performance",
+    enumPaymentReconciliation: "Payment reconciliation",
+    enumUserActivity: "Officer activity",
+    enumAnomaly: "Anomalies",
+    enumAuditSample: "Audit samples",
+    enumRevenueTarget: "Revenue targets",
+    enumPeriodClosing: "Period closing",
+    enumDataChange: "Record changes",
+    ofcNavWorkbench: "Audit workbench",
+    ofcWbSamplesDrawn: "Samples drawn",
+    ofcWbItemsOutstanding: "Items still to examine",
+    ofcWbExceptionsFound: "Exceptions found",
+    ofcWbReportsHeld: "Reports on file",
+    ofcWbSamples: "Samples",
+    ofcWbSamplesHint: "Each row records a draw that already happened. The criteria, the method and the seed cannot be changed afterwards, which is what lets somebody else reproduce it.",
+    ofcWbSampleNumber: "Sample",
+    ofcWbTitle: "What this is about",
+    ofcWbMethod: "How it was drawn",
+    ofcWbMethodRandom: "At random, from a stored seed",
+    ofcWbMethodSystematic: "Every nth, in date order",
+    ofcWbMethodHighestValue: "The largest amounts (not a sample)",
+    ofcWbDrawn: "Drawn of population",
+    ofcWbPending: "Not yet examined",
+    ofcWbExceptions: "Exceptions",
+    ofcWbDrawnAt: "Drawn on",
+    ofcWbDrawnBy: "Drawn by",
+    ofcWbNoSamples: "No sample has been drawn yet.",
+    ofcWbDraw: "Draw a sample",
+    ofcWbDrawHint: "Say what the sample is for and how wide to look. Leaving a field empty means it does not narrow anything.",
+    ofcWbSize: "How many to draw",
+    ofcWbFrom: "From",
+    ofcWbTo: "To",
+    ofcWbMinimumNaira: "Smallest amount (naira)",
+    ofcWbDrawIsFinal: "A draw cannot be taken back or redrawn. Draw a fresh sample if these criteria are wrong.",
+    ofcWbDrawnNotice: "{{number}} drawn, {{n}} transactions to examine.",
+    ofcWbSeed: "Seed",
+    ofcWbPopulation: "Drawn from",
+    ofcWbPosition: "Item",
+    ofcWbOutcome: "Finding",
+    ofcWbFinding: "What was found",
+    ofcWbRecord: "Record",
+    ofcWbNoItems: "This sample selected nothing.",
+    ofcWbCompleteHint: "A sample can only be completed once every item has a finding. Half-finished work reported as complete is worse than no sample.",
+    ofcWbComplete: "Complete this sample",
+    ofcWbReports: "Audit reports",
+    ofcWbReportsHint: "Each report holds the rows as they stood when it was generated, with a checksum a reader can recompute.",
+    ofcWbReportNumber: "Report",
+    ofcWbReportType: "Question it answers",
+    ofcWbRows: "Rows",
+    ofcWbPeriod: "Period",
+    ofcWbGeneratedAt: "Generated on",
+    ofcWbSignedBy: "Signed by",
+    ofcWbChecksum: "Checksum",
+    ofcWbNoReports: "No report has been generated yet.",
+    ofcWbGenerate: "Generate a report",
+    ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
+    ofcWbGenerated: "{{number}} generated, {{n}} rows.",
+    ofcWbSign: "Sign",
+    ofcWbWithdraw: "Withdraw",
+    ofcWbActions: "Actions",
+    ofcWbClose: "Close",
+    ofcWbReference: "Reference",
+    ofcWbTaxpayer: "Taxpayer",
+    ofcWbAmount: "Amount",
+    ofcPeTitle: "Financial periods",
+    ofcPeIntro: "Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report.",
+    ofcPeOpenPeriod: "Open a period",
+    ofcPePeriod: "Period",
+    ofcPeCollected: "Collected",
+    ofcPeSettled: "Settled to government",
+    ofcPeCommission: "Commission",
+    ofcPeTransactions: "Transactions",
+    ofcPeClose: "Close the month",
+    ofcPeBeginClosing: "Begin closing",
+    ofcPeReopen: "Reopen",
+    ofcPeClosedBy: "Closed by",
+    ofcPeReopenedBy: "Reopened by",
+    ofcPeClosingNote: "What is being certified",
+    ofcPeReopenReason: "Why it is being reopened",
+    ofcPeNotReady: "Not ready to close",
+    ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
+    ofcPeOverride: "Why you are closing over them",
+    ofcPeUnreconciled: "Unresolved exceptions",
+    ofcPePendingPayments: "Payments still pending",
+    ofcPeFiguresNow: "What the month holds now",
+    ofcPeFrozen: "Frozen at close",
+    ofcPeReopenSeparate: "Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for.",
+    ofcNonePeriods: "No financial period has been opened yet.",
+    enumSupervisorChange: "Reporting line",
+    enumRoleChange: "Role",
+    ofcNavOrganisation: "Departments & offices",
+    ofcOrTitle: "The organisation",
+    ofcOrIntro: "Who works with whom, who answers for them, and where they sit. A department is a body; a role is what somebody may do. Both are needed and neither replaces the other.",
+    ofcOrDepartments: "Departments",
+    ofcOrOffices: "Revenue offices",
+    ofcOrOfficesBody: "Where officers sit, which is not the territory they cover. The Jos North office administers three LGAs.",
+    ofcOrNewDepartment: "Add a department",
+    ofcOrNewOffice: "Add an office",
+    ofcOrCode: "Code",
+    ofcOrFunction: "Work it does",
+    ofcOrHead: "Answers for it",
+    ofcOrParent: "Sits under",
+    ofcOrOfficers: "Officers",
+    ofcOrOpenCases: "Open cases",
+    ofcOrCovers: "Administers",
+    ofcOrClose: "Close",
+    ofcOrPosting: "Posting",
+    ofcOrPostingBody: "Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers.",
+    ofcOrMoveOfficer: "Move this officer",
+    ofcOrDepartment: "Department",
+    ofcOrOffice: "Office",
+    ofcOrSupervisor: "Reports to",
+    ofcOrJobTitle: "Job title",
+    ofcOrStaffNumber: "Staff number",
+    ofcOrWhyMoving: "Why they are moving",
+    ofcOrEffectiveFrom: "From",
+    ofcOrHistory: "Posting history",
+    ofcOrHistoryBody: "Append-only. Who was responsible for an area in a given month is asked in revenue disputes, and an answer that can be adjusted afterwards is not one.",
+    ofcOrNobody: "Nobody",
+    ofcOrUnposted: "Not posted",
+    ofcCwEscalate: "Escalate",
+    ofcCwEscalateBody: "Sends the case to the officer above, with its whole history attached. If nobody is above, it says so rather than marking the case escalated and leaving it here.",
+    ofcCwEscalateReason: "Why it needs somebody above",
+    ofcCwEscalatedTo: "Escalated to",
+    ofcNoneDepartments: "No department has been created yet.",
+    ofcNoneOffices: "No revenue office has been created yet.",
+    ofcNoneTransfers: "No posting has been recorded for this officer.",
+    enumCollection: "Collection",
+    enumFinance: "Finance",
+    enumAudit: "Audit",
+    enumEnforcement: "Enforcement",
+    enumTaxpayerServices: "Taxpayer services",
+    enumAdministration: "Administration",
+    enumTechnology: "Technology",
+    enumPosting: "Posting",
+    enumDepartment: "Department",
+    enumOffice: "Office",
+    enumTerritory: "Territory",
+    ofcDbByChannel: "How the money arrived",
+    ofcDbByChannelBody: "Recorded on every transaction since the platform started, and never grouped until now. It is the figure behind every decision about where to put agents.",
+    ofcDbByTaxpayerType: "Individuals and businesses",
+    ofcDbByItem: "Revenue by levy",
+    ofcDbByItemBody: "One level below the category, which is where somebody's responsibility sits.",
+    ofcDbReversed: "Reversed",
+    ofcDbRefunded: "Refunded",
+    ofcDbAgentsOnline: "Agents working now",
+    ofcDbAgentsOnlineHint: "Active in the last fifteen minutes",
+    ofcDbAgentsSuspended: "Agents suspended",
+    ofcDbExpectedRevenue: "Assessed and unpaid",
+    ofcDbExpectedRevenueHint: "Money already invoiced and owed. Not a projection.",
+    ofcNavTaxpayerAnalytics: "Taxpayer base",
+    ofcTaTitle: "The taxpayer base",
+    ofcTaIntro: "Not how many people are on the register, but how many are still paying, how often, and where the ones who stopped are.",
+    ofcTaActive: "Paying",
+    ofcTaActiveHint: "Paid something in the last ninety days",
+    ofcTaInactive: "Stopped paying",
+    ofcTaNeverPaid: "Never paid",
+    ofcTaTotal: "On the register",
+    ofcTaNewThisMonth: "Registered this month",
+    ofcTaAverageLifetime: "Average paid, each",
+    ofcTaFrequency: "How often somebody who pays, pays",
+    ofcTaFrequencyBody: "Banded rather than averaged. A mean over a population where most paid once and a few paid twelve times describes nobody in it.",
+    ofcTaByLga: "The register by Local Government Area",
+    ofcTaByCategory: "Which levies the register is engaged with",
+    ofcTaTaxpayersAssessed: "Assessed",
+    ofcTaTaxpayersPaid: "Paid",
+    ofcTaAveragePayment: "Average payment",
+    ofcTaComplianceScore: "Average compliance score",
+    ofcTaOutstanding: "Outstanding",
+    ofcCmByPlace: "Commission by Local Government Area",
+    ofcCmByPeriod: "Commission by month",
+    ofcCmAccrued: "Accrued",
+    ofcCmPaidOut: "Paid",
+    ofcCmOutstandingCommission: "Outstanding",
+    enumOnce: "Once",
+    enumTwoToThree: "Two or three times",
+    enumFourToEleven: "Four to eleven times",
+    enumTwelveOrMore: "Twelve times or more",
+    ofcDbYesterday: "Yesterday",
+    ofcDbThisWeek: "This week",
+    ofcDbVsYesterday: "against yesterday",
+    ofcDbVsLastWeek: "against the same days last week",
+    ofcDbVsLastMonth: "against the same days last month",
+    ofcDbVsLastYear: "against the same period last year",
+    ofcDbNoComparison: "nothing collected then, so no comparison",
+    ofcDbLastMonthWhole: "The whole of last month",
+    ofcDbDeclining: "Categories collecting less than last month",
+    ofcDbDecliningBody: "Ranked by size, a category that halved still sits near the top and looks healthy. This is the same data ranked by direction.",
+    ofcDbNoneDeclining: "Nothing is collecting less than it did last month.",
+    ofcDbChange: "Change",
+    ofcDbShareOfMonth: "Share of the month",
+    ofcRvAverageTransaction: "Average transaction",
+    ofcRvCompliance: "Register paying",
+    ofcRvComplianceHint: "The share of taxpayers registered here who paid anything in the period.",
+    ofcPfGrowth: "Against last month",
+    ofcPfCategories: "Levies worked",
+    enumCategory: "Category",
+    enumItem: "Revenue item",
+    enumLga: "Local Government Area",
+    enumWithdrawn: "Withdrawn",
+    ofcNavTargets: "Targets & forecast",
+    ofcTgTitle: "Revenue targets",
+    ofcTgIntro: "What the Service expects to raise, and what has come in against it.",
+    ofcTgSetTarget: "Set a target",
+    ofcTgScope: "Set against",
+    ofcTgScopeState: "The whole State",
+    ofcTgScopeLga: "One Local Government Area",
+    ofcTgScopeCategory: "One revenue category",
+    ofcTgScopeItem: "One revenue item",
+    ofcTgScopeAgent: "One agent",
+    ofcTgPeriod: "Period",
+    ofcTgPeriodDaily: "Daily",
+    ofcTgPeriodWeekly: "Weekly",
+    ofcTgPeriodMonthly: "Monthly",
+    ofcTgPeriodQuarterly: "Quarterly",
+    ofcTgPeriodAnnual: "Annual",
+    ofcTgAmount: "Target amount",
+    ofcTgNote: "Why this figure",
+    ofcTgTarget: "Target",
+    ofcTgCollected: "Collected",
+    ofcTgAchievement: "Achievement",
+    ofcTgGap: "Gap",
+    ofcTgThroughPeriod: "Through the period",
+    ofcTgRollup: "State target and what was apportioned below it",
+    ofcTgRollupBody: "These do not have to agree. The State figure normally carries headroom, and an LGA with no target of its own is the more useful thing to notice.",
+    ofcTgStateTarget: "State target",
+    ofcTgApportioned: "Apportioned to LGAs",
+    ofcTgLgasWithout: "LGAs with no target",
+    ofcTgWithdraw: "Withdraw",
+    ofcTgWithdrawReason: "Why it is being withdrawn",
+    ofcTgSuperseded: "This replaces an earlier target for the same period.",
+    ofcTgSetBy: "Set by",
+    ofcTgShowSuperseded: "Include revised and withdrawn",
+    ofcNoneTargetsSet: "No target has been set for this period.",
+    ofcFcTitle: "Forecast",
+    ofcFcNotATarget: "This is a forecast, not a target and not guaranteed revenue. It is arithmetic on what has been collected so far and what previous years did by this point.",
+    ofcFcProjected: "Projected for the period",
+    ofcFcBasis: "Worked out from",
+    ofcFcConfidence: "Confidence",
+    ofcFcSeasonalShare: "Usually collected by this point",
+    ofcFcComparablePeriods: "Comparable periods used",
+    ofcFcProjectedAchievement: "Projected against target",
+    forecastSeasonal: "Shaped by the collection curve: previous years are used to say what share of a period is usually in by now.",
+    forecastRunRate: "A straight run rate. There is not enough history to know the collection curve, so this is likely to be wrong early and late in the period.",
+    forecastTooEarlyInCurve: "Previous years had collected almost nothing by this point, so the curve cannot be used yet. A straight run rate is shown instead.",
+    forecastPeriodComplete: "The period has finished. This is the actual figure, not a projection.",
+    forecastNotStarted: "The period has not started. There is nothing to project from yet.",
+    enumSeasonal: "Collection curve",
+    enumRunRate: "Run rate",
+    enumInsufficientHistory: "Not enough history",
+    enumAwaitingInformation: "Awaiting information",
+    enumEscalated: "Escalated",
+    enumInvestigating: "Investigating",
+    enumAgentConduct: "Agent conduct",
+    enumCommissionQuery: "Commission query",
+    enumDataCorrection: "Data correction",
+    enumFraudInvestigation: "Fraud investigation",
+    enumGeneral: "General",
+    enumReconciliationException: "Reconciliation exception",
+    enumRevenueAnomaly: "Revenue anomaly",
+    enumSystemIssue: "System issue",
+    enumTaxpayerDispute: "Taxpayer dispute",
+    enumApproval: "Approval",
+    enumFraudFlag: "Risk flag",
+    enumManual: "Raised by an officer",
+    enumSupportTicket: "Support ticket",
+    enumAssignment: "Assigned",
+    enumComment: "Comment",
+    enumDueDateChange: "Due date changed",
+    enumEscalation: "Escalated",
+    enumEvidence: "Evidence attached",
+    enumNote: "Internal note",
+    enumPriorityChange: "Priority changed",
+    enumResolution: "Resolution",
+    enumRouted: "Routed",
+    enumStatusChange: "Status changed",
+    ofcCwSubject: "Subject",
+    ofcCwDescription: "What happened",
+    ofcCwCategory: "Category",
+    ofcCwRisk: "Risk",
+    ofcCwPriority: "Priority",
+    ofcCwDepartment: "Send to",
+    ofcCwAssignee: "Assign to",
+    ofcCwNobody: "Nobody yet",
+    ofcCwAnyDepartment: "No department",
+    ofcCwDue: "Due",
+    ofcCwOnlyOpen: "Only open cases",
+    ofcCwOnlyOverdue: "Only overdue",
+    ofcCwOpenedBy: "Opened by",
+    ofcCwCaseNumber: "Case",
+    ofcCwComments: "Comments",
+    ofcCwEvidence: "Evidence",
+    ofcCwBackToQueue: "Back to the queue",
+    ofcCwHistory: "History",
+    ofcCwAddComment: "Add a comment",
+    ofcCwInternalNote: "Keep this as an internal note",
+    ofcCwMention: "Name an officer",
+    ofcCwPost: "Post",
+    ofcCwMoveCase: "Move this case",
+    ofcCwChangeStatus: "Change the status",
+    ofcCwResolution: "What it concluded",
+    ofcCwResolutionRequired: "Say what the case concluded before resolving it.",
+    ofcCwSaved: "Saved.",
+    ofcCwNotYours: "This case is not assigned to you and you did not open it, so you may comment and nothing more.",
+    ofcCwAbout: "About",
+    ofcCwWhy: "Why",
+    ofcCwSubjectTooShort: "Give the case a subject of at least five characters.",
+    ofcCwSampleSubject: "Collections trebled with no new taxpayers",
+    ofcCwSampleDescription: "Say what you saw, where, and what you would like the other department to check.",
+    ofcCwAppendOnly: "Nothing here can be edited or removed. A correction is another entry.",
+    ofcNoneCasesMatchFilter: "No cases match these filters.",
+    ofcT3Title: "Transaction file",
+    ofcT3Intro: "The whole story of one collection, from the taxpayer to the government account.",
+    ofcT3Find: "Find a transaction",
+    ofcT3FindBody: "A transaction reference, or a receipt number off a citizen’s message.",
+    ofcT3Chain: "The chain",
+    ofcT3Assessment: "Assessment",
+    ofcT3Invoice: "Invoice",
+    ofcT3Payment: "Payment",
+    ofcT3Gateway: "Gateway",
+    ofcT3Settlement: "Settlement",
+    ofcT3Reconciliation: "Reconciliation",
+    ofcT3Commission: "Commission",
+    ofcT3Refunds: "Refunds",
+    ofcT3Timeline: "What happened, in order",
+    ofcT3TimelineBody: "The platform’s own record and the officers’ actions, on one clock.",
+    ofcT3Platform: "Platform",
+    ofcT3OfficerAction: "Officer action",
+    ofcT3Before: "Before",
+    ofcT3After: "After",
+    ofcT3CasesAndFlags: "Cases and risk flags",
+    ofcT3OpenCaseAbout: "Open a case about this transaction",
+    ofcT3Withheld: "Not shown to your role",
+    ofcT3WithheldBody: "These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record.",
+    ofcT3NoPayment: "No payment has been attempted.",
+    ofcT3NoReceipt: "No receipt has been issued.",
+    ofcT3NoSettlement: "The money has not reached the government account yet.",
+    ofcT3NoCommission: "No commission was earned.",
+    ofcT3NoReconciliation: "This has not been through a reconciliation run.",
+    ofcT3Channel: "Channel",
+    ofcT3Where: "Where",
+    ofcT3ServiceCharge: "Service charge",
+    ofcT3Verified: "Verified",
+    ofcT3NothingLinked: "No case or flag is linked to this transaction.",
     ofcGroupAdministration: "Administration",
     ofcGroupAgentsProgrammes: "Agents and programmes",
     ofcGroupAssessment: "Assessment",
@@ -4422,6 +5407,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Biyan kudi da ke ci gaba da gazawa",
     enumReversalPattern: "Yanayin mayar da kudi akai-akai",
     enumUnusualVolume: "Karbar kudi fiye da yadda aka saba",
+    enumFrequentManualIntervention: "Ana yawan canza shi da hannu",
+    enumRepeatedReceiptRegeneration: "An sake fitar da rasit ko saukar da shi sau da yawa",
+    enumUnusualOfficerActivity: "Aiki ya fi na yau da kullun na wannan jami’in",
+    enumUnusualTransactionTiming: "An rubuta karbar kudi da tsakar dare",
+    enumUser: "Jami’i",
     enumRapidSuccession: "Karbar kudi a jere, da sauri sosai",
     enumCommissionAnomaly: "Kwamishan da bai yi daidai ba",
     enumSettlementVariance: "Hanyar biya ta biya wani adadi daban",
@@ -5247,6 +6237,66 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcRlExportLimit: "Layukan da zai iya fitarwa",
+    ofcRlExportsNothing: "Ba ya fitar da komai",
+    ofcCwSave: "Ajiye",
+    enumIntegrationAlert: "Wata hidimar waje ba ta amsawa",
+    enumNeverCalled: "Ba a kira ba tukuna",
+    enumDegraded: "An yi kira ba a amsa ba",
+    enumDown: "Ba ya amsawa",
+    ofcOvChange: "Abin da ya canza",
+    enumApprovalWaiting: "Amincewa na jiran ka",
+    enumCaseAssigned: "An ba ka wani shari\u2019a",
+    enumCaseEscalated: "An daga shari\u2019a zuwa gare ka",
+    enumCaseMention: "An ambaci sunanka a shari\u2019a",
+    enumSystemAlert: "Wani abu a tsarin ya tsaya",
+    enumInfo: "Don sanarwa",
+    enumWarning: "Ya cancanci duba",
+    ofcNavInbox: "Akwatin sako",
+    ofcInHint: "Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi.",
+    ofcInUnread: "Ba a karanta ba tukuna",
+    ofcInCritical: "Na bukatar kulawa yanzu",
+    ofcInCriticalTitle: "Tsarin na bukatar kulawa",
+    ofcInSeverity: "Yadda yake da gaggawa",
+    ofcInKind: "Menene shi",
+    ofcInSubject: "Abin da ya faru",
+    ofcInWhen: "Yaushe",
+    ofcInRead: "An karanta",
+    ofcInMarkRead: "Yi masa alamar an karanta",
+    ofcInReadAll: "Yi wa duka alamar an karanta",
+    ofcInShowAll: "Nuna komai",
+    ofcInShowUnread: "Nuna wanda ba a karanta ba kadai",
+    ofcInToYourRole: "ga matsayinka",
+    ofcInNothing: "Ba a tayar da komai a gare ka ba.",
+    ofcNavMyAccess: "Inda na shiga",
+    ofcAcSessions: "Zaman shiga",
+    ofcAcSessionsHint: "Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.",
+    ofcAcDevices: "Na\u2019urori",
+    ofcAcDevicesHint: "Ana rubuta shi lokacin da asusun ya fara shiga daga na\u2019ura. Toshe daya yana kawo karshen kowane zaman da yake rike da shi kuma yana hana shi bude wani.",
+    ofcAcDevice: "Na\u2019ura",
+    ofcAcUnknownDevice: "Na\u2019urar da ba a sani ba",
+    ofcAcThisOne: "wannan",
+    ofcAcAddress: "Adireshi",
+    ofcAcSignedIn: "An shiga",
+    ofcAcLastUsed: "An yi amfani da shi ta karshe",
+    ofcAcFirstSeen: "An fara ganin sa",
+    ofcAcLastSeen: "An gan shi ta karshe",
+    ofcAcLiveSessions: "Zaman da ke bude",
+    ofcAcEnd: "Kawo karshe",
+    ofcAcEndThisOne: "Kawo karshe ka fita",
+    ofcAcEnded: "An kawo karshe",
+    ofcAcBlock: "Toshe",
+    ofcAcUnblock: "Cire toshewa",
+    ofcAcNoSessions: "Wannan asusun bai taba shiga ba.",
+    ofcAcNoDevices: "Ba a rubuta wata na\u2019ura ba tukuna.",
+    ofcCwUploadEvidence: "Loda shaida",
+    ofcCwUploadHint: "Don takardar da wannan tsarin bai fitar ba: sanarwar banki, wasika, hoto. Hotuna da PDF, har zuwa 15 MB.",
+    ofcCwUploadFile: "Fayil",
+    ofcCwUploadWhat: "Menene shi",
+    ofcCwUploadWhere: "Daga ina ya zo",
+    ofcExportExcel: "Takardar lissafi",
+    ofcExportPdf: "Takarda don ajiyewa",
+    ofcExportWorking: "Ana shirya...",
     ofcDownloadCsv: "Sauke CSV",
     ofcTxReceipt: "Rasit",
     ofcTxCreated: "An kirkira",
@@ -5562,6 +6612,429 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Izinin jami’ai",
     ofcNavFieldApp: "Manhajar filin aiki",
     ofcNavAllocations: "Zagayen rabon kaya",
+    ofcNavMyWork: "Aikina",
+    ofcNavCases: "Kararraki",
+    ofcGroupYourDesk: "Teburinka",
+    ofcSearchLabel: "Nemi bayanan gwamnati",
+    ofcSearchPlaceholder: "Lamba, TIN, suna ko lambar rasit",
+    ofcSearchSearching: "Ana nema…",
+    ofcSearchNoResults: "Babu abin da ya dace da haka.",
+    ofcSearchHint: "Haruffa biyu ko fiye.",
+    ofcSearchTransaction: "Ma’amala",
+    ofcSearchTaxpayer: "Mai biyan haraji",
+    ofcSearchAgent: "Wakili",
+    ofcSearchOfficer: "Jami’i",
+    ofcSearchInvoice: "Takardar biya",
+    ofcSearchReceipt: "Rasit",
+    ofcSearchPayment: "Biyan kudi",
+    ofcSearchAssessment: "Kima",
+    ofcSearchVehicle: "Abin hawa",
+    ofcSearchRevenueItem: "Nau’in haraji",
+    ofcSearchPlace: "Karamar hukuma",
+    ofcSearchCase: "Kara",
+    ofcMwIntro: "Duk abin da ke jiranka, ko daga ina ya zo a manhajar.",
+    ofcMwAssigned: "An ba ka",
+    ofcMwAssignedBody: "Kararrakin da wani ya sa a hannunka.",
+    ofcMwOpened: "Kararrakin da ka bude",
+    ofcMwOpenedBody: "Yanzu na wani ne ya yi, amma har yanzu naka ne ka bi.",
+    ofcMwMentions: "Inda aka ambace ka",
+    ofcMwMentionsBody: "Wani jami’i ya rubuta sunanka a kan kara.",
+    ofcMwDepartment: "Yana jiran sashenka",
+    ofcMwDepartmentBody: "An aika wa matsayinka kuma babu wanda ya karba tukuna.",
+    ofcMwApprovals: "Amincewa da ke jiran hukunci",
+    ofcMwExceptions: "Bambancin lissafi",
+    ofcMwFlags: "Alamun hadari",
+    ofcMwOverdue: "Ya wuce lokaci",
+    ofcMwNothing: "Babu abin da ke jiranka.",
+    ofcMwOpenQueue: "Bude dukkan jerin aikin",
+    ofcCwTitle: "Jerin aikin gwamnati",
+    ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
+    ofcCwOpenCase: "Bude kara",
+    ofcCwStatus: "Matsayi",
+    ofcNavRoles: "Matsayi da izini",
+    ofcRlTitle: "Matsayi da izini",
+    ofcRlIntro: "Wa zai iya yin me. Wannan bayanai ne yanzu, don haka sauya wa wanda Hukumar ta ba iko ba ya jiran sabon fitarwa.",
+    ofcRlCatalogueNote: "Jerin izinin da suke nan ya kasance a cikin lambar, saboda izini suna ne da hanyoyin ke duba. Bayar da izinin da babu hanyar da ke duba shi zai yi kama da iko amma ba iko ba ne.",
+    ofcRlRole: "Matsayi",
+    ofcRlOfficers: "Jami’an da ke rike da shi",
+    ofcRlPermissions: "Izini",
+    ofcRlSystemRole: "Yana zuwa da manhajar",
+    ofcRlPortalRole: "Yana shiga wannan tashar",
+    ofcRlGrant: "Bayar",
+    ofcRlRevoke: "Cire",
+    ofcRlGrantReason: "Dalilin bayar da wannan iko",
+    ofcRlRevokeReason: "Dalilin cire wannan iko",
+    ofcRlRevokeWarning: "Duk wanda ke rike da wannan matsayi za a fitar da shi. An yi haka da gangan: ana ajiye taswirar, kuma dakika talatin lokaci ne mai tsawo ga wanda aka cire wa iko ya ci gaba da amfani da shi.",
+    ofcRlNewRole: "Kara matsayi",
+    ofcRlRoleName: "Sunan da ake amfani da shi a lambar",
+    ofcRlRoleLabel: "Abin da jami’ai ke gani",
+    ofcRlCopyFrom: "Fara daga",
+    ofcRlCopyFromBody: "Farawa daga matsayin da ya fi kusa sannan a cire abubuwa ya fi aminci fiye da farawa ba tare da komai ba, wanda shi ne yadda matsayi ke samun komai bayan mako guda, gaggawa daya bayan daya.",
+    ofcRlRetire: "Yi ritaya",
+    ofcRlRestore: "Mayar da shi aiki",
+    ofcRlIsPortalRole: "Wannan matsayi yana shiga tashar jami’ai",
+    ofcRlSignedOut: "Jami’an da aka fitar",
+    ofcRlSearchPermission: "Nemo izini",
+    ofcNoneRoles: "Ba a saita wani matsayi ba.",
+    enumClosing: "Ana rufewa",
+    ofcNavPeriods: "Lokutan kudi",
+    enumClean: "Babu matsala",
+    enumException: "Matsala",
+    enumNotAvailable: "Ba a iya duba shi ba",
+    enumRandom: "Bazuwa",
+    enumSystematic: "Kowane na n",
+    enumHighestValue: "Mafi girman kudi",
+    enumDrawn: "An zana",
+    enumInReview: "Ana duba shi",
+    enumGenerated: "An samar da shi",
+    enumSigned: "An sa hannu",
+    enumTransactionAudit: "Binciken cinikayya",
+    enumAgentActivity: "Ayyukan wakili",
+    enumRevenueCollection: "Kudin da aka karba",
+    enumLgaPerformance: "Aikin karamar hukuma",
+    enumPaymentReconciliation: "Daidaita biyan kudi",
+    enumUserActivity: "Ayyukan jami’i",
+    enumAnomaly: "Abubuwan da ba a saba gani ba",
+    enumAuditSample: "Samfuran bincike",
+    enumRevenueTarget: "Burin kudin shiga",
+    enumPeriodClosing: "Rufe lokaci",
+    enumDataChange: "Canje-canjen bayanai",
+    ofcNavWorkbench: "Teburin bincike",
+    ofcWbSamplesDrawn: "Samfuran da aka zana",
+    ofcWbItemsOutstanding: "Abubuwan da suka rage a duba",
+    ofcWbExceptionsFound: "Matsalolin da aka samu",
+    ofcWbReportsHeld: "Rahotannin da ke fayil",
+    ofcWbSamples: "Samfura",
+    ofcWbSamplesHint: "Kowane layi yana rubuta zanen da ya riga ya faru. Ba za a iya canza sharudda, hanya ko iri ba bayan haka, wanda shi ne abin da ke ba wani damar maimaita shi.",
+    ofcWbSampleNumber: "Samfur",
+    ofcWbTitle: "Abin da ya shafa",
+    ofcWbMethod: "Yadda aka zana shi",
+    ofcWbMethodRandom: "Bazuwa, daga iri da aka ajiye",
+    ofcWbMethodSystematic: "Kowane na n, bisa tsarin kwanan wata",
+    ofcWbMethodHighestValue: "Mafi girman kudi (ba samfur ba ne)",
+    ofcWbDrawn: "An zana daga jimla",
+    ofcWbPending: "Ba a duba ba tukuna",
+    ofcWbExceptions: "Matsaloli",
+    ofcWbDrawnAt: "An zana a",
+    ofcWbDrawnBy: "Wanda ya zana",
+    ofcWbNoSamples: "Ba a zana samfur ba tukuna.",
+    ofcWbDraw: "Zana samfur",
+    ofcWbDrawHint: "Ka fada me ake bukatar samfurin da kuma yadda za a duba. Barin fili babu komai yana nufin ba ya rage komai.",
+    ofcWbSize: "Nawa za a zana",
+    ofcWbFrom: "Daga",
+    ofcWbTo: "Zuwa",
+    ofcWbMinimumNaira: "Mafi karancin kudi (naira)",
+    ofcWbDrawIsFinal: "Ba za a iya soke zane ko sake zana shi ba. Ka zana sabon samfur idan wadannan sharuddan ba daidai ba ne.",
+    ofcWbDrawnNotice: "An zana {{number}}, cinikayya {{n}} za a duba.",
+    ofcWbSeed: "Iri",
+    ofcWbPopulation: "An zana daga",
+    ofcWbPosition: "Abu",
+    ofcWbOutcome: "Sakamako",
+    ofcWbFinding: "Abin da aka samu",
+    ofcWbRecord: "Rubuta",
+    ofcWbNoItems: "Wannan samfurin bai zabi komai ba.",
+    ofcWbCompleteHint: "Ba za a iya kammala samfur ba sai kowane abu ya sami sakamako. Aikin da ba a gama ba amma aka ce an gama ya fi rashin samfur muni.",
+    ofcWbComplete: "Kammala wannan samfurin",
+    ofcWbReports: "Rahotannin bincike",
+    ofcWbReportsHint: "Kowane rahoto yana rike da bayanan yadda suke a lokacin da aka samar da shi, tare da lambar tantancewa da mai karatu zai iya sake lissafawa.",
+    ofcWbReportNumber: "Rahoto",
+    ofcWbReportType: "Tambayar da yake amsawa",
+    ofcWbRows: "Layuka",
+    ofcWbPeriod: "Lokaci",
+    ofcWbGeneratedAt: "An samar a",
+    ofcWbSignedBy: "Wanda ya sa hannu",
+    ofcWbChecksum: "Lambar tantancewa",
+    ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
+    ofcWbGenerate: "Samar da rahoto",
+    ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",
+    ofcWbGenerated: "An samar da {{number}}, layuka {{n}}.",
+    ofcWbSign: "Sa hannu",
+    ofcWbWithdraw: "Janye",
+    ofcWbActions: "Ayyuka",
+    ofcWbClose: "Rufe",
+    ofcWbReference: "Lamba",
+    ofcWbTaxpayer: "Mai biyan haraji",
+    ofcWbAmount: "Kudi",
+    ofcPeTitle: "Lokutan kudi",
+    ofcPeIntro: "Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba.",
+    ofcPeOpenPeriod: "Bude lokaci",
+    ofcPePeriod: "Lokaci",
+    ofcPeCollected: "An tara",
+    ofcPeSettled: "An tura wa gwamnati",
+    ofcPeCommission: "Kwamishan",
+    ofcPeTransactions: "Ma’amaloli",
+    ofcPeClose: "Rufe watan",
+    ofcPeBeginClosing: "Fara rufewa",
+    ofcPeReopen: "Sake budewa",
+    ofcPeClosedBy: "Wanda ya rufe",
+    ofcPeReopenedBy: "Wanda ya sake budewa",
+    ofcPeClosingNote: "Abin da ake tabbatarwa",
+    ofcPeReopenReason: "Dalilin sake budewa",
+    ofcPeNotReady: "Bai shirya rufewa ba",
+    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
+    ofcPeOverride: "Dalilin rufewa duk da haka",
+    ofcPeUnreconciled: "Bambancin da ba a warware ba",
+    ofcPePendingPayments: "Biyan da ke jira",
+    ofcPeFiguresNow: "Abin da watan ke da shi yanzu",
+    ofcPeFrozen: "An daskare a rufewa",
+    ofcPeReopenSeparate: "Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin.",
+    ofcNonePeriods: "Ba a bude wani lokacin kudi ba tukuna.",
+    enumSupervisorChange: "Layin rahoto",
+    enumRoleChange: "Matsayi",
+    ofcNavOrganisation: "Sassa da ofisoshi",
+    ofcOrTitle: "Kungiyar",
+    ofcOrIntro: "Wanda ke aiki da wa, wanda ke da alhakinsu, da inda suke zaune. Sashe jiki ne; matsayi shi ne abin da mutum zai iya yi. Ana bukatar dukansu kuma babu wanda ya maye gurbin dayan.",
+    ofcOrDepartments: "Sassa",
+    ofcOrOffices: "Ofisoshin haraji",
+    ofcOrOfficesBody: "Inda jami’ai ke zaune, wanda ba yankin da suke rufewa ba ne. Ofishin Jos North yana kula da kananan hukumomi uku.",
+    ofcOrNewDepartment: "Kara sashe",
+    ofcOrNewOffice: "Kara ofishi",
+    ofcOrCode: "Lamba",
+    ofcOrFunction: "Aikin da yake yi",
+    ofcOrHead: "Wanda ke da alhakinsa",
+    ofcOrParent: "Yana karkashin",
+    ofcOrOfficers: "Jami’ai",
+    ofcOrOpenCases: "Kararrakin da ba a rufe ba",
+    ofcOrCovers: "Yana kula da",
+    ofcOrClose: "Rufe",
+    ofcOrPosting: "Matsayi",
+    ofcOrPostingBody: "Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban.",
+    ofcOrMoveOfficer: "Matsar da wannan jami’i",
+    ofcOrDepartment: "Sashe",
+    ofcOrOffice: "Ofishi",
+    ofcOrSupervisor: "Yana bayar da rahoto ga",
+    ofcOrJobTitle: "Mukami",
+    ofcOrStaffNumber: "Lambar ma’aikaci",
+    ofcOrWhyMoving: "Dalilin matsawa",
+    ofcOrEffectiveFrom: "Daga",
+    ofcOrHistory: "Tarihin matsayi",
+    ofcOrHistoryBody: "Ana kara kawai. Ana tambayar wa ke da alhakin wani yanki a wani wata a jayayyar haraji, kuma amsar da za a iya gyarawa daga baya ba amsa ba ce.",
+    ofcOrNobody: "Babu kowa",
+    ofcOrUnposted: "Ba a saka ba",
+    ofcCwEscalate: "Daukaka",
+    ofcCwEscalateBody: "Yana aika karar ga jami’in da ke sama, tare da duk tarihinta. Idan babu kowa a sama, zai fada maimakon a sa alamar daukaka a bar ta a nan.",
+    ofcCwEscalateReason: "Dalilin bukatar wani a sama",
+    ofcCwEscalatedTo: "An daukaka zuwa",
+    ofcNoneDepartments: "Ba a kirkiri wani sashe ba tukuna.",
+    ofcNoneOffices: "Ba a kirkiri ofishin haraji ba tukuna.",
+    ofcNoneTransfers: "Ba a rubuta wani matsayi ga wannan jami’i ba.",
+    enumCollection: "Karbar kudi",
+    enumFinance: "Kudi",
+    enumAudit: "Bincike",
+    enumEnforcement: "Aiwatarwa",
+    enumTaxpayerServices: "Hidimar masu biyan haraji",
+    enumAdministration: "Gudanarwa",
+    enumTechnology: "Fasaha",
+    enumPosting: "Matsayi",
+    enumDepartment: "Sashe",
+    enumOffice: "Ofishi",
+    enumTerritory: "Yanki",
+    ofcDbByChannel: "Yadda kudin ya shigo",
+    ofcDbByChannelBody: "An rubuta shi a kan kowace ma’amala tun farkon manhajar, kuma ba a taba tarawa ba har yanzu. Shi ne adadin da ke bayan kowane shawara kan inda za a sanya wakilai.",
+    ofcDbByTaxpayerType: "Mutane da kasuwanci",
+    ofcDbByItem: "Haraji bisa kowane nau’i",
+    ofcDbByItemBody: "Mataki daya kasa da nau’in, inda alhakin wani yake.",
+    ofcDbReversed: "An soke",
+    ofcDbRefunded: "An mayar",
+    ofcDbAgentsOnline: "Wakilan da ke aiki yanzu",
+    ofcDbAgentsOnlineHint: "Sun yi aiki cikin mintuna goma sha biyar da suka wuce",
+    ofcDbAgentsSuspended: "Wakilan da aka dakatar",
+    ofcDbExpectedRevenue: "An kima kuma ba a biya ba",
+    ofcDbExpectedRevenueHint: "Kudin da aka riga aka fitar da takardar biya kuma ana bin sa. Ba hasashe ba.",
+    ofcNavTaxpayerAnalytics: "Masu biyan haraji",
+    ofcTaTitle: "Masu biyan haraji",
+    ofcTaIntro: "Ba yawan mutanen da ke rajista ba, sai dai nawa ne har yanzu ke biya, sau nawa, da kuma inda wadanda suka daina suke.",
+    ofcTaActive: "Suna biya",
+    ofcTaActiveHint: "Sun biya wani abu cikin kwanaki casa’in da suka wuce",
+    ofcTaInactive: "Sun daina biya",
+    ofcTaNeverPaid: "Ba su taba biya ba",
+    ofcTaTotal: "A rajista",
+    ofcTaNewThisMonth: "An yi rajista wannan watan",
+    ofcTaAverageLifetime: "Matsakaicin abin da kowa ya biya",
+    ofcTaFrequency: "Sau nawa mai biya yake biya",
+    ofcTaFrequencyBody: "An rarraba maimakon a dauki matsakaici. Matsakaici a cikin jama’a inda mafi yawa suka biya sau daya kuma kadan suka biya sau goma sha biyu ba ya siffanta kowa a cikinsu.",
+    ofcTaByLga: "Rajista bisa karamar hukuma",
+    ofcTaByCategory: "Harajin da masu rajista ke da alaka da su",
+    ofcTaTaxpayersAssessed: "An kima",
+    ofcTaTaxpayersPaid: "Sun biya",
+    ofcTaAveragePayment: "Matsakaicin biya",
+    ofcTaComplianceScore: "Matsakaicin makin bin doka",
+    ofcTaOutstanding: "Abin da ake bin su",
+    ofcCmByPlace: "Kwamishan bisa karamar hukuma",
+    ofcCmByPeriod: "Kwamishan bisa wata",
+    ofcCmAccrued: "An tara",
+    ofcCmPaidOut: "An biya",
+    ofcCmOutstandingCommission: "Bai biya ba",
+    enumOnce: "Sau daya",
+    enumTwoToThree: "Sau biyu ko uku",
+    enumFourToEleven: "Sau hudu zuwa goma sha daya",
+    enumTwelveOrMore: "Sau goma sha biyu ko fiye",
+    ofcDbYesterday: "Jiya",
+    ofcDbThisWeek: "Wannan makon",
+    ofcDbVsYesterday: "kan jiya",
+    ofcDbVsLastWeek: "kan kwanakin makon jiya",
+    ofcDbVsLastMonth: "kan kwanakin watan jiya",
+    ofcDbVsLastYear: "kan wannan lokaci na bara",
+    ofcDbNoComparison: "ba a tara komai a lokacin ba, don haka babu kwatanci",
+    ofcDbLastMonthWhole: "Duk watan jiya",
+    ofcDbDeclining: "Nau’ikan da suka tara kasa da watan jiya",
+    ofcDbDecliningBody: "Idan aka jera bisa girma, nau’in da ya ragu da rabi zai kasance a saman kuma zai yi kama da lafiya. Wannan bayanai iri daya ne aka jera bisa hanya.",
+    ofcDbNoneDeclining: "Babu abin da ke tarawa kasa da watan jiya.",
+    ofcDbChange: "Canji",
+    ofcDbShareOfMonth: "Kason watan",
+    ofcRvAverageTransaction: "Matsakaicin ma’amala",
+    ofcRvCompliance: "Rajistar da ke biya",
+    ofcRvComplianceHint: "Kason masu biyan haraji da aka yi rajista a nan da suka biya wani abu a lokacin.",
+    ofcPfGrowth: "Kan watan jiya",
+    ofcPfCategories: "Harajin da ake aiki da su",
+    enumCategory: "Nau’i",
+    enumItem: "Harajin guda",
+    enumLga: "Karamar hukuma",
+    enumWithdrawn: "An janye",
+    ofcNavTargets: "Manufura da hasashe",
+    ofcTgTitle: "Manufofin haraji",
+    ofcTgIntro: "Abin da Hukumar ke tsammanin tarawa, da abin da ya shigo a kansa.",
+    ofcTgSetTarget: "Sanya manufa",
+    ofcTgScope: "An sanya wa",
+    ofcTgScopeState: "Duk Jihar",
+    ofcTgScopeLga: "Karamar hukuma daya",
+    ofcTgScopeCategory: "Nau’in haraji daya",
+    ofcTgScopeItem: "Harajin guda daya",
+    ofcTgScopeAgent: "Wakili daya",
+    ofcTgPeriod: "Lokaci",
+    ofcTgPeriodDaily: "Kullum",
+    ofcTgPeriodWeekly: "Mako-mako",
+    ofcTgPeriodMonthly: "Wata-wata",
+    ofcTgPeriodQuarterly: "Kwata-kwata",
+    ofcTgPeriodAnnual: "Shekara-shekara",
+    ofcTgAmount: "Adadin manufa",
+    ofcTgNote: "Dalilin wannan adadi",
+    ofcTgTarget: "Manufa",
+    ofcTgCollected: "An tara",
+    ofcTgAchievement: "Cimma buri",
+    ofcTgGap: "Rata",
+    ofcTgThroughPeriod: "Cikin lokacin",
+    ofcTgRollup: "Manufar jiha da abin da aka raba a karkashinta",
+    ofcTgRollupBody: "Ba lallai su daidaita ba. Adadin Jihar yakan dauki karin sarari, kuma karamar hukuma da ba ta da manufa ita ce abin lura mafi amfani.",
+    ofcTgStateTarget: "Manufar jiha",
+    ofcTgApportioned: "An raba wa kananan hukumomi",
+    ofcTgLgasWithout: "Kananan hukumomin da ba su da manufa",
+    ofcTgWithdraw: "Janye",
+    ofcTgWithdrawReason: "Dalilin janyewa",
+    ofcTgSuperseded: "Wannan ya maye gurbin manufar da ta gabata na wannan lokaci.",
+    ofcTgSetBy: "Wanda ya sanya",
+    ofcTgShowSuperseded: "Hada da wadanda aka sauya ko janye",
+    ofcNoneTargetsSet: "Ba a sanya manufa don wannan lokaci ba.",
+    ofcFcTitle: "Hasashe",
+    ofcFcNotATarget: "Wannan hasashe ne, ba manufa ba kuma ba tabbataccen kudin shiga ba. Lissafi ne kan abin da aka tara ya zuwa yanzu da abin da shekarun baya suka yi a wannan lokaci.",
+    ofcFcProjected: "Hasashen lokacin",
+    ofcFcBasis: "An lissafa daga",
+    ofcFcConfidence: "Tabbaci",
+    ofcFcSeasonalShare: "Yawanci ana tarawa ya zuwa yanzu",
+    ofcFcComparablePeriods: "Lokutan da aka kwatanta",
+    ofcFcProjectedAchievement: "Hasashe kan manufa",
+    forecastSeasonal: "An tsara shi bisa yadda ake tarawa: an yi amfani da shekarun baya don sanin kaso nawa ake tarawa ya zuwa yanzu.",
+    forecastRunRate: "Kai tsaye bisa saurin tarawa. Babu isasshen tarihi don sanin yadda ake tarawa, don haka watakila ba daidai ba ne a farko da karshen lokacin.",
+    forecastTooEarlyInCurve: "Shekarun baya kusan ba su tara komai ba ya zuwa yanzu, don haka ba za a iya amfani da yadda ake tarawa ba tukuna. An nuna saurin tarawa kai tsaye.",
+    forecastPeriodComplete: "Lokacin ya kare. Wannan shi ne ainihin adadin, ba hasashe ba.",
+    forecastNotStarted: "Lokacin bai fara ba. Babu abin da za a yi hasashe daga gare shi tukuna.",
+    enumSeasonal: "Yadda ake tarawa",
+    enumRunRate: "Saurin tarawa",
+    enumInsufficientHistory: "Babu isasshen tarihi",
+    enumAwaitingInformation: "Ana jiran bayani",
+    enumEscalated: "An daukaka",
+    enumInvestigating: "Ana bincike",
+    enumAgentConduct: "Halin wakili",
+    enumCommissionQuery: "Tambaya kan kwamishan",
+    enumDataCorrection: "Gyaran bayanai",
+    enumFraudInvestigation: "Binciken zamba",
+    enumGeneral: "Na gama-gari",
+    enumReconciliationException: "Bambancin lissafi",
+    enumRevenueAnomaly: "Rashin daidaito a haraji",
+    enumSystemIssue: "Matsalar manhaja",
+    enumTaxpayerDispute: "Takaddamar mai biyan haraji",
+    enumApproval: "Amincewa",
+    enumFraudFlag: "Alamar hadari",
+    enumManual: "Jami’i ya bude",
+    enumSupportTicket: "Takardar taimako",
+    enumAssignment: "An ba wa",
+    enumComment: "Sharhi",
+    enumDueDateChange: "An sauya ranar karshe",
+    enumEscalation: "An daukaka",
+    enumEvidence: "An hada hujja",
+    enumNote: "Bayanin cikin gida",
+    enumPriorityChange: "An sauya muhimmanci",
+    enumResolution: "Warware",
+    enumRouted: "An tura",
+    enumStatusChange: "An sauya matsayi",
+    ofcCwSubject: "Batu",
+    ofcCwDescription: "Abin da ya faru",
+    ofcCwCategory: "Nau’i",
+    ofcCwRisk: "Hadari",
+    ofcCwPriority: "Muhimmanci",
+    ofcCwDepartment: "Aika wa",
+    ofcCwAssignee: "Ba wa",
+    ofcCwNobody: "Babu kowa tukuna",
+    ofcCwAnyDepartment: "Babu sashe",
+    ofcCwDue: "Ranar karshe",
+    ofcCwOnlyOpen: "Kararrakin da ba a rufe ba kadai",
+    ofcCwOnlyOverdue: "Wadanda suka wuce lokaci kadai",
+    ofcCwOpenedBy: "Wanda ya bude",
+    ofcCwCaseNumber: "Kara",
+    ofcCwComments: "Sharhi",
+    ofcCwEvidence: "Hujja",
+    ofcCwBackToQueue: "Koma jerin aikin",
+    ofcCwHistory: "Tarihi",
+    ofcCwAddComment: "Kara sharhi",
+    ofcCwInternalNote: "Ajiye wannan a matsayin bayanin cikin gida",
+    ofcCwMention: "Ambaci jami’i",
+    ofcCwPost: "Aika",
+    ofcCwMoveCase: "Matsar da wannan kara",
+    ofcCwChangeStatus: "Sauya matsayi",
+    ofcCwResolution: "Abin da ya kammala",
+    ofcCwResolutionRequired: "Fada abin da karar ta kammala kafin ka warware ta.",
+    ofcCwSaved: "An adana.",
+    ofcCwNotYours: "Ba a ba ka wannan kara ba kuma ba kai ka bude ta ba, don haka za ka iya yin sharhi kadai.",
+    ofcCwAbout: "Game da",
+    ofcCwWhy: "Dalili",
+    ofcCwSubjectTooShort: "Ba karar batu na akalla haruffa biyar.",
+    ofcCwSampleSubject: "Karbar kudi ta ninka sau uku ba tare da sabbin masu biyan haraji ba",
+    ofcCwSampleDescription: "Fada abin da ka gani, a ina, da abin da kake so dayan sashen ya duba.",
+    ofcCwAppendOnly: "Ba za a iya gyara ko cire komai a nan ba. Gyara wani shigarwa ne.",
+    ofcNoneCasesMatchFilter: "Babu kara da ya dace da wadannan tacewa.",
+    ofcT3Title: "Fayil din ma’amala",
+    ofcT3Intro: "Cikakken labarin karbar kudi guda, daga mai biyan haraji zuwa asusun gwamnati.",
+    ofcT3Find: "Nemo ma’amala",
+    ofcT3FindBody: "Lambar ma’amala, ko lambar rasit daga sakon dan kasa.",
+    ofcT3Chain: "Sarkar",
+    ofcT3Assessment: "Kima",
+    ofcT3Invoice: "Takardar biya",
+    ofcT3Payment: "Biyan kudi",
+    ofcT3Gateway: "Kofar biyan kudi",
+    ofcT3Settlement: "Turawar kudi",
+    ofcT3Reconciliation: "Daidaita lissafi",
+    ofcT3Commission: "Kwamishan",
+    ofcT3Refunds: "Mayar da kudi",
+    ofcT3Timeline: "Abin da ya faru, bi da bi",
+    ofcT3TimelineBody: "Rijistar manhajar da ayyukan jami’ai, a agogo guda.",
+    ofcT3Platform: "Manhaja",
+    ofcT3OfficerAction: "Aikin jami’i",
+    ofcT3Before: "Kafin",
+    ofcT3After: "Bayan",
+    ofcT3CasesAndFlags: "Kararraki da alamun hadari",
+    ofcT3OpenCaseAbout: "Bude kara game da wannan ma’amala",
+    ofcT3Withheld: "Ba a nuna wa matsayinka ba",
+    ofcT3WithheldBody: "Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai.",
+    ofcT3NoPayment: "Ba a yi yunkurin biyan kudi ba.",
+    ofcT3NoReceipt: "Ba a bayar da rasit ba.",
+    ofcT3NoSettlement: "Kudin bai isa asusun gwamnati ba tukuna.",
+    ofcT3NoCommission: "Ba a samu kwamishan ba.",
+    ofcT3NoReconciliation: "Wannan bai wuce ta zagayen daidaita lissafi ba.",
+    ofcT3Channel: "Hanya",
+    ofcT3Where: "Ina",
+    ofcT3ServiceCharge: "Kudin hidima",
+    ofcT3Verified: "An tabbatar",
+    ofcT3NothingLinked: "Babu kara ko alamar hadari da ke da nasaba da wannan ma’amala.",
     ofcGroupAdministration: "Gudanarwa",
     ofcGroupAgentsProgrammes: "Wakilai da shirye-shirye",
     ofcGroupAssessment: "Kima",

@@ -21,6 +21,7 @@ import { hashPassword } from '../lib/crypto';
 import { recordSettlement } from '../services/reconciliation';
 import { gateway } from '../integrations/gateway';
 import { seedReferenceData } from '../db/seed';
+import { seedDemoAgent } from '../db/seed-agent';
 
 let server: Server | null = null;
 let baseUrl = '';
@@ -98,6 +99,21 @@ export async function resetDatabase(): Promise<void> {
     );
   }
   await pool.query(`DELETE FROM users WHERE phone LIKE '+234%'`);
+
+  /*
+   * Roles a test invented.
+   *
+   * `roles` cannot be truncated — `users.role` references it and the six the
+   * platform ships with have to survive — but an administrator can now create
+   * one, so a test that does leaves it behind for every file that runs
+   * afterwards in the same shard database. That is the `app_versions` failure
+   * again in a new place, and it is worth removing here rather than asking
+   * every future test to remember.
+   *
+   * Only non-system roles, and only after the fixture users above are gone, so
+   * nothing still holds them.
+   */
+  await pool.query(`DELETE FROM roles WHERE NOT is_system`);
 }
 
 export interface ApiResponse<T = any> {
@@ -148,6 +164,33 @@ export async function api<T = any>(
 
 export const get = <T = any>(path: string, options?: RequestOptions) =>
   api<T>('GET', path, undefined, options);
+
+/**
+ * The same, for a response whose body is bytes.
+ *
+ * `api` reads every response as text, which is right for JSON and CSV and
+ * silently corrupts a PDF or a workbook: the deflate streams inside one are
+ * not valid UTF-8, and decoding them replaces whole bytes before any assertion
+ * gets to look at them.
+ */
+export async function getBinary(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ status: number; body: Buffer; headers: Headers }> {
+  const headers: Record<string, string> = {
+    'x-app-version': options.appVersion ?? '1.0.0',
+    ...options.headers,
+  };
+  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.deviceId) headers['x-device-id'] = options.deviceId;
+
+  const response = await fetch(`${baseUrl}${path}`, { method: 'GET', headers });
+  return {
+    status: response.status,
+    body: Buffer.from(await response.arrayBuffer()),
+    headers: response.headers,
+  };
+}
 export const post = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>
   api<T>('POST', path, body, options);
 export const put = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>
@@ -344,6 +387,68 @@ export async function confirmedCollection(transactionId: string): Promise<{
  * test makes rather than something the platform does on its own — the whole
  * point of the change is that settlement is a separate event.
  */
+/**
+ * One collection, driven all the way through: taxpayer, assessment, payment,
+ * settlement.
+ *
+ * Two test files were building this by hand, and a third would have made three
+ * copies of a sequence that has to stay in step with the pipeline it exercises.
+ * The demonstration agent needs an administrator to have approved it, so the
+ * caller has to have created one before this is called.
+ *
+ * Returns the transaction id, which is all any caller has wanted from it.
+ */
+export async function seedOneCollection(label: string): Promise<string> {
+  const demo = await seedDemoAgent();
+  if (!demo) {
+    throw new Error(
+      'the demonstration agent could not be seeded — reference data and an admin user come first',
+    );
+  }
+  const session = await loginAs(demo.phone, demo.password, demo.deviceIdentifier);
+  const agentAuth = { token: session.accessToken, deviceId: demo.deviceIdentifier };
+
+  const taxpayer = await post(
+    '/taxpayers',
+    {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: 'Seeded',
+      lastName: `Subject${label}`,
+      phone: `+2348159${label.padStart(6, '0')}`,
+      address: '11 Ledger Street, Jos',
+      lgaId: await firstLgaId(),
+      consentGiven: true,
+      declarationAccepted: true,
+    },
+    { ...agentAuth, idempotencyKey: `seed-tp-${label}` },
+  );
+  if (taxpayer.status !== 201) {
+    throw new Error(`could not register a taxpayer: ${JSON.stringify(taxpayer.body)}`);
+  }
+
+  const assessment = await post(
+    '/revenue/assessments',
+    {
+      taxpayerId: taxpayer.body.taxpayerId,
+      revenueItemId: await revenueItemByCode('SHOPS-KIOSKS'),
+      inputs: {},
+    },
+    { ...agentAuth, idempotencyKey: `seed-as-${label}` },
+  );
+  const initiated = await post(
+    '/payments/initiate',
+    { transactionId: assessment.body.transactionId },
+    { ...agentAuth, idempotencyKey: `seed-pay-${label}` },
+  );
+  await post(
+    '/payments/simulate',
+    { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+    agentAuth,
+  );
+  await settleTransaction(assessment.body.transactionId);
+  return assessment.body.transactionId as string;
+}
+
 export async function settleTransaction(transactionId: string): Promise<void> {
   const collection = await confirmedCollection(transactionId);
   await settleCollection({

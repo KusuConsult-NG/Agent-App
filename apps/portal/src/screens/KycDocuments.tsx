@@ -191,6 +191,7 @@ function DocumentViewer({
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [access, setAccess] = useState<AccessEntry[] | null>(null);
+  const [accessError, setAccessError] = useState<ApiError | null>(null);
   const urlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -217,11 +218,34 @@ function DocumentViewer({
     };
   }, [doc.id]);
 
+  /*
+   * "Nobody looked" and "I could not find out who looked" are different answers.
+   *
+   * This swallowed the rejection and set the list to empty, so a failed lookup
+   * rendered "No access recorded" — the screen asserting, about a log of who
+   * has read somebody's identity papers, a fact it did not have. An officer
+   * checking whether a colleague opened a file would have been told no.
+   *
+   * The failure is now shown and the button stays, so the question can be
+   * asked again. Nothing here is a control; it is evidence, and evidence that
+   * reports a failure as a finding is worse than evidence that is missing.
+   */
   const showAccess = useCallback(() => {
+    setAccessError(null);
     api
       .get<{ access: AccessEntry[] }>(`/agents/kyc/documents/${doc.id}/access`)
       .then((data) => setAccess(data.access))
-      .catch(() => setAccess([]));
+      .catch((caught) => {
+        setAccess(null);
+        if (caught instanceof ApiRequestError) setAccessError(caught.error);
+        else {
+          setAccessError({
+            code: 'CLIENT',
+            message: 'The access log could not be read.',
+            moneyStatus: 'NOT_APPLICABLE',
+          });
+        }
+      });
   }, [doc.id]);
 
   async function decide(decision: 'ACCEPT' | 'REJECT') {
@@ -310,6 +334,7 @@ function DocumentViewer({
 
       {can('audit:read') && (
         <div className="document-viewer__access">
+          <ErrorAlert error={accessError} />
           {!access ? (
             <button type="button" className="link" onClick={showAccess}>{t.ofcKycWhoLooked}</button>
           ) : access.length === 0 ? (

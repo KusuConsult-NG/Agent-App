@@ -150,6 +150,36 @@ export const PERMISSIONS = [
   'fraud:read',
   'fraud:manage',
   'audit:read',
+  /*
+   * The auditor's own instruments.
+   *
+   * Both write, and both write only into the auditor's workpapers: a sample
+   * records which transactions were drawn for examination, a report freezes
+   * figures that were already readable and puts a name and a date on them.
+   * Neither can change what a taxpayer owes, what an agent earned, or what a
+   * receipt says -- the same test `case:*` has to pass to sit in a role that
+   * exists to be read-only about the record.
+   *
+   * `audit:sign` is separate from `audit:report` because generating figures
+   * and standing behind them are different acts, and PSIRS may well want them
+   * to be different people.
+   */
+  'audit:sample',
+  'audit:report',
+  'audit:sign',
+  /*
+   * Taking a copy out of the platform.
+   *
+   * Separate from the permission that lets an officer read the same rows on
+   * screen, because they are not the same act. A row on screen is governed by
+   * everything around it -- the audit trail, the territory scope, the officer's
+   * session; the same row in a spreadsheet on a laptop is governed by nothing
+   * this platform can see. Every role that reads a report holds this today, so
+   * nothing narrows on the day it ships; what it buys is the ability to take
+   * it away from one role without taking their reports away, which was
+   * impossible while the two were the same permission.
+   */
+  'data:export',
   'support:read:own',
   'support:read:all',
   'support:manage',
@@ -157,6 +187,61 @@ export const PERMISSIONS = [
   // Incentives
   'incentive:read:all',
   'incentive:configure',
+
+  /*
+   * Casework.
+   *
+   * These write, and they write only the officer's own investigative record —
+   * a case, its comments, its evidence, its assignment. Nothing here changes
+   * what a taxpayer owes, what an agent earned, or what a receipt says. That
+   * distinction is the reason the auditor holds all four of them and is still
+   * read-only in the sense the role exists for; see `MUTATING_PERMISSIONS` and
+   * `CASEWORK_PERMISSIONS` in `apps/portal/src/lib/permissions.ts`.
+   *
+   * `case:manage` is the authority over *any* case: reassign it, route it to
+   * another department, escalate it, resolve it, close it. An officer who does
+   * not hold it can still do all of that to a case they opened or a case
+   * assigned to them, which is enforced in `services/cases.ts` rather than by
+   * a permission, because "mine" is a fact about the row and not about the
+   * role.
+   */
+  'case:read:all',
+  'case:create',
+  'case:contribute',
+  'case:manage',
+
+  /*
+   * Revenue targets.
+   *
+   * `target:read:all` is held by every reporting role, because an achievement
+   * percentage is meaningless to a finance officer who can see the actual and
+   * not the target it is measured against — the §36 matrix gives Finance and
+   * Audit sight of targets and not the setting of them.
+   *
+   * `target:manage` sets and withdraws. Planning revenue is the Service's own
+   * decision about what it expects to raise, so it sits with the administrator
+   * and the revenue officer and nowhere else. A finance officer who could
+   * lower a target could make a shortfall disappear.
+   */
+  'target:read:all',
+  'target:manage',
+
+  /*
+   * Financial periods.
+   *
+   * Closing a month freezes what the State says it collected in it, and
+   * reopening one unfreezes a figure that has already been reported. They are
+   * separate permissions on purpose: the officer who closes the books and the
+   * officer who can unclose them being the same person removes most of what a
+   * period lock is for. Finance closes; only an administrator reopens.
+   *
+   * `period:read` is held by every reporting role — an officer looking at a
+   * March figure needs to know whether March is closed, and that is not a
+   * privileged fact.
+   */
+  'period:read',
+  'period:close',
+  'period:reopen',
 
   // Approvals (maker-checker)
   'approval:request',
@@ -218,11 +303,17 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:suspend',
     'commission:read:all',
     'report:read:territory',
+    'data:export',
     'fraud:read',
     'support:read:all',
     'support:manage',
     'approval:review',
     'approval:authorise',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'target:read:all',
+    'period:read',
   ],
   revenue_officer: [
     'taxpayer:correct',
@@ -249,6 +340,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:suspend',
     'commission:read:all',
     'report:read:all',
+    'data:export',
     'dashboard:executive',
     'fraud:read',
     'fraud:manage',
@@ -258,6 +350,12 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'incentive:read:all',
     'approval:request',
     'approval:review',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'target:read:all',
+    'target:manage',
+    'period:read',
   ],
   finance_officer: [
     'taxpayer:read:all',
@@ -277,12 +375,19 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'commission:manage',
     'commission:payout:approve',
     'report:read:all',
+    'data:export',
     'report:financial',
     'dashboard:executive',
     'fraud:read',
     'audit:read',
     'approval:review',
     'approval:authorise',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'target:read:all',
+    'period:read',
+    'period:close',
   ],
   auditor: [
     'taxpayer:read:all',
@@ -296,11 +401,34 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:read:all',
     'commission:read:all',
     'report:read:all',
+    'data:export',
     'report:financial',
     'fraud:read',
     'audit:read',
     'incentive:read:all',
     'support:read:all',
+    /*
+     * The auditor writes cases and nothing else.
+     *
+     * An auditor who cannot record what they found is not independent, they
+     * are mute — the finding leaves the platform in an email and the
+     * investigation has no file. `case:manage` is here because an audit case
+     * is the auditor's own instrument: they decide what it is about, who is
+     * asked for information, and when it is resolved.
+     *
+     * It does not cost the role its standing. None of these four can change a
+     * taxpayer's liability, an agent's commission, a rate, a receipt, or a
+     * reconciliation outcome. See the note above the casework block.
+     */
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'case:manage',
+    'audit:sample',
+    'audit:report',
+    'audit:sign',
+    'target:read:all',
+    'period:read',
   ],
   admin: [
     'taxpayer:correct',
@@ -331,6 +459,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'commission:read:all',
     'commission:manage',
     'report:read:all',
+    'data:export',
     'dashboard:executive',
     'fraud:read',
     'fraud:manage',
@@ -342,6 +471,14 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'approval:request',
     'system:configure',
     'user:manage',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'case:manage',
+    'target:read:all',
+    'target:manage',
+    'period:read',
+    'period:reopen',
   ],
 };
 
@@ -365,6 +502,25 @@ export const STEP_UP_ACTIONS = [
   'payment.reversal.approve',
   'agent.suspend',
   'user.role.change',
+  /*
+   * Closing a month, and unclosing one.
+   *
+   * After a close the database itself refuses to write into the period, and
+   * after a reopen it stops refusing — so both change what is possible rather
+   * than merely what is recorded. That is the size of decision this list is
+   * for.
+   */
+  'financial.period.close',
+  'financial.period.reopen',
+  /*
+   * Putting a name to figures, and taking a report out of circulation.
+   *
+   * A signed audit report is read as settled by everyone downstream of it, and
+   * the signature cannot be edited off the row afterwards -- migration 062
+   * refuses that. Withdrawal is the other half of the same authority. Neither
+   * should be one click from a session left open on a desk.
+   */
+  'audit.report.sign',
 ] as const;
 
 export type StepUpAction = (typeof STEP_UP_ACTIONS)[number];
