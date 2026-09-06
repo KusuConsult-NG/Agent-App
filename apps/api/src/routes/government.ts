@@ -39,6 +39,7 @@ import * as exporting from '../services/export';
 import * as officerDevices from '../services/officer-devices';
 import * as inbox from '../services/officer-inbox';
 import { integrationStatus } from '../integrations';
+import { integrationHealth } from '../services/integration-health';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
 
@@ -2757,7 +2758,17 @@ governmentRouter.get(
   '/platform/integrations',
   requirePermission('system:configure', 'audit:read'),
   asyncHandler(async (_req, res) => {
-    res.json(integrationStatus());
+    /*
+     * Which adapter is configured, and whether it is answering.
+     *
+     * This endpoint used to report only the first, which is a fact about
+     * deployment: it tells an officer that the real TIN service is selected
+     * rather than the mock, and nothing about whether it responded this
+     * morning. Both are worth knowing and neither substitutes for the other --
+     * a mock answering perfectly is not the same news as the service
+     * answering.
+     */
+    res.json({ ...integrationStatus(), ...(await integrationHealth(pool)) });
   }),
 );
 

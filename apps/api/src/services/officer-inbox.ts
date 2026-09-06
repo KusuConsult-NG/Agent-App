@@ -30,7 +30,17 @@ export type NotificationKind =
   | 'CASE_MENTION'
   | 'CASE_ESCALATED'
   | 'APPROVAL_WAITING'
-  | 'SYSTEM_ALERT';
+  | 'SYSTEM_ALERT'
+  /*
+   * Back, with something behind it.
+   *
+   * Migration 064 wrote this kind and removed it before shipping, because
+   * nothing could raise one: `integrationStatus()` reports which adapter is
+   * configured rather than whether it answers. Migration 065 records the
+   * outcome of every outbound call, so the state is now reachable --
+   * `services/integration-health.ts` raises it.
+   */
+  | 'INTEGRATION_ALERT';
 
 export type NotificationSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 

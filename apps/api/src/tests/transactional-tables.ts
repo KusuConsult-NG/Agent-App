@@ -108,6 +108,17 @@ export const TRANSACTIONAL_TABLES = [
    */
   'officer_notifications',
   /*
+   * And whether the outside world answered.
+   *
+   * It holds no user reference, so the reset does not strictly need it -- but
+   * a run that left an integration DOWN would silence the next file's alert
+   * sweep through the "one unread per subject" index, and a file that seeded
+   * three failures would make the file after it report an outage that never
+   * happened. TRUNCATE does not fire the DELETE trigger migration 065 adds, so
+   * the "history only grows" guarantee is unaffected.
+   */
+  'integration_health',
+  /*
    * And the period lock.
    *
    * It has to be emptied between files for two reasons. It holds a `closed_by`

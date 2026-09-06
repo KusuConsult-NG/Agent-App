@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2370 strings, grouped by where an agent meets them. Lower stakes
+2374 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2803,6 +2803,10 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumIntegrationAlert` | An outside service is not answering | Wata hidimar waje ba ta amsawa | ☐ | |
+| `enumNeverCalled` | Not called yet | Ba a kira ba tukuna | ☐ | |
+| `enumDegraded` | A call went unanswered | An yi kira ba a amsa ba | ☐ | |
+| `enumDown` | Not answering | Ba ya amsawa | ☐ | |
 | `enumApprovalWaiting` | An approval is waiting for you | Amincewa na jiran ka | ☐ | |
 | `enumCaseAssigned` | A case was assigned to you | An ba ka wani shari’a | ☐ | |
 | `enumCaseEscalated` | A case was escalated to you | An daga shari’a zuwa gare ka | ☐ | |

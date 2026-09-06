@@ -33,11 +33,12 @@ for, recorded here rather than left implied:
   configuration. A role PSIRS creates gets the floor until an engineer changes
   the file, which is the same shape of problem the role-permission map had
   before migration 059.
-* **There is no live probe of the outside services.** Job health raises alerts;
-  a gateway or TIN service that has stopped answering does not, because
-  `integrationStatus()` reports which adapter is configured rather than whether
-  it responds. The `INTEGRATION_ALERT` notification kind was written for this
-  and removed rather than faked — see migration 064.
+* ~~There is no live probe of the outside services.~~ **Done** — migration 065.
+  Not a probe: every adapter already returns `UNAVAILABLE` rather than throwing
+  when it cannot reach its service, so `integration_health` records the outcome
+  of the platform's own calls. A synthetic lookup against a government identity
+  service every five minutes would be a real query about a real person asked
+  for no reason. `INTEGRATION_ALERT` is back, with the table behind it.
 
 The four items the brief said it "would not put in front of an officer
 without" — Transaction 360, the audit trail with before and after, the shared
@@ -130,7 +131,7 @@ are all Complete and each is covered by a test that fails if it stops being.
 | Pending payments | Complete | `/transactions` status filter |
 | Unreconciled transactions | Complete | `exceptions.reconciliation_exceptions` |
 | Fraud alerts | Complete | `exceptions.open_fraud_flags`, `/fraud` |
-| System alerts | Complete | Overdue, failing and stalled jobs raise an alert into the administrator role's inbox. `NEVER_RUN` deliberately does not: on a fresh database every job has never run, and an alert storm on the first morning is how an organisation learns to ignore alerts |
+| System alerts | Complete | Overdue, failing and stalled jobs, and any integration that has stopped answering, raise an alert into the administrator role's inbox. `NEVER_RUN` and `NEVER_CALLED` deliberately do not: on a fresh database that is everything, and an alert storm on the first morning is how an organisation learns to ignore alerts |
 | Pending officer tasks | Complete | `/my-work` |
 | Pending approvals | Complete | `exceptions.pending_approvals` |
 

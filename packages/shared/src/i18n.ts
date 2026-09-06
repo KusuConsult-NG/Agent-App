@@ -1134,6 +1134,10 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  enumIntegrationAlert: string;
+  enumNeverCalled: string;
+  enumDegraded: string;
+  enumDown: string;
   ofcOvChange: string;
   enumApprovalWaiting: string;
   enumCaseAssigned: string;
@@ -3750,6 +3754,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    enumIntegrationAlert: "An outside service is not answering",
+    enumNeverCalled: "Not called yet",
+    enumDegraded: "A call went unanswered",
+    enumDown: "Not answering",
     ofcOvChange: "What changed",
     enumApprovalWaiting: "An approval is waiting for you",
     enumCaseAssigned: "A case was assigned to you",
@@ -6223,6 +6231,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    enumIntegrationAlert: "Wata hidimar waje ba ta amsawa",
+    enumNeverCalled: "Ba a kira ba tukuna",
+    enumDegraded: "An yi kira ba a amsa ba",
+    enumDown: "Ba ya amsawa",
     ofcOvChange: "Abin da ya canza",
     enumApprovalWaiting: "Amincewa na jiran ka",
     enumCaseAssigned: "An ba ka wani shari\u2019a",

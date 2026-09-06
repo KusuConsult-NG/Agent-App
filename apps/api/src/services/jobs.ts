@@ -145,7 +145,9 @@ export const BACKGROUND_JOBS = {
    */
   'system-alerts': {
     intervalMs: 15 * 60_000,
-    purpose: 'Raises an alert when a background job is overdue, failing or stalled.',
+    purpose:
+      'Raises an alert when a background job is overdue or failing, ' +
+      'or an integration has stopped answering.',
   },
 } as const;
 

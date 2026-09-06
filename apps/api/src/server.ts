@@ -17,6 +17,7 @@ import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
 import { raiseSystemAlerts } from './services/officer-inbox';
+import { raiseIntegrationAlerts } from './services/integration-health';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
@@ -160,7 +161,11 @@ async function main() {
     }),
 
     schedule('system-alerts', async () => {
-      const { raised } = await withTransaction((client) => raiseSystemAlerts(client));
+      const { raised } = await withTransaction(async (client) => {
+        const jobs = await raiseSystemAlerts(client);
+        const integrations = await raiseIntegrationAlerts(client);
+        return { raised: jobs.raised + integrations.raised };
+      });
       return raised > 0 ? `${raised} alert(s) raised` : null;
     }),
 
