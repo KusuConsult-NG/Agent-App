@@ -17,8 +17,6 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import {
   activationBlockers,
-  permissionsForRole,
-  roleHasPermission,
   type AgentClearanceFlags,
   type Permission,
   type Role,
@@ -26,6 +24,7 @@ import {
   compareVersions,
 } from '@psirs/shared';
 import { config } from '../config';
+import * as rbacStore from '../services/rbac-store';
 import { pool, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
@@ -100,7 +99,17 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       userId: payload.sub,
       role,
       sessionId: payload.sid,
-      permissions: permissionsForRole(role),
+      /*
+       * Read from the database, not from the compiled map.
+       *
+       * The role-to-permission table moved out of `rbac.ts` and into
+       * `role_permissions` so PSIRS can change their own delegation of
+       * authority without a deployment. `rbacStore` caches it for thirty
+       * seconds, so this stays one map lookup per request rather than a query
+       * — see the note in that file on why a revocation does not wait for the
+       * cache to expire.
+       */
+      permissions: await rbacStore.permissionsFor(role),
       agentId: payload.agentId,
       deviceId: payload.deviceId,
     };
@@ -118,7 +127,16 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 export function requirePermission(...permissions: Permission[]) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) return next(unauthorised());
-    const granted = permissions.some((permission) => roleHasPermission(req.auth!.role, permission));
+    /*
+     * Asked of the store rather than of the compiled map, for the same reason.
+     *
+     * `req.auth.permissions` was already resolved above and could be read from
+     * there — but this is the enforcement point, and having it consult the same
+     * source directly means a future change to how `req.auth` is populated
+     * cannot quietly widen what is allowed.
+     */
+    const held = await rbacStore.permissionsFor(req.auth.role);
+    const granted = permissions.some((permission) => held.includes(permission));
     if (!granted) {
       /*
        * A refusal is a thing that happened.

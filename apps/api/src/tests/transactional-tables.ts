@@ -85,6 +85,19 @@ export const TRANSACTIONAL_TABLES = [
    * trigger, so the "never deleted" guarantee is unaffected.
    */
   'financial_periods',
+  /*
+   * The delegation of authority, which is reference data a test can change.
+   *
+   * Migration 059 moved the role-to-permission map into the database, so a test
+   * that grants `catalogue:configure` to finance officers changes it for every
+   * file that runs afterwards in the same shard — and the parity test that
+   * compares the table against the compiled map would then fail on somebody
+   * else's grant. Emptied between files and restored by `seedRoles`, which
+   * re-applies the compiled map only to a role that has no grants at all.
+   *
+   * `role_permissions` before `roles`: the first references the second.
+   */
+  'role_permissions',
   'revenue_targets',
   'officer_transfers',
   'departments',

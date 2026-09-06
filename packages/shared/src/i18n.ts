@@ -1518,6 +1518,31 @@ export interface TranslationDictionary {
   ofcCwIntro: string;
   ofcCwOpenCase: string;
   ofcCwStatus: string;
+  ofcNavRoles: string;
+  ofcRlTitle: string;
+  ofcRlIntro: string;
+  ofcRlCatalogueNote: string;
+  ofcRlRole: string;
+  ofcRlOfficers: string;
+  ofcRlPermissions: string;
+  ofcRlSystemRole: string;
+  ofcRlPortalRole: string;
+  ofcRlGrant: string;
+  ofcRlRevoke: string;
+  ofcRlGrantReason: string;
+  ofcRlRevokeReason: string;
+  ofcRlRevokeWarning: string;
+  ofcRlNewRole: string;
+  ofcRlRoleName: string;
+  ofcRlRoleLabel: string;
+  ofcRlCopyFrom: string;
+  ofcRlCopyFromBody: string;
+  ofcRlRetire: string;
+  ofcRlRestore: string;
+  ofcRlIsPortalRole: string;
+  ofcRlSignedOut: string;
+  ofcRlSearchPermission: string;
+  ofcNoneRoles: string;
   enumClosing: string;
   ofcNavPeriods: string;
   ofcPeTitle: string;
@@ -3939,6 +3964,31 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
     ofcCwOpenCase: "Open a case",
     ofcCwStatus: "Status",
+    ofcNavRoles: "Roles & permissions",
+    ofcRlTitle: "Roles and permissions",
+    ofcRlIntro: "Who may do what. This is data now, so a change in the Service's delegation of authority does not wait for a release.",
+    ofcRlCatalogueNote: "The list of permissions that exist stays in code, because a permission is a name the routes check. A grant naming something no route checks would look like a control and be none.",
+    ofcRlRole: "Role",
+    ofcRlOfficers: "Officers holding it",
+    ofcRlPermissions: "Permissions",
+    ofcRlSystemRole: "Ships with the platform",
+    ofcRlPortalRole: "Signs in to this portal",
+    ofcRlGrant: "Grant",
+    ofcRlRevoke: "Take away",
+    ofcRlGrantReason: "Why this authority is being given",
+    ofcRlRevokeReason: "Why this authority is being taken away",
+    ofcRlRevokeWarning: "Everybody holding this role will be signed out. That is deliberate: the map is cached, and thirty seconds is a long time for somebody whose authority has just been withdrawn to keep exercising it.",
+    ofcRlNewRole: "Add a role",
+    ofcRlRoleName: "Name used in code",
+    ofcRlRoleLabel: "What officers see",
+    ofcRlCopyFrom: "Start from",
+    ofcRlCopyFromBody: "Starting from the nearest existing role and taking things away is safer than starting from nothing, which is how a role ends up with everything a week later, one emergency at a time.",
+    ofcRlRetire: "Retire",
+    ofcRlRestore: "Bring back",
+    ofcRlIsPortalRole: "This role signs in to the officer portal",
+    ofcRlSignedOut: "Officers signed out",
+    ofcRlSearchPermission: "Find a permission",
+    ofcNoneRoles: "No role is configured.",
     enumClosing: "Being closed",
     ofcNavPeriods: "Financial periods",
     ofcPeTitle: "Financial periods",
@@ -6252,6 +6302,31 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
     ofcCwOpenCase: "Bude kara",
     ofcCwStatus: "Matsayi",
+    ofcNavRoles: "Matsayi da izini",
+    ofcRlTitle: "Matsayi da izini",
+    ofcRlIntro: "Wa zai iya yin me. Wannan bayanai ne yanzu, don haka sauya wa wanda Hukumar ta ba iko ba ya jiran sabon fitarwa.",
+    ofcRlCatalogueNote: "Jerin izinin da suke nan ya kasance a cikin lambar, saboda izini suna ne da hanyoyin ke duba. Bayar da izinin da babu hanyar da ke duba shi zai yi kama da iko amma ba iko ba ne.",
+    ofcRlRole: "Matsayi",
+    ofcRlOfficers: "Jami’an da ke rike da shi",
+    ofcRlPermissions: "Izini",
+    ofcRlSystemRole: "Yana zuwa da manhajar",
+    ofcRlPortalRole: "Yana shiga wannan tashar",
+    ofcRlGrant: "Bayar",
+    ofcRlRevoke: "Cire",
+    ofcRlGrantReason: "Dalilin bayar da wannan iko",
+    ofcRlRevokeReason: "Dalilin cire wannan iko",
+    ofcRlRevokeWarning: "Duk wanda ke rike da wannan matsayi za a fitar da shi. An yi haka da gangan: ana ajiye taswirar, kuma dakika talatin lokaci ne mai tsawo ga wanda aka cire wa iko ya ci gaba da amfani da shi.",
+    ofcRlNewRole: "Kara matsayi",
+    ofcRlRoleName: "Sunan da ake amfani da shi a lambar",
+    ofcRlRoleLabel: "Abin da jami’ai ke gani",
+    ofcRlCopyFrom: "Fara daga",
+    ofcRlCopyFromBody: "Farawa daga matsayin da ya fi kusa sannan a cire abubuwa ya fi aminci fiye da farawa ba tare da komai ba, wanda shi ne yadda matsayi ke samun komai bayan mako guda, gaggawa daya bayan daya.",
+    ofcRlRetire: "Yi ritaya",
+    ofcRlRestore: "Mayar da shi aiki",
+    ofcRlIsPortalRole: "Wannan matsayi yana shiga tashar jami’ai",
+    ofcRlSignedOut: "Jami’an da aka fitar",
+    ofcRlSearchPermission: "Nemo izini",
+    ofcNoneRoles: "Ba a saita wani matsayi ba.",
     enumClosing: "Ana rufewa",
     ofcNavPeriods: "Lokutan kudi",
     ofcPeTitle: "Lokutan kudi",

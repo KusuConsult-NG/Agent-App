@@ -32,6 +32,7 @@ import * as investigation from '../services/investigation';
 import * as targets from '../services/targets';
 import * as organisation from '../services/organisation';
 import * as periods from '../services/periods';
+import * as rbacStore from '../services/rbac-store';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -1948,6 +1949,159 @@ governmentRouter.get(
             revenueItemId: data.revenueItemId,
           },
           scope,
+        ),
+      );
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Roles and permissions, which are now data
+// ---------------------------------------------------------------------------
+
+/*
+ * The map an administrator can change without a deployment.
+ *
+ * Reading it is `user:manage` — the same permission that already governs who
+ * holds which role, and the delegation of authority is not something every
+ * officer needs to browse.
+ */
+governmentRouter.get(
+  '/roles',
+  requirePermission('user:manage'),
+  asyncHandler(async (_req, res) => {
+    res.json({
+      roles: await rbacStore.listRoles(pool),
+      /*
+       * Every permission that exists, not only those currently granted.
+       *
+       * Listing only what is held would make the unheld ones ungrantable,
+       * which is the opposite of the point.
+       */
+      grantable: rbacStore.grantablePermissions(),
+    });
+  }),
+);
+
+governmentRouter.post(
+  '/roles',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      name: z.string().trim().min(3).max(40),
+      label: z.string().trim().min(2).max(80),
+      labelHa: z.string().trim().max(80).nullish(),
+      description: z.string().trim().max(500).nullish(),
+      isPortal: z.boolean().default(false),
+      /*
+       * Starting from an existing role rather than from nothing.
+       *
+       * A role created empty gets given everything a week later, one emergency
+       * at a time. Copying the nearest role and taking things away is the safer
+       * habit, so it is the easy one.
+       */
+      copyFrom: z.string().trim().max(40).nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await rbacStore.createRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+/*
+ * Closing a role, and reopening one.
+ *
+ * Both step-up, for the same reason granting is: since migration 060 a retired
+ * role cannot be assigned to anybody, so retiring one takes a route into the
+ * organisation away and restoring it hands that route back. Neither should be
+ * one click from a session somebody walked away from.
+ */
+governmentRouter.post(
+  '/roles/:name/retire',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await rbacStore.retireRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/roles/:name/restore',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await rbacStore.restoreRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Granting and revoking, both step-up.
+ *
+ * This is the platform's delegation of authority; changing it is at least as
+ * consequential as changing one officer's role, which already requires step-up.
+ */
+governmentRouter.post(
+  '/roles/:name/grant',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      permission: z.string().trim().min(3).max(60),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      await rbacStore.grant(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        { role: req.params.name!, ...data },
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Revoking ends the sessions of everybody holding the role.
+ *
+ * The grant map is cached for thirty seconds, and thirty seconds is a long time
+ * for an officer whose authority has just been withdrawn to keep exercising it.
+ * Signing them out makes the withdrawal immediate, and is a visible and correct
+ * consequence of it.
+ */
+governmentRouter.post(
+  '/roles/:name/revoke',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      permission: z.string().trim().min(3).max(60),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await rbacStore.revoke(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          { role: req.params.name!, ...data },
         ),
       );
     },

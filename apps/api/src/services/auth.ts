@@ -8,7 +8,6 @@
 
 import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
-import { permissionsForRole } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
@@ -23,6 +22,7 @@ import { AppError, forbidden, unauthorised, conflict, badRequest, notFound } fro
 import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
 import { recordTransfer } from './organisation';
+import * as rbacStore from './rbac-store';
 import { queueNotification } from './notifications';
 
 export interface SessionTokens {
@@ -124,7 +124,16 @@ async function createSession(params: {
         phone: params.phone,
         email: params.email,
         role: params.role,
-        permissions: permissionsForRole(params.role),
+        /*
+         * From the database, like the middleware.
+         *
+         * The portal renders its menu from this list, so a grant an
+         * administrator made a minute ago has to be in the session the officer
+         * signs in with — otherwise the API allows something the menu does not
+         * offer, which is the exact drift `permissions.ts` in the portal was
+         * written to prevent.
+         */
+        permissions: await rbacStore.permissionsFor(params.role),
         agentId: params.agentId ?? undefined,
       },
     },

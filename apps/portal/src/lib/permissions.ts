@@ -374,6 +374,13 @@ const SCREEN: Record<string, NavItem> = {
   },
   users: { path: '/users', label: 'ofcNavUsers', permission: 'user:manage' },
   /*
+   * The delegation of authority itself, which is data now.
+   *
+   * `user:manage` — the same permission that already governs who holds which
+   * role. Who may do what is not something every officer needs to browse.
+   */
+  roles: { path: '/roles', label: 'ofcNavRoles', permission: 'user:manage' },
+  /*
    * The structure, readable by every portal role and by nobody else.
    *
    * `case:read:all` is held by exactly those five and by no field agent, which
@@ -436,8 +443,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupAdministration',
-      items: [SCREEN.home!, SCREEN.users!, SCREEN.organisation!, SCREEN.agents!,
-              SCREEN.referees!],
+      items: [SCREEN.home!, SCREEN.users!, SCREEN.roles!, SCREEN.organisation!,
+              SCREEN.agents!, SCREEN.referees!],
     },
     {
       group: 'ofcGroupConfiguration',

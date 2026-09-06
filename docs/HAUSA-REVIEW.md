@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2210 strings, grouped by where an agent meets them. Lower stakes
+2235 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -338,6 +338,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavAllocations` | Distribution rounds | Zagayen rabon kaya | ☐ | |
 | `ofcNavMyWork` | My work | Aikina | ☐ | |
 | `ofcNavCases` | Cases | Kararraki | ☐ | |
+| `ofcNavRoles` | Roles & permissions | Matsayi da izini | ☐ | |
 | `ofcNavPeriods` | Financial periods | Lokutan kudi | ☐ | |
 | `ofcNavOrganisation` | Departments & offices | Sassa da ofisoshi | ☐ | |
 | `ofcNavTaxpayerAnalytics` | Taxpayer base | Masu biyan haraji | ☐ | |
@@ -1304,6 +1305,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNoneNothingWaiting` | Nothing waiting. | Babu abin da ke jira. | ☐ | |
 | `ofcNoneAuthorityAcknowledgedRenewal` | The authority has acknowledged every renewal. | Hukumar ta amince da kowace sabuntawa. | ☐ | |
 | `ofcNoneOfflineQueueUsedPeriod` | The offline queue has not been used in this period. | Ba a yi amfani da jerin gwanon ba tare da layi ba a wannan lokacin. | ☐ | |
+| `ofcNoneRoles` | No role is configured. | Ba a saita wani matsayi ba. | ☐ | |
 | `ofcNonePeriods` | No financial period has been opened yet. | Ba a bude wani lokacin kudi ba tukuna. | ☐ | |
 | `ofcNoneDepartments` | No department has been created yet. | Ba a kirkiri wani sashe ba tukuna. | ☐ | |
 | `ofcNoneOffices` | No revenue office has been created yet. | Ba a kirkiri ofishin haraji ba tukuna. | ☐ | |
@@ -1361,6 +1363,29 @@ instructions — but they are what an agent reads all day.
 | `ofcCwIntro` | A case carries work between departments, and keeps every step of it. | Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa. | ☐ | |
 | `ofcCwOpenCase` | Open a case | Bude kara | ☐ | |
 | `ofcCwStatus` | Status | Matsayi | ☐ | |
+| `ofcRlTitle` | Roles and permissions | Matsayi da izini | ☐ | |
+| `ofcRlIntro` | Who may do what. This is data now, so a change in the Service's delegation of authority does not wait for a release. | Wa zai iya yin me. Wannan bayanai ne yanzu, don haka sauya wa wanda Hukumar ta ba iko ba ya jiran sabon fitarwa. | ☐ | |
+| `ofcRlCatalogueNote` | The list of permissions that exist stays in code, because a permission is a name the routes check. A grant naming something no route checks would look like a control and be none. | Jerin izinin da suke nan ya kasance a cikin lambar, saboda izini suna ne da hanyoyin ke duba. Bayar da izinin da babu hanyar da ke duba shi zai yi kama da iko amma ba iko ba ne. | ☐ | |
+| `ofcRlRole` | Role | Matsayi | ☐ | |
+| `ofcRlOfficers` | Officers holding it | Jami’an da ke rike da shi | ☐ | |
+| `ofcRlPermissions` | Permissions | Izini | ☐ | |
+| `ofcRlSystemRole` | Ships with the platform | Yana zuwa da manhajar | ☐ | |
+| `ofcRlPortalRole` | Signs in to this portal | Yana shiga wannan tashar | ☐ | |
+| `ofcRlGrant` | Grant | Bayar | ☐ | |
+| `ofcRlRevoke` | Take away | Cire | ☐ | |
+| `ofcRlGrantReason` | Why this authority is being given | Dalilin bayar da wannan iko | ☐ | |
+| `ofcRlRevokeReason` | Why this authority is being taken away | Dalilin cire wannan iko | ☐ | |
+| `ofcRlRevokeWarning` | Everybody holding this role will be signed out. That is deliberate: the map is cached, and thirty seconds is a long time for somebody whose authority has just been withdrawn to keep exercising it. | Duk wanda ke rike da wannan matsayi za a fitar da shi. An yi haka da gangan: ana ajiye taswirar, kuma dakika talatin lokaci ne mai tsawo ga wanda aka cire wa iko ya ci gaba da amfani da shi. | ☐ | |
+| `ofcRlNewRole` | Add a role | Kara matsayi | ☐ | |
+| `ofcRlRoleName` | Name used in code | Sunan da ake amfani da shi a lambar | ☐ | |
+| `ofcRlRoleLabel` | What officers see | Abin da jami’ai ke gani | ☐ | |
+| `ofcRlCopyFrom` | Start from | Fara daga | ☐ | |
+| `ofcRlCopyFromBody` | Starting from the nearest existing role and taking things away is safer than starting from nothing, which is how a role ends up with everything a week later, one emergency at a time. | Farawa daga matsayin da ya fi kusa sannan a cire abubuwa ya fi aminci fiye da farawa ba tare da komai ba, wanda shi ne yadda matsayi ke samun komai bayan mako guda, gaggawa daya bayan daya. | ☐ | |
+| `ofcRlRetire` | Retire | Yi ritaya | ☐ | |
+| `ofcRlRestore` | Bring back | Mayar da shi aiki | ☐ | |
+| `ofcRlIsPortalRole` | This role signs in to the officer portal | Wannan matsayi yana shiga tashar jami’ai | ☐ | |
+| `ofcRlSignedOut` | Officers signed out | Jami’an da aka fitar | ☐ | |
+| `ofcRlSearchPermission` | Find a permission | Nemo izini | ☐ | |
 | `ofcPeTitle` | Financial periods | Lokutan kudi | ☐ | |
 | `ofcPeIntro` | Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report. | Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba. | ☐ | |
 | `ofcPeOpenPeriod` | Open a period | Bude lokaci | ☐ | |

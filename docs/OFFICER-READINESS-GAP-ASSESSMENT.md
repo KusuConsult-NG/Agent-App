@@ -134,8 +134,8 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | --- | --- | --- |
 | Officers | Complete | `/users`, create, role change, status change |
 | Departments | Complete | `/organisation`, created and closed by an administrator |
-| Roles | Partial | Six fixed roles in `packages/shared/src/rbac.ts`. An administrator can assign a role and cannot create one |
-| Permissions | Partial | Granular and enforced, but the role→permission map is code, not data. Changing who may refund is a deployment |
+| Roles | Complete | `roles` table (migration 059). Six ship as system roles that cannot be deleted or renamed; an administrator creates, retires and restores their own from `/roles`, optionally copying an existing role's grants |
+| Permissions | Complete | The map is `role_permissions`, editable at `/roles` under step-up and audited. The *catalogue* stays in code — a grant naming a permission no route checks is refused — and `a-map-that-moved.test.ts` compares both directions so the move changed no role's authority |
 | LGAs | Complete | `lgas`, seeded, 17 |
 | Wards | Complete | `wards` |
 | Territories | Complete | `territories`, `/users` territory assignment |
@@ -146,7 +146,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Officer transfers | Complete | `officer_transfers`, append-only, one row per thing that moved — including the territory and role changes that were previously only audit entries |
 | Officer suspension | Complete | `PATCH /government/users/:id/status` |
 | Officer deactivation | Complete | Same, `CLOSED` |
-| Granular view/create/edit/approve/reverse/refund/export/configure | Partial | All eight verbs exist as permissions and are enforced per route. They cannot be *configured* by an administrator |
+| Granular view/create/edit/approve/reverse/refund/export/configure | Complete | All eight verbs exist as permissions, are enforced per route, and are now granted and revoked per role by an administrator. A revocation takes effect within 30s (`rbac-store.ts` cache) |
 
 ---
 
@@ -315,8 +315,8 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Item | Verdict |
 | --- | --- |
 | Manage officers | Complete |
-| Manage roles | Partial — assign, not define |
-| Manage permissions | Partial — enforced, not configurable |
+| Manage roles | Complete |
+| Manage permissions | Complete |
 | Manage territories | Complete |
 | Manage agents | Complete |
 | See organization-wide activity | Complete |

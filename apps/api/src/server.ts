@@ -12,6 +12,7 @@ import { config, envFileLoaded } from './config';
 import { describeDatabase } from './env';
 import { closePool, pool, withTransaction } from './db/pool';
 import { runMigrations } from './db/migrate';
+import * as rbacStore from './services/rbac-store';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
@@ -120,6 +121,15 @@ async function main() {
   } else {
     log.info('skipping migrations on boot; the deploy pipeline owns them', { component: 'boot' });
   }
+
+  /*
+   * Read the role-to-permission map before taking any traffic.
+   *
+   * So the first request of the day is not the one that pays for the query, and
+   * so a database that cannot answer it is discovered on boot rather than on
+   * somebody's first sign-in.
+   */
+  await rbacStore.warm();
 
   const app = createApp();
   const server = app.listen(config.port, () => {

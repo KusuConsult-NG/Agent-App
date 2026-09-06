@@ -98,6 +98,21 @@ export async function resetDatabase(): Promise<void> {
     );
   }
   await pool.query(`DELETE FROM users WHERE phone LIKE '+234%'`);
+
+  /*
+   * Roles a test invented.
+   *
+   * `roles` cannot be truncated — `users.role` references it and the six the
+   * platform ships with have to survive — but an administrator can now create
+   * one, so a test that does leaves it behind for every file that runs
+   * afterwards in the same shard database. That is the `app_versions` failure
+   * again in a new place, and it is worth removing here rather than asking
+   * every future test to remember.
+   *
+   * Only non-system roles, and only after the fixture users above are gone, so
+   * nothing still holds them.
+   */
+  await pool.query(`DELETE FROM roles WHERE NOT is_system`);
 }
 
 export interface ApiResponse<T = any> {

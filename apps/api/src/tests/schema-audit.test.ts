@@ -90,6 +90,21 @@ const MUST_BE_APPEND_ONLY = [
  * citizen.
  */
 const DELIBERATELY_MUTABLE = new Set([
+  /*
+   * Taking a permission away from a role deletes the row that granted it.
+   *
+   * That is the whole of the feature migration 059 added: the map moved into
+   * the database so PSIRS can change their delegation of authority without a
+   * deployment, and a revocation is a DELETE. Protecting this table would mean
+   * an authority could be granted and never withdrawn.
+   *
+   * Nothing is lost by it. Every grant and revoke writes `rbac.grant` or
+   * `rbac.revoke` to `audit_logs` with the actor, the permission and the
+   * reason, and that record is hash-chained and append-only — so who held what,
+   * and when it changed, is evidence even though the current state is a table
+   * somebody can delete from.
+   */
+  'role_permissions',
   'programme_eligibility',
   'taxpayer_compliance',
   'taxpayer_duplicate_checks',
