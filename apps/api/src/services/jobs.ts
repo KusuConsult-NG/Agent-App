@@ -129,6 +129,24 @@ export const BACKGROUND_JOBS = {
     intervalMs: 60 * 60_000,
     purpose: 'Deletes rate limit buckets whose window has ended.',
   },
+  /*
+   * The job that watches the other jobs.
+   *
+   * Their health was already computed and served at `/government/workers`, and
+   * an officer had to go and look -- which means the way anybody found out the
+   * reminder sweep had been dead for a day was a taxpayer asking why nobody
+   * had written to them. This turns the same figures into something that
+   * arrives in an administrator's inbox.
+   *
+   * It cannot report on itself usefully: a run that never happens raises no
+   * alert about the fact that it never happened. That is a real limit and the
+   * honest answer to it is outside this platform -- but every *other* job now
+   * has a watcher, which is the whole of what was missing.
+   */
+  'system-alerts': {
+    intervalMs: 15 * 60_000,
+    purpose: 'Raises an alert when a background job is overdue, failing or stalled.',
+  },
 } as const;
 
 export type JobName = keyof typeof BACKGROUND_JOBS;

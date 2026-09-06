@@ -1134,6 +1134,29 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  enumApprovalWaiting: string;
+  enumCaseAssigned: string;
+  enumCaseEscalated: string;
+  enumCaseMention: string;
+  enumSystemAlert: string;
+  enumInfo: string;
+  enumWarning: string;
+  ofcNavInbox: string;
+  ofcInHint: string;
+  ofcInUnread: string;
+  ofcInCritical: string;
+  ofcInCriticalTitle: string;
+  ofcInSeverity: string;
+  ofcInKind: string;
+  ofcInSubject: string;
+  ofcInWhen: string;
+  ofcInRead: string;
+  ofcInMarkRead: string;
+  ofcInReadAll: string;
+  ofcInShowAll: string;
+  ofcInShowUnread: string;
+  ofcInToYourRole: string;
+  ofcInNothing: string;
   ofcNavMyAccess: string;
   ofcAcSessions: string;
   ofcAcSessionsHint: string;
@@ -3726,6 +3749,29 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    enumApprovalWaiting: "An approval is waiting for you",
+    enumCaseAssigned: "A case was assigned to you",
+    enumCaseEscalated: "A case was escalated to you",
+    enumCaseMention: "You were named on a case",
+    enumSystemAlert: "Something on the platform has stopped",
+    enumInfo: "For information",
+    enumWarning: "Worth looking at",
+    ofcNavInbox: "Inbox",
+    ofcInHint: "What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it.",
+    ofcInUnread: "Not yet read",
+    ofcInCritical: "Needing attention now",
+    ofcInCriticalTitle: "The platform needs attention",
+    ofcInSeverity: "How urgent",
+    ofcInKind: "What it is",
+    ofcInSubject: "What happened",
+    ofcInWhen: "When",
+    ofcInRead: "Read",
+    ofcInMarkRead: "Mark read",
+    ofcInReadAll: "Mark all read",
+    ofcInShowAll: "Show everything",
+    ofcInShowUnread: "Show unread only",
+    ofcInToYourRole: "to your role",
+    ofcInNothing: "Nothing has been raised for you.",
     ofcNavMyAccess: "Where I am signed in",
     ofcAcSessions: "Sessions",
     ofcAcSessionsHint: "Every browser this account is signed in on. End any you do not recognise, then change your password.",
@@ -6175,6 +6221,29 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    enumApprovalWaiting: "Amincewa na jiran ka",
+    enumCaseAssigned: "An ba ka wani shari\u2019a",
+    enumCaseEscalated: "An daga shari\u2019a zuwa gare ka",
+    enumCaseMention: "An ambaci sunanka a shari\u2019a",
+    enumSystemAlert: "Wani abu a tsarin ya tsaya",
+    enumInfo: "Don sanarwa",
+    enumWarning: "Ya cancanci duba",
+    ofcNavInbox: "Akwatin sako",
+    ofcInHint: "Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi.",
+    ofcInUnread: "Ba a karanta ba tukuna",
+    ofcInCritical: "Na bukatar kulawa yanzu",
+    ofcInCriticalTitle: "Tsarin na bukatar kulawa",
+    ofcInSeverity: "Yadda yake da gaggawa",
+    ofcInKind: "Menene shi",
+    ofcInSubject: "Abin da ya faru",
+    ofcInWhen: "Yaushe",
+    ofcInRead: "An karanta",
+    ofcInMarkRead: "Yi masa alamar an karanta",
+    ofcInReadAll: "Yi wa duka alamar an karanta",
+    ofcInShowAll: "Nuna komai",
+    ofcInShowUnread: "Nuna wanda ba a karanta ba kadai",
+    ofcInToYourRole: "ga matsayinka",
+    ofcInNothing: "Ba a tayar da komai a gare ka ba.",
     ofcNavMyAccess: "Inda na shiga",
     ofcAcSessions: "Zaman shiga",
     ofcAcSessionsHint: "Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.",

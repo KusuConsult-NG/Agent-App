@@ -395,6 +395,9 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/cases/:id/comments` · `/evidence` | `case:contribute` |
 | `POST` | `/government/cases/:id/evidence/upload` | `case:contribute`; the body is the file, its type checked against the bytes |
 | `GET` | `/government/cases/evidence/:id/file` | `case:read:all`; the read is audited |
+| `GET` | `/government/inbox?unreadOnly=` | no permission — what this officer and their role were told |
+| `POST` | `/government/inbox/:id/read` · `/inbox/read-all` | their own, or their role's |
+| `GET` | `/government/users/:id/activity?days=` | their own without a permission; anybody else's with `audit:read` |
 | `GET` | `/government/sessions/mine` | no permission — an officer's own sessions and machines |
 | `POST` | `/government/sessions/:id/end` | their own; anybody's with `user:manage` |
 | `GET` | `/government/users/:id/sessions` | `user:manage` |

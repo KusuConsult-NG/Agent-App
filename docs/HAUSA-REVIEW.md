@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2346 strings, grouped by where an agent meets them. Lower stakes
+2369 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -313,6 +313,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcNavInbox` | Inbox | Akwatin sako | ☐ | |
 | `ofcNavMyAccess` | Where I am signed in | Inda na shiga | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
 | `ofcNavIntelligence` | Revenue intelligence | Nazarin haraji | ☐ | |
@@ -1324,6 +1325,21 @@ instructions — but they are what an agent reads all day.
 | `ofcFrom` | From | Daga | ☐ | |
 | `ofcTo` | To | Zuwa | ☐ | |
 | `ofcExportCsv` | Export CSV | Fitar da CSV | ☐ | |
+| `ofcInHint` | What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it. | Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi. | ☐ | |
+| `ofcInUnread` | Not yet read | Ba a karanta ba tukuna | ☐ | |
+| `ofcInCritical` | Needing attention now | Na bukatar kulawa yanzu | ☐ | |
+| `ofcInCriticalTitle` | The platform needs attention | Tsarin na bukatar kulawa | ☐ | |
+| `ofcInSeverity` | How urgent | Yadda yake da gaggawa | ☐ | |
+| `ofcInKind` | What it is | Menene shi | ☐ | |
+| `ofcInSubject` | What happened | Abin da ya faru | ☐ | |
+| `ofcInWhen` | When | Yaushe | ☐ | |
+| `ofcInRead` | Read | An karanta | ☐ | |
+| `ofcInMarkRead` | Mark read | Yi masa alamar an karanta | ☐ | |
+| `ofcInReadAll` | Mark all read | Yi wa duka alamar an karanta | ☐ | |
+| `ofcInShowAll` | Show everything | Nuna komai | ☐ | |
+| `ofcInShowUnread` | Show unread only | Nuna wanda ba a karanta ba kadai | ☐ | |
+| `ofcInToYourRole` | to your role | ga matsayinka | ☐ | |
+| `ofcInNothing` | Nothing has been raised for you. | Ba a tayar da komai a gare ka ba. | ☐ | |
 | `ofcAcSessions` | Sessions | Zaman shiga | ☐ | |
 | `ofcAcSessionsHint` | Every browser this account is signed in on. End any you do not recognise, then change your password. | Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri. | ☐ | |
 | `ofcAcDevices` | Machines | Na’urori | ☐ | |
@@ -2786,6 +2802,13 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumApprovalWaiting` | An approval is waiting for you | Amincewa na jiran ka | ☐ | |
+| `enumCaseAssigned` | A case was assigned to you | An ba ka wani shari’a | ☐ | |
+| `enumCaseEscalated` | A case was escalated to you | An daga shari’a zuwa gare ka | ☐ | |
+| `enumCaseMention` | You were named on a case | An ambaci sunanka a shari’a | ☐ | |
+| `enumSystemAlert` | Something on the platform has stopped | Wani abu a tsarin ya tsaya | ☐ | |
+| `enumInfo` | For information | Don sanarwa | ☐ | |
+| `enumWarning` | Worth looking at | Ya cancanci duba | ☐ | |
 | `enumClosing` | Being closed | Ana rufewa | ☐ | |
 | `enumClean` | Clean | Babu matsala | ☐ | |
 | `enumException` | Exception | Matsala | ☐ | |

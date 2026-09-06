@@ -415,6 +415,8 @@ const SCREEN: Record<string, NavItem> = {
    * every authenticated officer may open.
    */
   myAccess: { path: '/my-access', label: 'ofcNavMyAccess' },
+  // Same reasoning: reading what you were told is not a privilege.
+  inbox: { path: '/inbox', label: 'ofcNavInbox' },
   usage: { path: '/usage', label: 'ofcNavUsage', permission: 'report:read:all' },
   catalogue: { path: '/catalogue', label: 'ofcNavCatalogue', permission: 'catalogue:read' },
   programmes: { path: '/programmes', label: 'ofcNavProgrammes', permission: 'incentive:read:all' },
@@ -493,7 +495,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   admin: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupAdministration',
@@ -520,7 +522,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   revenue_officer: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupTheRegister',
@@ -549,7 +551,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   finance_officer: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupSettlement',
@@ -574,7 +576,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   auditor: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupExamination',
@@ -601,7 +603,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   supervisor: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupMyTerritory',

@@ -52,6 +52,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextCaseNumber } from '../lib/references';
 import { recordAudit } from './audit';
+import * as inbox from './officer-inbox';
 import { ACCEPTED as ACCEPTED_FILES } from './kyc-documents';
 import { storage, storageKey } from './storage';
 
@@ -389,6 +390,32 @@ export async function comment(
       mentions,
     });
     await client.query('UPDATE cases SET updated_at = now() WHERE id = $1', [caseId]);
+
+    /*
+     * Writing somebody's name is asking them something.
+     *
+     * `/my-work` already surfaces the most recent mention per case, which
+     * answers "what is waiting for me". This is the other half: a record that
+     * they were asked, which they can mark read once they have answered --
+     * otherwise the item sits in the work queue until the case moves, and an
+     * officer who has already replied is told about it every morning.
+     *
+     * The officer writing the comment is skipped: naming yourself in your own
+     * note is a way of tagging it, not a way of asking a question.
+     */
+    for (const mentioned of mentions) {
+      if (mentioned === viewer.userId) continue;
+      await inbox.raise(client, {
+        userId: mentioned,
+        kind: 'CASE_MENTION',
+        subject: `${row.case_number}: you were named in a ${input.internal ? 'note' : 'comment'}`,
+        body: input.body.trim().slice(0, 500),
+        entityType: 'case',
+        entityId: caseId,
+        // Per comment, not per case: two different questions are two items.
+        dedupeKey: `case-mention:${caseId}:${mentioned}:${Date.now()}`,
+      });
+    }
   });
 }
 
@@ -685,6 +712,28 @@ export async function assign(
       newValue: { assigneeId: input.assigneeId, department, departmentId },
       reason: input.reason?.trim() || null,
     });
+
+    /*
+     * And tell them, rather than leaving it for them to notice.
+     *
+     * Not for an officer assigning a case to themselves, which is most of what
+     * an investigator does all day and would be a notification saying "you did
+     * the thing you just did". Deduplicated per case and per assignee, so a
+     * case reassigned back and forth while nobody reads either message leaves
+     * one unread item.
+     */
+    if (input.assigneeId && input.assigneeId !== viewer.userId) {
+      await inbox.raise(client, {
+        userId: input.assigneeId,
+        kind: 'CASE_ASSIGNED',
+        severity: row.priority === 'URGENT' ? 'WARNING' : 'INFO',
+        subject: `${row.case_number} was assigned to you: ${row.subject}`,
+        body: input.reason?.trim() ?? '',
+        entityType: 'case',
+        entityId: caseId,
+        dedupeKey: `case-assigned:${caseId}:${input.assigneeId}`,
+      });
+    }
   });
 }
 
@@ -742,6 +791,21 @@ export async function escalate(
       oldValue: { status: row.status, assigneeId: row.assignee_id },
       newValue: { assigneeId: target.id, via: target.via },
       reason: input.reason.trim(),
+    });
+
+    /*
+     * An escalation that the person above finds out about by looking is an
+     * escalation in the sense that a shrug is an answer.
+     */
+    await inbox.raise(client, {
+      userId: target.id,
+      kind: 'CASE_ESCALATED',
+      severity: 'WARNING',
+      subject: `${row.case_number} was escalated to you: ${row.subject}`,
+      body: input.reason.trim(),
+      entityType: 'case',
+      entityId: caseId,
+      dedupeKey: `case-escalated:${caseId}:${target.id}`,
     });
   });
 

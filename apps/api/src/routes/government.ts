@@ -37,6 +37,7 @@ import * as rbacStore from '../services/rbac-store';
 import * as workbench from '../services/audit-workbench';
 import * as exporting from '../services/export';
 import * as officerDevices from '../services/officer-devices';
+import * as inbox from '../services/officer-inbox';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -564,6 +565,36 @@ governmentRouter.post(
           newValue: { approvalType: data.approvalType, entityId: data.entityId },
           reason: data.reason,
         });
+
+        /*
+         * Tell whoever reviews these, rather than waiting for them to look.
+         *
+         * Addressed to a role, not a person: an approval waiting on a named
+         * officer waits through their leave, and a reversal or a refund
+         * sitting unreviewed is money the platform is holding from somebody.
+         *
+         * Which role is derived from the permission rather than named here --
+         * `approval:review` is what the reviewing endpoint requires, and since
+         * migration 059 which roles hold it is PSIRS's decision rather than a
+         * constant in this file.
+         */
+        const reviewers = await query<{ role: string }>(
+          client,
+          `SELECT DISTINCT role FROM role_permissions WHERE permission = 'approval:review'`,
+        );
+        for (const reviewer of reviewers) {
+          await inbox.raise(client, {
+            role: reviewer.role,
+            kind: 'APPROVAL_WAITING',
+            severity: 'WARNING',
+            subject: `${data.approvalType} is waiting for a decision`,
+            body: data.reason,
+            entityType: 'approval',
+            entityId: row!.id,
+            dedupeKey: `approval:${row!.id}:${reviewer.role}`,
+          });
+        }
+
         return row!;
       });
 
@@ -2982,6 +3013,77 @@ governmentRouter.post(
     async (req, res, data) => {
       await workbench.withdrawReport(auditor(req), req.params.id!, data.reason);
       res.json({ withdrawn: true });
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// The officer's inbox, and the platform's own alarms (Addendum §1, §29)
+// ---------------------------------------------------------------------------
+
+/*
+ * No permission, for the reason `/sessions/mine` has none: the answer is about
+ * the officer asking, and an officer whose role somebody narrowed still needs
+ * to read what they were told.
+ */
+governmentRouter.get(
+  '/inbox',
+  validateQuery(
+    z.object({
+      unreadOnly: z.coerce.boolean().default(false),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }),
+    async (req, res, data) => {
+      const viewer = { userId: req.auth!.userId, role: req.auth!.role };
+      res.json({
+        notifications: await inbox.inboxFor(pool, viewer, data),
+        unread: await inbox.unreadCount(pool, viewer),
+      });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/inbox/:id/read',
+  asyncHandler(async (req, res) => {
+    await inbox.markRead({ userId: req.auth!.userId, role: req.auth!.role }, req.params.id!);
+    res.json({ read: true });
+  }),
+);
+
+governmentRouter.post(
+  '/inbox/read-all',
+  asyncHandler(async (req, res) => {
+    const read = await inbox.markAllRead({ userId: req.auth!.userId, role: req.auth!.role });
+    res.json({ read });
+  }),
+);
+
+/*
+ * What one officer has been doing.
+ *
+ * `audit:read`, because that is literally what this is: the audit log about
+ * one person, counted instead of listed. Gating it on `user:manage` would put
+ * a supervisor's ordinary question -- what did my officer work on this week --
+ * behind the authority to change roles, and every officer who holds
+ * `audit:read` can already read every one of these rows one at a time.
+ *
+ * An officer reading their own needs nothing at all, which the service cannot
+ * decide because it does not know who is asking. So the route does.
+ */
+governmentRouter.get(
+  '/users/:id/activity',
+  validateQuery(
+    z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }),
+    async (req, res, data) => {
+      const own = req.params.id === req.auth!.userId;
+      if (!own && !req.auth!.permissions.includes('audit:read')) {
+        throw forbidden(
+          'You may read your own activity, and this is not yours.',
+          'Reading another officer’s work needs the audit permission.',
+        );
+      }
+      res.json(await inbox.activityFor(pool, req.params.id!, data.days));
     },
   ),
 );

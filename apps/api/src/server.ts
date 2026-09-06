@@ -16,6 +16,7 @@ import * as rbacStore from './services/rbac-store';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
+import { raiseSystemAlerts } from './services/officer-inbox';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
@@ -156,6 +157,11 @@ async function main() {
     schedule('fraud-sweep', async () => {
       await withTransaction((client) => runFraudSweep(client));
       return null;
+    }),
+
+    schedule('system-alerts', async () => {
+      const { raised } = await withTransaction((client) => raiseSystemAlerts(client));
+      return raised > 0 ? `${raised} alert(s) raised` : null;
     }),
 
     schedule('tin-catch-up', async () => {

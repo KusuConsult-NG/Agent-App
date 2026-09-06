@@ -35,9 +35,9 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Last login | Complete | `users.last_login_at`, shown on `/users` |
 | Active sessions | Complete | `/my-access` lists an officer's own sessions (needing no permission — the answer is about the person asking) and ends any one of them; `user:manage` sees and ends anybody's. Ended sessions stay listed and marked rather than disappearing |
 | Device / session management | Complete | `officer_devices` — discovered on first sign-in rather than pre-approved, because a queue between an emergency and the officer handling it is the wrong control for a browser. What officers get is the half that matters: a record of the machines, and a block that ends every session it holds and refuses it another. Enforced by a trigger (migration 063), because the case a block is for is a laptop already in somebody else's hands |
-| Notifications | Partial | `services/notifications.ts` is outbound SMS to citizens and agents. There is no officer inbox — see §29 |
+| Notifications | Complete | `officer_notifications` is the officer's own inbox, at `/inbox`, with read state. Fed by case assignment, mentions, escalation, approvals waiting and the platform's own alarms. `/my-work` still answers "what is waiting"; the inbox answers "what was raised, and did anybody look" |
 | Tasks | Complete | Case tasks and assignment, `apps/api/src/services/cases.ts`, `/cases` and `/my-work` in the portal |
-| Alerts | Partial | Fraud flags, reconciliation exceptions and job failures each have their own screen; §29 gathers them into one place now, but a system alert (integration down, job stalled) still has to be read off `/government/workers` |
+| Alerts | Complete | The `system-alerts` job turns job health into notifications addressed to a role rather than a person, deduplicated so a job failing all day raises one alert and not ninety-six, and raised again once somebody acknowledges it without fixing it |
 | Internal messages | Complete | Case comments and internal notes, with mentions, `case_events` |
 | Search | Complete | `GET /government/search`, portal shell search box — see §5 |
 | Saved filters | Missing | Every screen's filters are lost on navigation |
@@ -105,7 +105,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Pending payments | Complete | `/transactions` status filter |
 | Unreconciled transactions | Complete | `exceptions.reconciliation_exceptions` |
 | Fraud alerts | Complete | `exceptions.open_fraud_flags`, `/fraud` |
-| System alerts | Partial | `GET /government/workers` reports every background job's health; integration status at `/government/platform/integrations`. Neither raises an alert — an officer has to go and look |
+| System alerts | Complete | Overdue, failing and stalled jobs raise an alert into the administrator role's inbox. `NEVER_RUN` deliberately does not: on a fresh database every job has never run, and an alert storm on the first morning is how an organisation learns to ignore alerts |
 | Pending officer tasks | Complete | `/my-work` |
 | Pending approvals | Complete | `exceptions.pending_approvals` |
 
@@ -114,7 +114,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Item | Verdict | Evidence / gap |
 | --- | --- | --- |
 | Which officer logged in | Complete | `audit_logs`, action `auth.login` |
-| What officer is working on | Partial | Every material action is in the audit log; nothing summarises "this officer, this session" |
+| What officer is working on | Complete | `GET /government/users/:id/activity` — counts by action and by day, live sessions with the machine each is on, and the last twenty-five things they did. Counts, never a score: a number with a formula behind it becomes the thing people manage to, and this platform suspends people |
 | Approvals performed | Complete | `audit_logs`, `approvals` |
 | Rejections | Complete | Same |
 | Records modified | Complete | `audit_logs.old_value` / `new_value` |
