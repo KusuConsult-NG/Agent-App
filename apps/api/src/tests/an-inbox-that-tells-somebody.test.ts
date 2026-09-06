@@ -218,10 +218,12 @@ describe('an officer is told, and it is recorded that they were', () => {
     const requested = await post(
       '/government/approvals',
       {
-        approvalType: 'PAYMENT_REVERSAL',
-        entityType: 'transaction',
-        entityId: 'TXN-2026-000001',
-        reason: 'The taxpayer paid twice for the same shop rate.',
+        // A kind the administrator may request: `PAYMENT_REVERSAL` needs
+        // `payment:reverse:request`, which they deliberately do not hold.
+        approvalType: 'COMMISSION_ADJUSTMENT',
+        entityType: 'commission',
+        entityId: 'CMS-2026-000001',
+        reason: 'The commission was accrued at the wrong rate for this ward.',
       },
       auth('admin'),
     );
@@ -248,6 +250,57 @@ describe('an officer is told, and it is recorded that they were', () => {
       0,
       'the officer who asked is not told that they asked',
     );
+  });
+
+  /*
+   * Found by generating the role-action matrix.
+   *
+   * `/government/approvals` accepts eleven kinds of request under one
+   * permission, so an officer who could ask for an agent activation could also
+   * ask for a payment reversal -- while `payment:reverse:request` existed, was
+   * granted to two roles, and was checked by nothing. Authority that looks
+   * real and confers nothing is exactly what a signed matrix must not contain,
+   * so it is enforced rather than deleted.
+   */
+  it('will not let an officer request a reversal without the permission for one', async () => {
+    const admin = await post(
+      '/government/approvals',
+      {
+        approvalType: 'PAYMENT_REVERSAL',
+        entityType: 'transaction',
+        entityId: 'TXN-2026-000002',
+        reason: 'An administrator asking for a reversal they may not request.',
+      },
+      auth('admin'),
+    );
+    assert.equal(admin.status, 403, JSON.stringify(admin.body));
+    assert.match(JSON.stringify(admin.body), /payment:reverse:request/);
+
+    // And the roles that hold it are unaffected.
+    const officer = await post(
+      '/government/approvals',
+      {
+        approvalType: 'PAYMENT_REVERSAL',
+        entityType: 'transaction',
+        entityId: 'TXN-2026-000003',
+        reason: 'The taxpayer paid twice for the same shop rate.',
+      },
+      auth('officer'),
+    );
+    assert.equal(officer.status, 201, JSON.stringify(officer.body));
+
+    // A kind with no extra permission still goes through on approval:request.
+    const ordinary = await post(
+      '/government/approvals',
+      {
+        approvalType: 'COMMISSION_ADJUSTMENT',
+        entityType: 'commission',
+        entityId: 'CMS-1',
+        reason: 'The commission was accrued at the wrong rate.',
+      },
+      auth('admin'),
+    );
+    assert.equal(ordinary.status, 201, JSON.stringify(ordinary.body));
   });
 
   it('needs no permission, so a narrowed role can still read its own inbox', async () => {

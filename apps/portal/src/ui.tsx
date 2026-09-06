@@ -435,3 +435,83 @@ export function ExportButtons({
     </div>
   );
 }
+
+/**
+ * What a change actually changed.
+ *
+ * `audit_logs.old_value` and `new_value` have been captured on every write
+ * since the platform started, and for most of that time nothing rendered them:
+ * an auditor asking "what did that action actually do" read JSON out of a CSV
+ * export. The Transaction 360 timeline started showing them; the general audit
+ * screen, which is where somebody goes when they do not already know which
+ * transaction to look at, still did not.
+ *
+ * IT SHOWS THE DIFFERENCE, NOT BOTH SIDES
+ *
+ * A row whose before and after are printed in full asks the reader to spot
+ * which of fourteen fields moved. Only the keys that differ are listed, as
+ * `field: was → now`, which is the question being asked. A key present on one
+ * side and not the other is shown with a dash for the missing side rather than
+ * omitted -- a field that appeared or disappeared is a change.
+ *
+ * WHERE IT SAYS NOTHING
+ *
+ * An action with neither side is a creation or a read, and renders as nothing
+ * at all rather than as "no changes": an empty diff on a row that never had
+ * one is noise on every line of the busiest screen in the portal.
+ */
+export function BeforeAfter({
+  before,
+  after,
+}: {
+  before: unknown;
+  after: unknown;
+}) {
+  const { t } = usePortalI18n();
+
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+
+  const oldRecord = asRecord(before);
+  const newRecord = asRecord(after);
+  if (!oldRecord && !newRecord) {
+    /*
+     * A value that is not an object at all -- a bare string or number in
+     * `new_value` -- still deserves to be shown rather than swallowed.
+     */
+    if (before === null || before === undefined) {
+      if (after === null || after === undefined) return null;
+    }
+    return (
+      <span className="before-after">
+        {t.ofcT3Before}: {String(before ?? '—')} → {t.ofcT3After}: {String(after ?? '—')}
+      </span>
+    );
+  }
+
+  const show = (value: unknown): string => {
+    if (value === null || value === undefined) return '—';
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value);
+  };
+
+  const keys = [...new Set([...Object.keys(oldRecord ?? {}), ...Object.keys(newRecord ?? {})])];
+  const changed = keys.filter((key) => show(oldRecord?.[key]) !== show(newRecord?.[key]));
+
+  if (changed.length === 0) return null;
+
+  return (
+    <ul className="before-after">
+      {changed.map((key) => (
+        <li key={key}>
+          <span className="before-after__field">{key}</span>{' '}
+          <span className="before-after__was">{show(oldRecord?.[key])}</span>
+          {' → '}
+          <span className="before-after__now">{show(newRecord?.[key])}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}

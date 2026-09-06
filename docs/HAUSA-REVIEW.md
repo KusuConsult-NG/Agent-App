@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2369 strings, grouped by where an agent meets them. Lower stakes
+2370 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -932,6 +932,7 @@ instructions — but they are what an agent reads all day.
 | `ofcOvResult` | Result | Sakamako | ☐ | |
 | `ofcOvHash` | Hash | Sa hannu | ☐ | |
 | `ofcOvTampered` | Audit trail has been tampered with | An taba rajistar bincike | ☐ | |
+| `ofcOvChange` | What changed | Abin da ya canza | ☐ | |
 
 #### The officer portal — the revenue catalogue
 

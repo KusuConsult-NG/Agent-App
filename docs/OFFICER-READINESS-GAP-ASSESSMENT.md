@@ -13,11 +13,36 @@ Four verdicts, and the difference between them matters:
 | **Missing** | Not built. |
 | **Not tested** | Built, but nothing asserts it stays built. |
 
-A "Partial" is not a near-miss. Most of them below are a query that exists on
-the API and stops short of a screen — which is the same thing as absent to the
+A "Partial" is not a near-miss. Most of them were a query that existed on the
+API and stopped short of a screen — which is the same thing as absent to the
 officer holding the tablet.
 
-Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
+## Where it now stands
+
+First assessed 6 September 2026 against `claude/officer-command-centre-admin-r5j0s8`,
+with fifty-one items marked Partial or Missing. **Every one of them has since
+been built, and every row below reads Complete.** The verdicts are not a
+statement that nothing is left to do — they are a statement that the brief's
+own checklist is answered, each row by a named file, endpoint or migration a
+reviewer can open.
+
+Two things that would still be worth doing and are outside what the brief asks
+for, recorded here rather than left implied:
+
+* **The row limits on exports are constants in `services/export.ts`,** not
+  configuration. A role PSIRS creates gets the floor until an engineer changes
+  the file, which is the same shape of problem the role-permission map had
+  before migration 059.
+* **There is no live probe of the outside services.** Job health raises alerts;
+  a gateway or TIN service that has stopped answering does not, because
+  `integrationStatus()` reports which adapter is configured rather than whether
+  it responds. The `INTEGRATION_ALERT` notification kind was written for this
+  and removed rather than faked — see migration 064.
+
+The four items the brief said it "would not put in front of an officer
+without" — Transaction 360, the audit trail with before and after, the shared
+work queue, and role-based access enforced on the API rather than in the menu —
+are all Complete and each is covered by a test that fails if it stops being.
 
 ---
 
@@ -40,7 +65,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Alerts | Complete | The `system-alerts` job turns job health into notifications addressed to a role rather than a person, deduplicated so a job failing all day raises one alert and not ninety-six, and raised again once somebody acknowledges it without fixing it |
 | Internal messages | Complete | Case comments and internal notes, with mentions, `case_events` |
 | Search | Complete | `GET /government/search`, portal shell search box — see §5 |
-| Saved filters | Missing | Every screen's filters are lost on navigation |
+| Saved filters | Complete | `lib/filters.ts` keeps them in the address and in the session: the URL first, so a filtered view is shareable and the back button behaves; then this session's storage, so returning to a screen restores what the officer had. An emptied filter in the URL beats the remembered one, because clearing a field is a decision |
 | Reports | Complete | `services/reports.ts`, 20+ report queries across dashboards, geography, agents, remittance |
 | Export controls | Complete | CSV, XLSX and PDF from one path (`services/export.ts`), gated on `data:export` — its own permission, so it can be taken from a role without taking their reports away — capped per role, and audited with the filters and the row count |
 | Activity history | Complete | `audit_logs` with a verified hash chain (`GET /government/audit/verify`) |
@@ -269,7 +294,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Vehicle renewals, refunds, reversals, commission, revenue configuration, KYC, referees | Complete | Each has a screen; search reaches them |
 | Full transaction timeline | Complete | `GET /government/transactions/:id/full`, merging `transaction_events` and `audit_logs` |
 | Timeline without querying multiple tables | Complete | Same endpoint, one call |
-| Before / after on modifications | Partial | `audit_logs.old_value` and `new_value` are captured on every write and returned by `GET /government/audit`. The Transaction 360 timeline renders them; the general audit screen still does not |
+| Before / after on modifications | Complete | One `BeforeAfter` renderer on both screens, showing the *difference* rather than both sides in full — a reader asked to spot which of fourteen fields moved does not spot it. An action with no change renders nothing at all |
 | Who changed it, when, why, approval | Complete | `actor_id`, `created_at`, `reason`, and the approval row where one was required |
 | Immutable financial records | Complete | Receipts are voided, never edited; the audit chain is hash-linked and verifiable |
 | Audit cases | Complete | §22 — cases carry case number, subject, transactions, agent, taxpayer, officer, category, risk, description, evidence, assignee, due date, status |
@@ -303,7 +328,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Search a TIN | Complete | Resolves to the taxpayer |
 | Search a receipt number | Complete | Resolves to the receipt and its transaction |
 | One authoritative transaction, four views | Complete | There is one `transactions` row; Transaction 360 reads it and shows each role what its permissions allow |
-| Role-based action matrix | Partial | Enforced in `packages/shared/src/rbac.ts` and asserted by `apps/api/src/tests/portal-navigation.test.ts`. §32's matrix is not published as a document PSIRS can sign off |
+| Role-based action matrix | Complete | `docs/ROLE-ACTION-MATRIX.md`, generated from `ROLE_PERMISSIONS` and from the route and service guards, with `npm run verify` failing when the two drift. Generating it found `payment:reverse:request` granted to two roles and checked by nothing, which is now enforced |
 | My Work | Complete | `/my-work` |
 
 ---
@@ -370,7 +395,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Global transaction investigation | Complete |
 | Full transaction timeline | Complete |
 | Audit logs | Complete |
-| Before / after records | Partial — on the transaction timeline, not on the audit screen |
+| Before / after records | Complete |
 | Audit cases | Complete |
 | Evidence management | Complete |
 | Risk alerts | Complete |

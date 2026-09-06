@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
+import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -490,7 +491,11 @@ export function AuditScreen() {
   const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
   const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
-  const [filters, setFilters] = useState({ action: '', entityType: '' });
+  /*
+   * Kept in the URL and in this session. An auditor who filtered to one action,
+   * opened the transaction it named and came back used to get the whole log.
+   */
+  const [filters, setFilters] = useFilters('audit', '/audit', { action: '', entityType: '' });
 
   /*
    * One builder for the screen and the export.
@@ -652,7 +657,7 @@ export function AuditScreen() {
               <input
                 id="entity"
                 value={filters.entityType}
-                onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
+                onChange={(event) => setFilters({ entityType: event.target.value })}
                 placeholder={t.ofcOvEntityPlaceholder}
               />
             </div>
@@ -661,7 +666,7 @@ export function AuditScreen() {
               <input
                 id="action"
                 value={filters.action}
-                onChange={(event) => setFilters({ ...filters, action: event.target.value })}
+                onChange={(event) => setFilters({ action: event.target.value })}
                 placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
@@ -687,6 +692,22 @@ export function AuditScreen() {
               { key: 'entity_type', label: 'ofcOvEntity' },
               { key: 'result', label: 'ofcOvResult', render: (row) => <Badge status={row.result} /> },
               { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
+              {
+                /*
+                 * What the action actually changed.
+                 *
+                 * The columns to the left say who did what, and until now that
+                 * was the whole of this screen: an auditor who wanted to know
+                 * what an action *did* opened Transaction 360, which only
+                 * helps if you already know which transaction. The diff is
+                 * rendered here rather than both sides in full, because a
+                 * reader asked to spot which of fourteen fields moved does not
+                 * spot it.
+                 */
+                key: 'change',
+                label: 'ofcOvChange',
+                render: (row) => <BeforeAfter before={row.old_value} after={row.new_value} />,
+              },
               {
                 key: 'hash',
                 label: 'ofcOvHash',

@@ -20,7 +20,7 @@
     "dev:agent": "npm run dev --workspace @psirs/agent",
     "dev:portal": "npm run dev --workspace @psirs/portal",
     "test": "npm run build --workspace @psirs/shared && npm run test --workspace @psirs/api && npm run test --workspace @psirs/agent && npm run test --workspace @psirs/portal",
-    "verify": "npm run typecheck && npm run check:hausa-review && npm run test && npm run test:concurrency",
+    "verify": "npm run typecheck && npm run check:hausa-review && npm run check:action-matrix && npm run test && npm run test:concurrency",
     "test:concurrency": "npm run build --workspace @psirs/shared && npm run test:concurrency --workspace @psirs/api",
     "verify:integrations": "npm run build --workspace @psirs/shared && tsx apps/api/src/db/verify-integrations.ts",
     "benchmark": "node scripts/benchmark-load.mjs",
@@ -31,7 +31,8 @@
     "uat": "scripts/uat/stack.sh up && npx playwright test tests/browser/uat.spec.ts",
     "uat:up": "scripts/uat/stack.sh up",
     "uat:down": "scripts/uat/stack.sh down",
-    "check:hausa-review": "node scripts/build-hausa-review.mjs --check"
+    "check:hausa-review": "node scripts/build-hausa-review.mjs --check",
+    "check:action-matrix": "node scripts/build-action-matrix.mjs --check"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

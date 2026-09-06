@@ -1134,6 +1134,7 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcOvChange: string;
   enumApprovalWaiting: string;
   enumCaseAssigned: string;
   enumCaseEscalated: string;
@@ -3749,6 +3750,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcOvChange: "What changed",
     enumApprovalWaiting: "An approval is waiting for you",
     enumCaseAssigned: "A case was assigned to you",
     enumCaseEscalated: "A case was escalated to you",
@@ -6221,6 +6223,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcOvChange: "Abin da ya canza",
     enumApprovalWaiting: "Amincewa na jiran ka",
     enumCaseAssigned: "An ba ka wani shari\u2019a",
     enumCaseEscalated: "An daga shari\u2019a zuwa gare ka",

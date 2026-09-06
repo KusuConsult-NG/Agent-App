@@ -230,7 +230,14 @@ describe('the transaction file', () => {
     render(<TransactionScreen transactionKey={TX.id} navigate={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText(/catalogue.rate.change/)).toBeTruthy());
-    expect(screen.getByText(/Before: amountKobo: 2500000 → After: amountKobo: 3000000/)).toBeTruthy();
+    /*
+     * The diff, not both sides in full. Both screens now share one renderer,
+     * and it prints only the fields that moved: a reader asked to spot which
+     * of fourteen fields changed does not spot it.
+     */
+    expect(screen.getByText('amountKobo')).toBeTruthy();
+    expect(screen.getByText('2500000')).toBeTruthy();
+    expect(screen.getByText('3000000')).toBeTruthy();
   });
 
   it('tells the platform’s record apart from an officer’s action', async () => {

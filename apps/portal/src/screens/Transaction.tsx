@@ -28,7 +28,7 @@
 
 import { useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { Alert, Badge, BeforeAfter, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -409,12 +409,7 @@ export function TransactionScreen({
                 * nothing rendered them, so an auditor asking "what did that
                 * change actually do" had to read JSON out of a CSV export.
                 */}
-              {(entry.old_value || entry.new_value) && (
-                <p className="muted">
-                  {t.ofcT3Before}: {stringify(entry.old_value)} → {t.ofcT3After}:{' '}
-                  {stringify(entry.new_value)}
-                </p>
-              )}
+              <BeforeAfter before={entry.old_value} after={entry.new_value} />
             </li>
           ))}
         </ol>
@@ -485,10 +480,3 @@ export function TransactionScreen({
   );
 }
 
-function stringify(value: Record<string, unknown> | null | undefined): string {
-  if (!value) return '—';
-  if (typeof value !== 'object') return String(value);
-  return Object.entries(value)
-    .map(([key, entry]) => `${key}: ${entry === null ? '—' : String(entry)}`)
-    .join(', ');
-}

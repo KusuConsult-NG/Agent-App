@@ -6,7 +6,7 @@
 import express, { Router } from 'express';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
+import { ECONOMIC_SECTOR_CODES, parseKobo, type Permission } from '@psirs/shared';
 import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
 import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
 import {
@@ -541,6 +541,33 @@ governmentRouter.post(
       reason: z.string().min(10, 'Explain what is being requested and why'),
     }),
     async (req, res, data) => {
+      /*
+       * Some approvals need more than `approval:request`.
+       *
+       * This endpoint accepts eleven kinds of request under one permission, so
+       * an officer who may ask for an agent activation could also ask for a
+       * payment reversal -- and `payment:reverse:request` existed, was granted
+       * to two roles, and was checked by nothing, which is authority that
+       * looks real and confers nothing. Generating the role-action matrix is
+       * what made that visible.
+       *
+       * One entry, because one is what the catalogue declares. A kind that is
+       * absent here is governed by `approval:request` alone, which is a
+       * statement rather than an oversight: the control on a refund or a rate
+       * change is the *approver*, who is never the requester.
+       */
+      const ALSO_NEEDED: Partial<Record<typeof data.approvalType, Permission>> = {
+        PAYMENT_REVERSAL: 'payment:reverse:request',
+      };
+      const extra = ALSO_NEEDED[data.approvalType];
+      if (extra && !req.auth!.permissions.includes(extra)) {
+        throw forbidden(
+          `Requesting a ${data.approvalType.toLowerCase().replace(/_/g, ' ')} needs the ` +
+            `${extra} permission.`,
+          'Ask an officer who holds it to raise the request.',
+        );
+      }
+
       const approval = await withTransaction(async (client) => {
         const row = await queryOne<{ id: string }>(
           client,
