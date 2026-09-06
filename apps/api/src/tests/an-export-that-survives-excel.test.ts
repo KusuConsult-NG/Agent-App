@@ -40,7 +40,7 @@ import {
 } from './helpers';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
-import { rowLimitFor, toXlsx } from '../services/export';
+import { MINIMUM_COLUMN, fitColumns, rowLimitFor, toXlsx } from '../services/export';
 import { grantStepUp } from './helpers';
 import { forget } from '../services/rbac-store';
 import { forgetLimits } from '../services/export';
@@ -224,9 +224,79 @@ describe('a workbook the recipient can actually open', () => {
     assert.match(sheet, /one\ttwo/, 'the tab, which XML can hold, is not');
   });
 
+  /*
+   * A wide report renders the columns that fit rather than none of them.
+   *
+   * The first version of the layout scaled every column by one factor and then
+   * cut from the front at the first one narrower than the minimum. Past about
+   * thirty columns that factor takes every column under it, so the count
+   * reached zero and a forty-column report came out as a heading and a
+   * paragraph saying nothing fit -- a valid PDF, served with a 200, carrying
+   * none of the data the officer asked for. No report the platform ships is
+   * that wide, so it was latent; rendering forty columns and reading the
+   * result is what found it.
+   *
+   * Asserted against `fitColumns` rather than against the rendered file. The
+   * first attempt at this test searched the PDF bytes for the note the page
+   * prints and found nothing, because PDFKit deflates its content streams --
+   * so the decision is tested where it is made.
+   */
+  it('shows the columns that fit on a very wide report, not none of them', () => {
+    const A4_LANDSCAPE_TEXT_WIDTH = 769;
+    const forty = Array.from({ length: 40 }, () => 60);
+
+    const { shown, widths, tableWidth } = fitColumns(forty, A4_LANDSCAPE_TEXT_WIDTH);
+    assert.ok(shown > 0, 'a report with no columns rendered is not a report');
+    assert.ok(shown < forty.length, 'and the ones that did not fit are left to be named');
+    assert.ok(
+      widths.every((one) => one >= MINIMUM_COLUMN),
+      'no column is narrower than the point where it carries nothing',
+    );
+    assert.ok(tableWidth <= A4_LANDSCAPE_TEXT_WIDTH, 'the table stays on the page');
+  });
+
+  /*
+   * The case that actually happens. Every report the platform ships is well
+   * under thirty columns, and none of them may lose one.
+   */
+  it('shows every column of a report of ordinary width', () => {
+    const A4_LANDSCAPE_TEXT_WIDTH = 769;
+    // Eighteen columns, which is the widest thing `/transactions` returns.
+    const ordinary = Array.from({ length: 18 }, () => 100);
+
+    const { shown } = fitColumns(ordinary, A4_LANDSCAPE_TEXT_WIDTH);
+    assert.equal(shown, ordinary.length, 'a real report loses nothing');
+  });
+
+  it('leaves a narrow report unscaled rather than stretching it', () => {
+    const { widths, shown } = fitColumns([80, 90, 70], 769);
+    assert.equal(shown, 3);
+    assert.deepEqual(widths, [80, 90, 70], 'three columns do not become a full-width table');
+  });
+
   it('writes a workbook even when nothing matched', () => {
     const files = unzip(toXlsx([]));
     assert.ok(files.get('xl/worksheets/sheet1.xml')!.includes('<sheetData>'));
+  });
+
+  /*
+   * The named style a reader looks for before it looks at anything else.
+   *
+   * The first version of the writer left `cellStyles` out: nothing in this
+   * workbook uses a named style, and every attribute in the ones above has a
+   * default a reader is entitled to assume. Opening the file with openpyxl --
+   * an implementation with no shared code with this one -- produced a warning
+   * that it had found no default style and was supplying its own, which is one
+   * reader being generous and not a thing to rely on from the next.
+   *
+   * Asserted here rather than left to that manual check, because the manual
+   * check happened once and this file is edited again.
+   */
+  it('declares the Normal style, so a strict reader has one to fall back on', () => {
+    const styles = unzip(toXlsx([{ a: 1 }])).get('xl/styles.xml')!;
+    assert.match(styles, /<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"\/><\/cellStyles>/);
+    // And the cell formats name their parts rather than relying on defaults.
+    assert.match(styles, /<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"\/>/);
   });
 
   it('refuses a sheet name Excel would not accept', () => {
