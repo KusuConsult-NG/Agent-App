@@ -692,14 +692,31 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
  * in the database, and the reader needs to be told so rather than shown
  * figures under a signature that no longer covers them.
  */
-export async function getReport(db: Db, reportId: string) {
-  const report = await queryOne<{
-    id: string;
-    parameters: unknown;
-    payload: unknown;
-    checksum: string;
-    [key: string]: unknown;
-  }>(
+export interface StoredReport {
+  id: string;
+  report_number: string;
+  report_type: string;
+  title: string;
+  parameters: unknown;
+  period_start: string | null;
+  period_end: string | null;
+  payload: unknown;
+  row_count: number;
+  checksum: string;
+  status: string;
+  generated_at: string;
+  signed_at: string | null;
+  signature_note: string | null;
+  withdrawn_reason: string | null;
+  generated_by_name: string | null;
+  signed_by_name: string | null;
+}
+
+export async function getReport(
+  db: Db,
+  reportId: string,
+): Promise<StoredReport & { checksumMatches: boolean; recomputedChecksum: string }> {
+  const report = await queryOne<StoredReport>(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
             r.period_start, r.period_end, r.payload, r.row_count, r.checksum,

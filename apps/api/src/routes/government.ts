@@ -4,6 +4,7 @@
  */
 
 import { Router } from 'express';
+import type { Response } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
 import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
@@ -34,6 +35,7 @@ import * as organisation from '../services/organisation';
 import * as periods from '../services/periods';
 import * as rbacStore from '../services/rbac-store';
 import * as workbench from '../services/audit-workbench';
+import * as exporting from '../services/export';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -266,9 +268,9 @@ governmentRouter.get(
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
-      format: z.enum(['json', 'csv']).default('json'),
+      format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       const rows = await query(
         pool,
         `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.status,
@@ -304,13 +306,20 @@ governmentRouter.get(
         ],
       );
 
-      if (data.format === 'csv') {
-        res.setHeader('content-type', 'text/csv');
-        res.setHeader('content-disposition', 'attachment; filename="transactions.csv"');
-        res.send(reports.toCsv(rows));
-        return;
-      }
-      res.json(rows);
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: 'Transactions',
+        filename: 'transactions',
+        parameters: {
+          status: data.status,
+          lgaId: data.lgaId,
+          agentId: data.agentId,
+          revenueItemId: data.revenueItemId,
+          from: data.from,
+          to: data.to,
+        },
+      });
     },
   ),
 );
@@ -1252,9 +1261,9 @@ governmentRouter.get(
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
       limit: z.coerce.number().int().max(500).default(100),
-      format: z.enum(['json', 'csv']).default('json'),
+      format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       const rows = await query(
         pool,
         `SELECT a.sequence_no, a.created_at, a.action, a.entity_type, a.entity_id, a.result,
@@ -1279,13 +1288,20 @@ governmentRouter.get(
         ],
       );
 
-      if (data.format === 'csv') {
-        res.setHeader('content-type', 'text/csv');
-        res.setHeader('content-disposition', 'attachment; filename="audit-log.csv"');
-        res.send(reports.toCsv(rows));
-        return;
-      }
-      res.json(rows);
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: 'Audit log',
+        filename: 'audit-log',
+        parameters: {
+          entityType: data.entityType,
+          entityId: data.entityId,
+          actorId: data.actorId,
+          action: data.action,
+          from: data.from,
+          to: data.to,
+        },
+      });
     },
   ),
 );
@@ -1708,6 +1724,98 @@ governmentRouter.get(
  * role, so gating a section of a 360 view and gating the screen that section
  * came from are the same decision made from the same source.
  */
+/**
+ * Send a result set in whichever format was asked for, and record that it left.
+ *
+ * The three formats share one path deliberately. When CSV was the only answer
+ * the check for it sat inline at the end of a handler, and adding two more
+ * would have meant three copies of the same content-type, filename and audit
+ * decision in every endpoint that exports -- with the audit line being the one
+ * a hurried copy would drop.
+ *
+ * `json` is the screen and is deliberately not an export: it is the same rows
+ * an officer is already looking at, it stays inside the session, and treating
+ * every page of a table as a data export would fill the audit log with noise
+ * and make the entries that matter unfindable. Reads worth recording are
+ * recorded through `recordReportView`, which the report screens call by name.
+ */
+async function deliver(
+  req: RouteRequest,
+  res: Response,
+  options: {
+    rows: Record<string, unknown>[];
+    format: 'json' | exporting.ExportFormat;
+    subject: string;
+    filename: string;
+    parameters: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { rows, format, subject, filename, parameters } = options;
+  if (format === 'json') {
+    res.json(rows);
+    return;
+  }
+
+  /*
+   * The gate is here rather than on the route, because the format is a query
+   * parameter and the permission is about the format. Putting `data:export` on
+   * the route would take the screen away from an officer to stop them taking
+   * the file, which is the opposite of what it is for.
+   */
+  if (!req.auth!.permissions.includes('data:export')) {
+    throw forbidden(
+      'Your role may read this on screen and may not export it.',
+      'Ask an administrator to grant your role the export permission.',
+    );
+  }
+
+  /*
+   * The limit is checked and the export recorded before a byte is written,
+   * inside a transaction, so a refusal is a clean 403 rather than a half-sent
+   * file -- and so an export that fails to be recorded does not happen.
+   */
+  await withTransaction((client) =>
+    exporting.recordExport(
+      client,
+      {
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        subject,
+        format,
+        parameters,
+      },
+      rows.length,
+    ),
+  );
+
+  if (format === 'csv') {
+    res.setHeader('content-type', 'text/csv');
+    res.setHeader('content-disposition', `attachment; filename="${filename}.csv"`);
+    res.send(reports.toCsv(rows));
+    return;
+  }
+
+  if (format === 'xlsx') {
+    res.setHeader(
+      'content-type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('content-disposition', `attachment; filename="${filename}.xlsx"`);
+    res.send(exporting.toXlsx(rows, subject));
+    return;
+  }
+
+  const pdf = await exporting.renderReportPdf({
+    title: subject,
+    rows,
+    parameters,
+    generatedBy: `${req.auth!.role} ${req.auth!.userId}`,
+  });
+  res.setHeader('content-type', 'application/pdf');
+  res.setHeader('content-disposition', `attachment; filename="${filename}.pdf"`);
+  res.send(pdf);
+}
+
 function officer(req: RouteRequest): investigation.Viewer {
   return {
     userId: req.auth!.userId,
@@ -2749,12 +2857,99 @@ governmentRouter.get(
   ),
 );
 
+/*
+ * Reading a report is itself recorded.
+ *
+ * "Reports generated" was marked partial in the officer-readiness assessment
+ * because exports were audited and report views were not: the log could show
+ * that nobody had taken a copy of a taxpayer's history while an officer had
+ * read it forty times.
+ */
 governmentRouter.get(
   '/audit/reports/:id',
   requirePermission('audit:report'),
   asyncHandler(async (req, res) => {
-    res.json(await workbench.getReport(pool, req.params.id));
+    const report = await workbench.getReport(pool, req.params.id!);
+    await withTransaction((client) =>
+      exporting.recordReportView(
+        client,
+        {
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          subject: String(report.report_number),
+          parameters: (report.parameters ?? {}) as Record<string, unknown>,
+        },
+        Number(report.row_count),
+      ),
+    );
+    res.json(report);
   }),
+);
+
+/*
+ * And a signed report, as a file somebody can put in a folder.
+ *
+ * The rows come out of the frozen payload rather than being re-queried, which
+ * is the whole point of the object: the PDF a reviewer opens in June carries
+ * the figures signed in March, and its checksum line lets them confirm that
+ * without taking the platform's word for it.
+ */
+governmentRouter.get(
+  '/audit/reports/:id/export',
+  requirePermission('audit:report'),
+  validateQuery(
+    z.object({ format: z.enum(['csv', 'xlsx', 'pdf']).default('pdf') }),
+    async (req, res, data) => {
+      const report = await workbench.getReport(pool, req.params.id!);
+      const rows = ((report.payload as { rows?: Record<string, unknown>[] })?.rows ??
+        []) as Record<string, unknown>[];
+
+      if (data.format === 'pdf') {
+        if (!req.auth!.permissions.includes('data:export')) {
+          throw forbidden(
+            'Your role may read this on screen and may not export it.',
+            'Ask an administrator to grant your role the export permission.',
+          );
+        }
+        await withTransaction((client) =>
+          exporting.recordExport(
+            client,
+            {
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              subject: String(report.report_number),
+              format: 'pdf',
+              parameters: (report.parameters ?? {}) as Record<string, unknown>,
+            },
+            rows.length,
+          ),
+        );
+        const pdf = await exporting.renderReportPdf({
+          title: String(report.title),
+          rows,
+          parameters: (report.parameters ?? {}) as Record<string, unknown>,
+          generatedBy: String(report.generated_by_name ?? 'PSIRS'),
+          reportNumber: String(report.report_number),
+          checksum: String(report.checksum),
+        });
+        res.setHeader('content-type', 'application/pdf');
+        res.setHeader(
+          'content-disposition',
+          `attachment; filename="${String(report.report_number).replace(/\//g, '-')}.pdf"`,
+        );
+        res.send(pdf);
+        return;
+      }
+
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: String(report.title),
+        filename: String(report.report_number).replace(/\//g, '-'),
+        parameters: (report.parameters ?? {}) as Record<string, unknown>,
+      });
+    },
+  ),
 );
 
 /*

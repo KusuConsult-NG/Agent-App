@@ -41,7 +41,7 @@ import {
   type ApiError,
   type User,
 } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, Badge, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 interface SampleRow {
@@ -731,6 +731,15 @@ function ReportActions({
         <button type="button" className="small secondary" onClick={() => setOpen('withdraw')}>
           {t.ofcWbWithdraw}
         </button>
+        {/*
+          * The file comes from the frozen payload, not from a fresh query --
+          * which is the whole point of the report being an object. The
+          * reviewer who opens it in June gets the figures signed in March.
+          */}
+        <ExportButtons
+          path={`/government/audit/reports/${report.id}/export`}
+          filename={report.report_number.replace(/\//g, '-')}
+        />
       </>
     );
   }

@@ -167,6 +167,19 @@ export const PERMISSIONS = [
   'audit:sample',
   'audit:report',
   'audit:sign',
+  /*
+   * Taking a copy out of the platform.
+   *
+   * Separate from the permission that lets an officer read the same rows on
+   * screen, because they are not the same act. A row on screen is governed by
+   * everything around it -- the audit trail, the territory scope, the officer's
+   * session; the same row in a spreadsheet on a laptop is governed by nothing
+   * this platform can see. Every role that reads a report holds this today, so
+   * nothing narrows on the day it ships; what it buys is the ability to take
+   * it away from one role without taking their reports away, which was
+   * impossible while the two were the same permission.
+   */
+  'data:export',
   'support:read:own',
   'support:read:all',
   'support:manage',
@@ -290,6 +303,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:suspend',
     'commission:read:all',
     'report:read:territory',
+    'data:export',
     'fraud:read',
     'support:read:all',
     'support:manage',
@@ -326,6 +340,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:suspend',
     'commission:read:all',
     'report:read:all',
+    'data:export',
     'dashboard:executive',
     'fraud:read',
     'fraud:manage',
@@ -360,6 +375,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'commission:manage',
     'commission:payout:approve',
     'report:read:all',
+    'data:export',
     'report:financial',
     'dashboard:executive',
     'fraud:read',
@@ -385,6 +401,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'agent:read:all',
     'commission:read:all',
     'report:read:all',
+    'data:export',
     'report:financial',
     'fraud:read',
     'audit:read',
@@ -442,6 +459,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'commission:read:all',
     'commission:manage',
     'report:read:all',
+    'data:export',
     'dashboard:executive',
     'fraud:read',
     'fraud:manage',

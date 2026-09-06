@@ -1134,6 +1134,9 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcExportExcel: string;
+  ofcExportPdf: string;
+  ofcExportWorking: string;
   ofcDownloadCsv: string;
   ofcTxReceipt: string;
   ofcTxCreated: string;
@@ -3697,6 +3700,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcExportExcel: "Spreadsheet",
+    ofcExportPdf: "Document to file",
+    ofcExportWorking: "Preparing...",
     ofcDownloadCsv: "Download CSV",
     ofcTxReceipt: "Receipt",
     ofcTxCreated: "Created",
@@ -6117,6 +6123,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcExportExcel: "Takardar lissafi",
+    ofcExportPdf: "Takarda don ajiyewa",
+    ofcExportWorking: "Ana shirya...",
     ofcDownloadCsv: "Sauke CSV",
     ofcTxReceipt: "Rasit",
     ofcTxCreated: "An kirkira",

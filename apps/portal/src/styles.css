@@ -788,3 +788,18 @@ button.link:hover { background: none; color: var(--green-500); }
 .growth { font-weight: 650; font-size: 0.82rem; white-space: nowrap; }
 .growth--up { color: var(--green-900); }
 .growth--down { color: var(--danger); }
+
+/*
+ * The export row.
+ *
+ * Wrapping rather than scrolling, because the three buttons sit inside a table
+ * cell on the reports screen and a horizontal scrollbar inside one cell is a
+ * control nobody finds. Inline-flex so the row does not claim the full width
+ * of a toolbar it shares with other controls.
+ */
+.export-buttons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}

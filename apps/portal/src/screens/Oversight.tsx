@@ -1,8 +1,8 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { Alert, Badge, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
@@ -492,10 +492,27 @@ export function AuditScreen() {
   const [pending, setPending] = useState<AuditQuery | null>(null);
   const [filters, setFilters] = useState({ action: '', entityType: '' });
 
+  /*
+   * One builder for the screen and the export.
+   *
+   * They were separate, and drifted: the screen read 150 entries and the
+   * export sent 500 with the same two filters written out again. An officer
+   * exporting what they were looking at should get what they were looking at,
+   * filtered the same way -- so the only difference is how many rows, which is
+   * the one difference that is deliberate.
+   */
+  const auditQuery = useCallback(
+    (limit: number) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (filters.action) params.set('action', filters.action);
+      if (filters.entityType) params.set('entityType', filters.entityType);
+      return params;
+    },
+    [filters],
+  );
+
   useEffect(() => {
-    const params = new URLSearchParams({ limit: '150' });
-    if (filters.action) params.set('action', filters.action);
-    if (filters.entityType) params.set('entityType', filters.entityType);
+    const params = auditQuery(150);
 
     setEntries(null);
     api
@@ -504,7 +521,7 @@ export function AuditScreen() {
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
       });
-  }, [filters]);
+  }, [auditQuery]);
 
   return (
     <>
@@ -648,17 +665,10 @@ export function AuditScreen() {
                 placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                const params = new URLSearchParams({ limit: '500', format: 'csv' });
-                if (filters.action) params.set('action', filters.action);
-                if (filters.entityType) params.set('entityType', filters.entityType);
-                const csv = await api.get<string>(`/government/audit?${params.toString()}`);
-                downloadCsv(`plateau-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-              }}
-            >{t.ofcExportCsv}</button>
+            <ExportButtons
+              path={`/government/audit?${auditQuery(500).toString()}`}
+              filename={`plateau-audit-${new Date().toISOString().slice(0, 10)}`}
+            />
           </div>
         </div>
 

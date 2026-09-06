@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2317 strings, grouped by where an agent meets them. Lower stakes
+2320 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1323,6 +1323,9 @@ instructions — but they are what an agent reads all day.
 | `ofcFrom` | From | Daga | ☐ | |
 | `ofcTo` | To | Zuwa | ☐ | |
 | `ofcExportCsv` | Export CSV | Fitar da CSV | ☐ | |
+| `ofcExportExcel` | Spreadsheet | Takardar lissafi | ☐ | |
+| `ofcExportPdf` | Document to file | Takarda don ajiyewa | ☐ | |
+| `ofcExportWorking` | Preparing... | Ana shirya... | ☐ | |
 | `ofcDownloadCsv` | Download CSV | Sauke CSV | ☐ | |
 | `ofcNothingToShow` | Nothing to show. | Babu abin da za a nuna. | ☐ | |
 | `ofcRevenueAdministration` | Revenue administration | Gudanar da haraji | ☐ | |

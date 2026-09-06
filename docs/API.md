@@ -361,7 +361,7 @@ process would be a lost capture wearing the costume of a successful one.
 |---|---|---|
 | `GET` | `/government/dashboard` · `/kpis` | `report:read:all` |
 | `GET` | `/government/intelligence/geography` | drill State → LGA → Ward → Community |
-| `GET` | `/government/transactions?format=json\|csv` | `payment:read:all` |
+| `GET` | `/government/transactions?format=json\|csv\|xlsx\|pdf` | `payment:read:all`; any format but `json` also needs `data:export` |
 | `POST` | `/government/reconciliation/run` · `/recover` | `payment:reconcile` |
 | `GET` | `/government/reconciliation/exceptions` | exception queue |
 | `POST` | `/government/reconciliation/exceptions/:id/resolve` | resolution required |
@@ -374,7 +374,7 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
-| `GET` | `/government/audit?format=json\|csv` | `audit:read` |
+| `GET` | `/government/audit?format=json\|csv\|xlsx\|pdf` | `audit:read`; any format but `json` also needs `data:export` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
 | `POST`/`GET` | `/government/audit/samples` | `audit:sample` — draw a sample, or list what has been drawn |
@@ -382,7 +382,8 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/audit/samples/items/:id/finding` | `CLEAN`, `EXCEPTION` (which must say what was wrong) or `NOT_AVAILABLE` |
 | `POST` | `/government/audit/samples/:id/complete` | refused while any item is still unexamined |
 | `POST`/`GET` | `/government/audit/reports` | `audit:report` — generate a report of one of thirteen kinds, or list them |
-| `GET` | `/government/audit/reports/:id` | the frozen payload, plus `checksumMatches` recomputed on read |
+| `GET` | `/government/audit/reports/:id` | the frozen payload, plus `checksumMatches` recomputed on read; the read is itself audited |
+| `GET` | `/government/audit/reports/:id/export?format=csv\|xlsx\|pdf` | the frozen payload as a file, carrying the report number and checksum |
 | `POST` | `/government/audit/reports/:id/sign` | `audit:sign`, step-up `audit.report.sign` |
 | `POST` | `/government/audit/reports/:id/withdraw` | `audit:report`, step-up — a report is never deleted |
 | `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |

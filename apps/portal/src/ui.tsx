@@ -1,8 +1,8 @@
 /** Shared presentation components for the government portal. */
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
-import type { ApiError } from './lib/api';
+import { ApiRequestError, downloadExport, type ApiError } from './lib/api';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -363,6 +363,73 @@ export function LanguageToggle({ align = 'flex-end' }: { align?: 'flex-end' | 'f
           style={{ padding: '4px 12px', fontSize: '0.76rem' }}
         >
           {option === 'en' ? t.pubEnglish : t.pubHausa}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The three ways a report leaves, offered together.
+ *
+ * Every screen that exported had its own button, its own filename convention
+ * and its own idea of what the file was for. Two more formats each would have
+ * been six buttons per screen and six chances to forget that the server, not
+ * the browser, is what writes them -- and a file the browser writes is a file
+ * that never appears in the export record.
+ *
+ * The formats are labelled by what they are for rather than by their
+ * extension, because that is the choice the officer is actually making: a
+ * spreadsheet to work in, a document to file, or the raw rows for another
+ * system.
+ *
+ * Refusals are shown here rather than thrown away. The commonest one by far is
+ * the row limit for the officer's role, which is a sentence they can act on --
+ * narrow the period, or ask for the limit to be raised -- and which a silent
+ * failure would turn into "the button does nothing".
+ */
+export function ExportButtons({
+  path,
+  filename,
+  disabled,
+}: {
+  /** The API path, with its filters already in the query string. */
+  path: string;
+  filename: string;
+  disabled?: boolean;
+}) {
+  const { t } = usePortalI18n();
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const formats: { format: 'xlsx' | 'pdf' | 'csv'; label: keyof TranslationDictionary }[] = [
+    { format: 'xlsx', label: 'ofcExportExcel' },
+    { format: 'pdf', label: 'ofcExportPdf' },
+    { format: 'csv', label: 'ofcExportCsv' },
+  ];
+
+  return (
+    <div className="export-buttons">
+      <ErrorAlert error={error} />
+      {formats.map(({ format, label }) => (
+        <button
+          key={format}
+          type="button"
+          className="small secondary"
+          disabled={disabled || busy !== null}
+          onClick={async () => {
+            setBusy(format);
+            setError(null);
+            try {
+              await downloadExport(path, format, filename);
+            } catch (caught) {
+              setError(caught instanceof ApiRequestError ? caught.error : null);
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          {busy === format ? t.ofcExportWorking : t[label]}
         </button>
       ))}
     </div>

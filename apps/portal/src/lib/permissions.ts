@@ -163,6 +163,24 @@ export const MUTATING_PERMISSIONS = [
  * puts it in one, and the test says so by name.
  */
 export const READ_ONLY_PERMISSIONS = [
+  /*
+   * Exporting is here, and it is the least comfortable member of the list.
+   *
+   * It changes nothing about the record, which is the test this class applies,
+   * and an auditor who cannot take a copy of what they examined cannot produce
+   * a working paper. But it is not the same as reading: a row on screen is
+   * governed by the session, the territory scope and the audit trail, and the
+   * same row in a spreadsheet on somebody's laptop is governed by nothing this
+   * platform can see.
+   *
+   * What makes it safe to file as a read is that it is not free. `data:export`
+   * is its own permission, so it can be taken away from a role without taking
+   * their reports away; every export is capped by role and written to the
+   * audit log with the filters and the row count. Those are the controls doing
+   * the work -- not this classification, which only says the record is
+   * unchanged.
+   */
+  'data:export',
   'taxpayer:read:assigned',
   'taxpayer:read:all',
   'group:read:all',

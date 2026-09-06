@@ -42,7 +42,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Search | Complete | `GET /government/search`, portal shell search box — see §5 |
 | Saved filters | Missing | Every screen's filters are lost on navigation |
 | Reports | Complete | `services/reports.ts`, 20+ report queries across dashboards, geography, agents, remittance |
-| Export controls | Partial | CSV export exists on audit, transactions and remittance (`reports.toCsv`). Exports are audited, but there is no per-role export limit and no PDF or Excel |
+| Export controls | Complete | CSV, XLSX and PDF from one path (`services/export.ts`), gated on `data:export` — its own permission, so it can be taken from a role without taking their reports away — capped per role, and audited with the filters and the row count |
 | Activity history | Complete | `audit_logs` with a verified hash chain (`GET /government/audit/verify`) |
 | Help / support | Complete | `support_tickets`, `/support` |
 
@@ -123,7 +123,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Suspensions | Complete | `audit_logs` |
 | Refund approvals | Complete | `approvals` |
 | Reconciliation actions | Complete | `reconciliation_records.reconciled_by` |
-| Reports generated | Partial | Exports are audited; report *views* are not |
+| Reports generated | Complete | `report.export` records what left; `report.view` records that a stored audit report was read, which was the half that was missing |
 | Sensitive data accessed | Complete | `document_access_logs`, `kyc_document_access_logs`, `GET /government/audit/queries/taxpayer-access` |
 
 ---
@@ -250,7 +250,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Refund / reversal management | Complete | Approval-gated |
 | Commission management | Complete | `/commissions`, payout batches, approve / complete / fail |
 | Settlement, revenue, financial reports | Complete | `services/reports.ts`, CSV |
-| Financial exports | Partial | CSV only |
+| Financial exports | Complete | CSV, XLSX and PDF |
 | Exception management | Complete | Above |
 | Financial period closing | Complete | `financial_periods` and a trigger on the four tables that decide what a month collected. Enforced at the database, not in the service |
 | Transaction adjustments with controlled approval | Complete | `approvals` with `approval:authorise` |
@@ -278,8 +278,8 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Anomaly analytics | Complete | `services/fraud.ts` covers territory violations, velocity, duplicate contacts, reversal patterns and registration risk, and now four rules that watch the office rather than the field: repeated receipt regeneration or retrieval, collections written in the small hours (read in Africa/Lagos), an officer's day against their own preceding four weeks, and frequent manual interventions. `watching-the-office.test.ts` asserts each fires on the shape it is for and stays quiet on the ordinary case beside it |
 | Audit sampling | Complete | `POST /government/audit/samples` draws by period, category, LGA, agent, value band and status, at random from a stored seed, systematically, or by largest amount. Migration 062 fixes the criteria, the seed, the population size and the selected rows at the moment of drawing, so a reviewer can reproduce the draw and nobody can widen it after seeing the results |
 | Audit reports (13 kinds) | Complete | `audit_reports` holds all thirteen as objects: the rows frozen at generation, a SHA-256 over the canonical payload and parameters, a generator, and a separate signature. `GET` recomputes the checksum and tells the reader when stored figures no longer match what was signed. A report is withdrawn with a reason, never deleted |
-| Export PDF | Missing | CSV only |
-| Export Excel | Missing | CSV only |
+| Export PDF | Complete | `renderReportPdf` — paginated, landscape, header repeated per page, and always carrying what the figures cover; a signed audit report exports with its number and checksum on the page |
+| Export Excel | Complete | `toXlsx` writes the workbook directly (the obvious library carries a transitive advisory). A phone number keeps its leading zero and a TIN stays a TIN; `an-export-that-survives-excel.test.ts` unpacks the archive through its central directory and checks every CRC |
 | Export CSV | Complete | `reports.toCsv` |
 
 ---

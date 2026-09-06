@@ -664,8 +664,21 @@ describe('RBAC — every role checked against the API, not the UI', () => {
       'audit:report',
       'audit:sign',
     ];
+    /*
+     * `data:export` is not a write and is not exempt for free.
+     *
+     * It changes nothing about the record, which is what this assertion is
+     * about; what it does is take a copy out of the platform's control, and
+     * that is governed by its own permission, a per-role row cap and an audit
+     * entry naming the filters and the count -- see `services/export.ts` and
+     * `READ_ONLY_PERMISSIONS` in the portal, which classify it the same way
+     * and for the same stated reason.
+     */
     const writes = permissionsForRole('auditor').filter(
-      (permission) => !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$/.test(permission),
+      (permission) =>
+        !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$|^data:export$/.test(
+          permission,
+        ),
     );
     assert.deepEqual(
       [...writes].sort(),

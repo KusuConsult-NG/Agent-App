@@ -164,6 +164,33 @@ export async function api<T = any>(
 
 export const get = <T = any>(path: string, options?: RequestOptions) =>
   api<T>('GET', path, undefined, options);
+
+/**
+ * The same, for a response whose body is bytes.
+ *
+ * `api` reads every response as text, which is right for JSON and CSV and
+ * silently corrupts a PDF or a workbook: the deflate streams inside one are
+ * not valid UTF-8, and decoding them replaces whole bytes before any assertion
+ * gets to look at them.
+ */
+export async function getBinary(
+  path: string,
+  options: RequestOptions = {},
+): Promise<{ status: number; body: Buffer; headers: Headers }> {
+  const headers: Record<string, string> = {
+    'x-app-version': options.appVersion ?? '1.0.0',
+    ...options.headers,
+  };
+  if (options.token) headers.authorization = `Bearer ${options.token}`;
+  if (options.deviceId) headers['x-device-id'] = options.deviceId;
+
+  const response = await fetch(`${baseUrl}${path}`, { method: 'GET', headers });
+  return {
+    status: response.status,
+    body: Buffer.from(await response.arrayBuffer()),
+    headers: response.headers,
+  };
+}
 export const post = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>
   api<T>('POST', path, body, options);
 export const put = <T = any>(path: string, body?: unknown, options?: RequestOptions) =>

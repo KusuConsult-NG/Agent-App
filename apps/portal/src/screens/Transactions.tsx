@@ -1,8 +1,8 @@
 /** Transaction monitoring and export (PRD §48, §49). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { Badge, ErrorAlert, ExportButtons, Loading, Money, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -71,13 +71,6 @@ export function TransactionsScreen() {
       });
   }, [buildQuery]);
 
-  async function exportCsv() {
-    const params = buildQuery();
-    params.set('format', 'csv');
-    const csv = await api.get<string>(`/government/transactions?${params.toString()}`);
-    downloadCsv(`plateau-transactions-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-  }
-
   return (
     <>
       <div className="card">
@@ -134,7 +127,11 @@ export function TransactionsScreen() {
             />
           </div>
 
-          <button type="button" className="secondary" onClick={exportCsv}>{t.ofcExportCsv}</button>
+          <ExportButtons
+            path={`/government/transactions?${buildQuery().toString()}`}
+            filename={`plateau-transactions-${new Date().toISOString().slice(0, 10)}`}
+            disabled={!rows || rows.length === 0}
+          />
         </div>
       </div>
 
