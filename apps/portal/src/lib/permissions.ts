@@ -137,6 +137,15 @@ export const MUTATING_PERMISSIONS = [
    * which is a change to the record in the sense that matters.
    */
   'target:manage',
+  /*
+   * Closing a month freezes what the State says it collected in it; reopening
+   * one unfreezes a figure that has already been reported to the
+   * Accountant-General. Both change the record in the strongest sense the word
+   * has here — after a close, the database itself refuses to write into the
+   * month, and after a reopen it stops refusing.
+   */
+  'period:close',
+  'period:reopen',
 ] as const;
 
 /**
@@ -188,6 +197,7 @@ export const READ_ONLY_PERMISSIONS = [
   'incentive:read:all',
   'case:read:all',
   'target:read:all',
+  'period:read',
 ] as const;
 
 /**
@@ -336,6 +346,15 @@ const SCREEN: Record<string, NavItem> = {
     permission: ['report:read:all', 'report:read:territory'],
   },
   reconciliation: { path: '/reconciliation', label: 'ofcNavReconciliation', permission: 'report:financial' },
+  /*
+   * The period lock, readable by every reporting role.
+   *
+   * An officer looking at a March figure needs to know whether March can still
+   * move, and that is not a privileged fact. Closing is `period:close` and
+   * reopening `period:reopen`, both gated inside the screen and again on the
+   * API.
+   */
+  periods: { path: '/periods', label: 'ofcNavPeriods', permission: 'period:read' },
   commissions: { path: '/commissions', label: 'ofcNavCommissions', permission: 'commission:read:all' },
   approvals: { path: '/approvals', label: 'ofcNavApprovals', permission: 'approval:review' },
   fraud: { path: '/fraud', label: 'ofcNavFraud', permission: 'fraud:read' },
@@ -427,7 +446,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!],
+      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!, SCREEN.periods!],
     },
     {
       group: 'ofcGroupRevenue',
@@ -473,8 +492,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupSettlement',
-      items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!,
-              SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.periods!, SCREEN.commissions!,
+              SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupRevenue',
@@ -502,7 +521,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupTheMoney',
-      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!],
+      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.periods!,
+              SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupWhatCharged',

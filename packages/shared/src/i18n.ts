@@ -1518,6 +1518,32 @@ export interface TranslationDictionary {
   ofcCwIntro: string;
   ofcCwOpenCase: string;
   ofcCwStatus: string;
+  enumClosing: string;
+  ofcNavPeriods: string;
+  ofcPeTitle: string;
+  ofcPeIntro: string;
+  ofcPeOpenPeriod: string;
+  ofcPePeriod: string;
+  ofcPeCollected: string;
+  ofcPeSettled: string;
+  ofcPeCommission: string;
+  ofcPeTransactions: string;
+  ofcPeClose: string;
+  ofcPeBeginClosing: string;
+  ofcPeReopen: string;
+  ofcPeClosedBy: string;
+  ofcPeReopenedBy: string;
+  ofcPeClosingNote: string;
+  ofcPeReopenReason: string;
+  ofcPeNotReady: string;
+  ofcPeNotReadyBody: string;
+  ofcPeOverride: string;
+  ofcPeUnreconciled: string;
+  ofcPePendingPayments: string;
+  ofcPeFiguresNow: string;
+  ofcPeFrozen: string;
+  ofcPeReopenSeparate: string;
+  ofcNonePeriods: string;
   enumSupervisorChange: string;
   enumRoleChange: string;
   ofcNavOrganisation: string;
@@ -3913,6 +3939,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
     ofcCwOpenCase: "Open a case",
     ofcCwStatus: "Status",
+    enumClosing: "Being closed",
+    ofcNavPeriods: "Financial periods",
+    ofcPeTitle: "Financial periods",
+    ofcPeIntro: "Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report.",
+    ofcPeOpenPeriod: "Open a period",
+    ofcPePeriod: "Period",
+    ofcPeCollected: "Collected",
+    ofcPeSettled: "Settled to government",
+    ofcPeCommission: "Commission",
+    ofcPeTransactions: "Transactions",
+    ofcPeClose: "Close the month",
+    ofcPeBeginClosing: "Begin closing",
+    ofcPeReopen: "Reopen",
+    ofcPeClosedBy: "Closed by",
+    ofcPeReopenedBy: "Reopened by",
+    ofcPeClosingNote: "What is being certified",
+    ofcPeReopenReason: "Why it is being reopened",
+    ofcPeNotReady: "Not ready to close",
+    ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
+    ofcPeOverride: "Why you are closing over them",
+    ofcPeUnreconciled: "Unresolved exceptions",
+    ofcPePendingPayments: "Payments still pending",
+    ofcPeFiguresNow: "What the month holds now",
+    ofcPeFrozen: "Frozen at close",
+    ofcPeReopenSeparate: "Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for.",
+    ofcNonePeriods: "No financial period has been opened yet.",
     enumSupervisorChange: "Reporting line",
     enumRoleChange: "Role",
     ofcNavOrganisation: "Departments & offices",
@@ -6200,6 +6252,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
     ofcCwOpenCase: "Bude kara",
     ofcCwStatus: "Matsayi",
+    enumClosing: "Ana rufewa",
+    ofcNavPeriods: "Lokutan kudi",
+    ofcPeTitle: "Lokutan kudi",
+    ofcPeIntro: "Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba.",
+    ofcPeOpenPeriod: "Bude lokaci",
+    ofcPePeriod: "Lokaci",
+    ofcPeCollected: "An tara",
+    ofcPeSettled: "An tura wa gwamnati",
+    ofcPeCommission: "Kwamishan",
+    ofcPeTransactions: "Ma’amaloli",
+    ofcPeClose: "Rufe watan",
+    ofcPeBeginClosing: "Fara rufewa",
+    ofcPeReopen: "Sake budewa",
+    ofcPeClosedBy: "Wanda ya rufe",
+    ofcPeReopenedBy: "Wanda ya sake budewa",
+    ofcPeClosingNote: "Abin da ake tabbatarwa",
+    ofcPeReopenReason: "Dalilin sake budewa",
+    ofcPeNotReady: "Bai shirya rufewa ba",
+    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
+    ofcPeOverride: "Dalilin rufewa duk da haka",
+    ofcPeUnreconciled: "Bambancin da ba a warware ba",
+    ofcPePendingPayments: "Biyan da ke jira",
+    ofcPeFiguresNow: "Abin da watan ke da shi yanzu",
+    ofcPeFrozen: "An daskare a rufewa",
+    ofcPeReopenSeparate: "Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin.",
+    ofcNonePeriods: "Ba a bude wani lokacin kudi ba tukuna.",
     enumSupervisorChange: "Layin rahoto",
     enumRoleChange: "Matsayi",
     ofcNavOrganisation: "Sassa da ofisoshi",

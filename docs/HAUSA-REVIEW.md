@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2184 strings, grouped by where an agent meets them. Lower stakes
+2210 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -338,6 +338,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavAllocations` | Distribution rounds | Zagayen rabon kaya | ☐ | |
 | `ofcNavMyWork` | My work | Aikina | ☐ | |
 | `ofcNavCases` | Cases | Kararraki | ☐ | |
+| `ofcNavPeriods` | Financial periods | Lokutan kudi | ☐ | |
 | `ofcNavOrganisation` | Departments & offices | Sassa da ofisoshi | ☐ | |
 | `ofcNavTaxpayerAnalytics` | Taxpayer base | Masu biyan haraji | ☐ | |
 | `ofcNavTargets` | Targets & forecast | Manufura da hasashe | ☐ | |
@@ -1303,6 +1304,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNoneNothingWaiting` | Nothing waiting. | Babu abin da ke jira. | ☐ | |
 | `ofcNoneAuthorityAcknowledgedRenewal` | The authority has acknowledged every renewal. | Hukumar ta amince da kowace sabuntawa. | ☐ | |
 | `ofcNoneOfflineQueueUsedPeriod` | The offline queue has not been used in this period. | Ba a yi amfani da jerin gwanon ba tare da layi ba a wannan lokacin. | ☐ | |
+| `ofcNonePeriods` | No financial period has been opened yet. | Ba a bude wani lokacin kudi ba tukuna. | ☐ | |
 | `ofcNoneDepartments` | No department has been created yet. | Ba a kirkiri wani sashe ba tukuna. | ☐ | |
 | `ofcNoneOffices` | No revenue office has been created yet. | Ba a kirkiri ofishin haraji ba tukuna. | ☐ | |
 | `ofcNoneTransfers` | No posting has been recorded for this officer. | Ba a rubuta wani matsayi ga wannan jami’i ba. | ☐ | |
@@ -1359,6 +1361,29 @@ instructions — but they are what an agent reads all day.
 | `ofcCwIntro` | A case carries work between departments, and keeps every step of it. | Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa. | ☐ | |
 | `ofcCwOpenCase` | Open a case | Bude kara | ☐ | |
 | `ofcCwStatus` | Status | Matsayi | ☐ | |
+| `ofcPeTitle` | Financial periods | Lokutan kudi | ☐ | |
+| `ofcPeIntro` | Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report. | Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba. | ☐ | |
+| `ofcPeOpenPeriod` | Open a period | Bude lokaci | ☐ | |
+| `ofcPePeriod` | Period | Lokaci | ☐ | |
+| `ofcPeCollected` | Collected | An tara | ☐ | |
+| `ofcPeSettled` | Settled to government | An tura wa gwamnati | ☐ | |
+| `ofcPeCommission` | Commission | Kwamishan | ☐ | |
+| `ofcPeTransactions` | Transactions | Ma’amaloli | ☐ | |
+| `ofcPeClose` | Close the month | Rufe watan | ☐ | |
+| `ofcPeBeginClosing` | Begin closing | Fara rufewa | ☐ | |
+| `ofcPeReopen` | Reopen | Sake budewa | ☐ | |
+| `ofcPeClosedBy` | Closed by | Wanda ya rufe | ☐ | |
+| `ofcPeReopenedBy` | Reopened by | Wanda ya sake budewa | ☐ | |
+| `ofcPeClosingNote` | What is being certified | Abin da ake tabbatarwa | ☐ | |
+| `ofcPeReopenReason` | Why it is being reopened | Dalilin sake budewa | ☐ | |
+| `ofcPeNotReady` | Not ready to close | Bai shirya rufewa ba | ☐ | |
+| `ofcPeNotReadyBody` | Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one. | Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba. | ☐ | |
+| `ofcPeOverride` | Why you are closing over them | Dalilin rufewa duk da haka | ☐ | |
+| `ofcPeUnreconciled` | Unresolved exceptions | Bambancin da ba a warware ba | ☐ | |
+| `ofcPePendingPayments` | Payments still pending | Biyan da ke jira | ☐ | |
+| `ofcPeFiguresNow` | What the month holds now | Abin da watan ke da shi yanzu | ☐ | |
+| `ofcPeFrozen` | Frozen at close | An daskare a rufewa | ☐ | |
+| `ofcPeReopenSeparate` | Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for. | Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin. | ☐ | |
 | `ofcOrTitle` | The organisation | Kungiyar | ☐ | |
 | `ofcOrIntro` | Who works with whom, who answers for them, and where they sit. A department is a body; a role is what somebody may do. Both are needed and neither replaces the other. | Wanda ke aiki da wa, wanda ke da alhakinsu, da inda suke zaune. Sashe jiki ne; matsayi shi ne abin da mutum zai iya yi. Ana bukatar dukansu kuma babu wanda ya maye gurbin dayan. | ☐ | |
 | `ofcOrDepartments` | Departments | Sassa | ☐ | |
@@ -2646,6 +2671,7 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumClosing` | Being closed | Ana rufewa | ☐ | |
 | `enumSupervisorChange` | Reporting line | Layin rahoto | ☐ | |
 | `enumRoleChange` | Role | Matsayi | ☐ | |
 | `enumCollection` | Collection | Karbar kudi | ☐ | |

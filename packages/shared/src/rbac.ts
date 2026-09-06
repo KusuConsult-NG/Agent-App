@@ -196,6 +196,23 @@ export const PERMISSIONS = [
   'target:read:all',
   'target:manage',
 
+  /*
+   * Financial periods.
+   *
+   * Closing a month freezes what the State says it collected in it, and
+   * reopening one unfreezes a figure that has already been reported. They are
+   * separate permissions on purpose: the officer who closes the books and the
+   * officer who can unclose them being the same person removes most of what a
+   * period lock is for. Finance closes; only an administrator reopens.
+   *
+   * `period:read` is held by every reporting role — an officer looking at a
+   * March figure needs to know whether March is closed, and that is not a
+   * privileged fact.
+   */
+  'period:read',
+  'period:close',
+  'period:reopen',
+
   // Approvals (maker-checker)
   'approval:request',
   'approval:review',
@@ -265,6 +282,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:create',
     'case:contribute',
     'target:read:all',
+    'period:read',
   ],
   revenue_officer: [
     'taxpayer:correct',
@@ -305,6 +323,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:contribute',
     'target:read:all',
     'target:manage',
+    'period:read',
   ],
   finance_officer: [
     'taxpayer:read:all',
@@ -334,6 +353,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:create',
     'case:contribute',
     'target:read:all',
+    'period:read',
+    'period:close',
   ],
   auditor: [
     'taxpayer:read:all',
@@ -370,6 +391,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:contribute',
     'case:manage',
     'target:read:all',
+    'period:read',
   ],
   admin: [
     'taxpayer:correct',
@@ -417,6 +439,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:manage',
     'target:read:all',
     'target:manage',
+    'period:read',
+    'period:reopen',
   ],
 };
 
@@ -440,6 +464,16 @@ export const STEP_UP_ACTIONS = [
   'payment.reversal.approve',
   'agent.suspend',
   'user.role.change',
+  /*
+   * Closing a month, and unclosing one.
+   *
+   * After a close the database itself refuses to write into the period, and
+   * after a reopen it stops refusing — so both change what is possible rather
+   * than merely what is recorded. That is the size of decision this list is
+   * for.
+   */
+  'financial.period.close',
+  'financial.period.reopen',
 ] as const;
 
 export type StepUpAction = (typeof STEP_UP_ACTIONS)[number];

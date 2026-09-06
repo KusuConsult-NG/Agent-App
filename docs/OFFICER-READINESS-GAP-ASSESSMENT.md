@@ -252,7 +252,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Settlement, revenue, financial reports | Complete | `services/reports.ts`, CSV |
 | Financial exports | Partial | CSV only |
 | Exception management | Complete | Above |
-| Financial period closing | Missing | No period lock. A settled month can still be written to |
+| Financial period closing | Complete | `financial_periods` and a trigger on the four tables that decide what a month collected. Enforced at the database, not in the service |
 | Transaction adjustments with controlled approval | Complete | `approvals` with `approval:authorise` |
 | Commission accrued / pending / eligible / paid / reversed | Complete | `commissions.status` covers all five |
 | Agent commission, by LGA, by period | Complete | `GET /government/commissions/by-place` |
@@ -361,7 +361,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Financial reports | Complete |
 | Settlement reports | Complete |
 | Financial audit trail | Complete |
-| Period controls | **Missing** |
+| Period controls | Complete |
 
 ### Auditor
 
@@ -397,6 +397,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | **Period comparison** | `reports.executiveDashboard`, `geographicIntelligence`, `agentPerformance` | §2, §8, §9, §10 — yesterday, previous period, growth, decline, contribution share, growth per place and per agent |
 | **Taxpayer base** | `/taxpayer-base` · `reports.taxpayerAnalytics` | §11. Cohorts by payment behaviour, banded frequency, per-LGA register health |
 | **The organisation** | `/organisation` · `departments`, `revenue_offices`, `officer_transfers` · migration 057 | §1, §4, §6 — departments, offices, the reporting line, dated transfers, and case routing to a body |
+| **Financial periods** | `/periods` · `financial_periods` · migration 058 | §16. A closed month is refused by the database, on the four tables that decide what it collected |
 
 Two of those are worth a sentence each.
 
@@ -450,8 +451,9 @@ follows them is what remains.
 3. ~~**Departments and the reporting line** (§1, §4).~~ Done. Cases route to a
    department, escalation walks up to a person, and every posting change leaves
    a dated append-only record.
-4. **Financial period closing** (§16). A settled month is still writable.
-   This is a control, not a feature.
+4. ~~**Financial period closing** (§16).~~ Done. A closed month is refused by
+   the database, closing and reopening are separate authorities, and closing
+   over an unresolved exception demands a reason that goes on the record.
 5. **Configurable roles and permissions** (§4). Today, changing who may
    approve a refund is a code change and a deployment.
 6. **Audit sampling** (§25) and **audit reports as objects** (§26).
@@ -462,5 +464,5 @@ follows them is what remains.
    originate in the platform.
 9. **An officer inbox, system alerts and saved filters** (§1, §3).
 
-Item 4 is the one I would not put in front of a PSIRS finance officer
-without.
+All four of the items I said I would not put in front of a PSIRS officer
+without are now done.

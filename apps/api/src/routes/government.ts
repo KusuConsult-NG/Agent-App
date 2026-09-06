@@ -31,6 +31,7 @@ import * as cases from '../services/cases';
 import * as investigation from '../services/investigation';
 import * as targets from '../services/targets';
 import * as organisation from '../services/organisation';
+import * as periods from '../services/periods';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -1947,6 +1948,125 @@ governmentRouter.get(
             revenueItemId: data.revenueItemId,
           },
           scope,
+        ),
+      );
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Financial periods
+// ---------------------------------------------------------------------------
+
+/*
+ * Whether a month is closed is not a privileged fact.
+ *
+ * An officer looking at a March figure needs to know whether March can still
+ * move, so reading periods is open to every reporting role. Closing is finance;
+ * reopening is the administrator — deliberately not the same person, because
+ * the officer who closes the books also being the one who can unclose them
+ * removes most of what a period lock is for.
+ */
+governmentRouter.get(
+  '/periods',
+  requirePermission('period:read'),
+  validateQuery(
+    z.object({ limit: z.coerce.number().int().min(1).max(120).default(36) }),
+    async (_req, res, data) => {
+      res.json(await periods.listPeriods(pool, data));
+    },
+  ),
+);
+
+/** What a period holds right now — the same query the close writes down. */
+governmentRouter.get(
+  '/periods/figures',
+  requirePermission('period:read'),
+  validateQuery(
+    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    async (_req, res, data) => {
+      res.json(await periods.periodFigures(pool, data.periodStart, data.periodEnd));
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods',
+  requirePermission('period:close'),
+  validateBody(
+    z.object({
+      periodStart: z.coerce.date(),
+      periodEnd: z.coerce.date(),
+      label: z.string().trim().max(40).optional(),
+    }),
+    async (req, res, data) => {
+      const result = await periods.openPeriod(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods/:id/begin-closing',
+  requirePermission('period:close'),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await periods.beginClosing(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+      ),
+    );
+  }),
+);
+
+/*
+ * Closing, which the database then enforces.
+ *
+ * `requireStepUp` because after this the four tables that decide what the month
+ * collected refuse to be written — that is a bigger decision than most, and the
+ * platform already reserves step-up for exactly this size of action.
+ */
+governmentRouter.post(
+  '/periods/:id/close',
+  requirePermission('period:close'),
+  requireStepUp('financial.period.close'),
+  validateBody(
+    z.object({
+      note: z.string().trim().min(10).max(2000),
+      /*
+       * Closing over an unresolved exception freezes a figure already known to
+       * be wrong. It is sometimes the right call — a deadline is a deadline —
+       * and it is never a silent one.
+       */
+      overrideReason: z.string().trim().min(10).max(2000).optional(),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await periods.closePeriod(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data,
+        ),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods/:id/reopen',
+  requirePermission('period:reopen'),
+  requireStepUp('financial.period.reopen'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      res.json(
+        await periods.reopenPeriod(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data.reason,
         ),
       );
     },

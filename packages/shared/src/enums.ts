@@ -86,6 +86,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "CIVIL_SERVANT": 'enumCivilServant',
   "CLEARED": 'enumCleared',
   "CLOSED": 'enumClosed',
+  "CLOSING": 'enumClosing',
   "COLLECTED": 'enumCollected',
   "COLLECTION": 'enumCollection',
   "COMMENT": 'enumComment',

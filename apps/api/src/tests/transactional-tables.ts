@@ -74,6 +74,17 @@ export const TRANSACTIONAL_TABLES = [
    */
   'case_events',
   'cases',
+  /*
+   * And the period lock.
+   *
+   * It has to be emptied between files for two reasons. It holds a `closed_by`
+   * pointing at an officer the reset deletes, like `departments` above — and a
+   * closed period left behind would refuse the *next* file's collections at the
+   * database, which is the lock working exactly as designed against a fixture
+   * that has no idea it exists. TRUNCATE does not fire the row-level DELETE
+   * trigger, so the "never deleted" guarantee is unaffected.
+   */
+  'financial_periods',
   'revenue_targets',
   'officer_transfers',
   'departments',
