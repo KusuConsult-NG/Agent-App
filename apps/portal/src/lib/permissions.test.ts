@@ -240,25 +240,37 @@ describe('the auditor is read-only, observably', () => {
    * And writes its own findings, which is not the same thing.
    *
    * Pinned rather than left implied. The auditor gained four writing
-   * permissions when casework arrived, and the read-only marker survived that
-   * because casework is classified apart — a distinction that is only worth
-   * anything if somebody stated it on purpose. If a future change folds
-   * casework back into `MUTATING_PERMISSIONS`, the marker disappears and the
-   * test above fails; if it strips the auditor's casework instead, this one
-   * does, and the failure says the role was made mute.
+   * permissions when casework arrived and three more with the audit workbench,
+   * and the read-only marker survived both because that class is classified
+   * apart — a distinction that is only worth anything if somebody stated it on
+   * purpose. If a future change folds it back into `MUTATING_PERMISSIONS`, the
+   * marker disappears and the test above fails; if it strips the auditor's own
+   * record instead, this one does, and the failure says the role was made
+   * mute.
    */
-  it('writes its own cases, and that is the whole of what it writes', () => {
+  it('writes its own record, and that is the whole of what it writes', () => {
     const held = ROLE_PERMISSIONS.auditor as readonly string[];
     expect(held).toContain('case:create');
     expect(held).toContain('case:contribute');
     expect(held).toContain('case:manage');
+    // The workbench: drawing a sample, generating a report, signing one.
+    expect(held).toContain('audit:sample');
+    expect(held).toContain('audit:report');
+    expect(held).toContain('audit:sign');
 
     const writes = held.filter(
       (permission) =>
         (MUTATING_PERMISSIONS as readonly string[]).includes(permission) ||
         (CASEWORK_PERMISSIONS as readonly string[]).includes(permission),
     );
-    expect(writes.sort()).toEqual(['case:contribute', 'case:create', 'case:manage']);
+    expect(writes.sort()).toEqual([
+      'audit:report',
+      'audit:sample',
+      'audit:sign',
+      'case:contribute',
+      'case:create',
+      'case:manage',
+    ]);
   });
 
   it('is the only role the portal describes as read-only', () => {

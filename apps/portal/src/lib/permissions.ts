@@ -226,6 +226,23 @@ export const CASEWORK_PERMISSIONS = [
   'case:create',
   'case:contribute',
   'case:manage',
+  /*
+   * The workbench is in this class for the same reason casework is.
+   *
+   * Drawing a sample writes down which transactions an auditor examined;
+   * generating a report freezes figures that were already readable and signing
+   * one puts a name on them. Not one of the three changes what a taxpayer
+   * owes, what an agent earned, or what a receipt says -- which is the line
+   * stated above, applied.
+   *
+   * `audit:sign` is the closest call, because a signature carries weight
+   * outside the audit file. It stays here: what it commits is the auditor's
+   * own opinion, and an examiner who cannot sign their own report has not been
+   * kept independent, only kept quiet.
+   */
+  'audit:sample',
+  'audit:report',
+  'audit:sign',
 ] as const;
 
 /**
@@ -361,6 +378,15 @@ const SCREEN: Record<string, NavItem> = {
   support: { path: '/support', label: 'ofcNavSupport', permission: 'support:read:all' },
   outstanding: { path: '/outstanding', label: 'ofcNavOutstanding', permission: 'payment:read:all' },
   audit: { path: '/audit', label: 'ofcNavAudit', permission: 'audit:read' },
+  /*
+   * The workbench sits behind `audit:sample`, not `audit:read`.
+   *
+   * Every officer with `audit:read` can read the log; drawing a sample and
+   * signing a report are the examiner's own work, and offering the screen to
+   * everybody who can read an audit trail would put a "draw a sample" button
+   * in front of officers whose every click on it would 403.
+   */
+  workbench: { path: '/workbench', label: 'ofcNavWorkbench', permission: 'audit:sample' },
   usage: { path: '/usage', label: 'ofcNavUsage', permission: 'report:read:all' },
   catalogue: { path: '/catalogue', label: 'ofcNavCatalogue', permission: 'catalogue:read' },
   programmes: { path: '/programmes', label: 'ofcNavProgrammes', permission: 'incentive:read:all' },
@@ -524,7 +550,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupExamination',
-      items: [SCREEN.home!, SCREEN.audit!, SCREEN.fraud!, SCREEN.transactions!],
+      items: [SCREEN.home!, SCREEN.audit!, SCREEN.workbench!, SCREEN.fraud!,
+              SCREEN.transactions!],
     },
     {
       group: 'ofcGroupTheMoney',

@@ -75,6 +75,18 @@ export const TRANSACTIONAL_TABLES = [
   'case_events',
   'cases',
   /*
+   * The auditor's workpapers.
+   *
+   * Items before samples: the cascade would do it, but naming both keeps the
+   * order explicit and stops a later reader wondering whether the cascade is
+   * load-bearing. Both hold user references the reset deletes, and both are
+   * protected against row-level DELETE by migration 062 -- which TRUNCATE does
+   * not fire, so emptying them between files leaves that guarantee intact.
+   */
+  'audit_sample_items',
+  'audit_samples',
+  'audit_reports',
+  /*
    * And the period lock.
    *
    * It has to be emptied between files for two reasons. It holds a `closed_by`

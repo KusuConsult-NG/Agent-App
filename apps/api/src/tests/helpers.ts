@@ -21,6 +21,7 @@ import { hashPassword } from '../lib/crypto';
 import { recordSettlement } from '../services/reconciliation';
 import { gateway } from '../integrations/gateway';
 import { seedReferenceData } from '../db/seed';
+import { seedDemoAgent } from '../db/seed-agent';
 
 let server: Server | null = null;
 let baseUrl = '';
@@ -359,6 +360,68 @@ export async function confirmedCollection(transactionId: string): Promise<{
  * test makes rather than something the platform does on its own — the whole
  * point of the change is that settlement is a separate event.
  */
+/**
+ * One collection, driven all the way through: taxpayer, assessment, payment,
+ * settlement.
+ *
+ * Two test files were building this by hand, and a third would have made three
+ * copies of a sequence that has to stay in step with the pipeline it exercises.
+ * The demonstration agent needs an administrator to have approved it, so the
+ * caller has to have created one before this is called.
+ *
+ * Returns the transaction id, which is all any caller has wanted from it.
+ */
+export async function seedOneCollection(label: string): Promise<string> {
+  const demo = await seedDemoAgent();
+  if (!demo) {
+    throw new Error(
+      'the demonstration agent could not be seeded — reference data and an admin user come first',
+    );
+  }
+  const session = await loginAs(demo.phone, demo.password, demo.deviceIdentifier);
+  const agentAuth = { token: session.accessToken, deviceId: demo.deviceIdentifier };
+
+  const taxpayer = await post(
+    '/taxpayers',
+    {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: 'Seeded',
+      lastName: `Subject${label}`,
+      phone: `+2348159${label.padStart(6, '0')}`,
+      address: '11 Ledger Street, Jos',
+      lgaId: await firstLgaId(),
+      consentGiven: true,
+      declarationAccepted: true,
+    },
+    { ...agentAuth, idempotencyKey: `seed-tp-${label}` },
+  );
+  if (taxpayer.status !== 201) {
+    throw new Error(`could not register a taxpayer: ${JSON.stringify(taxpayer.body)}`);
+  }
+
+  const assessment = await post(
+    '/revenue/assessments',
+    {
+      taxpayerId: taxpayer.body.taxpayerId,
+      revenueItemId: await revenueItemByCode('SHOPS-KIOSKS'),
+      inputs: {},
+    },
+    { ...agentAuth, idempotencyKey: `seed-as-${label}` },
+  );
+  const initiated = await post(
+    '/payments/initiate',
+    { transactionId: assessment.body.transactionId },
+    { ...agentAuth, idempotencyKey: `seed-pay-${label}` },
+  );
+  await post(
+    '/payments/simulate',
+    { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+    agentAuth,
+  );
+  await settleTransaction(assessment.body.transactionId);
+  return assessment.body.transactionId as string;
+}
+
 export async function settleTransaction(transactionId: string): Promise<void> {
   const collection = await confirmedCollection(transactionId);
   await settleCollection({

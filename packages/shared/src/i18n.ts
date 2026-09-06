@@ -210,6 +210,11 @@ export interface TranslationDictionary {
   enumRepeatedFailedPayments: string;
   enumReversalPattern: string;
   enumUnusualVolume: string;
+  enumFrequentManualIntervention: string;
+  enumRepeatedReceiptRegeneration: string;
+  enumUnusualOfficerActivity: string;
+  enumUnusualTransactionTiming: string;
+  enumUser: string;
   enumRapidSuccession: string;
   enumCommissionAnomaly: string;
   enumSettlementVariance: string;
@@ -1545,6 +1550,83 @@ export interface TranslationDictionary {
   ofcNoneRoles: string;
   enumClosing: string;
   ofcNavPeriods: string;
+  enumClean: string;
+  enumException: string;
+  enumNotAvailable: string;
+  enumRandom: string;
+  enumSystematic: string;
+  enumHighestValue: string;
+  enumDrawn: string;
+  enumInReview: string;
+  enumGenerated: string;
+  enumSigned: string;
+  enumTransactionAudit: string;
+  enumAgentActivity: string;
+  enumRevenueCollection: string;
+  enumLgaPerformance: string;
+  enumPaymentReconciliation: string;
+  enumUserActivity: string;
+  enumAnomaly: string;
+  enumAuditSample: string;
+  enumRevenueTarget: string;
+  enumPeriodClosing: string;
+  enumDataChange: string;
+  ofcNavWorkbench: string;
+  ofcWbSamplesDrawn: string;
+  ofcWbItemsOutstanding: string;
+  ofcWbExceptionsFound: string;
+  ofcWbReportsHeld: string;
+  ofcWbSamples: string;
+  ofcWbSamplesHint: string;
+  ofcWbSampleNumber: string;
+  ofcWbTitle: string;
+  ofcWbMethod: string;
+  ofcWbMethodRandom: string;
+  ofcWbMethodSystematic: string;
+  ofcWbMethodHighestValue: string;
+  ofcWbDrawn: string;
+  ofcWbPending: string;
+  ofcWbExceptions: string;
+  ofcWbDrawnAt: string;
+  ofcWbDrawnBy: string;
+  ofcWbNoSamples: string;
+  ofcWbDraw: string;
+  ofcWbDrawHint: string;
+  ofcWbSize: string;
+  ofcWbFrom: string;
+  ofcWbTo: string;
+  ofcWbMinimumNaira: string;
+  ofcWbDrawIsFinal: string;
+  ofcWbDrawnNotice: string;
+  ofcWbSeed: string;
+  ofcWbPopulation: string;
+  ofcWbPosition: string;
+  ofcWbOutcome: string;
+  ofcWbFinding: string;
+  ofcWbRecord: string;
+  ofcWbNoItems: string;
+  ofcWbCompleteHint: string;
+  ofcWbComplete: string;
+  ofcWbReports: string;
+  ofcWbReportsHint: string;
+  ofcWbReportNumber: string;
+  ofcWbReportType: string;
+  ofcWbRows: string;
+  ofcWbPeriod: string;
+  ofcWbGeneratedAt: string;
+  ofcWbSignedBy: string;
+  ofcWbChecksum: string;
+  ofcWbNoReports: string;
+  ofcWbGenerate: string;
+  ofcWbGenerateHint: string;
+  ofcWbGenerated: string;
+  ofcWbSign: string;
+  ofcWbWithdraw: string;
+  ofcWbActions: string;
+  ofcWbClose: string;
+  ofcWbReference: string;
+  ofcWbTaxpayer: string;
+  ofcWbAmount: string;
   ofcPeTitle: string;
   ofcPeIntro: string;
   ofcPeOpenPeriod: string;
@@ -2785,6 +2867,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Payments that keep failing",
     enumReversalPattern: "A pattern of reversals",
     enumUnusualVolume: "More collections than usual",
+    enumFrequentManualIntervention: "Often changed by hand",
+    enumRepeatedReceiptRegeneration: "Receipt issued or fetched again and again",
+    enumUnusualOfficerActivity: "Busier than this officer's usual day",
+    enumUnusualTransactionTiming: "Collections written late at night",
+    enumUser: "Officer",
     enumRapidSuccession: "Collections one after another, too fast",
     enumCommissionAnomaly: "Commission that does not add up",
     enumSettlementVariance: "The gateway paid a different amount",
@@ -3991,6 +4078,83 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNoneRoles: "No role is configured.",
     enumClosing: "Being closed",
     ofcNavPeriods: "Financial periods",
+    enumClean: "Clean",
+    enumException: "Exception",
+    enumNotAvailable: "Could not be examined",
+    enumRandom: "Random",
+    enumSystematic: "Every nth",
+    enumHighestValue: "Largest amounts",
+    enumDrawn: "Drawn",
+    enumInReview: "Being examined",
+    enumGenerated: "Generated",
+    enumSigned: "Signed",
+    enumTransactionAudit: "Transaction audit",
+    enumAgentActivity: "Agent activity",
+    enumRevenueCollection: "Revenue collected",
+    enumLgaPerformance: "Council performance",
+    enumPaymentReconciliation: "Payment reconciliation",
+    enumUserActivity: "Officer activity",
+    enumAnomaly: "Anomalies",
+    enumAuditSample: "Audit samples",
+    enumRevenueTarget: "Revenue targets",
+    enumPeriodClosing: "Period closing",
+    enumDataChange: "Record changes",
+    ofcNavWorkbench: "Audit workbench",
+    ofcWbSamplesDrawn: "Samples drawn",
+    ofcWbItemsOutstanding: "Items still to examine",
+    ofcWbExceptionsFound: "Exceptions found",
+    ofcWbReportsHeld: "Reports on file",
+    ofcWbSamples: "Samples",
+    ofcWbSamplesHint: "Each row records a draw that already happened. The criteria, the method and the seed cannot be changed afterwards, which is what lets somebody else reproduce it.",
+    ofcWbSampleNumber: "Sample",
+    ofcWbTitle: "What this is about",
+    ofcWbMethod: "How it was drawn",
+    ofcWbMethodRandom: "At random, from a stored seed",
+    ofcWbMethodSystematic: "Every nth, in date order",
+    ofcWbMethodHighestValue: "The largest amounts (not a sample)",
+    ofcWbDrawn: "Drawn of population",
+    ofcWbPending: "Not yet examined",
+    ofcWbExceptions: "Exceptions",
+    ofcWbDrawnAt: "Drawn on",
+    ofcWbDrawnBy: "Drawn by",
+    ofcWbNoSamples: "No sample has been drawn yet.",
+    ofcWbDraw: "Draw a sample",
+    ofcWbDrawHint: "Say what the sample is for and how wide to look. Leaving a field empty means it does not narrow anything.",
+    ofcWbSize: "How many to draw",
+    ofcWbFrom: "From",
+    ofcWbTo: "To",
+    ofcWbMinimumNaira: "Smallest amount (naira)",
+    ofcWbDrawIsFinal: "A draw cannot be taken back or redrawn. Draw a fresh sample if these criteria are wrong.",
+    ofcWbDrawnNotice: "{{number}} drawn, {{n}} transactions to examine.",
+    ofcWbSeed: "Seed",
+    ofcWbPopulation: "Drawn from",
+    ofcWbPosition: "Item",
+    ofcWbOutcome: "Finding",
+    ofcWbFinding: "What was found",
+    ofcWbRecord: "Record",
+    ofcWbNoItems: "This sample selected nothing.",
+    ofcWbCompleteHint: "A sample can only be completed once every item has a finding. Half-finished work reported as complete is worse than no sample.",
+    ofcWbComplete: "Complete this sample",
+    ofcWbReports: "Audit reports",
+    ofcWbReportsHint: "Each report holds the rows as they stood when it was generated, with a checksum a reader can recompute.",
+    ofcWbReportNumber: "Report",
+    ofcWbReportType: "Question it answers",
+    ofcWbRows: "Rows",
+    ofcWbPeriod: "Period",
+    ofcWbGeneratedAt: "Generated on",
+    ofcWbSignedBy: "Signed by",
+    ofcWbChecksum: "Checksum",
+    ofcWbNoReports: "No report has been generated yet.",
+    ofcWbGenerate: "Generate a report",
+    ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
+    ofcWbGenerated: "{{number}} generated, {{n}} rows.",
+    ofcWbSign: "Sign",
+    ofcWbWithdraw: "Withdraw",
+    ofcWbActions: "Actions",
+    ofcWbClose: "Close",
+    ofcWbReference: "Reference",
+    ofcWbTaxpayer: "Taxpayer",
+    ofcWbAmount: "Amount",
     ofcPeTitle: "Financial periods",
     ofcPeIntro: "Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report.",
     ofcPeOpenPeriod: "Open a period",
@@ -5123,6 +5287,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Biyan kudi da ke ci gaba da gazawa",
     enumReversalPattern: "Yanayin mayar da kudi akai-akai",
     enumUnusualVolume: "Karbar kudi fiye da yadda aka saba",
+    enumFrequentManualIntervention: "Ana yawan canza shi da hannu",
+    enumRepeatedReceiptRegeneration: "An sake fitar da rasit ko saukar da shi sau da yawa",
+    enumUnusualOfficerActivity: "Aiki ya fi na yau da kullun na wannan jami’in",
+    enumUnusualTransactionTiming: "An rubuta karbar kudi da tsakar dare",
+    enumUser: "Jami’i",
     enumRapidSuccession: "Karbar kudi a jere, da sauri sosai",
     enumCommissionAnomaly: "Kwamishan da bai yi daidai ba",
     enumSettlementVariance: "Hanyar biya ta biya wani adadi daban",
@@ -6329,6 +6498,83 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNoneRoles: "Ba a saita wani matsayi ba.",
     enumClosing: "Ana rufewa",
     ofcNavPeriods: "Lokutan kudi",
+    enumClean: "Babu matsala",
+    enumException: "Matsala",
+    enumNotAvailable: "Ba a iya duba shi ba",
+    enumRandom: "Bazuwa",
+    enumSystematic: "Kowane na n",
+    enumHighestValue: "Mafi girman kudi",
+    enumDrawn: "An zana",
+    enumInReview: "Ana duba shi",
+    enumGenerated: "An samar da shi",
+    enumSigned: "An sa hannu",
+    enumTransactionAudit: "Binciken cinikayya",
+    enumAgentActivity: "Ayyukan wakili",
+    enumRevenueCollection: "Kudin da aka karba",
+    enumLgaPerformance: "Aikin karamar hukuma",
+    enumPaymentReconciliation: "Daidaita biyan kudi",
+    enumUserActivity: "Ayyukan jami’i",
+    enumAnomaly: "Abubuwan da ba a saba gani ba",
+    enumAuditSample: "Samfuran bincike",
+    enumRevenueTarget: "Burin kudin shiga",
+    enumPeriodClosing: "Rufe lokaci",
+    enumDataChange: "Canje-canjen bayanai",
+    ofcNavWorkbench: "Teburin bincike",
+    ofcWbSamplesDrawn: "Samfuran da aka zana",
+    ofcWbItemsOutstanding: "Abubuwan da suka rage a duba",
+    ofcWbExceptionsFound: "Matsalolin da aka samu",
+    ofcWbReportsHeld: "Rahotannin da ke fayil",
+    ofcWbSamples: "Samfura",
+    ofcWbSamplesHint: "Kowane layi yana rubuta zanen da ya riga ya faru. Ba za a iya canza sharudda, hanya ko iri ba bayan haka, wanda shi ne abin da ke ba wani damar maimaita shi.",
+    ofcWbSampleNumber: "Samfur",
+    ofcWbTitle: "Abin da ya shafa",
+    ofcWbMethod: "Yadda aka zana shi",
+    ofcWbMethodRandom: "Bazuwa, daga iri da aka ajiye",
+    ofcWbMethodSystematic: "Kowane na n, bisa tsarin kwanan wata",
+    ofcWbMethodHighestValue: "Mafi girman kudi (ba samfur ba ne)",
+    ofcWbDrawn: "An zana daga jimla",
+    ofcWbPending: "Ba a duba ba tukuna",
+    ofcWbExceptions: "Matsaloli",
+    ofcWbDrawnAt: "An zana a",
+    ofcWbDrawnBy: "Wanda ya zana",
+    ofcWbNoSamples: "Ba a zana samfur ba tukuna.",
+    ofcWbDraw: "Zana samfur",
+    ofcWbDrawHint: "Ka fada me ake bukatar samfurin da kuma yadda za a duba. Barin fili babu komai yana nufin ba ya rage komai.",
+    ofcWbSize: "Nawa za a zana",
+    ofcWbFrom: "Daga",
+    ofcWbTo: "Zuwa",
+    ofcWbMinimumNaira: "Mafi karancin kudi (naira)",
+    ofcWbDrawIsFinal: "Ba za a iya soke zane ko sake zana shi ba. Ka zana sabon samfur idan wadannan sharuddan ba daidai ba ne.",
+    ofcWbDrawnNotice: "An zana {{number}}, cinikayya {{n}} za a duba.",
+    ofcWbSeed: "Iri",
+    ofcWbPopulation: "An zana daga",
+    ofcWbPosition: "Abu",
+    ofcWbOutcome: "Sakamako",
+    ofcWbFinding: "Abin da aka samu",
+    ofcWbRecord: "Rubuta",
+    ofcWbNoItems: "Wannan samfurin bai zabi komai ba.",
+    ofcWbCompleteHint: "Ba za a iya kammala samfur ba sai kowane abu ya sami sakamako. Aikin da ba a gama ba amma aka ce an gama ya fi rashin samfur muni.",
+    ofcWbComplete: "Kammala wannan samfurin",
+    ofcWbReports: "Rahotannin bincike",
+    ofcWbReportsHint: "Kowane rahoto yana rike da bayanan yadda suke a lokacin da aka samar da shi, tare da lambar tantancewa da mai karatu zai iya sake lissafawa.",
+    ofcWbReportNumber: "Rahoto",
+    ofcWbReportType: "Tambayar da yake amsawa",
+    ofcWbRows: "Layuka",
+    ofcWbPeriod: "Lokaci",
+    ofcWbGeneratedAt: "An samar a",
+    ofcWbSignedBy: "Wanda ya sa hannu",
+    ofcWbChecksum: "Lambar tantancewa",
+    ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
+    ofcWbGenerate: "Samar da rahoto",
+    ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",
+    ofcWbGenerated: "An samar da {{number}}, layuka {{n}}.",
+    ofcWbSign: "Sa hannu",
+    ofcWbWithdraw: "Janye",
+    ofcWbActions: "Ayyuka",
+    ofcWbClose: "Rufe",
+    ofcWbReference: "Lamba",
+    ofcWbTaxpayer: "Mai biyan haraji",
+    ofcWbAmount: "Kudi",
     ofcPeTitle: "Lokutan kudi",
     ofcPeIntro: "Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba.",
     ofcPeOpenPeriod: "Bude lokaci",

@@ -33,6 +33,7 @@ import * as targets from '../services/targets';
 import * as organisation from '../services/organisation';
 import * as periods from '../services/periods';
 import * as rbacStore from '../services/rbac-store';
+import * as workbench from '../services/audit-workbench';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -2604,6 +2605,191 @@ governmentRouter.get(
  * role, so scoping a query to "their own tickets" and gating a screen are the
  * same decision made from the same source.
  */
+// ---------------------------------------------------------------------------
+// The auditor's workbench: samples and signed reports (Addendum §25, §26)
+// ---------------------------------------------------------------------------
+
+/*
+ * Its own viewer, rather than `officer(req)`.
+ *
+ * The workbench scopes its draws and its reports through `resolveReportScope`,
+ * which needs the permission list at its declared type; `investigation.Viewer`
+ * widens it to `string[]`, and widening it here would mean casting it back at
+ * the point where the territory filter is chosen. That is the last place worth
+ * having a cast.
+ */
+function auditor(req: RouteRequest): workbench.Viewer {
+  return {
+    userId: req.auth!.userId,
+    role: req.auth!.role,
+    permissions: req.auth!.permissions,
+  };
+}
+
+/*
+ * Drawing a sample.
+ *
+ * Scoped like every other report: a supervisor drawing a sample gets one from
+ * their own territories, and the scope they drew under is written into the
+ * criteria so a reader knows which population the denominator refers to.
+ */
+governmentRouter.post(
+  '/audit/samples',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({
+      title: z.string().trim().min(5).max(200),
+      method: z.enum(['RANDOM', 'SYSTEMATIC', 'HIGHEST_VALUE']).default('RANDOM'),
+      size: z.coerce.number().int().min(1).max(500),
+      seed: z.string().trim().min(4).max(100).nullish(),
+      criteria: z
+        .object({
+          from: z.string().date().nullish(),
+          to: z.string().date().nullish(),
+          revenueCategoryId: uuidSchema.nullish(),
+          lgaId: uuidSchema.nullish(),
+          agentId: uuidSchema.nullish(),
+          minimumKobo: z.string().regex(/^\d+$/).nullish(),
+          maximumKobo: z.string().regex(/^\d+$/).nullish(),
+          status: z.string().trim().max(40).nullish(),
+        })
+        .default({}),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await workbench.drawSample(auditor(req), data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/samples',
+  requirePermission('audit:sample'),
+  validateQuery(
+    z.object({
+      status: z.enum(['DRAWN', 'IN_REVIEW', 'COMPLETED']).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    }),
+    async (_req, res, data) => {
+      res.json({ samples: await workbench.listSamples(pool, data) });
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/samples/:id',
+  requirePermission('audit:sample'),
+  asyncHandler(async (req, res) => {
+    res.json(await workbench.getSample(pool, req.params.id));
+  }),
+);
+
+governmentRouter.post(
+  '/audit/samples/items/:id/finding',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({
+      outcome: z.enum(['CLEAN', 'EXCEPTION', 'NOT_AVAILABLE']),
+      finding: z.string().trim().max(2000).nullish(),
+      caseId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      await workbench.recordFinding(auditor(req), req.params.id!, data);
+      res.json({ recorded: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/samples/:id/complete',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({ note: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.completeSample(auditor(req), req.params.id!, data.note);
+      res.json({ completed: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/reports',
+  requirePermission('audit:report'),
+  validateBody(
+    z.object({
+      reportType: z.enum(workbench.REPORT_TYPES),
+      title: z.string().trim().min(5).max(200),
+      parameters: z
+        .object({
+          from: z.string().date().nullish(),
+          to: z.string().date().nullish(),
+          lgaId: uuidSchema.nullish(),
+          agentId: uuidSchema.nullish(),
+          sampleId: uuidSchema.nullish(),
+          userId: uuidSchema.nullish(),
+        })
+        .default({}),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await workbench.generateReport(auditor(req), data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/reports',
+  requirePermission('audit:report'),
+  validateQuery(
+    z.object({
+      reportType: z.enum(workbench.REPORT_TYPES).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    }),
+    async (_req, res, data) => {
+      res.json({ reports: await workbench.listReports(pool, data) });
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/reports/:id',
+  requirePermission('audit:report'),
+  asyncHandler(async (req, res) => {
+    res.json(await workbench.getReport(pool, req.params.id));
+  }),
+);
+
+/*
+ * Signing, and withdrawing.
+ *
+ * Both step-up. A signature is an officer's name on figures that will be read
+ * as settled, and a withdrawal takes a signed report out of circulation; a
+ * session somebody walked away from should be able to do neither.
+ */
+governmentRouter.post(
+  '/audit/reports/:id/sign',
+  requirePermission('audit:sign'),
+  requireStepUp('audit.report.sign'),
+  validateBody(
+    z.object({ note: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.signReport(auditor(req), req.params.id!, data.note);
+      res.json({ signed: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/reports/:id/withdraw',
+  requirePermission('audit:report'),
+  requireStepUp('audit.report.sign'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.withdrawReport(auditor(req), req.params.id!, data.reason);
+      res.json({ withdrawn: true });
+    },
+  ),
+);
+
 function viewerFrom(req: RouteRequest): support.Viewer {
   return {
     userId: req.auth!.userId,

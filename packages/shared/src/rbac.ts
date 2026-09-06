@@ -150,6 +150,23 @@ export const PERMISSIONS = [
   'fraud:read',
   'fraud:manage',
   'audit:read',
+  /*
+   * The auditor's own instruments.
+   *
+   * Both write, and both write only into the auditor's workpapers: a sample
+   * records which transactions were drawn for examination, a report freezes
+   * figures that were already readable and puts a name and a date on them.
+   * Neither can change what a taxpayer owes, what an agent earned, or what a
+   * receipt says -- the same test `case:*` has to pass to sit in a role that
+   * exists to be read-only about the record.
+   *
+   * `audit:sign` is separate from `audit:report` because generating figures
+   * and standing behind them are different acts, and PSIRS may well want them
+   * to be different people.
+   */
+  'audit:sample',
+  'audit:report',
+  'audit:sign',
   'support:read:own',
   'support:read:all',
   'support:manage',
@@ -390,6 +407,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:create',
     'case:contribute',
     'case:manage',
+    'audit:sample',
+    'audit:report',
+    'audit:sign',
     'target:read:all',
     'period:read',
   ],
@@ -474,6 +494,15 @@ export const STEP_UP_ACTIONS = [
    */
   'financial.period.close',
   'financial.period.reopen',
+  /*
+   * Putting a name to figures, and taking a report out of circulation.
+   *
+   * A signed audit report is read as settled by everyone downstream of it, and
+   * the signature cannot be edited off the row afterwards -- migration 062
+   * refuses that. Withdrawal is the other half of the same authority. Neither
+   * should be one click from a session left open on a desk.
+   */
+  'audit.report.sign',
 ] as const;
 
 export type StepUpAction = (typeof STEP_UP_ACTIONS)[number];

@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2235 strings, grouped by where an agent meets them. Lower stakes
+2317 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -340,6 +340,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavCases` | Cases | Kararraki | ☐ | |
 | `ofcNavRoles` | Roles & permissions | Matsayi da izini | ☐ | |
 | `ofcNavPeriods` | Financial periods | Lokutan kudi | ☐ | |
+| `ofcNavWorkbench` | Audit workbench | Teburin bincike | ☐ | |
 | `ofcNavOrganisation` | Departments & offices | Sassa da ofisoshi | ☐ | |
 | `ofcNavTaxpayerAnalytics` | Taxpayer base | Masu biyan haraji | ☐ | |
 | `ofcNavTargets` | Targets & forecast | Manufura da hasashe | ☐ | |
@@ -1386,6 +1387,61 @@ instructions — but they are what an agent reads all day.
 | `ofcRlIsPortalRole` | This role signs in to the officer portal | Wannan matsayi yana shiga tashar jami’ai | ☐ | |
 | `ofcRlSignedOut` | Officers signed out | Jami’an da aka fitar | ☐ | |
 | `ofcRlSearchPermission` | Find a permission | Nemo izini | ☐ | |
+| `ofcWbSamplesDrawn` | Samples drawn | Samfuran da aka zana | ☐ | |
+| `ofcWbItemsOutstanding` | Items still to examine | Abubuwan da suka rage a duba | ☐ | |
+| `ofcWbExceptionsFound` | Exceptions found | Matsalolin da aka samu | ☐ | |
+| `ofcWbReportsHeld` | Reports on file | Rahotannin da ke fayil | ☐ | |
+| `ofcWbSamples` | Samples | Samfura | ☐ | |
+| `ofcWbSamplesHint` | Each row records a draw that already happened. The criteria, the method and the seed cannot be changed afterwards, which is what lets somebody else reproduce it. | Kowane layi yana rubuta zanen da ya riga ya faru. Ba za a iya canza sharudda, hanya ko iri ba bayan haka, wanda shi ne abin da ke ba wani damar maimaita shi. | ☐ | |
+| `ofcWbSampleNumber` | Sample | Samfur | ☐ | |
+| `ofcWbTitle` | What this is about | Abin da ya shafa | ☐ | |
+| `ofcWbMethod` | How it was drawn | Yadda aka zana shi | ☐ | |
+| `ofcWbMethodRandom` | At random, from a stored seed | Bazuwa, daga iri da aka ajiye | ☐ | |
+| `ofcWbMethodSystematic` | Every nth, in date order | Kowane na n, bisa tsarin kwanan wata | ☐ | |
+| `ofcWbMethodHighestValue` | The largest amounts (not a sample) | Mafi girman kudi (ba samfur ba ne) | ☐ | |
+| `ofcWbDrawn` | Drawn of population | An zana daga jimla | ☐ | |
+| `ofcWbPending` | Not yet examined | Ba a duba ba tukuna | ☐ | |
+| `ofcWbExceptions` | Exceptions | Matsaloli | ☐ | |
+| `ofcWbDrawnAt` | Drawn on | An zana a | ☐ | |
+| `ofcWbDrawnBy` | Drawn by | Wanda ya zana | ☐ | |
+| `ofcWbNoSamples` | No sample has been drawn yet. | Ba a zana samfur ba tukuna. | ☐ | |
+| `ofcWbDraw` | Draw a sample | Zana samfur | ☐ | |
+| `ofcWbDrawHint` | Say what the sample is for and how wide to look. Leaving a field empty means it does not narrow anything. | Ka fada me ake bukatar samfurin da kuma yadda za a duba. Barin fili babu komai yana nufin ba ya rage komai. | ☐ | |
+| `ofcWbSize` | How many to draw | Nawa za a zana | ☐ | |
+| `ofcWbFrom` | From | Daga | ☐ | |
+| `ofcWbTo` | To | Zuwa | ☐ | |
+| `ofcWbMinimumNaira` | Smallest amount (naira) | Mafi karancin kudi (naira) | ☐ | |
+| `ofcWbDrawIsFinal` | A draw cannot be taken back or redrawn. Draw a fresh sample if these criteria are wrong. | Ba za a iya soke zane ko sake zana shi ba. Ka zana sabon samfur idan wadannan sharuddan ba daidai ba ne. | ☐ | |
+| `ofcWbDrawnNotice` | {{number}} drawn, {{n}} transactions to examine. | An zana {{number}}, cinikayya {{n}} za a duba. | ☐ | |
+| `ofcWbSeed` | Seed | Iri | ☐ | |
+| `ofcWbPopulation` | Drawn from | An zana daga | ☐ | |
+| `ofcWbPosition` | Item | Abu | ☐ | |
+| `ofcWbOutcome` | Finding | Sakamako | ☐ | |
+| `ofcWbFinding` | What was found | Abin da aka samu | ☐ | |
+| `ofcWbRecord` | Record | Rubuta | ☐ | |
+| `ofcWbNoItems` | This sample selected nothing. | Wannan samfurin bai zabi komai ba. | ☐ | |
+| `ofcWbCompleteHint` | A sample can only be completed once every item has a finding. Half-finished work reported as complete is worse than no sample. | Ba za a iya kammala samfur ba sai kowane abu ya sami sakamako. Aikin da ba a gama ba amma aka ce an gama ya fi rashin samfur muni. | ☐ | |
+| `ofcWbComplete` | Complete this sample | Kammala wannan samfurin | ☐ | |
+| `ofcWbReports` | Audit reports | Rahotannin bincike | ☐ | |
+| `ofcWbReportsHint` | Each report holds the rows as they stood when it was generated, with a checksum a reader can recompute. | Kowane rahoto yana rike da bayanan yadda suke a lokacin da aka samar da shi, tare da lambar tantancewa da mai karatu zai iya sake lissafawa. | ☐ | |
+| `ofcWbReportNumber` | Report | Rahoto | ☐ | |
+| `ofcWbReportType` | Question it answers | Tambayar da yake amsawa | ☐ | |
+| `ofcWbRows` | Rows | Layuka | ☐ | |
+| `ofcWbPeriod` | Period | Lokaci | ☐ | |
+| `ofcWbGeneratedAt` | Generated on | An samar a | ☐ | |
+| `ofcWbSignedBy` | Signed by | Wanda ya sa hannu | ☐ | |
+| `ofcWbChecksum` | Checksum | Lambar tantancewa | ☐ | |
+| `ofcWbNoReports` | No report has been generated yet. | Ba a samar da rahoto ba tukuna. | ☐ | |
+| `ofcWbGenerate` | Generate a report | Samar da rahoto | ☐ | |
+| `ofcWbGenerateHint` | Generating freezes the figures. Signing is a separate step, and often a different officer. | Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban. | ☐ | |
+| `ofcWbGenerated` | {{number}} generated, {{n}} rows. | An samar da {{number}}, layuka {{n}}. | ☐ | |
+| `ofcWbSign` | Sign | Sa hannu | ☐ | |
+| `ofcWbWithdraw` | Withdraw | Janye | ☐ | |
+| `ofcWbActions` | Actions | Ayyuka | ☐ | |
+| `ofcWbClose` | Close | Rufe | ☐ | |
+| `ofcWbReference` | Reference | Lamba | ☐ | |
+| `ofcWbTaxpayer` | Taxpayer | Mai biyan haraji | ☐ | |
+| `ofcWbAmount` | Amount | Kudi | ☐ | |
 | `ofcPeTitle` | Financial periods | Lokutan kudi | ☐ | |
 | `ofcPeIntro` | Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report. | Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba. | ☐ | |
 | `ofcPeOpenPeriod` | Open a period | Bude lokaci | ☐ | |
@@ -2372,6 +2428,11 @@ instructions — but they are what an agent reads all day.
 | `enumRepeatedFailedPayments` | Payments that keep failing | Biyan kudi da ke ci gaba da gazawa | ☐ | |
 | `enumReversalPattern` | A pattern of reversals | Yanayin mayar da kudi akai-akai | ☐ | |
 | `enumUnusualVolume` | More collections than usual | Karbar kudi fiye da yadda aka saba | ☐ | |
+| `enumFrequentManualIntervention` | Often changed by hand | Ana yawan canza shi da hannu | ☐ | |
+| `enumRepeatedReceiptRegeneration` | Receipt issued or fetched again and again | An sake fitar da rasit ko saukar da shi sau da yawa | ☐ | |
+| `enumUnusualOfficerActivity` | Busier than this officer's usual day | Aiki ya fi na yau da kullun na wannan jami’in | ☐ | |
+| `enumUnusualTransactionTiming` | Collections written late at night | An rubuta karbar kudi da tsakar dare | ☐ | |
+| `enumUser` | Officer | Jami’i | ☐ | |
 | `enumRapidSuccession` | Collections one after another, too fast | Karbar kudi a jere, da sauri sosai | ☐ | |
 | `enumCommissionAnomaly` | Commission that does not add up | Kwamishan da bai yi daidai ba | ☐ | |
 | `enumSettlementVariance` | The gateway paid a different amount | Hanyar biya ta biya wani adadi daban | ☐ | |
@@ -2697,6 +2758,27 @@ instructions — but they are what an agent reads all day.
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
 | `enumClosing` | Being closed | Ana rufewa | ☐ | |
+| `enumClean` | Clean | Babu matsala | ☐ | |
+| `enumException` | Exception | Matsala | ☐ | |
+| `enumNotAvailable` | Could not be examined | Ba a iya duba shi ba | ☐ | |
+| `enumRandom` | Random | Bazuwa | ☐ | |
+| `enumSystematic` | Every nth | Kowane na n | ☐ | |
+| `enumHighestValue` | Largest amounts | Mafi girman kudi | ☐ | |
+| `enumDrawn` | Drawn | An zana | ☐ | |
+| `enumInReview` | Being examined | Ana duba shi | ☐ | |
+| `enumGenerated` | Generated | An samar da shi | ☐ | |
+| `enumSigned` | Signed | An sa hannu | ☐ | |
+| `enumTransactionAudit` | Transaction audit | Binciken cinikayya | ☐ | |
+| `enumAgentActivity` | Agent activity | Ayyukan wakili | ☐ | |
+| `enumRevenueCollection` | Revenue collected | Kudin da aka karba | ☐ | |
+| `enumLgaPerformance` | Council performance | Aikin karamar hukuma | ☐ | |
+| `enumPaymentReconciliation` | Payment reconciliation | Daidaita biyan kudi | ☐ | |
+| `enumUserActivity` | Officer activity | Ayyukan jami’i | ☐ | |
+| `enumAnomaly` | Anomalies | Abubuwan da ba a saba gani ba | ☐ | |
+| `enumAuditSample` | Audit samples | Samfuran bincike | ☐ | |
+| `enumRevenueTarget` | Revenue targets | Burin kudin shiga | ☐ | |
+| `enumPeriodClosing` | Period closing | Rufe lokaci | ☐ | |
+| `enumDataChange` | Record changes | Canje-canjen bayanai | ☐ | |
 | `enumSupervisorChange` | Reporting line | Layin rahoto | ☐ | |
 | `enumRoleChange` | Role | Matsayi | ☐ | |
 | `enumCollection` | Collection | Karbar kudi | ☐ | |

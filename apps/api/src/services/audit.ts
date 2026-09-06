@@ -40,8 +40,13 @@ export interface AuditEntry {
  * time and again after a round trip through JSONB would therefore produce two
  * different digests for identical data, and every verification would report
  * tampering that had not happened.
+ *
+ * Exported because an audit report's checksum has exactly the same problem for
+ * exactly the same reason: its payload is JSONB, and a second implementation
+ * that sorted keys slightly differently would make every report look tampered
+ * with the first time somebody checked one.
  */
-function canonicalJson(value: unknown): unknown {
+export function canonicalJson(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(canonicalJson);
   return Object.keys(value as Record<string, unknown>)

@@ -377,6 +377,14 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/audit?format=json\|csv` | `audit:read` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
+| `POST`/`GET` | `/government/audit/samples` | `audit:sample` — draw a sample, or list what has been drawn |
+| `GET` | `/government/audit/samples/:id` | the sample, its seed, and every transaction it selected |
+| `POST` | `/government/audit/samples/items/:id/finding` | `CLEAN`, `EXCEPTION` (which must say what was wrong) or `NOT_AVAILABLE` |
+| `POST` | `/government/audit/samples/:id/complete` | refused while any item is still unexamined |
+| `POST`/`GET` | `/government/audit/reports` | `audit:report` — generate a report of one of thirteen kinds, or list them |
+| `GET` | `/government/audit/reports/:id` | the frozen payload, plus `checksumMatches` recomputed on read |
+| `POST` | `/government/audit/reports/:id/sign` | `audit:sign`, step-up `audit.report.sign` |
+| `POST` | `/government/audit/reports/:id/withdraw` | `audit:report`, step-up — a report is never deleted |
 | `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |
 | `GET` | `/government/search?q=` | `catalogue:read` — see below; each result kind is gated separately |
 | `GET` | `/government/transactions/:key/full` | Transaction 360; `:key` is an id or a reference |

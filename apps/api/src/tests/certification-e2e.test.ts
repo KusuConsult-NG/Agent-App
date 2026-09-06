@@ -638,18 +638,39 @@ describe('RBAC — every role checked against the API, not the UI', () => {
     /*
      * And what they may write is their own file, and only that.
      *
-     * `case:read:all` is a read and is not listed; the three below are the
-     * whole of the auditor's write surface. If a mutating permission is ever
-     * added to the role, this is where it shows up as an unexplained fourth.
+     * `case:read:all` is a read and is not listed; the six below are the whole
+     * of the auditor's write surface. If a mutating permission is ever added
+     * to the role, this is where it shows up as an unexplained seventh.
+     *
+     * The workbench three joined casework for the reason casework was allowed
+     * in the first place, and the reason is a line rather than a category: an
+     * auditor's writes land in the auditor's own record. A sample says which
+     * transactions were examined, a report freezes figures that were already
+     * readable, a signature puts a name to them. None of the six changes what
+     * a taxpayer owes, what an agent earned, what a rate is, or what a receipt
+     * says -- which is what the refusals above actually test, and what makes
+     * the role read-only in the sense it exists to be.
+     *
+     * `audit:sign` is the one worth arguing about, because a signature carries
+     * weight outside the audit file. It belongs here: what it commits is the
+     * examiner's own opinion, and an auditor who cannot sign their own report
+     * has not been kept independent, only kept quiet.
      */
-    const CASEWORK = ['case:create', 'case:contribute', 'case:manage'];
+    const OWN_RECORD = [
+      'case:create',
+      'case:contribute',
+      'case:manage',
+      'audit:sample',
+      'audit:report',
+      'audit:sign',
+    ];
     const writes = permissionsForRole('auditor').filter(
       (permission) => !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$/.test(permission),
     );
     assert.deepEqual(
       [...writes].sort(),
-      [...CASEWORK].sort(),
-      `the auditor's write surface should be casework alone, and is: ${writes.join(', ')}`,
+      [...OWN_RECORD].sort(),
+      `the auditor's write surface should be their own record alone, and is: ${writes.join(', ')}`,
     );
   });
 });

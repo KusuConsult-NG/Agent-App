@@ -275,9 +275,9 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Audit cases | Complete | §22 — cases carry case number, subject, transactions, agent, taxpayer, officer, category, risk, description, evidence, assignee, due date, status |
 | Six case statuses | Complete | Open, Investigating, Awaiting Information, Escalated, Resolved, Closed |
 | Evidence management | Partial | Attaching, listing and auditing all work (§6). The gap is the same one: an auditor cannot upload a document that did not originate in the platform, which is most of what an investigation collects |
-| Anomaly analytics | Partial | `services/fraud.ts` covers territory violations, velocity, duplicate contacts, reversal patterns and registration risk. Not covered: repeated receipt regeneration, unusual transaction timing, unusual **officer** activity, frequent manual interventions |
-| Audit sampling | Missing | An auditor cannot draw a sample by period, category, LGA, agent or value |
-| Audit reports (13 kinds) | Partial | Transaction, agent, revenue, LGA, payment, reconciliation, commission and user-activity questions are all answerable through existing queries and CSV. There is no report *object* — no saved, dated, signed audit report |
+| Anomaly analytics | Complete | `services/fraud.ts` covers territory violations, velocity, duplicate contacts, reversal patterns and registration risk, and now four rules that watch the office rather than the field: repeated receipt regeneration or retrieval, collections written in the small hours (read in Africa/Lagos), an officer's day against their own preceding four weeks, and frequent manual interventions. `watching-the-office.test.ts` asserts each fires on the shape it is for and stays quiet on the ordinary case beside it |
+| Audit sampling | Complete | `POST /government/audit/samples` draws by period, category, LGA, agent, value band and status, at random from a stored seed, systematically, or by largest amount. Migration 062 fixes the criteria, the seed, the population size and the selected rows at the moment of drawing, so a reviewer can reproduce the draw and nobody can widen it after seeing the results |
+| Audit reports (13 kinds) | Complete | `audit_reports` holds all thirteen as objects: the rows frozen at generation, a SHA-256 over the canonical payload and parameters, a generator, and a separate signature. `GET` recomputes the checksum and tells the reader when stored figures no longer match what was signed. A report is withdrawn with a reason, never deleted |
 | Export PDF | Missing | CSV only |
 | Export Excel | Missing | CSV only |
 | Export CSV | Complete | `reports.toCsv` |
@@ -374,14 +374,14 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Audit cases | Complete |
 | Evidence management | Partial |
 | Risk alerts | Complete |
-| Anomaly detection | Partial |
-| Audit sampling | **Missing** |
+| Anomaly detection | Complete |
+| Audit sampling | Complete |
 | Agent audits | Complete |
 | Revenue audits | Complete |
 | Payment audits | Complete |
 | Reconciliation audits | Complete |
 | Commission audits | Complete |
-| Audit reports | Partial |
+| Audit reports | Complete |
 | Investigation history | Complete |
 
 ---
