@@ -492,6 +492,7 @@ interface CaseEvent {
 
 interface CaseDetailBody extends CaseRow {
   description: string;
+  department_id: string | null;
   resolution: string | null;
   resolved_by_name: string | null;
   tin: string | null;
@@ -521,6 +522,9 @@ function CaseDetail({
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [officers, setOfficers] = useState<{ id: string; full_name: string; role: string }[]>([]);
+  const [departments, setDepartments] = useState<
+    { id: string; name: string; status: string }[]
+  >([]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -548,6 +552,19 @@ function CaseDetail({
       .get<{ id: string; full_name: string; role: string }[]>('/government/users')
       .then(setOfficers)
       .catch(() => setOfficers([]));
+  }, []);
+
+  /*
+   * The department list, which every portal role may read.
+   *
+   * Unlike the officer list: routing a case to Finance requires seeing that
+   * Finance exists, and that is not the same permission as enumerating staff.
+   */
+  useEffect(() => {
+    api
+      .get<{ id: string; name: string; status: string }[]>('/government/departments')
+      .then((rows) => setDepartments(rows.filter((row) => row.status === 'ACTIVE')))
+      .catch(() => setDepartments([]));
   }, []);
 
   if (error) return <div className="card"><ErrorAlert error={error} /></div>;
@@ -669,6 +686,7 @@ function CaseDetail({
         <CaseControls
           detail={detail}
           officers={officers}
+          departments={departments}
           onDone={async (message) => {
             setNotice(message);
             await load();
@@ -691,10 +709,12 @@ function describe(value: Record<string, unknown> | null): string {
 function CaseControls({
   detail,
   officers,
+  departments,
   onDone,
 }: {
   detail: CaseDetailBody;
   officers: { id: string; full_name: string; role: string }[];
+  departments: { id: string; name: string; status: string }[];
   onDone: (message: string) => Promise<void>;
 }) {
   const { t } = usePortalI18n();
@@ -709,6 +729,8 @@ function CaseControls({
   const [resolution, setResolution] = useState('');
   const [assignee, setAssignee] = useState(detail.assignee_name ? '' : '');
   const [department, setDepartment] = useState(detail.department ?? '');
+  const [departmentId, setDepartmentId] = useState(detail.department_id ?? '');
+  const [escalateReason, setEscalateReason] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -921,6 +943,32 @@ function CaseControls({
                 </select>
               </label>
             )}
+            {/*
+              * A department, where one exists, and a role otherwise.
+              *
+              * Two departments can hold the same function and different
+              * officers, which is the whole reason departments exist — routing
+              * by role could not tell Finance North from Finance South. The
+              * role picker stays because every case raised before departments
+              * existed is addressed that way, and a raiser who does not know
+              * the organisation chart still reaches somebody through it.
+              */}
+            {departments.length > 0 && (
+              <label>
+                {t.ofcOrDepartment}
+                <select
+                  value={departmentId}
+                  onChange={(event) => setDepartmentId(event.target.value)}
+                >
+                  <option value="">{t.ofcCwAnyDepartment}</option>
+                  {departments.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label>
               {t.ofcCwDepartment}
               <select value={department} onChange={(event) => setDepartment(event.target.value)}>
@@ -941,11 +989,45 @@ function CaseControls({
                 await api.post(`/government/cases/${detail.id}/assign`, {
                   assigneeId: assignee || null,
                   department: department || null,
+                  departmentId: departmentId || null,
                 });
               }, t.ofcCwSaved)
             }
           >
             {t.ofcCwMoveCase}
+          </button>
+
+          {/*
+            * Escalation that goes somewhere.
+            *
+            * ESCALATED used to be a status and nothing more: the case changed
+            * colour and stayed on the same desk. This resolves who is above —
+            * supervisor, then department head, then the department above that —
+            * and moves the case to them. Where the walk runs out the server
+            * refuses, rather than marking it escalated and leaving it here.
+            */}
+          <h3>{t.ofcCwEscalate}</h3>
+          <p className="muted">{t.ofcCwEscalateBody}</p>
+          <label>
+            {t.ofcCwEscalateReason}
+            <input
+              value={escalateReason}
+              onChange={(event) => setEscalateReason(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={busy || escalateReason.trim().length < 10}
+            onClick={() =>
+              run(async () => {
+                await api.post(`/government/cases/${detail.id}/escalate`, {
+                  reason: escalateReason.trim(),
+                });
+                setEscalateReason('');
+              }, t.ofcCwSaved)
+            }
+          >
+            {t.ofcCwEscalate}
           </button>
         </>
       )}

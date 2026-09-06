@@ -355,6 +355,21 @@ const SCREEN: Record<string, NavItem> = {
   },
   users: { path: '/users', label: 'ofcNavUsers', permission: 'user:manage' },
   /*
+   * The structure, readable by every portal role and by nobody else.
+   *
+   * `case:read:all` is held by exactly those five and by no field agent, which
+   * is the boundary that matters here. Not the reporting pair: a route that
+   * accepts `report:read:territory` promises to narrow its answer to the
+   * caller's territories, and an organisation chart is not territory data —
+   * see the note on the endpoint. Creating or closing a department is
+   * `user:manage`, gated inside the screen.
+   */
+  organisation: {
+    path: '/organisation',
+    label: 'ofcNavOrganisation',
+    permission: 'case:read:all',
+  },
+  /*
    * `system:configure`, held by administrators alone. Raising the minimum app
    * version stops every agent still on an older build from collecting; that is
    * a different size of decision from suspending one agent, and it is not on a
@@ -402,7 +417,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupAdministration',
-      items: [SCREEN.home!, SCREEN.users!, SCREEN.agents!, SCREEN.referees!],
+      items: [SCREEN.home!, SCREEN.users!, SCREEN.organisation!, SCREEN.agents!,
+              SCREEN.referees!],
     },
     {
       group: 'ofcGroupConfiguration',

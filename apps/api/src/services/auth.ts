@@ -22,6 +22,7 @@ import {
 import { AppError, forbidden, unauthorised, conflict, badRequest, notFound } from '../lib/errors';
 import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
+import { recordTransfer } from './organisation';
 import { queueNotification } from './notifications';
 
 export interface SessionTokens {
@@ -869,6 +870,17 @@ export async function changeUserRole(params: {
       reason: params.reason,
     });
 
+    // The dated posting record, for the same reason as the territory change
+    // below: an audit entry says what was written, a transfer says what
+    // somebody's posting was on a given date.
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'ROLE',
+      fromValue: { role: target.role },
+      toValue: { role: params.newRole },
+      reason: params.reason,
+    });
+
     await queueNotification(client, {
       event: 'USER_ROLE_CHANGED',
       userId: params.targetUserId,
@@ -1059,6 +1071,22 @@ export async function setOfficerTerritories(params: {
       entityId: params.targetUserId,
       oldValue: { territoryIds: before.map((row) => row.territory_id) },
       newValue: { territoryIds: [...new Set(params.territoryIds)] },
+      reason: params.reason,
+    });
+
+    /*
+     * And a dated posting record, beside the audit entry.
+     *
+     * They answer different questions. The audit entry says what changed and
+     * when somebody wrote it; the transfer says who covered which territory
+     * from which date — which is what a revenue dispute asks, and what you
+     * cannot reconstruct by replaying a log and hoping none of it is missing.
+     */
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'TERRITORY',
+      fromValue: { territoryIds: before.map((row) => row.territory_id) },
+      toValue: { territoryIds: [...new Set(params.territoryIds)] },
       reason: params.reason,
     });
 

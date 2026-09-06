@@ -1518,6 +1518,56 @@ export interface TranslationDictionary {
   ofcCwIntro: string;
   ofcCwOpenCase: string;
   ofcCwStatus: string;
+  enumSupervisorChange: string;
+  enumRoleChange: string;
+  ofcNavOrganisation: string;
+  ofcOrTitle: string;
+  ofcOrIntro: string;
+  ofcOrDepartments: string;
+  ofcOrOffices: string;
+  ofcOrOfficesBody: string;
+  ofcOrNewDepartment: string;
+  ofcOrNewOffice: string;
+  ofcOrCode: string;
+  ofcOrFunction: string;
+  ofcOrHead: string;
+  ofcOrParent: string;
+  ofcOrOfficers: string;
+  ofcOrOpenCases: string;
+  ofcOrCovers: string;
+  ofcOrClose: string;
+  ofcOrPosting: string;
+  ofcOrPostingBody: string;
+  ofcOrMoveOfficer: string;
+  ofcOrDepartment: string;
+  ofcOrOffice: string;
+  ofcOrSupervisor: string;
+  ofcOrJobTitle: string;
+  ofcOrStaffNumber: string;
+  ofcOrWhyMoving: string;
+  ofcOrEffectiveFrom: string;
+  ofcOrHistory: string;
+  ofcOrHistoryBody: string;
+  ofcOrNobody: string;
+  ofcOrUnposted: string;
+  ofcCwEscalate: string;
+  ofcCwEscalateBody: string;
+  ofcCwEscalateReason: string;
+  ofcCwEscalatedTo: string;
+  ofcNoneDepartments: string;
+  ofcNoneOffices: string;
+  ofcNoneTransfers: string;
+  enumCollection: string;
+  enumFinance: string;
+  enumAudit: string;
+  enumEnforcement: string;
+  enumTaxpayerServices: string;
+  enumAdministration: string;
+  enumTechnology: string;
+  enumPosting: string;
+  enumDepartment: string;
+  enumOffice: string;
+  enumTerritory: string;
   ofcDbByChannel: string;
   ofcDbByChannelBody: string;
   ofcDbByTaxpayerType: string;
@@ -3863,6 +3913,56 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
     ofcCwOpenCase: "Open a case",
     ofcCwStatus: "Status",
+    enumSupervisorChange: "Reporting line",
+    enumRoleChange: "Role",
+    ofcNavOrganisation: "Departments & offices",
+    ofcOrTitle: "The organisation",
+    ofcOrIntro: "Who works with whom, who answers for them, and where they sit. A department is a body; a role is what somebody may do. Both are needed and neither replaces the other.",
+    ofcOrDepartments: "Departments",
+    ofcOrOffices: "Revenue offices",
+    ofcOrOfficesBody: "Where officers sit, which is not the territory they cover. The Jos North office administers three LGAs.",
+    ofcOrNewDepartment: "Add a department",
+    ofcOrNewOffice: "Add an office",
+    ofcOrCode: "Code",
+    ofcOrFunction: "Work it does",
+    ofcOrHead: "Answers for it",
+    ofcOrParent: "Sits under",
+    ofcOrOfficers: "Officers",
+    ofcOrOpenCases: "Open cases",
+    ofcOrCovers: "Administers",
+    ofcOrClose: "Close",
+    ofcOrPosting: "Posting",
+    ofcOrPostingBody: "Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers.",
+    ofcOrMoveOfficer: "Move this officer",
+    ofcOrDepartment: "Department",
+    ofcOrOffice: "Office",
+    ofcOrSupervisor: "Reports to",
+    ofcOrJobTitle: "Job title",
+    ofcOrStaffNumber: "Staff number",
+    ofcOrWhyMoving: "Why they are moving",
+    ofcOrEffectiveFrom: "From",
+    ofcOrHistory: "Posting history",
+    ofcOrHistoryBody: "Append-only. Who was responsible for an area in a given month is asked in revenue disputes, and an answer that can be adjusted afterwards is not one.",
+    ofcOrNobody: "Nobody",
+    ofcOrUnposted: "Not posted",
+    ofcCwEscalate: "Escalate",
+    ofcCwEscalateBody: "Sends the case to the officer above, with its whole history attached. If nobody is above, it says so rather than marking the case escalated and leaving it here.",
+    ofcCwEscalateReason: "Why it needs somebody above",
+    ofcCwEscalatedTo: "Escalated to",
+    ofcNoneDepartments: "No department has been created yet.",
+    ofcNoneOffices: "No revenue office has been created yet.",
+    ofcNoneTransfers: "No posting has been recorded for this officer.",
+    enumCollection: "Collection",
+    enumFinance: "Finance",
+    enumAudit: "Audit",
+    enumEnforcement: "Enforcement",
+    enumTaxpayerServices: "Taxpayer services",
+    enumAdministration: "Administration",
+    enumTechnology: "Technology",
+    enumPosting: "Posting",
+    enumDepartment: "Department",
+    enumOffice: "Office",
+    enumTerritory: "Territory",
     ofcDbByChannel: "How the money arrived",
     ofcDbByChannelBody: "Recorded on every transaction since the platform started, and never grouped until now. It is the figure behind every decision about where to put agents.",
     ofcDbByTaxpayerType: "Individuals and businesses",
@@ -6100,6 +6200,56 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
     ofcCwOpenCase: "Bude kara",
     ofcCwStatus: "Matsayi",
+    enumSupervisorChange: "Layin rahoto",
+    enumRoleChange: "Matsayi",
+    ofcNavOrganisation: "Sassa da ofisoshi",
+    ofcOrTitle: "Kungiyar",
+    ofcOrIntro: "Wanda ke aiki da wa, wanda ke da alhakinsu, da inda suke zaune. Sashe jiki ne; matsayi shi ne abin da mutum zai iya yi. Ana bukatar dukansu kuma babu wanda ya maye gurbin dayan.",
+    ofcOrDepartments: "Sassa",
+    ofcOrOffices: "Ofisoshin haraji",
+    ofcOrOfficesBody: "Inda jami’ai ke zaune, wanda ba yankin da suke rufewa ba ne. Ofishin Jos North yana kula da kananan hukumomi uku.",
+    ofcOrNewDepartment: "Kara sashe",
+    ofcOrNewOffice: "Kara ofishi",
+    ofcOrCode: "Lamba",
+    ofcOrFunction: "Aikin da yake yi",
+    ofcOrHead: "Wanda ke da alhakinsa",
+    ofcOrParent: "Yana karkashin",
+    ofcOrOfficers: "Jami’ai",
+    ofcOrOpenCases: "Kararrakin da ba a rufe ba",
+    ofcOrCovers: "Yana kula da",
+    ofcOrClose: "Rufe",
+    ofcOrPosting: "Matsayi",
+    ofcOrPostingBody: "Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban.",
+    ofcOrMoveOfficer: "Matsar da wannan jami’i",
+    ofcOrDepartment: "Sashe",
+    ofcOrOffice: "Ofishi",
+    ofcOrSupervisor: "Yana bayar da rahoto ga",
+    ofcOrJobTitle: "Mukami",
+    ofcOrStaffNumber: "Lambar ma’aikaci",
+    ofcOrWhyMoving: "Dalilin matsawa",
+    ofcOrEffectiveFrom: "Daga",
+    ofcOrHistory: "Tarihin matsayi",
+    ofcOrHistoryBody: "Ana kara kawai. Ana tambayar wa ke da alhakin wani yanki a wani wata a jayayyar haraji, kuma amsar da za a iya gyarawa daga baya ba amsa ba ce.",
+    ofcOrNobody: "Babu kowa",
+    ofcOrUnposted: "Ba a saka ba",
+    ofcCwEscalate: "Daukaka",
+    ofcCwEscalateBody: "Yana aika karar ga jami’in da ke sama, tare da duk tarihinta. Idan babu kowa a sama, zai fada maimakon a sa alamar daukaka a bar ta a nan.",
+    ofcCwEscalateReason: "Dalilin bukatar wani a sama",
+    ofcCwEscalatedTo: "An daukaka zuwa",
+    ofcNoneDepartments: "Ba a kirkiri wani sashe ba tukuna.",
+    ofcNoneOffices: "Ba a kirkiri ofishin haraji ba tukuna.",
+    ofcNoneTransfers: "Ba a rubuta wani matsayi ga wannan jami’i ba.",
+    enumCollection: "Karbar kudi",
+    enumFinance: "Kudi",
+    enumAudit: "Bincike",
+    enumEnforcement: "Aiwatarwa",
+    enumTaxpayerServices: "Hidimar masu biyan haraji",
+    enumAdministration: "Gudanarwa",
+    enumTechnology: "Fasaha",
+    enumPosting: "Matsayi",
+    enumDepartment: "Sashe",
+    enumOffice: "Ofishi",
+    enumTerritory: "Yanki",
     ofcDbByChannel: "Yadda kudin ya shigo",
     ofcDbByChannelBody: "An rubuta shi a kan kowace ma’amala tun farkon manhajar, kuma ba a taba tarawa ba har yanzu. Shi ne adadin da ke bayan kowane shawara kan inda za a sanya wakilai.",
     ofcDbByTaxpayerType: "Mutane da kasuwanci",

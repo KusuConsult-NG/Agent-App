@@ -116,6 +116,7 @@ interface CaseRow {
   assignee_id: string | null;
   opened_by: string;
   department: string | null;
+  department_id: string | null;
   subject: string;
   priority: string;
   due_at: Date | null;
@@ -162,8 +163,8 @@ function assertOpen(row: CaseRow): void {
 async function load(db: Db, id: string): Promise<CaseRow> {
   const row = await queryOne<CaseRow>(
     db,
-    `SELECT id, case_number, status, assignee_id, opened_by, department, subject,
-            priority, due_at
+    `SELECT id, case_number, status, assignee_id, opened_by, department, department_id,
+            subject, priority, due_at
        FROM cases WHERE id = $1`,
     [id],
   );
@@ -241,6 +242,14 @@ export interface OpenCaseInput {
   riskLevel?: string;
   priority?: string;
   department?: string | null;
+  /**
+   * The department this case is addressed to, now that departments exist.
+   *
+   * Preferred over `department` where both are given. The role-name column
+   * stays because cases already in flight are addressed to one, and dropping
+   * it would strand them in a queue nobody opens.
+   */
+  departmentId?: string | null;
   assigneeId?: string | null;
   transactionId?: string | null;
   agentId?: string | null;
@@ -265,9 +274,9 @@ export async function openCase(
       client,
       `INSERT INTO cases (
          case_number, subject, description, category, risk_level, priority,
-         department, assignee_id, transaction_id, agent_id, taxpayer_id,
+         department, department_id, assignee_id, transaction_id, agent_id, taxpayer_id,
          subject_user_id, lga_id, source_type, source_id, due_at, opened_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        RETURNING id`,
       [
         caseNumber,
@@ -277,6 +286,7 @@ export async function openCase(
         input.riskLevel ?? 'MEDIUM',
         input.priority ?? 'NORMAL',
         input.department ?? null,
+        input.departmentId ?? null,
         input.assigneeId ?? null,
         input.transactionId ?? null,
         input.agentId ?? null,
@@ -298,6 +308,7 @@ export async function openCase(
         subject: input.subject.trim(),
         category: input.category ?? 'GENERAL',
         department: input.department ?? null,
+        departmentId: input.departmentId ?? null,
         assigneeId: input.assigneeId ?? null,
       },
     });
@@ -409,7 +420,12 @@ export async function assign(
   db: Db,
   viewer: Viewer,
   caseId: string,
-  input: { assigneeId: string | null; department?: string | null; reason?: string },
+  input: {
+    assigneeId: string | null;
+    department?: string | null;
+    departmentId?: string | null;
+    reason?: string;
+  },
 ): Promise<void> {
   const row = await load(db, caseId);
   assertOpen(row);
@@ -417,19 +433,47 @@ export async function assign(
   if (input.assigneeId) await assertAssignable(db, input.assigneeId);
 
   const department = input.department === undefined ? row.department : input.department;
+  const departmentId =
+    input.departmentId === undefined ? row.department_id : input.departmentId;
+
+  if (departmentId && departmentId !== row.department_id) {
+    const target = await queryOne<{ status: string; name: string }>(
+      db,
+      'SELECT status, name FROM departments WHERE id = $1',
+      [departmentId],
+    );
+    if (!target) throw notFound('That department');
+    /*
+     * A closed department is a queue nobody reads.
+     *
+     * Routing into one looks exactly like routing into a working department,
+     * which is the failure worth refusing rather than logging.
+     */
+    if (target.status !== 'ACTIVE') {
+      throw badRequest(`${target.name} is closed and cannot be sent work.`);
+    }
+  }
+
+  const routed =
+    (input.department !== undefined && input.department !== row.department) ||
+    (input.departmentId !== undefined && input.departmentId !== row.department_id);
 
   await withTransaction(async (client) => {
     await client.query(
-      'UPDATE cases SET assignee_id = $2, department = $3, updated_at = now() WHERE id = $1',
-      [caseId, input.assigneeId, department],
+      `UPDATE cases
+          SET assignee_id = $2, department = $3, department_id = $4, updated_at = now()
+        WHERE id = $1`,
+      [caseId, input.assigneeId, department, departmentId],
     );
     await append(client, caseId, viewer, {
-      kind: input.department !== undefined && input.department !== row.department
-        ? 'ROUTED'
-        : 'ASSIGNMENT',
+      kind: routed ? 'ROUTED' : 'ASSIGNMENT',
       body: input.reason?.trim() ?? '',
-      oldValue: { assigneeId: row.assignee_id, department: row.department },
-      newValue: { assigneeId: input.assigneeId, department },
+      oldValue: {
+        assigneeId: row.assignee_id,
+        department: row.department,
+        departmentId: row.department_id,
+      },
+      newValue: { assigneeId: input.assigneeId, department, departmentId },
     });
     await recordAudit(client, {
       actorId: viewer.userId,
@@ -437,11 +481,75 @@ export async function assign(
       action: 'case.assign',
       entityType: 'case',
       entityId: caseId,
-      oldValue: { assigneeId: row.assignee_id, department: row.department },
-      newValue: { assigneeId: input.assigneeId, department },
+      oldValue: {
+        assigneeId: row.assignee_id,
+        department: row.department,
+        departmentId: row.department_id,
+      },
+      newValue: { assigneeId: input.assigneeId, department, departmentId },
       reason: input.reason?.trim() || null,
     });
   });
+}
+
+/**
+ * Escalate: move the case up the reporting line, to a person.
+ *
+ * ESCALATED was a status and nothing more — the case changed colour and stayed
+ * exactly where it was, which is an escalation in the sense that a shrug is an
+ * answer. With a reporting line there is somewhere up to send it, so this
+ * resolves the target, assigns the case to them, and records who it went to and
+ * how the platform decided that.
+ *
+ * When the walk runs out — nobody above, no department head — it says so rather
+ * than marking the case escalated and leaving it on the same desk.
+ */
+export async function escalate(
+  db: Db,
+  viewer: Viewer,
+  caseId: string,
+  input: { reason: string },
+): Promise<{ toUserId: string; toName: string; via: string }> {
+  const row = await load(db, caseId);
+  assertOpen(row);
+  assertMayWork(viewer, row);
+
+  const { escalationTarget } = await import('./organisation.js');
+  const target = await escalationTarget(db, row.assignee_id ?? viewer.userId);
+  if (!target) {
+    throw conflict(
+      'NOBODY_ABOVE',
+      'There is nobody above this case to escalate it to.',
+      'Set a supervisor or a department head for the officer holding it, then try again.',
+    );
+  }
+
+  await withTransaction(async (client) => {
+    await client.query(
+      `UPDATE cases
+          SET status = 'ESCALATED', assignee_id = $2, updated_at = now()
+        WHERE id = $1`,
+      [caseId, target.id],
+    );
+    await append(client, caseId, viewer, {
+      kind: 'ESCALATION',
+      body: input.reason.trim(),
+      oldValue: { status: row.status, assigneeId: row.assignee_id },
+      newValue: { status: 'ESCALATED', assigneeId: target.id, via: target.via },
+    });
+    await recordAudit(client, {
+      actorId: viewer.userId,
+      actorRole: viewer.role,
+      action: 'case.escalate',
+      entityType: 'case',
+      entityId: caseId,
+      oldValue: { status: row.status, assigneeId: row.assignee_id },
+      newValue: { assigneeId: target.id, via: target.via },
+      reason: input.reason.trim(),
+    });
+  });
+
+  return { toUserId: target.id, toName: target.full_name, via: target.via };
 }
 
 /**
@@ -783,17 +891,31 @@ export async function myWork(db: Db, viewer: Viewer) {
        * The queue a case falls into when it is routed to Finance rather than to
        * a named person. Without it, routing to a department is routing to
        * nowhere.
+       *
+       * Two ways in, because there are two kinds of address. A case sent to the
+       * officer's actual department is theirs; one sent to their *role* is too,
+       * which is how every case raised before departments existed is addressed
+       * and how a raiser who does not know the organisation chart still reaches
+       * somebody. Reading only the first would strand every case already in
+       * flight.
        */
       query(
         db,
         `SELECT c.id, c.case_number, c.subject, c.status, c.priority, c.risk_level,
-                c.due_at, c.created_at, opener.full_name AS opened_by_name
+                c.due_at, c.created_at, opener.full_name AS opened_by_name,
+                d.name AS department_name
            FROM cases c
            LEFT JOIN users opener ON opener.id = c.opened_by
-          WHERE c.department = $1 AND c.assignee_id IS NULL
+           LEFT JOIN departments d ON d.id = c.department_id
+          WHERE c.assignee_id IS NULL
             AND c.status NOT IN ('RESOLVED','CLOSED')
+            AND (
+                  c.department = $2
+               OR (c.department_id IS NOT NULL
+                   AND c.department_id = (SELECT department_id FROM users WHERE id = $1))
+                )
           ORDER BY c.created_at LIMIT 25`,
-        [viewer.role],
+        [viewer.userId, viewer.role],
       ),
       queryOne(
         db,
@@ -805,9 +927,13 @@ export async function myWork(db: Db, viewer: Viewer) {
                AND due_at IS NOT NULL AND due_at < now()) AS assigned_overdue,
            (SELECT count(*)::text FROM cases
              WHERE opened_by = $1 AND status NOT IN ('RESOLVED','CLOSED')) AS opened_open,
-           (SELECT count(*)::text FROM cases
-             WHERE department = $2 AND assignee_id IS NULL
-               AND status NOT IN ('RESOLVED','CLOSED')) AS department_unassigned,
+           (SELECT count(*)::text FROM cases c
+             WHERE c.assignee_id IS NULL
+               AND c.status NOT IN ('RESOLVED','CLOSED')
+               AND (c.department = $2
+                    OR (c.department_id IS NOT NULL
+                        AND c.department_id = (SELECT department_id FROM users WHERE id = $1))))
+             AS department_unassigned,
            (SELECT count(DISTINCT e.case_id)::text FROM case_events e
              WHERE $1 = ANY(e.mentions) AND e.actor_id <> $1) AS mentions`,
         [viewer.userId, viewer.role],

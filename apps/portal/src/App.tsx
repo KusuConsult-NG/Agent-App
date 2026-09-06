@@ -42,6 +42,7 @@ import { CasesScreen, MyWorkScreen } from './screens/Cases';
 import { TransactionScreen } from './screens/Transaction';
 import { TargetsScreen } from './screens/Targets';
 import { TaxpayerBaseScreen } from './screens/TaxpayerBase';
+import { OrganisationScreen } from './screens/Organisation';
 import { GlobalSearch } from './screens/Search';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
@@ -273,6 +274,7 @@ function Routes({
   }
   if (matchRoute(route, '/targets')) return <TargetsScreen user={user} />;
   if (matchRoute(route, '/taxpayer-base')) return <TaxpayerBaseScreen />;
+  if (matchRoute(route, '/organisation')) return <OrganisationScreen user={user} />;
   if (matchRoute(route, '/dashboard')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
   if (matchRoute(route, '/transactions')) return <TransactionsScreen />;

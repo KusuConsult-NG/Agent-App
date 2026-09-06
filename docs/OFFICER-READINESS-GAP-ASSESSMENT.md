@@ -28,10 +28,10 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Secure login | Complete | `apps/api/src/routes/auth.ts`, argon2 hashes, lockout after failed attempts |
 | MFA / OTP | Complete | `POST /auth/otp/request`, `otp_codes`, plus step-up grants for named actions (`STEP_UP_ACTIONS`, `packages/shared/src/rbac.ts`) |
 | Role-based permissions | Complete | `packages/shared/src/rbac.ts`; every route names a permission, never a role |
-| Officer profile | Partial | `users` holds name, phone, email, role, status, last login. No department, no job title, no photograph |
-| Department | Missing | No `department` on `users` and no department table. Roles stand in for departments today, which is why a case cannot be routed to Finance as a body |
+| Officer profile | Complete | Name, phone, email, role, status, last login, plus department, revenue office, supervisor, job title and staff number. No photograph, which nothing in the brief asks for |
+| Department | Complete | `departments`, with a function, a head, a parent and officers posted to it. A case routes to one, and two departments of the same function stay apart |
 | LGA / territory assignment | Complete | `user_territories`, managed at `/users` in the portal, enforced by `services/report-scope.ts` |
-| Supervisor | Missing | No `supervisor_id` on `users`. The `supervisor` **role** exists; the reporting line does not, so nothing can escalate upwards automatically |
+| Supervisor | Complete | `users.supervisor_id`, cycle-proof at the database, and escalation walks it — supervisor, then department head, then the department above |
 | Last login | Complete | `users.last_login_at`, shown on `/users` |
 | Active sessions | Partial | `sessions` rows exist and `POST /auth/logout-all` revokes them. No officer can *see* their sessions, and no administrator can see or end another officer's |
 | Device / session management | Partial | Full lifecycle for **agent** handsets (`agent_devices`, `/field-app`). Nothing equivalent for officers |
@@ -56,33 +56,33 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | --- | --- | --- |
 | Total revenue | Complete | `reports.executiveDashboard` → `collections.total_kobo` |
 | Today's revenue | Complete | `collections.today_kobo` |
-| Yesterday's revenue | Missing | The dashboard's 30-day trend contains yesterday, but no figure is stated |
+| Yesterday's revenue | Complete | `collections.yesterday_kobo`, with the day-on-day change beside it |
 | This week | Complete | `collections.week_kobo` |
 | This month | Complete | `collections.month_kobo` |
 | This year | Complete | `collections.ytd_kobo` |
-| Previous-period comparison | Missing | Nothing computes the prior period |
-| Revenue growth / decline | Missing | Follows from the above |
-| Revenue target | Missing | No target model anywhere in the schema |
-| Target achievement | Missing | Follows |
+| Previous-period comparison | Complete | Every period carries the one before it, cut at the same point through itself |
+| Revenue growth / decline | Complete | Basis points per period, null rather than zero where there is nothing to compare against |
+| Revenue target | Complete | `revenue_targets` — state, LGA, category, item or agent, for any period |
+| Target achievement | Complete | Computed against the target's own period, with the elapsed share of the period beside it |
 | Outstanding assessments | Complete | `/outstanding`, `reports.defaultersByCategory` |
 | Outstanding invoices | Complete | Same screen, unpaid invoice ageing |
 | Successful payments | Complete | `counts.successful_transactions` |
 | Failed payments | Complete | `counts.failed_transactions` |
-| Reversed payments | Partial | Counted per agent in `agentPerformance`; not on the executive dashboard |
-| Refunded payments | Partial | `refunds` table and `/government/refunds/outstanding`; no headline figure |
+| Reversed payments | Complete | `counts.reversed_kobo` and `reversed_transactions` on the dashboard |
+| Refunded payments | Complete | `counts.refunded_kobo` and `refunded_transactions` |
 
 ### Revenue breakdown
 
 | Item | Verdict | Evidence / gap |
 | --- | --- | --- |
 | By category | Complete | `revenueByCategory` |
-| By subcategory | Partial | `revenue_items` sit under categories and `GET /government/revenue/by-category` drills to the item; the dashboard stops at the category |
+| By subcategory | Complete | `revenueByItem` on the dashboard, the levy rather than the heading above it |
 | By MDA | Complete | `revenueByMda`, `reports.revenueByMda` |
 | By LGA | Complete | `revenueByLga` |
 | By ward | Complete | `reports.geographicIntelligence` with `lgaId` |
 | By agent | Complete | `revenueByAgent` |
-| By channel | Missing | `transactions.channel` is recorded on every row and never aggregated |
-| By taxpayer type | Missing | `taxpayers` carries the type; no report groups on it |
+| By channel | Complete | `revenueByChannel` |
+| By taxpayer type | Complete | `revenueByTaxpayerType`, with an average transaction each |
 | By period | Complete | `dailyTrend`, 30 days |
 
 ---
@@ -93,9 +93,9 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 
 | Item | Verdict | Evidence / gap |
 | --- | --- | --- |
-| Agents currently online | Missing | Last-seen is not tracked for agents |
+| Agents currently online | Complete | `counts.agents_online`, read from `sessions.last_used_at` over fifteen minutes |
 | Agents currently active | Complete | `counts.active_agents` (operational status, not presence) |
-| Agents suspended | Partial | Visible on `/agents`; not counted on the dashboard |
+| Agents suspended | Complete | `counts.agents_suspended` |
 | New agent applications | Complete | `adminWorkItems`, `/agents` |
 | Pending KYC | Complete | `adminWorkItems`, `/agents` clearance queue |
 | Pending referee verification | Complete | `/referees` |
@@ -133,17 +133,17 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Item | Verdict | Evidence / gap |
 | --- | --- | --- |
 | Officers | Complete | `/users`, create, role change, status change |
-| Departments | Missing | No such object |
+| Departments | Complete | `/organisation`, created and closed by an administrator |
 | Roles | Partial | Six fixed roles in `packages/shared/src/rbac.ts`. An administrator can assign a role and cannot create one |
 | Permissions | Partial | Granular and enforced, but the role→permission map is code, not data. Changing who may refund is a deployment |
 | LGAs | Complete | `lgas`, seeded, 17 |
 | Wards | Complete | `wards` |
 | Territories | Complete | `territories`, `/users` territory assignment |
-| Revenue offices | Missing | Not modelled |
-| Supervisors | Missing | No reporting line — see §1 |
+| Revenue offices | Complete | `revenue_offices`, which always administer their own LGA whether or not anybody said so |
+| Supervisors | Complete | See §1 |
 | Agent assignments | Complete | `agent:assign_territory` |
 | Officer assignments | Complete | `user_territories` |
-| Officer transfers | Partial | Reassigning territories is a transfer in effect and is audited; there is no transfer as a first-class, dated event |
+| Officer transfers | Complete | `officer_transfers`, append-only, one row per thing that moved — including the territory and role changes that were previously only audit entries |
 | Officer suspension | Complete | `PATCH /government/users/:id/status` |
 | Officer deactivation | Complete | Same, `CLOSED` |
 | Granular view/create/edit/approve/reverse/refund/export/configure | Partial | All eight verbs exist as permissions and are enforced per route. They cannot be *configured* by an administrator |
@@ -187,7 +187,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Due date | Complete | `cases.due_at`, overdue surfaced in `/my-work` |
 | Escalation | Complete | `ESCALATED` status plus an escalation event naming who it went to |
 | Case history | Complete | `case_events` is append-only; there is no update or delete path |
-| Routing between departments | Partial | A case is routed to an **officer** or to a **role**. It cannot be routed to a department, because departments do not exist (§4) |
+| Routing between departments | Complete | A case routes to a department, and the role address still works for everything raised before departments existed |
 
 ---
 
@@ -196,38 +196,38 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Item | Verdict | Evidence / gap |
 | --- | --- | --- |
 | Revenue collected today / month / year | Complete | `executiveDashboard`, scoped to the officer's territories |
-| Revenue target, achievement %, gap | Missing | No target model |
-| Growth rate | Missing | No period comparison |
+| Revenue target, achievement %, gap | Complete | §12 |
+| Growth rate | Complete | §2 |
 | Collection trend | Complete | 30-day daily trend |
-| Forecast | Missing | Nothing forecasts |
+| Forecast | Complete | Run rate shaped by the collection curve, labelled with its basis and confidence |
 | Outstanding revenue | Complete | `/outstanding` |
-| Expected revenue | Partial | Unpaid invoices are a floor for it; nothing states it as a figure |
+| Expected revenue | Complete | `counts.expected_revenue_kobo` — assessed and unpaid, stated as a fact rather than a projection |
 | Revenue by category / subcategory | Complete | `GET /government/revenue/by-category` |
 | Top-performing categories | Complete | Same, ordered |
-| Declining categories | Missing | Needs the period comparison |
-| Revenue contribution % | Missing | Computable from what is returned; not computed |
-| Category growth / targets | Missing | Follows |
+| Declining categories | Complete | A dashboard panel ranking categories by direction rather than by size |
+| Revenue contribution % | Complete | `contribution_bp` per category |
+| Category growth / targets | Complete | `growth_bp` per category; targets may be set at category and item level |
 | State → LGA → Ward → Community drill-down | Complete | `reports.geographicIntelligence` |
 | Collection, taxpayer count, transaction count per level | Complete | Same query |
-| Average transaction per level | Partial | Returned per agent, not per geography |
-| Growth per level | Missing | Period comparison again |
-| Compliance per level | Partial | `taxpayer_compliance` exists per taxpayer; not aggregated by geography |
+| Average transaction per level | Complete | `average_kobo` at LGA, ward and community |
+| Growth per level | Complete | `growth_bp` against the window of equal length immediately before |
+| Compliance per level | Complete | `compliance_bp` — the share of the register in that place that paid anything in the window |
 | Outstanding obligations per level | Complete | `taxpayer_tax_obligations`, `/outstanding` by LGA |
 | Agent performance per level | Complete | `reports.agentCollectionMap` |
 | Agent collections, transactions, average, taxpayers onboarded | Complete | `reports.agentPerformance` |
-| Categories processed per agent | Partial | Derivable; not returned |
+| Categories processed per agent | Complete | `categories_processed` |
 | Commission generated, failed, reversals, refunds per agent | Complete | `agentPerformance` |
-| Collection growth per agent | Missing | Period comparison |
+| Collection growth per agent | Complete | `growth_bp` per agent, on the agent ranking |
 | Activity frequency | Complete | `active_days` |
 | Territory performance | Complete | `agentCollectionMap`, `collectionMappingCoverage` |
 | Agent ranking table | Complete | `/performance` |
-| Total / new / active / inactive taxpayers | Partial | Total and new-this-month on the dashboard; active vs inactive is not distinguished |
+| Total / new / active / inactive taxpayers | Complete | `/taxpayer-base`. Active means *paid within ninety days*, not `status = 'ACTIVE'` |
 | Taxpayers by LGA / ward / category | Complete | `geographicIntelligence`, `defaultersByCategory` |
-| Taxpayer growth | Partial | New-this-month only |
-| Compliance, payment frequency, average payment | Partial | `taxpayer_compliance` scores each taxpayer; no cohort view |
-| Revenue target management (state → LGA → category → period) | Missing | The single largest gap on the revenue side |
-| Target vs actual, daily/weekly/monthly/quarterly/annual | Missing | Follows |
-| Revenue forecasting | Missing | Follows |
+| Taxpayer growth | Complete | New this month against new last month, per LGA as well as statewide |
+| Compliance, payment frequency, average payment | Complete | Frequency banded rather than averaged; average payment per band and per taxpayer |
+| Revenue target management (state → LGA → category → period) | Complete | `/targets`, with the state figure beside what was apportioned below it |
+| Target vs actual, daily/weekly/monthly/quarterly/annual | Complete | All five periods, resolved on the server so a wrong browser clock cannot set a target against the wrong dates |
+| Revenue forecasting | Complete | Seasonal where the history supports it, run rate where it does not, and it says which |
 
 ---
 
@@ -255,7 +255,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Financial period closing | Missing | No period lock. A settled month can still be written to |
 | Transaction adjustments with controlled approval | Complete | `approvals` with `approval:authorise` |
 | Commission accrued / pending / eligible / paid / reversed | Complete | `commissions.status` covers all five |
-| Agent commission, by LGA, by period | Partial | Per agent and per payout batch; not grouped by LGA or period |
+| Agent commission, by LGA, by period | Complete | `GET /government/commissions/by-place` |
 | Payout batches, failed payouts | Complete | `commission_payouts` |
 | Transaction → commission → payout traceable | Complete | `commissions.transaction_id` unique, `commissions.payout_id`; shown whole in Transaction 360 |
 
@@ -334,16 +334,16 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Item | Verdict |
 | --- | --- |
 | Revenue analytics | Complete |
-| Revenue targets | **Missing** |
-| Revenue forecasting | **Missing** |
+| Revenue targets | Complete |
+| Revenue forecasting | Complete |
 | Category analytics | Complete |
 | LGA analytics | Complete |
 | Ward analytics | Complete |
 | Agent analytics | Complete |
-| Taxpayer analytics | Partial |
+| Taxpayer analytics | Complete |
 | Outstanding revenue | Complete |
 | Collection trends | Complete |
-| Performance comparisons | Partial — across places and agents, not across periods |
+| Performance comparisons | Complete — across places, agents and periods |
 | Revenue reports | Complete |
 | Case / task management | Complete |
 
@@ -388,6 +388,32 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 
 ## What was added to close the gaps above
 
+### Second pass — targets, comparison, and the organisation
+
+| Surface | Where | What it closed |
+| --- | --- | --- |
+| **Revenue targets** | `/targets` · `revenue_targets` · migration 056 | §2, §8, §12 — target, achievement, gap, category and item targets, target-versus-actual over five periods |
+| **Forecasting** | `GET /government/forecast` | §13. Run rate shaped by the collection curve, always labelled with its basis and confidence |
+| **Period comparison** | `reports.executiveDashboard`, `geographicIntelligence`, `agentPerformance` | §2, §8, §9, §10 — yesterday, previous period, growth, decline, contribution share, growth per place and per agent |
+| **Taxpayer base** | `/taxpayer-base` · `reports.taxpayerAnalytics` | §11. Cohorts by payment behaviour, banded frequency, per-LGA register health |
+| **The organisation** | `/organisation` · `departments`, `revenue_offices`, `officer_transfers` · migration 057 | §1, §4, §6 — departments, offices, the reporting line, dated transfers, and case routing to a body |
+
+Two of those are worth a sentence each.
+
+**A target is measured against its own period.** A March target listed in an
+annual query must be compared with March's collections, not the year's — get
+that wrong and the screen reports 1,200% achievement, which is the first thing
+a naive implementation does.
+
+**A comparison is cut at the same point through the previous period.** "This
+month against last month" asked on the 8th otherwise compares eight days with
+thirty-one and reports a collapse every month: an error that looks like a
+finding, which is the worst kind.
+
+### First pass — search, the transaction file, cases
+
+
+
 Four surfaces, all reachable from every officer's menu.
 
 | Surface | Where | What it closed |
@@ -412,25 +438,29 @@ nothing else.
 
 ## What this assessment says to do next
 
-Ordered by what an officer loses without it.
+Ordered by what an officer loses without it. The first three are done; what
+follows them is what remains.
 
-1. **Revenue targets and forecasting** (§12, §13). Nine "Missing" rows collapse
-   into this one. Without a target, every growth, gap, achievement and
-   declining-category figure in the brief is unanswerable, and the revenue
-   officer's dashboard can only ever report what happened.
-2. **Period comparison** (§2, §8). Cheap next to targets — one more window
-   function over queries that already exist — and it unlocks growth rate,
-   previous-period comparison, declining categories and per-agent growth.
-3. **Departments and the reporting line** (§1, §4). Cases route to a role
-   today. Routing to a department, and escalating up a supervisor chain,
-   both wait on two columns that do not exist.
+1. ~~**Revenue targets and forecasting** (§12, §13).~~ Done. `revenue_targets`,
+   target-versus-actual against each target's own period, and a forecast shaped
+   by the collection curve that says what it rests on.
+2. ~~**Period comparison** (§2, §8).~~ Done. Every period against the one
+   before it, cut at the same point through itself, with growth as basis points
+   and null — never zero — where there is nothing to compare against.
+3. ~~**Departments and the reporting line** (§1, §4).~~ Done. Cases route to a
+   department, escalation walks up to a person, and every posting change leaves
+   a dated append-only record.
 4. **Financial period closing** (§16). A settled month is still writable.
    This is a control, not a feature.
-5. **Audit sampling** (§25) and **audit reports as objects** (§26).
-6. **Configurable roles and permissions** (§4). Today, changing who may
+5. **Configurable roles and permissions** (§4). Today, changing who may
    approve a refund is a code change and a deployment.
+6. **Audit sampling** (§25) and **audit reports as objects** (§26).
 7. **PDF and Excel export** (§26). CSV is enough for analysis and not enough
    for a report that goes in a file.
+8. **Officer sessions and evidence upload** (§1, §23). An officer cannot see
+   their own sessions, and an auditor cannot attach a document that did not
+   originate in the platform.
+9. **An officer inbox, system alerts and saved filters** (§1, §3).
 
-Items 1, 2 and 4 are the ones I would not put in front of a PSIRS revenue or
-finance officer without.
+Item 4 is the one I would not put in front of a PSIRS finance officer
+without.

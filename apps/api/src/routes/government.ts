@@ -30,6 +30,7 @@ import { leakageDashboard, runFraudSweep } from '../services/fraud';
 import * as cases from '../services/cases';
 import * as investigation from '../services/investigation';
 import * as targets from '../services/targets';
+import * as organisation from '../services/organisation';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -1953,6 +1954,174 @@ governmentRouter.get(
 );
 
 // ---------------------------------------------------------------------------
+// The organisation the officers work in
+// ---------------------------------------------------------------------------
+
+/*
+ * Reading the structure is open to every portal role; changing it is not.
+ *
+ * `case:read:all` is the gate, and the choice is deliberate on both sides.
+ * It is held by exactly the five portal roles and by no field agent, which is
+ * the boundary that matters — the organisation chart is not an agent's to
+ * read. And it is *not* `report:read:territory`, which would be the obvious
+ * pair: a route that accepts that permission is promising to narrow its answer
+ * to the caller's territories, and the chart is not territory data. Claiming a
+ * scope and then not applying it is the leak `a-report-that-forgets-whose-it-
+ * is.test.ts` exists to catch, and it is right to.
+ *
+ * Creating a department, or moving somebody, is `user:manage`: the
+ * administrator's permission, and the same one that governs who holds which
+ * role.
+ */
+governmentRouter.get(
+  '/departments',
+  requirePermission('case:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json(await organisation.listDepartments(pool));
+  }),
+);
+
+governmentRouter.post(
+  '/departments',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      code: z.string().trim().min(2).max(20),
+      name: z.string().trim().min(2).max(120),
+      nameHa: z.string().trim().max(120).nullish(),
+      description: z.string().trim().max(1000).nullish(),
+      function: z.enum(organisation.DEPARTMENT_FUNCTIONS),
+      headUserId: uuidSchema.nullish(),
+      parentId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.createDepartment(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/departments/:id/update',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      name: z.string().trim().min(2).max(120).optional(),
+      nameHa: z.string().trim().max(120).nullish(),
+      description: z.string().trim().max(1000).nullish(),
+      headUserId: uuidSchema.nullish(),
+      parentId: uuidSchema.nullish(),
+      status: z.enum(['ACTIVE', 'CLOSED']).optional(),
+    }),
+    async (req, res, data) => {
+      await organisation.updateDepartment(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/offices',
+  requirePermission('case:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json(await organisation.listOffices(pool));
+  }),
+);
+
+governmentRouter.post(
+  '/offices',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      code: z.string().trim().min(2).max(20),
+      name: z.string().trim().min(2).max(120),
+      nameHa: z.string().trim().max(120).nullish(),
+      lgaId: uuidSchema,
+      address: z.string().trim().max(300).nullish(),
+      phone: z.string().trim().max(30).nullish(),
+      coversLgaIds: z.array(uuidSchema).max(17).optional(),
+      headUserId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.createOffice(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+/*
+ * Move an officer, and leave a dated record of every part that moved.
+ *
+ * One transfer row per thing that actually changed rather than one saying
+ * "posting changed": "when did she move to Finance" and "when did he stop
+ * reporting to Bala" are separate questions, and a combined row makes both a
+ * JSON dig.
+ */
+governmentRouter.post(
+  '/users/:id/posting',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      departmentId: uuidSchema.nullish(),
+      revenueOfficeId: uuidSchema.nullish(),
+      supervisorId: uuidSchema.nullish(),
+      jobTitle: z.string().trim().max(120).nullish(),
+      staffNumber: z.string().trim().max(40).nullish(),
+      reason: z.string().trim().min(10).max(1000),
+      effectiveFrom: z.coerce.date().optional(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.repost(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data,
+      );
+      res.json(result);
+    },
+  ),
+);
+
+/** One officer's posting history. `audit:read` sees it too — it is evidence. */
+governmentRouter.get(
+  '/users/:id/transfers',
+  requirePermission('user:manage', 'audit:read'),
+  asyncHandler(async (req, res) => {
+    res.json(await organisation.transfersFor(pool, req.params.id!));
+  }),
+);
+
+/*
+ * Who was posted where, and when.
+ *
+ * The question a revenue dispute asks — "who was responsible for Jos North in
+ * March" — and the reason postings are a table rather than a log.
+ */
+governmentRouter.get(
+  '/transfers',
+  requirePermission('user:manage', 'audit:read'),
+  validateQuery(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+      kind: z.enum(organisation.TRANSFER_KINDS).optional(),
+    }),
+    async (_req, res, data) => {
+      res.json(await organisation.postingHistory(pool, data));
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
 // Cases: the work that crosses a department
 // ---------------------------------------------------------------------------
 
@@ -2008,6 +2177,7 @@ governmentRouter.post(
       riskLevel: z.enum(cases.CASE_RISK_LEVELS).default('MEDIUM'),
       priority: z.enum(cases.CASE_PRIORITIES).default('NORMAL'),
       department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      departmentId: uuidSchema.nullish(),
       assigneeId: uuidSchema.nullish(),
       transactionId: uuidSchema.nullish(),
       agentId: uuidSchema.nullish(),
@@ -2079,6 +2249,7 @@ governmentRouter.post(
     z.object({
       assigneeId: uuidSchema.nullable(),
       department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      departmentId: uuidSchema.nullish(),
       reason: z.string().trim().max(1000).optional(),
     }),
     async (req, res, data) => {
@@ -2100,6 +2271,25 @@ governmentRouter.post(
     async (req, res, data) => {
       await cases.setStatus(pool, officer(req), req.params.id!, data);
       res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Escalate: up the reporting line, to a person.
+ *
+ * ESCALATED used to be a status and nothing more — the case changed colour and
+ * stayed on the same desk. This resolves who is above, moves it to them, and
+ * records how the platform decided that. When there is nobody above, it refuses
+ * rather than marking the case escalated and leaving it where it was.
+ */
+governmentRouter.post(
+  '/cases/:id/escalate',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      res.json(await cases.escalate(pool, officer(req), req.params.id!, data));
     },
   ),
 );

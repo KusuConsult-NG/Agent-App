@@ -62,6 +62,22 @@ export const TRANSACTIONAL_TABLES = [
   'kyc_documents',
   'agent_kyc',
   'approvals',
+  /*
+   * The command centre's own state.
+   *
+   * All six are written during a run and none is reference data, so they belong
+   * here — and `departments` in particular has to be, because it holds a
+   * `head_user_id` and `resetDatabase` deletes the officers those rows point
+   * at. A department left behind by one file breaks every later file's reset
+   * with a foreign key violation, in a shard database that outlives the run.
+   * That is the same failure `app_versions` was added for, below.
+   */
+  'case_events',
+  'cases',
+  'revenue_targets',
+  'officer_transfers',
+  'departments',
+  'revenue_offices',
   'agents',
   'bank_accounts',
   'sessions',

@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { PostingPanel } from './Organisation';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName, type TranslationDictionary } from '@psirs/shared';
 
@@ -431,6 +432,23 @@ export function UserAccessScreen({ user }: { user: User }) {
             </>
           )}
         </div>
+      )}
+
+      {/*
+        * Where this officer is posted, and the dated record of every move.
+        *
+        * Beside the territory panel because an administrator opening one
+        * usually wants the other: territories are what an officer may see, a
+        * posting is who they work with and who answers for them, and moving
+        * somebody normally means both.
+        */}
+      {coverage && (
+        <PostingPanel
+          officerId={coverage.id}
+          onChanged={async () => {
+            await load();
+          }}
+        />
       )}
 
       <div className="card card--flush">

@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2134 strings, grouped by where an agent meets them. Lower stakes
+2184 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -338,6 +338,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavAllocations` | Distribution rounds | Zagayen rabon kaya | ☐ | |
 | `ofcNavMyWork` | My work | Aikina | ☐ | |
 | `ofcNavCases` | Cases | Kararraki | ☐ | |
+| `ofcNavOrganisation` | Departments & offices | Sassa da ofisoshi | ☐ | |
 | `ofcNavTaxpayerAnalytics` | Taxpayer base | Masu biyan haraji | ☐ | |
 | `ofcNavTargets` | Targets & forecast | Manufura da hasashe | ☐ | |
 
@@ -1302,6 +1303,9 @@ instructions — but they are what an agent reads all day.
 | `ofcNoneNothingWaiting` | Nothing waiting. | Babu abin da ke jira. | ☐ | |
 | `ofcNoneAuthorityAcknowledgedRenewal` | The authority has acknowledged every renewal. | Hukumar ta amince da kowace sabuntawa. | ☐ | |
 | `ofcNoneOfflineQueueUsedPeriod` | The offline queue has not been used in this period. | Ba a yi amfani da jerin gwanon ba tare da layi ba a wannan lokacin. | ☐ | |
+| `ofcNoneDepartments` | No department has been created yet. | Ba a kirkiri wani sashe ba tukuna. | ☐ | |
+| `ofcNoneOffices` | No revenue office has been created yet. | Ba a kirkiri ofishin haraji ba tukuna. | ☐ | |
+| `ofcNoneTransfers` | No posting has been recorded for this officer. | Ba a rubuta wani matsayi ga wannan jami’i ba. | ☐ | |
 | `ofcNoneTargetsSet` | No target has been set for this period. | Ba a sanya manufa don wannan lokaci ba. | ☐ | |
 | `ofcNoneCasesMatchFilter` | No cases match these filters. | Babu kara da ya dace da wadannan tacewa. | ☐ | |
 
@@ -1355,6 +1359,39 @@ instructions — but they are what an agent reads all day.
 | `ofcCwIntro` | A case carries work between departments, and keeps every step of it. | Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa. | ☐ | |
 | `ofcCwOpenCase` | Open a case | Bude kara | ☐ | |
 | `ofcCwStatus` | Status | Matsayi | ☐ | |
+| `ofcOrTitle` | The organisation | Kungiyar | ☐ | |
+| `ofcOrIntro` | Who works with whom, who answers for them, and where they sit. A department is a body; a role is what somebody may do. Both are needed and neither replaces the other. | Wanda ke aiki da wa, wanda ke da alhakinsu, da inda suke zaune. Sashe jiki ne; matsayi shi ne abin da mutum zai iya yi. Ana bukatar dukansu kuma babu wanda ya maye gurbin dayan. | ☐ | |
+| `ofcOrDepartments` | Departments | Sassa | ☐ | |
+| `ofcOrOffices` | Revenue offices | Ofisoshin haraji | ☐ | |
+| `ofcOrOfficesBody` | Where officers sit, which is not the territory they cover. The Jos North office administers three LGAs. | Inda jami’ai ke zaune, wanda ba yankin da suke rufewa ba ne. Ofishin Jos North yana kula da kananan hukumomi uku. | ☐ | |
+| `ofcOrNewDepartment` | Add a department | Kara sashe | ☐ | |
+| `ofcOrNewOffice` | Add an office | Kara ofishi | ☐ | |
+| `ofcOrCode` | Code | Lamba | ☐ | |
+| `ofcOrFunction` | Work it does | Aikin da yake yi | ☐ | |
+| `ofcOrHead` | Answers for it | Wanda ke da alhakinsa | ☐ | |
+| `ofcOrParent` | Sits under | Yana karkashin | ☐ | |
+| `ofcOrOfficers` | Officers | Jami’ai | ☐ | |
+| `ofcOrOpenCases` | Open cases | Kararrakin da ba a rufe ba | ☐ | |
+| `ofcOrCovers` | Administers | Yana kula da | ☐ | |
+| `ofcOrClose` | Close | Rufe | ☐ | |
+| `ofcOrPosting` | Posting | Matsayi | ☐ | |
+| `ofcOrPostingBody` | Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers. | Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban. | ☐ | |
+| `ofcOrMoveOfficer` | Move this officer | Matsar da wannan jami’i | ☐ | |
+| `ofcOrDepartment` | Department | Sashe | ☐ | |
+| `ofcOrOffice` | Office | Ofishi | ☐ | |
+| `ofcOrSupervisor` | Reports to | Yana bayar da rahoto ga | ☐ | |
+| `ofcOrJobTitle` | Job title | Mukami | ☐ | |
+| `ofcOrStaffNumber` | Staff number | Lambar ma’aikaci | ☐ | |
+| `ofcOrWhyMoving` | Why they are moving | Dalilin matsawa | ☐ | |
+| `ofcOrEffectiveFrom` | From | Daga | ☐ | |
+| `ofcOrHistory` | Posting history | Tarihin matsayi | ☐ | |
+| `ofcOrHistoryBody` | Append-only. Who was responsible for an area in a given month is asked in revenue disputes, and an answer that can be adjusted afterwards is not one. | Ana kara kawai. Ana tambayar wa ke da alhakin wani yanki a wani wata a jayayyar haraji, kuma amsar da za a iya gyarawa daga baya ba amsa ba ce. | ☐ | |
+| `ofcOrNobody` | Nobody | Babu kowa | ☐ | |
+| `ofcOrUnposted` | Not posted | Ba a saka ba | ☐ | |
+| `ofcCwEscalate` | Escalate | Daukaka | ☐ | |
+| `ofcCwEscalateBody` | Sends the case to the officer above, with its whole history attached. If nobody is above, it says so rather than marking the case escalated and leaving it here. | Yana aika karar ga jami’in da ke sama, tare da duk tarihinta. Idan babu kowa a sama, zai fada maimakon a sa alamar daukaka a bar ta a nan. | ☐ | |
+| `ofcCwEscalateReason` | Why it needs somebody above | Dalilin bukatar wani a sama | ☐ | |
+| `ofcCwEscalatedTo` | Escalated to | An daukaka zuwa | ☐ | |
 | `ofcTaTitle` | The taxpayer base | Masu biyan haraji | ☐ | |
 | `ofcTaIntro` | Not how many people are on the register, but how many are still paying, how often, and where the ones who stopped are. | Ba yawan mutanen da ke rajista ba, sai dai nawa ne har yanzu ke biya, sau nawa, da kuma inda wadanda suka daina suke. | ☐ | |
 | `ofcTaActive` | Paying | Suna biya | ☐ | |
@@ -2609,6 +2646,19 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumSupervisorChange` | Reporting line | Layin rahoto | ☐ | |
+| `enumRoleChange` | Role | Matsayi | ☐ | |
+| `enumCollection` | Collection | Karbar kudi | ☐ | |
+| `enumFinance` | Finance | Kudi | ☐ | |
+| `enumAudit` | Audit | Bincike | ☐ | |
+| `enumEnforcement` | Enforcement | Aiwatarwa | ☐ | |
+| `enumTaxpayerServices` | Taxpayer services | Hidimar masu biyan haraji | ☐ | |
+| `enumAdministration` | Administration | Gudanarwa | ☐ | |
+| `enumTechnology` | Technology | Fasaha | ☐ | |
+| `enumPosting` | Posting | Matsayi | ☐ | |
+| `enumDepartment` | Department | Sashe | ☐ | |
+| `enumOffice` | Office | Ofishi | ☐ | |
+| `enumTerritory` | Territory | Yanki | ☐ | |
 | `enumOnce` | Once | Sau daya | ☐ | |
 | `enumTwoToThree` | Two or three times | Sau biyu ko uku | ☐ | |
 | `enumFourToEleven` | Four to eleven times | Sau hudu zuwa goma sha daya | ☐ | |
