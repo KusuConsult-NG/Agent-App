@@ -405,6 +405,16 @@ const SCREEN: Record<string, NavItem> = {
    * in front of officers whose every click on it would 403.
    */
   workbench: { path: '/workbench', label: 'ofcNavWorkbench', permission: 'audit:sample' },
+  /*
+   * No permission, deliberately.
+   *
+   * The answer is about the officer asking. Gating it would mean an officer
+   * whose role somebody narrowed could no longer see that their old laptop is
+   * still signed in -- which is exactly the officer most likely to need to
+   * look. `permission` is optional on a `NavItem` for exactly this: a screen
+   * every authenticated officer may open.
+   */
+  myAccess: { path: '/my-access', label: 'ofcNavMyAccess' },
   usage: { path: '/usage', label: 'ofcNavUsage', permission: 'report:read:all' },
   catalogue: { path: '/catalogue', label: 'ofcNavCatalogue', permission: 'catalogue:read' },
   programmes: { path: '/programmes', label: 'ofcNavProgrammes', permission: 'incentive:read:all' },
@@ -483,7 +493,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   admin: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!],
+      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupAdministration',
@@ -510,7 +520,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   revenue_officer: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!],
+      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupTheRegister',
@@ -539,7 +549,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   finance_officer: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!],
+      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupSettlement',
@@ -564,7 +574,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   auditor: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!],
+      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupExamination',
@@ -591,7 +601,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   supervisor: [
     {
       group: 'ofcGroupYourDesk',
-      items: [SCREEN.myWork!, SCREEN.cases!],
+      items: [SCREEN.myWork!, SCREEN.cases!, SCREEN.myAccess!],
     },
     {
       group: 'ofcGroupMyTerritory',
@@ -617,7 +627,25 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
  * designed one and a much better outcome than an empty portal.
  */
 const NAV_FALLBACK: readonly NavGroup[] = [
-  { group: 'ofcGroupEverything', items: Object.values(SCREEN) },
+  {
+    group: 'ofcGroupEverything',
+    /*
+     * Everything except the screens that open on authentication alone.
+     *
+     * The filter below drops an item whose permission the role does not hold,
+     * which is what makes a fallback menu safe. A screen with no permission
+     * survives that filter for *every* role -- including the field agent, who
+     * has no menu here because they belong in the agent application and are
+     * turned away at the door. Offering them "where I am signed in", a screen
+     * about officer machines they will never have, is the one way this list
+     * can be wrong.
+     *
+     * A role PSIRS creates therefore reaches these screens by their path and
+     * not from this menu, until somebody arranges a menu for it. That is the
+     * cost, and it is smaller than the alternative.
+     */
+    items: Object.values(SCREEN).filter((item) => item.permission !== undefined),
+  },
 ];
 
 export function navFor(role: string | undefined): readonly NavGroup[] {

@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, can, uploadFile, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -799,14 +799,14 @@ function CaseControls({
       </button>
 
       {/*
-        * Evidence, drawn from what is already on file.
+        * Evidence comes from two places, and this is the first: a document the
+        * platform itself issued, pointed at rather than uploaded. The list
+        * comes from the server for a reason — an officer working a case does
+        * not get a search across every document the State holds, only what
+        * this case is already about.
         *
-        * There is no officer upload path on this platform — every document is
-        * minted by the service that issued it — so attaching evidence means
-        * pointing at a receipt, an invoice or a vehicle's papers that already
-        * belong to what the case is about. The list comes from the
-        * server for that reason: an officer working a case does not get a
-        * search across every document the State holds.
+        * The second is the upload below, which is most of what an
+        * investigation actually collects.
         */}
       {(detail.attachable ?? []).length > 0 && (
         <>
@@ -849,6 +849,10 @@ function CaseControls({
             </button>
           </div>
         </>
+      )}
+
+      {detail.may_work && (
+        <EvidenceUpload caseId={detail.id} onUploaded={onDone} />
       )}
 
       {detail.may_work && (
@@ -1269,5 +1273,99 @@ function CaseBlock({ title, body, rows }: { title: string; body: string; rows: C
         />
       )}
     </div>
+  );
+}
+
+// ===========================================================================
+/**
+ * A file that did not come from this platform, put on the case.
+ *
+ * Most of what an investigation collects is not a document PSIRS issued -- a
+ * bank advice a taxpayer hands over, a letter, a photograph of a stall -- and
+ * until now none of it could go on a case at all. It went into somebody's
+ * email instead, which is to say it left the audit trail.
+ *
+ * TWO FIELDS THAT ARE NOT OPTIONAL
+ *
+ * What it is, and where it came from. The database requires both, and the form
+ * asks for them before it will send: an unlabelled scan is something the next
+ * reader has to open to find out about, and "where did this come from" is the
+ * first question an auditor asks of any document the State did not write.
+ * Answering it a year later from memory is not answering it.
+ *
+ * The file is sent as the body rather than as a multipart form, matching the
+ * API: one document at a time, its type declared in the header and checked
+ * against the bytes on the far side.
+ */
+function EvidenceUpload({
+  caseId,
+  onUploaded,
+}: {
+  caseId: string;
+  onUploaded: (message: string) => Promise<void>;
+}) {
+  const { t } = usePortalI18n();
+  const [file, setFile] = useState<File | null>(null);
+  const [description, setDescription] = useState('');
+  const [provenance, setProvenance] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const ready = file !== null && description.trim().length >= 3 && provenance.trim().length >= 3;
+
+  return (
+    <>
+      <h3>{t.ofcCwUploadEvidence}</h3>
+      <ErrorAlert error={error} />
+      <p className="muted">{t.ofcCwUploadHint}</p>
+      <div className="filters">
+        <label>
+          {t.ofcCwUploadFile}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp,application/pdf"
+            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <label>
+          {t.ofcCwUploadWhat}
+          <input value={description} onChange={(event) => setDescription(event.target.value)} />
+        </label>
+        <label>
+          {t.ofcCwUploadWhere}
+          <input value={provenance} onChange={(event) => setProvenance(event.target.value)} />
+        </label>
+        <button
+          type="button"
+          disabled={busy || !ready}
+          onClick={async () => {
+            if (!file) return;
+            setBusy(true);
+            setError(null);
+            try {
+              await uploadFile(
+                `/government/cases/${caseId}/evidence/upload?` +
+                  new URLSearchParams({
+                    filename: file.name,
+                    description: description.trim(),
+                    provenance: provenance.trim(),
+                  }).toString(),
+                file,
+              );
+              setFile(null);
+              setDescription('');
+              setProvenance('');
+              await onUploaded(t.ofcCwSaved);
+            } catch (caught) {
+              setError(caught instanceof ApiRequestError ? caught.error : null);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? t.ofcExportWorking : t.ofcCwUploadEvidence}
+        </button>
+      </div>
+    </>
   );
 }

@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2320 strings, grouped by where an agent meets them. Lower stakes
+2346 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -313,6 +313,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcNavMyAccess` | Where I am signed in | Inda na shiga | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
 | `ofcNavIntelligence` | Revenue intelligence | Nazarin haraji | ☐ | |
 | `ofcNavRevenue` | Revenue summary | Takaitaccen haraji | ☐ | |
@@ -1323,6 +1324,31 @@ instructions — but they are what an agent reads all day.
 | `ofcFrom` | From | Daga | ☐ | |
 | `ofcTo` | To | Zuwa | ☐ | |
 | `ofcExportCsv` | Export CSV | Fitar da CSV | ☐ | |
+| `ofcAcSessions` | Sessions | Zaman shiga | ☐ | |
+| `ofcAcSessionsHint` | Every browser this account is signed in on. End any you do not recognise, then change your password. | Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri. | ☐ | |
+| `ofcAcDevices` | Machines | Na’urori | ☐ | |
+| `ofcAcDevicesHint` | Recorded the first time this account signs in from a machine. Blocking one ends every session it holds and stops it opening another. | Ana rubuta shi lokacin da asusun ya fara shiga daga na’ura. Toshe daya yana kawo karshen kowane zaman da yake rike da shi kuma yana hana shi bude wani. | ☐ | |
+| `ofcAcDevice` | Machine | Na’ura | ☐ | |
+| `ofcAcUnknownDevice` | Unknown machine | Na’urar da ba a sani ba | ☐ | |
+| `ofcAcThisOne` | this one | wannan | ☐ | |
+| `ofcAcAddress` | Address | Adireshi | ☐ | |
+| `ofcAcSignedIn` | Signed in | An shiga | ☐ | |
+| `ofcAcLastUsed` | Last used | An yi amfani da shi ta karshe | ☐ | |
+| `ofcAcFirstSeen` | First seen | An fara ganin sa | ☐ | |
+| `ofcAcLastSeen` | Last seen | An gan shi ta karshe | ☐ | |
+| `ofcAcLiveSessions` | Open sessions | Zaman da ke bude | ☐ | |
+| `ofcAcEnd` | End | Kawo karshe | ☐ | |
+| `ofcAcEndThisOne` | End and sign out | Kawo karshe ka fita | ☐ | |
+| `ofcAcEnded` | Ended | An kawo karshe | ☐ | |
+| `ofcAcBlock` | Block | Toshe | ☐ | |
+| `ofcAcUnblock` | Unblock | Cire toshewa | ☐ | |
+| `ofcAcNoSessions` | This account has never been signed in. | Wannan asusun bai taba shiga ba. | ☐ | |
+| `ofcAcNoDevices` | No machine has been recorded yet. | Ba a rubuta wata na’ura ba tukuna. | ☐ | |
+| `ofcCwUploadEvidence` | Upload evidence | Loda shaida | ☐ | |
+| `ofcCwUploadHint` | For a document this platform did not issue: a bank advice, a letter, a photograph. Images and PDFs, up to 15 MB. | Don takardar da wannan tsarin bai fitar ba: sanarwar banki, wasika, hoto. Hotuna da PDF, har zuwa 15 MB. | ☐ | |
+| `ofcCwUploadFile` | The file | Fayil | ☐ | |
+| `ofcCwUploadWhat` | What it is | Menene shi | ☐ | |
+| `ofcCwUploadWhere` | Where it came from | Daga ina ya zo | ☐ | |
 | `ofcExportExcel` | Spreadsheet | Takardar lissafi | ☐ | |
 | `ofcExportPdf` | Document to file | Takarda don ajiyewa | ☐ | |
 | `ofcExportWorking` | Preparing... | Ana shirya... | ☐ | |

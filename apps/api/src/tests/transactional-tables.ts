@@ -87,6 +87,18 @@ export const TRANSACTIONAL_TABLES = [
   'audit_samples',
   'audit_reports',
   /*
+   * The officer's own machines and the files they put on a case.
+   *
+   * `officer_devices` holds a `user_id` the reset deletes and a `blocked_by`
+   * pointing at another officer, so a row left behind by one file breaks the
+   * next file's reset with a foreign key violation. `case_evidence_files` is
+   * referenced by `case_events`, which is emptied above -- both are protected
+   * against row-level DELETE by migration 063, and TRUNCATE does not fire that
+   * trigger, so emptying them between files leaves the guarantee intact.
+   */
+  'case_evidence_files',
+  'officer_devices',
+  /*
    * And the period lock.
    *
    * It has to be emptied between files for two reasons. It holds a `closed_by`

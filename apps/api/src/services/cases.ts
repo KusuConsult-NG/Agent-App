@@ -52,6 +52,8 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextCaseNumber } from '../lib/references';
 import { recordAudit } from './audit';
+import { ACCEPTED as ACCEPTED_FILES } from './kyc-documents';
+import { storage, storageKey } from './storage';
 
 export const CASE_STATUSES = [
   'OPEN',
@@ -172,6 +174,19 @@ async function load(db: Db, id: string): Promise<CaseRow> {
   return row;
 }
 
+/**
+ * How large a piece of evidence may be.
+ *
+ * Larger than the identity-document cap, because that one is sized for a phone
+ * photograph of an ID and this is sized for a scanned bank statement -- a
+ * multi-page PDF an officer cannot control the size of, and one they must not
+ * be told to crop.
+ */
+export const MAX_EVIDENCE_BYTES = 15 * 1024 * 1024;
+
+/** The file types a case will keep, named so the body parser can refuse the rest. */
+export const EVIDENCE_CONTENT_TYPES = ACCEPTED_FILES.map((entry) => entry.contentType);
+
 interface EventInput {
   kind: string;
   body?: string;
@@ -179,6 +194,7 @@ interface EventInput {
   oldValue?: unknown;
   newValue?: unknown;
   documentId?: string | null;
+  evidenceFileId?: string | null;
 }
 
 async function append(
@@ -189,8 +205,9 @@ async function append(
 ): Promise<void> {
   await client.query(
     `INSERT INTO case_events (
-       case_id, kind, body, mentions, old_value, new_value, document_id, actor_id, actor_role
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       case_id, kind, body, mentions, old_value, new_value, document_id, evidence_file_id,
+       actor_id, actor_role
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
     [
       caseId,
       event.kind,
@@ -199,6 +216,7 @@ async function append(
       event.oldValue === undefined ? null : JSON.stringify(event.oldValue),
       event.newValue === undefined ? null : JSON.stringify(event.newValue),
       event.documentId ?? null,
+      event.evidenceFileId ?? null,
       viewer.userId,
       viewer.role,
     ],
@@ -414,6 +432,184 @@ export async function attachEvidence(
       reason: input.body?.trim() || null,
     });
   });
+}
+
+/**
+ * A file that did not come from this platform, put on the case.
+ *
+ * Most of what an investigation collects is not a document PSIRS issued: a
+ * bank advice a taxpayer hands over, a letter, a photograph of a stall. None
+ * of it could go on a case, so it went into somebody's email instead -- which
+ * is to say it left the audit trail at exactly the point an investigation
+ * needs one.
+ *
+ * WHY IT IS NOT A `documents` ROW
+ *
+ * Every row in that table is something the State issued, carrying a
+ * verification code a citizen can check against the register. A scan of a
+ * third party's letter is not, and filing it there would make the public
+ * verification endpoint able to affirm a document PSIRS never wrote.
+ *
+ * WHAT THE OFFICER HAS TO SAY
+ *
+ * A description and a provenance, both required by the table rather than by
+ * this function. An unlabelled scan on a case file is something the next
+ * reader has to open to find out about; a file with no statement of where it
+ * came from is the question an auditor asks first about any document the
+ * platform did not issue, and answering it a year later from memory is not an
+ * answer.
+ *
+ * The bytes are stored before the row exists, and the row records the checksum
+ * the storage driver reported for what it actually wrote -- not one computed
+ * here over bytes that may never have landed.
+ */
+export async function uploadEvidence(
+  db: Db,
+  viewer: Viewer,
+  caseId: string,
+  input: {
+    bytes: Buffer;
+    declaredContentType: string;
+    filename: string;
+    description: string;
+    provenance: string;
+  },
+): Promise<{ evidenceFileId: string; checksum: string; byteSize: number }> {
+  const row = await load(db, caseId);
+  assertOpen(row);
+  assertMayWork(viewer, row);
+
+  /*
+   * The declared type is checked before the size, because an unsupported type
+   * never reaches the body parser and the bytes arrive empty -- reporting that
+   * as "the file is empty" sends an officer back to rescan a document that was
+   * never the problem.
+   */
+  const declared = ACCEPTED_FILES.find((entry) => entry.contentType === input.declaredContentType);
+  if (!declared) {
+    throw badRequest(
+      `${input.declaredContentType || 'That file type'} is not a file type PSIRS keeps. ` +
+        `Send one of: ${ACCEPTED_FILES.map((entry) => entry.contentType).join(', ')}.`,
+      [{ field: 'Content-Type', issue: 'Unsupported file type' }],
+    );
+  }
+  if (input.bytes.length === 0) throw badRequest('That file is empty.');
+  if (input.bytes.length > MAX_EVIDENCE_BYTES) {
+    throw badRequest(
+      `That file is ${(input.bytes.length / 1024 / 1024).toFixed(1)} MB and the largest ` +
+        `accepted is ${MAX_EVIDENCE_BYTES / 1024 / 1024} MB.`,
+    );
+  }
+  /*
+   * The header is the uploader's claim about the file; the bytes are the fact.
+   * A mismatch is either a broken client or a payload parked behind an image
+   * viewer, and neither is something to keep on a case file.
+   */
+  if (!declared.matches(input.bytes)) {
+    throw badRequest(
+      `This file is not a ${input.declaredContentType}.`,
+      [{ field: 'body', issue: 'Content does not match the declared type' }],
+    );
+  }
+
+  const stored = await storage.put(
+    storageKey('evidence', 'cases', caseId, `${Date.now()}.${declared.extension}`),
+    input.bytes,
+    declared.contentType,
+  );
+
+  return withTransaction(async (client) => {
+    const file = await queryOne<{ id: string }>(
+      client,
+      `INSERT INTO case_evidence_files (
+         case_id, original_filename, content_type, byte_size, storage_reference,
+         checksum, description, provenance, uploaded_by
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id`,
+      [
+        caseId,
+        input.filename.trim().slice(0, 200) || `evidence.${declared.extension}`,
+        declared.contentType,
+        stored.byteSize,
+        stored.storageReference,
+        stored.checksum,
+        input.description.trim(),
+        input.provenance.trim(),
+        viewer.userId,
+      ],
+    );
+
+    await append(client, caseId, viewer, {
+      kind: 'EVIDENCE',
+      body: input.description.trim(),
+      evidenceFileId: file!.id,
+    });
+    await client.query('UPDATE cases SET updated_at = now() WHERE id = $1', [caseId]);
+
+    await recordAudit(client, {
+      actorId: viewer.userId,
+      actorRole: viewer.role,
+      action: 'case.evidence.upload',
+      entityType: 'case',
+      entityId: caseId,
+      newValue: {
+        evidenceFileId: file!.id,
+        filename: input.filename,
+        checksum: stored.checksum,
+        byteSize: stored.byteSize,
+        provenance: input.provenance.trim(),
+      },
+      reason: input.description.trim(),
+    });
+
+    return { evidenceFileId: file!.id, checksum: stored.checksum, byteSize: stored.byteSize };
+  });
+}
+
+/**
+ * Read one back, and record that it was read.
+ *
+ * Evidence is read by whoever may work the case, which is the same test that
+ * governs writing to it: an investigation nobody but its opener can read is
+ * not a shared record. The read is audited because who looked at a piece of
+ * evidence, and when, is itself part of the file.
+ */
+export async function readEvidence(
+  db: Db,
+  viewer: Viewer,
+  evidenceFileId: string,
+): Promise<{ bytes: Buffer; contentType: string; filename: string }> {
+  const file = await queryOne<{
+    id: string;
+    case_id: string;
+    storage_reference: string;
+    content_type: string;
+    original_filename: string;
+  }>(
+    db,
+    `SELECT id, case_id, storage_reference, content_type, original_filename
+       FROM case_evidence_files WHERE id = $1`,
+    [evidenceFileId],
+  );
+  if (!file) throw notFound('That evidence');
+
+  const row = await load(db, file.case_id);
+  assertMayWork(viewer, row);
+
+  const bytes = await storage.get(file.storage_reference);
+
+  await withTransaction((client) =>
+    recordAudit(client, {
+      actorId: viewer.userId,
+      actorRole: viewer.role,
+      action: 'case.evidence.read',
+      entityType: 'case',
+      entityId: file.case_id,
+      newValue: { evidenceFileId },
+    }),
+  );
+
+  return { bytes, contentType: file.content_type, filename: file.original_filename };
 }
 
 export async function assign(
@@ -767,8 +963,10 @@ export async function getCase(db: Db, viewer: Viewer, caseId: string) {
   const events = await query(
     db,
     `SELECT e.id, e.sequence_no, e.kind, e.body, e.old_value, e.new_value,
-            e.document_id, e.created_at, e.actor_role,
+            e.document_id, e.evidence_file_id, e.created_at, e.actor_role,
             d.document_number, d.document_type, d.status AS document_status,
+            f.original_filename, f.content_type, f.byte_size, f.checksum,
+            f.description AS evidence_description, f.provenance AS evidence_provenance,
             u.full_name AS actor_name,
             COALESCE(
               (SELECT array_agg(m.full_name ORDER BY m.full_name)
@@ -778,6 +976,7 @@ export async function getCase(db: Db, viewer: Viewer, caseId: string) {
        FROM case_events e
        JOIN users u ON u.id = e.actor_id
        LEFT JOIN documents d ON d.id = e.document_id
+       LEFT JOIN case_evidence_files f ON f.id = e.evidence_file_id
       WHERE e.case_id = $1
       ORDER BY e.sequence_no`,
     [caseId],
@@ -786,11 +985,13 @@ export async function getCase(db: Db, viewer: Viewer, caseId: string) {
   /*
    * What this case could have attached to it, and has not.
    *
-   * Evidence has to come from somewhere, and there is no officer upload path
-   * on this platform — every document is minted by the service that issued it:
-   * a receipt, an invoice, a vehicle's papers. So "attach evidence" means
-   * pointing at one of those, and the list of candidates is what the case is
+   * Evidence comes from two places, and this is the first: a document the
+   * platform itself issued — a receipt, an invoice, a vehicle's papers — which
+   * is attached by pointing at it. The list of candidates is what the case is
    * already about.
+   *
+   * The second is `uploadEvidence` below: a file that did not originate here,
+   * which most of what an investigation collects does not.
    *
    * Derived here rather than through a document-browsing endpoint, because a
    * screen that let an officer search every document the State holds is a

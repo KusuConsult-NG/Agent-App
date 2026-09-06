@@ -1134,6 +1134,32 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcNavMyAccess: string;
+  ofcAcSessions: string;
+  ofcAcSessionsHint: string;
+  ofcAcDevices: string;
+  ofcAcDevicesHint: string;
+  ofcAcDevice: string;
+  ofcAcUnknownDevice: string;
+  ofcAcThisOne: string;
+  ofcAcAddress: string;
+  ofcAcSignedIn: string;
+  ofcAcLastUsed: string;
+  ofcAcFirstSeen: string;
+  ofcAcLastSeen: string;
+  ofcAcLiveSessions: string;
+  ofcAcEnd: string;
+  ofcAcEndThisOne: string;
+  ofcAcEnded: string;
+  ofcAcBlock: string;
+  ofcAcUnblock: string;
+  ofcAcNoSessions: string;
+  ofcAcNoDevices: string;
+  ofcCwUploadEvidence: string;
+  ofcCwUploadHint: string;
+  ofcCwUploadFile: string;
+  ofcCwUploadWhat: string;
+  ofcCwUploadWhere: string;
   ofcExportExcel: string;
   ofcExportPdf: string;
   ofcExportWorking: string;
@@ -3700,6 +3726,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcNavMyAccess: "Where I am signed in",
+    ofcAcSessions: "Sessions",
+    ofcAcSessionsHint: "Every browser this account is signed in on. End any you do not recognise, then change your password.",
+    ofcAcDevices: "Machines",
+    ofcAcDevicesHint: "Recorded the first time this account signs in from a machine. Blocking one ends every session it holds and stops it opening another.",
+    ofcAcDevice: "Machine",
+    ofcAcUnknownDevice: "Unknown machine",
+    ofcAcThisOne: "this one",
+    ofcAcAddress: "Address",
+    ofcAcSignedIn: "Signed in",
+    ofcAcLastUsed: "Last used",
+    ofcAcFirstSeen: "First seen",
+    ofcAcLastSeen: "Last seen",
+    ofcAcLiveSessions: "Open sessions",
+    ofcAcEnd: "End",
+    ofcAcEndThisOne: "End and sign out",
+    ofcAcEnded: "Ended",
+    ofcAcBlock: "Block",
+    ofcAcUnblock: "Unblock",
+    ofcAcNoSessions: "This account has never been signed in.",
+    ofcAcNoDevices: "No machine has been recorded yet.",
+    ofcCwUploadEvidence: "Upload evidence",
+    ofcCwUploadHint: "For a document this platform did not issue: a bank advice, a letter, a photograph. Images and PDFs, up to 15 MB.",
+    ofcCwUploadFile: "The file",
+    ofcCwUploadWhat: "What it is",
+    ofcCwUploadWhere: "Where it came from",
     ofcExportExcel: "Spreadsheet",
     ofcExportPdf: "Document to file",
     ofcExportWorking: "Preparing...",
@@ -6123,6 +6175,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcNavMyAccess: "Inda na shiga",
+    ofcAcSessions: "Zaman shiga",
+    ofcAcSessionsHint: "Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.",
+    ofcAcDevices: "Na\u2019urori",
+    ofcAcDevicesHint: "Ana rubuta shi lokacin da asusun ya fara shiga daga na\u2019ura. Toshe daya yana kawo karshen kowane zaman da yake rike da shi kuma yana hana shi bude wani.",
+    ofcAcDevice: "Na\u2019ura",
+    ofcAcUnknownDevice: "Na\u2019urar da ba a sani ba",
+    ofcAcThisOne: "wannan",
+    ofcAcAddress: "Adireshi",
+    ofcAcSignedIn: "An shiga",
+    ofcAcLastUsed: "An yi amfani da shi ta karshe",
+    ofcAcFirstSeen: "An fara ganin sa",
+    ofcAcLastSeen: "An gan shi ta karshe",
+    ofcAcLiveSessions: "Zaman da ke bude",
+    ofcAcEnd: "Kawo karshe",
+    ofcAcEndThisOne: "Kawo karshe ka fita",
+    ofcAcEnded: "An kawo karshe",
+    ofcAcBlock: "Toshe",
+    ofcAcUnblock: "Cire toshewa",
+    ofcAcNoSessions: "Wannan asusun bai taba shiga ba.",
+    ofcAcNoDevices: "Ba a rubuta wata na\u2019ura ba tukuna.",
+    ofcCwUploadEvidence: "Loda shaida",
+    ofcCwUploadHint: "Don takardar da wannan tsarin bai fitar ba: sanarwar banki, wasika, hoto. Hotuna da PDF, har zuwa 15 MB.",
+    ofcCwUploadFile: "Fayil",
+    ofcCwUploadWhat: "Menene shi",
+    ofcCwUploadWhere: "Daga ina ya zo",
     ofcExportExcel: "Takardar lissafi",
     ofcExportPdf: "Takarda don ajiyewa",
     ofcExportWorking: "Ana shirya...",

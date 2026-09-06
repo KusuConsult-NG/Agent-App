@@ -33,8 +33,8 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | LGA / territory assignment | Complete | `user_territories`, managed at `/users` in the portal, enforced by `services/report-scope.ts` |
 | Supervisor | Complete | `users.supervisor_id`, cycle-proof at the database, and escalation walks it — supervisor, then department head, then the department above |
 | Last login | Complete | `users.last_login_at`, shown on `/users` |
-| Active sessions | Partial | `sessions` rows exist and `POST /auth/logout-all` revokes them. No officer can *see* their sessions, and no administrator can see or end another officer's |
-| Device / session management | Partial | Full lifecycle for **agent** handsets (`agent_devices`, `/field-app`). Nothing equivalent for officers |
+| Active sessions | Complete | `/my-access` lists an officer's own sessions (needing no permission — the answer is about the person asking) and ends any one of them; `user:manage` sees and ends anybody's. Ended sessions stay listed and marked rather than disappearing |
+| Device / session management | Complete | `officer_devices` — discovered on first sign-in rather than pre-approved, because a queue between an emergency and the officer handling it is the wrong control for a browser. What officers get is the half that matters: a record of the machines, and a block that ends every session it holds and refuses it another. Enforced by a trigger (migration 063), because the case a block is for is a laptop already in somebody else's hands |
 | Notifications | Partial | `services/notifications.ts` is outbound SMS to citizens and agents. There is no officer inbox — see §29 |
 | Tasks | Complete | Case tasks and assignment, `apps/api/src/services/cases.ts`, `/cases` and `/my-work` in the portal |
 | Alerts | Partial | Fraud flags, reconciliation exceptions and job failures each have their own screen; §29 gathers them into one place now, but a system alert (integration down, job stalled) still has to be read off `/government/workers` |
@@ -179,7 +179,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Tasks | Complete | A case assigned to an officer is that officer's task |
 | Assignments | Complete | `cases.assignee_id`, reassignment recorded as a case event |
 | Comments | Complete | `case_events`, kind `COMMENT` |
-| Attachments | Partial | An officer attaches a document the platform already issued — a receipt, an invoice, vehicle papers — chosen from what the case is about, and the attachment gets its own audit entry. There is **no upload**: nothing on this platform lets an officer add a file of their own, so a bank advice a taxpayer hands over cannot be put on the case |
+| Attachments | Complete | Two sources: a document the platform issued, pointed at; or a file uploaded onto the case (`case_evidence_files`), which is where a bank advice, a letter or a photograph goes. Uploads carry a checksum, must state what they are and where they came from, and cannot be altered or removed once on the file |
 | Internal notes | Complete | `case_events`, kind `NOTE`, not visible to non-officers (no non-officer can reach a case at all) |
 | Mentions | Complete | `case_events.mentions`, surfaced in `/my-work` |
 | Status | Complete | Six states, §22 |
@@ -274,7 +274,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Immutable financial records | Complete | Receipts are voided, never edited; the audit chain is hash-linked and verifiable |
 | Audit cases | Complete | §22 — cases carry case number, subject, transactions, agent, taxpayer, officer, category, risk, description, evidence, assignee, due date, status |
 | Six case statuses | Complete | Open, Investigating, Awaiting Information, Escalated, Resolved, Closed |
-| Evidence management | Partial | Attaching, listing and auditing all work (§6). The gap is the same one: an auditor cannot upload a document that did not originate in the platform, which is most of what an investigation collects |
+| Evidence management | Complete | Upload, read-back and both audited. Deliberately not a `documents` row: every row in that table is something the State issued and a citizen can verify, and a scan of a third party's letter is not |
 | Anomaly analytics | Complete | `services/fraud.ts` covers territory violations, velocity, duplicate contacts, reversal patterns and registration risk, and now four rules that watch the office rather than the field: repeated receipt regeneration or retrieval, collections written in the small hours (read in Africa/Lagos), an officer's day against their own preceding four weeks, and frequent manual interventions. `watching-the-office.test.ts` asserts each fires on the shape it is for and stays quiet on the ordinary case beside it |
 | Audit sampling | Complete | `POST /government/audit/samples` draws by period, category, LGA, agent, value band and status, at random from a stored seed, systematically, or by largest amount. Migration 062 fixes the criteria, the seed, the population size and the selected rows at the moment of drawing, so a reviewer can reproduce the draw and nobody can widen it after seeing the results |
 | Audit reports (13 kinds) | Complete | `audit_reports` holds all thirteen as objects: the rows frozen at generation, a SHA-256 over the canonical payload and parameters, a generator, and a separate signature. `GET` recomputes the checksum and tells the reader when stored figures no longer match what was signed. A report is withdrawn with a reason, never deleted |
@@ -293,7 +293,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Everything stays on one case | Complete | `case_events` is the case's whole history |
 | Internal messages, comments, mentions | Complete | §6 |
 | Notifications, tasks, assignments, escalations | Complete | `/my-work` |
-| Attachments | Partial | §6 |
+| Attachments | Complete | §6 |
 | Case discussions, status updates | Complete | `case_events` |
 | Auditable, not an open chat | Complete | Every event is append-only and attributed; there is no direct message that is not attached to a case |
 | Global notification centre | Complete | `GET /government/my-work` returns cases, mentions, approvals, exceptions and flags for the signed-in officer in one payload |
@@ -372,7 +372,7 @@ Assessed 6 September 2026, against `claude/officer-command-centre-admin-r5j0s8`.
 | Audit logs | Complete |
 | Before / after records | Partial — on the transaction timeline, not on the audit screen |
 | Audit cases | Complete |
-| Evidence management | Partial |
+| Evidence management | Complete |
 | Risk alerts | Complete |
 | Anomaly detection | Complete |
 | Audit sampling | Complete |

@@ -23,6 +23,7 @@ import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
 import { recordTransfer } from './organisation';
 import * as rbacStore from './rbac-store';
+import * as officerDevices from './officer-devices';
 import { queueNotification } from './notifications';
 
 export interface SessionTokens {
@@ -48,6 +49,8 @@ async function createSession(params: {
   email: string | null;
   agentId?: string | null;
   deviceId?: string | null;
+  /** The officer's machine, discovered at sign-in. Null for an agent handset. */
+  officerDeviceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
   /**
@@ -79,13 +82,14 @@ async function createSession(params: {
     const row = await queryOne<{ id: string }>(
       client,
       `INSERT INTO sessions
-         (user_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at,
-          absolute_expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (user_id, refresh_token_hash, device_id, officer_device_id, ip_address, user_agent,
+          expires_at, absolute_expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [
         params.userId,
         sha256(refreshToken),
         params.deviceId ?? null,
+        params.officerDeviceId ?? null,
         params.ipAddress ?? null,
         params.userAgent ?? null,
         // The rolling expiry can never outlast the absolute one.
@@ -236,6 +240,28 @@ export async function login(params: {
     deviceId = device?.id ?? null;
   }
 
+  /*
+   * The machine an officer is signing in from, discovered rather than
+   * registered.
+   *
+   * Agents are excluded: their device is the handset, it is already bound and
+   * approved, and giving them a second parallel device record would mean two
+   * places to revoke and one of them forgotten. `deviceForSignIn` refuses a
+   * blocked machine here so the officer gets a sentence, and migration 063
+   * refuses it again at the row so a laptop in somebody else's hands cannot
+   * hold a session whatever the caller does.
+   */
+  const officerDeviceId =
+    user.role === 'agent'
+      ? null
+      : await withTransaction((client) =>
+          officerDevices.deviceForSignIn(client, {
+            userId: user.id,
+            userAgent: params.userAgent ?? null,
+            clientDeviceId: params.deviceIdentifier ?? null,
+          }),
+        );
+
   const { tokens } = await createSession({
     userId: user.id,
     role: user.role,
@@ -244,6 +270,7 @@ export async function login(params: {
     email: user.email,
     agentId: agent?.id ?? null,
     deviceId,
+    officerDeviceId,
     ipAddress: params.ipAddress ?? null,
     userAgent: params.userAgent ?? null,
   });
@@ -317,6 +344,7 @@ export async function refresh(params: {
       id: string;
       user_id: string;
       device_id: string | null;
+      officer_device_id: string | null;
       device_identifier: string | null;
       expires_at: Date;
       absolute_expires_at: Date | null;
@@ -330,7 +358,8 @@ export async function refresh(params: {
       status: string;
     }>(
       client,
-      `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
+      `SELECT s.id, s.user_id, s.device_id, s.officer_device_id, s.expires_at,
+              s.absolute_expires_at, s.revoked_at,
               s.revoked_reason, s.rotated_to_session_id,
               d.device_identifier,
               u.full_name, u.phone, u.email, u.role, u.status
@@ -404,6 +433,10 @@ export async function refresh(params: {
       email: session.email,
       agentId: agent?.id ?? null,
       deviceId: session.device_id,
+      // Carried, not rediscovered: a refresh is the same machine by
+      // definition, and re-deriving it from a header would let a rotation
+      // quietly move a session onto a different device record.
+      officerDeviceId: session.officer_device_id,
       ipAddress: params.ipAddress ?? null,
       // Carried, never recomputed: this is what stops rotation from resetting it.
       absoluteExpiresAt: session.absolute_expires_at,

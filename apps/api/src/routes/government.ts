@@ -3,7 +3,7 @@
  * audit, reports and incentive programmes (PRD §37-§39, §45-§49, §67, §72).
  */
 
-import { Router } from 'express';
+import express, { Router } from 'express';
 import type { Response } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
@@ -36,6 +36,7 @@ import * as periods from '../services/periods';
 import * as rbacStore from '../services/rbac-store';
 import * as workbench from '../services/audit-workbench';
 import * as exporting from '../services/export';
+import * as officerDevices from '../services/officer-devices';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -2983,6 +2984,163 @@ governmentRouter.post(
       res.json({ withdrawn: true });
     },
   ),
+);
+
+// ---------------------------------------------------------------------------
+// Where an officer is signed in, and on what (Addendum §1)
+// ---------------------------------------------------------------------------
+
+/*
+ * An officer's own sessions and devices need no permission at all.
+ *
+ * Requiring one would mean an officer whose role somebody narrowed could no
+ * longer see that their old laptop is still signed in -- which is precisely
+ * the officer most likely to need to look. Authentication is the whole of the
+ * authority here, because the answer is about the person asking.
+ */
+governmentRouter.get(
+  '/sessions/mine',
+  asyncHandler(async (req, res) => {
+    res.json({
+      sessions: await officerDevices.sessionsFor(pool, req.auth!.userId, req.auth!.sessionId),
+      devices: await officerDevices.devicesFor(pool, req.auth!.userId),
+    });
+  }),
+);
+
+governmentRouter.post(
+  '/sessions/:id/end',
+  validateBody(
+    z.object({ reason: z.string().trim().max(500).default('Ended by the officer') }),
+    async (req, res, data) => {
+      await officerDevices.endSession(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        {
+          // Their own without a permission; anybody's with `user:manage`.
+          mayEndAnyone: req.auth!.permissions.includes('user:manage'),
+          reason: data.reason,
+        },
+      );
+      res.json({ ended: true });
+    },
+  ),
+);
+
+/*
+ * And an administrator's view of somebody else's.
+ *
+ * `user:manage` rather than `user:read:all`: seeing where a colleague is
+ * signed in, from which address, on what machine, is a supervisory act rather
+ * than part of reading the staff list.
+ */
+governmentRouter.get(
+  '/users/:id/sessions',
+  requirePermission('user:manage'),
+  asyncHandler(async (req, res) => {
+    res.json({
+      sessions: await officerDevices.sessionsFor(pool, req.params.id!, null),
+      devices: await officerDevices.devicesFor(pool, req.params.id!),
+    });
+  }),
+);
+
+/*
+ * Blocking a machine, and lifting it. Both step-up.
+ *
+ * A block ends every session the device holds and stops it opening another --
+ * enforced on the row by migration 063, because the case it exists for is a
+ * laptop already in somebody else's hands. That is the same size of decision
+ * as changing an officer's role, and gets the same extra verification.
+ */
+governmentRouter.post(
+  '/devices/:id/block',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(500) }),
+    async (req, res, data) => {
+      res.json(
+        await officerDevices.blockDevice(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data.reason,
+        ),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/devices/:id/unblock',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(500) }),
+    async (req, res, data) => {
+      await officerDevices.unblockDevice(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data.reason,
+      );
+      res.json({ unblocked: true });
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Evidence that did not come from this platform (Addendum §23)
+// ---------------------------------------------------------------------------
+
+/*
+ * The body is the file, not a multipart envelope.
+ *
+ * The same decision the KYC upload made and for the same reason: an officer
+ * attaches one document at a time, and parsing a multipart body to find it
+ * would be a dependency and a parser for no gain. The declared type is checked
+ * against the bytes inside `uploadEvidence`, because a Content-Type header is
+ * the uploader's claim and nothing more.
+ */
+const evidenceBody = express.raw({
+  type: cases.EVIDENCE_CONTENT_TYPES,
+  limit: cases.MAX_EVIDENCE_BYTES,
+});
+
+governmentRouter.post(
+  '/cases/:id/evidence/upload',
+  requirePermission('case:contribute'),
+  evidenceBody,
+  validateQuery(
+    z.object({
+      filename: z.string().trim().min(1).max(200),
+      description: z.string().trim().min(3).max(500),
+      provenance: z.string().trim().min(3).max(500),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await cases.uploadEvidence(pool, officer(req), req.params.id!, {
+          bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+          declaredContentType: (req.header('content-type') ?? '').split(';')[0]!.trim(),
+          filename: data.filename,
+          description: data.description,
+          provenance: data.provenance,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/cases/evidence/:id/file',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    const file = await cases.readEvidence(pool, officer(req), req.params.id!);
+    res.setHeader('content-type', file.contentType);
+    // Never cached: this is somebody's bank advice on an open investigation.
+    res.setHeader('cache-control', 'private, no-store');
+    res.setHeader('content-disposition', `inline; filename="${file.filename}"`);
+    res.send(file.bytes);
+  }),
 );
 
 function viewerFrom(req: RouteRequest): support.Viewer {
