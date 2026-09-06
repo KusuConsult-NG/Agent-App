@@ -229,6 +229,26 @@ describe('a workbook the recipient can actually open', () => {
     assert.ok(files.get('xl/worksheets/sheet1.xml')!.includes('<sheetData>'));
   });
 
+  /*
+   * The named style a reader looks for before it looks at anything else.
+   *
+   * The first version of the writer left `cellStyles` out: nothing in this
+   * workbook uses a named style, and every attribute in the ones above has a
+   * default a reader is entitled to assume. Opening the file with openpyxl --
+   * an implementation with no shared code with this one -- produced a warning
+   * that it had found no default style and was supplying its own, which is one
+   * reader being generous and not a thing to rely on from the next.
+   *
+   * Asserted here rather than left to that manual check, because the manual
+   * check happened once and this file is edited again.
+   */
+  it('declares the Normal style, so a strict reader has one to fall back on', () => {
+    const styles = unzip(toXlsx([{ a: 1 }])).get('xl/styles.xml')!;
+    assert.match(styles, /<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"\/><\/cellStyles>/);
+    // And the cell formats name their parts rather than relying on defaults.
+    assert.match(styles, /<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"\/>/);
+  });
+
   it('refuses a sheet name Excel would not accept', () => {
     const files = unzip(toXlsx([{ a: 1 }], 'March/April: report [draft]'));
     const workbook = files.get('xl/workbook.xml')!;

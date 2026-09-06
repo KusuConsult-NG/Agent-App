@@ -384,8 +384,26 @@ function workbookParts(rows: Record<string, unknown>[], sheetName: string): [str
         '<font><b/><sz val="11"/><name val="Calibri"/></font></fonts>' +
         '<fills count="1"><fill><patternFill patternType="none"/></fill></fills>' +
         '<borders count="1"><border/></borders>' +
-        '<cellStyleXfs count="1"><xf/></cellStyleXfs>' +
-        '<cellXfs count="2"><xf xfId="0"/><xf fontId="1" applyFont="1" xfId="0"/></cellXfs>' +
+        '<cellStyleXfs count="1">' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+        '<cellXfs count="2">' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+        '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+        '</cellXfs>' +
+        /*
+         * The Normal named style, which a reader looks for before it looks at
+         * anything else.
+         *
+         * Left out of the first version because nothing in this workbook uses
+         * a named style, and every attribute above has a default that a reader
+         * is entitled to assume. openpyxl opened the file and warned that it
+         * had no default style and was supplying its own -- which is one
+         * implementation being generous, and not a thing to rely on from the
+         * next one. A warning from a tolerant reader is the cheapest possible
+         * notice that a stricter reader may refuse.
+         */
+        '<cellStyles count="1">' +
+        '<cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
         '</styleSheet>',
     ],
     ['xl/worksheets/sheet1.xml', sheetXml(rows, headers)],
