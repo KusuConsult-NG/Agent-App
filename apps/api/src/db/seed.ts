@@ -829,14 +829,35 @@ async function seedRoles(): Promise<void> {
     // citizen never signs in, so there is no credential to phish.
   };
 
+  /*
+   * How many rows each shipped role may export.
+   *
+   * Seeded rather than left to the column default, because the default is the
+   * floor a role PSIRS creates gets and these six are decisions: the auditor
+   * needs the whole population or an examination is not one; the field agent
+   * takes nothing out at all.
+   *
+   * Only applied when the row is created. An administrator who has raised a
+   * limit has made a decision, and a re-seed must not quietly put it back --
+   * which is the same rule the permission grants below follow.
+   */
+  const EXPORT_LIMITS: Record<string, number> = {
+    agent: 0,
+    supervisor: 20_000,
+    revenue_officer: 20_000,
+    finance_officer: 50_000,
+    auditor: 100_000,
+    admin: 50_000,
+  };
+
   await withTransaction(async (client) => {
     for (const [name, [label, labelHa]] of Object.entries(LABELS)) {
       await client.query(
-        `INSERT INTO roles (name, label, label_ha, is_system, is_portal)
-         VALUES ($1,$2,$3,TRUE,$4)
+        `INSERT INTO roles (name, label, label_ha, is_system, is_portal, export_row_limit)
+         VALUES ($1,$2,$3,TRUE,$4,$5)
          ON CONFLICT (name) DO UPDATE SET label = EXCLUDED.label,
                                           label_ha = EXCLUDED.label_ha`,
-        [name, label, labelHa, PORTAL.includes(name)],
+        [name, label, labelHa, PORTAL.includes(name), EXPORT_LIMITS[name] ?? 5000],
       );
     }
 

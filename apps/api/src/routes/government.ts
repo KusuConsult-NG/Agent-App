@@ -2207,6 +2207,34 @@ governmentRouter.post(
   ),
 );
 
+/*
+ * How much of the register this role may take out in one file.
+ *
+ * Step-up, like the grants beside it. Raising an export limit does not change
+ * what an officer may see -- it changes how much of it can leave on a laptop,
+ * which is the same size of decision.
+ */
+governmentRouter.post(
+  '/roles/:name/export-limit',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      limit: z.coerce.number().int().min(0).max(1_000_000),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      await rbacStore.setExportLimit(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.limit,
+        data.reason,
+      );
+      res.json({ limit: data.limit });
+    },
+  ),
+);
+
 governmentRouter.post(
   '/roles/:name/restore',
   requirePermission('user:manage'),

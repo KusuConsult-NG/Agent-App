@@ -41,7 +41,9 @@ import {
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { rowLimitFor, toXlsx } from '../services/export';
+import { grantStepUp } from './helpers';
 import { forget } from '../services/rbac-store';
+import { forgetLimits } from '../services/export';
 
 const PHONES = {
   auditor: '+2348081000001',
@@ -60,6 +62,16 @@ after(async () => {
 beforeEach(async () => {
   await resetDatabase();
   await seedReferenceData();
+  /*
+   * Both caches, because both outlive a reset.
+   *
+   * The permission map and the export limits are cached for thirty seconds
+   * against a role name, and `resetDatabase` empties the tables underneath
+   * them. A test that revoked a permission or lowered a limit would otherwise
+   * leave the next test running against a snapshot of its own changes.
+   */
+  forget();
+  forgetLimits();
   for (const [key, phone] of Object.entries(PHONES)) {
     await createGovernmentUser({
       fullName: `Export ${key}`,
@@ -313,11 +325,77 @@ describe('an export is a different act from a read', () => {
     assert.equal(count!.count, '0');
   });
 
-  it('caps an export at what the role may take, by role', () => {
-    assert.ok(rowLimitFor('auditor') > rowLimitFor('revenue_officer'),
-      'an examination that cannot see the population is not an examination');
-    assert.ok(rowLimitFor('a_role_psirs_invented') < rowLimitFor('admin'),
-      'a role nobody has decided about gets the floor, not the ceiling');
+  it('caps an export at what the role may take, by role', async () => {
+    assert.ok(
+      (await rowLimitFor('auditor')) > (await rowLimitFor('revenue_officer')),
+      'an examination that cannot see the population is not an examination',
+    );
+    assert.equal(
+      await rowLimitFor('agent'),
+      0,
+      'the field agent takes nothing out of the platform at all',
+    );
+  });
+
+  /*
+   * The reason this moved out of `services/export.ts` in migration 066.
+   *
+   * A role PSIRS creates used to get a hard-coded floor until an engineer
+   * edited a TypeScript file and PSIRS waited for a release -- the same shape
+   * of problem the permission map had before migration 059, one file over.
+   */
+  it('lets an administrator change what a role may take, without a deployment', async () => {
+    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    await post(
+      '/government/roles',
+      { name: 'zonal_coordinator', label: 'Zonal coordinator', isPortal: true },
+      auth('admin'),
+    );
+    assert.equal(await rowLimitFor('zonal_coordinator'), 5000, 'a new role starts at the floor');
+
+    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    const raised = await post(
+      '/government/roles/zonal_coordinator/export-limit',
+      { limit: 40000, reason: 'Zonal coordinators report on the whole zone each month.' },
+      auth('admin'),
+    );
+    assert.equal(raised.status, 200, JSON.stringify(raised.body));
+    assert.equal(await rowLimitFor('zonal_coordinator'), 40000, 'and the cache does not hold it back');
+
+    const entry = await queryOne<{ old_value: { exportRowLimit: number }; new_value: { exportRowLimit: number } }>(
+      pool,
+      `SELECT old_value, new_value FROM audit_logs
+        WHERE action = 'rbac.role.export_limit' ORDER BY sequence_no DESC LIMIT 1`,
+    );
+    assert.equal(entry!.old_value.exportRowLimit, 5000);
+    assert.equal(entry!.new_value.exportRowLimit, 40000);
+  });
+
+  it('refuses a limit above what the writer could actually produce', async () => {
+    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    const absurd = await post(
+      '/government/roles/auditor/export-limit',
+      { limit: 9_000_000, reason: 'Asking for more than the file format can carry.' },
+      auth('admin'),
+    );
+    assert.equal(absurd.status, 422, JSON.stringify(absurd.body));
+  });
+
+  /*
+   * Zero is a decision, and a different one from the permission being absent:
+   * that says whether they may export, this says how much.
+   */
+  it('lets a role be set to export nothing, and says so in those words', async () => {
+    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    await post(
+      '/government/roles/revenue_officer/export-limit',
+      { limit: 0, reason: 'Field officers stop taking copies pending the data review.' },
+      auth('admin'),
+    );
+
+    const refused = await get('/government/transactions?limit=10&format=csv', auth('revenue'));
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+    assert.match(JSON.stringify(refused.body), /may not take a copy/i);
   });
 });
 

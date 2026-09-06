@@ -1134,6 +1134,9 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcRlExportLimit: string;
+  ofcRlExportsNothing: string;
+  ofcCwSave: string;
   enumIntegrationAlert: string;
   enumNeverCalled: string;
   enumDegraded: string;
@@ -3754,6 +3757,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcRlExportLimit: "Rows it may export",
+    ofcRlExportsNothing: "Exports nothing",
+    ofcCwSave: "Save",
     enumIntegrationAlert: "An outside service is not answering",
     enumNeverCalled: "Not called yet",
     enumDegraded: "A call went unanswered",
@@ -6231,6 +6237,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcRlExportLimit: "Layukan da zai iya fitarwa",
+    ofcRlExportsNothing: "Ba ya fitar da komai",
+    ofcCwSave: "Ajiye",
     enumIntegrationAlert: "Wata hidimar waje ba ta amsawa",
     enumNeverCalled: "Ba a kira ba tukuna",
     enumDegraded: "An yi kira ba a amsa ba",

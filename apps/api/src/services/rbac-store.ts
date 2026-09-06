@@ -43,6 +43,7 @@ import { PERMISSIONS, permissionsForRole as compiledPermissionsFor, type Permiss
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { forgetLimits } from './export';
 import { log } from '../lib/logger';
 import { recordAudit } from './audit';
 
@@ -222,6 +223,7 @@ export async function listRoles(db: Db) {
   return query(
     db,
     `SELECT r.name, r.label, r.label_ha, r.description, r.is_system, r.is_portal, r.status,
+            r.export_row_limit,
             (SELECT count(*)::text FROM users u WHERE u.role = r.name AND u.status = 'ACTIVE')
               AS officers,
             COALESCE(
@@ -232,6 +234,64 @@ export async function listRoles(db: Db) {
        FROM roles r
       ORDER BY r.is_system DESC, r.name`,
   );
+}
+
+/**
+ * How many rows this role may take out of the platform.
+ *
+ * Its own function rather than a general "update the role", because it is the
+ * only field on a role that is a control: the label and the description are
+ * how a role reads, and this is how much of the register can leave in one
+ * file. A single-purpose endpoint is what makes the audit entry say what
+ * actually changed rather than "the role was edited".
+ */
+export async function setExportLimit(
+  actor: Actor,
+  roleName: string,
+  limit: number,
+  reason: string,
+): Promise<void> {
+  await withTransaction(async (client) => {
+    const role = await loadRole(client, roleName);
+
+    const previous = await queryOne<{ export_row_limit: number }>(
+      client,
+      'SELECT export_row_limit FROM roles WHERE name = $1',
+      [roleName],
+    );
+    if (previous!.export_row_limit === limit) {
+      throw conflict(
+        'LIMIT_UNCHANGED',
+        `${role.label} may already export ${limit.toLocaleString()} rows at a time.`,
+      );
+    }
+
+    /*
+     * The bounds are the database's, checked here so the administrator gets a
+     * sentence rather than a constraint violation. The ceiling is not a policy
+     * -- it is what the XLSX writer can actually produce, and a limit above it
+     * would be a promise the code cannot keep.
+     */
+    await client.query('UPDATE roles SET export_row_limit = $2, updated_at = now() WHERE name = $1', [
+      roleName,
+      limit,
+    ]);
+
+    await recordAudit(client, {
+      actorId: actor.userId,
+      actorRole: actor.role,
+      action: 'rbac.role.export_limit',
+      entityType: 'role',
+      entityId: roleName,
+      oldValue: { exportRowLimit: previous!.export_row_limit },
+      newValue: { exportRowLimit: limit },
+      reason,
+    });
+  });
+
+  // Both caches: the map's, and the export limit's next door.
+  forget();
+  forgetLimits();
 }
 
 /**

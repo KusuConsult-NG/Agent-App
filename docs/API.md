@@ -374,6 +374,11 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
+| `GET` | `/government/roles` | `user:manage` — every role, its permissions, its officers, and how many rows it may export |
+| `POST` | `/government/roles` | `user:manage`, step-up — create a role, optionally copying an existing one's grants |
+| `POST` | `/government/roles/:name/grant` · `/revoke` | `user:manage`, step-up — the delegation of authority, as data since migration 059 |
+| `POST` | `/government/roles/:name/retire` · `/restore` | `user:manage`, step-up — a retired role cannot be assigned (migration 060) |
+| `POST` | `/government/roles/:name/export-limit` | `user:manage`, step-up — rows the role may take out in one file; 0 means none |
 | `GET` | `/government/audit?format=json\|csv\|xlsx\|pdf` | `audit:read`; any format but `json` also needs `data:export` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |

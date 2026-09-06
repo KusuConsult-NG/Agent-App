@@ -26,13 +26,14 @@ statement that nothing is left to do — they are a statement that the brief's
 own checklist is answered, each row by a named file, endpoint or migration a
 reviewer can open.
 
-Two things that would still be worth doing and are outside what the brief asks
-for, recorded here rather than left implied:
+Two things that were worth doing beyond what the brief asks, recorded here
+when they were still outstanding and since built:
 
-* **The row limits on exports are constants in `services/export.ts`,** not
-  configuration. A role PSIRS creates gets the floor until an engineer changes
-  the file, which is the same shape of problem the role-permission map had
-  before migration 059.
+* ~~The row limits on exports are constants in `services/export.ts`.~~ **Done**
+  — migration 066 put the number on the role, changeable from `/roles` under
+  step-up and audited. Zero means the role exports nothing, which is a
+  different statement from the permission being absent: that says whether they
+  may, this says how much.
 * ~~There is no live probe of the outside services.~~ **Done** — migration 065.
   Not a probe: every adapter already returns `UNAVAILABLE` rather than throwing
   when it cannot reach its service, so `integration_health` records the outcome
@@ -68,7 +69,7 @@ are all Complete and each is covered by a test that fails if it stops being.
 | Search | Complete | `GET /government/search`, portal shell search box — see §5 |
 | Saved filters | Complete | `lib/filters.ts` keeps them in the address and in the session: the URL first, so a filtered view is shareable and the back button behaves; then this session's storage, so returning to a screen restores what the officer had. An emptied filter in the URL beats the remembered one, because clearing a field is a decision |
 | Reports | Complete | `services/reports.ts`, 20+ report queries across dashboards, geography, agents, remittance |
-| Export controls | Complete | CSV, XLSX and PDF from one path (`services/export.ts`), gated on `data:export` — its own permission, so it can be taken from a role without taking their reports away — capped per role, and audited with the filters and the row count |
+| Export controls | Complete | CSV, XLSX and PDF from one path (`services/export.ts`), gated on `data:export` — its own permission, so it can be taken from a role without taking their reports away — capped per role by a number on the role itself (migration 066), and audited with the filters and the row count |
 | Activity history | Complete | `audit_logs` with a verified hash chain (`GET /government/audit/verify`) |
 | Help / support | Complete | `support_tickets`, `/support` |
 

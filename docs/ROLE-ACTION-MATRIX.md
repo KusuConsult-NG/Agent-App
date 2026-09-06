@@ -151,7 +151,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `approval:review` | Approve | supervisor, revenue_officer, finance_officer | `GET /agents/bank-changes`<br>`GET /government/approvals`<br>`POST /government/approvals/:id/decide`<br>decided in `services/cases.ts` |
 | `approval:authorise` | Approve | supervisor, finance_officer | `GET /government/approvals`<br>`POST /government/approvals/:id/decide`<br>decided in `services/cases.ts` |
 | `system:configure` | Configure | admin | `POST /agents/app-version`<br>`GET /agents/app-version/history`<br>`GET /government/platform/integrations` |
-| `user:manage` | Edit | admin | `GET /government/users`<br>`POST /government/users/:id/role`<br>`POST /government/users/:id/status`<br>`GET /government/users/:id/territories`<br>…and 17 more |
+| `user:manage` | Edit | admin | `GET /government/users`<br>`POST /government/users/:id/role`<br>`POST /government/users/:id/status`<br>`GET /government/users/:id/territories`<br>…and 18 more |
 
 ## C. Actions that need a second factor
 

@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2374 strings, grouped by where an agent meets them. Lower stakes
+2377 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1326,6 +1326,9 @@ instructions — but they are what an agent reads all day.
 | `ofcFrom` | From | Daga | ☐ | |
 | `ofcTo` | To | Zuwa | ☐ | |
 | `ofcExportCsv` | Export CSV | Fitar da CSV | ☐ | |
+| `ofcRlExportLimit` | Rows it may export | Layukan da zai iya fitarwa | ☐ | |
+| `ofcRlExportsNothing` | Exports nothing | Ba ya fitar da komai | ☐ | |
+| `ofcCwSave` | Save | Ajiye | ☐ | |
 | `ofcInHint` | What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it. | Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi. | ☐ | |
 | `ofcInUnread` | Not yet read | Ba a karanta ba tukuna | ☐ | |
 | `ofcInCritical` | Needing attention now | Na bukatar kulawa yanzu | ☐ | |

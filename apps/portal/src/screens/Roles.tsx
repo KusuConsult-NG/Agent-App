@@ -39,6 +39,7 @@ interface Role {
   status: string;
   officers: string;
   permissions: string[];
+  export_row_limit: number;
 }
 
 export function RolesScreen({ user }: { user: User }) {
@@ -141,6 +142,36 @@ export function RolesScreen({ user }: { user: User }) {
                 key: 'status',
                 label: 'ofcCwStatus',
                 render: (row: Role) => <Badge status={row.status} />,
+              },
+              {
+                /*
+                 * How much of the register this role can take out in one file.
+                 *
+                 * A limit rather than a yes-or-no, because the permission
+                 * already answers whether they may export at all. Zero is
+                 * shown as a sentence rather than as a number: "0" in a column
+                 * of thousands reads as missing data, and this is a decision.
+                 */
+                key: 'export_row_limit',
+                label: 'ofcRlExportLimit',
+                numeric: true,
+                render: (row: Role) =>
+                  can('user:manage') ? (
+                    <ExportLimitControl
+                      role={row}
+                      user={user}
+                      onDone={async (message) => {
+                        setNotice(message);
+                        await load();
+                      }}
+                    />
+                  ) : (
+                    <span>
+                      {row.export_row_limit === 0
+                        ? t.ofcRlExportsNothing
+                        : row.export_row_limit.toLocaleString()}
+                    </span>
+                  ),
               },
               {
                 key: 'open',
@@ -481,6 +512,89 @@ function NewRoleForm({
         }}
       >
         {busy ? '…' : t.ofcRlNewRole}
+      </button>
+    </div>
+  );
+}
+
+// ===========================================================================
+/**
+ * Raising or lowering how much of the register a role may take out.
+ *
+ * This was a constant in `services/export.ts` until migration 066, which meant
+ * a role PSIRS created got the floor until an engineer edited a file and PSIRS
+ * waited for a release. It is the same shape of problem the permission map had
+ * before roles became data, one file over.
+ *
+ * The current value is shown in the box rather than an empty field with a
+ * placeholder: an administrator changing a limit needs to see what it is now,
+ * and typing over a number is how somebody adjusts one.
+ */
+function ExportLimitControl({
+  role,
+  user,
+  onDone,
+}: {
+  role: Role;
+  user: User;
+  onDone: (message: string) => Promise<void>;
+}) {
+  const { t } = usePortalI18n();
+  const [limit, setLimit] = useState(String(role.export_row_limit));
+  const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  if (!open) {
+    return (
+      <button type="button" className="link" onClick={() => setOpen(true)}>
+        {role.export_row_limit === 0
+          ? t.ofcRlExportsNothing
+          : role.export_row_limit.toLocaleString()}
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <ErrorAlert error={error} />
+      <input
+        type="number"
+        min={0}
+        max={1000000}
+        value={limit}
+        onChange={(event) => setLimit(event.target.value)}
+      />{' '}
+      <input
+        value={reason}
+        placeholder={t.ofcCwWhy}
+        onChange={(event) => setReason(event.target.value)}
+      />{' '}
+      <button
+        type="button"
+        className="small"
+        disabled={busy || reason.trim().length < 10}
+        onClick={async () => {
+          setBusy(true);
+          setError(null);
+          try {
+            await stepUp('user.role.change', user.phone);
+            await api.post(`/government/roles/${role.name}/export-limit`, {
+              limit: Number(limit),
+              reason: reason.trim(),
+            });
+            setOpen(false);
+            setReason('');
+            await onDone(t.ofcCwSaved);
+          } catch (caught) {
+            setError(caught instanceof ApiRequestError ? caught.error : null);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {t.ofcCwSave}
       </button>
     </div>
   );

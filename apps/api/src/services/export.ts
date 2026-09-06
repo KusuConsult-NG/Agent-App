@@ -38,6 +38,7 @@ import PDFDocument from 'pdfkit';
 import { deflateRawSync, crc32 } from 'node:zlib';
 import type { PoolClient } from 'pg';
 import { config } from '../config';
+import { pool, query, queryOne } from '../db/pool';
 import { recordAudit } from './audit';
 import { forbidden } from '../lib/errors';
 
@@ -53,24 +54,65 @@ export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
  * examination, and the field roles are lowest because their legitimate exports
  * are about their own territory.
  *
- * Keyed by role name rather than typed against the six the platform ships
- * with, because roles became data in migration 059: a role PSIRS creates for
- * themselves is a real case, and it gets the floor below until somebody
- * decides otherwise.
+ * WHY THIS READS THE DATABASE
+ *
+ * It used to be a constant map here, with a floor for anything not in it.
+ * Since migration 059 an administrator creates their own roles, so that floor
+ * was a role PSIRS invented waiting on an engineer and a release before its
+ * officers could export a useful report -- the same shape of problem migration
+ * 059 existed to fix for permissions, reproduced one file over. Migration 066
+ * put the number on the role.
+ *
+ * The fallback below is not a policy. It is what to do when the role row has
+ * gone missing underneath a live request, which should not happen and must not
+ * mean "unlimited": erring towards the smallest limit costs an officer a
+ * refusal they can act on, and erring the other way puts the register on
+ * somebody's laptop.
  */
-const ROW_LIMITS: Record<string, number> = {
-  auditor: 100_000,
-  admin: 50_000,
-  finance_officer: 50_000,
-  revenue_officer: 20_000,
-  supervisor: 20_000,
-};
+const LIMIT_WHEN_THE_ROLE_CANNOT_BE_READ = 0;
 
-/** What a role PSIRS created gets until somebody decides otherwise. */
-const DEFAULT_ROW_LIMIT = 5_000;
+/**
+ * Cached for the same thirty seconds, and for the same reasons, as the
+ * permission map next door: an export is not a hot path, but reading two rows
+ * per download to answer a question that changes about once a year is a query
+ * that exists to be forgotten about.
+ */
+let cache: { at: number; limits: Map<string, number> } | null = null;
+const CACHE_MS = 30_000;
 
-export function rowLimitFor(role: string): number {
-  return ROW_LIMITS[role] ?? DEFAULT_ROW_LIMIT;
+export function forgetLimits(): void {
+  cache = null;
+}
+
+export async function rowLimitFor(role: string): Promise<number> {
+  if (!cache || Date.now() - cache.at > CACHE_MS) {
+    const rows = await query<{ name: string; export_row_limit: number }>(
+      pool,
+      'SELECT name, export_row_limit FROM roles',
+    );
+    cache = { at: Date.now(), limits: new Map(rows.map((row) => [row.name, row.export_row_limit])) };
+  }
+
+  const cached = cache.limits.get(role);
+  if (cached !== undefined) return cached;
+
+  /*
+   * A name the cache has not heard of is asked about, not refused.
+   *
+   * The cache is a snapshot, and a role created thirty seconds ago is exactly
+   * the role an administrator is about to test. Falling through to the
+   * fallback here made a brand-new role export nothing until the snapshot
+   * expired -- safe, and indistinguishable from a bug to the person who had
+   * just set its limit.
+   */
+  const row = await queryOne<{ export_row_limit: number }>(
+    pool,
+    'SELECT export_row_limit FROM roles WHERE name = $1',
+    [role],
+  );
+  if (!row) return LIMIT_WHEN_THE_ROLE_CANNOT_BE_READ;
+  cache.limits.set(role, row.export_row_limit);
+  return row.export_row_limit;
 }
 
 export interface ExportRequest {
@@ -94,11 +136,13 @@ export async function recordExport(
   request: ExportRequest,
   rowCount: number,
 ): Promise<void> {
-  const limit = rowLimitFor(request.actorRole);
+  const limit = await rowLimitFor(request.actorRole);
   if (rowCount > limit) {
     throw forbidden(
-      `This export is ${rowCount.toLocaleString()} rows and your role may export ` +
-        `${limit.toLocaleString()} at a time.`,
+      limit === 0
+        ? 'Your role may read this on screen and may not take a copy of it.'
+        : `This export is ${rowCount.toLocaleString()} rows and your role may export ` +
+          `${limit.toLocaleString()} at a time.`,
       'Narrow the period or the filters, or ask an administrator to raise the limit for your role.',
     );
   }
