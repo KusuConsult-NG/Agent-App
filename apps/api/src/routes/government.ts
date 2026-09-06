@@ -29,6 +29,7 @@ import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
 import * as cases from '../services/cases';
 import * as investigation from '../services/investigation';
+import * as targets from '../services/targets';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -1759,6 +1760,196 @@ governmentRouter.get(
     const scope = await resolveReportScope(pool, req.auth!);
     res.json(await investigation.transaction360(pool, officer(req), req.params.key!, scope));
   }),
+);
+
+/*
+ * The taxpayer base as a population, not as a count.
+ *
+ * "Active" here means paying within the window, not `status = 'ACTIVE'` — see
+ * the service. A register full of people who last paid two years ago reports
+ * 100% active under the other reading, which is the reading the dashboard had.
+ */
+governmentRouter.get(
+  '/taxpayers/analytics',
+  requirePermission('report:read:all', 'report:read:territory', 'taxpayer:read:all'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      wardId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.taxpayerAnalytics(pool, data, scope));
+    },
+  ),
+);
+
+/** Commission by place and by month, which is how a Council asks about it. */
+governmentRouter.get(
+  '/commissions/by-place',
+  requirePermission('commission:read:all'),
+  validateQuery(
+    z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.commissionByPlaceAndPeriod(pool, data, scope));
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Revenue targets and forecasting
+// ---------------------------------------------------------------------------
+
+/*
+ * Target versus actual.
+ *
+ * Every reporting role reads this: an achievement percentage is meaningless to
+ * a finance officer who can see the actual and not the number it is measured
+ * against. Setting one is `target:manage` and sits with the administrator and
+ * the revenue officer alone.
+ */
+governmentRouter.get(
+  '/targets',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+      scope: z.enum(targets.TARGET_SCOPES).optional(),
+      periodKind: z.enum(targets.TARGET_PERIODS).optional(),
+      lgaId: uuidSchema.optional(),
+      includeInactive: z.coerce.boolean().optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await targets.targetProgress(pool, data, scope));
+    },
+  ),
+);
+
+/** The state figure beside the sum of what was apportioned below it. */
+governmentRouter.get(
+  '/targets/rollup',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    async (_req, res, data) => {
+      res.json(await targets.targetRollup(pool, data));
+    },
+  ),
+);
+
+/*
+ * The calendar period a label names, resolved on the server.
+ *
+ * A client computing "this month" from its own clock can be wrong about it, and
+ * a target set against the wrong dates is silently wrong for a month.
+ */
+governmentRouter.get(
+  '/targets/period',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({
+      kind: z.enum(targets.TARGET_PERIODS),
+      anchor: z.coerce.date().optional(),
+    }),
+    async (_req, res, data) => {
+      const period = targets.resolvePeriod(data.kind, data.anchor);
+      res.json({
+        kind: data.kind,
+        periodStart: period.start.toISOString().slice(0, 10),
+        periodEnd: period.end.toISOString().slice(0, 10),
+      });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/targets',
+  requirePermission('target:manage'),
+  validateBody(
+    z.object({
+      scope: z.enum(targets.TARGET_SCOPES),
+      lgaId: uuidSchema.nullish(),
+      categoryId: uuidSchema.nullish(),
+      revenueItemId: uuidSchema.nullish(),
+      agentId: uuidSchema.nullish(),
+      periodKind: z.enum(targets.TARGET_PERIODS),
+      periodStart: z.coerce.date(),
+      periodEnd: z.coerce.date(),
+      amountKobo: koboSchema,
+      note: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      const result = await targets.setTarget(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        { ...data, amountKobo: BigInt(data.amountKobo) },
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/targets/:id/withdraw',
+  requirePermission('target:manage'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await targets.withdrawTarget(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * A forecast, labelled as one.
+ *
+ * The payload carries `is_forecast`, the `basis` it was computed from and a
+ * confidence, because a projection presented as a bare figure is how an
+ * estimate becomes a number somebody budgets against. The brief asks
+ * specifically that this be clearly labelled and not treated as guaranteed
+ * revenue.
+ */
+governmentRouter.get(
+  '/forecast',
+  requirePermission('target:read:all', 'report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      periodKind: z.enum(targets.TARGET_PERIODS).default('MONTHLY'),
+      periodStart: z.coerce.date().optional(),
+      periodEnd: z.coerce.date().optional(),
+      lgaId: uuidSchema.nullish(),
+      categoryId: uuidSchema.nullish(),
+      revenueItemId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      const period =
+        data.periodStart && data.periodEnd
+          ? { start: data.periodStart, end: data.periodEnd }
+          : targets.resolvePeriod(data.periodKind);
+      res.json(
+        await targets.forecast(
+          pool,
+          {
+            periodStart: period.start,
+            periodEnd: period.end,
+            lgaId: data.lgaId,
+            categoryId: data.categoryId,
+            revenueItemId: data.revenueItemId,
+          },
+          scope,
+        ),
+      );
+    },
+  ),
 );
 
 // ---------------------------------------------------------------------------

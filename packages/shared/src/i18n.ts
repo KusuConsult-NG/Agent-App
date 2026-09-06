@@ -1518,6 +1518,118 @@ export interface TranslationDictionary {
   ofcCwIntro: string;
   ofcCwOpenCase: string;
   ofcCwStatus: string;
+  ofcDbByChannel: string;
+  ofcDbByChannelBody: string;
+  ofcDbByTaxpayerType: string;
+  ofcDbByItem: string;
+  ofcDbByItemBody: string;
+  ofcDbReversed: string;
+  ofcDbRefunded: string;
+  ofcDbAgentsOnline: string;
+  ofcDbAgentsOnlineHint: string;
+  ofcDbAgentsSuspended: string;
+  ofcDbExpectedRevenue: string;
+  ofcDbExpectedRevenueHint: string;
+  ofcNavTaxpayerAnalytics: string;
+  ofcTaTitle: string;
+  ofcTaIntro: string;
+  ofcTaActive: string;
+  ofcTaActiveHint: string;
+  ofcTaInactive: string;
+  ofcTaNeverPaid: string;
+  ofcTaTotal: string;
+  ofcTaNewThisMonth: string;
+  ofcTaAverageLifetime: string;
+  ofcTaFrequency: string;
+  ofcTaFrequencyBody: string;
+  ofcTaByLga: string;
+  ofcTaByCategory: string;
+  ofcTaTaxpayersAssessed: string;
+  ofcTaTaxpayersPaid: string;
+  ofcTaAveragePayment: string;
+  ofcTaComplianceScore: string;
+  ofcTaOutstanding: string;
+  ofcCmByPlace: string;
+  ofcCmByPeriod: string;
+  ofcCmAccrued: string;
+  ofcCmPaidOut: string;
+  ofcCmOutstandingCommission: string;
+  enumOnce: string;
+  enumTwoToThree: string;
+  enumFourToEleven: string;
+  enumTwelveOrMore: string;
+  ofcDbYesterday: string;
+  ofcDbThisWeek: string;
+  ofcDbVsYesterday: string;
+  ofcDbVsLastWeek: string;
+  ofcDbVsLastMonth: string;
+  ofcDbVsLastYear: string;
+  ofcDbNoComparison: string;
+  ofcDbLastMonthWhole: string;
+  ofcDbDeclining: string;
+  ofcDbDecliningBody: string;
+  ofcDbNoneDeclining: string;
+  ofcDbChange: string;
+  ofcDbShareOfMonth: string;
+  ofcRvAverageTransaction: string;
+  ofcRvCompliance: string;
+  ofcRvComplianceHint: string;
+  ofcPfGrowth: string;
+  ofcPfCategories: string;
+  enumCategory: string;
+  enumItem: string;
+  enumLga: string;
+  enumWithdrawn: string;
+  ofcNavTargets: string;
+  ofcTgTitle: string;
+  ofcTgIntro: string;
+  ofcTgSetTarget: string;
+  ofcTgScope: string;
+  ofcTgScopeState: string;
+  ofcTgScopeLga: string;
+  ofcTgScopeCategory: string;
+  ofcTgScopeItem: string;
+  ofcTgScopeAgent: string;
+  ofcTgPeriod: string;
+  ofcTgPeriodDaily: string;
+  ofcTgPeriodWeekly: string;
+  ofcTgPeriodMonthly: string;
+  ofcTgPeriodQuarterly: string;
+  ofcTgPeriodAnnual: string;
+  ofcTgAmount: string;
+  ofcTgNote: string;
+  ofcTgTarget: string;
+  ofcTgCollected: string;
+  ofcTgAchievement: string;
+  ofcTgGap: string;
+  ofcTgThroughPeriod: string;
+  ofcTgRollup: string;
+  ofcTgRollupBody: string;
+  ofcTgStateTarget: string;
+  ofcTgApportioned: string;
+  ofcTgLgasWithout: string;
+  ofcTgWithdraw: string;
+  ofcTgWithdrawReason: string;
+  ofcTgSuperseded: string;
+  ofcTgSetBy: string;
+  ofcTgShowSuperseded: string;
+  ofcNoneTargetsSet: string;
+  ofcFcTitle: string;
+  ofcFcNotATarget: string;
+  ofcFcProjected: string;
+  ofcFcBasis: string;
+  ofcFcConfidence: string;
+  ofcFcSeasonalShare: string;
+  ofcFcComparablePeriods: string;
+  ofcFcProjectedAchievement: string;
+  forecastSeasonal: string;
+  forecastRunRate: string;
+  forecastTooEarlyInCurve: string;
+  forecastPeriodComplete: string;
+  forecastNotStarted: string;
+  enumSeasonal: string;
+  enumRunRate: string;
+  enumInsufficientHistory: string;
   enumAwaitingInformation: string;
   enumEscalated: string;
   enumInvestigating: string;
@@ -3751,6 +3863,118 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
     ofcCwOpenCase: "Open a case",
     ofcCwStatus: "Status",
+    ofcDbByChannel: "How the money arrived",
+    ofcDbByChannelBody: "Recorded on every transaction since the platform started, and never grouped until now. It is the figure behind every decision about where to put agents.",
+    ofcDbByTaxpayerType: "Individuals and businesses",
+    ofcDbByItem: "Revenue by levy",
+    ofcDbByItemBody: "One level below the category, which is where somebody's responsibility sits.",
+    ofcDbReversed: "Reversed",
+    ofcDbRefunded: "Refunded",
+    ofcDbAgentsOnline: "Agents working now",
+    ofcDbAgentsOnlineHint: "Active in the last fifteen minutes",
+    ofcDbAgentsSuspended: "Agents suspended",
+    ofcDbExpectedRevenue: "Assessed and unpaid",
+    ofcDbExpectedRevenueHint: "Money already invoiced and owed. Not a projection.",
+    ofcNavTaxpayerAnalytics: "Taxpayer base",
+    ofcTaTitle: "The taxpayer base",
+    ofcTaIntro: "Not how many people are on the register, but how many are still paying, how often, and where the ones who stopped are.",
+    ofcTaActive: "Paying",
+    ofcTaActiveHint: "Paid something in the last ninety days",
+    ofcTaInactive: "Stopped paying",
+    ofcTaNeverPaid: "Never paid",
+    ofcTaTotal: "On the register",
+    ofcTaNewThisMonth: "Registered this month",
+    ofcTaAverageLifetime: "Average paid, each",
+    ofcTaFrequency: "How often somebody who pays, pays",
+    ofcTaFrequencyBody: "Banded rather than averaged. A mean over a population where most paid once and a few paid twelve times describes nobody in it.",
+    ofcTaByLga: "The register by Local Government Area",
+    ofcTaByCategory: "Which levies the register is engaged with",
+    ofcTaTaxpayersAssessed: "Assessed",
+    ofcTaTaxpayersPaid: "Paid",
+    ofcTaAveragePayment: "Average payment",
+    ofcTaComplianceScore: "Average compliance score",
+    ofcTaOutstanding: "Outstanding",
+    ofcCmByPlace: "Commission by Local Government Area",
+    ofcCmByPeriod: "Commission by month",
+    ofcCmAccrued: "Accrued",
+    ofcCmPaidOut: "Paid",
+    ofcCmOutstandingCommission: "Outstanding",
+    enumOnce: "Once",
+    enumTwoToThree: "Two or three times",
+    enumFourToEleven: "Four to eleven times",
+    enumTwelveOrMore: "Twelve times or more",
+    ofcDbYesterday: "Yesterday",
+    ofcDbThisWeek: "This week",
+    ofcDbVsYesterday: "against yesterday",
+    ofcDbVsLastWeek: "against the same days last week",
+    ofcDbVsLastMonth: "against the same days last month",
+    ofcDbVsLastYear: "against the same period last year",
+    ofcDbNoComparison: "nothing collected then, so no comparison",
+    ofcDbLastMonthWhole: "The whole of last month",
+    ofcDbDeclining: "Categories collecting less than last month",
+    ofcDbDecliningBody: "Ranked by size, a category that halved still sits near the top and looks healthy. This is the same data ranked by direction.",
+    ofcDbNoneDeclining: "Nothing is collecting less than it did last month.",
+    ofcDbChange: "Change",
+    ofcDbShareOfMonth: "Share of the month",
+    ofcRvAverageTransaction: "Average transaction",
+    ofcRvCompliance: "Register paying",
+    ofcRvComplianceHint: "The share of taxpayers registered here who paid anything in the period.",
+    ofcPfGrowth: "Against last month",
+    ofcPfCategories: "Levies worked",
+    enumCategory: "Category",
+    enumItem: "Revenue item",
+    enumLga: "Local Government Area",
+    enumWithdrawn: "Withdrawn",
+    ofcNavTargets: "Targets & forecast",
+    ofcTgTitle: "Revenue targets",
+    ofcTgIntro: "What the Service expects to raise, and what has come in against it.",
+    ofcTgSetTarget: "Set a target",
+    ofcTgScope: "Set against",
+    ofcTgScopeState: "The whole State",
+    ofcTgScopeLga: "One Local Government Area",
+    ofcTgScopeCategory: "One revenue category",
+    ofcTgScopeItem: "One revenue item",
+    ofcTgScopeAgent: "One agent",
+    ofcTgPeriod: "Period",
+    ofcTgPeriodDaily: "Daily",
+    ofcTgPeriodWeekly: "Weekly",
+    ofcTgPeriodMonthly: "Monthly",
+    ofcTgPeriodQuarterly: "Quarterly",
+    ofcTgPeriodAnnual: "Annual",
+    ofcTgAmount: "Target amount",
+    ofcTgNote: "Why this figure",
+    ofcTgTarget: "Target",
+    ofcTgCollected: "Collected",
+    ofcTgAchievement: "Achievement",
+    ofcTgGap: "Gap",
+    ofcTgThroughPeriod: "Through the period",
+    ofcTgRollup: "State target and what was apportioned below it",
+    ofcTgRollupBody: "These do not have to agree. The State figure normally carries headroom, and an LGA with no target of its own is the more useful thing to notice.",
+    ofcTgStateTarget: "State target",
+    ofcTgApportioned: "Apportioned to LGAs",
+    ofcTgLgasWithout: "LGAs with no target",
+    ofcTgWithdraw: "Withdraw",
+    ofcTgWithdrawReason: "Why it is being withdrawn",
+    ofcTgSuperseded: "This replaces an earlier target for the same period.",
+    ofcTgSetBy: "Set by",
+    ofcTgShowSuperseded: "Include revised and withdrawn",
+    ofcNoneTargetsSet: "No target has been set for this period.",
+    ofcFcTitle: "Forecast",
+    ofcFcNotATarget: "This is a forecast, not a target and not guaranteed revenue. It is arithmetic on what has been collected so far and what previous years did by this point.",
+    ofcFcProjected: "Projected for the period",
+    ofcFcBasis: "Worked out from",
+    ofcFcConfidence: "Confidence",
+    ofcFcSeasonalShare: "Usually collected by this point",
+    ofcFcComparablePeriods: "Comparable periods used",
+    ofcFcProjectedAchievement: "Projected against target",
+    forecastSeasonal: "Shaped by the collection curve: previous years are used to say what share of a period is usually in by now.",
+    forecastRunRate: "A straight run rate. There is not enough history to know the collection curve, so this is likely to be wrong early and late in the period.",
+    forecastTooEarlyInCurve: "Previous years had collected almost nothing by this point, so the curve cannot be used yet. A straight run rate is shown instead.",
+    forecastPeriodComplete: "The period has finished. This is the actual figure, not a projection.",
+    forecastNotStarted: "The period has not started. There is nothing to project from yet.",
+    enumSeasonal: "Collection curve",
+    enumRunRate: "Run rate",
+    enumInsufficientHistory: "Not enough history",
     enumAwaitingInformation: "Awaiting information",
     enumEscalated: "Escalated",
     enumInvestigating: "Investigating",
@@ -5876,6 +6100,118 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
     ofcCwOpenCase: "Bude kara",
     ofcCwStatus: "Matsayi",
+    ofcDbByChannel: "Yadda kudin ya shigo",
+    ofcDbByChannelBody: "An rubuta shi a kan kowace ma’amala tun farkon manhajar, kuma ba a taba tarawa ba har yanzu. Shi ne adadin da ke bayan kowane shawara kan inda za a sanya wakilai.",
+    ofcDbByTaxpayerType: "Mutane da kasuwanci",
+    ofcDbByItem: "Haraji bisa kowane nau’i",
+    ofcDbByItemBody: "Mataki daya kasa da nau’in, inda alhakin wani yake.",
+    ofcDbReversed: "An soke",
+    ofcDbRefunded: "An mayar",
+    ofcDbAgentsOnline: "Wakilan da ke aiki yanzu",
+    ofcDbAgentsOnlineHint: "Sun yi aiki cikin mintuna goma sha biyar da suka wuce",
+    ofcDbAgentsSuspended: "Wakilan da aka dakatar",
+    ofcDbExpectedRevenue: "An kima kuma ba a biya ba",
+    ofcDbExpectedRevenueHint: "Kudin da aka riga aka fitar da takardar biya kuma ana bin sa. Ba hasashe ba.",
+    ofcNavTaxpayerAnalytics: "Masu biyan haraji",
+    ofcTaTitle: "Masu biyan haraji",
+    ofcTaIntro: "Ba yawan mutanen da ke rajista ba, sai dai nawa ne har yanzu ke biya, sau nawa, da kuma inda wadanda suka daina suke.",
+    ofcTaActive: "Suna biya",
+    ofcTaActiveHint: "Sun biya wani abu cikin kwanaki casa’in da suka wuce",
+    ofcTaInactive: "Sun daina biya",
+    ofcTaNeverPaid: "Ba su taba biya ba",
+    ofcTaTotal: "A rajista",
+    ofcTaNewThisMonth: "An yi rajista wannan watan",
+    ofcTaAverageLifetime: "Matsakaicin abin da kowa ya biya",
+    ofcTaFrequency: "Sau nawa mai biya yake biya",
+    ofcTaFrequencyBody: "An rarraba maimakon a dauki matsakaici. Matsakaici a cikin jama’a inda mafi yawa suka biya sau daya kuma kadan suka biya sau goma sha biyu ba ya siffanta kowa a cikinsu.",
+    ofcTaByLga: "Rajista bisa karamar hukuma",
+    ofcTaByCategory: "Harajin da masu rajista ke da alaka da su",
+    ofcTaTaxpayersAssessed: "An kima",
+    ofcTaTaxpayersPaid: "Sun biya",
+    ofcTaAveragePayment: "Matsakaicin biya",
+    ofcTaComplianceScore: "Matsakaicin makin bin doka",
+    ofcTaOutstanding: "Abin da ake bin su",
+    ofcCmByPlace: "Kwamishan bisa karamar hukuma",
+    ofcCmByPeriod: "Kwamishan bisa wata",
+    ofcCmAccrued: "An tara",
+    ofcCmPaidOut: "An biya",
+    ofcCmOutstandingCommission: "Bai biya ba",
+    enumOnce: "Sau daya",
+    enumTwoToThree: "Sau biyu ko uku",
+    enumFourToEleven: "Sau hudu zuwa goma sha daya",
+    enumTwelveOrMore: "Sau goma sha biyu ko fiye",
+    ofcDbYesterday: "Jiya",
+    ofcDbThisWeek: "Wannan makon",
+    ofcDbVsYesterday: "kan jiya",
+    ofcDbVsLastWeek: "kan kwanakin makon jiya",
+    ofcDbVsLastMonth: "kan kwanakin watan jiya",
+    ofcDbVsLastYear: "kan wannan lokaci na bara",
+    ofcDbNoComparison: "ba a tara komai a lokacin ba, don haka babu kwatanci",
+    ofcDbLastMonthWhole: "Duk watan jiya",
+    ofcDbDeclining: "Nau’ikan da suka tara kasa da watan jiya",
+    ofcDbDecliningBody: "Idan aka jera bisa girma, nau’in da ya ragu da rabi zai kasance a saman kuma zai yi kama da lafiya. Wannan bayanai iri daya ne aka jera bisa hanya.",
+    ofcDbNoneDeclining: "Babu abin da ke tarawa kasa da watan jiya.",
+    ofcDbChange: "Canji",
+    ofcDbShareOfMonth: "Kason watan",
+    ofcRvAverageTransaction: "Matsakaicin ma’amala",
+    ofcRvCompliance: "Rajistar da ke biya",
+    ofcRvComplianceHint: "Kason masu biyan haraji da aka yi rajista a nan da suka biya wani abu a lokacin.",
+    ofcPfGrowth: "Kan watan jiya",
+    ofcPfCategories: "Harajin da ake aiki da su",
+    enumCategory: "Nau’i",
+    enumItem: "Harajin guda",
+    enumLga: "Karamar hukuma",
+    enumWithdrawn: "An janye",
+    ofcNavTargets: "Manufura da hasashe",
+    ofcTgTitle: "Manufofin haraji",
+    ofcTgIntro: "Abin da Hukumar ke tsammanin tarawa, da abin da ya shigo a kansa.",
+    ofcTgSetTarget: "Sanya manufa",
+    ofcTgScope: "An sanya wa",
+    ofcTgScopeState: "Duk Jihar",
+    ofcTgScopeLga: "Karamar hukuma daya",
+    ofcTgScopeCategory: "Nau’in haraji daya",
+    ofcTgScopeItem: "Harajin guda daya",
+    ofcTgScopeAgent: "Wakili daya",
+    ofcTgPeriod: "Lokaci",
+    ofcTgPeriodDaily: "Kullum",
+    ofcTgPeriodWeekly: "Mako-mako",
+    ofcTgPeriodMonthly: "Wata-wata",
+    ofcTgPeriodQuarterly: "Kwata-kwata",
+    ofcTgPeriodAnnual: "Shekara-shekara",
+    ofcTgAmount: "Adadin manufa",
+    ofcTgNote: "Dalilin wannan adadi",
+    ofcTgTarget: "Manufa",
+    ofcTgCollected: "An tara",
+    ofcTgAchievement: "Cimma buri",
+    ofcTgGap: "Rata",
+    ofcTgThroughPeriod: "Cikin lokacin",
+    ofcTgRollup: "Manufar jiha da abin da aka raba a karkashinta",
+    ofcTgRollupBody: "Ba lallai su daidaita ba. Adadin Jihar yakan dauki karin sarari, kuma karamar hukuma da ba ta da manufa ita ce abin lura mafi amfani.",
+    ofcTgStateTarget: "Manufar jiha",
+    ofcTgApportioned: "An raba wa kananan hukumomi",
+    ofcTgLgasWithout: "Kananan hukumomin da ba su da manufa",
+    ofcTgWithdraw: "Janye",
+    ofcTgWithdrawReason: "Dalilin janyewa",
+    ofcTgSuperseded: "Wannan ya maye gurbin manufar da ta gabata na wannan lokaci.",
+    ofcTgSetBy: "Wanda ya sanya",
+    ofcTgShowSuperseded: "Hada da wadanda aka sauya ko janye",
+    ofcNoneTargetsSet: "Ba a sanya manufa don wannan lokaci ba.",
+    ofcFcTitle: "Hasashe",
+    ofcFcNotATarget: "Wannan hasashe ne, ba manufa ba kuma ba tabbataccen kudin shiga ba. Lissafi ne kan abin da aka tara ya zuwa yanzu da abin da shekarun baya suka yi a wannan lokaci.",
+    ofcFcProjected: "Hasashen lokacin",
+    ofcFcBasis: "An lissafa daga",
+    ofcFcConfidence: "Tabbaci",
+    ofcFcSeasonalShare: "Yawanci ana tarawa ya zuwa yanzu",
+    ofcFcComparablePeriods: "Lokutan da aka kwatanta",
+    ofcFcProjectedAchievement: "Hasashe kan manufa",
+    forecastSeasonal: "An tsara shi bisa yadda ake tarawa: an yi amfani da shekarun baya don sanin kaso nawa ake tarawa ya zuwa yanzu.",
+    forecastRunRate: "Kai tsaye bisa saurin tarawa. Babu isasshen tarihi don sanin yadda ake tarawa, don haka watakila ba daidai ba ne a farko da karshen lokacin.",
+    forecastTooEarlyInCurve: "Shekarun baya kusan ba su tara komai ba ya zuwa yanzu, don haka ba za a iya amfani da yadda ake tarawa ba tukuna. An nuna saurin tarawa kai tsaye.",
+    forecastPeriodComplete: "Lokacin ya kare. Wannan shi ne ainihin adadin, ba hasashe ba.",
+    forecastNotStarted: "Lokacin bai fara ba. Babu abin da za a yi hasashe daga gare shi tukuna.",
+    enumSeasonal: "Yadda ake tarawa",
+    enumRunRate: "Saurin tarawa",
+    enumInsufficientHistory: "Babu isasshen tarihi",
     enumAwaitingInformation: "Ana jiran bayani",
     enumEscalated: "An daukaka",
     enumInvestigating: "Ana bincike",

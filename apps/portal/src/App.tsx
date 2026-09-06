@@ -40,6 +40,8 @@ import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, Verif
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
 import { CasesScreen, MyWorkScreen } from './screens/Cases';
 import { TransactionScreen } from './screens/Transaction';
+import { TargetsScreen } from './screens/Targets';
+import { TaxpayerBaseScreen } from './screens/TaxpayerBase';
 import { GlobalSearch } from './screens/Search';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
@@ -269,6 +271,8 @@ function Routes({
   if (transactionMatch) {
     return <TransactionScreen transactionKey={transactionMatch.key!} navigate={navigate} />;
   }
+  if (matchRoute(route, '/targets')) return <TargetsScreen user={user} />;
+  if (matchRoute(route, '/taxpayer-base')) return <TaxpayerBaseScreen />;
   if (matchRoute(route, '/dashboard')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
   if (matchRoute(route, '/transactions')) return <TransactionsScreen />;

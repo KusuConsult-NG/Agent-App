@@ -57,6 +57,45 @@ export function Stat({
   );
 }
 
+/**
+ * A change against the period before, or an honest silence.
+ *
+ * `null` basis points is not zero growth. A ward deployed this month, or a levy
+ * introduced last week, has nothing to compare against — and rendering that as
+ * "0%" is a claim the data does not support, on exactly the rows an officer is
+ * most likely to be looking at.
+ *
+ * The arrow and the sign both carry the direction, because colour alone fails
+ * for a reviewer who cannot distinguish red from green and prints badly.
+ */
+export function Growth({
+  basisPoints,
+  hint,
+}: {
+  basisPoints: number | string | null | undefined;
+  hint?: Label;
+}) {
+  const text = useLabel();
+  const { t } = usePortalI18n();
+  if (basisPoints === null || basisPoints === undefined || basisPoints === '') {
+    return <span className="muted">{t.ofcDbNoComparison}</span>;
+  }
+  const bp = Number(basisPoints);
+  if (!Number.isFinite(bp)) return <span className="muted">{t.ofcDbNoComparison}</span>;
+
+  const percent = bp / 100;
+  const rising = bp > 0;
+  const flat = bp === 0;
+  return (
+    <span className={flat ? 'muted' : rising ? 'growth growth--up' : 'growth growth--down'}>
+      {flat ? '' : rising ? '▲ ' : '▼ '}
+      {rising ? '+' : ''}
+      {percent.toFixed(1)}%
+      {hint && <span className="muted"> {text(hint)}</span>}
+    </span>
+  );
+}
+
 export function Badge({ status }: { status: string | null | undefined }) {
   const { t } = usePortalI18n();
   if (!status) return <>—</>;

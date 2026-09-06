@@ -180,6 +180,22 @@ export const PERMISSIONS = [
   'case:contribute',
   'case:manage',
 
+  /*
+   * Revenue targets.
+   *
+   * `target:read:all` is held by every reporting role, because an achievement
+   * percentage is meaningless to a finance officer who can see the actual and
+   * not the target it is measured against — the §36 matrix gives Finance and
+   * Audit sight of targets and not the setting of them.
+   *
+   * `target:manage` sets and withdraws. Planning revenue is the Service's own
+   * decision about what it expects to raise, so it sits with the administrator
+   * and the revenue officer and nowhere else. A finance officer who could
+   * lower a target could make a shortfall disappear.
+   */
+  'target:read:all',
+  'target:manage',
+
   // Approvals (maker-checker)
   'approval:request',
   'approval:review',
@@ -248,6 +264,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:read:all',
     'case:create',
     'case:contribute',
+    'target:read:all',
   ],
   revenue_officer: [
     'taxpayer:correct',
@@ -286,6 +303,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:read:all',
     'case:create',
     'case:contribute',
+    'target:read:all',
+    'target:manage',
   ],
   finance_officer: [
     'taxpayer:read:all',
@@ -314,6 +333,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:read:all',
     'case:create',
     'case:contribute',
+    'target:read:all',
   ],
   auditor: [
     'taxpayer:read:all',
@@ -349,6 +369,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:create',
     'case:contribute',
     'case:manage',
+    'target:read:all',
   ],
   admin: [
     'taxpayer:correct',
@@ -394,6 +415,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'case:create',
     'case:contribute',
     'case:manage',
+    'target:read:all',
+    'target:manage',
   ],
 };
 

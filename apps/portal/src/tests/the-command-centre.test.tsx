@@ -25,7 +25,9 @@ import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/re
 import { TransactionScreen } from '../screens/Transaction';
 import { CasesScreen, MyWorkScreen } from '../screens/Cases';
 import { GlobalSearch } from '../screens/Search';
+import { TargetsScreen } from '../screens/Targets';
 import { api } from '../lib/api';
+import { Growth } from '../ui';
 import * as apiModule from '../lib/api';
 import { permissionsForRole, type Role } from '@psirs/shared';
 
@@ -488,5 +490,176 @@ describe('the search box', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+// ===========================================================================
+describe('targets and the forecast beside them', () => {
+  const period = { periodStart: '2026-09-01', periodEnd: '2026-09-30' };
+
+  const target = {
+    id: 't1',
+    scope: 'LGA',
+    period_kind: 'MONTHLY',
+    period_start: '2026-09-01',
+    period_end: '2026-09-30',
+    target_kobo: '10000000',
+    collected_kobo: '2000000',
+    days_elapsed: 24,
+    days_in_period: 30,
+    status: 'ACTIVE',
+    note: null,
+    lga_name: 'Jos North',
+    category_name: null,
+    item_name: null,
+    agent_code: null,
+    agent_name: null,
+    set_by_name: 'Revenue Ladi',
+  };
+
+  const rollup = {
+    state_target_kobo: '100000000',
+    lga_targets_kobo: '30000000',
+    lgas_with_a_target: '3',
+    lgas_total: '17',
+    category_targets_kobo: '0',
+    agent_targets_kobo: '0',
+  };
+
+  function mock(forecast: Record<string, unknown>) {
+    return vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.includes('/targets/period')) return Promise.resolve(period) as never;
+      if (path.includes('/targets/rollup')) return Promise.resolve(rollup) as never;
+      if (path.includes('/forecast')) return Promise.resolve(forecast) as never;
+      if (path.includes('/government/targets')) return Promise.resolve([target]) as never;
+      return Promise.resolve([]) as never;
+    });
+  }
+
+  const seasonal = {
+    is_forecast: true,
+    basis: 'SEASONAL',
+    confidence: 'HIGH',
+    period_start: '2026-09-01',
+    period_end: '2026-09-30',
+    days_elapsed: 24,
+    days_in_period: 30,
+    collected_kobo: '2000000',
+    projected_kobo: '2666666',
+    seasonal_share_bp: 7500,
+    comparable_periods: 3,
+    target_kobo: '10000000',
+    projected_achievement_bp: 2666,
+    explanation_key: 'forecastSeasonal',
+  };
+
+  /*
+   * The property the brief asks for by name: a forecast is labelled a forecast.
+   *
+   * There is no code path that renders `projected_kobo` without the warning,
+   * the basis and the confidence beside it. A projection shown as a bare figure
+   * is how an estimate becomes a number a Council budgets against.
+   */
+  it('never shows a projection without saying it is one', async () => {
+    signInAs('revenue_officer');
+    mock(seasonal);
+
+    render(<TargetsScreen user={user('revenue_officer')} />);
+
+    await waitFor(() => expect(screen.getByText(/Forecast/)).toBeTruthy());
+    expect(screen.getByText(/not a target and not guaranteed revenue/i)).toBeTruthy();
+    expect(screen.getByText(/Collection curve/)).toBeTruthy();
+    expect(screen.getByText(/previous years are used/i)).toBeTruthy();
+    expect(screen.getByText(/75\.0%/)).toBeTruthy();
+  });
+
+  it('explains a run rate as the weaker estimate it is', async () => {
+    signInAs('admin');
+    mock({
+      ...seasonal,
+      basis: 'RUN_RATE',
+      confidence: 'LOW',
+      seasonal_share_bp: null,
+      comparable_periods: 0,
+      explanation_key: 'forecastRunRate',
+    });
+
+    render(<TargetsScreen user={user('admin')} />);
+
+    await waitFor(() => expect(screen.getByText(/Run rate/)).toBeTruthy());
+    expect(screen.getByText(/not enough history to know the collection curve/i)).toBeTruthy();
+  });
+
+  /*
+   * 20% of a monthly target is excellent on the 6th and alarming on the 24th.
+   *
+   * A bare achievement percentage says neither, so the elapsed share of the
+   * period is printed beside it and the figure is marked when it is behind.
+   */
+  it('shows achievement against how far through the period it is', async () => {
+    signInAs('admin');
+    mock(seasonal);
+
+    render(<TargetsScreen user={user('admin')} />);
+
+    await waitFor(() => expect(screen.getByText('20.0%')).toBeTruthy());
+    expect(screen.getByText(/80% Through the period/)).toBeTruthy();
+    expect(screen.getByText('20.0%').className).toContain('danger-text');
+  });
+
+  it('counts the LGAs with no target rather than complaining about the gap', async () => {
+    signInAs('admin');
+    mock(seasonal);
+
+    render(<TargetsScreen user={user('admin')} />);
+
+    await waitFor(() => expect(screen.getByText(/apportioned below it/i)).toBeTruthy());
+    // 17 LGAs, three with a target.
+    expect(screen.getByText('14')).toBeTruthy();
+    expect(screen.getByText(/These do not have to agree/i)).toBeTruthy();
+  });
+
+  it('offers no target controls to a role that cannot set one', async () => {
+    signInAs('auditor');
+    mock(seasonal);
+
+    render(<TargetsScreen user={user('auditor')} />);
+
+    await waitFor(() => expect(screen.getByText(/Revenue targets/)).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Set a target/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Withdraw/i })).toBeNull();
+  });
+});
+
+// ===========================================================================
+describe('a change against the period before', () => {
+  /*
+   * The property that decides whether the second column is honest.
+   *
+   * A ward deployed this month, or a levy introduced last week, collected
+   * nothing in the previous period. That is not zero growth, and rendering it
+   * as "0.0%" is a claim the data does not support — on exactly the rows an
+   * officer is most likely to be looking at.
+   */
+  it('says there is nothing to compare rather than showing zero', () => {
+    render(<Growth basisPoints={null} />);
+    expect(screen.getByText(/nothing collected then/i)).toBeTruthy();
+    expect(screen.queryByText(/0\.0%/)).toBeNull();
+  });
+
+  it('carries direction in the sign and the arrow, not only in colour', () => {
+    const { unmount } = render(<Growth basisPoints={4823} />);
+    expect(screen.getByText(/▲ \+48\.2%/)).toBeTruthy();
+    unmount();
+
+    render(<Growth basisPoints={-5000} />);
+    expect(screen.getByText(/▼ -50\.0%/)).toBeTruthy();
+  });
+
+  it('treats a flat period as flat, not as a rise', () => {
+    render(<Growth basisPoints={0} />);
+    const rendered = screen.getByText(/0\.0%/);
+    expect(rendered.className).toContain('muted');
+    expect(rendered.textContent).not.toContain('▲');
   });
 });

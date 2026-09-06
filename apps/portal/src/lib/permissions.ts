@@ -129,6 +129,14 @@ export const MUTATING_PERMISSIONS = [
   'group:manage',
   'allocation:manage',
   'allocation:collect',
+  /*
+   * Setting a revenue target is a decision about what the State expects to
+   * raise, and it changes how every collection figure below it is judged. It
+   * belongs with the writes rather than with casework: a target quietly lowered
+   * makes a shortfall disappear from every screen that reports against it,
+   * which is a change to the record in the sense that matters.
+   */
+  'target:manage',
 ] as const;
 
 /**
@@ -179,6 +187,7 @@ export const READ_ONLY_PERMISSIONS = [
   'support:read:all',
   'incentive:read:all',
   'case:read:all',
+  'target:read:all',
 ] as const;
 
 /**
@@ -268,6 +277,27 @@ const SCREEN: Record<string, NavItem> = {
    */
   myWork: { path: '/my-work', label: 'ofcNavMyWork', permission: 'case:read:all' },
   cases: { path: '/cases', label: 'ofcNavCases', permission: 'case:read:all' },
+  /*
+   * Targets and the forecast beside them.
+   *
+   * `target:read:all`, which every reporting role holds: an achievement
+   * percentage is meaningless to a finance officer who can see the actual and
+   * not the number it is measured against. Setting one is `target:manage` and
+   * is gated inside the screen.
+   */
+  targets: { path: '/targets', label: 'ofcNavTargets', permission: 'target:read:all' },
+  /*
+   * The register as a population.
+   *
+   * `taxpayer:read:all` rather than a reporting permission: these are cohorts
+   * of real people and the counts are drawn from the register itself, so the
+   * gate is the one that opens the register.
+   */
+  taxpayerBase: {
+    path: '/taxpayer-base',
+    label: 'ofcNavTaxpayerAnalytics',
+    permission: 'taxpayer:read:all',
+  },
   dashboard: {
     path: '/dashboard',
     label: 'ofcNavDashboard',
@@ -385,8 +415,9 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!,
-              SCREEN.transactions!, SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.targets!, SCREEN.levies!,
+              SCREEN.intelligence!, SCREEN.taxpayerBase!, SCREEN.transactions!,
+              SCREEN.performance!],
     },
   ],
 
@@ -397,7 +428,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupTheRegister',
-      items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.taxpayerBase!,
+              SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
@@ -405,7 +437,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.targets!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupAgentsProgrammes',
@@ -430,8 +462,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.transactions!,
-              SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.targets!, SCREEN.levies!,
+              SCREEN.transactions!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupWhoCollected',
@@ -458,8 +490,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupWhatCharged',
-      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.dashboard!,
-              SCREEN.intelligence!],
+      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.targets!,
+              SCREEN.dashboard!, SCREEN.intelligence!, SCREEN.taxpayerBase!],
     },
     {
       group: 'ofcGroupWhoDidIt',
@@ -479,8 +511,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenueHere',
-      items: [SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!,
-              SCREEN.commissions!],
+      items: [SCREEN.revenue!, SCREEN.targets!, SCREEN.levies!, SCREEN.intelligence!,
+              SCREEN.transactions!, SCREEN.commissions!],
     },
     {
       group: 'ofcGroupOversight',

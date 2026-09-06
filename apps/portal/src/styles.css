@@ -777,3 +777,14 @@ button.link:hover { background: none; color: var(--green-500); }
   .global-search__hit { grid-template-columns: 1fr; }
   .global-search__kind { grid-row: auto; }
 }
+
+/*
+ * Direction, carried by more than colour.
+ *
+ * The arrow and the sign say which way a figure moved; the colour only
+ * reinforces it. A reviewer who cannot distinguish red from green, or who
+ * prints the page, still reads the change correctly.
+ */
+.growth { font-weight: 650; font-size: 0.82rem; white-space: nowrap; }
+.growth--up { color: var(--green-900); }
+.growth--down { color: var(--danger); }
