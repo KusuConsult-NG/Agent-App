@@ -1470,6 +1470,148 @@ export interface TranslationDictionary {
   ofcNavUsers: string;
   ofcNavFieldApp: string;
   ofcNavAllocations: string;
+
+  // ---------------------------------------------------------------------
+  // The command centre: one search box, one work queue, one transaction.
+  //
+  // Added with the officer command centre. These name three surfaces that
+  // did not exist — a search that resolves any government reference, a case
+  // that carries work between departments, and the whole story of one
+  // collection on a single screen.
+  // ---------------------------------------------------------------------
+  ofcNavMyWork: string;
+  ofcNavCases: string;
+  ofcGroupYourDesk: string;
+  ofcSearchLabel: string;
+  ofcSearchPlaceholder: string;
+  ofcSearchSearching: string;
+  ofcSearchNoResults: string;
+  ofcSearchHint: string;
+  ofcSearchTransaction: string;
+  ofcSearchTaxpayer: string;
+  ofcSearchAgent: string;
+  ofcSearchOfficer: string;
+  ofcSearchInvoice: string;
+  ofcSearchReceipt: string;
+  ofcSearchPayment: string;
+  ofcSearchAssessment: string;
+  ofcSearchVehicle: string;
+  ofcSearchRevenueItem: string;
+  ofcSearchPlace: string;
+  ofcSearchCase: string;
+  ofcMwIntro: string;
+  ofcMwAssigned: string;
+  ofcMwAssignedBody: string;
+  ofcMwOpened: string;
+  ofcMwOpenedBody: string;
+  ofcMwMentions: string;
+  ofcMwMentionsBody: string;
+  ofcMwDepartment: string;
+  ofcMwDepartmentBody: string;
+  ofcMwApprovals: string;
+  ofcMwExceptions: string;
+  ofcMwFlags: string;
+  ofcMwOverdue: string;
+  ofcMwNothing: string;
+  ofcMwOpenQueue: string;
+  ofcCwTitle: string;
+  ofcCwIntro: string;
+  ofcCwOpenCase: string;
+  ofcCwStatus: string;
+  enumAwaitingInformation: string;
+  enumEscalated: string;
+  enumInvestigating: string;
+  enumAgentConduct: string;
+  enumCommissionQuery: string;
+  enumDataCorrection: string;
+  enumFraudInvestigation: string;
+  enumGeneral: string;
+  enumReconciliationException: string;
+  enumRevenueAnomaly: string;
+  enumSystemIssue: string;
+  enumTaxpayerDispute: string;
+  enumApproval: string;
+  enumFraudFlag: string;
+  enumManual: string;
+  enumSupportTicket: string;
+  enumAssignment: string;
+  enumComment: string;
+  enumDueDateChange: string;
+  enumEscalation: string;
+  enumEvidence: string;
+  enumNote: string;
+  enumPriorityChange: string;
+  enumResolution: string;
+  enumRouted: string;
+  enumStatusChange: string;
+  ofcCwSubject: string;
+  ofcCwDescription: string;
+  ofcCwCategory: string;
+  ofcCwRisk: string;
+  ofcCwPriority: string;
+  ofcCwDepartment: string;
+  ofcCwAssignee: string;
+  ofcCwNobody: string;
+  ofcCwAnyDepartment: string;
+  ofcCwDue: string;
+  ofcCwOnlyOpen: string;
+  ofcCwOnlyOverdue: string;
+  ofcCwOpenedBy: string;
+  ofcCwCaseNumber: string;
+  ofcCwComments: string;
+  ofcCwEvidence: string;
+  ofcCwBackToQueue: string;
+  ofcCwHistory: string;
+  ofcCwAddComment: string;
+  ofcCwInternalNote: string;
+  ofcCwMention: string;
+  ofcCwPost: string;
+  ofcCwMoveCase: string;
+  ofcCwChangeStatus: string;
+  ofcCwResolution: string;
+  ofcCwResolutionRequired: string;
+  ofcCwSaved: string;
+  ofcCwNotYours: string;
+  ofcCwAbout: string;
+  ofcCwWhy: string;
+  ofcCwSubjectTooShort: string;
+  ofcCwSampleSubject: string;
+  ofcCwSampleDescription: string;
+  ofcCwAppendOnly: string;
+  ofcNoneCasesMatchFilter: string;
+  ofcT3Title: string;
+  ofcT3Intro: string;
+  ofcT3Find: string;
+  ofcT3FindBody: string;
+  ofcT3Chain: string;
+  ofcT3Assessment: string;
+  ofcT3Invoice: string;
+  ofcT3Payment: string;
+  ofcT3Gateway: string;
+  ofcT3Settlement: string;
+  ofcT3Reconciliation: string;
+  ofcT3Commission: string;
+  ofcT3Refunds: string;
+  ofcT3Timeline: string;
+  ofcT3TimelineBody: string;
+  ofcT3Platform: string;
+  ofcT3OfficerAction: string;
+  ofcT3Before: string;
+  ofcT3After: string;
+  ofcT3CasesAndFlags: string;
+  ofcT3OpenCaseAbout: string;
+  ofcT3Withheld: string;
+  ofcT3WithheldBody: string;
+  ofcT3NoPayment: string;
+  ofcT3NoReceipt: string;
+  ofcT3NoSettlement: string;
+  ofcT3NoCommission: string;
+  ofcT3NoReconciliation: string;
+  ofcT3Channel: string;
+  ofcT3Where: string;
+  ofcT3ServiceCharge: string;
+  ofcT3Verified: string;
+  ofcT3NothingLinked: string;
   ofcGroupAdministration: string;
   ofcGroupAgentsProgrammes: string;
   ofcGroupAssessment: string;
@@ -3570,6 +3712,139 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Officer access",
     ofcNavFieldApp: "Field application",
     ofcNavAllocations: "Distribution rounds",
+    ofcNavMyWork: "My work",
+    ofcNavCases: "Cases",
+    ofcGroupYourDesk: "Your desk",
+    ofcSearchLabel: "Search government records",
+    ofcSearchPlaceholder: "Reference, TIN, name or receipt number",
+    ofcSearchSearching: "Searching…",
+    ofcSearchNoResults: "Nothing matches that.",
+    ofcSearchHint: "Two characters or more.",
+    ofcSearchTransaction: "Transaction",
+    ofcSearchTaxpayer: "Taxpayer",
+    ofcSearchAgent: "Agent",
+    ofcSearchOfficer: "Officer",
+    ofcSearchInvoice: "Invoice",
+    ofcSearchReceipt: "Receipt",
+    ofcSearchPayment: "Payment",
+    ofcSearchAssessment: "Assessment",
+    ofcSearchVehicle: "Vehicle",
+    ofcSearchRevenueItem: "Revenue item",
+    ofcSearchPlace: "Local Government Area",
+    ofcSearchCase: "Case",
+    ofcMwIntro: "Everything waiting for you, wherever on the platform it came from.",
+    ofcMwAssigned: "Assigned to you",
+    ofcMwAssignedBody: "Cases somebody has put in your hands.",
+    ofcMwOpened: "Cases you opened",
+    ofcMwOpenedBody: "Now somebody else’s to work, and still yours to follow.",
+    ofcMwMentions: "Where you were named",
+    ofcMwMentionsBody: "An officer wrote your name on a case.",
+    ofcMwDepartment: "Waiting for your department",
+    ofcMwDepartmentBody: "Sent to your role and picked up by nobody yet.",
+    ofcMwApprovals: "Approvals awaiting a decision",
+    ofcMwExceptions: "Reconciliation exceptions",
+    ofcMwFlags: "Risk flags",
+    ofcMwOverdue: "Overdue",
+    ofcMwNothing: "Nothing is waiting for you.",
+    ofcMwOpenQueue: "Open the whole queue",
+    ofcCwTitle: "Government work queue",
+    ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
+    ofcCwOpenCase: "Open a case",
+    ofcCwStatus: "Status",
+    enumAwaitingInformation: "Awaiting information",
+    enumEscalated: "Escalated",
+    enumInvestigating: "Investigating",
+    enumAgentConduct: "Agent conduct",
+    enumCommissionQuery: "Commission query",
+    enumDataCorrection: "Data correction",
+    enumFraudInvestigation: "Fraud investigation",
+    enumGeneral: "General",
+    enumReconciliationException: "Reconciliation exception",
+    enumRevenueAnomaly: "Revenue anomaly",
+    enumSystemIssue: "System issue",
+    enumTaxpayerDispute: "Taxpayer dispute",
+    enumApproval: "Approval",
+    enumFraudFlag: "Risk flag",
+    enumManual: "Raised by an officer",
+    enumSupportTicket: "Support ticket",
+    enumAssignment: "Assigned",
+    enumComment: "Comment",
+    enumDueDateChange: "Due date changed",
+    enumEscalation: "Escalated",
+    enumEvidence: "Evidence attached",
+    enumNote: "Internal note",
+    enumPriorityChange: "Priority changed",
+    enumResolution: "Resolution",
+    enumRouted: "Routed",
+    enumStatusChange: "Status changed",
+    ofcCwSubject: "Subject",
+    ofcCwDescription: "What happened",
+    ofcCwCategory: "Category",
+    ofcCwRisk: "Risk",
+    ofcCwPriority: "Priority",
+    ofcCwDepartment: "Send to",
+    ofcCwAssignee: "Assign to",
+    ofcCwNobody: "Nobody yet",
+    ofcCwAnyDepartment: "No department",
+    ofcCwDue: "Due",
+    ofcCwOnlyOpen: "Only open cases",
+    ofcCwOnlyOverdue: "Only overdue",
+    ofcCwOpenedBy: "Opened by",
+    ofcCwCaseNumber: "Case",
+    ofcCwComments: "Comments",
+    ofcCwEvidence: "Evidence",
+    ofcCwBackToQueue: "Back to the queue",
+    ofcCwHistory: "History",
+    ofcCwAddComment: "Add a comment",
+    ofcCwInternalNote: "Keep this as an internal note",
+    ofcCwMention: "Name an officer",
+    ofcCwPost: "Post",
+    ofcCwMoveCase: "Move this case",
+    ofcCwChangeStatus: "Change the status",
+    ofcCwResolution: "What it concluded",
+    ofcCwResolutionRequired: "Say what the case concluded before resolving it.",
+    ofcCwSaved: "Saved.",
+    ofcCwNotYours: "This case is not assigned to you and you did not open it, so you may comment and nothing more.",
+    ofcCwAbout: "About",
+    ofcCwWhy: "Why",
+    ofcCwSubjectTooShort: "Give the case a subject of at least five characters.",
+    ofcCwSampleSubject: "Collections trebled with no new taxpayers",
+    ofcCwSampleDescription: "Say what you saw, where, and what you would like the other department to check.",
+    ofcCwAppendOnly: "Nothing here can be edited or removed. A correction is another entry.",
+    ofcNoneCasesMatchFilter: "No cases match these filters.",
+    ofcT3Title: "Transaction file",
+    ofcT3Intro: "The whole story of one collection, from the taxpayer to the government account.",
+    ofcT3Find: "Find a transaction",
+    ofcT3FindBody: "A transaction reference, or a receipt number off a citizen’s message.",
+    ofcT3Chain: "The chain",
+    ofcT3Assessment: "Assessment",
+    ofcT3Invoice: "Invoice",
+    ofcT3Payment: "Payment",
+    ofcT3Gateway: "Gateway",
+    ofcT3Settlement: "Settlement",
+    ofcT3Reconciliation: "Reconciliation",
+    ofcT3Commission: "Commission",
+    ofcT3Refunds: "Refunds",
+    ofcT3Timeline: "What happened, in order",
+    ofcT3TimelineBody: "The platform’s own record and the officers’ actions, on one clock.",
+    ofcT3Platform: "Platform",
+    ofcT3OfficerAction: "Officer action",
+    ofcT3Before: "Before",
+    ofcT3After: "After",
+    ofcT3CasesAndFlags: "Cases and risk flags",
+    ofcT3OpenCaseAbout: "Open a case about this transaction",
+    ofcT3Withheld: "Not shown to your role",
+    ofcT3WithheldBody: "These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record.",
+    ofcT3NoPayment: "No payment has been attempted.",
+    ofcT3NoReceipt: "No receipt has been issued.",
+    ofcT3NoSettlement: "The money has not reached the government account yet.",
+    ofcT3NoCommission: "No commission was earned.",
+    ofcT3NoReconciliation: "This has not been through a reconciliation run.",
+    ofcT3Channel: "Channel",
+    ofcT3Where: "Where",
+    ofcT3ServiceCharge: "Service charge",
+    ofcT3Verified: "Verified",
+    ofcT3NothingLinked: "No case or flag is linked to this transaction.",
     ofcGroupAdministration: "Administration",
     ofcGroupAgentsProgrammes: "Agents and programmes",
     ofcGroupAssessment: "Assessment",
@@ -5562,6 +5837,139 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Izinin jami’ai",
     ofcNavFieldApp: "Manhajar filin aiki",
     ofcNavAllocations: "Zagayen rabon kaya",
+    ofcNavMyWork: "Aikina",
+    ofcNavCases: "Kararraki",
+    ofcGroupYourDesk: "Teburinka",
+    ofcSearchLabel: "Nemi bayanan gwamnati",
+    ofcSearchPlaceholder: "Lamba, TIN, suna ko lambar rasit",
+    ofcSearchSearching: "Ana nema…",
+    ofcSearchNoResults: "Babu abin da ya dace da haka.",
+    ofcSearchHint: "Haruffa biyu ko fiye.",
+    ofcSearchTransaction: "Ma’amala",
+    ofcSearchTaxpayer: "Mai biyan haraji",
+    ofcSearchAgent: "Wakili",
+    ofcSearchOfficer: "Jami’i",
+    ofcSearchInvoice: "Takardar biya",
+    ofcSearchReceipt: "Rasit",
+    ofcSearchPayment: "Biyan kudi",
+    ofcSearchAssessment: "Kima",
+    ofcSearchVehicle: "Abin hawa",
+    ofcSearchRevenueItem: "Nau’in haraji",
+    ofcSearchPlace: "Karamar hukuma",
+    ofcSearchCase: "Kara",
+    ofcMwIntro: "Duk abin da ke jiranka, ko daga ina ya zo a manhajar.",
+    ofcMwAssigned: "An ba ka",
+    ofcMwAssignedBody: "Kararrakin da wani ya sa a hannunka.",
+    ofcMwOpened: "Kararrakin da ka bude",
+    ofcMwOpenedBody: "Yanzu na wani ne ya yi, amma har yanzu naka ne ka bi.",
+    ofcMwMentions: "Inda aka ambace ka",
+    ofcMwMentionsBody: "Wani jami’i ya rubuta sunanka a kan kara.",
+    ofcMwDepartment: "Yana jiran sashenka",
+    ofcMwDepartmentBody: "An aika wa matsayinka kuma babu wanda ya karba tukuna.",
+    ofcMwApprovals: "Amincewa da ke jiran hukunci",
+    ofcMwExceptions: "Bambancin lissafi",
+    ofcMwFlags: "Alamun hadari",
+    ofcMwOverdue: "Ya wuce lokaci",
+    ofcMwNothing: "Babu abin da ke jiranka.",
+    ofcMwOpenQueue: "Bude dukkan jerin aikin",
+    ofcCwTitle: "Jerin aikin gwamnati",
+    ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
+    ofcCwOpenCase: "Bude kara",
+    ofcCwStatus: "Matsayi",
+    enumAwaitingInformation: "Ana jiran bayani",
+    enumEscalated: "An daukaka",
+    enumInvestigating: "Ana bincike",
+    enumAgentConduct: "Halin wakili",
+    enumCommissionQuery: "Tambaya kan kwamishan",
+    enumDataCorrection: "Gyaran bayanai",
+    enumFraudInvestigation: "Binciken zamba",
+    enumGeneral: "Na gama-gari",
+    enumReconciliationException: "Bambancin lissafi",
+    enumRevenueAnomaly: "Rashin daidaito a haraji",
+    enumSystemIssue: "Matsalar manhaja",
+    enumTaxpayerDispute: "Takaddamar mai biyan haraji",
+    enumApproval: "Amincewa",
+    enumFraudFlag: "Alamar hadari",
+    enumManual: "Jami’i ya bude",
+    enumSupportTicket: "Takardar taimako",
+    enumAssignment: "An ba wa",
+    enumComment: "Sharhi",
+    enumDueDateChange: "An sauya ranar karshe",
+    enumEscalation: "An daukaka",
+    enumEvidence: "An hada hujja",
+    enumNote: "Bayanin cikin gida",
+    enumPriorityChange: "An sauya muhimmanci",
+    enumResolution: "Warware",
+    enumRouted: "An tura",
+    enumStatusChange: "An sauya matsayi",
+    ofcCwSubject: "Batu",
+    ofcCwDescription: "Abin da ya faru",
+    ofcCwCategory: "Nau’i",
+    ofcCwRisk: "Hadari",
+    ofcCwPriority: "Muhimmanci",
+    ofcCwDepartment: "Aika wa",
+    ofcCwAssignee: "Ba wa",
+    ofcCwNobody: "Babu kowa tukuna",
+    ofcCwAnyDepartment: "Babu sashe",
+    ofcCwDue: "Ranar karshe",
+    ofcCwOnlyOpen: "Kararrakin da ba a rufe ba kadai",
+    ofcCwOnlyOverdue: "Wadanda suka wuce lokaci kadai",
+    ofcCwOpenedBy: "Wanda ya bude",
+    ofcCwCaseNumber: "Kara",
+    ofcCwComments: "Sharhi",
+    ofcCwEvidence: "Hujja",
+    ofcCwBackToQueue: "Koma jerin aikin",
+    ofcCwHistory: "Tarihi",
+    ofcCwAddComment: "Kara sharhi",
+    ofcCwInternalNote: "Ajiye wannan a matsayin bayanin cikin gida",
+    ofcCwMention: "Ambaci jami’i",
+    ofcCwPost: "Aika",
+    ofcCwMoveCase: "Matsar da wannan kara",
+    ofcCwChangeStatus: "Sauya matsayi",
+    ofcCwResolution: "Abin da ya kammala",
+    ofcCwResolutionRequired: "Fada abin da karar ta kammala kafin ka warware ta.",
+    ofcCwSaved: "An adana.",
+    ofcCwNotYours: "Ba a ba ka wannan kara ba kuma ba kai ka bude ta ba, don haka za ka iya yin sharhi kadai.",
+    ofcCwAbout: "Game da",
+    ofcCwWhy: "Dalili",
+    ofcCwSubjectTooShort: "Ba karar batu na akalla haruffa biyar.",
+    ofcCwSampleSubject: "Karbar kudi ta ninka sau uku ba tare da sabbin masu biyan haraji ba",
+    ofcCwSampleDescription: "Fada abin da ka gani, a ina, da abin da kake so dayan sashen ya duba.",
+    ofcCwAppendOnly: "Ba za a iya gyara ko cire komai a nan ba. Gyara wani shigarwa ne.",
+    ofcNoneCasesMatchFilter: "Babu kara da ya dace da wadannan tacewa.",
+    ofcT3Title: "Fayil din ma’amala",
+    ofcT3Intro: "Cikakken labarin karbar kudi guda, daga mai biyan haraji zuwa asusun gwamnati.",
+    ofcT3Find: "Nemo ma’amala",
+    ofcT3FindBody: "Lambar ma’amala, ko lambar rasit daga sakon dan kasa.",
+    ofcT3Chain: "Sarkar",
+    ofcT3Assessment: "Kima",
+    ofcT3Invoice: "Takardar biya",
+    ofcT3Payment: "Biyan kudi",
+    ofcT3Gateway: "Kofar biyan kudi",
+    ofcT3Settlement: "Turawar kudi",
+    ofcT3Reconciliation: "Daidaita lissafi",
+    ofcT3Commission: "Kwamishan",
+    ofcT3Refunds: "Mayar da kudi",
+    ofcT3Timeline: "Abin da ya faru, bi da bi",
+    ofcT3TimelineBody: "Rijistar manhajar da ayyukan jami’ai, a agogo guda.",
+    ofcT3Platform: "Manhaja",
+    ofcT3OfficerAction: "Aikin jami’i",
+    ofcT3Before: "Kafin",
+    ofcT3After: "Bayan",
+    ofcT3CasesAndFlags: "Kararraki da alamun hadari",
+    ofcT3OpenCaseAbout: "Bude kara game da wannan ma’amala",
+    ofcT3Withheld: "Ba a nuna wa matsayinka ba",
+    ofcT3WithheldBody: "Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai.",
+    ofcT3NoPayment: "Ba a yi yunkurin biyan kudi ba.",
+    ofcT3NoReceipt: "Ba a bayar da rasit ba.",
+    ofcT3NoSettlement: "Kudin bai isa asusun gwamnati ba tukuna.",
+    ofcT3NoCommission: "Ba a samu kwamishan ba.",
+    ofcT3NoReconciliation: "Wannan bai wuce ta zagayen daidaita lissafi ba.",
+    ofcT3Channel: "Hanya",
+    ofcT3Where: "Ina",
+    ofcT3ServiceCharge: "Kudin hidima",
+    ofcT3Verified: "An tabbatar",
+    ofcT3NothingLinked: "Babu kara ko alamar hadari da ke da nasaba da wannan ma’amala.",
     ofcGroupAdministration: "Gudanarwa",
     ofcGroupAgentsProgrammes: "Wakilai da shirye-shirye",
     ofcGroupAssessment: "Kima",

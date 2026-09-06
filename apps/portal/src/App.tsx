@@ -38,6 +38,9 @@ import { LeviesScreen } from './screens/Levies';
 import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
+import { CasesScreen, MyWorkScreen } from './screens/Cases';
+import { TransactionScreen } from './screens/Transaction';
+import { GlobalSearch } from './screens/Search';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -189,6 +192,14 @@ export function App() {
       <div className="main">
         <header className="topbar">
           <h1>{t[activeLabel]}</h1>
+          {/*
+            * The search box lives in the shell, not on a screen.
+            *
+            * A search an officer has to navigate to is a search they use once.
+            * It grants nothing on its own — every kind of result is gated on
+            * the API against the permission that kind's own screen requires.
+            */}
+          <GlobalSearch navigate={navigate} />
           <div className="topbar__meta">
             <div>{new Date().toLocaleDateString('en-NG', { dateStyle: 'full' })}</div>
             <div>{t.authPsirsFull}</div>
@@ -206,6 +217,9 @@ export function App() {
 /** Headings for screens reached from a list rather than from the menu. */
 const SECTION_LABELS: Record<string, keyof TranslationDictionary> = {
   '/allocations': 'ofcDistributionRound',
+  '/transaction': 'ofcT3Title',
+  '/cases': 'ofcNavCases',
+  '/my-work': 'ofcNavMyWork',
 };
 
 function Routes({
@@ -219,6 +233,14 @@ function Routes({
 }) {
   const { t } = usePortalI18n();
   const agentMatch = matchRoute(route, '/agents/:id');
+  /*
+   * `:key` is a transaction id or a transaction reference.
+   *
+   * The search box hands over an id; a link pasted from a citizen's message or
+   * a reconciliation row carries the reference. The endpoint takes either, so
+   * neither the officer nor the caller has to know which they are holding.
+   */
+  const transactionMatch = matchRoute(route, '/transaction/:key');
   const ticketMatch = matchRoute(route, '/support/:id');
   const roundMatch = matchRoute(route, '/allocations/:id');
 
@@ -239,6 +261,13 @@ function Routes({
     ) : (
       <RoleHomeScreen user={user} navigate={navigate} />
     );
+  }
+  if (matchRoute(route, '/my-work')) return <MyWorkScreen user={user} />;
+  if (route === '/cases' || route.startsWith('/cases?')) {
+    return <CasesScreen user={user} route={route} navigate={navigate} />;
+  }
+  if (transactionMatch) {
+    return <TransactionScreen transactionKey={transactionMatch.key!} navigate={navigate} />;
   }
   if (matchRoute(route, '/dashboard')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;

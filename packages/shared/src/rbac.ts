@@ -158,6 +158,28 @@ export const PERMISSIONS = [
   'incentive:read:all',
   'incentive:configure',
 
+  /*
+   * Casework.
+   *
+   * These write, and they write only the officer's own investigative record —
+   * a case, its comments, its evidence, its assignment. Nothing here changes
+   * what a taxpayer owes, what an agent earned, or what a receipt says. That
+   * distinction is the reason the auditor holds all four of them and is still
+   * read-only in the sense the role exists for; see `MUTATING_PERMISSIONS` and
+   * `CASEWORK_PERMISSIONS` in `apps/portal/src/lib/permissions.ts`.
+   *
+   * `case:manage` is the authority over *any* case: reassign it, route it to
+   * another department, escalate it, resolve it, close it. An officer who does
+   * not hold it can still do all of that to a case they opened or a case
+   * assigned to them, which is enforced in `services/cases.ts` rather than by
+   * a permission, because "mine" is a fact about the row and not about the
+   * role.
+   */
+  'case:read:all',
+  'case:create',
+  'case:contribute',
+  'case:manage',
+
   // Approvals (maker-checker)
   'approval:request',
   'approval:review',
@@ -223,6 +245,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'support:manage',
     'approval:review',
     'approval:authorise',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
   ],
   revenue_officer: [
     'taxpayer:correct',
@@ -258,6 +283,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'incentive:read:all',
     'approval:request',
     'approval:review',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
   ],
   finance_officer: [
     'taxpayer:read:all',
@@ -283,6 +311,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'audit:read',
     'approval:review',
     'approval:authorise',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
   ],
   auditor: [
     'taxpayer:read:all',
@@ -301,6 +332,23 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'audit:read',
     'incentive:read:all',
     'support:read:all',
+    /*
+     * The auditor writes cases and nothing else.
+     *
+     * An auditor who cannot record what they found is not independent, they
+     * are mute — the finding leaves the platform in an email and the
+     * investigation has no file. `case:manage` is here because an audit case
+     * is the auditor's own instrument: they decide what it is about, who is
+     * asked for information, and when it is resolved.
+     *
+     * It does not cost the role its standing. None of these four can change a
+     * taxpayer's liability, an agent's commission, a rate, a receipt, or a
+     * reconciliation outcome. See the note above the casework block.
+     */
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'case:manage',
   ],
   admin: [
     'taxpayer:correct',
@@ -342,6 +390,10 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     'approval:request',
     'system:configure',
     'user:manage',
+    'case:read:all',
+    'case:create',
+    'case:contribute',
+    'case:manage',
   ],
 };
 

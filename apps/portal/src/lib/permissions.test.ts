@@ -32,6 +32,7 @@ import { describe, expect, it } from 'vitest';
 import { PERMISSIONS, ROLE_PERMISSIONS, ROLES, type Role } from '@psirs/shared';
 import { translations, type TranslationDictionary } from '@psirs/shared';
 import {
+  CASEWORK_PERMISSIONS,
   MUTATING_PERMISSIONS,
   READ_ONLY_PERMISSIONS,
   availableGroups,
@@ -94,18 +95,49 @@ describe('each role gets a distinct portal', () => {
       english(i.label),
     );
 
-  it('opens each role’s menu with the work that role does', () => {
-    expect(groupsFor('admin')[0]).toBe('Administration');
-    expect(groupsFor('revenue_officer')[0]).toBe('The register');
-    expect(groupsFor('finance_officer')[0]).toBe('Settlement');
-    expect(groupsFor('auditor')[0]).toBe('Examination');
-    expect(groupsFor('supervisor')[0]).toBe('My territory');
+  /*
+   * Every menu now opens with the officer's own desk, and the group after it is
+   * still the one that says what the role does.
+   *
+   * The desk — my work, and the case queue it is drawn from — is deliberately
+   * identical across the five roles, which is the one place the "same shape for
+   * everybody" pattern this file warns about is correct: what is waiting for
+   * *you* is the same question whatever your job, and the answer is already
+   * filtered to you by identity rather than by role.
+   *
+   * The property the original test was protecting is unchanged and is asserted
+   * one position along.
+   */
+  it('opens every menu with the officer’s own desk', () => {
+    for (const role of PORTAL_ROLES) {
+      expect(groupsFor(role as Role)[0], role).toBe('Your desk');
+    }
+  });
+
+  it('follows the desk with the work that role does', () => {
+    expect(groupsFor('admin')[1]).toBe('Administration');
+    expect(groupsFor('revenue_officer')[1]).toBe('The register');
+    expect(groupsFor('finance_officer')[1]).toBe('Settlement');
+    expect(groupsFor('auditor')[1]).toBe('Examination');
+    expect(groupsFor('supervisor')[1]).toBe('My territory');
   });
 
   it('gives no two roles the same arrangement', () => {
     const shapes = (['admin', 'revenue_officer', 'finance_officer', 'auditor', 'supervisor'] as const)
       .map((role) => groupsFor(role).join(' > '));
     expect(new Set(shapes).size).toBe(shapes.length);
+  });
+
+  /*
+   * And adding that group did not move anybody's landing page.
+   *
+   * `landingPath` used to be "the first thing in the menu", so a new first
+   * group would have silently relocated every officer's front door.
+   */
+  it('still lands every role on their role home', () => {
+    for (const role of PORTAL_ROLES) {
+      expect(landingPath(principal(role as Role)), role).toBe('/');
+    }
   });
 
   it('gives the supervisor their territory, not the whole state', () => {
@@ -196,12 +228,37 @@ describe('the auditor is read-only, observably', () => {
    * disappear, but nothing else would announce it. This asserts the underlying
    * fact rather than the marker.
    */
-  it('holds no permission that changes anything', () => {
+  it('holds no permission that changes the record', () => {
     const held = ROLE_PERMISSIONS.auditor as readonly string[];
     const mutating = held.filter((permission) =>
       (MUTATING_PERMISSIONS as readonly string[]).includes(permission),
     );
     expect(mutating, `auditor holds mutating permission(s): ${mutating.join(', ')}`).toEqual([]);
+  });
+
+  /**
+   * And writes its own findings, which is not the same thing.
+   *
+   * Pinned rather than left implied. The auditor gained four writing
+   * permissions when casework arrived, and the read-only marker survived that
+   * because casework is classified apart — a distinction that is only worth
+   * anything if somebody stated it on purpose. If a future change folds
+   * casework back into `MUTATING_PERMISSIONS`, the marker disappears and the
+   * test above fails; if it strips the auditor's casework instead, this one
+   * does, and the failure says the role was made mute.
+   */
+  it('writes its own cases, and that is the whole of what it writes', () => {
+    const held = ROLE_PERMISSIONS.auditor as readonly string[];
+    expect(held).toContain('case:create');
+    expect(held).toContain('case:contribute');
+    expect(held).toContain('case:manage');
+
+    const writes = held.filter(
+      (permission) =>
+        (MUTATING_PERMISSIONS as readonly string[]).includes(permission) ||
+        (CASEWORK_PERMISSIONS as readonly string[]).includes(permission),
+    );
+    expect(writes.sort()).toEqual(['case:contribute', 'case:create', 'case:manage']);
   });
 
   it('is the only role the portal describes as read-only', () => {
@@ -228,32 +285,35 @@ describe('the auditor is read-only, observably', () => {
      * The read-only set is now stated rather than derived, so a permission has
      * to be named in one list or the other to pass.
      */
-    const mutating = MUTATING_PERMISSIONS as readonly string[];
-    const readOnly = READ_ONLY_PERMISSIONS as readonly string[];
+    const lists = {
+      MUTATING_PERMISSIONS: MUTATING_PERMISSIONS as readonly string[],
+      CASEWORK_PERMISSIONS: CASEWORK_PERMISSIONS as readonly string[],
+      READ_ONLY_PERMISSIONS: READ_ONLY_PERMISSIONS as readonly string[],
+    };
+    const names = Object.keys(lists) as (keyof typeof lists)[];
 
-    const unclassified = PERMISSIONS.filter(
-      (permission) => !mutating.includes(permission) && !readOnly.includes(permission),
-    );
+    const classCountOf = (permission: string) =>
+      names.filter((name) => lists[name].includes(permission)).length;
+
+    const unclassified = PERMISSIONS.filter((permission) => classCountOf(permission) === 0);
     expect(
       unclassified,
-      `unclassified permission(s) — add to MUTATING_PERMISSIONS or READ_ONLY_PERMISSIONS: ${unclassified.join(', ')}`,
+      `unclassified permission(s) — add to ${names.join(', ')}: ${unclassified.join(', ')}`,
     ).toEqual([]);
 
-    const both = PERMISSIONS.filter(
-      (permission) => mutating.includes(permission) && readOnly.includes(permission),
-    );
-    expect(both, `classified as both read and write: ${both.join(', ')}`).toEqual([]);
+    const overclassified = PERMISSIONS.filter((permission) => classCountOf(permission) > 1);
+    expect(
+      overclassified,
+      `in more than one list: ${overclassified.join(', ')}`,
+    ).toEqual([]);
 
-    const staleReads = readOnly.filter(
-      (permission) => !(PERMISSIONS as readonly string[]).includes(permission),
-    );
-    expect(staleReads, `no longer real permissions: ${staleReads.join(', ')}`).toEqual([]);
-
-    // And nothing in the mutating list has been removed from the shared one.
-    const stale = (MUTATING_PERMISSIONS as readonly string[]).filter(
-      (permission) => !(PERMISSIONS as readonly string[]).includes(permission),
-    );
-    expect(stale, `no longer real permissions: ${stale.join(', ')}`).toEqual([]);
+    // And nothing in any list has been removed from the shared one.
+    for (const name of names) {
+      const stale = lists[name].filter(
+        (permission) => !(PERMISSIONS as readonly string[]).includes(permission),
+      );
+      expect(stale, `${name} names permissions that no longer exist: ${stale.join(', ')}`).toEqual([]);
+    }
   });
 
   /**
@@ -270,6 +330,10 @@ describe('the auditor is read-only, observably', () => {
     expect(mutating).toContain('vehicle:authority_sync');
     expect(mutating).not.toContain('report:financial');
     expect(mutating).not.toContain('audit:read');
+    // Casework writes, and is not a change to the record. `fraud:manage` is,
+    // because closing a flag is a decision about an agent.
+    expect(mutating).not.toContain('case:create');
+    expect(mutating).toContain('fraud:manage');
   });
 });
 

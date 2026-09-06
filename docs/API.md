@@ -378,6 +378,47 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
 | `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |
+| `GET` | `/government/search?q=` | `catalogue:read` — see below; each result kind is gated separately |
+| `GET` | `/government/transactions/:key/full` | Transaction 360; `:key` is an id or a reference |
+| `GET` | `/government/my-work` | `case:read:all` — everything waiting for the signed-in officer |
+| `GET`/`POST` | `/government/cases` | `case:read:all` / `case:create` |
+| `GET` | `/government/cases/:id` | the case and its whole history |
+| `POST` | `/government/cases/:id/comments` · `/evidence` | `case:contribute` |
+| `POST` | `/government/cases/:id/assign` · `/status` · `/priority` | `case:contribute` on the route; the row decides |
+
+### Global search, Transaction 360, and cases
+
+`GET /government/search` is gated on the weakest permission any portal role
+holds, and that is deliberate: it grants nothing on its own. Every *kind* of
+result — transaction, receipt, taxpayer, agent, officer, vehicle, case — is
+gated separately inside the service on the permission that kind's own screen
+requires, and territory scope narrows a supervisor to their own LGAs. Gating the
+endpoint itself more tightly would only mean the roles that hold less get no
+search, while changing nothing about what any of them can see through it.
+
+`GET /government/transactions/:key/full` assembles the whole chain — taxpayer,
+agent, revenue item, assessment, invoice, payments, gateway, receipt, refunds,
+settlement, reconciliation, commission, payout — plus a timeline that merges
+`transaction_events` with `audit_logs` in time order, carrying the before and
+after of every change. Sections the caller may not see are omitted **and named
+in `withheld`**: an empty `commission` and a hidden one look identical, and an
+investigator who cannot tell them apart will conclude something false.
+
+A transaction outside the caller's territory scope answers `404`, not `403`.
+"No such reference" and "not yours" are the same answer to somebody who should
+not know the row exists.
+
+The three case endpoints that move a case are `case:contribute` on the route,
+and the real gate is inside `services/cases.ts`: `case:manage`, **or** having
+opened this case, **or** having it assigned to you. That cannot be expressed as
+a route permission because it is a fact about the row — and requiring
+`case:manage` instead would let a finance officer raise a settlement discrepancy
+and then be unable to resolve it.
+
+`case_events` is append-only and the database enforces it: an `UPDATE` or
+`DELETE` is refused by trigger, and a case is `CLOSED` rather than deleted.
+A case cannot be `RESOLVED` without a resolution, checked in the service and
+again by a CHECK constraint.
 
 `GET /government/workers` answers for every declared background job: when it
 last started, when it last *succeeded* — the reading that separates a job

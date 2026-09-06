@@ -64,13 +64,20 @@ export function can(user: Principal | null, permission: string | readonly string
 }
 
 /**
- * Every permission in the system that changes something.
+ * Every permission that changes the record.
+ *
+ * "The record" is what the platform holds about somebody else: what a taxpayer
+ * owes, what an agent earned, what a rate is, what a receipt says, what
+ * reconciliation concluded. Holding none of these is what makes a role
+ * read-only in the sense an external reviewer cares about.
+ *
+ * It is not the same as "every permission that writes a row" — see
+ * `CASEWORK_PERMISSIONS` below, which write and do not belong here. Every
+ * permission is in exactly one of the three lists, and a test says so by name.
  *
  * Kept as a list rather than derived by pattern-matching the name, because
  * `payment:reconcile` and `taxpayer:tin_sync` do not look like writes and are,
- * while `report:financial` looks like it might be and is not. A test asserts
- * this stays exhaustive against the shared permission list, so a new permission
- * has to be classified rather than silently counted as read-only.
+ * while `report:financial` looks like it might be and is not.
  */
 export const MUTATING_PERMISSIONS = [
   'taxpayer:create',
@@ -171,14 +178,48 @@ export const READ_ONLY_PERMISSIONS = [
   'support:read:own',
   'support:read:all',
   'incentive:read:all',
+  'case:read:all',
 ] as const;
 
 /**
- * True when this officer cannot change anything, anywhere in the portal.
+ * Every permission that writes only the officer's own investigative record.
+ *
+ * A third class, and it exists because of the auditor.
+ *
+ * The brief this was built to asks that auditors open cases, assign them, take
+ * evidence and record findings. That is writing. It is also the opposite of
+ * what `MUTATING_PERMISSIONS` is about: none of it changes what a taxpayer
+ * owes, what an agent earned, what a rate is, or what a receipt says. An
+ * auditor who cannot write a case down is not read-only, they are mute — the
+ * finding leaves in an email and the investigation has no file.
+ *
+ * So the honest statement is not "the auditor writes nothing" but "the auditor
+ * writes nothing except the audit". Splitting the list is how that gets said
+ * in a form a test can check, instead of quietly filing four writes under
+ * reads and letting the read-only marker mean less than it did.
+ *
+ * The line to hold when classifying a future permission: if an outside party's
+ * money, liability or standing changes because of it, it is mutating, however
+ * investigative it sounds. `fraud:manage` closes a flag against an agent and is
+ * mutating for exactly that reason.
+ */
+export const CASEWORK_PERMISSIONS = [
+  'case:create',
+  'case:contribute',
+  'case:manage',
+] as const;
+
+/**
+ * True when this officer cannot change the record, anywhere in the portal.
  *
  * Today that is exactly the auditor. Stated as a property of the permission set
  * rather than a check for `role === 'auditor'`, so a role that is later granted
  * a mutating permission stops being described as read-only automatically.
+ *
+ * Casework is deliberately not counted; see `CASEWORK_PERMISSIONS`. What the
+ * portal shows a read-only officer is not "you may click nothing" — it is that
+ * nothing they do alters the revenue record, which is the property the role
+ * exists to have.
  */
 export function isReadOnly(user: Principal | null): boolean {
   return !!user && !can(user, MUTATING_PERMISSIONS);
@@ -216,6 +257,17 @@ export interface NavItem {
  */
 const SCREEN: Record<string, NavItem> = {
   home: { path: '/', label: 'home', permission: ['report:read:all', 'report:read:territory'] },
+  /*
+   * The two screens that are the same for every role, and first for all of
+   * them.
+   *
+   * `myWork` is what is waiting for this officer; `cases` is the queue it is
+   * drawn from. Both are gated on `case:read:all`, which all five portal roles
+   * hold — a case is how work crosses a department, and a department that
+   * could not see the queue could not be sent anything.
+   */
+  myWork: { path: '/my-work', label: 'ofcNavMyWork', permission: 'case:read:all' },
+  cases: { path: '/cases', label: 'ofcNavCases', permission: 'case:read:all' },
   dashboard: {
     path: '/dashboard',
     label: 'ofcNavDashboard',
@@ -315,6 +367,10 @@ type NavGroup = { group: keyof TranslationDictionary; items: readonly NavItem[] 
 const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   admin: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.cases!],
+    },
+    {
       group: 'ofcGroupAdministration',
       items: [SCREEN.home!, SCREEN.users!, SCREEN.agents!, SCREEN.referees!],
     },
@@ -335,6 +391,10 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   ],
 
   revenue_officer: [
+    {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.cases!],
+    },
     {
       group: 'ofcGroupTheRegister',
       items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
@@ -360,6 +420,10 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   finance_officer: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.cases!],
+    },
+    {
       group: 'ofcGroupSettlement',
       items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!,
               SCREEN.approvals!],
@@ -381,6 +445,10 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   auditor: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.cases!],
+    },
+    {
       group: 'ofcGroupExamination',
       items: [SCREEN.home!, SCREEN.audit!, SCREEN.fraud!, SCREEN.transactions!],
     },
@@ -401,6 +469,10 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   ],
 
   supervisor: [
+    {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.cases!],
+    },
     {
       group: 'ofcGroupMyTerritory',
       items: [SCREEN.home!, SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
@@ -466,7 +538,21 @@ export function availableGroups(
  * from the same filter rather than being assumed.
  */
 export function landingPath(user: Principal | null): string | null {
-  return availableItems(user)[0]?.path ?? null;
+  const items = availableItems(user);
+  /*
+   * The role home when they can open it, not simply the first menu item.
+   *
+   * The menus now open with "Your desk" — my work, and the case queue it is
+   * drawn from — which is the right first *group* and the wrong first *screen*.
+   * `/` is the briefing an officer wants on arriving: what the platform is
+   * waiting on, in their own terms. My work is what is waiting on them
+   * personally, and it is one click away at the top of the menu.
+   *
+   * Taking the first item would have moved every role's landing page as a side
+   * effect of adding a menu group, which is the kind of change nobody decides
+   * and everybody notices.
+   */
+  return items.find((item) => item.path === '/')?.path ?? items[0]?.path ?? null;
 }
 
 /**

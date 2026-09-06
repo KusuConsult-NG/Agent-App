@@ -594,19 +594,63 @@ describe('RBAC — every role checked against the API, not the UI', () => {
     assert.equal(attempt.status, 403, 'admin must be refused the reversal endpoint');
   });
 
+  /**
+   * The auditor changes nothing about the record, and writes their own findings.
+   *
+   * This used to test the *spelling* of the auditor's permissions — anything
+   * matching `:manage`, `:configure`, `:approve`, `:suspend` or `reverse` was
+   * a write. That is the heuristic `apps/portal/src/lib/permissions.ts` rejects
+   * by name and for good reason: `payment:reconcile` and `taxpayer:tin_sync`
+   * are writes that do not look like it, and `report:financial` looks like one
+   * and is not. The pattern happened to be right until casework arrived, and
+   * then failed on `case:manage` — an auditor opening their own audit case,
+   * which is the opposite of a control problem.
+   *
+   * So it asks the API instead, which is what the heading of this section
+   * promises. Sight of everything: the audit log, the money, the register.
+   * Control of nothing: every endpoint that moves money or alters a record
+   * refuses them, whatever the permission behind it is called.
+   *
+   * The casework permissions are named explicitly rather than pattern-matched,
+   * because a future permission called `case:something` that *did* change the
+   * record must not inherit this exemption by its prefix.
+   */
   it('gives the auditor sight of everything and control of nothing', async () => {
     const tokens = await seedOfficers();
-    const auditorPermissions = permissionsForRole('auditor');
 
-    for (const permission of auditorPermissions) {
-      assert.ok(
-        !/(:manage|:configure|:approve|:suspend|reverse)/.test(permission),
-        `auditor should not hold the mutating permission ${permission}`,
-      );
+    // Sight: the three reads an independent examiner cannot work without.
+    for (const path of ['/government/audit', '/government/transactions', '/government/dashboard']) {
+      const read = await get(path, { token: tokens.auditor });
+      assert.equal(read.status, 200, `the auditor must be able to read ${path}: ${JSON.stringify(read.body)}`);
     }
 
-    const read = await get('/government/audit', { token: tokens.auditor });
-    assert.equal(read.status, 200, `the auditor must be able to read the audit log: ${JSON.stringify(read.body)}`);
+    // Control: refused by the API, not merely unlinked in a menu.
+    for (const path of [
+      '/government/reconciliation/run',
+      '/government/fraud/sweep',
+      '/government/commissions/promote',
+      '/government/reminders/send-due',
+    ]) {
+      const attempt = await post(path, {}, { token: tokens.auditor });
+      assert.equal(attempt.status, 403, `auditor must be refused ${path} (got ${attempt.status})`);
+    }
+
+    /*
+     * And what they may write is their own file, and only that.
+     *
+     * `case:read:all` is a read and is not listed; the three below are the
+     * whole of the auditor's write surface. If a mutating permission is ever
+     * added to the role, this is where it shows up as an unexplained fourth.
+     */
+    const CASEWORK = ['case:create', 'case:contribute', 'case:manage'];
+    const writes = permissionsForRole('auditor').filter(
+      (permission) => !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$/.test(permission),
+    );
+    assert.deepEqual(
+      [...writes].sort(),
+      [...CASEWORK].sort(),
+      `the auditor's write surface should be casework alone, and is: ${writes.join(', ')}`,
+    );
   });
 });
 

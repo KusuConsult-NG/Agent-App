@@ -27,6 +27,8 @@ import * as incentives from '../services/incentives';
 import * as support from '../services/support';
 import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
+import * as cases from '../services/cases';
+import * as investigation from '../services/investigation';
 import { integrationStatus } from '../integrations';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
@@ -1688,6 +1690,243 @@ governmentRouter.get(
       ),
     );
   }),
+);
+
+// ---------------------------------------------------------------------------
+// Finding one thing, and seeing the whole of it
+// ---------------------------------------------------------------------------
+
+/**
+ * The signed-in officer, as the services below want them.
+ *
+ * Permissions travel with the viewer rather than being re-derived from the
+ * role, so gating a section of a 360 view and gating the screen that section
+ * came from are the same decision made from the same source.
+ */
+function officer(req: RouteRequest): investigation.Viewer {
+  return {
+    userId: req.auth!.userId,
+    role: req.auth!.role,
+    permissions: req.auth!.permissions,
+  };
+}
+
+/*
+ * One box, every kind of government reference.
+ *
+ * The permission here is deliberately the weakest one any portal role holds —
+ * `catalogue:read`, which all five have — because this endpoint grants nothing
+ * on its own. Each *kind* of result is gated separately inside `globalSearch`
+ * on the permission its own screen requires, so a supervisor searching a
+ * receipt number gets the receipt and no settlement, and an officer who cannot
+ * open the users screen cannot enumerate staff from here either.
+ *
+ * Gating the endpoint itself on something stronger would only mean the roles
+ * that hold less get no search at all, while changing nothing about what any
+ * of them can see through it.
+ */
+governmentRouter.get(
+  '/search',
+  requirePermission('catalogue:read'),
+  validateQuery(
+    z.object({
+      q: z.string().trim().min(2).max(120),
+      limit: z.coerce.number().int().min(1).max(25).default(5),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await investigation.globalSearch(pool, officer(req), { term: data.q, limit: data.limit }, scope));
+    },
+  ),
+);
+
+/*
+ * Transaction 360.
+ *
+ * Gated on being able to see a transaction at all; everything beyond that —
+ * the payments, the settlement, the commission, the audit history — is gated
+ * section by section inside the service, and the answer names what it withheld
+ * so an investigator can tell an empty section from a hidden one.
+ *
+ * `:key` is an id or a reference. An officer arriving from a citizen's SMS has
+ * the reference and one arriving from a list has the id, and making them care
+ * which is a needless way to lose people.
+ */
+governmentRouter.get(
+  '/transactions/:key/full',
+  requirePermission('payment:read:all', 'report:read:all', 'report:read:territory'),
+  asyncHandler(async (req, res) => {
+    const scope = await resolveReportScope(pool, req.auth!);
+    res.json(await investigation.transaction360(pool, officer(req), req.params.key!, scope));
+  }),
+);
+
+// ---------------------------------------------------------------------------
+// Cases: the work that crosses a department
+// ---------------------------------------------------------------------------
+
+/** Everything waiting for this officer, wherever it came from. */
+governmentRouter.get(
+  '/my-work',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json(await cases.myWork(pool, officer(req)));
+  }),
+);
+
+governmentRouter.get(
+  '/cases',
+  requirePermission('case:read:all'),
+  validateQuery(
+    z.object({
+      status: z.enum(cases.CASE_STATUSES).optional(),
+      open: z.coerce.boolean().optional(),
+      department: z.enum(cases.CASE_DEPARTMENTS).optional(),
+      assigneeId: uuidSchema.optional(),
+      category: z.enum(cases.CASE_CATEGORIES).optional(),
+      priority: z.enum(cases.CASE_PRIORITIES).optional(),
+      riskLevel: z.enum(cases.CASE_RISK_LEVELS).optional(),
+      transactionId: uuidSchema.optional(),
+      agentId: uuidSchema.optional(),
+      taxpayerId: uuidSchema.optional(),
+      overdue: z.coerce.boolean().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }),
+    async (_req, res, data) => {
+      res.json(await cases.listCases(pool, data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/cases/:id',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json(await cases.getCase(pool, officer(req), req.params.id!));
+  }),
+);
+
+governmentRouter.post(
+  '/cases',
+  requirePermission('case:create'),
+  validateBody(
+    z.object({
+      subject: z.string().trim().min(5).max(200),
+      description: z.string().trim().max(4000).optional(),
+      category: z.enum(cases.CASE_CATEGORIES).default('GENERAL'),
+      riskLevel: z.enum(cases.CASE_RISK_LEVELS).default('MEDIUM'),
+      priority: z.enum(cases.CASE_PRIORITIES).default('NORMAL'),
+      department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      assigneeId: uuidSchema.nullish(),
+      transactionId: uuidSchema.nullish(),
+      agentId: uuidSchema.nullish(),
+      taxpayerId: uuidSchema.nullish(),
+      subjectUserId: uuidSchema.nullish(),
+      lgaId: uuidSchema.nullish(),
+      sourceType: z.enum(['MANUAL', 'FRAUD_FLAG', 'RECONCILIATION_EXCEPTION',
+                          'SUPPORT_TICKET', 'APPROVAL']).default('MANUAL'),
+      sourceId: uuidSchema.nullish(),
+      dueAt: z.coerce.date().nullish(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await cases.openCase(pool, officer(req), data));
+    },
+  ),
+);
+
+/*
+ * A comment, or an internal note.
+ *
+ * `case:contribute` rather than `case:manage`: the whole point of the workspace
+ * is that a finance officer can answer a question on an auditor's case without
+ * being given authority over it. Adding text does not move the case.
+ */
+governmentRouter.post(
+  '/cases/:id/comments',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      body: z.string().trim().min(1).max(4000),
+      internal: z.boolean().default(false),
+      mentions: z.array(uuidSchema).max(20).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.comment(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/evidence',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      documentId: uuidSchema,
+      body: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.attachEvidence(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * The three that move a case, and all three are `case:contribute` on the route.
+ *
+ * The real gate is inside the service: `case:manage`, or having opened this
+ * case, or having it assigned to you. That cannot be expressed as a permission
+ * on a route because it is a fact about the row, and putting `case:manage` here
+ * instead would mean a finance officer could raise a settlement discrepancy and
+ * then be unable to resolve it — a suggestion box, not a queue.
+ */
+governmentRouter.post(
+  '/cases/:id/assign',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      assigneeId: uuidSchema.nullable(),
+      department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.assign(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/status',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      status: z.enum(cases.CASE_STATUSES),
+      resolution: z.string().trim().max(4000).optional(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.setStatus(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/priority',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      priority: z.enum(cases.CASE_PRIORITIES).optional(),
+      dueAt: z.coerce.date().nullish(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.setPriority(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
 );
 
 /** Source-of-truth map and integration state (PRD §82). */
