@@ -505,6 +505,49 @@ const INK = '#12211a';
 const MUTED = '#5b6b63';
 const RULE = '#c9d6cf';
 
+/** Below this a column carries no information, only the fact that it exists. */
+export const MINIMUM_COLUMN = 24;
+
+/**
+ * How many columns fit on the page, and how wide each one is.
+ *
+ * Pulled out of the renderer because it is the whole of the layout decision,
+ * and because a mistake in it is invisible in the output: the page still
+ * renders, still validates, and is simply missing the data. Checking it here
+ * needs no PDF reader, which is what makes it checkable at all -- the first
+ * attempt at a test for this searched the PDF bytes for the note it prints,
+ * and found nothing, because PDFKit deflates its content streams.
+ *
+ * Scale to fit, but never below the minimum. The first version scaled every
+ * column by one factor and then cut from the front at the first one narrower
+ * than that -- past about thirty columns the factor takes *every* column under
+ * it, so the count reached zero and a forty-column report came out as a
+ * heading and a paragraph saying nothing fit: a valid PDF, served with a 200,
+ * carrying none of the data the officer asked for. No report the platform
+ * ships is that wide, so it was latent rather than live, and rendering forty
+ * columns and reading the result is what found it.
+ *
+ * Columns are taken from the front rather than by picking whichever widest
+ * ones happen to fit: a table whose columns are not in the order the report
+ * defined them is a table nobody can check against the CSV of the same report.
+ */
+export function fitColumns(
+  natural: number[],
+  width: number,
+): { widths: number[]; shown: number; tableWidth: number } {
+  const totalNatural = natural.reduce((sum, value) => sum + value, 0);
+  const scale = totalNatural > width && totalNatural > 0 ? width / totalNatural : 1;
+  const widths = natural.map((value) => Math.max(value * scale, MINIMUM_COLUMN));
+
+  let shown = 0;
+  let tableWidth = 0;
+  while (shown < widths.length && tableWidth + widths[shown]! <= width) {
+    tableWidth += widths[shown]!;
+    shown += 1;
+  }
+  return { widths, shown, tableWidth };
+}
+
 /**
  * A table, paginated, landscape, with the header repeated on every page.
  *
@@ -548,21 +591,8 @@ export function renderReportPdf(report: PdfReport): Promise<Buffer> {
     return Math.min(widest + 8, 160);
   });
 
-  const totalNatural = natural.reduce((sum, value) => sum + value, 0);
-  const scale = totalNatural > width && totalNatural > 0 ? width / totalNatural : 1;
-  const widths = natural.map((value) => value * scale);
-
-  /*
-   * Columns too narrow to read anything in are named instead of printed. The
-   * count stops at the first one that is too narrow rather than skipping past
-   * it, because a table with a hole in the middle reads as a missing value
-   * rather than as a truncated report.
-   */
-  const MINIMUM_COLUMN = 24;
-  let shown = 0;
-  while (shown < widths.length && widths[shown]! >= MINIMUM_COLUMN) shown += 1;
+  const { widths, shown, tableWidth } = fitColumns(natural, width);
   const omitted = headers.slice(shown);
-  const tableWidth = widths.slice(0, shown).reduce((sum, value) => sum + value, 0);
 
   let cursor = 0;
 
