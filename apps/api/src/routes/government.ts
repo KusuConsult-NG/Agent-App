@@ -22,6 +22,7 @@ import * as auth from '../services/auth';
 import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
+import { arrearsWorklist } from '../services/arrears';
 import { resolveReportScope, territoriesForOfficer } from '../services/report-scope';
 import * as incentives from '../services/incentives';
 import * as support from '../services/support';
@@ -71,6 +72,54 @@ governmentRouter.get(
     const scope = await resolveReportScope(pool, req.auth!);
     res.json(await reports.executiveDashboard(pool, scope));
   }),
+);
+
+/*
+ * What the State is already owed, ranked so somebody can go and get it.
+ *
+ * The cheapest revenue there is: assessed, unpaid and already in the database,
+ * needing no enumeration and no new instrument. It has never had a list —
+ * `taxpayer_compliance` carries a per-taxpayer total for the compliance score,
+ * which answers a question about one person and not the question of who to
+ * visit first.
+ *
+ * Scoped like every other money report, and gated behind the report
+ * permissions rather than `taxpayer:read:all`: this is a ranked register of
+ * citizens with the amount each owes, and it is the most sensitive list this
+ * platform can produce. A supervisor sees their own territories; the narrowing
+ * comes from `resolveReportScope` and the caller's identity, never from the
+ * query string.
+ */
+governmentRouter.get(
+  '/arrears',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      minimumNaira: z.coerce.number().int().min(0).max(100_000_000).optional(),
+      lapsingWithinDays: z.coerce.number().int().min(0).max(3650).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(
+        await arrearsWorklist(
+          pool,
+          {
+            lgaId: data.lgaId,
+            // Naira at the boundary, kobo underneath — the officer types the
+            // unit they think in and the arithmetic stays in the unit that
+            // cannot lose a fraction.
+            minimumKobo:
+              data.minimumNaira === undefined ? undefined : BigInt(data.minimumNaira) * 100n,
+            lapsingWithinDays: data.lapsingWithinDays,
+            limit: data.limit,
+          },
+          scope,
+        ),
+      );
+    },
+  ),
 );
 
 /*
