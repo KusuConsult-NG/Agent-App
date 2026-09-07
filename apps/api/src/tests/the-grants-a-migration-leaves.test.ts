@@ -33,6 +33,7 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { ROLE_PERMISSIONS, ROLES } from '@psirs/shared';
+import { NOTIFICATION_TEMPLATES } from '../db/seed';
 
 /*
  * A database of its own, because the point is the starting state.
@@ -134,4 +135,48 @@ describe('the grants a migration leaves behind', () => {
       );
     }
   });
+
+  /*
+   * The same question about the other reference data a migration also writes.
+   *
+   * Forty of the sixty templates the seed list names are also inserted by a
+   * migration, and the seed inserts `ON CONFLICT DO NOTHING`. For those forty
+   * the migration's row is the one a clean install ends up with, so editing the
+   * wording in seed.ts alone changes nothing anywhere. That is not
+   * hypothetical: migration 042 exists purely to carry one corrected body to
+   * databases the seed could no longer reach, and PR #70 had to do the same for
+   * revenue item names.
+   *
+   * They agree today. This is here so they stay agreeing, and it costs one
+   * query on a scratch database the test above has already paid for.
+   *
+   * `incentive_programmes` is deliberately not checked the same way: no
+   * migration inserts into it, so the seed always wins and the assertion could
+   * not fail. A check that cannot fail is what put the eight missing grants
+   * into production in the first place.
+   */
+  it('holds the notification templates the seed list actually specifies', async () => {
+    const { rows } = await scratch.query<{ code: string; subject: string | null; body: string }>(
+      'SELECT code, subject, body FROM notification_templates',
+    );
+    const stored = new Map(rows.map((row) => [row.code, row]));
+
+    for (const template of NOTIFICATION_TEMPLATES) {
+      const row = stored.get(template.code);
+      assert.ok(row, `no template ${template.code} on a migrated and seeded database`);
+      assert.equal(
+        row!.body,
+        template.body,
+        `${template.code} reads differently in the database than in the seed list. ` +
+          'A template inserted by a migration wins over the seed, so changing the ' +
+          'wording here needs a migration carrying it, as migration 042 does.',
+      );
+      assert.equal(
+        row!.subject ?? null,
+        template.subject ?? null,
+        `${template.code} has a different subject in the database than in the seed list.`,
+      );
+    }
+  });
+
 });
