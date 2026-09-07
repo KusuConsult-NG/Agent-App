@@ -1024,6 +1024,32 @@ export interface TranslationDictionary {
   ofcLvLevy: string;
   ofcLvInvoices: string;
   ofcLvOldestDue: string;
+  ofcNavArrears: string;
+  ofcArTitle: string;
+  ofcArIntro: string;
+  ofcArAtLeast: string;
+  ofcArLapsingWithin: string;
+  ofcArAnyDeadline: string;
+  ofcArWithin7: string;
+  ofcArWithin14: string;
+  ofcArWithin30: string;
+  ofcArCollectableNow: string;
+  ofcArTaxpayers: string;
+  ofcArNeedsReassessment: string;
+  ofcArEndedElsewhere: string;
+  ofcArWhoIsMissing: string;
+  ofcArInFlightExplained: string;
+  ofcArLapsedTitle: string;
+  ofcArLapsedExplained: string;
+  ofcArWhoToCall: string;
+  ofcArShowingLargest: string;
+  ofcArOwedFor: string;
+  ofcArDaysLeft: string;
+  ofcArNoDeadline: string;
+  ofcArLastPaid: string;
+  ofcArNeverPaid: string;
+  ofcArPartPaid: string;
+  ofcArNobodyOwes: string;
   ofcAlIntro: string;
   ofcAlNewRound: string;
   ofcAlProgramme: string;
@@ -3159,6 +3185,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvLevy: "Levy",
     ofcLvInvoices: "Invoices",
     ofcLvOldestDue: "Oldest due",
+    ofcNavArrears: "Arrears worklist",
+    ofcArTitle: "Who owes the State money",
+    ofcArIntro: "Assessed, unpaid and still payable, largest debt first. These taxpayers are already on the register — this is money the State is owed today, not money it has to go and find.",
+    ofcArAtLeast: "Owing at least (₦)",
+    ofcArLapsingWithin: "Deadline closing within",
+    ofcArAnyDeadline: "Any deadline",
+    ofcArWithin7: "7 days",
+    ofcArWithin14: "14 days",
+    ofcArWithin30: "30 days",
+    ofcArCollectableNow: "Collectable now",
+    ofcArTaxpayers: "Taxpayers owing",
+    ofcArNeedsReassessment: "Needs re-assessment",
+    ofcArEndedElsewhere: "Owed by closed records",
+    ofcArWhoIsMissing: "Who is not on this list",
+    ofcArInFlightExplained: "Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called.",
+    ofcArLapsedTitle: "Debt that cannot be paid as it stands",
+    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first.",
+    ofcArWhoToCall: "Who to call",
+    ofcArShowingLargest: "Showing the {{n}} largest debts. Narrow by LGA or amount to see further down.",
+    ofcArOwedFor: "Owed for",
+    ofcArDaysLeft: "Days left to pay",
+    ofcArNoDeadline: "No deadline",
+    ofcArLastPaid: "Last paid",
+    ofcArNeverPaid: "Never",
+    ofcArPartPaid: "Part paid",
+    ofcArNobodyOwes: "Nobody in this scope owes a collectable debt.",
     ofcAlIntro: "A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point.",
     ofcAlNewRound: "New round",
     ofcAlProgramme: "Programme",
@@ -5151,6 +5203,32 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvLevy: "Haraji",
     ofcLvInvoices: "Takardun biya",
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
+    ofcNavArrears: "Jerin bashin da ake bin jiha",
+    ofcArTitle: "Wanda ke bin jiha bashi",
+    ofcArIntro: "An kimanta, ba a biya ba, kuma har yanzu ana iya biya, mafi girman bashi da farko. Wadannan masu biyan haraji suna cikin rajista — wannan kudi ne da ake bin jiha yau, ba kudin da za ta fita nema ba.",
+    ofcArAtLeast: "Yana bin akalla (₦)",
+    ofcArLapsingWithin: "Ranar karshe na zuwa cikin",
+    ofcArAnyDeadline: "Kowace ranar karshe",
+    ofcArWithin7: "Kwana 7",
+    ofcArWithin14: "Kwana 14",
+    ofcArWithin30: "Kwana 30",
+    ofcArCollectableNow: "Ana iya karba yanzu",
+    ofcArTaxpayers: "Masu biyan haraji da ke bin bashi",
+    ofcArNeedsReassessment: "Yana bukatar sake kimantawa",
+    ofcArEndedElsewhere: "Bashin rikodin da aka rufe",
+    ofcArWhoIsMissing: "Wanda ba ya cikin wannan jerin",
+    ofcArInFlightExplained: "An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba.",
+    ofcArLapsedTitle: "Bashin da ba a iya biya kamar yadda yake",
+    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa.",
+    ofcArWhoToCall: "Wanda za a kira",
+    ofcArShowingLargest: "Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArOwedFor: "Bashin",
+    ofcArDaysLeft: "Kwanakin da suka rage a biya",
+    ofcArNoDeadline: "Babu ranar karshe",
+    ofcArLastPaid: "Biya na karshe",
+    ofcArNeverPaid: "Bai taba ba",
+    ofcArPartPaid: "An biya wani sashe",
+    ofcArNobodyOwes: "Babu wanda ke bin bashin da ake iya karba a wannan yanki.",
     ofcAlIntro: "Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba.",
     ofcAlNewRound: "Sabon zagaye",
     ofcAlProgramme: "Shiri",

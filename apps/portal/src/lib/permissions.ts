@@ -245,6 +245,18 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavLevies',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  /*
+   * The same report permissions as the levy screens, and deliberately not
+   * `taxpayer:read:all`. This is a ranked register of citizens with the amount
+   * each owes — the most sensitive list the platform produces — so it is
+   * offered to the roles whose job is the revenue, narrowed to their own
+   * territories by the API rather than by this menu.
+   */
+  arrears: {
+    path: '/arrears',
+    label: 'ofcNavArrears',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -329,15 +341,16 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!,
-              SCREEN.transactions!, SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.revenue!, SCREEN.levies!,
+              SCREEN.intelligence!, SCREEN.transactions!, SCREEN.performance!],
     },
   ],
 
   revenue_officer: [
     {
       group: 'ofcGroupTheRegister',
-      items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.taxpayerRecords!, SCREEN.outstanding!,
+              SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
@@ -366,8 +379,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.transactions!,
-              SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.revenue!, SCREEN.levies!,
+              SCREEN.transactions!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupWhoCollected',
@@ -386,7 +399,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupTheMoney',
-      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!],
+      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.arrears!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupWhatCharged',
@@ -403,7 +416,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   supervisor: [
     {
       group: 'ofcGroupMyTerritory',
-      items: [SCREEN.home!, SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.performance!, SCREEN.approvals!,
+              SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupRevenueHere',

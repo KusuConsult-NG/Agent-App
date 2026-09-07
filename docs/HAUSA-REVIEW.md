@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1889 strings, grouped by where an agent meets them. Lower stakes
+1915 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -313,6 +313,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcNavArrears` | Arrears worklist | Jerin bashin da ake bin jiha | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
 | `ofcNavIntelligence` | Revenue intelligence | Nazarin haraji | ☐ | |
 | `ofcNavRevenue` | Revenue summary | Takaitaccen haraji | ☐ | |
@@ -1144,6 +1145,36 @@ instructions — but they are what an agent reads all day.
 | `ofcLvLevy` | Levy | Haraji | ☐ | |
 | `ofcLvInvoices` | Invoices | Takardun biya | ☐ | |
 | `ofcLvOldestDue` | Oldest due | Mafi tsufa da ya kamata a biya | ☐ | |
+
+#### The officer portal — the arrears worklist
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `ofcArTitle` | Who owes the State money | Wanda ke bin jiha bashi | ☐ | |
+| `ofcArIntro` | Assessed, unpaid and still payable, largest debt first. These taxpayers are already on the register — this is money the State is owed today, not money it has to go and find. | An kimanta, ba a biya ba, kuma har yanzu ana iya biya, mafi girman bashi da farko. Wadannan masu biyan haraji suna cikin rajista — wannan kudi ne da ake bin jiha yau, ba kudin da za ta fita nema ba. | ☐ | |
+| `ofcArAtLeast` | Owing at least (₦) | Yana bin akalla (₦) | ☐ | |
+| `ofcArLapsingWithin` | Deadline closing within | Ranar karshe na zuwa cikin | ☐ | |
+| `ofcArAnyDeadline` | Any deadline | Kowace ranar karshe | ☐ | |
+| `ofcArWithin7` | 7 days | Kwana 7 | ☐ | |
+| `ofcArWithin14` | 14 days | Kwana 14 | ☐ | |
+| `ofcArWithin30` | 30 days | Kwana 30 | ☐ | |
+| `ofcArCollectableNow` | Collectable now | Ana iya karba yanzu | ☐ | |
+| `ofcArTaxpayers` | Taxpayers owing | Masu biyan haraji da ke bin bashi | ☐ | |
+| `ofcArNeedsReassessment` | Needs re-assessment | Yana bukatar sake kimantawa | ☐ | |
+| `ofcArEndedElsewhere` | Owed by closed records | Bashin rikodin da aka rufe | ☐ | |
+| `ofcArWhoIsMissing` | Who is not on this list | Wanda ba ya cikin wannan jerin | ☐ | |
+| `ofcArInFlightExplained` | Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called. | An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba. | ☐ | |
+| `ofcArLapsedTitle` | Debt that cannot be paid as it stands | Bashin da ba a iya biya kamar yadda yake | ☐ | |
+| `ofcArLapsedExplained` | {{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first. | Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa. | ☐ | |
+| `ofcArWhoToCall` | Who to call | Wanda za a kira | ☐ | |
+| `ofcArShowingLargest` | Showing the {{n}} largest debts. Narrow by LGA or amount to see further down. | Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa. | ☐ | |
+| `ofcArOwedFor` | Owed for | Bashin | ☐ | |
+| `ofcArDaysLeft` | Days left to pay | Kwanakin da suka rage a biya | ☐ | |
+| `ofcArNoDeadline` | No deadline | Babu ranar karshe | ☐ | |
+| `ofcArLastPaid` | Last paid | Biya na karshe | ☐ | |
+| `ofcArNeverPaid` | Never | Bai taba ba | ☐ | |
+| `ofcArPartPaid` | Part paid | An biya wani sashe | ☐ | |
+| `ofcArNobodyOwes` | Nobody in this scope owes a collectable debt. | Babu wanda ke bin bashin da ake iya karba a wannan yanki. | ☐ | |
 
 #### The officer portal — distribution rounds
 

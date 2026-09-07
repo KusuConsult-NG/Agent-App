@@ -35,6 +35,7 @@ import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
 import { LeviesScreen } from './screens/Levies';
+import { ArrearsScreen } from './screens/Arrears';
 import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
@@ -249,6 +250,7 @@ function Routes({
   if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
   if (matchRoute(route, '/revenue')) return <RevenueScreen />;
   if (matchRoute(route, '/levies')) return <LeviesScreen />;
+  if (matchRoute(route, '/arrears')) return <ArrearsScreen />;
   if (matchRoute(route, '/allocations')) return <AllocationsScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;
