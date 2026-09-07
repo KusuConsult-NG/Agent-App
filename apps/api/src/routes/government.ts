@@ -23,6 +23,13 @@ import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
+import {
+  coverageLeads,
+  connectionAccessHistory,
+  readConnections,
+  rebuildVehicleConnections,
+  recordConnectionDecision,
+} from '../services/connections';
 import { resolveReportScope, territoriesForOfficer } from '../services/report-scope';
 import * as incentives from '../services/incentives';
 import * as support from '../services/support';
@@ -120,6 +127,156 @@ governmentRouter.get(
       );
     },
   ),
+);
+
+/* ---------------------------------------------------------------------------
+ * Tax intelligence: what is connected to a person
+ *
+ * The most sensitive surface in the platform, and the one where the shape of
+ * the endpoints is itself a control. Three rules are visible here rather than
+ * buried in the service:
+ *
+ * `purpose` is a required parameter of the read, not a header somebody may
+ * omit. The design permits two uses of this graph and two only — finding
+ * people who should be assessed and are not, and reconciling an assessment
+ * against observable assets — plus the reads a citizen's own request or an
+ * objection makes necessary. A purpose that can be left out is not a limit,
+ * and it is the difference between a system with a boundary and a system with
+ * a paragraph about one.
+ *
+ * The read of one named person is separated from the list of leads. They are
+ * different acts: the list answers "where should we look", the record answers
+ * "what do we hold about this person", and only the second is logged against
+ * an individual because only the second is one.
+ *
+ * The rebuild is `system:configure`. Deriving edges is not reporting — it
+ * writes claims about citizens into a table — so it sits with the
+ * administrator rather than with everyone who may read a report.
+ * ------------------------------------------------------------------------- */
+
+governmentRouter.get(
+  '/intelligence/leads',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      minimumVehicles: z.coerce.number().int().min(1).max(100).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await coverageLeads(pool, data, scope));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/intelligence/taxpayers/:id',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      /*
+       * No default. A default purpose is the same thing as no purpose — every
+       * read would carry whichever value was cheapest to leave out, and the
+       * log would record that fact rather than the officer's reason.
+       */
+      purpose: z.enum(['COVERAGE_LEAD', 'CONSISTENCY_CHECK', 'TAXPAYER_REQUEST']),
+      includeWithdrawn: z.coerce.boolean().optional(),
+    }),
+    async (req, res, data) => {
+      /*
+       * Scoped before the read, and refused rather than narrowed.
+       *
+       * Every other report in this file narrows its rows to the caller's
+       * territories. This one answers about a single named person, so there is
+       * nothing to narrow — the request either concerns somebody the officer
+       * may see or it does not, and returning an empty record would tell them
+       * the taxpayer exists somewhere they cannot look.
+       */
+      const scope = await resolveReportScope(pool, req.auth!);
+      if (scope.kind === 'TERRITORIES') {
+        const lgaIds = scope.territories.map((territory) => territory.lgaId);
+        const inScope = await queryOne<{ id: string }>(
+          pool,
+          'SELECT id FROM taxpayers WHERE id = $1 AND lga_id = ANY($2::uuid[])',
+          [req.params.id, lgaIds],
+        );
+        if (!inScope) {
+          throw forbidden(
+            'This taxpayer is not in one of your territories, so their record is not yours to open.',
+          );
+        }
+      }
+
+      res.json(
+        await readConnections(pool, {
+          taxpayerId: req.params.id!,
+          purpose: data.purpose,
+          actorId: req.auth!.userId,
+          ipAddress: req.clientIp,
+          includeWithdrawn: data.includeWithdrawn,
+        }),
+      );
+    },
+  ),
+);
+
+/*
+ * Who has read this person's record, and under what claimed purpose.
+ *
+ * Held behind `audit:read` rather than the report permissions. The officers
+ * who look at the graph should not be the ones who decide what the log of
+ * their looking says, and an auditor asking "who has been running coverage
+ * queries against this citizen" is the question the log exists to answer.
+ */
+governmentRouter.get(
+  '/intelligence/taxpayers/:id/access-log',
+  requirePermission('audit:read'),
+  asyncHandler(async (req, res) => {
+    res.json(await connectionAccessHistory(pool, req.params.id!));
+  }),
+);
+
+governmentRouter.post(
+  '/intelligence/connections/:id/decision',
+  requirePermission('taxpayer:correct'),
+  validateBody(
+    z.object({
+      state: z.enum(['CONFIRMED_BY_TAXPAYER', 'DISPUTED', 'WITHDRAWN']),
+      reason: z.string().min(4).max(500),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await recordConnectionDecision(pool, {
+          connectionId: req.params.id!,
+          state: data.state,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/intelligence/rebuild',
+  requirePermission('system:configure'),
+  asyncHandler(async (req, res) => {
+    const result = await rebuildVehicleConnections(pool);
+    await withTransaction(async (client) => {
+      await recordAudit(client, {
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        action: 'connection.rebuilt',
+        entityType: 'taxpayer_connection',
+        entityId: null,
+        newValue: result,
+        reason: 'Connection graph rebuilt from the vehicle register',
+      });
+    });
+    res.json(result);
+  }),
 );
 
 /*

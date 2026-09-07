@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1915 strings, grouped by where an agent meets them. Lower stakes
+1967 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -314,6 +314,7 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `ofcNavArrears` | Arrears worklist | Jerin bashin da ake bin jiha | ☐ | |
+| `ofcNavConnections` | Assets and leads | Dukiya da alamu | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
 | `ofcNavIntelligence` | Revenue intelligence | Nazarin haraji | ☐ | |
 | `ofcNavRevenue` | Revenue summary | Takaitaccen haraji | ☐ | |
@@ -1175,6 +1176,56 @@ instructions — but they are what an agent reads all day.
 | `ofcArNeverPaid` | Never | Bai taba ba | ☐ | |
 | `ofcArPartPaid` | Part paid | An biya wani sashe | ☐ | |
 | `ofcArNobodyOwes` | Nobody in this scope owes a collectable debt. | Babu wanda ke bin bashin da ake iya karba a wannan yanki. | ☐ | |
+
+#### The officer portal — assets and coverage leads
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `ofcIgReasonLabel` | Why are you changing this claim? | Me ya sa kake canza wannan ikirari? | ☐ | |
+| `ofcIgReasonFirst` | Write the reason first. | Ka fara rubuta dalili. | ☐ | |
+| `ofcIgTitle` | What is connected to a taxpayer | Abin da ke da alaka da mai biyan haraji | ☐ | |
+| `ofcIgIntro` | People running commercial vehicles the State has never assessed for income tax, drawn from the vehicle register PSIRS already keeps. Nothing here comes from outside the platform. | Mutanen da ke tafiyar da motocin kasuwanci wadanda jiha ba ta taba kimanta harajin kudin shiga a kansu ba, daga rajistar motoci da PSIRS ke rike da ita. Babu abin da ya fito daga wajen tsarin. | ☐ | |
+| `ofcIgLimitsTitle` | What this list is, and what it is not | Menene wannan jerin, kuma menene ba shi ba | ☐ | |
+| `ofcIgLimits` | Every line is a claim, not a finding. Read the grounds column before acting: a match on a shared phone number is a reason to ask, never a reason to assess. Opening a record is logged against that person with the purpose you choose. | Kowane layi ikirari ne, ba binciken karshe ba. Ka karanta ginshikin dalili kafin ka yi aiki: daidaituwa ta lambar waya daya dalili ne na tambaya, ba na kimantawa ba. Ana rubuta bude rikodi a kan mutumin tare da dalilin da ka zaba. | ☐ | |
+| `ofcIgAtLeastVehicles` | With at least this many vehicles | Da akalla motoci masu yawa haka | ☐ | |
+| `ofcIgRebuildLabel` | From the register | Daga rajista | ☐ | |
+| `ofcIgRebuildAction` | Rebuild connections | Sake gina alakoki | ☐ | |
+| `ofcIgRebuilt` | {{asserted}} connection(s) recorded: {{registry}} from the register, {{phone}} matched on a shared phone. {{ambiguous}} vehicle(s) matched more than one taxpayer and were left alone. | An rubuta alaka {{asserted}}: {{registry}} daga rajista, {{phone}} sun dace ta lambar waya daya. Motoci {{ambiguous}} sun dace da fiye da mai biyan haraji daya kuma an bar su. | ☐ | |
+| `ofcIgLeads` | People to look at | Mutanen da za a duba | ☐ | |
+| `ofcIgVehicles` | Commercial vehicles | Motocin kasuwanci | ☐ | |
+| `ofcIgUnmatched` | Vehicles with no owner matched | Motocin da ba a gano mai su ba | ☐ | |
+| `ofcIgUnmatchedExplained` | {{n}} vehicle(s) on the register are connected to nobody, so they are not in the count above. That is the part of the problem this list cannot see. | Motoci {{n}} a rajista ba su da alaka da kowa, don haka ba sa cikin kidayar da ke sama. Wannan shi ne bangaren matsalar da wannan jerin ba zai iya gani ba. | ☐ | |
+| `ofcIgPurpose` | Why are you opening this record? | Me ya sa kake bude wannan rikodin? | ☐ | |
+| `ofcIgPurposeChoose` | Choose a reason | Zabi dalili | ☐ | |
+| `ofcIgPurposeFirst` | Choose a reason first — every read of a record is logged with one. | Ka fara zabar dalili — ana rubuta kowace karatun rikodi da dalili. | ☐ | |
+| `ofcIgRegistrations` | Registrations | Lambobin rajista | ☐ | |
+| `ofcIgGrounds` | Grounds | Dalili | ☐ | |
+| `ofcIgFromRegister` | The register names them | Rajista ta ambace su | ☐ | |
+| `ofcIgFromPhone` | Matched on a shared phone number | An dace ta lambar waya daya | ☐ | |
+| `ofcIgChargedCommercial` | Charged the commercial rate | An caje kudin kasuwanci | ☐ | |
+| `ofcIgPaidLastYear` | Paid in the last year | An biya a shekarar da ta gabata | ☐ | |
+| `ofcIgOpen` | Open record | Bude rikodi | ☐ | |
+| `ofcIgNoLeads` | Nobody in this scope has a commercial vehicle and no income assessment. | Babu wanda ke da motar kasuwanci kuma ba a kimanta harajin kudin shiga a kansa ba a wannan yanki. | ☐ | |
+| `ofcIgRecordTitle` | The record | Rikodin | ☐ | |
+| `ofcIgWhatWeClaim` | What the State claims about them | Abin da jiha ke ikirari a kansu | ☐ | |
+| `ofcIgWhatTheyOwe` | What they owe | Abin da suke bin bashi | ☐ | |
+| `ofcIgThing` | Thing | Abu | ☐ | |
+| `ofcIgRelationship` | Relationship | Alaka | ☐ | |
+| `ofcIgSource` | Where it came from | Inda ya fito | ☐ | |
+| `ofcIgObtained` | Recorded on | An rubuta a | ☐ | |
+| `ofcIgLawfulBasis` | Power relied on | Ikon da aka dogara a kai | ☐ | |
+| `ofcIgDecide` | Decision | Shawara | ☐ | |
+| `ofcIgConfirm` | Taxpayer confirms | Mai biyan haraji ya tabbatar | ☐ | |
+| `ofcIgDispute` | Taxpayer disputes | Mai biyan haraji ya ki amincewa | ☐ | |
+| `ofcIgWithdraw` | Withdraw claim | Janye ikirari | ☐ | |
+| `ofcIgReasonPrompt` | Say why. This is a record about a person, and a change nobody explained cannot be defended to them. | Ka fadi dalili. Wannan rikodi ne game da mutum, kuma canjin da babu wanda ya bayyana ba za a iya kare shi a gaban sa ba. | ☐ | |
+| `ofcIgNothingClaimed` | The State claims nothing about this person. | Jiha ba ta ikirari komai a kan wannan mutumin. | ☐ | |
+| `ofcIgReference` | Reference | Lamba | ☐ | |
+| `ofcIgSince` | Since | Tun | ☐ | |
+| `ofcIgPayableNow` | Can be paid now | Ana iya biya yanzu | ☐ | |
+| `ofcIgPayableYes` | Yes | Eh | ☐ | |
+| `ofcIgPayableNeedsReassessment` | No — needs a fresh assessment | A’a — yana bukatar sabon kimantawa | ☐ | |
+| `ofcIgOwesNothing` | They owe the State nothing. | Ba sa bin jiha komai. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2437,6 +2488,12 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumAsserted` | Claimed | An yi ikirari | ☐ | |
+| `enumConfirmedByTaxpayer` | Confirmed by the taxpayer | Mai biyan haraji ya tabbatar | ☐ | |
+| `enumConsistencyCheck` | Checking an assessment against assets | Duba kimantawa da dukiya | ☐ | |
+| `enumCoverageLead` | Looking for people not yet assessed | Neman wadanda ba a kimanta ba tukuna | ☐ | |
+| `enumTaxpayerRequest` | The taxpayer asked to see it | Mai biyan haraji ya nemi ganin sa | ☐ | |
+| `enumWithdrawn` | Withdrawn | An janye | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |

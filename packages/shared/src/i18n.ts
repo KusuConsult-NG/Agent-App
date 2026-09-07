@@ -1026,6 +1026,58 @@ export interface TranslationDictionary {
   ofcLvOldestDue: string;
   ofcNavArrears: string;
   ofcArTitle: string;
+  ofcIgReasonLabel: string;
+  ofcIgReasonFirst: string;
+  ofcNavConnections: string;
+  ofcIgTitle: string;
+  ofcIgIntro: string;
+  ofcIgLimitsTitle: string;
+  ofcIgLimits: string;
+  ofcIgAtLeastVehicles: string;
+  ofcIgRebuildLabel: string;
+  ofcIgRebuildAction: string;
+  ofcIgRebuilt: string;
+  ofcIgLeads: string;
+  ofcIgVehicles: string;
+  ofcIgUnmatched: string;
+  ofcIgUnmatchedExplained: string;
+  ofcIgPurpose: string;
+  ofcIgPurposeChoose: string;
+  ofcIgPurposeFirst: string;
+  ofcIgRegistrations: string;
+  ofcIgGrounds: string;
+  ofcIgFromRegister: string;
+  ofcIgFromPhone: string;
+  ofcIgChargedCommercial: string;
+  ofcIgPaidLastYear: string;
+  ofcIgOpen: string;
+  ofcIgNoLeads: string;
+  ofcIgRecordTitle: string;
+  ofcIgWhatWeClaim: string;
+  ofcIgWhatTheyOwe: string;
+  ofcIgThing: string;
+  ofcIgRelationship: string;
+  ofcIgSource: string;
+  ofcIgObtained: string;
+  ofcIgLawfulBasis: string;
+  ofcIgDecide: string;
+  ofcIgConfirm: string;
+  ofcIgDispute: string;
+  ofcIgWithdraw: string;
+  ofcIgReasonPrompt: string;
+  ofcIgNothingClaimed: string;
+  ofcIgReference: string;
+  ofcIgSince: string;
+  ofcIgPayableNow: string;
+  ofcIgPayableYes: string;
+  ofcIgPayableNeedsReassessment: string;
+  ofcIgOwesNothing: string;
+  enumAsserted: string;
+  enumConfirmedByTaxpayer: string;
+  enumConsistencyCheck: string;
+  enumCoverageLead: string;
+  enumTaxpayerRequest: string;
+  enumWithdrawn: string;
   ofcArIntro: string;
   ofcArAtLeast: string;
   ofcArLapsingWithin: string;
@@ -3187,6 +3239,58 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Oldest due",
     ofcNavArrears: "Arrears worklist",
     ofcArTitle: "Who owes the State money",
+    ofcIgReasonLabel: "Why are you changing this claim?",
+    ofcIgReasonFirst: "Write the reason first.",
+    ofcNavConnections: "Assets and leads",
+    ofcIgTitle: "What is connected to a taxpayer",
+    ofcIgIntro: "People running commercial vehicles the State has never assessed for income tax, drawn from the vehicle register PSIRS already keeps. Nothing here comes from outside the platform.",
+    ofcIgLimitsTitle: "What this list is, and what it is not",
+    ofcIgLimits: "Every line is a claim, not a finding. Read the grounds column before acting: a match on a shared phone number is a reason to ask, never a reason to assess. Opening a record is logged against that person with the purpose you choose.",
+    ofcIgAtLeastVehicles: "With at least this many vehicles",
+    ofcIgRebuildLabel: "From the register",
+    ofcIgRebuildAction: "Rebuild connections",
+    ofcIgRebuilt: "{{asserted}} connection(s) recorded: {{registry}} from the register, {{phone}} matched on a shared phone. {{ambiguous}} vehicle(s) matched more than one taxpayer and were left alone.",
+    ofcIgLeads: "People to look at",
+    ofcIgVehicles: "Commercial vehicles",
+    ofcIgUnmatched: "Vehicles with no owner matched",
+    ofcIgUnmatchedExplained: "{{n}} vehicle(s) on the register are connected to nobody, so they are not in the count above. That is the part of the problem this list cannot see.",
+    ofcIgPurpose: "Why are you opening this record?",
+    ofcIgPurposeChoose: "Choose a reason",
+    ofcIgPurposeFirst: "Choose a reason first — every read of a record is logged with one.",
+    ofcIgRegistrations: "Registrations",
+    ofcIgGrounds: "Grounds",
+    ofcIgFromRegister: "The register names them",
+    ofcIgFromPhone: "Matched on a shared phone number",
+    ofcIgChargedCommercial: "Charged the commercial rate",
+    ofcIgPaidLastYear: "Paid in the last year",
+    ofcIgOpen: "Open record",
+    ofcIgNoLeads: "Nobody in this scope has a commercial vehicle and no income assessment.",
+    ofcIgRecordTitle: "The record",
+    ofcIgWhatWeClaim: "What the State claims about them",
+    ofcIgWhatTheyOwe: "What they owe",
+    ofcIgThing: "Thing",
+    ofcIgRelationship: "Relationship",
+    ofcIgSource: "Where it came from",
+    ofcIgObtained: "Recorded on",
+    ofcIgLawfulBasis: "Power relied on",
+    ofcIgDecide: "Decision",
+    ofcIgConfirm: "Taxpayer confirms",
+    ofcIgDispute: "Taxpayer disputes",
+    ofcIgWithdraw: "Withdraw claim",
+    ofcIgReasonPrompt: "Say why. This is a record about a person, and a change nobody explained cannot be defended to them.",
+    ofcIgNothingClaimed: "The State claims nothing about this person.",
+    ofcIgReference: "Reference",
+    ofcIgSince: "Since",
+    ofcIgPayableNow: "Can be paid now",
+    ofcIgPayableYes: "Yes",
+    ofcIgPayableNeedsReassessment: "No — needs a fresh assessment",
+    ofcIgOwesNothing: "They owe the State nothing.",
+    enumAsserted: "Claimed",
+    enumConfirmedByTaxpayer: "Confirmed by the taxpayer",
+    enumConsistencyCheck: "Checking an assessment against assets",
+    enumCoverageLead: "Looking for people not yet assessed",
+    enumTaxpayerRequest: "The taxpayer asked to see it",
+    enumWithdrawn: "Withdrawn",
     ofcArIntro: "Assessed, unpaid and still payable, largest debt first. These taxpayers are already on the register — this is money the State is owed today, not money it has to go and find.",
     ofcArAtLeast: "Owing at least (₦)",
     ofcArLapsingWithin: "Deadline closing within",
@@ -5205,6 +5309,58 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
     ofcNavArrears: "Jerin bashin da ake bin jiha",
     ofcArTitle: "Wanda ke bin jiha bashi",
+    ofcIgReasonLabel: "Me ya sa kake canza wannan ikirari?",
+    ofcIgReasonFirst: "Ka fara rubuta dalili.",
+    ofcNavConnections: "Dukiya da alamu",
+    ofcIgTitle: "Abin da ke da alaka da mai biyan haraji",
+    ofcIgIntro: "Mutanen da ke tafiyar da motocin kasuwanci wadanda jiha ba ta taba kimanta harajin kudin shiga a kansu ba, daga rajistar motoci da PSIRS ke rike da ita. Babu abin da ya fito daga wajen tsarin.",
+    ofcIgLimitsTitle: "Menene wannan jerin, kuma menene ba shi ba",
+    ofcIgLimits: "Kowane layi ikirari ne, ba binciken karshe ba. Ka karanta ginshikin dalili kafin ka yi aiki: daidaituwa ta lambar waya daya dalili ne na tambaya, ba na kimantawa ba. Ana rubuta bude rikodi a kan mutumin tare da dalilin da ka zaba.",
+    ofcIgAtLeastVehicles: "Da akalla motoci masu yawa haka",
+    ofcIgRebuildLabel: "Daga rajista",
+    ofcIgRebuildAction: "Sake gina alakoki",
+    ofcIgRebuilt: "An rubuta alaka {{asserted}}: {{registry}} daga rajista, {{phone}} sun dace ta lambar waya daya. Motoci {{ambiguous}} sun dace da fiye da mai biyan haraji daya kuma an bar su.",
+    ofcIgLeads: "Mutanen da za a duba",
+    ofcIgVehicles: "Motocin kasuwanci",
+    ofcIgUnmatched: "Motocin da ba a gano mai su ba",
+    ofcIgUnmatchedExplained: "Motoci {{n}} a rajista ba su da alaka da kowa, don haka ba sa cikin kidayar da ke sama. Wannan shi ne bangaren matsalar da wannan jerin ba zai iya gani ba.",
+    ofcIgPurpose: "Me ya sa kake bude wannan rikodin?",
+    ofcIgPurposeChoose: "Zabi dalili",
+    ofcIgPurposeFirst: "Ka fara zabar dalili — ana rubuta kowace karatun rikodi da dalili.",
+    ofcIgRegistrations: "Lambobin rajista",
+    ofcIgGrounds: "Dalili",
+    ofcIgFromRegister: "Rajista ta ambace su",
+    ofcIgFromPhone: "An dace ta lambar waya daya",
+    ofcIgChargedCommercial: "An caje kudin kasuwanci",
+    ofcIgPaidLastYear: "An biya a shekarar da ta gabata",
+    ofcIgOpen: "Bude rikodi",
+    ofcIgNoLeads: "Babu wanda ke da motar kasuwanci kuma ba a kimanta harajin kudin shiga a kansa ba a wannan yanki.",
+    ofcIgRecordTitle: "Rikodin",
+    ofcIgWhatWeClaim: "Abin da jiha ke ikirari a kansu",
+    ofcIgWhatTheyOwe: "Abin da suke bin bashi",
+    ofcIgThing: "Abu",
+    ofcIgRelationship: "Alaka",
+    ofcIgSource: "Inda ya fito",
+    ofcIgObtained: "An rubuta a",
+    ofcIgLawfulBasis: "Ikon da aka dogara a kai",
+    ofcIgDecide: "Shawara",
+    ofcIgConfirm: "Mai biyan haraji ya tabbatar",
+    ofcIgDispute: "Mai biyan haraji ya ki amincewa",
+    ofcIgWithdraw: "Janye ikirari",
+    ofcIgReasonPrompt: "Ka fadi dalili. Wannan rikodi ne game da mutum, kuma canjin da babu wanda ya bayyana ba za a iya kare shi a gaban sa ba.",
+    ofcIgNothingClaimed: "Jiha ba ta ikirari komai a kan wannan mutumin.",
+    ofcIgReference: "Lamba",
+    ofcIgSince: "Tun",
+    ofcIgPayableNow: "Ana iya biya yanzu",
+    ofcIgPayableYes: "Eh",
+    ofcIgPayableNeedsReassessment: "A’a — yana bukatar sabon kimantawa",
+    ofcIgOwesNothing: "Ba sa bin jiha komai.",
+    enumAsserted: "An yi ikirari",
+    enumConfirmedByTaxpayer: "Mai biyan haraji ya tabbatar",
+    enumConsistencyCheck: "Duba kimantawa da dukiya",
+    enumCoverageLead: "Neman wadanda ba a kimanta ba tukuna",
+    enumTaxpayerRequest: "Mai biyan haraji ya nemi ganin sa",
+    enumWithdrawn: "An janye",
     ofcArIntro: "An kimanta, ba a biya ba, kuma har yanzu ana iya biya, mafi girman bashi da farko. Wadannan masu biyan haraji suna cikin rajista — wannan kudi ne da ake bin jiha yau, ba kudin da za ta fita nema ba.",
     ofcArAtLeast: "Yana bin akalla (₦)",
     ofcArLapsingWithin: "Ranar karshe na zuwa cikin",

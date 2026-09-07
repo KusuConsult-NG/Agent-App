@@ -88,6 +88,17 @@ export const BACKGROUND_JOBS = {
     purpose: 'Proves against the gateway statement that the money arrived.',
   },
   /*
+   * Daily. The vehicle register changes when somebody registers or renews,
+   * and a lead that appears a day late costs nothing — whereas a graph rebuilt
+   * on every write would assert claims about citizens continuously, which is
+   * the opposite of what a purpose-limited system should do. The job is
+   * idempotent: a live edge cannot be asserted twice.
+   */
+  'connection-graph': {
+    intervalMs: 24 * 60 * 60_000,
+    purpose: 'Derives asset connections from the vehicle register.',
+  },
+  /*
    * The same cadence as reconciliation, so a reminder lands within hours of the
    * invoice entering a window rather than the next day. Each window is flagged
    * on the invoice after the first send, so re-running never duplicates one.

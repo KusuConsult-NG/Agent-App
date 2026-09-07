@@ -20,6 +20,7 @@ import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
 import { sendDueReminders } from './services/reminders';
 import { expireLapsedInvoices } from './services/revenue';
+import { rebuildVehicleConnections } from './services/connections';
 import { BACKGROUND_JOBS, runJob, type JobName } from './services/jobs';
 import { expireSettledKeys } from './middleware/idempotency';
 import { expireOldEvents } from './services/usage';
@@ -201,6 +202,24 @@ async function main() {
       return (
         `${result.summary?.matched} matched, ${result.summary?.exceptions} exception(s), ` +
         `${result.summary?.unchecked} unchecked, ${result.recovery?.verified ?? 0} payment(s) recovered`
+      );
+    }),
+
+    /*
+     * The asset graph, rebuilt from the register the State already keeps.
+     *
+     * Nothing here reaches outside the platform: every edge is derived from a
+     * vehicle row PSIRS holds. The job exists because a lead list that only
+     * refreshes when an administrator remembers is a lead list that goes stale
+     * without anybody noticing it has.
+     */
+    schedule('connection-graph', async () => {
+      const result = await rebuildVehicleConnections(pool);
+      if (result.asserted === 0 && result.ambiguous === 0) return null;
+      return (
+        `${result.asserted} connection(s) asserted ` +
+        `(${result.fromRegistry} from the register, ${result.fromPhone} by shared phone), ` +
+        `${result.ambiguous} vehicle(s) matched more than one taxpayer and were left alone`
       );
     }),
 

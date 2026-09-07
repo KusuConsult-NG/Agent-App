@@ -611,7 +611,7 @@ const INCENTIVE_PROGRAMMES = [
   },
 ] as const;
 
-const NOTIFICATION_TEMPLATES = [
+export const NOTIFICATION_TEMPLATES = [
   /*
    * The agent's own money, on the three occasions it moves.
    *

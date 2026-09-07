@@ -257,6 +257,16 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavArrears',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  /*
+   * The asset graph. Same report permissions as the arrears list, and for the
+   * same reason: it is a view of named citizens and what the State believes
+   * about them, narrowed to the caller's own territories by the API.
+   */
+  connections: {
+    path: '/connections',
+    label: 'ofcNavConnections',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -341,16 +351,16 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.revenue!, SCREEN.levies!,
-              SCREEN.intelligence!, SCREEN.transactions!, SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.connections!, SCREEN.revenue!,
+              SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!, SCREEN.performance!],
     },
   ],
 
   revenue_officer: [
     {
       group: 'ofcGroupTheRegister',
-      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.taxpayerRecords!, SCREEN.outstanding!,
-              SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.taxpayerRecords!,
+              SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
@@ -399,7 +409,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupTheMoney',
-      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.arrears!, SCREEN.outstanding!],
+      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.arrears!,
+              SCREEN.connections!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupWhatCharged',
@@ -416,8 +427,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   supervisor: [
     {
       group: 'ofcGroupMyTerritory',
-      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.performance!, SCREEN.approvals!,
-              SCREEN.outstanding!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.performance!,
+              SCREEN.approvals!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupRevenueHere',

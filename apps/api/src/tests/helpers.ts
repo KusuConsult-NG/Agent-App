@@ -20,7 +20,7 @@ import { TRANSACTIONAL_TABLES } from './transactional-tables';
 import { hashPassword } from '../lib/crypto';
 import { recordSettlement } from '../services/reconciliation';
 import { gateway } from '../integrations/gateway';
-import { seedReferenceData } from '../db/seed';
+import { NOTIFICATION_TEMPLATES, seedReferenceData } from '../db/seed';
 
 let server: Server | null = null;
 let baseUrl = '';
@@ -90,6 +90,37 @@ const NON_EMPTY_PROBE = TRANSACTIONAL_TABLES.map(
   (table) => `SELECT '${table}' AS t WHERE EXISTS (SELECT 1 FROM ${table})`,
 ).join(' UNION ALL ');
 
+/**
+ * Reference rows a test is allowed to change, restored to what the seed says.
+ *
+ * `notification_templates` is standing reference data: it is not truncated
+ * between tests, and the seed inserts with `ON CONFLICT DO NOTHING`, so a row
+ * whose status a test changed keeps that status for every later file in the
+ * shard — and, because the shard databases outlive a run, for every later run
+ * as well. One test with an unscoped `UPDATE ... SET status = 'ACTIVE'`
+ * therefore poisons a database permanently, and the only recovery is to drop
+ * it. That has happened here once already; the scoped WHERE that fixed the
+ * offending test does nothing for the databases it had already spoiled.
+ *
+ * Restoring the statuses each reset makes the suite self-healing against the
+ * whole class rather than against the one instance of it. It lives in the test
+ * harness deliberately: the seed's `DO NOTHING` is correct for a real
+ * deployment, where an operator who switches a template off means it.
+ */
+async function restoreSeededTemplateStatuses(): Promise<void> {
+  const inactive = NOTIFICATION_TEMPLATES.filter(
+    (template) => 'status' in template && template.status === 'INACTIVE',
+  ).map((template) => template.code);
+
+  await pool.query(
+    `UPDATE notification_templates
+        SET status = CASE WHEN code = ANY($1::text[]) THEN 'INACTIVE' ELSE 'ACTIVE' END
+      WHERE status IS DISTINCT FROM
+            CASE WHEN code = ANY($1::text[]) THEN 'INACTIVE' ELSE 'ACTIVE' END`,
+    [inactive],
+  );
+}
+
 export async function resetDatabase(): Promise<void> {
   const { rows } = await pool.query<{ t: string }>(NON_EMPTY_PROBE);
   if (rows.length > 0) {
@@ -98,6 +129,7 @@ export async function resetDatabase(): Promise<void> {
     );
   }
   await pool.query(`DELETE FROM users WHERE phone LIKE '+234%'`);
+  await restoreSeededTemplateStatuses();
 }
 
 export interface ApiResponse<T = any> {
