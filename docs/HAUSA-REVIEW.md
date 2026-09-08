@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2004 strings, grouped by where an agent meets them. Lower stakes
+2079 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -314,6 +314,7 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `ofcNavArrears` | Arrears worklist | Jerin bashin da ake bin jiha | ☐ | |
+| `ofcNavPresumptive` | Presumptive schedule | Jadawalin haraji na kimantawa | ☐ | |
 | `ofcNavPayroll` | Employers and premises | Masu daukar ma’aikata da wurare | ☐ | |
 | `ofcNavConnections` | Assets and leads | Dukiya da alamu | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
@@ -1267,6 +1268,69 @@ instructions — but they are what an agent reads all day.
 | `ofcPrFiledTitle` | Return filed | An kai rahoto | ☐ | |
 | `ofcPrFiledExplained` | The return covers {{n}} employee(s) and invoice {{invoice}} has been raised for the tax. | Rahoton ya shafi ma’aikata {{n}} kuma an fitar da daftari {{invoice}} na haraji. | ☐ | |
 | `ofcPrMissingTins` | {{n}} of them had no TIN — collect those and add them to the next return. | {{n}} daga cikinsu ba su da TIN — ka tattara su ka kara su a rahoto na gaba. | ☐ | |
+
+#### The officer portal — the presumptive schedule
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `ofcPsPublish` | Publishing | Wallafawa | ☐ | |
+| `ofcPsPublishClass` | Publish a local government class | Wallafa matakin karamar hukuma | ☐ | |
+| `ofcPsPublishFigure` | Publish a schedule figure | Wallafa adadin jadawali | ☐ | |
+| `ofcPsChoose` | Choose | Zaba | ☐ | |
+| `ofcPsIndicators` | Indicators behind this class | Alamomin da suka haifar da wannan mataki | ☐ | |
+| `ofcPsIndicatorsHint` | e.g. road access, electrification, poverty headcount | misali hanya, wutar lantarki, adadin talauci | ☐ | |
+| `ofcPsClassPublished` | The classification has been published. | An wallafa rarrabuwar. | ☐ | |
+| `ofcPsFigurePublished` | The figure has been published. | An wallafa adadin. | ☐ | |
+| `ofcPsAssumedTurnoverNaira` | Assumed annual turnover (₦) | Kudin shigar shekara da ake zato (₦) | ☐ | |
+| `ofcPsAdoptExemption` | Adopt a reading of the exemption | Amince da fassarar kebewa | ☐ | |
+| `ofcPsAdoptWarningTitle` | This decides who is taxed at all | Wannan yana yanke wanda za a biya haraji | ☐ | |
+| `ofcPsAdoptWarning` | Adopting a construction decides whether a trader with a shop is exempt, which moves the covered population enormously. Record it only on a written opinion, and cite that opinion below — it will be quoted back at PSIRS by the first person who disagrees. | Amince da fassara yana yanke ko an kebe mai shago, wanda ke canza adadin mutanen da abin ya shafa sosai. Ka rubuta shi ne kawai bisa ra’ayin da aka rubuta, kuma ka ambaci wannan ra’ayin a kasa — mutum na farko da bai yarda ba zai maido da shi ga PSIRS. | ☐ | |
+| `ofcPsConstruction` | Which reading | Wace fassara | ☐ | |
+| `ofcPsCeiling` | Turnover ceiling (₦) | Iyakar kudin shiga (₦) | ☐ | |
+| `ofcPsLegalBasis` | Opinion or instrument relied on | Ra’ayi ko dokar da aka dogara a kai | ☐ | |
+| `ofcPsExemptionAdopted` | The construction has been recorded. | An rubuta fassarar. | ☐ | |
+| `ofcPsTitle` | The presumptive schedule | Jadawalin haraji na kimantawa | ☐ | |
+| `ofcPsIntro` | What a trade of a given size is assumed to turn over, by local government class. The rate is one per cent everywhere — what differs is the assumed turnover, because turnover really is lower in some places. Nobody grants a discount and no officer decides anything. | Abin da ake ganin sana’a mai wani girma take samu, bisa matakin karamar hukuma. Adadin haraji kashi daya ne a ko’ina — abin da ya bambanta shi ne kudin shigar da ake zato, domin hakika samu ya fi kankanta a wasu wurare. Babu wanda ke bayar da ragi kuma babu jami’in da ke yanke shawara. | ☐ | |
+| `ofcPsReadiness` | Whether it can be used yet | Ko ana iya amfani da shi tukuna | ☐ | |
+| `ofcPsLgasClassified` | Local governments classified | Kananan hukumomin da aka rarraba | ☐ | |
+| `ofcPsCells` | Figures published | Adadin da aka wallafa | ☐ | |
+| `ofcPsExemptionInForce` | The exemption as adopted | Kebewar kamar yadda aka amince da ita | ☐ | |
+| `ofcPsConjunctive` | All three limbs must hold: no fixed premises, no employees, and turnover at or below the ceiling. A trader with a shop is therefore assessed even if their turnover is small. | Dole ne dukkan sharudda uku su cika: babu wurin kasuwanci na dindindin, babu ma’aikata, kuma kudin shiga bai wuce iyaka ba. Don haka ana kimanta mai shago ko da kudin shigarsa kadan ne. | ☐ | |
+| `ofcPsTurnoverGoverned` | Turnover governs alone: anyone at or below the ceiling is exempt, whether or not they have a shop or staff. | Kudin shiga kadai ke yanke hukunci: duk wanda bai wuce iyaka ba an kebe shi, ko yana da shago ko ma’aikata ko babu. | ☐ | |
+| `ofcPsNoExemptionAdopted` | No reading of the exemption has been adopted | Ba a amince da wata fassarar kebewa ba | ☐ | |
+| `ofcPsNoExemptionExplained` | Nobody can be assessed presumptively until PSIRS records which construction of the nano exemption applies, and on whose written opinion. The two readings differ on whether a trader with a shop is exempt, which is not a question this platform may answer by default. | Ba za a iya kimanta kowa ba har sai PSIRS ta rubuta wace fassarar kebewar nano ce ta shafi, kuma bisa ra’ayin wa aka rubuta. Fassarorin biyu sun bambanta kan ko an kebe mai shago, kuma wannan ba tambaya ce da wannan tsarin zai amsa da kansa ba. | ☐ | |
+| `ofcPsPartlyPublished` | The schedule is only partly published | An wallafa jadawalin bangare kadai | ☐ | |
+| `ofcPsPartlyPublishedExplained` | {{done}} of {{total}} local governments have a published class. Anyone in the rest cannot be assessed, and quoting figures from this table for them would be quoting figures that do not apply. | Kananan hukumomi {{done}} daga {{total}} ne ke da matakin da aka wallafa. Ba za a iya kimanta wadanda ke sauran ba, kuma ambaton adadi daga wannan jadawalin gare su zai zama ambaton abin da bai shafe su ba. | ☐ | |
+| `ofcPsWhatItWouldCost` | What a given trade would pay | Abin da wata sana’a za ta biya | ☐ | |
+| `ofcPsCheckIntro` | Enter what an agent would see standing in the doorway. There is no field for a turnover or a band — those are worked out from what was observed, which is what stops the figure being negotiable. | Ka shigar da abin da wakili zai gani yana tsaye a bakin kofa. Babu wurin shigar da kudin shiga ko mataki — ana lissafa su daga abin da aka gani, wanda shi ne ke hana a yi ciniki a kan adadin. | ☐ | |
+| `ofcPsPremises` | Premises | Wurin sana’a | ☐ | |
+| `ofcPsEquipment` | Machines or equipment | Injuna ko kayan aiki | ☐ | |
+| `ofcPsPeople` | People working besides the operator | Mutanen da ke aiki ban da mai sana’a | ☐ | |
+| `ofcPsWorkItOut` | Work it out | Yi lissafi | ☐ | |
+| `ofcPsBand` | Size band | Matakin girma | ☐ | |
+| `ofcPsClass` | Class | Mataki | ☐ | |
+| `ofcPsAssumedTurnover` | Assumed annual turnover | Kudin shigar shekara da ake zato | ☐ | |
+| `ofcPsAnnualTax` | Tax a year | Harajin shekara | ☐ | |
+| `ofcPsMonthlyTax` | Tax a month | Harajin wata | ☐ | |
+| `ofcPsExempt` | Exempt — nothing is payable | An kebe — babu abin biya | ☐ | |
+| `ofcPsExemptExplained` | This operator is a nano business under the construction of the exemption in force, so no presumptive tax is due at all. That is the law working, not a figure that came out small. | Wannan mai sana’a kanana ne bisa fassarar kebewar da ke aiki, don haka babu wani harajin kimantawa da ya kamata. Wannan doka ce ke aiki, ba adadi ne da ya fito kankani ba. | ☐ | |
+| `ofcPsHowWeGotThere` | How that figure was reached | Yadda aka kai ga wannan adadin | ☐ | |
+| `ofcPsStep` | Step | Mataki | ☐ | |
+| `ofcPsDetail` | What was used | Abin da aka yi amfani da shi | ☐ | |
+| `ofcPsAmount` | Amount | Adadi | ☐ | |
+| `ofcPsNoWorking` | No working to show. | Babu lissafin da za a nuna. | ☐ | |
+| `ofcPsClasses` | How each local government is classified | Yadda aka rarraba kowace karamar hukuma | ☐ | |
+| `ofcPsClassesIntro` | Classified on data PSIRS does not produce, and fixed for three years. Both are deliberate: a class drawn from an area’s own collection figures would pay it to under-collect, and one that can move next year is one that will be lobbied about. | An rarraba bisa bayanan da PSIRS ba ta samar ba, kuma an daidaita shi na shekara uku. Duka biyu da gangan ne: mataki da aka samo daga kudin da yankin ya tara zai sa a rage tarawa, kuma wanda za a iya canzawa badi zai jawo matsin lamba. | ☐ | |
+| `ofcPsIndexSource` | Whose data | Bayanan wa | ☐ | |
+| `ofcPsFrom` | From | Daga | ☐ | |
+| `ofcPsUntil` | Until | Har zuwa | ☐ | |
+| `ofcPsNoEndDate` | No end date set | Ba a saita ranar karshe ba | ☐ | |
+| `ofcPsNoClasses` | No local government has a published class yet. | Babu karamar hukumar da ke da matakin da aka wallafa tukuna. | ☐ | |
+| `ofcPsTheTable` | The published figures | Adadin da aka wallafa | ☐ | |
+| `ofcPsInstrument` | Adopted under | An amince da shi karkashin | ☐ | |
+| `ofcPsVersion` | Version | Sigar | ☐ | |
+| `ofcPsNoEntries` | No figures have been published yet. | Ba a wallafa wani adadi ba tukuna. | ☐ | |
+| `ofcPsHowToChange` | A published figure is never edited. Publishing a new one closes the old period and starts a new version, so an assessment made last year can still be checked against the figure it was made under. | Ba a taba gyara adadin da aka wallafa. Wallafa sabo yana rufe tsohon lokaci ya fara sabuwar siga, don haka ana iya duba kimantawar bara bisa adadin da aka yi ta a kansa. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2529,6 +2593,22 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumSmall` | Small | Karami | ☐ | |
+| `enumNano` | Nano — exempt | Nano — an kebe | ☐ | |
+| `enumPresumptive` | Presumptive — assessed off the schedule | Kimantawa — bisa jadawali | ☐ | |
+| `enumBooks` | Books — assessed on records | Littattafai — bisa rikodin | ☐ | |
+| `enumClassA` | Class A — strongest local economy | Mataki A — tattalin arziki mafi karfi | ☐ | |
+| `enumClassB` | Class B | Mataki B | ☐ | |
+| `enumClassC` | Class C | Mataki C | ☐ | |
+| `enumClassD` | Class D — weakest local economy | Mataki D — tattalin arziki mafi rauni | ☐ | |
+| `enumMicro` | Micro | Karami sosai | ☐ | |
+| `enumConjunctive` | All three limbs together | Dukkan sharudda uku tare | ☐ | |
+| `enumTurnoverGoverned` | Turnover governs alone | Kudin shiga kadai ke yanke hukunci | ☐ | |
+| `enumNone` | No fixed premises | Babu wurin dindindin | ☐ | |
+| `enumStall` | Market stall or table | Rumfa ko tebur a kasuwa | ☐ | |
+| `enumKiosk` | Kiosk or container | Kanti ko kwantena | ☐ | |
+| `enumLockUpShop` | Lock-up shop | Shago mai kulle | ☐ | |
+| `enumBuilding` | Building or yard | Gini ko fili | ☐ | |
 | `enumFiled` | Filed | An kai | ☐ | |
 | `enumAsserted` | Claimed | An yi ikirari | ☐ | |
 | `enumConfirmedByTaxpayer` | Confirmed by the taxpayer | Mai biyan haraji ya tabbatar | ☐ | |

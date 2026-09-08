@@ -66,10 +66,21 @@ function menu(role: Role): string[] {
 // ===========================================================================
 describe('each role gets a distinct portal', () => {
   it('gives the field agent nothing, because they belong in the agent app', () => {
-    // catalogue:read is the only portal gate an agent passes, which is how
-    // they used to arrive at a shell containing one item. They are now turned
-    // away at the door instead — see belongsInPortal.
-    expect(menu('agent')).toEqual(['Revenue catalogue']);
+    /*
+     * `catalogue:read` is the only portal gate an agent passes, which is how
+     * they used to arrive at a shell containing one item. They are now turned
+     * away at the door instead — see `belongsInPortal`, which is the control
+     * this test exists for and is asserted below.
+     *
+     * The presumptive schedule joined that same gate deliberately. It is a
+     * published rate table, and an agent standing at a stall being asked why
+     * the figure is what it is has a better reason to read it than most
+     * officers do. Narrowing the gate to keep it off a menu nobody can reach
+     * would hide a screen the API serves, which is the failure this codebase
+     * already recorded once when a supervisor's own dashboard was hidden from
+     * them while the endpoint answered.
+     */
+    expect(menu('agent')).toEqual(['Presumptive schedule', 'Revenue catalogue']);
     expect(belongsInPortal('agent')).toBe(false);
   });
 

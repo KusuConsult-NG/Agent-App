@@ -13,6 +13,29 @@
  */
 export const TRANSACTIONAL_TABLES = [
   /*
+   * The informal-sector programme's tables.
+   *
+   * Listed for two reasons, and the second is the one that bites. Truncation
+   * between files was partly happening already — `taxpayers` is truncated with
+   * CASCADE, which took the rows that reference it — but that is an accident of
+   * which foreign keys exist, and `lga_classes` (which references `lgas` and
+   * nothing transactional) was left behind entirely.
+   *
+   * The other reason is `check-enum-coverage.ts`, which treats the complement
+   * of this list as standing reference data. Without these names, every state
+   * in them was being read as reference data rather than as something the
+   * suite wrote — so the coverage figure was quietly answering a different
+   * question about them.
+   */
+  'taxpayer_connection_access_logs',
+  'taxpayer_connections',
+  'paye_schedule_lines',
+  'paye_schedules',
+  'lga_classes',
+  'presumptive_schedules',
+  'nano_exemption_policies',
+
+  /*
    * Operational state, not reference data.
    *
    * One row per background job, written by whichever instance ran it. A row

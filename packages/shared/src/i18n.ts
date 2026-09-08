@@ -1026,6 +1026,81 @@ export interface TranslationDictionary {
   ofcLvOldestDue: string;
   ofcNavArrears: string;
   ofcArTitle: string;
+  ofcPsPublish: string;
+  ofcPsPublishClass: string;
+  ofcPsPublishFigure: string;
+  ofcPsChoose: string;
+  ofcPsIndicators: string;
+  ofcPsIndicatorsHint: string;
+  ofcPsClassPublished: string;
+  ofcPsFigurePublished: string;
+  ofcPsAssumedTurnoverNaira: string;
+  ofcPsAdoptExemption: string;
+  ofcPsAdoptWarningTitle: string;
+  ofcPsAdoptWarning: string;
+  ofcPsConstruction: string;
+  ofcPsCeiling: string;
+  ofcPsLegalBasis: string;
+  ofcPsExemptionAdopted: string;
+  enumSmall: string;
+  enumNano: string;
+  enumPresumptive: string;
+  enumBooks: string;
+  enumClassA: string;
+  enumClassB: string;
+  enumClassC: string;
+  enumClassD: string;
+  enumMicro: string;
+  enumConjunctive: string;
+  enumTurnoverGoverned: string;
+  enumNone: string;
+  enumStall: string;
+  enumKiosk: string;
+  enumLockUpShop: string;
+  enumBuilding: string;
+  ofcNavPresumptive: string;
+  ofcPsTitle: string;
+  ofcPsIntro: string;
+  ofcPsReadiness: string;
+  ofcPsLgasClassified: string;
+  ofcPsCells: string;
+  ofcPsExemptionInForce: string;
+  ofcPsConjunctive: string;
+  ofcPsTurnoverGoverned: string;
+  ofcPsNoExemptionAdopted: string;
+  ofcPsNoExemptionExplained: string;
+  ofcPsPartlyPublished: string;
+  ofcPsPartlyPublishedExplained: string;
+  ofcPsWhatItWouldCost: string;
+  ofcPsCheckIntro: string;
+  ofcPsPremises: string;
+  ofcPsEquipment: string;
+  ofcPsPeople: string;
+  ofcPsWorkItOut: string;
+  ofcPsBand: string;
+  ofcPsClass: string;
+  ofcPsAssumedTurnover: string;
+  ofcPsAnnualTax: string;
+  ofcPsMonthlyTax: string;
+  ofcPsExempt: string;
+  ofcPsExemptExplained: string;
+  ofcPsHowWeGotThere: string;
+  ofcPsStep: string;
+  ofcPsDetail: string;
+  ofcPsAmount: string;
+  ofcPsNoWorking: string;
+  ofcPsClasses: string;
+  ofcPsClassesIntro: string;
+  ofcPsIndexSource: string;
+  ofcPsFrom: string;
+  ofcPsUntil: string;
+  ofcPsNoEndDate: string;
+  ofcPsNoClasses: string;
+  ofcPsTheTable: string;
+  ofcPsInstrument: string;
+  ofcPsVersion: string;
+  ofcPsNoEntries: string;
+  ofcPsHowToChange: string;
   enumFiled: string;
   ofcPrWithdraw: string;
   ofcPrWithdrawReason: string;
@@ -3276,6 +3351,81 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Oldest due",
     ofcNavArrears: "Arrears worklist",
     ofcArTitle: "Who owes the State money",
+    ofcPsPublish: "Publishing",
+    ofcPsPublishClass: "Publish a local government class",
+    ofcPsPublishFigure: "Publish a schedule figure",
+    ofcPsChoose: "Choose",
+    ofcPsIndicators: "Indicators behind this class",
+    ofcPsIndicatorsHint: "e.g. road access, electrification, poverty headcount",
+    ofcPsClassPublished: "The classification has been published.",
+    ofcPsFigurePublished: "The figure has been published.",
+    ofcPsAssumedTurnoverNaira: "Assumed annual turnover (₦)",
+    ofcPsAdoptExemption: "Adopt a reading of the exemption",
+    ofcPsAdoptWarningTitle: "This decides who is taxed at all",
+    ofcPsAdoptWarning: "Adopting a construction decides whether a trader with a shop is exempt, which moves the covered population enormously. Record it only on a written opinion, and cite that opinion below — it will be quoted back at PSIRS by the first person who disagrees.",
+    ofcPsConstruction: "Which reading",
+    ofcPsCeiling: "Turnover ceiling (₦)",
+    ofcPsLegalBasis: "Opinion or instrument relied on",
+    ofcPsExemptionAdopted: "The construction has been recorded.",
+    enumSmall: "Small",
+    enumNano: "Nano — exempt",
+    enumPresumptive: "Presumptive — assessed off the schedule",
+    enumBooks: "Books — assessed on records",
+    enumClassA: "Class A — strongest local economy",
+    enumClassB: "Class B",
+    enumClassC: "Class C",
+    enumClassD: "Class D — weakest local economy",
+    enumMicro: "Micro",
+    enumConjunctive: "All three limbs together",
+    enumTurnoverGoverned: "Turnover governs alone",
+    enumNone: "No fixed premises",
+    enumStall: "Market stall or table",
+    enumKiosk: "Kiosk or container",
+    enumLockUpShop: "Lock-up shop",
+    enumBuilding: "Building or yard",
+    ofcNavPresumptive: "Presumptive schedule",
+    ofcPsTitle: "The presumptive schedule",
+    ofcPsIntro: "What a trade of a given size is assumed to turn over, by local government class. The rate is one per cent everywhere — what differs is the assumed turnover, because turnover really is lower in some places. Nobody grants a discount and no officer decides anything.",
+    ofcPsReadiness: "Whether it can be used yet",
+    ofcPsLgasClassified: "Local governments classified",
+    ofcPsCells: "Figures published",
+    ofcPsExemptionInForce: "The exemption as adopted",
+    ofcPsConjunctive: "All three limbs must hold: no fixed premises, no employees, and turnover at or below the ceiling. A trader with a shop is therefore assessed even if their turnover is small.",
+    ofcPsTurnoverGoverned: "Turnover governs alone: anyone at or below the ceiling is exempt, whether or not they have a shop or staff.",
+    ofcPsNoExemptionAdopted: "No reading of the exemption has been adopted",
+    ofcPsNoExemptionExplained: "Nobody can be assessed presumptively until PSIRS records which construction of the nano exemption applies, and on whose written opinion. The two readings differ on whether a trader with a shop is exempt, which is not a question this platform may answer by default.",
+    ofcPsPartlyPublished: "The schedule is only partly published",
+    ofcPsPartlyPublishedExplained: "{{done}} of {{total}} local governments have a published class. Anyone in the rest cannot be assessed, and quoting figures from this table for them would be quoting figures that do not apply.",
+    ofcPsWhatItWouldCost: "What a given trade would pay",
+    ofcPsCheckIntro: "Enter what an agent would see standing in the doorway. There is no field for a turnover or a band — those are worked out from what was observed, which is what stops the figure being negotiable.",
+    ofcPsPremises: "Premises",
+    ofcPsEquipment: "Machines or equipment",
+    ofcPsPeople: "People working besides the operator",
+    ofcPsWorkItOut: "Work it out",
+    ofcPsBand: "Size band",
+    ofcPsClass: "Class",
+    ofcPsAssumedTurnover: "Assumed annual turnover",
+    ofcPsAnnualTax: "Tax a year",
+    ofcPsMonthlyTax: "Tax a month",
+    ofcPsExempt: "Exempt — nothing is payable",
+    ofcPsExemptExplained: "This operator is a nano business under the construction of the exemption in force, so no presumptive tax is due at all. That is the law working, not a figure that came out small.",
+    ofcPsHowWeGotThere: "How that figure was reached",
+    ofcPsStep: "Step",
+    ofcPsDetail: "What was used",
+    ofcPsAmount: "Amount",
+    ofcPsNoWorking: "No working to show.",
+    ofcPsClasses: "How each local government is classified",
+    ofcPsClassesIntro: "Classified on data PSIRS does not produce, and fixed for three years. Both are deliberate: a class drawn from an area’s own collection figures would pay it to under-collect, and one that can move next year is one that will be lobbied about.",
+    ofcPsIndexSource: "Whose data",
+    ofcPsFrom: "From",
+    ofcPsUntil: "Until",
+    ofcPsNoEndDate: "No end date set",
+    ofcPsNoClasses: "No local government has a published class yet.",
+    ofcPsTheTable: "The published figures",
+    ofcPsInstrument: "Adopted under",
+    ofcPsVersion: "Version",
+    ofcPsNoEntries: "No figures have been published yet.",
+    ofcPsHowToChange: "A published figure is never edited. Publishing a new one closes the old period and starts a new version, so an assessment made last year can still be checked against the figure it was made under.",
     enumFiled: "Filed",
     ofcPrWithdraw: "Withdraw",
     ofcPrWithdrawReason: "Why is this return being withdrawn?",
@@ -5383,6 +5533,81 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
     ofcNavArrears: "Jerin bashin da ake bin jiha",
     ofcArTitle: "Wanda ke bin jiha bashi",
+    ofcPsPublish: "Wallafawa",
+    ofcPsPublishClass: "Wallafa matakin karamar hukuma",
+    ofcPsPublishFigure: "Wallafa adadin jadawali",
+    ofcPsChoose: "Zaba",
+    ofcPsIndicators: "Alamomin da suka haifar da wannan mataki",
+    ofcPsIndicatorsHint: "misali hanya, wutar lantarki, adadin talauci",
+    ofcPsClassPublished: "An wallafa rarrabuwar.",
+    ofcPsFigurePublished: "An wallafa adadin.",
+    ofcPsAssumedTurnoverNaira: "Kudin shigar shekara da ake zato (₦)",
+    ofcPsAdoptExemption: "Amince da fassarar kebewa",
+    ofcPsAdoptWarningTitle: "Wannan yana yanke wanda za a biya haraji",
+    ofcPsAdoptWarning: "Amince da fassara yana yanke ko an kebe mai shago, wanda ke canza adadin mutanen da abin ya shafa sosai. Ka rubuta shi ne kawai bisa ra’ayin da aka rubuta, kuma ka ambaci wannan ra’ayin a kasa — mutum na farko da bai yarda ba zai maido da shi ga PSIRS.",
+    ofcPsConstruction: "Wace fassara",
+    ofcPsCeiling: "Iyakar kudin shiga (₦)",
+    ofcPsLegalBasis: "Ra’ayi ko dokar da aka dogara a kai",
+    ofcPsExemptionAdopted: "An rubuta fassarar.",
+    enumSmall: "Karami",
+    enumNano: "Nano — an kebe",
+    enumPresumptive: "Kimantawa — bisa jadawali",
+    enumBooks: "Littattafai — bisa rikodin",
+    enumClassA: "Mataki A — tattalin arziki mafi karfi",
+    enumClassB: "Mataki B",
+    enumClassC: "Mataki C",
+    enumClassD: "Mataki D — tattalin arziki mafi rauni",
+    enumMicro: "Karami sosai",
+    enumConjunctive: "Dukkan sharudda uku tare",
+    enumTurnoverGoverned: "Kudin shiga kadai ke yanke hukunci",
+    enumNone: "Babu wurin dindindin",
+    enumStall: "Rumfa ko tebur a kasuwa",
+    enumKiosk: "Kanti ko kwantena",
+    enumLockUpShop: "Shago mai kulle",
+    enumBuilding: "Gini ko fili",
+    ofcNavPresumptive: "Jadawalin haraji na kimantawa",
+    ofcPsTitle: "Jadawalin haraji na kimantawa",
+    ofcPsIntro: "Abin da ake ganin sana’a mai wani girma take samu, bisa matakin karamar hukuma. Adadin haraji kashi daya ne a ko’ina — abin da ya bambanta shi ne kudin shigar da ake zato, domin hakika samu ya fi kankanta a wasu wurare. Babu wanda ke bayar da ragi kuma babu jami’in da ke yanke shawara.",
+    ofcPsReadiness: "Ko ana iya amfani da shi tukuna",
+    ofcPsLgasClassified: "Kananan hukumomin da aka rarraba",
+    ofcPsCells: "Adadin da aka wallafa",
+    ofcPsExemptionInForce: "Kebewar kamar yadda aka amince da ita",
+    ofcPsConjunctive: "Dole ne dukkan sharudda uku su cika: babu wurin kasuwanci na dindindin, babu ma’aikata, kuma kudin shiga bai wuce iyaka ba. Don haka ana kimanta mai shago ko da kudin shigarsa kadan ne.",
+    ofcPsTurnoverGoverned: "Kudin shiga kadai ke yanke hukunci: duk wanda bai wuce iyaka ba an kebe shi, ko yana da shago ko ma’aikata ko babu.",
+    ofcPsNoExemptionAdopted: "Ba a amince da wata fassarar kebewa ba",
+    ofcPsNoExemptionExplained: "Ba za a iya kimanta kowa ba har sai PSIRS ta rubuta wace fassarar kebewar nano ce ta shafi, kuma bisa ra’ayin wa aka rubuta. Fassarorin biyu sun bambanta kan ko an kebe mai shago, kuma wannan ba tambaya ce da wannan tsarin zai amsa da kansa ba.",
+    ofcPsPartlyPublished: "An wallafa jadawalin bangare kadai",
+    ofcPsPartlyPublishedExplained: "Kananan hukumomi {{done}} daga {{total}} ne ke da matakin da aka wallafa. Ba za a iya kimanta wadanda ke sauran ba, kuma ambaton adadi daga wannan jadawalin gare su zai zama ambaton abin da bai shafe su ba.",
+    ofcPsWhatItWouldCost: "Abin da wata sana’a za ta biya",
+    ofcPsCheckIntro: "Ka shigar da abin da wakili zai gani yana tsaye a bakin kofa. Babu wurin shigar da kudin shiga ko mataki — ana lissafa su daga abin da aka gani, wanda shi ne ke hana a yi ciniki a kan adadin.",
+    ofcPsPremises: "Wurin sana’a",
+    ofcPsEquipment: "Injuna ko kayan aiki",
+    ofcPsPeople: "Mutanen da ke aiki ban da mai sana’a",
+    ofcPsWorkItOut: "Yi lissafi",
+    ofcPsBand: "Matakin girma",
+    ofcPsClass: "Mataki",
+    ofcPsAssumedTurnover: "Kudin shigar shekara da ake zato",
+    ofcPsAnnualTax: "Harajin shekara",
+    ofcPsMonthlyTax: "Harajin wata",
+    ofcPsExempt: "An kebe — babu abin biya",
+    ofcPsExemptExplained: "Wannan mai sana’a kanana ne bisa fassarar kebewar da ke aiki, don haka babu wani harajin kimantawa da ya kamata. Wannan doka ce ke aiki, ba adadi ne da ya fito kankani ba.",
+    ofcPsHowWeGotThere: "Yadda aka kai ga wannan adadin",
+    ofcPsStep: "Mataki",
+    ofcPsDetail: "Abin da aka yi amfani da shi",
+    ofcPsAmount: "Adadi",
+    ofcPsNoWorking: "Babu lissafin da za a nuna.",
+    ofcPsClasses: "Yadda aka rarraba kowace karamar hukuma",
+    ofcPsClassesIntro: "An rarraba bisa bayanan da PSIRS ba ta samar ba, kuma an daidaita shi na shekara uku. Duka biyu da gangan ne: mataki da aka samo daga kudin da yankin ya tara zai sa a rage tarawa, kuma wanda za a iya canzawa badi zai jawo matsin lamba.",
+    ofcPsIndexSource: "Bayanan wa",
+    ofcPsFrom: "Daga",
+    ofcPsUntil: "Har zuwa",
+    ofcPsNoEndDate: "Ba a saita ranar karshe ba",
+    ofcPsNoClasses: "Babu karamar hukumar da ke da matakin da aka wallafa tukuna.",
+    ofcPsTheTable: "Adadin da aka wallafa",
+    ofcPsInstrument: "An amince da shi karkashin",
+    ofcPsVersion: "Sigar",
+    ofcPsNoEntries: "Ba a wallafa wani adadi ba tukuna.",
+    ofcPsHowToChange: "Ba a taba gyara adadin da aka wallafa. Wallafa sabo yana rufe tsohon lokaci ya fara sabuwar siga, don haka ana iya duba kimantawar bara bisa adadin da aka yi ta a kansa.",
     enumFiled: "An kai",
     ofcPrWithdraw: "Janye",
     ofcPrWithdrawReason: "Me ya sa ake janye wannan rahoto?",

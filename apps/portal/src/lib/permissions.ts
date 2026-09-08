@@ -274,6 +274,17 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavPayroll',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  /*
+   * The published schedule, readable by anyone who may read the catalogue.
+   * A rate table only officers can see is one nobody can contest, and being
+   * contestable by an ordinary person is the point of publishing figures
+   * rather than running a scoring model.
+   */
+  presumptive: {
+    path: '/presumptive',
+    label: 'ofcNavPresumptive',
+    permission: 'catalogue:read',
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -349,8 +360,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupConfiguration',
-      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!,
-              SCREEN.fieldApp!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.programmes!, SCREEN.allocations!,
+              SCREEN.groups!, SCREEN.fieldApp!],
     },
     {
       group: 'ofcGroupOversight',
@@ -372,7 +383,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupAssessment',
-      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.transactions!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.levies!, SCREEN.transactions!],
     },
     {
       group: 'ofcGroupRevenue',
@@ -406,7 +417,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!],
+      items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!,
+              SCREEN.presumptive!],
     },
   ],
 
@@ -422,8 +434,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupWhatCharged',
-      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.dashboard!,
-              SCREEN.intelligence!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.levies!, SCREEN.revenue!,
+              SCREEN.dashboard!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupWhoDidIt',
@@ -445,7 +457,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!],
+      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!, SCREEN.presumptive!],
     },
   ],
 };

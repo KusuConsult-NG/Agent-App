@@ -24,6 +24,14 @@ import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
 import {
+  adoptNanoPolicy,
+  bandFor,
+  classifyLga,
+  computePresumptive,
+  publishScheduleEntry,
+  publishedSchedule,
+} from '../services/presumptive';
+import {
   cancelPayeSchedule,
   employersNotFiling,
   filePayeSchedule,
@@ -421,6 +429,170 @@ governmentRouter.post(
         actorRole: req.auth!.role,
       });
       res.status(204).end();
+    },
+  ),
+);
+
+/* ---------------------------------------------------------------------------
+ * The presumptive schedule
+ *
+ * The table PSIRS has to defend in a room full of traders. Reading it is open
+ * to anyone who may read a report — it is a published document, and a schedule
+ * only officers can see is one nobody can contest. Changing it is
+ * `catalogue:configure`, which is where the rest of the revenue catalogue
+ * lives, because that is what this is: a rate table with a legal instrument
+ * behind it.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * `catalogue:read` alone, and deliberately not the report permissions.
+ *
+ * The schedule is statewide on purpose — a trader in Wase needs the Jos North
+ * figure beside her own to see why they differ, and narrowing it would destroy
+ * the thing that makes it defensible. But `report:read:territory` promises a
+ * narrowing, and a route that accepts it and then answers for the whole State
+ * is telling a supervisor something untrue about what they are looking at.
+ * Every officer role holds `catalogue:read`, so nobody loses access; what goes
+ * is the false promise.
+ */
+governmentRouter.get(
+  '/presumptive/schedule',
+  requirePermission('catalogue:read'),
+  asyncHandler(async (_req, res) => {
+    res.json(await publishedSchedule(pool));
+  }),
+);
+
+/*
+ * What a given set of observations would produce, before anybody is assessed.
+ *
+ * A preview and nothing else: it writes nothing, and the observations come in
+ * the request rather than from a stored record. It exists so an officer can
+ * answer "what would I owe?" at a counter, and so the schedule can be tested
+ * against real cases before it is adopted rather than after somebody has been
+ * billed under it.
+ */
+governmentRouter.post(
+  '/presumptive/preview',
+  requirePermission('catalogue:read'),
+  validateBody(
+    z.object({
+      economicSector: z.enum(ECONOMIC_SECTOR_CODES),
+      lgaId: uuidSchema,
+      observations: z.object({
+        premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']),
+        equipmentCount: z.number().int().min(0).max(1000),
+        peopleWorking: z.number().int().min(0).max(1000),
+      }),
+    }),
+    async (_req, res, data) => {
+      res.json(await computePresumptive(pool, data));
+    },
+  ),
+);
+
+/*
+ * The band alone, with no schedule lookup.
+ *
+ * Separate from the preview because it answers before a schedule exists, which
+ * is the state PSIRS is actually in while drafting one: what band does a
+ * tailor with a lock-up shop and two machines fall in, so the figure beside it
+ * can be argued about.
+ */
+governmentRouter.post(
+  '/presumptive/band',
+  requirePermission('catalogue:read'),
+  validateBody(
+    z.object({
+      premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']),
+      equipmentCount: z.number().int().min(0).max(1000),
+      peopleWorking: z.number().int().min(0).max(1000),
+    }),
+    async (_req, res, data) => {
+      res.json({ sizeBand: bandFor(data) });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/presumptive/lga-classes',
+  requirePermission('catalogue:configure'),
+  validateBody(
+    z.object({
+      lgaId: uuidSchema,
+      classCode: z.enum(['A', 'B', 'C', 'D']),
+      indexInputs: z.record(z.string(), z.unknown()),
+      indexSource: z.string().min(4).max(300),
+      effectiveFrom: z.string().date(),
+      effectiveTo: z.string().date().optional(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await classifyLga(pool, {
+          ...data,
+          effectiveTo: data.effectiveTo ?? null,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/presumptive/schedule',
+  requirePermission('catalogue:configure'),
+  validateBody(
+    z.object({
+      economicSector: z.enum(ECONOMIC_SECTOR_CODES),
+      sizeBand: z.enum(['MICRO', 'SMALL', 'MEDIUM']),
+      lgaClass: z.enum(['A', 'B', 'C', 'D']),
+      assumedAnnualTurnoverKobo: koboSchema,
+      instrumentReference: z.string().min(4).max(300),
+      effectiveFrom: z.string().date(),
+      effectiveTo: z.string().date().optional(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await publishScheduleEntry(pool, {
+          ...data,
+          assumedAnnualTurnoverKobo: data.assumedAnnualTurnoverKobo.toString(),
+          effectiveTo: data.effectiveTo ?? null,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+/*
+ * `system:configure`, not `catalogue:configure`.
+ *
+ * Adopting a construction of the exemption decides who in Plateau State is
+ * inside the tax net at all. That is a different size of decision from setting
+ * a figure in a rate table, and it should not sit with everyone who maintains
+ * the catalogue.
+ */
+governmentRouter.post(
+  '/presumptive/nano-policy',
+  requirePermission('system:configure'),
+  validateBody(
+    z.object({
+      construction: z.enum(['CONJUNCTIVE', 'TURNOVER_GOVERNED']),
+      turnoverCeilingKobo: koboSchema,
+      legalBasis: z.string().min(8).max(500),
+      effectiveFrom: z.string().date(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await adoptNanoPolicy(pool, {
+          ...data,
+          turnoverCeilingKobo: data.turnoverCeilingKobo.toString(),
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
     },
   ),
 );
