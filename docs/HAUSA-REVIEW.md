@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2183 strings, grouped by where an agent meets them. Lower stakes
+2184 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2604,6 +2604,7 @@ instructions — but they are what an agent reads all day.
 | `enumStarted` | Started | An fara | ☐ | |
 | `enumState` | State | Jiha | ☐ | |
 | `enumStepUp` | Extra confirmation | Karin tabbatarwa | ☐ | |
+| `enumCitizenStatement` | Statement of payments | Bayanin biyayya | ☐ | |
 | `enumStudentUnemployed` | Student or not working | Dalibi ko marar aikin yi | ☐ | |
 | `enumSubmitted` | Submitted | An tura | ☐ | |
 | `enumSucceeded` | Succeeded | Ya yi nasara | ☐ | |

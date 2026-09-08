@@ -494,6 +494,7 @@ export interface TranslationDictionary {
   enumStarted: string;
   enumState: string;
   enumStepUp: string;
+  enumCitizenStatement: string;
   enumStudentUnemployed: string;
   enumSubmitted: string;
   enumSucceeded: string;
@@ -2992,6 +2993,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumStarted: "Started",
     enumState: "State",
     enumStepUp: "Extra confirmation",
+    enumCitizenStatement: "Statement of payments",
     enumStudentUnemployed: "Student or not working",
     enumSubmitted: "Submitted",
     enumSucceeded: "Succeeded",
@@ -5278,6 +5280,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumStarted: "An fara",
     enumState: "Jiha",
     enumStepUp: "Karin tabbatarwa",
+    enumCitizenStatement: "Bayanin biyayya",
     enumStudentUnemployed: "Dalibi ko marar aikin yi",
     enumSubmitted: "An tura",
     enumSucceeded: "Ya yi nasara",

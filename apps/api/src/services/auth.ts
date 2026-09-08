@@ -610,9 +610,25 @@ async function ownRegisteredNumber(userId: string | null, destination: string): 
   return owner.phone;
 }
 
+/**
+ * What a one-time code is for.
+ *
+ * CITIZEN_STATEMENT is the odd one out and deliberately so: every other
+ * purpose belongs to somebody who already has an account. This one proves that
+ * whoever is asking is holding the handset the taxpayer record names, which is
+ * the only proof available to a person with no login at all.
+ */
+export type OtpPurpose =
+  | 'LOGIN'
+  | 'REGISTRATION'
+  | 'STEP_UP'
+  | 'PASSWORD_RESET'
+  | 'REFEREE_VERIFY'
+  | 'CITIZEN_STATEMENT';
+
 export async function requestOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   userId?: string | null;
 }): Promise<{
   sent: boolean;
@@ -692,7 +708,7 @@ type OtpOutcome =
  */
 export async function verifyOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   code: string;
 }): Promise<{ userId: string | null }> {
   const outcome = await withTransaction<OtpOutcome>(async (client) => {
