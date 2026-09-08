@@ -40,6 +40,10 @@ export STORAGE_PATH="/tmp/psirs-uat-storage"
 export RUN_MIGRATIONS_ON_BOOT=false
 export PORT=4000
 
+# The database first: a resumed container comes back with the server stopped,
+# and every step below assumes it is there.
+"$ROOT/scripts/ensure-postgres.sh" || exit 1
+
 RUN_DIR="/tmp/psirs-uat"
 mkdir -p "$RUN_DIR"
 
