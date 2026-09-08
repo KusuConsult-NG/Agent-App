@@ -248,22 +248,31 @@ Two things worth knowing about how they were done:
   them was keyed. That prop is now `keyof TranslationDictionary`, so the
   compiler holds the boundary the way it already does for `Stat` and `Alert`.
 
-### What is still English on that page, and why
+### The last English on that page is gone, and it was not a translation problem
 
-One line. A vehicle payment carries **`12 month vehicle renewal`** under it.
-That is `assessments.period_label` — free text written when the assessment was
-raised, in whatever language the officer or the rule that raised it used. It is
-not a dictionary string and there is no `period_label_ha`, so nothing on the
-screen can translate it.
+A vehicle payment used to carry **`12 month vehicle renewal`** under it —
+`assessments.period_label`, a sentence composed in English inside the renewal
+service. The obvious fix was a `period_label_ha` twin like `revenue_items`
+has. That would have been the wrong fix.
 
-Two ways out, and both are changes to how an assessment is raised rather than
-to a screen: give the column a Hausa twin the way `revenue_items` has one, or
-stop storing a sentence and store the period, letting each screen write the
-label itself. The second is better and larger. Neither is done here.
+Only three places set a period label. Two write `2026` and `2026-07`: a year
+and a month, which read the same in both languages and want no translation at
+all. The third was the renewal, and a renewal's period is not a name — it is
+two dates, which `assessments` already has columns for and which the renewal
+row beside it was already recording. So the renewal records them too now, and
+the screens print the period rather than a stored sentence.
 
-The status sentence, the paragraph about what is not shown, and the levy names
-were all in this state an hour ago and are fixed — the levy names because the
-catalogue already had `name_ha` and only the screen was ignoring it.
+It cost more than a language. The compliance score counts distinct period
+labels, and every renewal wrote the same words, so a motorist's 2025 and 2026
+renewals counted as **one** period against the minimum that gates programme
+eligibility. Somebody two years into paying looked like somebody assessed once.
+
+**One question left for you.** The period prints as `2026-09-08 – 2027-09-08`
+rather than "08 Sept 2026", because `formatDate` is fixed to `en-NG` and would
+put an English month inside a Hausa sentence. The ISO form reads the same in
+both languages and matches the line above it on that screen. Whether the
+portal should have Hausa month names at all — and which ones — is yours to
+say; it affects every date on every screen, not just this one.
 
 ### `enumAssigned` was doing double duty, and a TIN now has its own word
 

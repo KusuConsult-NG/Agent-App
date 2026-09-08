@@ -535,6 +535,8 @@ interface CitizenStatement {
     revenueItem: string;
     revenueItemHa: string | null;
     periodLabel: string | null;
+    periodStart: string | null;
+    periodEnd: string | null;
     amountKobo: string;
     returned: boolean;
   }[];
@@ -1026,7 +1028,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
                   {row.paidAt ? new Date(row.paidAt).toLocaleDateString() : '—'}
-                  {row.periodLabel ? ` · ${row.periodLabel}` : ''}
+                  {periodOf(row) ? ` · ${periodOf(row)}` : ''}
                   {/*
                     * A reversal says so. Shown rather than hidden, because
                     * money that came back is part of what happened and a
@@ -1080,6 +1082,37 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       )}
     </div>
   );
+}
+
+/**
+ * What a payment covered, in the reader's language.
+ *
+ * Dates first, because a period is dates and they need no translating. The
+ * label is the fallback for an assessment that only has a name for its period
+ * — a tax year, a month — and those are written `2026` and `2026-07`, which
+ * read the same in both languages. The one label that was English prose was
+ * the vehicle renewal's, and it now records real dates instead.
+ */
+function periodOf(
+  row: { periodLabel: string | null; periodStart: string | null; periodEnd: string | null },
+): string | null {
+  if (row.periodStart && row.periodEnd) {
+    /*
+     * Written as the dates themselves rather than through `formatDate`.
+     *
+     * `formatDate` is fixed to `en-NG`, so it renders "08 Sept 2026" whatever
+     * language the reader chose — English inside a Hausa sentence, which is
+     * the thing this whole change is about. `2026-09-08` reads the same in
+     * both, and it is already how this screen prints the statement's own
+     * window two lines above.
+     *
+     * Whether the portal should have Hausa month names at all is a question
+     * for the reviewer, not a decision to smuggle in here; it is written up in
+     * HAUSA-REVIEW.md.
+     */
+    return `${row.periodStart} – ${row.periodEnd}`;
+  }
+  return row.periodLabel;
 }
 
 /**

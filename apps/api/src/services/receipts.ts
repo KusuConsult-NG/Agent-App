@@ -74,6 +74,8 @@ export async function issueReceipt(
     mda_name_ha: string | null;
     lga_name: string;
     period_label: string | null;
+    period_start: Date | null;
+    period_end: Date | null;
     agent_code: string | null;
     payment_reference: string;
     gateway_reference: string | null;
@@ -86,7 +88,7 @@ export async function issueReceipt(
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             m.name AS mda_name, m.name_ha AS mda_name_ha,
-            l.name AS lga_name, a.period_label, ag.agent_code,
+            l.name AS lga_name, a.period_label, a.period_start, a.period_end, ag.agent_code,
             p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
        FROM transactions t
        JOIN taxpayers tp ON tp.id = t.taxpayer_id
@@ -145,6 +147,8 @@ export async function issueReceipt(
     paidAt: context.paid_at ?? issuedAt,
     issuedAt,
     periodLabel: context.period_label,
+    periodStart: context.period_start,
+    periodEnd: context.period_end,
     agentCode: context.agent_code,
     lgaName: context.lga_name,
     verificationCode,
@@ -234,6 +238,8 @@ export async function issueAcknowledgement(
     mda_name_ha: string | null;
     lga_name: string;
     period_label: string | null;
+    period_start: Date | null;
+    period_end: Date | null;
     agent_code: string | null;
     payment_reference: string;
     gateway_reference: string | null;
@@ -246,7 +252,7 @@ export async function issueAcknowledgement(
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             m.name AS mda_name, m.name_ha AS mda_name_ha,
-            l.name AS lga_name, a.period_label, ag.agent_code,
+            l.name AS lga_name, a.period_label, a.period_start, a.period_end, ag.agent_code,
             p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
        FROM transactions t
        JOIN taxpayers tp ON tp.id = t.taxpayer_id
@@ -286,6 +292,8 @@ export async function issueAcknowledgement(
     paidAt: context.paid_at ?? issuedAt,
     issuedAt,
     periodLabel: context.period_label,
+    periodStart: context.period_start,
+    periodEnd: context.period_end,
     agentCode: context.agent_code,
     lgaName: context.lga_name,
     verificationCode,

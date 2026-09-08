@@ -352,25 +352,6 @@ export async function initiateRenewal(params: {
     );
   }
 
-  const assessment = await createAssessment({
-    taxpayerId: params.taxpayerId,
-    revenueItemId: params.revenueItemId,
-    inputs: {
-      renewalPeriodMonths: params.renewalPeriodMonths,
-      vehicleType: vehicle.vehicle_type,
-      vehicleClass: vehicle.vehicle_class,
-      registrationNumber: vehicle.registration_number,
-    },
-    periodLabel: `${params.renewalPeriodMonths} month vehicle renewal`,
-    actorId: params.actorId,
-    actorRole: params.actorRole,
-    agentId: params.agentId ?? null,
-    territoryId: params.territoryId ?? null,
-    deviceId: params.deviceId ?? null,
-    latitude: params.latitude ?? null,
-    longitude: params.longitude ?? null,
-  });
-
   /*
    * An early renewal carries the unexpired time forward.
    *
@@ -396,6 +377,45 @@ export async function initiateRenewal(params: {
   const periodStart = unexpired ?? now;
   const expiryDate = new Date(periodStart);
   expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
+
+  /*
+   * Worked out before the assessment, not after, so both carry the same dates.
+   *
+   * The renewal row has always recorded this period and the assessment never
+   * did — it carried the sentence "12 month vehicle renewal" instead, composed
+   * here in English and shown to a citizen reading Hausa. The period is dates,
+   * and the dates were already being calculated four lines further down.
+   */
+  const assessment = await createAssessment({
+    taxpayerId: params.taxpayerId,
+    revenueItemId: params.revenueItemId,
+    inputs: {
+      renewalPeriodMonths: params.renewalPeriodMonths,
+      vehicleType: vehicle.vehicle_type,
+      vehicleClass: vehicle.vehicle_class,
+      registrationNumber: vehicle.registration_number,
+    },
+    periodStart: periodStart.toISOString().slice(0, 10),
+    periodEnd: expiryDate.toISOString().slice(0, 10),
+    /*
+     * No label. The period is the two dates above.
+     *
+     * A label was the only thing this assessment recorded about its period,
+     * and every renewal wrote the same words — so the compliance score, which
+     * counts DISTINCT period labels, folded a motorist's 2025 and 2026
+     * renewals into one period and scored them as though they had been
+     * assessed once. Unlabelled, each assessment counts as its own occasion,
+     * which is what the score's own comment says an unlabelled one is.
+     */
+    periodLabel: null,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    agentId: params.agentId ?? null,
+    territoryId: params.territoryId ?? null,
+    deviceId: params.deviceId ?? null,
+    latitude: params.latitude ?? null,
+    longitude: params.longitude ?? null,
+  });
 
   const renewal = await withTransaction(async (client) => {
     const row = await queryOne<{ id: string }>(

@@ -171,6 +171,68 @@ describe('Somebody who has done everything asked of them', () => {
     );
   });
 
+  it('counts two years of the same renewal as two periods, not one', async () => {
+    /*
+     * The other half of the label problem, and the more expensive half.
+     *
+     * The periods component counts DISTINCT period labels. Only vehicle
+     * renewals ever set one, and every renewal set the same words — "12 month
+     * vehicle renewal" — so a motorist who renewed in 2025 and again in 2026
+     * had two assessments that counted as one period. The score that gates
+     * incentive eligibility read them as somebody assessed once.
+     *
+     * Labels are not what a renewal's period is; two dates are, and the
+     * renewal path now records those. Unlabelled, each assessment counts as
+     * its own occasion, which is what the score's own comment says an
+     * unlabelled one is.
+     */
+    const motorist = await newTaxpayer();
+    const first = await assess(motorist, 'MARKET-LEVY', { pay: true });
+    const second = await assess(motorist, 'SHOPS-KIOSKS', { pay: true });
+
+    // Both assessments given the same label, as every renewal used to be.
+    await pool.query(
+      `UPDATE assessments SET period_label = '12 month vehicle renewal'
+        WHERE id IN (SELECT assessment_id FROM transactions WHERE id = ANY($1::uuid[]))`,
+      [[first, second]],
+    );
+    const collapsed = await scoreFor(motorist);
+
+    // And with the period recorded as dates instead, which is what the
+    // renewal path does now.
+    await pool.query(
+      `UPDATE assessments
+          SET period_label = NULL,
+              period_start = DATE '2026-01-01',
+              period_end = DATE '2026-12-31'
+        WHERE id IN (SELECT assessment_id FROM transactions WHERE id = ANY($1::uuid[]))`,
+      [[first, second]],
+    );
+    const counted = await scoreFor(motorist);
+
+    /*
+     * The count, not the score. Both renewals are paid either way, so the
+     * points are twenty either way — what the collapse cost was the number
+     * of periods, and `minimum_compliance_periods` gates programme
+     * eligibility on exactly that number. A motorist two years into paying
+     * showed as one period and waited longer for relief than they should.
+     */
+    const periodsIn = (breakdown: typeof collapsed) =>
+      Number(
+        /of (\d+) assessment period/.exec(
+          breakdown.components.find((c) => c.factor === 'Compliant periods')?.detail ?? '',
+        )?.[1] ?? 0,
+      );
+
+    assert.equal(periodsIn(collapsed), 1, 'the shared label folded both into one period');
+    assert.equal(periodsIn(counted), 2, 'two renewals are two periods');
+    assert.ok(
+      counted.score >= collapsed.score,
+      `recording the period must not cost a compliant motorist points: ` +
+        `${counted.score} after, ${collapsed.score} before`,
+    );
+  });
+
   it('does not need seven payments to be considered compliant', async () => {
     // The old scale capped payments at 5 points each up to 35, so a taxpayer
     // assessed once a year could never reach it however punctually they paid.

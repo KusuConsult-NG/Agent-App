@@ -34,6 +34,12 @@ import { query, queryOne } from '../db/pool';
 import { badRequest } from '../lib/errors';
 
 /** The statuses that mean money arrived. Kept in step with the score. */
+/** The day part of a DATE column, however the driver hands it over. */
+function asDate(value: string | Date | null): string | null {
+  if (!value) return null;
+  return (value instanceof Date ? value.toISOString() : String(value)).slice(0, 10);
+}
+
 const PAID_STATUSES = ['SETTLED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING'] as const;
 const RETURNED_STATUSES = ['REVERSED', 'REFUNDED'] as const;
 
@@ -44,6 +50,8 @@ export interface PaymentHistoryRow {
   revenueItemHa: string | null;
   category: string | null;
   periodLabel: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
   amountKobo: string;
   channel: string;
   status: string;
@@ -97,6 +105,8 @@ export async function paymentHistory(
     revenue_item_ha: string | null;
     category: string | null;
     period_label: string | null;
+    period_start: string | Date | null;
+    period_end: string | Date | null;
     amount_kobo: string;
     channel: string;
     status: string;
@@ -110,6 +120,8 @@ export async function paymentHistory(
             ri.name_ha       AS revenue_item_ha,
             rc.name          AS category,
             a.period_label,
+            a.period_start,
+            a.period_end,
             t.total_amount_kobo::text AS amount_kobo,
             t.channel,
             t.status,
@@ -207,6 +219,17 @@ export async function paymentHistory(
       revenueItemHa: row.revenue_item_ha,
       category: row.category,
       periodLabel: row.period_label,
+      /*
+       * A date, not a timestamp.
+       *
+       * `period_start` and `period_end` are DATE columns, and node-pg hands
+       * them back as JS Dates, which serialise through JSON as
+       * `2026-09-08T00:00:00.000Z`. A statement showing a midnight and a
+       * timezone for the day somebody's cover began is stating a precision
+       * the column does not have.
+       */
+      periodStart: asDate(row.period_start),
+      periodEnd: asDate(row.period_end),
       amountKobo: row.amount_kobo,
       channel: row.channel,
       status: row.status,

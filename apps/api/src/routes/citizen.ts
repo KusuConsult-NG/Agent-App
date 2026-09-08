@@ -450,6 +450,8 @@ citizenRouter.post(
           revenueItem: row.revenueItem,
           revenueItemHa: row.revenueItemHa,
           periodLabel: row.periodLabel,
+          periodStart: row.periodStart,
+          periodEnd: row.periodEnd,
           amountKobo: row.amountKobo,
           returned: row.returned,
         })),
