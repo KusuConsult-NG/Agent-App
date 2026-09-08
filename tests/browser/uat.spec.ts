@@ -129,6 +129,31 @@ async function settleThroughApi(gatewayReference: string): Promise<void> {
   const payment = list.find((row) => row.gateway_reference === gatewayReference);
   expect(payment, `the API does not know gateway reference ${gatewayReference}`).toBeTruthy();
 
+  /*
+   * Import the gateway's statement first, because a settlement is refused
+   * without one.
+   *
+   * This step did not exist when the spec was written, and the spec went red
+   * when the corroboration guard was added: a settlement will not issue
+   * receipts for a reference the gateway's own statement does not confirm.
+   * That guard is the point — money nobody outside the platform has confirmed
+   * should not become a receipt — so the harness catches up with it rather
+   * than routing around it. In the field a finance officer does exactly this:
+   * import the statement covering the date, then record the batch.
+   *
+   * The window is narrow and ends in the future. The mock gateway selects on
+   * `created_at` in `mock_gateway_transactions`, and the collection this test
+   * just made is seconds old; a `to` of "now" races the clock on a slow box.
+   */
+  const importedFrom = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const importedTo = new Date(Date.now() + 60 * 1000).toISOString();
+  const swept = await fetch(`${API}/government/reconciliation/run`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ from: importedFrom, to: importedTo }),
+  });
+  expect(swept.status, `statement import failed: ${await swept.clone().text()}`).toBe(200);
+
   const response = await fetch(`${API}/government/settlements`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -208,7 +233,17 @@ async function walkEveryScreen(page: Page, who: keyof typeof OFFICERS): Promise<
   const visited: string[] = [];
   for (const [index, link] of links.entries()) {
     await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
-    await page.waitForTimeout(1200);
+    /*
+     * Wait for the screen's own requests, then a short settle for the render.
+     *
+     * This was a flat 1,200ms per screen. An administrator is now offered
+     * twenty-six of them, so a third of the test's budget went on sleeping
+     * whether or not anything was still loading — and the screens that
+     * genuinely take longer than 1,200ms were photographed half-drawn anyway.
+     * Waiting on the network answers both.
+     */
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(350);
 
     const body = (await page.locator('.content').innerText().catch(() => '')).toLowerCase();
     expect(body, `${who} → ${link.label} is not refused by the API`).not.toContain('not permitted');
@@ -636,6 +671,17 @@ test.describe('A collection, end to end in the app', () => {
 test.describe('The officer portal, role by role', () => {
   for (const who of ['admin', 'revenue', 'finance', 'auditor', 'supervisor'] as const) {
     test(`${OFFICERS[who].label}: every screen they are offered opens`, async ({ page }) => {
+      /*
+       * Slow on purpose: this opens and photographs every screen a role is
+       * offered, and an administrator is offered twenty-six.
+       *
+       * It was on the default budget and passed when the portal was smaller.
+       * Levies, the presumptive schedule, enumeration, connections and
+       * allocations were added since, and nobody moved the number — so it
+       * began failing on a loaded machine and passing on a quiet one, which
+       * reads as flakiness and is really a walk that outgrew its clock.
+       */
+      test.slow();
       const visited = await walkEveryScreen(page, who);
       console.log(`  ${OFFICERS[who].label} walked ${visited.length} screens: ${visited.join(', ')}`);
     });
