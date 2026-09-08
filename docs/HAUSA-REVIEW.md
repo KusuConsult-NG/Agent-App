@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2136 strings, grouped by where an agent meets them. Lower stakes
+2163 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1650,6 +1650,7 @@ instructions — but they are what an agent reads all day.
 | `tpGiveTinToTaxpayer` | Give this number to the taxpayer. They will need it for every government payment. | Ka ba mai biyan haraji wannan lambar. Za su bukace ta a duk biyan kudi na gwamnati. | ☐ | |
 | `tpTinRequested` | TIN request submitted | An tura bukatar TIN | ☐ | |
 | `tpCollectRevenue` | Collect revenue | Karbi haraji | ☐ | |
+| `tpEnumerate` | Write down the business | Rubuta yadda kasuwancin yake | ☐ | |
 | `tpViewProfile` | View profile | Duba bayanai | ☐ | |
 | `tpPossibleExisting` | Possible existing taxpayer | Mai biyan haraji da watakila yana nan | ☐ | |
 | `tpCheckSamePerson` | Check whether any of these is the same person before creating a new record. | Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista. | ☐ | |
@@ -2678,6 +2679,32 @@ instructions — but they are what an agent reads all day.
 | `enumCoverageLead` | Looking for people not yet assessed | Neman wadanda ba a kimanta ba tukuna | ☐ | |
 | `enumTaxpayerRequest` | The taxpayer asked to see it | Mai biyan haraji ya nemi ganin sa | ☐ | |
 | `enumWithdrawn` | Withdrawn | An janye | ☐ | |
+| `agEnTitle` | What the business looks like | Yadda kasuwancin yake | ☐ | |
+| `agEnIntro` | Write down what you can see. You are not setting a price — the office works out the band from what you record, and the taxpayer is told by notice. | Ka rubuta abin da kake gani. Ba kai ne kake sanya farashi ba — ofis shi ke fitar da mataki daga abin da ka rubuta, kuma za a sanar da mai biyan haraji da takarda. | ☐ | |
+| `agEnWho` | Who | Wane ne | ☐ | |
+| `agEnPremises` | Where they trade from | Inda yake kasuwanci | ☐ | |
+| `agEnPremisesHint` | What you can see today, not what they say they are building. | Abin da kake gani yau, ba abin da ya ce zai gina ba. | ☐ | |
+| `agEnEquipment` | Machines or equipment | Injuna ko kayan aiki | ☐ | |
+| `agEnEquipmentHint` | Count what is being used for the business. Write 0 if there is none. | Ka kirga abin da ake amfani da shi don kasuwanci. Ka rubuta 0 idan babu. | ☐ | |
+| `agEnPeople` | People working besides the owner | Mutanen da ke aiki banda mai shi | ☐ | |
+| `agEnPeopleHint` | Including apprentices and family who work there. Write 0 if the owner works alone. | Har da almajirai da ’yan uwa da ke aiki a wurin. Ka rubuta 0 idan mai shi kadai ke aiki. | ☐ | |
+| `agEnSector` | Trade | Sana’a | ☐ | |
+| `agEnGroup` | Market association | Kungiyar kasuwa | ☐ | |
+| `agEnGroupHint` | If they belong to one, the leader will be asked to confirm what you wrote. | Idan yana cikin daya, za a tambayi shugaba ya tabbatar da abin da ka rubuta. | ☐ | |
+| `agEnNoGroupChosen` | Not through an association | Ba ta hannun kungiya ba | ☐ | |
+| `agEnNoGroupsTitle` | No association to record this through | Babu kungiyar da za a bi | ☐ | |
+| `agEnNoGroups` | None of your groups has been given a part in enumeration yet. Record it anyway — an officer can ask the leader later. | Babu wata kungiyarka da aka ba ta rawa a kidaya har yanzu. Ka rubuta duk da haka — jami’i na iya tambayar shugaba daga baya. | ☐ | |
+| `agEnNoAmountTitle` | You are not setting the tax | Ba kai ne kake sanya harajin ba | ☐ | |
+| `agEnNoAmount` | There is no amount on this form and there will not be one. If the trader asks what it will cost, tell them the office will send a notice, and that they can object to it. | Babu adadi a wannan takarda kuma ba za a sa ba. Idan mai kasuwanci ya tambaya nawa ne, ka ce masa ofis zai aika da sanarwa, kuma yana da damar kalubalantar ta. | ☐ | |
+| `agEnChoose` | Choose | Zaba | ☐ | |
+| `agEnSave` | Save what you saw | Ajiye abin da ka gani | ☐ | |
+| `agEnSaving` | Saving… | Ana ajiyewa… | ☐ | |
+| `agEnRecordedTitle` | Written down | An rubuta | ☐ | |
+| `agEnBand` | Size recorded | Girman da aka rubuta | ☐ | |
+| `agEnWhatHappensNextTitle` | What happens next | Abin da zai biyo baya | ☐ | |
+| `agEnNextWithLeader` | The association leader will be asked to confirm this. Nothing is charged until an officer looks at it. | Za a tambayi shugaban kungiya ya tabbatar da wannan. Ba a caji komai ba sai jami’i ya duba shi. | ☐ | |
+| `agEnNextWithoutLeader` | An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice. | Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa. | ☐ | |
+| `agEnBackToTaxpayer` | Back to the taxpayer | Koma ga mai biyan haraji | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |

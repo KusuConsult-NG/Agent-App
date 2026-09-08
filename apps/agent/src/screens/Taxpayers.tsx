@@ -971,6 +971,19 @@ export function TaxpayerScreen({
         <button type="button" onClick={() => navigate(`/collect?taxpayerId=${taxpayerId}`)}>
           {t.tpCollectRevenue}
         </button>
+        {/*
+          * Secondary, because collecting is what an agent is usually here to
+          * do. Enumeration is the other errand at the same stall: writing
+          * down what a business looks like so somebody who keeps no accounts
+          * can still be assessed on something other than a guess.
+          */}
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => navigate(`/taxpayers/${taxpayerId}/enumerate`)}
+        >
+          {t.tpEnumerate}
+        </button>
       </div>
 
       <p className="section-title">{t.tpTransactionsYouFacilitated}</p>

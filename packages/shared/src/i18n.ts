@@ -2014,6 +2014,33 @@ export interface TranslationDictionary {
   tpTinRequested: string;
   tpTinPending: string;
   tpCollectRevenue: string;
+  tpEnumerate: string;
+  agEnTitle: string;
+  agEnIntro: string;
+  agEnWho: string;
+  agEnPremises: string;
+  agEnPremisesHint: string;
+  agEnEquipment: string;
+  agEnEquipmentHint: string;
+  agEnPeople: string;
+  agEnPeopleHint: string;
+  agEnSector: string;
+  agEnGroup: string;
+  agEnGroupHint: string;
+  agEnNoGroupChosen: string;
+  agEnNoGroupsTitle: string;
+  agEnNoGroups: string;
+  agEnNoAmountTitle: string;
+  agEnNoAmount: string;
+  agEnChoose: string;
+  agEnSave: string;
+  agEnSaving: string;
+  agEnRecordedTitle: string;
+  agEnBand: string;
+  agEnWhatHappensNextTitle: string;
+  agEnNextWithLeader: string;
+  agEnNextWithoutLeader: string;
+  agEnBackToTaxpayer: string;
   tpViewProfile: string;
   tpPossibleExisting: string;
   tpCheckSamePerson: string;
@@ -4337,6 +4364,33 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpTinRequested: "TIN request submitted",
     tpTinPending: "The TIN service has not returned a number yet. It will appear on the taxpayer’s profile once assigned.",
     tpCollectRevenue: "Collect revenue",
+    tpEnumerate: "Write down the business",
+    agEnTitle: "What the business looks like",
+    agEnIntro: "Write down what you can see. You are not setting a price — the office works out the band from what you record, and the taxpayer is told by notice.",
+    agEnWho: "Who",
+    agEnPremises: "Where they trade from",
+    agEnPremisesHint: "What you can see today, not what they say they are building.",
+    agEnEquipment: "Machines or equipment",
+    agEnEquipmentHint: "Count what is being used for the business. Write 0 if there is none.",
+    agEnPeople: "People working besides the owner",
+    agEnPeopleHint: "Including apprentices and family who work there. Write 0 if the owner works alone.",
+    agEnSector: "Trade",
+    agEnGroup: "Market association",
+    agEnGroupHint: "If they belong to one, the leader will be asked to confirm what you wrote.",
+    agEnNoGroupChosen: "Not through an association",
+    agEnNoGroupsTitle: "No association to record this through",
+    agEnNoGroups: "None of your groups has been given a part in enumeration yet. Record it anyway — an officer can ask the leader later.",
+    agEnNoAmountTitle: "You are not setting the tax",
+    agEnNoAmount: "There is no amount on this form and there will not be one. If the trader asks what it will cost, tell them the office will send a notice, and that they can object to it.",
+    agEnChoose: "Choose",
+    agEnSave: "Save what you saw",
+    agEnSaving: "Saving…",
+    agEnRecordedTitle: "Written down",
+    agEnBand: "Size recorded",
+    agEnWhatHappensNextTitle: "What happens next",
+    agEnNextWithLeader: "The association leader will be asked to confirm this. Nothing is charged until an officer looks at it.",
+    agEnNextWithoutLeader: "An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice.",
+    agEnBackToTaxpayer: "Back to the taxpayer",
     tpViewProfile: "View profile",
     tpPossibleExisting: "Possible existing taxpayer",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
@@ -6576,6 +6630,33 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpTinRequested: "An tura bukatar TIN",
     tpTinPending: "Sashen TIN bai dawo da lamba ba tukuna. Za ta bayyana a bayanan mai biyan haraji da zarar an ba shi.",
     tpCollectRevenue: "Karbi haraji",
+    tpEnumerate: "Rubuta yadda kasuwancin yake",
+    agEnTitle: "Yadda kasuwancin yake",
+    agEnIntro: "Ka rubuta abin da kake gani. Ba kai ne kake sanya farashi ba — ofis shi ke fitar da mataki daga abin da ka rubuta, kuma za a sanar da mai biyan haraji da takarda.",
+    agEnWho: "Wane ne",
+    agEnPremises: "Inda yake kasuwanci",
+    agEnPremisesHint: "Abin da kake gani yau, ba abin da ya ce zai gina ba.",
+    agEnEquipment: "Injuna ko kayan aiki",
+    agEnEquipmentHint: "Ka kirga abin da ake amfani da shi don kasuwanci. Ka rubuta 0 idan babu.",
+    agEnPeople: "Mutanen da ke aiki banda mai shi",
+    agEnPeopleHint: "Har da almajirai da ’yan uwa da ke aiki a wurin. Ka rubuta 0 idan mai shi kadai ke aiki.",
+    agEnSector: "Sana’a",
+    agEnGroup: "Kungiyar kasuwa",
+    agEnGroupHint: "Idan yana cikin daya, za a tambayi shugaba ya tabbatar da abin da ka rubuta.",
+    agEnNoGroupChosen: "Ba ta hannun kungiya ba",
+    agEnNoGroupsTitle: "Babu kungiyar da za a bi",
+    agEnNoGroups: "Babu wata kungiyarka da aka ba ta rawa a kidaya har yanzu. Ka rubuta duk da haka — jami’i na iya tambayar shugaba daga baya.",
+    agEnNoAmountTitle: "Ba kai ne kake sanya harajin ba",
+    agEnNoAmount: "Babu adadi a wannan takarda kuma ba za a sa ba. Idan mai kasuwanci ya tambaya nawa ne, ka ce masa ofis zai aika da sanarwa, kuma yana da damar kalubalantar ta.",
+    agEnChoose: "Zaba",
+    agEnSave: "Ajiye abin da ka gani",
+    agEnSaving: "Ana ajiyewa…",
+    agEnRecordedTitle: "An rubuta",
+    agEnBand: "Girman da aka rubuta",
+    agEnWhatHappensNextTitle: "Abin da zai biyo baya",
+    agEnNextWithLeader: "Za a tambayi shugaban kungiya ya tabbatar da wannan. Ba a caji komai ba sai jami’i ya duba shi.",
+    agEnNextWithoutLeader: "Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa.",
+    agEnBackToTaxpayer: "Koma ga mai biyan haraji",
     tpViewProfile: "Duba bayanai",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",

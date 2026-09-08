@@ -47,6 +47,7 @@ import {
 import { VerifyScreen } from './screens/Verify';
 import { CollectionScreen } from './screens/Collection';
 import { GroupsScreen, GroupScreen, RegisterGroupScreen } from './screens/Groups';
+import { EnumerateScreen } from './screens/Enumerate';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
@@ -360,6 +361,7 @@ function Routes({
   onSignOut: () => void;
 }) {
   const { t } = useI18n();
+  const enumerateMatch = matchRoute(route, '/taxpayers/:id/enumerate');
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
   const ticketMatch = matchRoute(route, '/support/:id');
@@ -368,6 +370,9 @@ function Routes({
   if (matchRoute(route, '/')) return <HomeScreen navigate={navigate} />;
   if (matchRoute(route, '/application')) return <ApplicationScreen navigate={navigate} />;
   if (matchRoute(route, '/taxpayers')) return <TaxpayersScreen navigate={navigate} />;
+  if (enumerateMatch) {
+    return <EnumerateScreen taxpayerId={enumerateMatch.id!} navigate={navigate} />;
+  }
   if (matchRoute(route, '/taxpayers/new')) {
     return <RegisterTaxpayerScreen navigate={navigate} connection={connection} />;
   }
