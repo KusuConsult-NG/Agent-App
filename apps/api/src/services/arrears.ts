@@ -64,6 +64,11 @@
  * day the merge tool lands, a worklist that had to be remembered is a worklist
  * that double-chases.
  *
+ * A debt under objection is not chased. A presumptive assessment can be
+ * contested, and the window that suspends enforcement is worth nothing unless
+ * something honours it — a citizen who disputed an estimate and then took a
+ * call demanding payment has learnt that the objection process is decorative.
+ *
  * A closed record is somebody else's queue. `taxpayers/ended-with-arrears`
  * already exists for records taken off the register while still owing, and
  * that is a different conversation — reinstatement, not collection. They are
@@ -230,6 +235,22 @@ export async function arrearsWorklist(
                  JOIN transactions tr ON tr.id = p.transaction_id
                 WHERE tr.invoice_id = i.id
                   AND p.status = ANY($1::text[])
+             )
+         /*
+          * And nothing under objection.
+          *
+          * A presumptive assessment can be contested, and while the objection
+          * is open enforcement is suspended. That suspension is only real if
+          * something acts on it: a citizen who formally disputed an estimate
+          * and then got a call demanding payment has been told the objection
+          * window means nothing. This is where it means something.
+          */
+         AND NOT EXISTS (
+               SELECT 1
+                 FROM presumptive_assessments pa
+                 JOIN assessment_objections ao
+                   ON ao.presumptive_assessment_id = pa.id AND ao.status = 'OPEN'
+                WHERE pa.assessment_id = i.assessment_id
              )
     )`;
 

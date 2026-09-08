@@ -24,6 +24,16 @@ import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
 import {
+  assessFromObservation,
+  attestObservation,
+  decideObjection,
+  disagreements,
+  openObjections,
+  raiseObjection,
+  recentObservations,
+  recordObservation,
+} from '../services/enumeration';
+import {
   adoptNanoPolicy,
   bandFor,
   classifyLga,
@@ -593,6 +603,185 @@ governmentRouter.post(
           actorRole: req.auth!.role,
         }),
       );
+    },
+  ),
+);
+
+/* ---------------------------------------------------------------------------
+ * Enumeration, assessment and the objection window
+ *
+ * The permissions split three ways on purpose. Recording an observation is
+ * field work — `assessment:create`, which agents hold. Turning one into a
+ * liability is `paye:file`, the officer permission Phase 3 introduced for
+ * exactly this shape of act: raising a charge off a document rather than in
+ * front of the person. And deciding an objection is `approval:review`, which
+ * carries the platform's separation-of-duties culture with it.
+ * ------------------------------------------------------------------------- */
+
+/*
+ * Agents and officers both. An agent records in the field and an officer
+ * records on a market visit, and both are doing the same thing: writing down
+ * what is in front of them. `assessment:create` is the agent's half and
+ * `paye:file` the officer's — gating on the agent permission alone would have
+ * left a revenue officer standing in a market unable to write anything down.
+ */
+governmentRouter.post(
+  '/enumeration/observations',
+  requirePermission('assessment:create', 'paye:file'),
+  validateBody(
+    z.object({
+      taxpayerId: uuidSchema,
+      /*
+       * Facts only. No band, no turnover, no amount — an agent paid commission
+       * on what they collect, holding a form with a band on it, is being
+       * invited to negotiate somebody's tax at a stall.
+       */
+      premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']),
+      equipmentCount: z.number().int().min(0).max(1000),
+      peopleWorking: z.number().int().min(0).max(1000),
+      economicSector: z.enum(ECONOMIC_SECTOR_CODES),
+      groupId: uuidSchema.optional(),
+      latitude: z.number().min(-90).max(90).optional(),
+      longitude: z.number().min(-180).max(180).optional(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await recordObservation(pool, {
+          ...data,
+          groupId: data.groupId ?? null,
+          latitude: data.latitude ?? null,
+          longitude: data.longitude ?? null,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          agentId: req.auth!.agentId ?? null,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/enumeration/observations/:id/attest',
+  requirePermission('group:manage'),
+  validateBody(
+    z.object({
+      agrees: z.boolean(),
+      attestedByName: z.string().min(2).max(150),
+      /*
+       * What the leader claims instead, in the same terms the agent used.
+       * There is no band here and none in the table: a leader can say the
+       * stall is smaller, and cannot say what it should cost.
+       */
+      premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']).optional(),
+      equipmentCount: z.number().int().min(0).max(1000).optional(),
+      peopleWorking: z.number().int().min(0).max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await attestObservation(pool, {
+        observationId: req.params.id!,
+        agrees: data.agrees,
+        attestedByName: data.attestedByName,
+        premises: data.premises ?? null,
+        equipmentCount: data.equipmentCount ?? null,
+        peopleWorking: data.peopleWorking ?? null,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/enumeration/observations/:id/assess',
+  requirePermission('paye:file'),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(
+      await assessFromObservation(pool, {
+        observationId: req.params.id!,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        ipAddress: req.clientIp,
+      }),
+    );
+  }),
+);
+
+governmentRouter.get(
+  '/enumeration/observations',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({ limit: z.coerce.number().int().min(1).max(500).optional() }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await recentObservations(pool, data, scope));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/enumeration/disagreements',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({ limit: z.coerce.number().int().min(1).max(500).optional() }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await disagreements(pool, data, scope));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/enumeration/objections',
+  requirePermission('approval:review', 'report:read:all', 'report:read:territory'),
+  asyncHandler(async (req, res) => {
+    const scope = await resolveReportScope(pool, req.auth!);
+    res.json(await openObjections(pool, scope));
+  }),
+);
+
+/*
+ * Also both. An agent at a stall hears the trader say the count is wrong and
+ * must be able to write it down there, rather than telling them to come to an
+ * office — an objection that is hard to raise is an objection window that
+ * exists on paper.
+ */
+governmentRouter.post(
+  '/enumeration/assessments/:id/object',
+  requirePermission('assessment:create', 'paye:file'),
+  validateBody(
+    z.object({
+      ground: z.enum(['FACTS_WRONG', 'HAS_RECORDS', 'NOT_TRADING', 'OTHER']),
+      statement: z.string().min(4).max(1000),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await raiseObjection(pool, {
+          presumptiveAssessmentId: req.params.id!,
+          ground: data.ground,
+          statement: data.statement,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/enumeration/objections/:id/decide',
+  requirePermission('approval:review'),
+  validateBody(
+    z.object({ uphold: z.boolean(), reason: z.string().min(4).max(1000) }),
+    async (req, res, data) => {
+      await decideObjection(pool, {
+        objectionId: req.params.id!,
+        uphold: data.uphold,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.status(204).end();
     },
   ),
 );

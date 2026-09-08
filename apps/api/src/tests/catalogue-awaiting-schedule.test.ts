@@ -2,12 +2,20 @@
  * An item in the catalogue with no rate must refuse to be assessed.
  *
  * The Plateau State Revenue (Consolidation) Law, 2020 fixes several amounts by
- * Schedule — presumptive income tax by enterprise category in the First
- * Schedule, consolidated business premises rates by urban / semi-urban / rural
- * categorisation in the Second. Those items are catalogued here so government
- * can see they exist and must be configured, and seeded with no rate, because
- * the Schedule is the legal authority for the figure and this repository is
- * not it.
+ * Schedule — consolidated business premises rates by urban / semi-urban /
+ * rural categorisation in the Second. Those items are catalogued here so
+ * government can see they exist and must be configured, and seeded with no
+ * rate, because the Schedule is the legal authority for the figure and this
+ * repository is not it.
+ *
+ * The three presumptive income tax items left this list when the presumptive
+ * regime was built. Their rate is not a Schedule figure at all: section 29 of
+ * the Nigeria Tax Act 2025 sets it at 1% of turnover, which is federal and
+ * fixed. What PSIRS sets is the turnover that 1% applies to, and that is a
+ * published schedule of assumed turnover by sector, band and LGA class — a
+ * table in `presumptive_schedules`, not a number on the revenue item. So the
+ * item can carry the statutory percentage while the state figure it multiplies
+ * stays where it can be challenged and re-published.
  *
  * That arrangement is only safe if the platform refuses to charge anybody for
  * one. A revenue item that quietly assessed at zero, or at some default, would
@@ -24,9 +32,6 @@ import { createAssessment } from '../services/revenue';
 
 /** Codes seeded deliberately without a rate. */
 const AWAITING_SCHEDULE = [
-  'PIT-PRESUMPTIVE-MICRO',
-  'PIT-PRESUMPTIVE-SMALL',
-  'PIT-PRESUMPTIVE-MEDIUM',
   'BP-REG-SEMI-URBAN',
   'BP-RENEW-SEMI-URBAN',
   // Not one rate but a table: withholding differs by what is being paid for,
@@ -41,11 +46,11 @@ const AWAITING_SCHEDULE = [
 /**
  * Which kind of taxpayer each is for.
  *
- * Presumptive income tax is charged to an individual whose business keeps no
- * accounts; business premises registration is charged to the premises. Using
- * one taxpayer for both hides the rate check behind an applicability check —
- * the platform refuses a business item for an individual first, and correctly,
- * which is not the refusal this test is about.
+ * Business premises registration is charged to the premises; withholding and
+ * stamp duty are charged to an individual here. Using one taxpayer for both
+ * hides the rate check behind an applicability check — the platform refuses a
+ * business item for an individual first, and correctly, which is not the
+ * refusal this test is about.
  */
 const BUSINESS_ITEMS = new Set(['BP-REG-SEMI-URBAN', 'BP-RENEW-SEMI-URBAN']);
 

@@ -39,6 +39,7 @@ import { ArrearsScreen } from './screens/Arrears';
 import { ConnectionsScreen } from './screens/Connections';
 import { PayrollScreen } from './screens/Payroll';
 import { PresumptiveScreen } from './screens/Presumptive';
+import { EnumerationScreen } from './screens/Enumeration';
 import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
@@ -257,6 +258,7 @@ function Routes({
   if (matchRoute(route, '/connections')) return <ConnectionsScreen />;
   if (matchRoute(route, '/payroll')) return <PayrollScreen />;
   if (matchRoute(route, '/presumptive')) return <PresumptiveScreen />;
+  if (matchRoute(route, '/enumeration')) return <EnumerationScreen />;
   if (matchRoute(route, '/allocations')) return <AllocationsScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;

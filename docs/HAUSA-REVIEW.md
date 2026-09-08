@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2079 strings, grouped by where an agent meets them. Lower stakes
+2133 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -314,6 +314,7 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `ofcNavArrears` | Arrears worklist | Jerin bashin da ake bin jiha | ☐ | |
+| `ofcNavEnumeration` | Enumeration queues | Jerin aikin kidayar | ☐ | |
 | `ofcNavPresumptive` | Presumptive schedule | Jadawalin haraji na kimantawa | ☐ | |
 | `ofcNavPayroll` | Employers and premises | Masu daukar ma’aikata da wurare | ☐ | |
 | `ofcNavConnections` | Assets and leads | Dukiya da alamu | ☐ | |
@@ -1331,6 +1332,53 @@ instructions — but they are what an agent reads all day.
 | `ofcPsVersion` | Version | Sigar | ☐ | |
 | `ofcPsNoEntries` | No figures have been published yet. | Ba a wallafa wani adadi ba tukuna. | ☐ | |
 | `ofcPsHowToChange` | A published figure is never edited. Publishing a new one closes the old period and starts a new version, so an assessment made last year can still be checked against the figure it was made under. | Ba a taba gyara adadin da aka wallafa. Wallafa sabo yana rufe tsohon lokaci ya fara sabuwar siga, don haka ana iya duba kimantawar bara bisa adadin da aka yi ta a kansa. | ☐ | |
+
+#### The officer portal — enumeration queues
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `ofcEnRecorded` | What has been recorded | Abin da aka rubuta | ☐ | |
+| `ofcEnRecordedIntro` | Observations from the field and what became of each. An observation the association disputed cannot be assessed until somebody goes back and looks again. | Abubuwan da aka lura da su daga fili da abin da ya faru da kowanne. Ba za a iya kimanta abin da kungiya ta ki amincewa da shi ba sai wani ya sake dawowa ya duba. | ☐ | |
+| `ofcEnAttestation` | Attestation | Tabbatarwa | ☐ | |
+| `ofcEnNotYetAssessed` | Not assessed yet | Ba a kimanta ba tukuna | ☐ | |
+| `ofcEnExempt` | Exempt | An kebe | ☐ | |
+| `ofcEnAction` | Next | Na gaba | ☐ | |
+| `ofcEnSettleFirst` | Disputed — settle it first | Ana takaddama — a fara warwarewa | ☐ | |
+| `ofcEnLeaderAgrees` | Leader confirms | Shugaba ya tabbatar | ☐ | |
+| `ofcEnAssess` | Assess | Kimanta | ☐ | |
+| `ofcEnAlreadyObjected` | Objection open | Ana kalubalanta | ☐ | |
+| `ofcEnRecordObjection` | Record an objection | Rubuta kalubale | ☐ | |
+| `ofcEnAttestedByName` | Attesting leader’s name | Sunan shugaban da ke tabbatarwa | ☐ | |
+| `ofcEnStatementFirst` | Write what the taxpayer says first. | Ka fara rubuta abin da mai biyan haraji ya ce. | ☐ | |
+| `ofcEnNothingRecorded` | Nothing has been recorded yet. | Ba a rubuta komai ba tukuna. | ☐ | |
+| `ofcEnTitle` | What enumeration left for a person to decide | Abin da kidayar ta bar wa mutum ya yanke | ☐ | |
+| `ofcEnIntro` | Two queues. Where an agent and an association leader described the same trader differently, and where a taxpayer has formally disputed an estimate. Both are decisions a machine should not make. | Jeri biyu. Inda wakili da shugaban kungiya suka bayyana mai sana’a daban, da kuma inda mai biyan haraji ya ki amincewa da kiyasi a hukumance. Duka biyu shawarwari ne da bai kamata na’ura ta yanke ba. | ☐ | |
+| `ofcEnDisagreements` | Where the agent and the leader differ | Inda bayanan suka bambanta | ☐ | |
+| `ofcEnDisagreementsIntro` | An agent recorded one thing and the association leader another. Both versions are shown, with the band each would produce — a difference that does not change the band is a phone call, one that does is a visit. | Wakili ya rubuta abu daya shugaban kungiya kuma ya rubuta wani. An nuna bayanan biyu, tare da matakin da kowanne zai haifar — bambancin da bai canza mataki ba kiran waya ne, wanda ya canza kuwa ziyara ce. | ☐ | |
+| `ofcEnGroup` | Association | Kungiya | ☐ | |
+| `ofcEnAgentSaw` | The agent recorded | Wakili ya rubuta | ☐ | |
+| `ofcEnLeaderSays` | The leader disputes | Shugaba ya ki amincewa | ☐ | |
+| `ofcEnBandGap` | Effect on the band | Tasiri a kan mataki | ☐ | |
+| `ofcEnSameBand` | Same band either way | Mataki daya ko ta yaya | ☐ | |
+| `ofcEnObservedOn` | Recorded on | An rubuta a | ☐ | |
+| `ofcEnAttestedBy` | Attested by | Wanda ya tabbatar | ☐ | |
+| `ofcEnNoDisagreements` | Nothing is in dispute. | Babu bayanin da ake takaddama a kai. | ☐ | |
+| `ofcEnObjections` | Estimates under objection | Kiyasin da ake kalubalanta | ☐ | |
+| `ofcEnOpenObjections` | Open objections | Kalubalen da ba a warware ba | ☐ | |
+| `ofcEnUnderObjection` | Tax under objection | Harajin da ake kalubalanta | ☐ | |
+| `ofcEnWhileOpenTitle` | While an objection is open | Yayin da ake kalubalanta | ☐ | |
+| `ofcEnWhileOpen` | The debt is not chased. It is off the arrears worklist until this is decided, so nobody will be called about it in the meantime. | Ba a bin bashin. An cire shi daga jerin bashin da ake bi har sai an yanke shawara, don haka ba za a kira kowa a kansa ba a wannan lokacin. | ☐ | |
+| `ofcEnDecisionReason` | Why are you deciding this way? | Me ya sa kake yanke haka? | ☐ | |
+| `ofcEnDecisionReasonHint` | The taxpayer will be shown this. | Za a nuna wa mai biyan haraji wannan. | ☐ | |
+| `ofcEnGround` | Ground | Dalili | ☐ | |
+| `ofcEnWhatTheySay` | What the taxpayer says | Abin da mai biyan haraji ya ce | ☐ | |
+| `ofcEnRaisedOn` | Raised on | An gabatar a | ☐ | |
+| `ofcEnDecision` | Decision | Shawara | ☐ | |
+| `ofcEnYoursToPassOn` | You raised this assessment — another officer must decide | Kai ka yi wannan kimantawa — wani jami’i ne zai yanke | ☐ | |
+| `ofcEnUphold` | Uphold the objection | Amince da kalubalen | ☐ | |
+| `ofcEnReject` | Reject the objection | Ki kalubalen | ☐ | |
+| `ofcEnReasonFirst` | Write the reason first. | Ka fara rubuta dalili. | ☐ | |
+| `ofcEnNoObjections` | No estimate is under objection. | Babu kiyasin da ake kalubalanta. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2593,6 +2641,17 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumAssessed` | Assessed | An kimanta | ☐ | |
+| `enumFactsWrong` | The facts are wrong | Bayanan ba daidai ba | ☐ | |
+| `enumHasRecords` | Has proper records | Yana da rikodi na gaskiya | ☐ | |
+| `enumNotTrading` | No longer trading | Ba ya kasuwanci kuma | ☐ | |
+| `enumEnumeration` | Enumeration only | Kidaya kadai | ☐ | |
+| `enumAttestation` | Enumeration and attestation | Kidaya da tabbatarwa | ☐ | |
+| `enumObjected` | Under objection | Ana kalubalanta | ☐ | |
+| `enumUpheld` | Upheld | An amince | ☐ | |
+| `enumAgreed` | Leader agreed | Shugaba ya amince | ☐ | |
+| `enumDisagreed` | Leader disagreed | Shugaba bai amince ba | ☐ | |
+| `enumNotSought` | No attestation sought | Ba a nemi tabbatarwa ba | ☐ | |
 | `enumSmall` | Small | Karami | ☐ | |
 | `enumNano` | Nano — exempt | Nano — an kebe | ☐ | |
 | `enumPresumptive` | Presumptive — assessed off the schedule | Kimantawa — bisa jadawali | ☐ | |

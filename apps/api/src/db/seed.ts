@@ -128,31 +128,45 @@ const STATE_CATALOGUE: {
        * with no rate in force until somebody with the Schedule enters it.
        */
       {
+        /*
+         * One per cent of turnover, per section 29 of the Nigeria Tax Act 2025.
+         *
+         * These three carried no rate at all until the presumptive schedule
+         * existed, on the reasoning that the figure was PSIRS's to set. That
+         * conflated two different things: the *rate* is statutory and is this,
+         * while what PSIRS sets is the assumed turnover it applies to — which
+         * now lives in `presumptive_schedules` and is versioned there.
+         *
+         * Keeping the rate here rather than as a constant in the assessment
+         * path means the percentage an assessment was computed at is recorded
+         * on the assessment, and can be re-checked years later against the
+         * version in force at the time.
+         */
         code: 'PIT-PRESUMPTIVE-MICRO',
         name: 'Presumptive Income Tax (micro enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (kananan sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-SMALL',
         name: 'Presumptive Income Tax (small enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (karamar sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-MEDIUM',
         name: 'Presumptive Income Tax (medium enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (matsakaiciyar sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       /*
        * The Fourth Schedule to the Nigeria Tax Act, 2025, in force since

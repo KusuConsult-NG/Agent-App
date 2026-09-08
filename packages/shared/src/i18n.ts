@@ -1026,6 +1026,60 @@ export interface TranslationDictionary {
   ofcLvOldestDue: string;
   ofcNavArrears: string;
   ofcArTitle: string;
+  enumAssessed: string;
+  ofcEnRecorded: string;
+  ofcEnRecordedIntro: string;
+  ofcEnAttestation: string;
+  ofcEnNotYetAssessed: string;
+  ofcEnExempt: string;
+  ofcEnAction: string;
+  ofcEnSettleFirst: string;
+  ofcEnLeaderAgrees: string;
+  ofcEnAssess: string;
+  ofcEnAlreadyObjected: string;
+  ofcEnRecordObjection: string;
+  ofcEnAttestedByName: string;
+  ofcEnStatementFirst: string;
+  ofcEnNothingRecorded: string;
+  enumFactsWrong: string;
+  enumHasRecords: string;
+  enumNotTrading: string;
+  enumEnumeration: string;
+  enumAttestation: string;
+  enumObjected: string;
+  enumUpheld: string;
+  enumAgreed: string;
+  enumDisagreed: string;
+  enumNotSought: string;
+  ofcNavEnumeration: string;
+  ofcEnTitle: string;
+  ofcEnIntro: string;
+  ofcEnDisagreements: string;
+  ofcEnDisagreementsIntro: string;
+  ofcEnGroup: string;
+  ofcEnAgentSaw: string;
+  ofcEnLeaderSays: string;
+  ofcEnBandGap: string;
+  ofcEnSameBand: string;
+  ofcEnObservedOn: string;
+  ofcEnAttestedBy: string;
+  ofcEnNoDisagreements: string;
+  ofcEnObjections: string;
+  ofcEnOpenObjections: string;
+  ofcEnUnderObjection: string;
+  ofcEnWhileOpenTitle: string;
+  ofcEnWhileOpen: string;
+  ofcEnDecisionReason: string;
+  ofcEnDecisionReasonHint: string;
+  ofcEnGround: string;
+  ofcEnWhatTheySay: string;
+  ofcEnRaisedOn: string;
+  ofcEnDecision: string;
+  ofcEnYoursToPassOn: string;
+  ofcEnUphold: string;
+  ofcEnReject: string;
+  ofcEnReasonFirst: string;
+  ofcEnNoObjections: string;
   ofcPsPublish: string;
   ofcPsPublishClass: string;
   ofcPsPublishFigure: string;
@@ -3351,6 +3405,60 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Oldest due",
     ofcNavArrears: "Arrears worklist",
     ofcArTitle: "Who owes the State money",
+    enumAssessed: "Assessed",
+    ofcEnRecorded: "What has been recorded",
+    ofcEnRecordedIntro: "Observations from the field and what became of each. An observation the association disputed cannot be assessed until somebody goes back and looks again.",
+    ofcEnAttestation: "Attestation",
+    ofcEnNotYetAssessed: "Not assessed yet",
+    ofcEnExempt: "Exempt",
+    ofcEnAction: "Next",
+    ofcEnSettleFirst: "Disputed — settle it first",
+    ofcEnLeaderAgrees: "Leader confirms",
+    ofcEnAssess: "Assess",
+    ofcEnAlreadyObjected: "Objection open",
+    ofcEnRecordObjection: "Record an objection",
+    ofcEnAttestedByName: "Attesting leader’s name",
+    ofcEnStatementFirst: "Write what the taxpayer says first.",
+    ofcEnNothingRecorded: "Nothing has been recorded yet.",
+    enumFactsWrong: "The facts are wrong",
+    enumHasRecords: "Has proper records",
+    enumNotTrading: "No longer trading",
+    enumEnumeration: "Enumeration only",
+    enumAttestation: "Enumeration and attestation",
+    enumObjected: "Under objection",
+    enumUpheld: "Upheld",
+    enumAgreed: "Leader agreed",
+    enumDisagreed: "Leader disagreed",
+    enumNotSought: "No attestation sought",
+    ofcNavEnumeration: "Enumeration queues",
+    ofcEnTitle: "What enumeration left for a person to decide",
+    ofcEnIntro: "Two queues. Where an agent and an association leader described the same trader differently, and where a taxpayer has formally disputed an estimate. Both are decisions a machine should not make.",
+    ofcEnDisagreements: "Where the agent and the leader differ",
+    ofcEnDisagreementsIntro: "An agent recorded one thing and the association leader another. Both versions are shown, with the band each would produce — a difference that does not change the band is a phone call, one that does is a visit.",
+    ofcEnGroup: "Association",
+    ofcEnAgentSaw: "The agent recorded",
+    ofcEnLeaderSays: "The leader disputes",
+    ofcEnBandGap: "Effect on the band",
+    ofcEnSameBand: "Same band either way",
+    ofcEnObservedOn: "Recorded on",
+    ofcEnAttestedBy: "Attested by",
+    ofcEnNoDisagreements: "Nothing is in dispute.",
+    ofcEnObjections: "Estimates under objection",
+    ofcEnOpenObjections: "Open objections",
+    ofcEnUnderObjection: "Tax under objection",
+    ofcEnWhileOpenTitle: "While an objection is open",
+    ofcEnWhileOpen: "The debt is not chased. It is off the arrears worklist until this is decided, so nobody will be called about it in the meantime.",
+    ofcEnDecisionReason: "Why are you deciding this way?",
+    ofcEnDecisionReasonHint: "The taxpayer will be shown this.",
+    ofcEnGround: "Ground",
+    ofcEnWhatTheySay: "What the taxpayer says",
+    ofcEnRaisedOn: "Raised on",
+    ofcEnDecision: "Decision",
+    ofcEnYoursToPassOn: "You raised this assessment — another officer must decide",
+    ofcEnUphold: "Uphold the objection",
+    ofcEnReject: "Reject the objection",
+    ofcEnReasonFirst: "Write the reason first.",
+    ofcEnNoObjections: "No estimate is under objection.",
     ofcPsPublish: "Publishing",
     ofcPsPublishClass: "Publish a local government class",
     ofcPsPublishFigure: "Publish a schedule figure",
@@ -5533,6 +5641,60 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
     ofcNavArrears: "Jerin bashin da ake bin jiha",
     ofcArTitle: "Wanda ke bin jiha bashi",
+    enumAssessed: "An kimanta",
+    ofcEnRecorded: "Abin da aka rubuta",
+    ofcEnRecordedIntro: "Abubuwan da aka lura da su daga fili da abin da ya faru da kowanne. Ba za a iya kimanta abin da kungiya ta ki amincewa da shi ba sai wani ya sake dawowa ya duba.",
+    ofcEnAttestation: "Tabbatarwa",
+    ofcEnNotYetAssessed: "Ba a kimanta ba tukuna",
+    ofcEnExempt: "An kebe",
+    ofcEnAction: "Na gaba",
+    ofcEnSettleFirst: "Ana takaddama — a fara warwarewa",
+    ofcEnLeaderAgrees: "Shugaba ya tabbatar",
+    ofcEnAssess: "Kimanta",
+    ofcEnAlreadyObjected: "Ana kalubalanta",
+    ofcEnRecordObjection: "Rubuta kalubale",
+    ofcEnAttestedByName: "Sunan shugaban da ke tabbatarwa",
+    ofcEnStatementFirst: "Ka fara rubuta abin da mai biyan haraji ya ce.",
+    ofcEnNothingRecorded: "Ba a rubuta komai ba tukuna.",
+    enumFactsWrong: "Bayanan ba daidai ba",
+    enumHasRecords: "Yana da rikodi na gaskiya",
+    enumNotTrading: "Ba ya kasuwanci kuma",
+    enumEnumeration: "Kidaya kadai",
+    enumAttestation: "Kidaya da tabbatarwa",
+    enumObjected: "Ana kalubalanta",
+    enumUpheld: "An amince",
+    enumAgreed: "Shugaba ya amince",
+    enumDisagreed: "Shugaba bai amince ba",
+    enumNotSought: "Ba a nemi tabbatarwa ba",
+    ofcNavEnumeration: "Jerin aikin kidayar",
+    ofcEnTitle: "Abin da kidayar ta bar wa mutum ya yanke",
+    ofcEnIntro: "Jeri biyu. Inda wakili da shugaban kungiya suka bayyana mai sana’a daban, da kuma inda mai biyan haraji ya ki amincewa da kiyasi a hukumance. Duka biyu shawarwari ne da bai kamata na’ura ta yanke ba.",
+    ofcEnDisagreements: "Inda bayanan suka bambanta",
+    ofcEnDisagreementsIntro: "Wakili ya rubuta abu daya shugaban kungiya kuma ya rubuta wani. An nuna bayanan biyu, tare da matakin da kowanne zai haifar — bambancin da bai canza mataki ba kiran waya ne, wanda ya canza kuwa ziyara ce.",
+    ofcEnGroup: "Kungiya",
+    ofcEnAgentSaw: "Wakili ya rubuta",
+    ofcEnLeaderSays: "Shugaba ya ki amincewa",
+    ofcEnBandGap: "Tasiri a kan mataki",
+    ofcEnSameBand: "Mataki daya ko ta yaya",
+    ofcEnObservedOn: "An rubuta a",
+    ofcEnAttestedBy: "Wanda ya tabbatar",
+    ofcEnNoDisagreements: "Babu bayanin da ake takaddama a kai.",
+    ofcEnObjections: "Kiyasin da ake kalubalanta",
+    ofcEnOpenObjections: "Kalubalen da ba a warware ba",
+    ofcEnUnderObjection: "Harajin da ake kalubalanta",
+    ofcEnWhileOpenTitle: "Yayin da ake kalubalanta",
+    ofcEnWhileOpen: "Ba a bin bashin. An cire shi daga jerin bashin da ake bi har sai an yanke shawara, don haka ba za a kira kowa a kansa ba a wannan lokacin.",
+    ofcEnDecisionReason: "Me ya sa kake yanke haka?",
+    ofcEnDecisionReasonHint: "Za a nuna wa mai biyan haraji wannan.",
+    ofcEnGround: "Dalili",
+    ofcEnWhatTheySay: "Abin da mai biyan haraji ya ce",
+    ofcEnRaisedOn: "An gabatar a",
+    ofcEnDecision: "Shawara",
+    ofcEnYoursToPassOn: "Kai ka yi wannan kimantawa — wani jami’i ne zai yanke",
+    ofcEnUphold: "Amince da kalubalen",
+    ofcEnReject: "Ki kalubalen",
+    ofcEnReasonFirst: "Ka fara rubuta dalili.",
+    ofcEnNoObjections: "Babu kiyasin da ake kalubalanta.",
     ofcPsPublish: "Wallafawa",
     ofcPsPublishClass: "Wallafa matakin karamar hukuma",
     ofcPsPublishFigure: "Wallafa adadin jadawali",

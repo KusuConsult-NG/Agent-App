@@ -285,6 +285,11 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavPresumptive',
     permission: 'catalogue:read',
   },
+  enumeration: {
+    path: '/enumeration',
+    label: 'ofcNavEnumeration',
+    permission: ['approval:review', 'report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -365,7 +370,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!],
+      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!,
+              SCREEN.enumeration!],
     },
     {
       group: 'ofcGroupRevenue',
@@ -379,7 +385,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'ofcGroupTheRegister',
       items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
-              SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
+              SCREEN.enumeration!, SCREEN.taxpayerRecords!, SCREEN.outstanding!,
+              SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
@@ -448,7 +455,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'ofcGroupMyTerritory',
       items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
-              SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
+              SCREEN.enumeration!, SCREEN.performance!, SCREEN.approvals!,
+              SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupRevenueHere',

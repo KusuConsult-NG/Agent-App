@@ -1,0 +1,1412 @@
+/**
+ * Enumeration through associations, and the assessment that follows.
+ *
+ * Phase 5, and the part a citizen actually meets. Most of what is held here is
+ * about restraint: what an agent may not enter, what a leader may not decide,
+ * and what happens to somebody who says the estimate is wrong.
+ *
+ * THE PROPERTY THE REGIME TURNS ON. An agent records what they can see and the
+ * server computes the band. There is no parameter on any of this through which
+ * a turnover, a band or an amount can be supplied — an agent paid commission
+ * on what they collect, holding a form with a band on it, is being invited to
+ * negotiate somebody's tax at a stall.
+ *
+ * THE ONE THAT PROTECTS TRADERS FROM THEIR OWN LEADERS. The association's roll
+ * is the sampling frame PSIRS cannot build for itself, and the leader's
+ * attestation is a real check on the agent. But the leader attests to facts —
+ * what premises, how many hands — and there is no column anywhere for them to
+ * set a band or an amount. That is the difference between a witness and a tax
+ * farmer, and the second is unlawful under the 2026 Regulations.
+ *
+ * THE ONE THAT MAKES AN ESTIMATE FAIR. An objection suspends enforcement, and
+ * the officer who raised the assessment may not decide the objection to it.
+ * Both are enforced in the database.
+ */
+
+import './env';
+import { after, before, beforeEach, describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  createGovernmentUser,
+  get,
+  loginAs,
+  pool,
+  post,
+  resetDatabase,
+  startTestServer,
+  stopTestServer,
+} from './helpers';
+import { queryOne, query } from '../db/pool';
+import { seedReferenceData } from '../db/seed';
+import { seedDemoAgent } from '../db/seed-agent';
+import {
+  assessFromObservation,
+  attestObservation,
+  decideObjection,
+  disagreements,
+  openObjections,
+  raiseObjection,
+  recordObservation,
+} from '../services/enumeration';
+import {
+  adoptNanoPolicy,
+  classifyLga,
+  publishScheduleEntry,
+  type Observations,
+} from '../services/presumptive';
+import { arrearsWorklist } from '../services/arrears';
+
+let auth: { token: string; deviceId: string };
+let officerId: string;
+let secondOfficerId: string;
+let lgaId: string;
+let seq = 0;
+
+before(async () => { await startTestServer(); });
+after(async () => { await stopTestServer(); });
+
+beforeEach(async () => {
+  await resetDatabase();
+  await seedReferenceData();
+  officerId = await createGovernmentUser({
+    fullName: 'Assessing Officer',
+    phone: '+2348000000001',
+    role: 'admin',
+  });
+  secondOfficerId = await createGovernmentUser({
+    fullName: 'Reviewing Officer',
+    phone: '+2348000000002',
+    role: 'admin',
+  });
+  const demo = await seedDemoAgent();
+  const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+  auth = { token: session.accessToken, deviceId: demo!.deviceIdentifier };
+  lgaId = (await queryOne<{ id: string }>(pool, 'SELECT id FROM lgas ORDER BY name LIMIT 1', []))!.id;
+  seq = 0;
+
+  // Phase 4's outputs, which Phase 5 refuses to work without.
+  await adoptNanoPolicy(pool, {
+    construction: 'CONJUNCTIVE',
+    turnoverCeilingKobo: '1200000000',
+    legalBasis: 'Opinion of the Attorney-General of Plateau State, 12 January 2026',
+    effectiveFrom: '2026-01-01',
+    actorId: officerId,
+    actorRole: 'admin',
+  });
+  await classifyLga(pool, {
+    lgaId,
+    classCode: 'A',
+    indexInputs: { roadAccess: 'paved' },
+    indexSource: 'National Bureau of Statistics',
+    effectiveFrom: '2026-01-01',
+    effectiveTo: '2029-01-01',
+    actorId: officerId,
+    actorRole: 'admin',
+  });
+  for (const [band, turnover] of [['MICRO', '90000000'], ['SMALL', '480000000']] as const) {
+    await publishScheduleEntry(pool, {
+      economicSector: 'ARTISAN_CRAFT',
+      sizeBand: band,
+      lgaClass: 'A',
+      assumedAnnualTurnoverKobo: turnover,
+      instrumentReference: 'Plateau State Revenue (Presumptive Assessment) Regulation 2026',
+      effectiveFrom: '2026-01-01',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+  }
+});
+
+async function trader(name: string) {
+  seq += 1;
+  const suffix = String(seq).padStart(5, '0');
+  const response = await post(
+    '/taxpayers',
+    {
+      taxpayerType: 'INDIVIDUAL',
+      firstName: name,
+      lastName: `Trader${suffix}`,
+      phone: `+23480444${suffix}`,
+      address: '7 Terminus Market, Jos',
+      lgaId,
+      economicSector: 'ARTISAN_CRAFT',
+      consentGiven: true,
+      declarationAccepted: true,
+    },
+    { ...auth, idempotencyKey: `enum-tp-${suffix}` },
+  );
+  assert.equal(response.status, 201, JSON.stringify(response.body));
+  return response.body.taxpayerId as string;
+}
+
+async function guild(taxRole: 'ENUMERATION' | 'ATTESTATION' | 'NONE' = 'ATTESTATION') {
+  seq += 1;
+  const row = await queryOne<{ id: string }>(
+    pool,
+    `INSERT INTO taxpayer_groups
+       (code, name, group_type, lga_id, leader_name, leader_phone, registered_by, tax_role,
+        economic_sector)
+     VALUES ($1,'Terminus Tailors Guild','ARTISAN_GUILD',$2,'Guild Leader',$3,$4,$5,'ARTISAN_CRAFT')
+     RETURNING id`,
+    [`GRP-ENUM-${seq}`, lgaId, `+23481222${String(seq).padStart(5, '0')}`, officerId, taxRole],
+  );
+  return row!.id;
+}
+
+/** A tailor with a lock-up shop, two machines and one apprentice. */
+const TAILOR: {
+  premises: Observations['premises'];
+  equipmentCount: number;
+  peopleWorking: number;
+  economicSector: string;
+} = {
+  premises: 'LOCK_UP_SHOP',
+  equipmentCount: 2,
+  peopleWorking: 1,
+  economicSector: 'ARTISAN_CRAFT',
+};
+
+const observe = (taxpayerId: string, overrides: Partial<typeof TAILOR> & { groupId?: string } = {}) =>
+  recordObservation(pool, {
+    taxpayerId,
+    ...TAILOR,
+    ...overrides,
+    actorId: officerId,
+    actorRole: 'admin',
+  });
+
+describe('what the agent records', () => {
+  it('takes facts and returns a band it worked out itself', async () => {
+    const taxpayer = await trader('Amina');
+    const observation = await observe(taxpayer);
+
+    assert.equal(observation.sizeBand, 'SMALL', 'the server decides the band');
+    assert.equal(observation.premises, 'LOCK_UP_SHOP');
+  });
+
+  it('takes the LGA from the taxpayer, not from whoever fills the form', async () => {
+    /*
+     * The LGA selects the schedule column. Accepting it from the request would
+     * let the person filling the form choose which figure they are assessed
+     * against — the same negotiation the band rule prevents, one step removed.
+     *
+     * Sent anyway and asserted ignored, because "there is no parameter" is
+     * only worth something if a request that supplies one is not honoured.
+     */
+    const taxpayer = await trader('Fixed LGA');
+    const elsewhere = await queryOne<{ id: string }>(
+      pool,
+      'SELECT id FROM lgas WHERE id <> $1 LIMIT 1',
+      [lgaId],
+    );
+    const officer = await loginAs('+2348000000001');
+
+    const response = await post(
+      '/government/enumeration/observations',
+      { taxpayerId: taxpayer, ...TAILOR, lgaId: elsewhere!.id },
+      { token: officer.accessToken },
+    );
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+
+    /*
+     * Read from the row, not from the response. The response object builds
+     * `lgaId` from the taxpayer it looked up, so it says the right thing even
+     * if something else was written — which is exactly the assertion that
+     * cannot fail, and the reason this reads the stored observation instead.
+     */
+    const stored = await queryOne<{ lga_id: string }>(
+      pool,
+      'SELECT lga_id FROM presumptive_observations WHERE id = $1',
+      [response.body.id],
+    );
+    assert.equal(
+      stored!.lga_id,
+      lgaId,
+      'the taxpayer’s own local government decides which schedule column applies',
+    );
+    assert.notEqual(stored!.lga_id, elsewhere!.id);
+  });
+
+  it('has nowhere to put a band or an amount', async () => {
+    const taxpayer = await trader('Negotiating');
+    const officer = await loginAs('+2348000000001');
+    const response = await post(
+      '/government/enumeration/observations',
+      {
+        taxpayerId: taxpayer,
+        ...TAILOR,
+        sizeBand: 'MICRO',
+        assumedAnnualTurnoverKobo: '1',
+        annualTaxKobo: '1',
+      },
+      { token: officer.accessToken },
+    );
+
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+    assert.equal(
+      response.body.sizeBand,
+      'SMALL',
+      'the observations decide the band, whatever else was sent',
+    );
+  });
+
+  it('refuses a negative count', async () => {
+    const taxpayer = await trader('Negative');
+    await assert.rejects(observe(taxpayer, { equipmentCount: -1 }), /negative/i);
+  });
+
+  it('refuses to name a group that has no part in this', async () => {
+    /*
+     * A group registered for an allocation programme is not an attesting body.
+     * Treating one as though it were would give a leader standing over members
+     * who never agreed to it.
+     */
+    const taxpayer = await trader('Wrong Group');
+    const other = await guild('NONE');
+    await assert.rejects(observe(taxpayer, { groupId: other }), /part in enumeration/i);
+  });
+});
+
+describe('what the leader may say', () => {
+  it('confirms an observation, and that is recorded against it', async () => {
+    const taxpayer = await trader('Attested');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+    assert.equal(observation.attestationState, 'PENDING');
+
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: true,
+      attestedByName: 'Guild Leader',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const row = await queryOne<{ attestation_state: string; attested_by_name: string }>(
+      pool,
+      'SELECT attestation_state, attested_by_name FROM presumptive_observations WHERE id = $1',
+      [observation.id],
+    );
+    assert.equal(row!.attestation_state, 'AGREED');
+    assert.equal(row!.attested_by_name, 'Guild Leader');
+  });
+
+  it('must say what they claim instead when they disagree', async () => {
+    const taxpayer = await trader('Vague');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+
+    await assert.rejects(
+      attestObservation(pool, {
+        observationId: observation.id,
+        agrees: false,
+        attestedByName: 'Guild Leader',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /what the leader claims instead/i,
+      'a disagreement with nothing behind it leaves nothing to settle',
+    );
+  });
+
+  it('has no way to set a band or an amount', async () => {
+    /*
+     * Asserted against the schema itself rather than the service, because the
+     * point is that the capability does not exist. A rule in a service can be
+     * relaxed by an edit; a column that was never added cannot.
+     */
+    const columns = await query<{ column_name: string }>(
+      pool,
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'presumptive_observations'`,
+      [],
+    );
+    const names = columns.map((row) => row.column_name);
+    for (const forbidden of [
+      'attested_band',
+      'attested_size_band',
+      'attested_turnover_kobo',
+      'attested_tax_kobo',
+      'leader_band',
+    ]) {
+      assert.equal(
+        names.includes(forbidden),
+        false,
+        `a leader who could set ${forbidden} would be a collector, not a witness`,
+      );
+    }
+    assert.ok(names.includes('attested_premises'), 'they attest to facts');
+  });
+
+  it('cannot attest twice', async () => {
+    const taxpayer = await trader('Twice');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: true,
+      attestedByName: 'Guild Leader',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      attestObservation(pool, {
+        observationId: observation.id,
+        agrees: false,
+        attestedByName: 'Guild Leader',
+        premises: 'STALL',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /not awaiting attestation/i,
+    );
+  });
+});
+
+describe('the disagreement queue', () => {
+  it('shows both versions and the band each would produce', async () => {
+    const taxpayer = await trader('Contested');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const queue = await disagreements(pool);
+    const item = queue.find((row) => row.observationId === observation.id);
+    assert.ok(item, 'two versions of a checkable fact is what attestation is for');
+    assert.equal(item!.agentBand, 'SMALL');
+    assert.equal(item!.leaderBand, 'SMALL', 'one apprentice still lifts a stall to SMALL');
+    assert.equal(item!.agentSaw.premises, 'LOCK_UP_SHOP');
+    assert.equal(item!.leaderSays.premises, 'STALL');
+  });
+
+  it('does not invent a wider disagreement than the one that was made', async () => {
+    /*
+     * A leader who disputed the premises said nothing about the staff. Reading
+     * the silent fields as zero would put the member a band lower than either
+     * account supports, which is a disagreement neither person made.
+     */
+    const taxpayer = await trader('Partial');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group, peopleWorking: 6 });
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const item = (await disagreements(pool)).find((row) => row.observationId === observation.id);
+    assert.equal(
+      item!.leaderBand,
+      'MEDIUM',
+      'six people still means MEDIUM — the leader only disputed the premises',
+    );
+  });
+
+  it('leaves an agreed observation off the queue entirely', async () => {
+    const taxpayer = await trader('Settled');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: true,
+      attestedByName: 'Guild Leader',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(disagreementsHas(await disagreements(pool), observation.id), false);
+  });
+
+  it('clears once somebody has been back to look again', async () => {
+    /*
+     * The queue's only exit, and it has to exist: a disputed observation
+     * cannot be assessed, so it would otherwise sit there for ever and a
+     * supervisor who did the right thing would see the same item every day.
+     * Observations are immutable, so going back means a new row — and the
+     * later one is what the State now believes.
+     */
+    const taxpayer = await trader('Revisited');
+    const group = await guild();
+    const first = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: first.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.ok(disagreementsHas(await disagreements(pool), first.id), 'on the queue first');
+
+    const second = await observe(taxpayer, { premises: 'STALL' });
+    assert.equal(
+      disagreementsHas(await disagreements(pool), first.id),
+      false,
+      'a supervisor who went back and settled it should not see it again',
+    );
+    assert.ok(second.id, 'and the earlier disagreement is still on the record');
+
+    const kept = await queryOne<{ attestation_state: string }>(
+      pool,
+      'SELECT attestation_state FROM presumptive_observations WHERE id = $1',
+      [first.id],
+    );
+    assert.equal(kept!.attestation_state, 'DISAGREED');
+  });
+});
+
+function disagreementsHas(queue: Awaited<ReturnType<typeof disagreements>>, id: string) {
+  return queue.some((row) => row.observationId === id);
+}
+
+describe('assessing what was found', () => {
+  it('computes the bill from the schedule and raises an ordinary invoice', async () => {
+    const taxpayer = await trader('Assessed');
+    const observation = await observe(taxpayer);
+
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    assert.equal(result.taxTier, 'PRESUMPTIVE');
+    assert.equal(result.assumedAnnualTurnoverKobo, '480000000');
+    assert.equal(result.annualTaxKobo, '4800000', 'one per cent of ₦4.8m is ₦48,000');
+    assert.ok(result.invoiceNumber, 'and it is collected through the ordinary invoice');
+
+    const invoice = await queryOne<{ amount_kobo: string }>(
+      pool,
+      'SELECT amount_kobo FROM invoices WHERE invoice_number = $1',
+      [result.invoiceNumber],
+    );
+    assert.equal(invoice!.amount_kobo, result.annualTaxKobo);
+  });
+
+  it('records a nano operator as exempt, with no invoice at all', async () => {
+    /*
+     * Recorded rather than skipped. How many people the exemption covers is
+     * the number this whole regime should be judged on, and a coverage metric
+     * that only counted assessments would bury it.
+     */
+    const taxpayer = await trader('Hawker');
+    const observation = await observe(taxpayer, {
+      premises: 'NONE',
+      equipmentCount: 0,
+      peopleWorking: 0,
+    });
+
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    assert.equal(result.taxTier, 'NANO');
+    assert.equal(result.annualTaxKobo, '0');
+    assert.equal(result.invoiceNumber, null, 'an invoice for zero is not a record of exemption');
+
+    const tier = await queryOne<{ tax_tier: string }>(
+      pool,
+      'SELECT tax_tier FROM taxpayers WHERE id = $1',
+      [taxpayer],
+    );
+    assert.equal(tier!.tax_tier, 'NANO');
+  });
+
+  it('refuses to assess an observation the association disputed', async () => {
+    const taxpayer = await trader('Disputed');
+    const group = await guild();
+    const observation = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      assessFromObservation(pool, {
+        observationId: observation.id,
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /not settled facts/i,
+      'issuing it anyway spends PSIRS credibility to save a supervisor a visit',
+    );
+  });
+
+  it('refuses to assess the same observation twice', async () => {
+    const taxpayer = await trader('Doubled');
+    const observation = await observe(taxpayer);
+    await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      assessFromObservation(pool, {
+        observationId: observation.id,
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /already produced an assessment/i,
+    );
+  });
+
+  it('records which schedule version and which construction it used', async () => {
+    const taxpayer = await trader('Traceable');
+    const observation = await observe(taxpayer);
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const row = await queryOne<{
+      schedule_id: string;
+      nano_policy_id: string;
+      observation_id: string;
+    }>(
+      pool,
+      'SELECT schedule_id, nano_policy_id, observation_id FROM presumptive_assessments WHERE id = $1',
+      [result.id],
+    );
+    assert.ok(row!.schedule_id, 'an assessment must be re-checkable against what it used');
+    assert.ok(row!.nano_policy_id);
+    assert.equal(row!.observation_id, observation.id);
+  });
+});
+
+describe('objecting to it', () => {
+  async function assessed(name: string) {
+    const taxpayer = await trader(name);
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    return { taxpayer, assessment };
+  }
+
+  it('suspends enforcement while the objection is open', async () => {
+    /*
+     * The property that makes the objection window mean something. A citizen
+     * who formally disputed an estimate and then took a call demanding payment
+     * has learnt that the process is decorative.
+     */
+    const { taxpayer, assessment } = await assessed('Objecting');
+
+    await pool.query(
+      `UPDATE invoices SET expires_at = now() + interval '20 days'
+        WHERE assessment_id = (SELECT assessment_id FROM presumptive_assessments WHERE id = $1)`,
+      [assessment.id],
+    );
+    assert.ok(
+      (await arrearsWorklist(pool)).rows.some((row) => row.taxpayerId === taxpayer),
+      'on the worklist before objecting',
+    );
+
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The stall is half the size recorded and there is no apprentice.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    assert.equal(
+      (await arrearsWorklist(pool)).rows.some((row) => row.taxpayerId === taxpayer),
+      false,
+      'a disputed estimate is not chased while it is disputed',
+    );
+  });
+
+  it('marks the assessment objected, and settled again once decided', async () => {
+    /*
+     * Separate from the arrears exclusion, which keys off the objection rather
+     * than the assessment. This is the record a screen shows the officer, and
+     * it was going untested — an assessment stuck at OBJECTED after the
+     * objection was rejected would read as unresolved for ever.
+     */
+    const { assessment } = await assessed('Status Tracked');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The machines are borrowed.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const objected = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM presumptive_assessments WHERE id = $1',
+      [assessment.id],
+    );
+    assert.equal(objected!.status, 'OBJECTED');
+
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'Re-checked on site; the machines are the trader’s own.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    const settled = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM presumptive_assessments WHERE id = $1',
+      [assessment.id],
+    );
+    assert.equal(settled!.status, 'ASSESSED', 'and it does not read as unresolved for ever');
+  });
+
+  it('lets the taxpayer leave the regime by producing records', async () => {
+    const { assessment } = await assessed('Has Books');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'HAS_RECORDS',
+      statement: 'Audited accounts for 2025 are available and were filed with FIRS.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.ok(objection.id, 'moving up must be a right, not a favour');
+  });
+
+  it('refuses a second objection while the first is still open', async () => {
+    /*
+     * The unique index refuses it either way. What this holds is that the
+     * officer is told somebody already raised it, rather than handed a
+     * constraint violation and left to guess whether the estimate is disputed.
+     */
+    const { assessment } = await assessed('Twice Over');
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The shop was shut for half the year.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      raiseObjection(pool, {
+        presumptiveAssessmentId: assessment.id,
+        ground: 'OTHER',
+        statement: 'Raised again at the counter by a different clerk.',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      }),
+      /already open/i,
+    );
+  });
+
+  it('refuses an objection to an exemption, which charges nothing', async () => {
+    /*
+     * An exempt operator has no bill. Upholding an objection withdraws the
+     * assessment — so an objection allowed here would delete the record of the
+     * exemption and put the observation back in the queue to be assessed
+     * again. Complaining would cost the taxpayer their exemption.
+     */
+    const taxpayer = await trader('Nothing Owed');
+    const observation = await observe(taxpayer, {
+      premises: 'NONE',
+      equipmentCount: 0,
+      peopleWorking: 0,
+    });
+    const exempt = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(exempt.taxTier, 'NANO');
+
+    await assert.rejects(
+      raiseObjection(pool, {
+        presumptiveAssessmentId: exempt.id,
+        ground: 'NOT_TRADING',
+        statement: 'He says he stopped hawking in June.',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /no estimate to object to/i,
+    );
+  });
+
+  it('will not let the assessing officer decide the objection', async () => {
+    const { assessment } = await assessed('Same Officer');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The machines counted belong to the landlord.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: false,
+        reason: 'I stand by my own assessment',
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /cannot decide the objection/i,
+      'an objection decided by the person objected to is a form, not a right of appeal',
+    );
+  });
+
+  it('cancels the bill when the objection is upheld', async () => {
+    const { taxpayer, assessment } = await assessed('Upheld');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'NOT_TRADING',
+      statement: 'The shop closed in November and the trader has left the State.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: true,
+      reason: 'Confirmed with the market association that the shop is closed.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    const invoice = await queryOne<{ status: string }>(
+      pool,
+      `SELECT i.status FROM invoices i
+         JOIN presumptive_assessments pa ON pa.assessment_id = i.assessment_id
+        WHERE pa.id = $1`,
+      [assessment.id],
+    );
+    assert.equal(
+      invoice!.status,
+      'CANCELLED',
+      'a decision in the taxpayer’s favour that left the bill standing cost them nothing',
+    );
+    assert.equal(
+      (await arrearsWorklist(pool)).rows.some((row) => row.taxpayerId === taxpayer),
+      false,
+    );
+  });
+
+  it('puts the debt back when the objection is rejected', async () => {
+    const { taxpayer, assessment } = await assessed('Rejected');
+    await pool.query(
+      `UPDATE invoices SET expires_at = now() + interval '20 days'
+        WHERE assessment_id = (SELECT assessment_id FROM presumptive_assessments WHERE id = $1)`,
+      [assessment.id],
+    );
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'OTHER',
+      statement: 'The trader says the tax is too high.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'The observations were re-checked on site and are correct.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    assert.ok(
+      (await arrearsWorklist(pool)).rows.some((row) => row.taxpayerId === taxpayer),
+      'enforcement resumes once the objection is decided',
+    );
+  });
+
+  it('refuses a decision with no reason the taxpayer can read', async () => {
+    const { assessment } = await assessed('Unexplained');
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The premises are shared with two other traders.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      decideObjection(pool, {
+        objectionId: objection.id,
+        uphold: false,
+        reason: '   ',
+        actorId: secondOfficerId,
+        actorRole: 'admin',
+      }),
+      /reason the taxpayer can read/i,
+    );
+  });
+
+  it('names the assessing officer on the queue, so a reviewer knows to pass it on', async () => {
+    const { assessment } = await assessed('Queued');
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'The count is wrong.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const queue = await openObjections(pool);
+    assert.equal(queue.length, 1);
+    assert.equal(queue[0]!.assessedBy, officerId);
+  });
+});
+
+describe('what the database refuses, with the service bypassed', () => {
+  async function scheduleRow(band: 'MICRO' | 'SMALL') {
+    return (await queryOne<{ id: string; assumed_annual_turnover_kobo: string }>(
+      pool,
+      `SELECT id, assumed_annual_turnover_kobo FROM presumptive_schedules WHERE size_band = $1`,
+      [band],
+    ))!;
+  }
+
+  async function bareObservation(taxpayerId: string) {
+    return (await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO presumptive_observations
+         (taxpayer_id, premises, equipment_count, people_working, economic_sector, lga_id, observed_by)
+       VALUES ($1,'LOCK_UP_SHOP',2,1,'ARTISAN_CRAFT',$2,$3) RETURNING id`,
+      [taxpayerId, lgaId, officerId],
+    ))!.id;
+  }
+
+  const policyId = async () =>
+    (await queryOne<{ id: string }>(pool, 'SELECT id FROM nano_exemption_policies LIMIT 1', []))!.id;
+
+  it('refuses an assessment whose figure disagrees with the schedule it cites', async () => {
+    const taxpayer = await trader('Mismatched');
+    const observation = await bareObservation(taxpayer);
+    const schedule = await scheduleRow('SMALL');
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO presumptive_assessments
+           (taxpayer_id, observation_id, schedule_id, nano_policy_id, tax_tier, size_band,
+            lga_class, assumed_annual_turnover_kobo, annual_tax_kobo, objection_window_ends_at,
+            created_by)
+         VALUES ($1,$2,$3,$4,'PRESUMPTIVE','SMALL','A',999,9,now(),$5)`,
+        [taxpayer, observation, schedule.id, await policyId(), officerId],
+      ),
+      /cites a schedule row saying/i,
+      'a foreign key to evidence and a number from somewhere else is the shape of a stall bargain',
+    );
+  });
+
+  it('refuses an assessment that cites a schedule row for a different band', async () => {
+    const taxpayer = await trader('Wrong Band');
+    const observation = await bareObservation(taxpayer);
+    const micro = await scheduleRow('MICRO');
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO presumptive_assessments
+           (taxpayer_id, observation_id, schedule_id, nano_policy_id, tax_tier, size_band,
+            lga_class, assumed_annual_turnover_kobo, annual_tax_kobo, objection_window_ends_at,
+            created_by)
+         VALUES ($1,$2,$3,$4,'PRESUMPTIVE','SMALL','A',$5,$6,now(),$7)`,
+        [
+          taxpayer,
+          observation,
+          micro.id,
+          await policyId(),
+          micro.assumed_annual_turnover_kobo,
+          (BigInt(micro.assumed_annual_turnover_kobo) / 100n).toString(),
+          officerId,
+        ],
+      ),
+      /cites a schedule row for band/i,
+    );
+  });
+
+  it('refuses a charge that is not one per cent of the assumed turnover', async () => {
+    const taxpayer = await trader('Wrong Rate');
+    const observation = await bareObservation(taxpayer);
+    const schedule = await scheduleRow('SMALL');
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO presumptive_assessments
+           (taxpayer_id, observation_id, schedule_id, nano_policy_id, tax_tier, size_band,
+            lga_class, assumed_annual_turnover_kobo, annual_tax_kobo, objection_window_ends_at,
+            created_by)
+         VALUES ($1,$2,$3,$4,'PRESUMPTIVE','SMALL','A',$5,$6,now(),$7)`,
+        [
+          taxpayer,
+          observation,
+          schedule.id,
+          await policyId(),
+          schedule.assumed_annual_turnover_kobo,
+          '999999',
+          officerId,
+        ],
+      ),
+      /not one per cent of/i,
+    );
+  });
+
+  it('refuses to charge a nano business anything at all', async () => {
+    /*
+     * The plan's second invariant, and the reason it is a trigger. An officer
+     * measured on how many people they bring into the net has a standing
+     * reason to assess somebody the law exempts — which is how these schemes
+     * turn regressive without anybody deciding that they should.
+     */
+    const taxpayer = await trader('Exempt');
+    const observation = await bareObservation(taxpayer);
+    const schedule = await scheduleRow('MICRO');
+
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO presumptive_assessments
+           (taxpayer_id, observation_id, schedule_id, nano_policy_id, tax_tier, size_band,
+            lga_class, assumed_annual_turnover_kobo, annual_tax_kobo, objection_window_ends_at,
+            created_by)
+         VALUES ($1,$2,$3,$4,'NANO','MICRO','A',$5,$6,now(),$7)`,
+        [
+          taxpayer,
+          observation,
+          schedule.id,
+          await policyId(),
+          schedule.assumed_annual_turnover_kobo,
+          (BigInt(schedule.assumed_annual_turnover_kobo) / 100n).toString(),
+          officerId,
+        ],
+      ),
+      /nano business is exempt/i,
+    );
+  });
+
+  it('refuses an assessment with no observation behind it', async () => {
+    const schedule = await scheduleRow('SMALL');
+    await assert.rejects(
+      pool.query(
+        `INSERT INTO presumptive_assessments
+           (taxpayer_id, schedule_id, nano_policy_id, tax_tier, size_band, lga_class,
+            assumed_annual_turnover_kobo, annual_tax_kobo, objection_window_ends_at, created_by)
+         VALUES ($1,$2,$3,'PRESUMPTIVE','SMALL','A',$4,$5,now(),$6)`,
+        [
+          await trader('No Evidence'),
+          schedule.id,
+          await policyId(),
+          schedule.assumed_annual_turnover_kobo,
+          (BigInt(schedule.assumed_annual_turnover_kobo) / 100n).toString(),
+          officerId,
+        ],
+      ),
+      /observation_id/,
+      'no observation, no assessment — not a rule to remember but a column that cannot be null',
+    );
+  });
+
+  it('refuses to edit what was observed', async () => {
+    const taxpayer = await trader('Rewritten');
+    const observation = await bareObservation(taxpayer);
+    await assert.rejects(
+      pool.query(`UPDATE presumptive_observations SET equipment_count = 99 WHERE id = $1`, [
+        observation,
+      ]),
+      /immutable|cannot be changed|equipment_count/i,
+    );
+  });
+
+  it('refuses an attestation that does not say who made it', async () => {
+    const taxpayer = await trader('Anonymous Attestation');
+    const observation = await bareObservation(taxpayer);
+    await assert.rejects(
+      pool.query(
+        `UPDATE presumptive_observations SET attestation_state = 'AGREED' WHERE id = $1`,
+        [observation],
+      ),
+      /who made it and when/i,
+    );
+  });
+
+  it('refuses an objection decided by nobody', async () => {
+    const taxpayer = await trader('Anonymous Decision');
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'Wrong count.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      pool.query(`UPDATE assessment_objections SET status = 'REJECTED' WHERE id = $1`, [
+        objection.id,
+      ]),
+      /must record who made it/i,
+    );
+  });
+
+  it('refuses to re-decide an objection', async () => {
+    const taxpayer = await trader('Re-decided');
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'Wrong count.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await decideObjection(pool, {
+      objectionId: objection.id,
+      uphold: false,
+      reason: 'Re-checked on site.',
+      actorId: secondOfficerId,
+      actorRole: 'admin',
+    });
+
+    await assert.rejects(
+      pool.query(
+        `UPDATE assessment_objections
+            SET status = 'UPHELD', decided_by = $2, decision_reason = 'changed my mind'
+          WHERE id = $1`,
+        [objection.id, secondOfficerId],
+      ),
+      /already been decided/i,
+    );
+  });
+
+  it('refuses a group tax role the schema does not know', async () => {
+    const group = await guild();
+    await assert.rejects(
+      pool.query(`UPDATE taxpayer_groups SET tax_role = 'COLLECTION' WHERE id = $1`, [group]),
+      /tax_role/,
+      'there is no collecting role, and there must not be one',
+    );
+  });
+
+  it('has no column through which money could be owed by a group', async () => {
+    /*
+     * State money never enters an association's account. Asserted against the
+     * schema because that is where the guarantee lives: there is no payable
+     * against a group to create.
+     */
+    const columns = await query<{ column_name: string }>(
+      pool,
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'taxpayer_groups'`,
+      [],
+    );
+    const names = columns.map((row) => row.column_name);
+    for (const forbidden of ['balance_kobo', 'collected_kobo', 'account_number', 'payable_kobo']) {
+      assert.equal(names.includes(forbidden), false, `a group with ${forbidden} is a tax farmer`);
+    }
+  });
+});
+
+describe('the statutory rate is in one place', () => {
+  it('charges the one per cent the catalogue carries', async () => {
+    /*
+     * The rate lives on the revenue item, the service applies it to the
+     * schedule's assumed turnover, and migration 058 checks the stored charge
+     * against the same one per cent. Three places would drift; this asserts
+     * they currently agree, so a change to any of them fails here rather than
+     * on somebody's bill.
+     */
+    const rate = await queryOne<{ rate_basis_points: number; rate_type: string }>(
+      pool,
+      `SELECT r.rate_basis_points, r.rate_type
+         FROM revenue_item_rates r
+         JOIN revenue_items ri ON ri.id = r.revenue_item_id
+        WHERE ri.code = 'PIT-PRESUMPTIVE-SMALL'
+        ORDER BY r.effective_from DESC LIMIT 1`,
+      [],
+    );
+    assert.ok(rate, 'the presumptive items must carry a rate or nothing can be invoiced');
+    assert.equal(rate!.rate_type, 'PERCENTAGE');
+    assert.equal(rate!.rate_basis_points, 100, 'one per cent, per section 29 of the Act');
+
+    const taxpayer = await trader('Rate Check');
+    const observation = await observe(taxpayer);
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(
+      BigInt(result.annualTaxKobo),
+      BigInt(result.assumedAnnualTurnoverKobo) / 100n,
+      'and the charge is that rate applied to the schedule figure',
+    );
+  });
+});
+
+describe('who may do what', () => {
+  it('lets an agent record an observation', async () => {
+    const taxpayer = await trader('Field Recorded');
+    const response = await post(
+      '/government/enumeration/observations',
+      { taxpayerId: taxpayer, ...TAILOR },
+      { ...auth, idempotencyKey: 'enum-obs-1' },
+    );
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+  });
+
+  it('does not let an agent turn one into a bill', async () => {
+    const taxpayer = await trader('Field Assessed');
+    const observation = await observe(taxpayer);
+    const response = await post(
+      `/government/enumeration/observations/${observation.id}/assess`,
+      {},
+      auth,
+    );
+    assert.equal(
+      response.status,
+      403,
+      'raising a charge off a document is not the same act as recording what is in front of you',
+    );
+  });
+
+  it('does not let an agent decide an objection', async () => {
+    const taxpayer = await trader('Field Decided');
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    const objection = await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'Wrong count.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const response = await post(
+      `/government/enumeration/objections/${objection.id}/decide`,
+      { uphold: true, reason: 'Because the trader asked me to' },
+      auth,
+    );
+    assert.equal(response.status, 403, `got ${response.status}`);
+  });
+
+  it('lets an officer read the disagreement queue', async () => {
+    const officer = await loginAs('+2348000000001');
+    const response = await get('/government/enumeration/disagreements', {
+      token: officer.accessToken,
+    });
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+  });
+});
+
+/**
+ * The rest of the schedule, which one LGA and one trade never reach.
+ *
+ * A presumptive schedule is a table: sector by band by LGA class. Everything
+ * above assesses an artisan with a lock-up shop in a class-A LGA, which is one
+ * cell of it. The cells nobody exercises are where a per-class table fails
+ * silently — a trader in a rural Council charged the Jos figure is not a
+ * refused request, it is a wrong bill that looks exactly like a right one.
+ */
+describe('the other cells of the schedule', () => {
+  async function traderIn(name: string, lga: string) {
+    const taxpayer = await trader(name);
+    await pool.query('UPDATE taxpayers SET lga_id = $2 WHERE id = $1', [taxpayer, lga]);
+    return taxpayer;
+  }
+
+  it('charges a rural trader the rural figure, not the Jos one', async () => {
+    /*
+     * The whole point of classifying LGAs. Four classes, four turnovers, and
+     * an assessment that took the wrong row would still produce a plausible
+     * invoice — so the figures are chosen far enough apart that reading the
+     * wrong one cannot be mistaken for rounding.
+     */
+    const others = await query<{ id: string }>(
+      pool,
+      'SELECT id FROM lgas WHERE id <> $1 ORDER BY name LIMIT 3',
+      [lgaId],
+    );
+    assert.equal(others.length, 3, 'Plateau has seventeen Councils; three spare ones are needed');
+
+    const byClass = [
+      { classCode: 'B' as const, lga: others[0]!.id, turnover: '60000000', tax: '600000' },
+      { classCode: 'C' as const, lga: others[1]!.id, turnover: '30000000', tax: '300000' },
+      { classCode: 'D' as const, lga: others[2]!.id, turnover: '12000000', tax: '120000' },
+    ];
+
+    for (const cell of byClass) {
+      await classifyLga(pool, {
+        lgaId: cell.lga,
+        classCode: cell.classCode,
+        indexInputs: { roadAccess: 'earth' },
+        indexSource: 'National Bureau of Statistics',
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2029-01-01',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      await publishScheduleEntry(pool, {
+        economicSector: 'ARTISAN_CRAFT',
+        sizeBand: 'SMALL',
+        lgaClass: cell.classCode,
+        assumedAnnualTurnoverKobo: cell.turnover,
+        instrumentReference: 'Plateau State Revenue (Presumptive Assessment) Regulation 2026',
+        effectiveFrom: '2026-01-01',
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+    }
+
+    for (const cell of byClass) {
+      const taxpayer = await traderIn(`Class ${cell.classCode}`, cell.lga);
+      const observation = await observe(taxpayer);
+      const assessment = await assessFromObservation(pool, {
+        observationId: observation.id,
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+      assert.equal(assessment.lgaClass, cell.classCode);
+      assert.equal(
+        assessment.annualTaxKobo,
+        cell.tax,
+        `class ${cell.classCode} was charged another class's figure`,
+      );
+    }
+
+    const classA = await trader('Class A');
+    const inJos = await assessFromObservation(pool, {
+      observationId: (await observe(classA)).id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(inJos.annualTaxKobo, '4800000', 'and the class-A figure did not move either');
+  });
+
+  it('lifts a trader working out of a building to the top band', async () => {
+    /*
+     * Premises set a floor the count cannot lower. Someone running a workshop
+     * from a whole building is a medium enterprise whatever they say about how
+     * many machines are theirs — which is the arm of the band rule a lock-up
+     * shop never reaches.
+     */
+    await publishScheduleEntry(pool, {
+      economicSector: 'ARTISAN_CRAFT',
+      sizeBand: 'MEDIUM',
+      lgaClass: 'A',
+      assumedAnnualTurnoverKobo: '1800000000',
+      instrumentReference: 'Plateau State Revenue (Presumptive Assessment) Regulation 2026',
+      effectiveFrom: '2026-01-01',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const taxpayer = await trader('Workshop');
+    const observation = await observe(taxpayer, {
+      premises: 'BUILDING',
+      equipmentCount: 1,
+      peopleWorking: 0,
+    });
+    assert.equal(observation.sizeBand, 'MEDIUM', 'the premises floor is not negotiable');
+
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(assessment.sizeBand, 'MEDIUM');
+    assert.equal(assessment.annualTaxKobo, '18000000');
+  });
+
+  it('leaves a kiosk trader in the smallest band', async () => {
+    // The other end of the same rule: a kiosk sets no floor above MICRO, so
+    // one person with one machine stays where the count puts them.
+    const taxpayer = await trader('Kiosk');
+    const observation = await observe(taxpayer, {
+      premises: 'KIOSK',
+      equipmentCount: 1,
+      peopleWorking: 0,
+    });
+    assert.equal(observation.sizeBand, 'MICRO');
+  });
+
+  it('records whatever the leader says the premises are, including none', async () => {
+    /*
+     * The leader's account is written down as given, not translated into a
+     * band or a judgement about who is right. Every rung of the ladder,
+     * because the one that matters most is NONE — a leader saying a member has
+     * no fixed premises at all is saying they may be exempt, and an
+     * attestation that could not carry that would only ever argue upwards.
+     */
+    const association = await guild('ATTESTATION');
+    const ladder = ['NONE', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING'] as const;
+    for (const premises of ladder) {
+      const taxpayer = await trader(`Leader Says ${premises}`);
+      // Attestation is only open on an observation recorded against a group;
+      // there is nobody to attest to one an agent took on their own.
+      const observation = await observe(taxpayer, { groupId: association });
+      await attestObservation(pool, {
+        observationId: observation.id,
+        agrees: false,
+        attestedByName: 'Guild Leader',
+        premises,
+        equipmentCount: 1,
+        peopleWorking: 0,
+        actorId: officerId,
+        actorRole: 'admin',
+      });
+
+      const stored = await queryOne<{ attested_premises: string; attestation_state: string }>(
+        pool,
+        'SELECT attested_premises, attestation_state FROM presumptive_observations WHERE id = $1',
+        [observation.id],
+      );
+      assert.equal(stored!.attested_premises, premises);
+      assert.equal(stored!.attestation_state, 'DISAGREED');
+    }
+  });
+
+  it('lets an association that enumerates its own members do so', async () => {
+    /*
+     * Two different parts a group can play. An attesting body confirms what an
+     * agent recorded; an enumerating one does the recording, which is how a
+     * market association reaches members no agent would be let near. Both are
+     * standing to be enumerated against; only NONE is not.
+     */
+    const association = await guild('ENUMERATION');
+    const taxpayer = await trader('Enumerated By Guild');
+    const observation = await observe(taxpayer, { groupId: association });
+
+    const stored = await queryOne<{ group_id: string }>(
+      pool,
+      'SELECT group_id FROM presumptive_observations WHERE id = $1',
+      [observation.id],
+    );
+    assert.equal(stored!.group_id, association);
+  });
+});
