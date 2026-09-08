@@ -37,7 +37,7 @@ import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../l
 import { requestBackgroundSync, submitOrQueue } from '../lib/drafts';
 import { Alert, ErrorAlert, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { bandFor, enumLabel, type Premises, type SizeBand } from '@psirs/shared';
 
 interface Profile {
   taxpayer: {
@@ -66,7 +66,7 @@ interface Recorded {
 }
 
 /** The rungs, smallest first, so the control reads as a ladder. */
-const PREMISES = ['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING'] as const;
+const PREMISES: Premises[] = ['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING'];
 
 export function EnumerateScreen({
   taxpayerId,
@@ -147,6 +147,30 @@ export function EnumerateScreen({
     form.equipmentCount.trim() !== '' &&
     form.peopleWorking.trim() !== '';
 
+  /*
+   * The band, worked out here on the phone.
+   *
+   * It runs `bandFor` from the shared package — the same function the platform
+   * runs when the capture arrives, not a copy of it — so the answer an agent
+   * gives at the stall and the answer the office reaches are the same answer
+   * by construction rather than by both being maintained carefully.
+   *
+   * Shown as soon as the three facts are there, before saving and whether or
+   * not there is any signal, because "what have you written me down as" is a
+   * question a trader asks while the agent is still standing in front of them.
+   *
+   * What it is not is a price. The band multiplies an assumed turnover this
+   * handset does not carry and will not be given; the sum arrives by notice.
+   */
+  const bandNow: SizeBand | null =
+    complete
+      ? bandFor({
+          premises: form.premises as Premises,
+          equipmentCount: Number(form.equipmentCount),
+          peopleWorking: Number(form.peopleWorking),
+        })
+      : null;
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!complete) return;
@@ -159,6 +183,18 @@ export function EnumerateScreen({
       peopleWorking: Number(form.peopleWorking),
       economicSector: form.economicSector,
       ...(form.groupId ? { groupId: form.groupId } : {}),
+      /*
+       * What the agent was shown, travelling with the capture.
+       *
+       * Not what decides the band — the platform runs the rule again on
+       * arrival and that result is the one that stands. This is the record of
+       * what a trader was told at their own stall, and it matters precisely
+       * when the two disagree: a handset running an old build, or a rule
+       * changed between capture and sync. Without it the taxpayer hears
+       * "small" from an agent and reads "medium" on a notice, and nothing
+       * anywhere knows that happened.
+       */
+      ...(bandNow ? { bandAtCapture: bandNow } : {}),
     };
     try {
       /*
@@ -210,13 +246,16 @@ export function EnumerateScreen({
             items={[
               [t.agEnWho, name],
               [t.agEnPremises, enumLabel(form.premises, t)],
+              /*
+               * The band the phone worked out, shown here as it is shown on a
+               * capture that got through. It is the same function the office
+               * runs on arrival, so this is not a guess standing in for an
+               * answer — but the office's run is the one that decides, which
+               * is what the notice below says.
+               */
+              [t.agEnBand, bandNow ? enumLabel(bandNow, t) : '—'],
             ]}
           />
-          {/*
-            * No band here, deliberately. Nothing has worked one out — the
-            * office does that when the capture arrives — and an agent shown a
-            * size on a phone with no signal would have been shown a guess.
-            */}
           <Alert kind="warning" title={t.agEnWhatHappensNextTitle}>
             {t.agEnQueuedNext}
           </Alert>
@@ -322,6 +361,12 @@ export function EnumerateScreen({
           </select>
         </Field>
       )}
+
+      {bandNow ? (
+        <Alert kind="info" title={t.agEnBandSoFarTitle}>
+          {t.agEnBandSoFar.replace('{{band}}', enumLabel(bandNow, t))}
+        </Alert>
+      ) : null}
 
       <Alert kind="info" title={t.agEnNoAmountTitle}>
         {t.agEnNoAmount}

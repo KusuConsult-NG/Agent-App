@@ -47,9 +47,22 @@ async function signIn(page: Page): Promise<void> {
   await page.waitForTimeout(3000);
 }
 
-async function shot(page: Page, name: string): Promise<void> {
+/**
+ * Photograph the phone.
+ *
+ * Viewport rather than full page, because the navigation bar is fixed to the
+ * bottom of a phone screen and a full-page capture floats it across the middle
+ * of the image. `focus` scrolls one thing into view first, for the shots whose
+ * whole point sits below the fold on a 414-wide screen — a picture that proves
+ * a control exists has to contain it.
+ */
+async function shot(page: Page, name: string, focus?: string): Promise<void> {
   await page.waitForLoadState('networkidle').catch(() => undefined);
-  await page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
+  if (focus) {
+    await page.getByText(new RegExp(focus, 'i')).first().scrollIntoViewIfNeeded();
+  } else {
+    await page.evaluate(() => window.scrollTo(0, 0)).catch(() => undefined);
+  }
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
 }
@@ -141,7 +154,10 @@ test('nothing can be saved until both counts are answered', async ({ page }) => 
 
   await page.getByLabel(/People working besides the owner/i).fill('2');
   await expect(save).toBeEnabled();
-  await shot(page, 'agent-enum-03-filled-in');
+  // The band appears as soon as the facts are in, before anything is saved —
+  // which is when the trader is asking.
+  await expect(page.getByText(/This is a Small business/i)).toBeVisible();
+  await shot(page, 'agent-enum-03-filled-in', 'Size from what you have written');
   expect(console_.errors, console_.errors.join('\n')).toEqual([]);
 });
 
@@ -171,14 +187,18 @@ test('the band comes back from the office, and still no amount', async ({ page }
   expect(console_.errors, console_.errors.join('\n')).toEqual([]);
 });
 
-test('a count taken with no signal is kept on the phone, with no band', async ({ page }) => {
+test('a count taken with no signal is kept on the phone, and still answers the band', async ({
+  page,
+}) => {
   /*
    * The markets worth enumerating are the ones the network is worst in. An
    * enumeration that needed a connection would be collected where coverage
    * already exists, which is exactly where the missing taxpayers are not.
    *
-   * The confirmation cannot say what the online one says: nothing has worked
-   * out a band yet. A size shown here would be one the handset invented.
+   * And the trader still gets an answer. The band rule runs on the phone —
+   * the same function from @psirs/shared that the office runs on arrival, not
+   * a copy — so "what have you written me down as" can be answered at the
+   * stall with no signal and no wait.
    */
   const console_ = watchConsole(page);
   await signIn(page);
@@ -197,8 +217,12 @@ test('a count taken with no signal is kept on the phone, with no band', async ({
   await page.getByRole('button', { name: /Save what you saw/i }).click();
 
   await expect(page.getByText(/Held on this phone/i)).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/Size recorded/i)).toHaveCount(0);
+  await expect(page.getByText(/Size recorded/i)).toBeVisible();
+  await expect(page.getByText(/^Small$/)).toBeVisible();
   await expect(page.getByText(/do not write it down a second time/i)).toBeVisible();
+  // A size, still no sum. The schedule that turns one into the other is not
+  // on this handset and will not be.
+  await expect(page.locator('body')).not.toContainText('₦');
   await shot(page, 'agent-enum-06-held-on-the-phone');
 
   await page.context().setOffline(false);

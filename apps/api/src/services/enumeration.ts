@@ -79,6 +79,17 @@ export interface RecordObservationParams {
   actorId: string;
   actorRole: string;
   agentId?: string | null;
+  /**
+   * The band the capturing handset showed the agent, when one did.
+   *
+   * Not what decides anything. The band that stands is concluded here, from
+   * the facts, by the same function the handset ran — so in the ordinary case
+   * this simply matches. It is kept because the cases where it does not are
+   * real: an old build in a market with no signal, or a rule changed between
+   * capture and sync. Either way a trader was told one size and will read
+   * another, and this is what lets somebody answer them.
+   */
+  bandAtCapture?: SizeBand | null;
 }
 
 export interface Observation {
@@ -157,8 +168,9 @@ export async function recordObservation(
       client,
       `INSERT INTO presumptive_observations
          (taxpayer_id, premises, equipment_count, people_working, economic_sector,
-          lga_id, observed_by, agent_id, latitude, longitude, group_id, attestation_state)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+          lga_id, observed_by, agent_id, latitude, longitude, group_id, attestation_state,
+          band_at_capture)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
        RETURNING id, observed_at`,
       [
         params.taxpayerId,
@@ -173,6 +185,7 @@ export async function recordObservation(
         params.longitude ?? null,
         params.groupId ?? null,
         params.groupId ? 'PENDING' : 'NOT_SOUGHT',
+        params.bandAtCapture ?? null,
       ],
     );
 
@@ -190,6 +203,36 @@ export async function recordObservation(
       reason: 'Field observation recorded for presumptive assessment',
     });
 
+    const sizeBand = bandFor({
+      premises: params.premises,
+      equipmentCount: params.equipmentCount,
+      peopleWorking: params.peopleWorking,
+    });
+
+    /*
+     * The handset said something else.
+     *
+     * Audited rather than refused. The capture is good — the facts are the
+     * agent's and they are what the band is read from — but somebody standing
+     * at a stall was told a different size, and the first anyone would
+     * otherwise hear of it is the taxpayer objecting to a notice that does not
+     * match what they were told.
+     */
+    if (params.bandAtCapture && params.bandAtCapture !== sizeBand) {
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'observation.band_disagreed_with_handset',
+        entityType: 'presumptive_observation',
+        entityId: inserted!.id,
+        oldValue: { bandAtCapture: params.bandAtCapture },
+        newValue: { sizeBand },
+        reason:
+          'The handset showed a different size from the one the platform reached. The ' +
+          'taxpayer may have been told the handset’s.',
+      });
+    }
+
     return {
       id: inserted!.id,
       taxpayerId: params.taxpayerId,
@@ -205,11 +248,7 @@ export async function recordObservation(
       attestedPremises: null,
       attestedEquipmentCount: null,
       attestedPeopleWorking: null,
-      sizeBand: bandFor({
-        premises: params.premises,
-        equipmentCount: params.equipmentCount,
-        peopleWorking: params.peopleWorking,
-      }),
+      sizeBand,
     };
   });
 }

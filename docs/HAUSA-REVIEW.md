@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2166 strings, grouped by where an agent meets them. Lower stakes
+2168 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2707,7 +2707,9 @@ instructions — but they are what an agent reads all day.
 | `agEnNextWithoutLeader` | An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice. | Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa. | ☐ | |
 | `agEnBackToTaxpayer` | Back to the taxpayer | Koma ga mai biyan haraji | ☐ | |
 | `agEnQueuedTitle` | Held on this phone | Yana kan wannan wayar | ☐ | |
-| `agEnQueuedNext` | There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office works out the size then, not now. | Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai fitar da girman a lokacin, ba yanzu ba. | ☐ | |
+| `agEnQueuedNext` | There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office checks the size again when it arrives. | Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai sake duba girman idan ya iso. | ☐ | |
+| `agEnBandSoFarTitle` | Size from what you have written | Girma daga abin da ka rubuta | ☐ | |
+| `agEnBandSoFar` | This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice. | Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |

@@ -2044,6 +2044,8 @@ export interface TranslationDictionary {
   agEnBackToTaxpayer: string;
   agEnQueuedTitle: string;
   agEnQueuedNext: string;
+  agEnBandSoFarTitle: string;
+  agEnBandSoFar: string;
   tpViewProfile: string;
   tpPossibleExisting: string;
   tpCheckSamePerson: string;
@@ -4396,7 +4398,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnNextWithoutLeader: "An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice.",
     agEnBackToTaxpayer: "Back to the taxpayer",
     agEnQueuedTitle: "Held on this phone",
-    agEnQueuedNext: "There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office works out the size then, not now.",
+    agEnQueuedNext: "There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office checks the size again when it arrives.",
+    agEnBandSoFarTitle: "Size from what you have written",
+    agEnBandSoFar: "This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice.",
     tpViewProfile: "View profile",
     tpPossibleExisting: "Possible existing taxpayer",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
@@ -6665,7 +6669,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnNextWithoutLeader: "Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa.",
     agEnBackToTaxpayer: "Koma ga mai biyan haraji",
     agEnQueuedTitle: "Yana kan wannan wayar",
-    agEnQueuedNext: "Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai fitar da girman a lokacin, ba yanzu ba.",
+    agEnQueuedNext: "Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai sake duba girman idan ya iso.",
+    agEnBandSoFarTitle: "Girma daga abin da ka rubuta",
+    agEnBandSoFar: "Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa.",
     tpViewProfile: "Duba bayanai",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",

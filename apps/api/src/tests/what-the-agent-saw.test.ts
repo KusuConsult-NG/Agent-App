@@ -1302,17 +1302,18 @@ describe('an enumeration that waited for a signal', () => {
     );
   });
 
-  it('ignores a band a queued capture tried to name', async () => {
+  it('records the platform’s band, not the one the handset sent', async () => {
     /*
-     * The property the whole arrangement rests on. A handset that could set a
-     * band is a handset somebody can modify to set a smaller one, and the
-     * agent holding it is paid commission on what that business later pays.
+     * The property the whole arrangement rests on, now that the phone works
+     * out a band of its own.
      *
-     * The band is not accepted from the payload — it is concluded from the
-     * facts when the capture arrives — so a payload that names one gets the
-     * platform's answer regardless. A building with nine machines and six
-     * people is MEDIUM whatever the phone claimed, and this sends MICRO to
-     * prove the claim changes nothing rather than merely that it is absent.
+     * The handset's answer travels with the capture and is kept, because a
+     * trader was told it. It decides nothing: the platform runs the rule
+     * again on the facts, and a building with nine machines and six people is
+     * MEDIUM whatever the phone said. This sends MICRO — which no honest
+     * build of the app could have produced from these facts — so what is
+     * being proved is that the claim changes nothing, not merely that an
+     * agreeing claim is tolerated.
      */
     const taxpayer = await trader('Says Its Own Band');
     const agent = await agentSession();
@@ -1331,7 +1332,7 @@ describe('an enumeration that waited for a signal', () => {
               equipmentCount: 9,
               peopleWorking: 6,
               economicSector: 'ARTISAN_CRAFT',
-              sizeBand: 'MICRO',
+              bandAtCapture: 'MICRO',
             },
           },
         ],
@@ -1348,19 +1349,105 @@ describe('an enumeration that waited for a signal', () => {
     );
 
     /*
-     * And the claim reached no column. There is nowhere for it to land —
-     * `presumptive_observations` holds facts only — but a payload key that
-     * quietly became a value somewhere is exactly the kind of thing that is
-     * only ever noticed by looking.
+     * And the handset's answer is kept where it can be read, rather than
+     * dropped. The taxpayer standing at that stall was told micro; when the
+     * notice says medium, somebody has to be able to say why.
      */
-    const row = await queryOne<Record<string, unknown>>(
+    const row = await queryOne<{ band_at_capture: string }>(
       pool,
-      'SELECT * FROM presumptive_observations WHERE id = $1',
+      'SELECT band_at_capture FROM presumptive_observations WHERE id = $1',
       [result.entityId],
     );
-    assert.ok(
-      !Object.values(row!).includes('MICRO'),
-      'nothing on the row carries the band the handset asked for',
+    assert.equal(row!.band_at_capture, 'MICRO');
+
+    const flagged = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM audit_logs
+        WHERE entity_id = $1 AND action = 'observation.band_disagreed_with_handset'`,
+      [result.entityId],
+    );
+    assert.equal(flagged!.count, '1', 'and the disagreement is on the record, not merely stored');
+  });
+
+  it('says nothing about a disagreement when the two agree', async () => {
+    /*
+     * The mirror, and the case that will be true almost always: one shared
+     * function, run twice. A flag raised on every capture would be a flag
+     * nobody reads by the second week.
+     */
+    const taxpayer = await trader('Handset Agrees');
+    const agent = await agentSession();
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-observation-000005',
+            draftType: 'BUSINESS_OBSERVATION',
+            capturedAt: new Date().toISOString(),
+            payload: {
+              taxpayerId: taxpayer,
+              premises: 'BUILDING',
+              equipmentCount: 9,
+              peopleWorking: 6,
+              economicSector: 'ARTISAN_CRAFT',
+              // The top band, and the same facts the disagreeing case above
+              // sends — so the two differ only in what the handset claimed.
+              bandAtCapture: 'MEDIUM',
+            },
+          },
+        ],
+      },
+      agent,
+    );
+    const [result] = response.body.results;
+    assert.equal(result.status, 'SYNCED', JSON.stringify(result));
+
+    const flagged = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM audit_logs
+        WHERE entity_id = $1 AND action = 'observation.band_disagreed_with_handset'`,
+      [result.entityId],
+    );
+    assert.equal(flagged!.count, '0');
+  });
+
+  it('will not let what the agent was told be edited afterwards', async () => {
+    /*
+     * What somebody was told on a particular afternoon is a fact about that
+     * afternoon. Editing it turns the record of a mis-told band into a record
+     * of somebody having tidied up.
+     *
+     * The column is settable only as the row is written, which is stricter
+     * than "cannot be changed" and is the right strictness: an observation
+     * that reached the platform without a handset band was not taken on a
+     * handset, and cannot be given one later either.
+     */
+    const told = await recordObservation(pool, {
+      taxpayerId: await trader('Told Once'),
+      ...TAILOR,
+      bandAtCapture: 'SMALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await assert.rejects(
+      pool.query('UPDATE presumptive_observations SET band_at_capture = $2 WHERE id = $1', [
+        told.id,
+        'MICRO',
+      ]),
+      /band_at_capture/i,
+      'a band the agent showed cannot be revised into one they did not',
+    );
+
+    const officerRecorded = await observe(await trader('No Handset'), {});
+    await assert.rejects(
+      pool.query('UPDATE presumptive_observations SET band_at_capture = $2 WHERE id = $1', [
+        officerRecorded.id,
+        'MICRO',
+      ]),
+      /band_at_capture/i,
+      'and an observation nobody took on a phone cannot acquire one',
     );
   });
 

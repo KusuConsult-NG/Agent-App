@@ -25,6 +25,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 import { EnumerateScreen } from '../screens/Enumerate';
 import { ApiRequestError, api } from '../lib/api';
 import * as drafts from '../lib/drafts';
+import { bandFor } from '@psirs/shared';
 
 const TAXPAYER = {
   taxpayer: {
@@ -112,6 +113,64 @@ describe('writing down a stall', () => {
     expect(screen.getByText(/the office will send a notice/i)).toBeTruthy();
   });
 
+  it('works out the band on the phone, as the facts are entered', async () => {
+    /*
+     * "What have you written me down as" is asked while the agent is still
+     * standing there, and an agent who has to say "wait for the notice" looks
+     * either evasive or powerless. The phone answers it — with the same
+     * function the office runs, imported from the shared package rather than
+     * copied, so the two cannot drift into telling a trader different things.
+     */
+    render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
+    await screen.findByLabelText(/Where they trade from/i);
+    expect(
+      screen.queryByText(/Size from what you have written/i),
+      'nothing is claimed before the facts are in',
+    ).toBeNull();
+
+    await fill({ premises: 'LOCK_UP_SHOP', equipment: '3', people: '2' });
+    expect(screen.getByText(/Size from what you have written/i)).toBeTruthy();
+    expect(screen.getByText(/This is a Small business/i)).toBeTruthy();
+
+    // Premises set a floor the counts cannot lower, and the phone knows it.
+    fireEvent.change(screen.getByLabelText(/Where they trade from/i), {
+      target: { value: 'BUILDING' },
+    });
+    expect(screen.getByText(/This is a Medium business/i)).toBeTruthy();
+  });
+
+  it('runs the platform’s rule, not a second copy of it', async () => {
+    /*
+     * Asserted against `bandFor` itself rather than against three hand-written
+     * expectations. A copied rule that agreed on the cases somebody thought to
+     * write down is exactly the failure this is meant to exclude.
+     */
+    const cases: { premises: string; equipment: string; people: string }[] = [
+      { premises: 'NONE', equipment: '0', people: '0' },
+      { premises: 'STALL', equipment: '3', people: '0' },
+      { premises: 'KIOSK', equipment: '0', people: '5' },
+      { premises: 'LOCK_UP_SHOP', equipment: '0', people: '0' },
+      { premises: 'BUILDING', equipment: '0', people: '0' },
+      { premises: 'STALL', equipment: '10', people: '0' },
+    ];
+
+    for (const each of cases) {
+      cleanup();
+      render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
+      await fill(each);
+      const expected = bandFor({
+        premises: each.premises as never,
+        equipmentCount: Number(each.equipment),
+        peopleWorking: Number(each.people),
+      });
+      const label = expected.charAt(0) + expected.slice(1).toLowerCase();
+      expect(
+        screen.getByText(new RegExp(`This is a ${label} business`, 'i')),
+        `${each.premises}/${each.equipment}/${each.people} should read as ${expected}`,
+      ).toBeTruthy();
+    }
+  });
+
   it('offers no way to choose a size band', async () => {
     /*
      * The band is the price in everything but name — one step from the band is
@@ -163,6 +222,7 @@ describe('writing down a stall', () => {
       equipmentCount: 3,
       peopleWorking: 2,
       economicSector: 'ARTISAN_CRAFT',
+      bandAtCapture: 'SMALL',
     });
   });
 
@@ -230,15 +290,18 @@ describe('writing down a stall', () => {
       equipmentCount: 3,
       peopleWorking: 2,
       economicSector: 'ARTISAN_CRAFT',
+      // What the agent was shown travels with it, so the office can tell
+      // whether the trader was told something else.
+      bandAtCapture: 'SMALL',
     });
   });
 
-  it('shows no band on a count that has not reached the office', async () => {
+  it('still answers the band on a count that never left the phone', async () => {
     /*
-     * Nothing has worked one out. The band is the platform's conclusion,
-     * reached when the capture arrives — a size shown on a phone with no
-     * signal would be one the handset invented, which is the single thing
-     * this whole design refuses to do.
+     * The whole reason the rule runs here. A trader whose stall was written
+     * down in a market with no signal is owed the same answer as one written
+     * down on Ahmadu Bello Way — and the office checking it again on arrival
+     * is a different statement from the office being the only one who knows.
      */
     vi.spyOn(api, 'post').mockRejectedValue(new TypeError('Failed to fetch'));
     render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
@@ -246,9 +309,11 @@ describe('writing down a stall', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save what you saw/i }));
 
     await waitFor(() => expect(screen.getByText(/Held on this phone/i)).toBeTruthy());
-    expect(screen.queryByText(/Size recorded/i)).toBeNull();
-    expect(document.body.textContent).not.toMatch(/\bSmall\b|\bMicro\b|\bMedium\b/);
+    expect(screen.getByText(/Size recorded/i)).toBeTruthy();
+    expect(screen.getByText(/^Small$/)).toBeTruthy();
     expect(screen.getByText(/do not write it down a second time/i)).toBeTruthy();
+    // Still no money on it, offline or on.
+    expect(document.body.textContent).not.toMatch(/₦/);
   });
 
   it('does not queue a refusal the office would repeat', async () => {

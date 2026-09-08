@@ -44,6 +44,8 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
+import type { Observations, SizeBand } from '@psirs/shared';
+import { bandFor } from '@psirs/shared';
 import { recordAudit } from './audit';
 import { badRequest, conflict, notFound } from '../lib/errors';
 
@@ -51,31 +53,23 @@ import { badRequest, conflict, notFound } from '../lib/errors';
 const PRESUMPTIVE_BASIS_POINTS = 100n;
 const BASIS_POINT_DIVISOR = 10_000n;
 
-export type SizeBand = 'MICRO' | 'SMALL' | 'MEDIUM';
 export type LgaClass = 'A' | 'B' | 'C' | 'D';
 export type TaxTier = 'NANO' | 'PRESUMPTIVE' | 'BOOKS';
 export type NanoConstruction = 'CONJUNCTIVE' | 'TURNOVER_GOVERNED';
 
-/**
- * What an agent can see from the doorway.
+/*
+ * The band rule and the facts it reads live in @psirs/shared, and are
+ * re-exported here so this module still reads as the one place the
+ * presumptive regime is described.
  *
- * Every field is a fact a second person could check the following morning.
- * There is deliberately no `estimatedTurnover`, no `monthlyTakings` and no
- * `bandSuggestion`: those are conclusions, and conclusions are the server's.
+ * They moved because the agent's handset runs them too: a trader standing at
+ * their own stall asks what has been written about them, and an agent with no
+ * signal could not answer. Two copies of a three-comparison rule would agree
+ * on the day they were written and drift afterwards, and the drift would
+ * reach a taxpayer as an agent saying "small" and a notice saying medium.
  */
-export interface Observations {
-  /** Where the trade is carried on. */
-  premises:
-    | 'NONE'            // itinerant — a hawker, a mobile repairer
-    | 'STALL'           // a market stall or table
-    | 'KIOSK'           // a fixed kiosk or container
-    | 'LOCK_UP_SHOP'    // a shop that locks
-    | 'BUILDING';       // a whole building or yard
-  /** Machines, chairs, ovens, looms — the tools of the trade, counted. */
-  equipmentCount: number;
-  /** People working there besides the operator, apprentices included. */
-  peopleWorking: number;
-}
+export type { Observations, Premises, SizeBand } from '@psirs/shared';
+export { bandFor, InvalidObservation } from '@psirs/shared';
 
 export interface NanoPolicy {
   construction: NanoConstruction;
@@ -102,29 +96,6 @@ export interface NanoPolicy {
  * operating out of a building with no equipment is not micro, they are between
  * stock.
  */
-export function bandFor(observations: Observations): SizeBand {
-  if (observations.equipmentCount < 0 || observations.peopleWorking < 0) {
-    throw badRequest('An observation cannot be a negative number.');
-  }
-
-  const floor: SizeBand =
-    observations.premises === 'BUILDING'
-      ? 'MEDIUM'
-      : observations.premises === 'LOCK_UP_SHOP'
-        ? 'SMALL'
-        : 'MICRO';
-
-  const byScale: SizeBand =
-    observations.peopleWorking >= 5 || observations.equipmentCount >= 10
-      ? 'MEDIUM'
-      : observations.peopleWorking >= 1 || observations.equipmentCount >= 3
-        ? 'SMALL'
-        : 'MICRO';
-
-  const order: SizeBand[] = ['MICRO', 'SMALL', 'MEDIUM'];
-  return order[Math.max(order.indexOf(floor), order.indexOf(byScale))]!;
-}
-
 /* -------------------------------------------------------------------------- */
 /* The nano test                                                              */
 /* -------------------------------------------------------------------------- */

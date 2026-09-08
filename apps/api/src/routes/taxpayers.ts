@@ -984,26 +984,22 @@ draftRouter.post(
             }
 
             /*
-             * The band is worked out here, now, from the facts the phone
-             * carried — not on the phone at capture time.
+             * The band is reached here, from the facts the phone carried, by
+             * the same shared function the phone itself ran at the stall.
              *
-             * The rule is simple enough to have run offline. Running it here
-             * is the point: the handset records what an agent saw and the
-             * platform concludes what size of business that is, and an agent
-             * paid commission is only safe to send out enumerating because
-             * those are two different jobs. A band computed on the handset is
-             * a band an altered handset computes differently.
-             *
-             * Which also means an observation queued last week is banded by
-             * today's rule rather than by whatever the phone was running when
-             * it was captured. That is the right way round: the rule is
-             * PSIRS's, and a capture is a record of a stall, not of a build.
+             * So the handset's answer and this one agree in the ordinary case
+             * by construction rather than by two copies being maintained in
+             * step. Where they do not — an old build, or a rule changed
+             * between capture and sync — this one stands and the handset's is
+             * kept beside it, because a trader was told the handset's and is
+             * entitled to an explanation rather than a correction.
              */
             const observation = await recordObservation(pool, {
               ...parsed.data,
               groupId: parsed.data.groupId ?? null,
               latitude: parsed.data.latitude ?? null,
               longitude: parsed.data.longitude ?? null,
+              bandAtCapture: parsed.data.bandAtCapture ?? null,
               actorId: req.auth!.userId,
               actorRole: req.auth!.role,
               agentId,

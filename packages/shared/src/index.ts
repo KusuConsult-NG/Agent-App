@@ -8,5 +8,6 @@ export * from './agent-lifecycle';
 export * from './escpos';
 export * from './i18n';
 export * from './enums';
+export * from './banding';
 export * from './usage';
 export * from './versions';

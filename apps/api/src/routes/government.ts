@@ -647,6 +647,16 @@ export const observationCaptureSchema = z.object({
   groupId: uuidSchema.optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
+  /*
+   * What the handset showed, not what it decides.
+   *
+   * The agent's phone runs the same band rule from @psirs/shared so a trader
+   * can be told a size at their own stall with no signal. The platform runs it
+   * again here and that result is what stands — this is accepted only so a
+   * disagreement between the two can be recorded rather than discovered later
+   * by a taxpayer who was told one thing and sent another.
+   */
+  bandAtCapture: z.enum(['MICRO', 'SMALL', 'MEDIUM']).optional(),
 });
 
 governmentRouter.post(
@@ -661,6 +671,7 @@ governmentRouter.post(
           groupId: data.groupId ?? null,
           latitude: data.latitude ?? null,
           longitude: data.longitude ?? null,
+          bandAtCapture: data.bandAtCapture ?? null,
           actorId: req.auth!.userId,
           actorRole: req.auth!.role,
           agentId: req.auth!.agentId ?? null,
