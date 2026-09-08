@@ -224,3 +224,71 @@ describe('the portal stays translated', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * The blind spot the check above has, and where it is closed.
+ *
+ * `withoutLiterals` blanks the inside of every string before looking for JSX
+ * text. That is right for the `${…}` in a template literal, and it means a
+ * string literal rendered as an *expression child* is never examined:
+ *
+ *     {busy ? 'Searching…' : 'Check status'}
+ *     [ 'Amount', <Money kobo={result.amountKobo} /> ]
+ *
+ * Both reach a citizen in English. Seven such strings were found on the public
+ * pages, and four of them — `pubVerifyAmount`, `pubVerifyFingerprint`,
+ * `pubRefereeSubmit`, `pubRefereeSubmitting` — already had Hausa in the
+ * dictionary and in the review sheet. Somebody translated them, a reviewer
+ * approved them, and the screen went on showing English. That is the worst
+ * shape this failure takes, because the sheet says the work is done.
+ *
+ * So the rule below is blunt: on the public pages, a capitalised literal is
+ * either a dictionary key, an example somebody copies, or a bug.
+ *
+ * It covers the public pages and not the officer portal. Applying it there
+ * reports around two hundred more — button labels, table headings, KeyValue
+ * labels, `?? 'Unnamed'` fallbacks — and every one I sampled was real. That is
+ * its own piece of work: each needs Hausa, and the Hausa needs the reviewer
+ * this repository keeps `docs/HAUSA-REVIEW.md` for. Recorded there rather than
+ * left as a number in a commit message.
+ */
+const PUBLIC_PAGES = import.meta.glob('../screens/Public.tsx', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
+/** Literals on the public pages that are correct as they stand. */
+const ALLOWED_ON_PUBLIC = new Set([
+  // A shape somebody copies off a printed receipt. A translated example is an
+  // example that does not work.
+  'PSIRS/2026/000123',
+]);
+
+function capitalisedLiteralsIn(source: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const found: string[] = [];
+  for (const match of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"/g)) {
+    const text = (match[1] ?? match[2] ?? '').trim();
+    // A capitalised word followed by a lowercase one is how prose starts and
+    // is not how an enum value, a route or a CSS length is written.
+    if (!/^[A-Z][a-z]/.test(text)) continue;
+    if (KEYS.has(text) || ALLOWED_ON_PUBLIC.has(text)) continue;
+    found.push(text);
+  }
+  return found;
+}
+
+describe('the public pages have no English of their own', () => {
+  it('has the page to check', () => {
+    expect(Object.keys(PUBLIC_PAGES).length).toBe(1);
+  });
+
+  it('routes even its expression literals through the dictionary', () => {
+    const offenders: string[] = [];
+    for (const [path, source] of Object.entries(PUBLIC_PAGES)) {
+      for (const text of capitalisedLiteralsIn(source)) offenders.push(`${path}: ${text}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});

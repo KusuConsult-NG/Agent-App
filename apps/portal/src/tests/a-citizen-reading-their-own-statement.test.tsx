@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { CitizenPortalScreen } from '../screens/Public';
 import { api } from '../lib/api';
+import { setPublicLanguage } from '../lib/i18n';
 
 const FOUND = {
   found: true,
@@ -33,14 +34,16 @@ const STATEMENT = {
     totalKobo: '340000',
     returnedKobo: '0',
     byItem: [
-      { revenueItem: 'Shops and Kiosks Rates', payments: 1, totalKobo: '300000' },
-      { revenueItem: 'Market Tax and Levy', payments: 2, totalKobo: '40000' },
+      { revenueItem: 'Shops and Kiosks Rates', revenueItemHa: 'Kudin Shago da Rumfa', payments: 1, totalKobo: '300000' },
+      { revenueItem: 'Market Tax and Levy', revenueItemHa: null, payments: 2, totalKobo: '40000' },
     ],
   },
   rows: [
     { paidAt: '2026-04-01T09:00:00.000Z', revenueItem: 'Shops and Kiosks Rates',
+      revenueItemHa: 'Kudin Shago da Rumfa',
       periodLabel: '2026', amountKobo: '300000', returned: false },
     { paidAt: '2026-03-11T09:00:00.000Z', revenueItem: 'Market Tax and Levy',
+      revenueItemHa: null,
       periodLabel: null, amountKobo: '20000', returned: false },
   ],
 };
@@ -59,7 +62,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  setPublicLanguage('en');
+  vi.restoreAllMocks();
+});
 
 async function lookUp(mode: 'By TIN' | 'By phone' | 'By name', value: string) {
   render(<CitizenPortalScreen />);
@@ -206,5 +212,61 @@ describe('a citizen reading their own statement', () => {
 
     await waitFor(() => expect(screen.getByText(/Keep your receipts/i)).toBeTruthy());
     expect(screen.getByText(/the receipt is the proof/i)).toBeTruthy();
+  });
+});
+
+describe('the same statement, read in Hausa', () => {
+  /*
+   * `/citizen-status` is public and unauthenticated, so it has nobody to
+   * resolve a language from and answers in English. Every one of these checks
+   * is about the screen doing what the endpoint cannot.
+   */
+  it('says the compliance status in Hausa rather than repeating the server', async () => {
+    setPublicLanguage('ha');
+    render(<CitizenPortalScreen />);
+    fireEvent.change(screen.getByLabelText(/Lambar Shaidar Haraji/i), {
+      target: { value: '841446134' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Duba matsayi/i }));
+
+    await waitFor(() => expect(screen.queryByText(/Bayanan harajinka sun cika/)).toBeTruthy());
+    // And not the English sentence the endpoint sent alongside it.
+    expect(screen.queryByText(/Your tax records are up to date/)).toBeNull();
+  });
+
+  it('names the levies out of the catalogue, and keeps English where there is no Hausa', async () => {
+    /*
+     * A levy's Hausa is in `revenue_items.name_ha`, not in the dictionary, so
+     * a catalogue entry nobody has translated yet has no Hausa to show. The
+     * English name is then the right answer: a citizen can still tell which
+     * levy it was, which an empty cell would not let them do.
+     */
+    setPublicLanguage('ha');
+    render(<CitizenPortalScreen />);
+    fireEvent.change(screen.getByLabelText(/Lambar Shaidar Haraji/i), {
+      target: { value: '841446134' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Duba matsayi/i }));
+    await waitFor(() => expect(screen.queryByText(/Bayanan harajinka sun cika/)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /Aiko min da lamba/i }));
+    await waitFor(() => expect(screen.queryByLabelText(/Lambar da ke cikin sakon/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Lambar da ke cikin sakon/i), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Nuna min biyayyata/i }));
+
+    await waitFor(() => expect(screen.getAllByText(/Kudin Shago da Rumfa/).length).toBeGreaterThan(0));
+    expect(screen.queryByText(/Shops and Kiosks Rates/)).toBeNull();
+    // The one with no Hausa keeps its English name rather than going blank.
+    expect(screen.getAllByText(/Market Tax and Levy/).length).toBeGreaterThan(0);
+  });
+
+  it('leaves the English reader reading English', async () => {
+    // The guard on the check above: a screen that showed Hausa to everybody
+    // would satisfy it just as well.
+    await lookUp('By TIN', '841446134');
+    expect(screen.queryByText(/Bayanan harajinka sun cika/)).toBeNull();
+    expect(screen.queryByText(/Your tax records are up to date/)).toBeTruthy();
   });
 });

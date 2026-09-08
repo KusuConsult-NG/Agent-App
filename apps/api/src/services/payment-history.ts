@@ -60,7 +60,7 @@ export interface PaymentHistory {
     totalKobo: string;
     returnedKobo: string;
     /** What the money went to, largest first — the answer to "for what". */
-    byItem: { revenueItem: string; payments: number; totalKobo: string }[];
+    byItem: { revenueItem: string; revenueItemHa: string | null; payments: number; totalKobo: string }[];
   };
   rows: PaymentHistoryRow[];
 }
@@ -164,9 +164,15 @@ export async function paymentHistory(
    * totals: it is visible in the rows, and counting it as spending on a levy
    * would overstate what the trade actually cost.
    */
-  const byItem = await query<{ revenue_item: string; payments: string; total_kobo: string }>(
+  const byItem = await query<{
+    revenue_item: string;
+    revenue_item_ha: string | null;
+    payments: string;
+    total_kobo: string;
+  }>(
     db,
     `SELECT ri.name AS revenue_item,
+            ri.name_ha AS revenue_item_ha,
             count(*)::text AS payments,
             SUM(t.total_amount_kobo)::text AS total_kobo
        FROM transactions t
@@ -175,7 +181,7 @@ export async function paymentHistory(
         AND t.status = ANY($4::text[])
         AND COALESCE(t.settled_at, t.verified_at, t.created_at) >= $2::date
         AND COALESCE(t.settled_at, t.verified_at, t.created_at) < ($3::date + INTERVAL '1 day')
-      GROUP BY ri.name
+      GROUP BY ri.name, ri.name_ha
       ORDER BY SUM(t.total_amount_kobo) DESC`,
     [params.taxpayerId, params.from, params.to, [...PAID_STATUSES]],
   );
@@ -189,6 +195,7 @@ export async function paymentHistory(
       returnedKobo: summary?.returned_kobo ?? '0',
       byItem: byItem.map((row) => ({
         revenueItem: row.revenue_item,
+        revenueItemHa: row.revenue_item_ha,
         payments: Number.parseInt(row.payments, 10),
         totalKobo: row.total_kobo,
       })),

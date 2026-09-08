@@ -202,6 +202,68 @@ it. A Hausa word for it would be welcome.
 
 ---
 
+## Two things found while shooting the citizen page in Hausa
+
+Screenshots found both. Neither was visible in the tables below, which is the
+point worth taking from it: a table of key/value pairs proves a translation
+exists, not that a screen uses it.
+
+### Strings that had Hausa and were not being shown
+
+Seven strings on the public pages were written into the screen in English
+instead of being read from the dictionary — the search tabs, the search
+button, its progress text, and the placeholders. Four of them already had
+Hausa here, approved:
+
+| Key | Hausa that existed | What the screen showed |
+|---|---|---|
+| `pubVerifyAmount` | Adadi | Amount |
+| `pubVerifyFingerprint` | Hatimin takardar | Document fingerprint |
+| `pubRefereeSubmit` | Tabbatar da aikawa | Confirm and submit |
+| `pubRefereeSubmitting` | Ana aikawa… | Submitting… |
+
+Somebody translated these, you approved them, and the screen went on showing
+English. All seven are fixed, the new ones are in the tables below, and the
+public pages now fail their own test if it happens again.
+
+**The officer portal has about two hundred more.** Button labels, table
+headings, the labels down the side of a record, `?? 'Unnamed'` fallbacks.
+Every one I sampled was real. They are not fixed here, because each needs
+Hausa and the Hausa needs you — which is what this sheet is for. Say whether
+you want them in one batch or a screen at a time.
+
+### What is still English on that page, and why
+
+One line. A vehicle payment carries **`12 month vehicle renewal`** under it.
+That is `assessments.period_label` — free text written when the assessment was
+raised, in whatever language the officer or the rule that raised it used. It is
+not a dictionary string and there is no `period_label_ha`, so nothing on the
+screen can translate it.
+
+Two ways out, and both are changes to how an assessment is raised rather than
+to a screen: give the column a Hausa twin the way `revenue_items` has one, or
+stop storing a sentence and store the period, letting each screen write the
+label itself. The second is better and larger. Neither is done here.
+
+The status sentence, the paragraph about what is not shown, and the levy names
+were all in this state an hour ago and are fixed — the levy names because the
+catalogue already had `name_ha` and only the screen was ignoring it.
+
+### `enumAssigned` may be doing double duty
+
+The citizen page shows the state of somebody's TIN, and `ASSIGNED` renders
+through the shared enum table as **`An ba wa wani`**. Read plainly that is
+*given to someone* — which is right for a case assigned to an officer, and
+reads oddly for a TIN, where the meaning is that a number has been issued to
+the person reading the screen.
+
+This is the `sanarwa` problem in Group 1 again: one Hausa word standing for
+two unrelated things. It is listed here rather than changed, because which
+word is right is yours to say. If TIN status wants its own words, the other
+four values are `An nema`, `Ba a nema ba`, `Ya gaza` and `Ana da shi`.
+
+---
+
 ## Conventions used
 
 The existing dictionary avoids hooked letters (`ɗ`, `ƙ`) and writes `kudi`
@@ -305,7 +367,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2205 strings, grouped by where an agent meets them. Lower stakes
+2218 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2269,6 +2331,14 @@ instructions — but they are what an agent reads all day.
 | `pubAttestAnswerAll` | Please answer for every person before sending. | Da fatan za ka amsa game da kowane mutum kafin aikawa. | ☐ | |
 | `pubAttestSubmit` | Send my answers | Aika amsoshina | ☐ | |
 | `pubCitizenTitle` | Check your tax status | Duba matsayin harajinka | ☐ | |
+| `pubCitizenModeTin` | By TIN | Ta TIN | ☐ | |
+| `pubCitizenModePhone` | By phone | Ta waya | ☐ | |
+| `pubCitizenModeName` | By name | Ta suna | ☐ | |
+| `pubCitizenCheck` | Check status | Duba matsayi | ☐ | |
+| `pubCitizenSearching` | Searching… | Ana dubawa… | ☐ | |
+| `pubCitizenExampleTin` | e.g. PL-000001234 | misali PL-000001234 | ☐ | |
+| `pubCitizenExamplePhone` | e.g. 08012345678 | misali 08012345678 | ☐ | |
+| `pubCitizenExampleName` | e.g. Aminu Ibrahim | misali Aminu Ibrahim | ☐ | |
 | `pubCitizenByTin` | Tax Identification Number (TIN) | Lambar Shaidar Haraji (TIN) | ☐ | |
 | `pubCitizenByPhone` | Registered phone number | Lambar wayar da aka yi rijista | ☐ | |
 | `pubCitizenByName` | Full name or business name | Cikakken suna ko sunan kasuwanci | ☐ | |
@@ -2278,6 +2348,11 @@ instructions — but they are what an agent reads all day.
 | `pubCitizenArrears` | Has arrears | Yana da bashin haraji | ☐ | |
 | `pubCitizenAttention` | Needs attention | Yana bukatar kulawa | ☐ | |
 | `pubCitizenNotAssessed` | Not yet assessed | Ba a kimanta ba tukuna | ☐ | |
+| `pubCitizenMsgCompliant` | Your tax records are up to date. Keep paying on time to maintain your status. | Bayanan harajinka sun cika. Ka ci gaba da biya a kan lokaci domin ka rike wannan matsayi. | ☐ | |
+| `pubCitizenMsgArrears` | You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay. | Kana da harajin da ake bin ka. Da fatan za ka tuntubi ofishin PSIRS mafi kusa da kai ko wakilin karbar haraji domin ka biya. | ☐ | |
+| `pubCitizenMsgAttention` | Your compliance score needs improvement. Paying your obligations on time will raise it. | Makin bin ka’idar harajinka yana bukatar gyara. Biyan harajin da ake bin ka a kan lokaci zai daga shi. | ☐ | |
+| `pubCitizenMsgNotAssessed` | Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment. | Ba a kimanta maka komai ba tukuna, don haka babu makin bin ka’ida da za a nuna. Wannan zai sabunta bayan kimantawarka ta farko. | ☐ | |
+| `pubCitizenDetail` | For your TIN, your compliance score, what you owe and which support programmes you qualify for, visit any PSIRS office or an authorised revenue agent. They will confirm who you are first, which is why those details are not shown here. | Domin sanin TIN dinka, makin bin ka’idarka, abin da ake bin ka da kuma shirye-shiryen tallafi da ka cancanta, ka ziyarci kowane ofishin PSIRS ko wakilin karbar haraji da izini. Za su fara tabbatar da ko wane ne kai, shi ya sa ba a nuna wadannan bayanai a nan ba. | ☐ | |
 | `pubCitizenTinStatus` | TIN status | Matsayin TIN | ☐ | |
 | `pubCitizenOutstanding` | Outstanding obligations | Harajin da ake bin ka | ☐ | |
 | `pubCitizenOutstandingYes` | Yes — please contact PSIRS | Eh — da fatan za ka tuntubi PSIRS | ☐ | |

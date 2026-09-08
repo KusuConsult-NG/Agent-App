@@ -13,7 +13,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
-import { enumLabel, formatNaira } from '@psirs/shared';
+import { enumLabel, formatNaira, type TranslationDictionary } from '@psirs/shared';
 
 interface VerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
@@ -138,11 +138,11 @@ export function VerifyScreen({ code }: { code?: string }) {
                 items={[
                   [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
                   [t.pubVerifyRevenueType, result.revenueType ?? result.documentType ?? '—'],
-                  ['Amount', result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
+                  [t.pubVerifyAmount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
                   [t.pubVerifyIssued, formatDate(result.issuedAt)],
                   [t.pubVerifyLga, result.lga ?? '—'],
                   [
-                    'Document fingerprint',
+                    t.pubVerifyFingerprint,
                     result.integrityConfirmed === undefined
                       ? '—'
                       : result.integrityConfirmed
@@ -481,7 +481,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
 
         <div className="button-row" style={{ marginTop: 8 }}>
           <button type="button" disabled={busy || !allConfirmed} onClick={respond}>
-            {busy ? 'Submitting…' : 'Confirm and submit'}
+            {busy ? t.pubRefereeSubmitting : t.pubRefereeSubmit}
           </button>
           <button
             type="button"
@@ -522,7 +522,7 @@ interface CitizenStatement {
     payments: number;
     totalKobo: string;
     returnedKobo: string;
-    byItem: { revenueItem: string; payments: number; totalKobo: string }[];
+    byItem: { revenueItem: string; revenueItemHa: string | null; payments: number; totalKobo: string }[];
   };
   /*
    * No receipt number here, and none from the API. A receipt number is
@@ -533,6 +533,7 @@ interface CitizenStatement {
   rows: {
     paidAt: string | null;
     revenueItem: string;
+    revenueItemHa: string | null;
     periodLabel: string | null;
     amountKobo: string;
     returned: boolean;
@@ -807,7 +808,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
  * finds out somebody asked.
  */
 function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identifier: string }) {
-  const { t } = usePublicI18n();
+  const { t, lang } = usePublicI18n();
   const [stage, setStage] = useState<'idle' | 'sent' | 'shown'>('idle');
   const [code, setCode] = useState('');
   const [statement, setStatement] = useState<CitizenStatement | null>(null);
@@ -994,7 +995,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
                   }}
                 >
                   <span>
-                    {row.revenueItem}
+                    {levyName(row, lang)}
                     <span style={{ color: 'var(--muted)' }}> × {row.payments}</span>
                   </span>
                   <strong>{formatNaira(row.totalKobo)}</strong>
@@ -1020,7 +1021,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                  <span>{row.revenueItem}</span>
+                  <span>{levyName(row, lang)}</span>
                   <strong>{formatNaira(row.amountKobo)}</strong>
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
@@ -1081,6 +1082,42 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
   );
 }
 
+/**
+ * A levy's name in the language the reader chose.
+ *
+ * The catalogue carries `name_ha` alongside `name` and the statement endpoint
+ * sends both, so the only thing missing was a screen that used it. A levy with
+ * no Hausa name falls back to the English one: an untranslated name is a
+ * catalogue entry somebody has not got to yet, and showing the English is how
+ * a citizen can still tell which levy it was.
+ */
+function levyName(row: { revenueItem: string; revenueItemHa: string | null }, lang: string): string {
+  return (lang === 'ha' && row.revenueItemHa) || row.revenueItem;
+}
+
+/**
+ * The sentence for a compliance status, in the reader's language.
+ *
+ * `null` for a status this screen has no sentence for, so the caller can fall
+ * back to whatever the server said rather than render nothing. A status added
+ * to the API and not here is a gap that shows up as English, which is visible;
+ * rendering an empty paragraph would not be.
+ */
+function statusMessage(status: string | undefined, t: TranslationDictionary): string | null {
+  switch (status) {
+    case 'COMPLIANT':
+      return t.pubCitizenMsgCompliant;
+    case 'HAS_ARREARS':
+      return t.pubCitizenMsgArrears;
+    case 'NEEDS_ATTENTION':
+      return t.pubCitizenMsgAttention;
+    case 'NOT_ASSESSED':
+      return t.pubCitizenMsgNotAssessed;
+    default:
+      return null;
+  }
+}
+
 export function CitizenPortalScreen() {
   const { t } = usePublicI18n();
   const [mode, setMode] = useState<SearchMode>('tin');
@@ -1109,9 +1146,9 @@ export function CitizenPortalScreen() {
   }
 
   const placeholders: Record<SearchMode, string> = {
-    tin: 'e.g. PL-000001234',
-    phone: 'e.g. 08012345678',
-    name: 'e.g. Aminu Ibrahim',
+    tin: t.pubCitizenExampleTin,
+    phone: t.pubCitizenExamplePhone,
+    name: t.pubCitizenExampleName,
   };
 
   return (
@@ -1138,7 +1175,7 @@ export function CitizenPortalScreen() {
               style={{ flex: 1, justifyContent: 'center', fontSize: '0.82rem', padding: '8px 4px' }}
               onClick={() => { setMode(m); setInput(''); setResult(null); setError(null); }}
             >
-              {m === 'tin' ? 'By TIN' : m === 'phone' ? 'By phone' : 'By name'}
+              {m === 'tin' ? t.pubCitizenModeTin : m === 'phone' ? t.pubCitizenModePhone : t.pubCitizenModeName}
             </button>
           ))}
         </div>
@@ -1159,7 +1196,7 @@ export function CitizenPortalScreen() {
             />
           </div>
           <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-            {busy ? 'Searching…' : 'Check status'}
+            {busy ? t.pubCitizenSearching : t.pubCitizenCheck}
           </button>
         </form>
 
@@ -1226,11 +1263,24 @@ export function CitizenPortalScreen() {
               </p>
             </div>
 
-            <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>{result.message}</p>
+            {/*
+              * Read out of the status, not out of the server's sentence.
+              *
+              * `/citizen-status` is public and unauthenticated, so it has no
+              * person to resolve a language from and answers in English. On
+              * every other channel the platform picks the language off the
+              * recipient's record; here there is no recipient. So the screen,
+              * which does know what the reader chose, says it — and falls back
+              * to the server's words only for a status it has no sentence for,
+              * which is better than a blank where the answer belongs.
+              */}
+            <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>
+              {statusMessage(result.complianceStatus, t) ?? result.message}
+            </p>
 
             <KeyValue
               items={[
-                [t.pubCitizenTinStatus, result.tinStatus ?? '—'],
+                [t.pubCitizenTinStatus, enumLabel(result.tinStatus, t) || '—'],
                 [
                 t.pubCitizenOutstanding,
                 result.hasOutstanding ? t.pubCitizenOutstandingYes : t.pubCitizenNone,
@@ -1238,9 +1288,14 @@ export function CitizenPortalScreen() {
               ]}
             />
 
+            {/*
+              * The same trade, and the reason `detail` is not simply rendered:
+              * it is one fixed English sentence the endpoint always sends, so
+              * preferring the translation loses nothing and gains a Hausa
+              * reader the paragraph that explains why their score is not here.
+              */}
             <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
-              {result.detail ??
-                t.pubCitizenFooter}
+              {result.detail ? t.pubCitizenDetail : t.pubCitizenFooter}
             </p>
 
             {/*

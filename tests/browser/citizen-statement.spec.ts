@@ -243,3 +243,92 @@ test('the statement itself, once the code from the SMS is entered', async ({ pag
   await shot(page, 'citizen-stmt-05-another-period', 'Look at a different period');
   expect(console_.errors, console_.errors.join('\n')).toEqual([]);
 });
+
+/**
+ * The same journey read in Hausa.
+ *
+ * Shot rather than asserted from the dictionary, because a dictionary entry
+ * proves a translation exists and not that the screen uses it. Four strings on
+ * these pages had Hausa in the dictionary, and in the review sheet, while the
+ * screen went on showing English — a screenshot is what finds that, and a
+ * table of key/value pairs is what hides it.
+ */
+test('the whole journey, read in Hausa', async ({ page }) => {
+  // Slow for the same reason as the English journey: three limiters to honour.
+  test.slow();
+  const console_ = watchConsole(page);
+  const { tin, phone } = await aTaxpayerWhoHasPaid();
+
+  await page.goto(`${PORTAL}/#/citizen`);
+  await page.getByRole('button', { name: 'Hausa' }).click();
+
+  // Every control on the search form, not only the ones with a label element.
+  await expect(page.getByRole('button', { name: 'Ta TIN' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ta waya' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ta suna' })).toBeVisible();
+  await shot(page, 'citizen-stmt-ha-01-search');
+
+  await page.getByLabel(/Lambar Shaidar Haraji/i).fill(tin);
+  await pressing(
+    page,
+    /Duba matsayi/i,
+    () => page.getByText(/Abin da ka riga ka biya/i),
+    'Duba matsayi',
+  );
+
+  await expect(page.getByLabel(/^Daga$/i)).toBeVisible();
+  await expect(page.getByLabel(/^Zuwa$/i)).toBeVisible();
+  await shot(page, 'citizen-stmt-ha-02-offered', 'Aiko min da lamba');
+
+  await page.getByLabel(/^Daga$/i).fill('2026-01-01');
+  await page.getByLabel(/^Zuwa$/i).fill('2026-12-31');
+
+  await pressing(
+    page,
+    /Aiko min da lamba/i,
+    () => page.getByLabel(/Lambar da ke cikin sakon/i),
+    'Aiko min da lamba',
+  );
+  await shot(page, 'citizen-stmt-ha-03-code-sent', 'an aika lamba');
+
+  await page.getByLabel(/Lambar da ke cikin sakon/i).fill(await codeFromTheSms(phone));
+  await pressing(
+    page,
+    /Nuna min biyayyata/i,
+    () => page.getByText(/Abin da aka biya/i),
+    'Nuna min biyayyata',
+  );
+
+  await expect(page.getByText(/Biyayya daga 2026-01-01 zuwa 2026-12-31/i)).toBeVisible();
+  /*
+   * The levies too. Their Hausa lives in the catalogue rather than the
+   * dictionary, which is why it was reaching the statement and not the screen.
+   */
+  await expect(page.getByText('Harajin Kasuwa').first()).toBeVisible();
+  await expect(page.getByText(/Sabunta Takardun Mota/).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Duba wani lokaci dabam/i })).toBeVisible();
+  await shot(page, 'citizen-stmt-ha-04-statement', 'Kowane biya');
+  await shot(page, 'citizen-stmt-ha-05-another-period', 'Duba wani lokaci dabam');
+
+  /*
+   * Nothing English left on the page. The screenshots are the real check —
+   * this is the part of it a machine can hold, and it is what would have
+   * caught "Check status" sitting under a Hausa heading.
+   */
+  const body = await page.locator('body').innerText();
+  for (const english of [
+    'Check status',
+    'By TIN',
+    'By phone',
+    'By name',
+    'What you have already paid',
+    'Send me a code',
+    'Show my payments',
+    'Look at a different period',
+    'Market Tax and Levy',
+  ]) {
+    expect(body, `"${english}" is still on the Hausa page`).not.toContain(english);
+  }
+
+  expect(console_.errors, console_.errors.join('\n')).toEqual([]);
+});

@@ -2571,6 +2571,14 @@ export interface TranslationDictionary {
   pubAttestAnswerAll: string;
   pubAttestSubmit: string;
   pubCitizenTitle: string;
+  pubCitizenModeTin: string;
+  pubCitizenModePhone: string;
+  pubCitizenModeName: string;
+  pubCitizenCheck: string;
+  pubCitizenSearching: string;
+  pubCitizenExampleTin: string;
+  pubCitizenExamplePhone: string;
+  pubCitizenExampleName: string;
   pubCitizenByTin: string;
   pubCitizenByPhone: string;
   pubCitizenByName: string;
@@ -2580,6 +2588,11 @@ export interface TranslationDictionary {
   pubCitizenArrears: string;
   pubCitizenAttention: string;
   pubCitizenNotAssessed: string;
+  pubCitizenMsgCompliant: string;
+  pubCitizenMsgArrears: string;
+  pubCitizenMsgAttention: string;
+  pubCitizenMsgNotAssessed: string;
+  pubCitizenDetail: string;
   pubCitizenTinStatus: string;
   pubCitizenOutstanding: string;
   pubCitizenOutstandingYes: string;
@@ -4885,6 +4898,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubAttestAnswerAll: 'Please answer for every person before sending.',
     pubAttestSubmit: 'Send my answers',
     pubCitizenTitle: 'Check your tax status',
+    pubCitizenModeTin: 'By TIN',
+    pubCitizenModePhone: 'By phone',
+    pubCitizenModeName: 'By name',
+    pubCitizenCheck: 'Check status',
+    pubCitizenSearching: 'Searching…',
+    pubCitizenExampleTin: 'e.g. PL-000001234',
+    pubCitizenExamplePhone: 'e.g. 08012345678',
+    pubCitizenExampleName: 'e.g. Aminu Ibrahim',
     pubCitizenByTin: 'Tax Identification Number (TIN)',
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
@@ -4894,6 +4915,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenArrears: 'Has arrears',
     pubCitizenAttention: 'Needs attention',
     pubCitizenNotAssessed: 'Not yet assessed',
+    pubCitizenMsgCompliant: 'Your tax records are up to date. Keep paying on time to maintain your status.',
+    pubCitizenMsgArrears: 'You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay.',
+    pubCitizenMsgAttention: 'Your compliance score needs improvement. Paying your obligations on time will raise it.',
+    pubCitizenMsgNotAssessed: 'Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment.',
+    pubCitizenDetail: 'For your TIN, your compliance score, what you owe and which support programmes you qualify for, visit any PSIRS office or an authorised revenue agent. They will confirm who you are first, which is why those details are not shown here.',
     pubCitizenTinStatus: 'TIN status',
     pubCitizenOutstanding: 'Outstanding obligations',
     pubCitizenOutstandingYes: 'Yes — please contact PSIRS',
@@ -7193,6 +7219,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubAttestAnswerAll: 'Da fatan za ka amsa game da kowane mutum kafin aikawa.',
     pubAttestSubmit: 'Aika amsoshina',
     pubCitizenTitle: 'Duba matsayin harajinka',
+    pubCitizenModeTin: 'Ta TIN',
+    pubCitizenModePhone: 'Ta waya',
+    pubCitizenModeName: 'Ta suna',
+    pubCitizenCheck: 'Duba matsayi',
+    pubCitizenSearching: 'Ana dubawa…',
+    pubCitizenExampleTin: 'misali PL-000001234',
+    pubCitizenExamplePhone: 'misali 08012345678',
+    pubCitizenExampleName: 'misali Aminu Ibrahim',
     pubCitizenByTin: 'Lambar Shaidar Haraji (TIN)',
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
@@ -7202,6 +7236,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenArrears: 'Yana da bashin haraji',
     pubCitizenAttention: 'Yana bukatar kulawa',
     pubCitizenNotAssessed: 'Ba a kimanta ba tukuna',
+    pubCitizenMsgCompliant: 'Bayanan harajinka sun cika. Ka ci gaba da biya a kan lokaci domin ka rike wannan matsayi.',
+    pubCitizenMsgArrears: 'Kana da harajin da ake bin ka. Da fatan za ka tuntubi ofishin PSIRS mafi kusa da kai ko wakilin karbar haraji domin ka biya.',
+    pubCitizenMsgAttention: 'Makin bin ka’idar harajinka yana bukatar gyara. Biyan harajin da ake bin ka a kan lokaci zai daga shi.',
+    pubCitizenMsgNotAssessed: 'Ba a kimanta maka komai ba tukuna, don haka babu makin bin ka’ida da za a nuna. Wannan zai sabunta bayan kimantawarka ta farko.',
+    pubCitizenDetail: 'Domin sanin TIN dinka, makin bin ka’idarka, abin da ake bin ka da kuma shirye-shiryen tallafi da ka cancanta, ka ziyarci kowane ofishin PSIRS ko wakilin karbar haraji da izini. Za su fara tabbatar da ko wane ne kai, shi ya sa ba a nuna wadannan bayanai a nan ba.',
     pubCitizenTinStatus: 'Matsayin TIN',
     pubCitizenOutstanding: 'Harajin da ake bin ka',
     pubCitizenOutstandingYes: 'Eh — da fatan za ka tuntubi PSIRS',
