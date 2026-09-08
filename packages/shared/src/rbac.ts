@@ -86,6 +86,18 @@ export const PERMISSIONS = [
   'assessment:create',
   'assessment:read:own',
   'assessment:read:all',
+  /*
+   * Filing a PAYE return on behalf of an employer.
+   *
+   * Separate from `assessment:create`, which agents hold because raising an
+   * assessment in front of a taxpayer is their job. A payroll return is a
+   * different act: it comes off a document, covers dozens of named people, and
+   * produces a liability far larger than anything an agent raises at a stall.
+   * Putting it behind the field permission would let any cleared agent file a
+   * school's payroll, which is neither their work nor something the school
+   * would know had happened.
+   */
+  'paye:file',
   'invoice:create',
   'invoice:read:own',
   'invoice:read:all',
@@ -226,6 +238,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   revenue_officer: [
     'taxpayer:correct',
+    'paye:file',
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:update',
@@ -304,6 +317,7 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   admin: [
     'taxpayer:correct',
+    'paye:file',
     'taxpayer:read:all',
     'taxpayer:tin_sync',
     'taxpayer:manage',

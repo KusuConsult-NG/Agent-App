@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-1967 strings, grouped by where an agent meets them. Lower stakes
+2004 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -314,6 +314,7 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `ofcNavArrears` | Arrears worklist | Jerin bashin da ake bin jiha | ☐ | |
+| `ofcNavPayroll` | Employers and premises | Masu daukar ma’aikata da wurare | ☐ | |
 | `ofcNavConnections` | Assets and leads | Dukiya da alamu | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
 | `ofcNavIntelligence` | Revenue intelligence | Nazarin haraji | ☐ | |
@@ -1226,6 +1227,46 @@ instructions — but they are what an agent reads all day.
 | `ofcIgPayableYes` | Yes | Eh | ☐ | |
 | `ofcIgPayableNeedsReassessment` | No — needs a fresh assessment | A’a — yana bukatar sabon kimantawa | ☐ | |
 | `ofcIgOwesNothing` | They owe the State nothing. | Ba sa bin jiha komai. | ☐ | |
+
+#### The officer portal — employers and payroll returns
+
+| Key | English | Hausa (draft) | OK? | Your correction |
+|---|---|---|:---:|---|
+| `ofcPrWithdraw` | Withdraw | Janye | ☐ | |
+| `ofcPrWithdrawReason` | Why is this return being withdrawn? | Me ya sa ake janye wannan rahoto? | ☐ | |
+| `ofcPrWithdrawFirst` | Write the reason first. | Ka fara rubuta dalili. | ☐ | |
+| `ofcPrTitle` | Employers who should be filing | Masu daukar ma’aikata da ya kamata su kai rahoto | ☐ | |
+| `ofcPrIntro` | Schools, clinics, hotels and haulage yards on the register with no PAYE return on record. One employer with forty staff is worth a hundred market visits, and this list costs no field work — it is built from what registration already recorded. | Makarantu, asibitoci, otal-otal da wuraren jigilar kaya da ke cikin rajista amma ba su kai rahoton PAYE ba. Mai daukar ma’aikata 40 ya fi ziyarar kasuwa dari daraja, kuma wannan jerin bai bukaci aikin fili ba — an gina shi daga abin da rajista ta riga ta rubuta. | ☐ | |
+| `ofcPrWhichList` | Which list | Wanne jeri | ☐ | |
+| `ofcPrListPaye` | Employers with no PAYE return | Masu daukar ma’aikata da ba su kai rahoton PAYE ba | ☐ | |
+| `ofcPrListConsumption` | Hospitality with no consumption tax | Wuraren baki da ba su biya harajin amfani ba | ☐ | |
+| `ofcPrNotFiling` | Not filing | Ba sa kai rahoto | ☐ | |
+| `ofcPrFiling` | Already filing | Suna kai rahoto | ☐ | |
+| `ofcPrSector` | Sector | Bangare | ☐ | |
+| `ofcPrNature` | Nature of business | Irin kasuwanci | ☐ | |
+| `ofcPrOpen` | Open | Bude | ☐ | |
+| `ofcPrNoneNotFiling` | Every employer in these sectors has filed a return. | Kowane mai daukar ma’aikata a wadannan bangarori ya kai rahoto. | ☐ | |
+| `ofcPrNoneNotPaying` | Every hospitality premises here has paid consumption tax this year. | Kowane wurin baki a nan ya biya harajin amfani a wannan shekara. | ☐ | |
+| `ofcPrFiledBefore` | Returns already filed | Rahotannin da aka riga aka kai | ☐ | |
+| `ofcPrPeriod` | Month | Wata | ☐ | |
+| `ofcPrEmployees` | Employees | Ma’aikata | ☐ | |
+| `ofcPrGross` | Total pay | Jimlar albashi | ☐ | |
+| `ofcPrTax` | Tax due | Harajin da ya kamata | ☐ | |
+| `ofcPrFiledOn` | Filed on | An kai a | ☐ | |
+| `ofcPrWithdrawnBecause` | Withdrawn because | An janye saboda | ☐ | |
+| `ofcPrNeverFiled` | This employer has never filed a return. | Wannan mai daukar ma’aikata bai taba kai rahoto ba. | ☐ | |
+| `ofcPrFileAReturn` | File a return | Kai rahoto | ☐ | |
+| `ofcPrHowTheTaxIsWorkedOut` | How the tax is worked out | Yadda ake lissafin haraji | ☐ | |
+| `ofcPrHowExplained` | Enter what each person was paid for the month. The platform works out the tax on each of them separately, using the annual bands, and adds it up. There is no box for the tax because the tax is not something anybody types. | Ka shigar da abin da aka biya kowane mutum a wannan wata. Tsarin zai lissafa harajin kowannensu daban, ta amfani da matakan shekara, sannan ya hada su. Babu wurin shigar da haraji domin haraji ba abin da kowa ke rubutawa ba ne. | ☐ | |
+| `ofcPrYear` | Year | Shekara | ☐ | |
+| `ofcPrMonth` | Month number | Lambar wata | ☐ | |
+| `ofcPrEmployeeName` | Employee name | Sunan ma’aikaci | ☐ | |
+| `ofcPrMonthlyPay` | Paid this month (₦) | An biya wannan wata (₦) | ☐ | |
+| `ofcPrAddEmployee` | Add another employee | Kara wani ma’aikaci | ☐ | |
+| `ofcPrSubmit` | File this return ({{n}} employees) | Kai wannan rahoto (ma’aikata {{n}}) | ☐ | |
+| `ofcPrFiledTitle` | Return filed | An kai rahoto | ☐ | |
+| `ofcPrFiledExplained` | The return covers {{n}} employee(s) and invoice {{invoice}} has been raised for the tax. | Rahoton ya shafi ma’aikata {{n}} kuma an fitar da daftari {{invoice}} na haraji. | ☐ | |
+| `ofcPrMissingTins` | {{n}} of them had no TIN — collect those and add them to the next return. | {{n}} daga cikinsu ba su da TIN — ka tattara su ka kara su a rahoto na gaba. | ☐ | |
 
 #### The officer portal — distribution rounds
 
@@ -2488,6 +2529,7 @@ instructions — but they are what an agent reads all day.
 | `enumWholesaleTrade` | Wholesale trade | Sayarwa da yawa | ☐ | |
 | `actionSearch` | Search | Nema | ☐ | |
 | `pickNoTaxpayerMatch` | No taxpayer matches that search. They must be registered before a payment can be attributed to them. | Babu mai biyan haraji da ya dace da wannan binciken. Sai an yi masa rajista kafin a iya danganta biyan kudi da shi. | ☐ | |
+| `enumFiled` | Filed | An kai | ☐ | |
 | `enumAsserted` | Claimed | An yi ikirari | ☐ | |
 | `enumConfirmedByTaxpayer` | Confirmed by the taxpayer | Mai biyan haraji ya tabbatar | ☐ | |
 | `enumConsistencyCheck` | Checking an assessment against assets | Duba kimantawa da dukiya | ☐ | |

@@ -97,6 +97,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "DENIED": 'enumDenied',
   "DEVICE": 'enumDevice',
   "DEVICE_VELOCITY": 'enumDeviceVelocity',
+  "FILED": 'enumFiled',
   "SHARED_PHONE_NUMBER": 'enumSharedPhoneNumber',
   "DUPLICATE_TAXPAYER_DETAILS": 'enumDuplicateTaxpayerDetails',
   "OUT_OF_TERRITORY": 'enumOutOfTerritory',

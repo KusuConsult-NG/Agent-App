@@ -233,6 +233,24 @@ export interface CreateAssessmentParams {
   channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
   invoiceValidityDays?: number;
   ipAddress?: string | null;
+  /*
+   * An amount this platform worked out for itself, for the one case the rate
+   * engine cannot express: a liability that is the sum of many computations
+   * rather than one. PAYE is that case — an employer owes the total of what
+   * was deducted from thirty named people, and taxing the payroll as a single
+   * salary would push the whole of it into the top band.
+   *
+   * This is emphatically not a way for a caller to name a price. No route
+   * passes it; only server code that has already computed the figure from
+   * stored evidence does. And the discipline is not what holds it: migration
+   * 056 refuses a PAYE filing whose assessment amount is not exactly the
+   * schedule total, and that total is itself refused unless it equals the sum
+   * of the schedule's lines. A service that invented a number here would be
+   * caught by the database before the transaction committed.
+   */
+  precomputedAmountKobo?: Kobo;
+  /** Why that figure, recorded on the assessment's trace for an auditor. */
+  precomputedReason?: string;
 }
 
 export interface AssessmentResult {
@@ -253,12 +271,34 @@ export interface AssessmentResult {
 /**
  * Create assessment, invoice and transaction as one atomic obligation.
  *
- * The amount comes from `computeAmount` and nothing else: there is no
- * parameter on this function through which a caller can supply an amount
- * (PRD §31 "No agent-created amounts").
+ * The amount comes from `computeAmount` and nothing a caller sent (PRD §31,
+ * "No agent-created amounts"). The single exception is `precomputedAmountKobo`,
+ * which no route passes and which only server code that has already derived
+ * the figure from stored evidence may use — see its own comment, and migration
+ * 056, which refuses the one liability that uses it unless the assessment
+ * matches the schedule it was computed from.
  */
 export async function createAssessment(params: CreateAssessmentParams): Promise<AssessmentResult> {
-  return withTransaction(async (client) => {
+  return withTransaction((client) => createAssessmentIn(client, params));
+}
+
+/**
+ * The same thing, on a caller's transaction.
+ *
+ * Exists for the one case where an assessment is part of a larger indivisible
+ * act: a PAYE return, where the schedule, its employee lines and the
+ * assessment are one filing. Raising the assessment on its own connection
+ * would commit it independently, so a schedule that then failed to insert
+ * would leave an employer holding an invoice with nothing behind it — a bill
+ * nobody could explain, for a liability the platform has no record of.
+ *
+ * Callers with nothing to join should use `createAssessment` above.
+ */
+export async function createAssessmentIn(
+  client: PoolClient,
+  params: CreateAssessmentParams,
+): Promise<AssessmentResult> {
+  {
     const taxpayer = await queryOne<{
       id: string;
       taxpayer_type: string;
@@ -313,7 +353,32 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
     }
 
     const rate = await resolveRate(client, params.revenueItemId, new Date(), taxpayer.lga_id);
-    const computation = computeAmount(rate, params.inputs);
+    /*
+     * The rate version is resolved either way, so a precomputed assessment
+     * still records which bands were in force when it was made and can be
+     * re-checked years later against them.
+     */
+    const computation =
+      params.precomputedAmountKobo === undefined
+        ? computeAmount(rate, params.inputs)
+        : {
+            amountKobo: params.precomputedAmountKobo,
+            declaredBaseKobo: null,
+            trace: [
+              {
+                step: 'Computed from a filed schedule',
+                detail:
+                  params.precomputedReason ??
+                  'Sum of per-person amounts computed by the platform from a filed return',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+              {
+                step: 'Payable',
+                detail: 'Amount payable to government',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+            ],
+          };
 
     if (computation.amountKobo <= 0n) {
       /*
@@ -485,7 +550,7 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
       expiresAt,
       trace: computation.trace,
     };
-  });
+  }
 }
 
 /**

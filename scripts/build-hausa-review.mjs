@@ -134,6 +134,7 @@ const GROUPS = [
   ['ofcLv', 'The officer portal — levies'],
   ['ofcAr', 'The officer portal — the arrears worklist'],
   ['ofcIg', 'The officer portal — assets and coverage leads'],
+  ['ofcPr', 'The officer portal — employers and payroll returns'],
   ['ofcAl', 'The officer portal — distribution rounds'],
   ['ofcPf', 'The officer portal — agent performance'],
   ['ofcTx', 'The officer portal — transactions'],

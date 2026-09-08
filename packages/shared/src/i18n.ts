@@ -1026,6 +1026,43 @@ export interface TranslationDictionary {
   ofcLvOldestDue: string;
   ofcNavArrears: string;
   ofcArTitle: string;
+  enumFiled: string;
+  ofcPrWithdraw: string;
+  ofcPrWithdrawReason: string;
+  ofcPrWithdrawFirst: string;
+  ofcNavPayroll: string;
+  ofcPrTitle: string;
+  ofcPrIntro: string;
+  ofcPrWhichList: string;
+  ofcPrListPaye: string;
+  ofcPrListConsumption: string;
+  ofcPrNotFiling: string;
+  ofcPrFiling: string;
+  ofcPrSector: string;
+  ofcPrNature: string;
+  ofcPrOpen: string;
+  ofcPrNoneNotFiling: string;
+  ofcPrNoneNotPaying: string;
+  ofcPrFiledBefore: string;
+  ofcPrPeriod: string;
+  ofcPrEmployees: string;
+  ofcPrGross: string;
+  ofcPrTax: string;
+  ofcPrFiledOn: string;
+  ofcPrWithdrawnBecause: string;
+  ofcPrNeverFiled: string;
+  ofcPrFileAReturn: string;
+  ofcPrHowTheTaxIsWorkedOut: string;
+  ofcPrHowExplained: string;
+  ofcPrYear: string;
+  ofcPrMonth: string;
+  ofcPrEmployeeName: string;
+  ofcPrMonthlyPay: string;
+  ofcPrAddEmployee: string;
+  ofcPrSubmit: string;
+  ofcPrFiledTitle: string;
+  ofcPrFiledExplained: string;
+  ofcPrMissingTins: string;
   ofcIgReasonLabel: string;
   ofcIgReasonFirst: string;
   ofcNavConnections: string;
@@ -3239,6 +3276,43 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Oldest due",
     ofcNavArrears: "Arrears worklist",
     ofcArTitle: "Who owes the State money",
+    enumFiled: "Filed",
+    ofcPrWithdraw: "Withdraw",
+    ofcPrWithdrawReason: "Why is this return being withdrawn?",
+    ofcPrWithdrawFirst: "Write the reason first.",
+    ofcNavPayroll: "Employers and premises",
+    ofcPrTitle: "Employers who should be filing",
+    ofcPrIntro: "Schools, clinics, hotels and haulage yards on the register with no PAYE return on record. One employer with forty staff is worth a hundred market visits, and this list costs no field work — it is built from what registration already recorded.",
+    ofcPrWhichList: "Which list",
+    ofcPrListPaye: "Employers with no PAYE return",
+    ofcPrListConsumption: "Hospitality with no consumption tax",
+    ofcPrNotFiling: "Not filing",
+    ofcPrFiling: "Already filing",
+    ofcPrSector: "Sector",
+    ofcPrNature: "Nature of business",
+    ofcPrOpen: "Open",
+    ofcPrNoneNotFiling: "Every employer in these sectors has filed a return.",
+    ofcPrNoneNotPaying: "Every hospitality premises here has paid consumption tax this year.",
+    ofcPrFiledBefore: "Returns already filed",
+    ofcPrPeriod: "Month",
+    ofcPrEmployees: "Employees",
+    ofcPrGross: "Total pay",
+    ofcPrTax: "Tax due",
+    ofcPrFiledOn: "Filed on",
+    ofcPrWithdrawnBecause: "Withdrawn because",
+    ofcPrNeverFiled: "This employer has never filed a return.",
+    ofcPrFileAReturn: "File a return",
+    ofcPrHowTheTaxIsWorkedOut: "How the tax is worked out",
+    ofcPrHowExplained: "Enter what each person was paid for the month. The platform works out the tax on each of them separately, using the annual bands, and adds it up. There is no box for the tax because the tax is not something anybody types.",
+    ofcPrYear: "Year",
+    ofcPrMonth: "Month number",
+    ofcPrEmployeeName: "Employee name",
+    ofcPrMonthlyPay: "Paid this month (₦)",
+    ofcPrAddEmployee: "Add another employee",
+    ofcPrSubmit: "File this return ({{n}} employees)",
+    ofcPrFiledTitle: "Return filed",
+    ofcPrFiledExplained: "The return covers {{n}} employee(s) and invoice {{invoice}} has been raised for the tax.",
+    ofcPrMissingTins: "{{n}} of them had no TIN — collect those and add them to the next return.",
     ofcIgReasonLabel: "Why are you changing this claim?",
     ofcIgReasonFirst: "Write the reason first.",
     ofcNavConnections: "Assets and leads",
@@ -5309,6 +5383,43 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
     ofcNavArrears: "Jerin bashin da ake bin jiha",
     ofcArTitle: "Wanda ke bin jiha bashi",
+    enumFiled: "An kai",
+    ofcPrWithdraw: "Janye",
+    ofcPrWithdrawReason: "Me ya sa ake janye wannan rahoto?",
+    ofcPrWithdrawFirst: "Ka fara rubuta dalili.",
+    ofcNavPayroll: "Masu daukar ma’aikata da wurare",
+    ofcPrTitle: "Masu daukar ma’aikata da ya kamata su kai rahoto",
+    ofcPrIntro: "Makarantu, asibitoci, otal-otal da wuraren jigilar kaya da ke cikin rajista amma ba su kai rahoton PAYE ba. Mai daukar ma’aikata 40 ya fi ziyarar kasuwa dari daraja, kuma wannan jerin bai bukaci aikin fili ba — an gina shi daga abin da rajista ta riga ta rubuta.",
+    ofcPrWhichList: "Wanne jeri",
+    ofcPrListPaye: "Masu daukar ma’aikata da ba su kai rahoton PAYE ba",
+    ofcPrListConsumption: "Wuraren baki da ba su biya harajin amfani ba",
+    ofcPrNotFiling: "Ba sa kai rahoto",
+    ofcPrFiling: "Suna kai rahoto",
+    ofcPrSector: "Bangare",
+    ofcPrNature: "Irin kasuwanci",
+    ofcPrOpen: "Bude",
+    ofcPrNoneNotFiling: "Kowane mai daukar ma’aikata a wadannan bangarori ya kai rahoto.",
+    ofcPrNoneNotPaying: "Kowane wurin baki a nan ya biya harajin amfani a wannan shekara.",
+    ofcPrFiledBefore: "Rahotannin da aka riga aka kai",
+    ofcPrPeriod: "Wata",
+    ofcPrEmployees: "Ma’aikata",
+    ofcPrGross: "Jimlar albashi",
+    ofcPrTax: "Harajin da ya kamata",
+    ofcPrFiledOn: "An kai a",
+    ofcPrWithdrawnBecause: "An janye saboda",
+    ofcPrNeverFiled: "Wannan mai daukar ma’aikata bai taba kai rahoto ba.",
+    ofcPrFileAReturn: "Kai rahoto",
+    ofcPrHowTheTaxIsWorkedOut: "Yadda ake lissafin haraji",
+    ofcPrHowExplained: "Ka shigar da abin da aka biya kowane mutum a wannan wata. Tsarin zai lissafa harajin kowannensu daban, ta amfani da matakan shekara, sannan ya hada su. Babu wurin shigar da haraji domin haraji ba abin da kowa ke rubutawa ba ne.",
+    ofcPrYear: "Shekara",
+    ofcPrMonth: "Lambar wata",
+    ofcPrEmployeeName: "Sunan ma’aikaci",
+    ofcPrMonthlyPay: "An biya wannan wata (₦)",
+    ofcPrAddEmployee: "Kara wani ma’aikaci",
+    ofcPrSubmit: "Kai wannan rahoto (ma’aikata {{n}})",
+    ofcPrFiledTitle: "An kai rahoto",
+    ofcPrFiledExplained: "Rahoton ya shafi ma’aikata {{n}} kuma an fitar da daftari {{invoice}} na haraji.",
+    ofcPrMissingTins: "{{n}} daga cikinsu ba su da TIN — ka tattara su ka kara su a rahoto na gaba.",
     ofcIgReasonLabel: "Me ya sa kake canza wannan ikirari?",
     ofcIgReasonFirst: "Ka fara rubuta dalili.",
     ofcNavConnections: "Dukiya da alamu",

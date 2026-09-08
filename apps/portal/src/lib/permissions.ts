@@ -118,6 +118,8 @@ export const MUTATING_PERMISSIONS = [
    */
   'taxpayer:correct',
   'taxpayer:obligation:waive',
+  // Filing a PAYE return raises a liability against an employer.
+  'paye:file',
   'group:register',
   'group:manage',
   'allocation:manage',
@@ -267,6 +269,11 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavConnections',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  payroll: {
+    path: '/payroll',
+    label: 'ofcNavPayroll',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -351,16 +358,17 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.connections!, SCREEN.revenue!,
-              SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!, SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!,
+              SCREEN.performance!],
     },
   ],
 
   revenue_officer: [
     {
       group: 'ofcGroupTheRegister',
-      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.taxpayerRecords!,
-              SCREEN.outstanding!, SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
@@ -389,8 +397,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.revenue!, SCREEN.levies!,
-              SCREEN.transactions!, SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.payroll!, SCREEN.revenue!,
+              SCREEN.levies!, SCREEN.transactions!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupWhoCollected',
@@ -410,7 +418,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'ofcGroupTheMoney',
       items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.arrears!,
-              SCREEN.connections!, SCREEN.outstanding!],
+              SCREEN.connections!, SCREEN.payroll!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupWhatCharged',
@@ -427,8 +435,8 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   supervisor: [
     {
       group: 'ofcGroupMyTerritory',
-      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.performance!,
-              SCREEN.approvals!, SCREEN.outstanding!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupRevenueHere',

@@ -24,6 +24,13 @@ import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
 import {
+  cancelPayeSchedule,
+  employersNotFiling,
+  filePayeSchedule,
+  payeHistory,
+  premisesNotPayingConsumptionTax,
+} from '../services/paye';
+import {
   coverageLeads,
   connectionAccessHistory,
   readConnections,
@@ -277,6 +284,145 @@ governmentRouter.post(
     });
     res.json(result);
   }),
+);
+
+/* ---------------------------------------------------------------------------
+ * PAYE from informal employers, and the premises that owe consumption tax
+ *
+ * The two highest-yield segments after arrears, and both are answered from the
+ * register the platform already holds: `economic_sector` has been on every
+ * taxpayer since registration, and a school, clinic, hotel or haulage yard is
+ * a lead on the face of it.
+ *
+ * Filing sits behind `revenue:assess` rather than a report permission. It
+ * raises a liability against a citizen — that is an assessment, and it belongs
+ * with the people allowed to make one.
+ * ------------------------------------------------------------------------- */
+
+governmentRouter.get(
+  '/paye/not-filing',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      sector: z.enum(ECONOMIC_SECTOR_CODES).optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await employersNotFiling(pool, data, scope));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/consumption-tax/not-paying',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await premisesNotPayingConsumptionTax(pool, data, scope));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/paye/employers/:id/returns',
+  requirePermission('report:read:all', 'report:read:territory'),
+  asyncHandler(async (req, res) => {
+    /*
+     * Refused rather than narrowed, for the same reason as the connection
+     * graph: this answers about one named employer, so there are no rows to
+     * filter — the request either concerns somebody in the officer's
+     * territories or it does not. Without this a supervisor holding a
+     * territory permission could read any employer's payroll in the State,
+     * which is exactly what the permission says they may not do.
+     */
+    const scope = await resolveReportScope(pool, req.auth!);
+    if (scope.kind === 'TERRITORIES') {
+      const lgaIds = scope.territories.map((territory) => territory.lgaId);
+      const inScope = await queryOne<{ id: string }>(
+        pool,
+        'SELECT id FROM taxpayers WHERE id = $1 AND lga_id = ANY($2::uuid[])',
+        [req.params.id, lgaIds],
+      );
+      if (!inScope) {
+        throw forbidden(
+          'This employer is not in one of your territories, so their returns are not yours to read.',
+        );
+      }
+    }
+    res.json(await payeHistory(pool, req.params.id!));
+  }),
+);
+
+governmentRouter.post(
+  '/paye/returns',
+  requirePermission('paye:file'),
+  validateBody(
+    z.object({
+      employerTaxpayerId: uuidSchema,
+      periodYear: z.number().int().min(2020).max(2100),
+      periodMonth: z.number().int().min(1).max(12),
+      /*
+       * Emoluments only. There is no field here for the tax: the employer
+       * declares what each person was paid, and the platform works out what
+       * was owed on it. A schema that accepted a tax figure would make the
+       * liability negotiable at the counter, which is the whole failure mode
+       * of PAYE.
+       */
+      lines: z
+        .array(
+          z.object({
+            employeeName: z.string().min(2).max(150),
+            employeeTin: z.string().max(30).optional(),
+            employeePhone: z.string().max(20).optional(),
+            grossEmolumentKobo: koboSchema,
+          }),
+        )
+        .min(1)
+        .max(2000),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await filePayeSchedule({
+          employerTaxpayerId: data.employerTaxpayerId,
+          periodYear: data.periodYear,
+          periodMonth: data.periodMonth,
+          lines: data.lines.map((line) => ({
+            employeeName: line.employeeName,
+            employeeTin: line.employeeTin ?? null,
+            employeePhone: line.employeePhone ?? null,
+            grossEmolumentKobo: line.grossEmolumentKobo.toString(),
+          })),
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          ipAddress: req.clientIp,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/paye/returns/:id/cancel',
+  requirePermission('paye:file'),
+  validateBody(
+    z.object({ reason: z.string().min(4).max(500) }),
+    async (req, res, data) => {
+      await cancelPayeSchedule(pool, {
+        scheduleId: req.params.id!,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.status(204).end();
+    },
+  ),
 );
 
 /*
