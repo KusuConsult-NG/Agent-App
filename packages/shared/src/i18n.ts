@@ -985,6 +985,21 @@ export interface TranslationDictionary {
   ofcGpDistributions: string;
   ofcGpDistributionsIntro: string;
   ofcGpRegisteredGroups: string;
+  ofcPhTitle: string;
+  ofcPhIntro: string;
+  ofcPhFrom: string;
+  ofcPhTo: string;
+  ofcPhPaid: string;
+  ofcPhPayments: string;
+  ofcPhReturned: string;
+  ofcPhForWhat: string;
+  ofcPhLevy: string;
+  ofcPhEachPayment: string;
+  ofcPhWhen: string;
+  ofcPhPeriod: string;
+  ofcPhAmount: string;
+  ofcPhReceipt: string;
+  ofcPhNothingPaid: string;
   ofcGpTaxRole: string;
   ofcGpTaxRoleNone: string;
   ofcGpTaxRoleNeedsReason: string;
@@ -3404,6 +3419,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Distributions",
     ofcGpDistributionsIntro: "Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to see who has been awarded and who has actually collected.",
     ofcGpRegisteredGroups: "Registered groups",
+    ofcPhTitle: "What they have already paid",
+    ofcPhIntro: "Every payment that reached a government account, and what it was for. A taxpayer asking what they have paid is entitled to an answer they can check against their receipts.",
+    ofcPhFrom: "From",
+    ofcPhTo: "To",
+    ofcPhPaid: "Paid",
+    ofcPhPayments: "Payments",
+    ofcPhReturned: "Returned to them",
+    ofcPhForWhat: "What it went to",
+    ofcPhLevy: "Tax or levy",
+    ofcPhEachPayment: "Each payment",
+    ofcPhWhen: "When",
+    ofcPhPeriod: "Period",
+    ofcPhAmount: "Amount",
+    ofcPhReceipt: "Receipt",
+    ofcPhNothingPaid: "Nothing was paid in this period.",
     ofcGpTaxRole: "Part in enumeration",
     ofcGpTaxRoleNone: "No part",
     ofcGpTaxRoleNeedsReason: "Write down the reason first. Giving a leader standing over what a member is assessed on is recorded.",
@@ -5675,6 +5705,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Rabo",
     ofcGpDistributionsIntro: "Taki, iri da sauran rabon da ke da adadi tsayayye a bayansu. Ka bude daya don ganin wanda aka ba da wanda ya karba a hakika.",
     ofcGpRegisteredGroups: "Kungiyoyin da aka yi wa rajista",
+    ofcPhTitle: "Abin da suka riga suka biya",
+    ofcPhIntro: "Kowane biyan da ya isa asusun gwamnati, da abin da aka biya shi. Mai biyan haraji da ya tambayi abin da ya biya yana da hakkin samun amsar da zai iya duba ta da rasitunsa.",
+    ofcPhFrom: "Daga",
+    ofcPhTo: "Zuwa",
+    ofcPhPaid: "An biya",
+    ofcPhPayments: "Biyayya",
+    ofcPhReturned: "An mayar musu",
+    ofcPhForWhat: "Abin da aka biya",
+    ofcPhLevy: "Haraji ko kudin shiga",
+    ofcPhEachPayment: "Kowane biya",
+    ofcPhWhen: "Yaushe",
+    ofcPhPeriod: "Lokaci",
+    ofcPhAmount: "Adadi",
+    ofcPhReceipt: "Rasit",
+    ofcPhNothingPaid: "Ba a biya komai a wannan lokacin ba.",
     ofcGpTaxRole: "Rawar da take takawa a kidaya",
     ofcGpTaxRoleNone: "Babu rawar da take takawa",
     ofcGpTaxRoleNeedsReason: "Ka rubuta dalili tukuna. Ba shugaba iko a kan abin da za a kimanta wa dan kungiya ana ajiye shi a rubuce.",

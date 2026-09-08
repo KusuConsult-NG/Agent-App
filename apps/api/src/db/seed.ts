@@ -558,6 +558,67 @@ const INCENTIVE_PROGRAMMES = [
     linkageMode: 'ADDITIVE_BENEFIT',
   },
   {
+    name: 'Government Palliative (Humanitarian Support)',
+    nameHa: 'Tallafin Gwamnati (Taimakon Jin Kai)',
+    code: 'HUMANITARIAN-PALLIATIVE',
+    description:
+      'Relief distributed by the Plateau State Ministry of Humanitarian Affairs and Poverty ' +
+      'Alleviation. Registered taxpayers receive the base entitlement; sustained tax ' +
+      'compliance raises it to the full one.',
+    benefitType: 'HUMANITARIAN_PALLIATIVE',
+    benefitDescription:
+      'Food and essential-item support distributed through the Ministry of Humanitarian ' +
+      'Affairs. The Ministry decides need; this platform certifies tax standing only.',
+    eligibilityRules: {
+      requires_tin: true,
+      min_score: 90,
+      /*
+       * Ninety across three assessed periods, not ninety today.
+       *
+       * A snapshot score is trivially high for somebody assessed once last
+       * week and perfectly meaningless: paying a single levy on time scores
+       * full marks on punctuality, coverage and arrears at once. Beneficiary
+       * selection off that figure rewards being new to the register rather
+       * than being compliant, and the first year of any scheme is exactly when
+       * that is most common.
+       *
+       * Three assessed periods is the shortest window in which the score is
+       * measuring a habit. It is the same reasoning the score's own
+       * proportional components rest on — what the state asked of this person,
+       * over time — carried into who is chosen.
+       */
+      min_periods: 3,
+      sustained: true,
+    },
+    minimumScore: 90,
+    minimumCompliancePeriods: 3,
+    /*
+     * ADDITIVE, AND THIS IS NOT A DETAIL.
+     *
+     * PRD §40, which migration 017 exists to enforce: the platform must not
+     * automatically deny an essential public service because somebody is not
+     * tax-compliant. A humanitarian palliative is the strongest case of that
+     * rule there is. Relief exists for people in hardship, and the people in
+     * hardship are the least likely to be tax-compliant — so a 90% gate would
+     * withhold food support from the poorest, and withhold it precisely
+     * because they are poor. That is not a strict scheme, it is an inverted
+     * one, and it would be the platform doing it rather than any policy
+     * anybody signed.
+     *
+     * So the threshold is honoured where it belongs. Ninety per cent across
+     * three periods is the line between the base entitlement and the full one
+     * — a reward for paying, which is what a tax incentive is — and nobody
+     * registered is refused relief by this platform's arithmetic.
+     *
+     * `requires_no_arrears` is false for the same reason: owing money is a
+     * debt to recover, not a reason to go without food.
+     */
+    requiresNoArrears: false,
+    approvalAuthority:
+      'Plateau State Ministry of Humanitarian Affairs and Poverty Alleviation',
+    linkageMode: 'ADDITIVE_BENEFIT',
+  },
+  {
     name: 'Input Fertilizer Distribution Programme',
     nameHa: 'Shirin Rabon Takin Zamani',
     code: 'FERTILIZER-SUBSIDY',

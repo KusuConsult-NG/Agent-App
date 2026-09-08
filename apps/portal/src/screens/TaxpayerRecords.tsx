@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
+import { Alert, Badge, ErrorAlert, KeyValue, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -34,6 +34,29 @@ interface FoundTaxpayer {
 
 const displayName = (t: FoundTaxpayer) =>
   t.business_name ?? `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim();
+
+interface ByItem {
+  revenueItem: string;
+  payments: number;
+  totalKobo: string;
+}
+
+interface PaidRow {
+  transactionReference: string;
+  paidAt: string | null;
+  revenueItem: string;
+  revenueItemHa: string | null;
+  periodLabel: string | null;
+  amountKobo: string;
+  status: string;
+  returned: boolean;
+  receiptNumber: string | null;
+}
+
+interface PaidHistory {
+  summary: { payments: number; totalKobo: string; returnedKobo: string; byItem: ByItem[] };
+  rows: PaidRow[];
+}
 
 export function TaxpayerRecordsScreen({ user }: { user: User }) {
   const { t } = usePortalI18n();
@@ -283,6 +306,10 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
         <RegisterStatus taxpayerId={chosen.id} name={displayName(chosen)} />
       )}
 
+      {chosen && (can('report:read:all') || can('report:read:territory')) && (
+        <PaymentHistory taxpayerId={chosen.id} />
+      )}
+
       {chosen && can('taxpayer:obligation:waive') && <Obligations taxpayerId={chosen.id} />}
 
       {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
@@ -317,6 +344,142 @@ interface ObligationRow {
  * missing from it — so this sends the current set minus the one being removed,
  * rather than a delete.
  */
+/**
+ * What this person has already paid, and for what.
+ *
+ * The question a taxpayer actually asks, which the platform could not answer:
+ * it knew what was owed and had no view of what had been settled. An officer
+ * who has just found somebody by phone, name or TIN can now answer them
+ * without leaving the record.
+ *
+ * The period defaults to the last twelve months rather than to everything.
+ * "What did I pay this year" is the question people ask — they are reconciling
+ * against a bank statement, or checking a levy they think they paid twice —
+ * and an unbounded list answers a question nobody asked, slowly.
+ */
+function PaymentHistory({ taxpayerId }: { taxpayerId: string }) {
+  const { lang, t } = usePortalI18n();
+  const today = new Date();
+  const yearAgo = new Date(today);
+  yearAgo.setFullYear(today.getFullYear() - 1);
+  const asDate = (value: Date) => value.toISOString().slice(0, 10);
+
+  const [from, setFrom] = useState(asDate(yearAgo));
+  const [to, setTo] = useState(asDate(today));
+  const [history, setHistory] = useState<PaidHistory | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    setHistory(null);
+    api
+      .get<PaidHistory>(
+        `/government/taxpayers/${taxpayerId}/payments?from=${from}&to=${to}`,
+      )
+      .then(setHistory)
+      .catch((caught: unknown) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
+  }, [taxpayerId, from, to]);
+
+  useEffect(load, [load]);
+
+  return (
+    <div className="card">
+      <h2 className="card__title">{t.ofcPhTitle}</h2>
+      <p className="card__hint">{t.ofcPhIntro}</p>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="field" style={{ maxWidth: 190 }}>
+          <label htmlFor="ph-from">{t.ofcPhFrom}</label>
+          <input id="ph-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+        <div className="field" style={{ maxWidth: 190 }}>
+          <label htmlFor="ph-to">{t.ofcPhTo}</label>
+          <input id="ph-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      {history === null ? (
+        <Loading rows={2} />
+      ) : (
+        <>
+          <div className="stat-row">
+            <Stat label="ofcPhPaid" value={<Money kobo={history.summary.totalKobo} />} />
+            <Stat label="ofcPhPayments" value={String(history.summary.payments)} />
+            {/*
+              * Only when there is some. A row reading "returned ₦0.00" on every
+              * record makes a reversal look like a normal part of paying tax.
+              */}
+            {history.summary.returnedKobo !== '0' ? (
+              <Stat label="ofcPhReturned" value={<Money kobo={history.summary.returnedKobo} />} />
+            ) : null}
+          </div>
+
+          {history.summary.byItem.length > 0 ? (
+            <>
+              <p className="section-title">{t.ofcPhForWhat}</p>
+              <Table
+                columns={[
+                  { key: 'revenueItem', label: 'ofcPhLevy' },
+                  { key: 'payments', label: 'ofcPhPayments' },
+                  {
+                    key: 'totalKobo',
+                    label: 'ofcPhPaid',
+                    numeric: true,
+                    render: (row: ByItem) => <Money kobo={row.totalKobo} />,
+                  },
+                ]}
+                rows={history.summary.byItem}
+                empty="ofcPhNothingPaid"
+              />
+            </>
+          ) : null}
+
+          <p className="section-title">{t.ofcPhEachPayment}</p>
+          <Table
+            columns={[
+              {
+                key: 'paidAt',
+                label: 'ofcPhWhen',
+                render: (row: PaidRow) => (row.paidAt ? formatDate(row.paidAt) : '—'),
+              },
+              {
+                key: 'revenueItem',
+                label: 'ofcPhLevy',
+                render: (row: PaidRow) => localName(lang, row.revenueItem, row.revenueItemHa),
+              },
+              { key: 'periodLabel', label: 'ofcPhPeriod' },
+              {
+                key: 'amountKobo',
+                label: 'ofcPhAmount',
+                numeric: true,
+                render: (row: PaidRow) => <Money kobo={row.amountKobo} />,
+              },
+              { key: 'receiptNumber', label: 'ofcPhReceipt' },
+              {
+                key: 'status',
+                label: 'appStatus',
+                /*
+                 * A reversal is shown as one. Rendering it as an ordinary
+                 * payment would have somebody reading money back out of the
+                 * account as money paid into it.
+                 */
+                render: (row: PaidRow) =>
+                  row.returned ? <Badge status={row.status} /> : enumLabel(row.status, t),
+              },
+            ]}
+            rows={history.rows}
+            empty="ofcPhNothingPaid"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function Obligations({ taxpayerId }: { taxpayerId: string }) {
   const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<ObligationRow[] | null>(null);

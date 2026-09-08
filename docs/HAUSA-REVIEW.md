@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2168 strings, grouped by where an agent meets them. Lower stakes
+2183 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1510,6 +1510,21 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcPhTitle` | What they have already paid | Abin da suka riga suka biya | ☐ | |
+| `ofcPhIntro` | Every payment that reached a government account, and what it was for. A taxpayer asking what they have paid is entitled to an answer they can check against their receipts. | Kowane biyan da ya isa asusun gwamnati, da abin da aka biya shi. Mai biyan haraji da ya tambayi abin da ya biya yana da hakkin samun amsar da zai iya duba ta da rasitunsa. | ☐ | |
+| `ofcPhFrom` | From | Daga | ☐ | |
+| `ofcPhTo` | To | Zuwa | ☐ | |
+| `ofcPhPaid` | Paid | An biya | ☐ | |
+| `ofcPhPayments` | Payments | Biyayya | ☐ | |
+| `ofcPhReturned` | Returned to them | An mayar musu | ☐ | |
+| `ofcPhForWhat` | What it went to | Abin da aka biya | ☐ | |
+| `ofcPhLevy` | Tax or levy | Haraji ko kudin shiga | ☐ | |
+| `ofcPhEachPayment` | Each payment | Kowane biya | ☐ | |
+| `ofcPhWhen` | When | Yaushe | ☐ | |
+| `ofcPhPeriod` | Period | Lokaci | ☐ | |
+| `ofcPhAmount` | Amount | Adadi | ☐ | |
+| `ofcPhReceipt` | Receipt | Rasit | ☐ | |
+| `ofcPhNothingPaid` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
 | `ofcAllStatuses` | All statuses | Dukkan matsayi | ☐ | |
 | `ofcAllLgas` | All LGAs | Dukkan Kananan Hukumomi | ☐ | |
 | `ofcFrom` | From | Daga | ☐ | |

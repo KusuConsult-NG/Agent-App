@@ -28,6 +28,7 @@ import * as agents from '../services/agents';
 import * as reconciliation from '../services/reconciliation';
 import * as reports from '../services/reports';
 import { arrearsWorklist } from '../services/arrears';
+import { paymentHistory } from '../services/payment-history';
 import {
   assessFromObservation,
   attestObservation,
@@ -381,6 +382,56 @@ governmentRouter.get(
     }
     res.json(await payeHistory(pool, req.params.id!));
   }),
+);
+
+/*
+ * What this taxpayer has paid, over a period they chose.
+ *
+ * The question a person asks at a counter, which the platform could not
+ * answer: it knew what was owed and had no view of what had been settled.
+ * Reached from the search, so an officer who has just found somebody by
+ * phone, name or TIN can answer them without leaving the record.
+ *
+ * Narrowed the same way as an employer's returns, and refused rather than
+ * filtered for the same reason: this is about one named person, so there is
+ * nothing to filter — either they are in the officer's territories or the
+ * request is not the officer's to make.
+ */
+governmentRouter.get(
+  '/taxpayers/:id/payments',
+  requirePermission('report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      from: z.string().date(),
+      to: z.string().date(),
+      limit: z.coerce.number().int().min(1).max(500).optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      if (scope.kind === 'TERRITORIES') {
+        const lgaIds = scope.territories.map((territory) => territory.lgaId);
+        const inScope = await queryOne<{ id: string }>(
+          pool,
+          'SELECT id FROM taxpayers WHERE id = $1 AND lga_id = ANY($2::uuid[])',
+          [req.params.id, lgaIds],
+        );
+        if (!inScope) {
+          throw forbidden(
+            'This taxpayer is not in one of your territories, so their payments are not ' +
+              'yours to read.',
+          );
+        }
+      }
+      res.json(
+        await paymentHistory(pool, {
+          taxpayerId: req.params.id!,
+          from: data.from,
+          to: data.to,
+          limit: data.limit,
+        }),
+      );
+    },
+  ),
 );
 
 governmentRouter.post(
