@@ -2584,6 +2584,23 @@ export interface TranslationDictionary {
   pubCitizenOutstanding: string;
   pubCitizenOutstandingYes: string;
   pubCitizenNone: string;
+  pubStmtTitle: string;
+  pubStmtIntro: string;
+  pubStmtSendCode: string;
+  pubStmtSending: string;
+  pubStmtCodeSent: string;
+  pubStmtCode: string;
+  pubStmtShow: string;
+  pubStmtChecking: string;
+  pubStmtPeriod: string;
+  pubStmtTotal: string;
+  pubStmtCount: string;
+  pubStmtReturned: string;
+  pubStmtReturnedRow: string;
+  pubStmtForWhat: string;
+  pubStmtEach: string;
+  pubStmtNothing: string;
+  pubStmtFooter: string;
   pubCitizenFooter: string;
   pubCitizenAlso: string;
   pubCitizenVerifyLink: string;
@@ -4877,6 +4894,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenOutstanding: 'Outstanding obligations',
     pubCitizenOutstandingYes: 'Yes — please contact PSIRS',
     pubCitizenNone: 'None',
+    pubStmtTitle: "What you have already paid",
+    pubStmtIntro: "To see your payments we send a code to the phone number on your record. It is never sent to a number typed here.",
+    pubStmtSendCode: "Send me a code",
+    pubStmtSending: "Sending…",
+    pubStmtCodeSent: "If a record matches, a code has gone to the phone number on it. Enter it below.",
+    pubStmtCode: "Code from the SMS",
+    pubStmtShow: "Show my payments",
+    pubStmtChecking: "Checking…",
+    pubStmtPeriod: "Payments from {{from}} to {{to}}.",
+    pubStmtTotal: "Total paid",
+    pubStmtCount: "Payments",
+    pubStmtReturned: "Returned to you",
+    pubStmtReturnedRow: "returned to you",
+    pubStmtForWhat: "What it went to",
+    pubStmtEach: "Each payment",
+    pubStmtNothing: "Nothing was paid in this period.",
+    pubStmtFooter: "Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record.",
     pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
     pubCitizenAlso: 'Also available:',
     pubCitizenVerifyLink: 'Verify a payment receipt',
@@ -7164,6 +7198,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenOutstanding: 'Harajin da ake bin ka',
     pubCitizenOutstandingYes: 'Eh — da fatan za ka tuntubi PSIRS',
     pubCitizenNone: 'Babu',
+    pubStmtTitle: "Abin da ka riga ka biya",
+    pubStmtIntro: "Domin ganin biyayyarka muna aika lamba zuwa lambar wayar da ke rubuce a bayananka. Ba a taba aika ta zuwa lambar da aka rubuta a nan ba.",
+    pubStmtSendCode: "Aiko min da lamba",
+    pubStmtSending: "Ana aikawa…",
+    pubStmtCodeSent: "Idan akwai bayanan da suka dace, an aika lamba zuwa wayar da ke kansu. Ka shigar da ita a kasa.",
+    pubStmtCode: "Lambar da ke cikin sakon",
+    pubStmtShow: "Nuna min biyayyata",
+    pubStmtChecking: "Ana duba…",
+    pubStmtPeriod: "Biyayya daga {{from}} zuwa {{to}}.",
+    pubStmtTotal: "Jimlar da aka biya",
+    pubStmtCount: "Biyayya",
+    pubStmtReturned: "An mayar maka",
+    pubStmtReturnedRow: "an mayar maka",
+    pubStmtForWhat: "Abin da aka biya",
+    pubStmtEach: "Kowane biya",
+    pubStmtNothing: "Ba a biya komai a wannan lokacin ba.",
+    pubStmtFooter: "Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne.",
     pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
     pubCitizenAlso: 'Akwai kuma:',
     pubCitizenVerifyLink: 'Tantance rasitin biyan kudi',

@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2184 strings, grouped by where an agent meets them. Lower stakes
+2201 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2282,6 +2282,23 @@ instructions — but they are what an agent reads all day.
 | `pubCitizenOutstanding` | Outstanding obligations | Harajin da ake bin ka | ☐ | |
 | `pubCitizenOutstandingYes` | Yes — please contact PSIRS | Eh — da fatan za ka tuntubi PSIRS | ☐ | |
 | `pubCitizenNone` | None | Babu | ☐ | |
+| `pubStmtTitle` | What you have already paid | Abin da ka riga ka biya | ☐ | |
+| `pubStmtIntro` | To see your payments we send a code to the phone number on your record. It is never sent to a number typed here. | Domin ganin biyayyarka muna aika lamba zuwa lambar wayar da ke rubuce a bayananka. Ba a taba aika ta zuwa lambar da aka rubuta a nan ba. | ☐ | |
+| `pubStmtSendCode` | Send me a code | Aiko min da lamba | ☐ | |
+| `pubStmtSending` | Sending… | Ana aikawa… | ☐ | |
+| `pubStmtCodeSent` | If a record matches, a code has gone to the phone number on it. Enter it below. | Idan akwai bayanan da suka dace, an aika lamba zuwa wayar da ke kansu. Ka shigar da ita a kasa. | ☐ | |
+| `pubStmtCode` | Code from the SMS | Lambar da ke cikin sakon | ☐ | |
+| `pubStmtShow` | Show my payments | Nuna min biyayyata | ☐ | |
+| `pubStmtChecking` | Checking… | Ana duba… | ☐ | |
+| `pubStmtPeriod` | Payments from {{from}} to {{to}}. | Biyayya daga {{from}} zuwa {{to}}. | ☐ | |
+| `pubStmtTotal` | Total paid | Jimlar da aka biya | ☐ | |
+| `pubStmtCount` | Payments | Biyayya | ☐ | |
+| `pubStmtReturned` | Returned to you | An mayar maka | ☐ | |
+| `pubStmtReturnedRow` | returned to you | an mayar maka | ☐ | |
+| `pubStmtForWhat` | What it went to | Abin da aka biya | ☐ | |
+| `pubStmtEach` | Each payment | Kowane biya | ☐ | |
+| `pubStmtNothing` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
+| `pubStmtFooter` | Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record. | Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne. | ☐ | |
 | `pubCitizenFooter` | For questions about your account, visit any PSIRS office or contact an authorised revenue agent. | Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini. | ☐ | |
 | `pubCitizenAlso` | Also available: | Akwai kuma: | ☐ | |
 | `pubCitizenVerifyLink` | Verify a payment receipt | Tantance rasitin biyan kudi | ☐ | |

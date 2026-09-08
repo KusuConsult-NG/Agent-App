@@ -13,7 +13,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatNaira } from '@psirs/shared';
 
 interface VerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
@@ -515,6 +515,30 @@ export function RefereePortalScreen({ token }: { token: string }) {
  * returned to an anonymous caller, so there is nothing here to render them
  * from.
  */
+interface CitizenStatement {
+  from: string;
+  to: string;
+  summary: {
+    payments: number;
+    totalKobo: string;
+    returnedKobo: string;
+    byItem: { revenueItem: string; payments: number; totalKobo: string }[];
+  };
+  /*
+   * No receipt number here, and none from the API. A receipt number is
+   * verification material — the public verification page confirms a payment
+   * against one — so a statement carrying the set would let whoever passed the
+   * code check verify payments as though they held the receipts.
+   */
+  rows: {
+    paidAt: string | null;
+    revenueItem: string;
+    periodLabel: string | null;
+    amountKobo: string;
+    returned: boolean;
+  }[];
+}
+
 interface CitizenStatusResult {
   found: boolean;
   count?: number;
@@ -765,6 +789,205 @@ export function GroupAttestationScreen({ token }: { token: string }) {
   );
 }
 
+/**
+ * "What have I already paid?" — the question a taxpayer asks most.
+ *
+ * Offered only after a TIN or phone lookup has found a specific record, which
+ * is not a UI nicety: a name search deliberately answers with a count and
+ * never a person, so there is nobody to show a statement for. The same
+ * distinction the API draws, drawn once more where the button lives.
+ *
+ * WHY A CODE, WHEN THEY HAVE ALREADY BEEN FOUND.
+ *
+ * Because being found is not being identified. This page cannot tell the
+ * taxpayer from anybody else who knows their phone number — a lender, a former
+ * partner, a rival trader — and a year of payments describes somebody's trade,
+ * their takings and their movements. The code goes to the number on the
+ * record, so the only thing a stranger achieves by asking is that the taxpayer
+ * finds out somebody asked.
+ */
+function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identifier: string }) {
+  const { t } = usePublicI18n();
+  const [stage, setStage] = useState<'idle' | 'sent' | 'shown'>('idle');
+  const [code, setCode] = useState('');
+  const [statement, setStatement] = useState<CitizenStatement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const body = mode === 'tin' ? { tin: identifier } : { phone: identifier };
+
+  async function requestCode() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.publicPost('/citizen-status/statement/request', body);
+      setStage('sent');
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function show(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.publicPost<CitizenStatement>('/citizen-status/statement', {
+        ...body,
+        code: code.trim(),
+      });
+      setStatement(data);
+      setStage('shown');
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 18, borderTop: '1px solid var(--border, #e0e0e0)', paddingTop: 16 }}>
+      <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0 0 4px' }}>
+        {t.pubStmtTitle}
+      </p>
+      <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 12px' }}>
+        {t.pubStmtIntro}
+      </p>
+
+      <ErrorAlert error={error} />
+
+      {stage === 'idle' && (
+        <button
+          type="button"
+          disabled={busy}
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={() => void requestCode()}
+        >
+          {busy ? t.pubStmtSending : t.pubStmtSendCode}
+        </button>
+      )}
+
+      {stage !== 'idle' && !statement && (
+        <form onSubmit={(e) => void show(e)}>
+          <p style={{ fontSize: '0.8rem', margin: '0 0 10px' }}>{t.pubStmtCodeSent}</p>
+          <div className="field">
+            <label htmlFor="stmt-code">{t.pubStmtCode}</label>
+            <input
+              id="stmt-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy || code.trim().length < 4}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {busy ? t.pubStmtChecking : t.pubStmtShow}
+          </button>
+        </form>
+      )}
+
+      {statement && (
+        <div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 10px' }}>
+            {t.pubStmtPeriod
+              .replace('{{from}}', statement.from)
+              .replace('{{to}}', statement.to)}
+          </p>
+
+          <KeyValue
+            items={[
+              [t.pubStmtTotal, formatNaira(statement.summary.totalKobo)],
+              [t.pubStmtCount, String(statement.summary.payments)],
+              /*
+               * Only when there is some. A "returned ₦0.00" line on every
+               * statement makes a reversal look like a normal part of paying.
+               */
+              ...(statement.summary.returnedKobo !== '0'
+                ? ([[t.pubStmtReturned, formatNaira(statement.summary.returnedKobo)]] as [
+                    string,
+                    string,
+                  ][])
+                : []),
+            ]}
+          />
+
+          {statement.summary.byItem.length > 0 && (
+            <>
+              <p style={{ fontWeight: 600, fontSize: '0.82rem', margin: '14px 0 6px' }}>
+                {t.pubStmtForWhat}
+              </p>
+              {statement.summary.byItem.map((row) => (
+                <div
+                  key={row.revenueItem}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    fontSize: '0.82rem',
+                    padding: '5px 0',
+                    borderBottom: '1px solid var(--border, #eee)',
+                  }}
+                >
+                  <span>
+                    {row.revenueItem}
+                    <span style={{ color: 'var(--muted)' }}> × {row.payments}</span>
+                  </span>
+                  <strong>{formatNaira(row.totalKobo)}</strong>
+                </div>
+              ))}
+            </>
+          )}
+
+          <p style={{ fontWeight: 600, fontSize: '0.82rem', margin: '14px 0 6px' }}>
+            {t.pubStmtEach}
+          </p>
+          {statement.rows.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{t.pubStmtNothing}</p>
+          ) : (
+            statement.rows.map((row, index) => (
+              <div
+                key={`${row.paidAt}-${index}`}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '6px 0',
+                  borderBottom: '1px solid var(--border, #eee)',
+                  opacity: row.returned ? 0.7 : 1,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <span>{row.revenueItem}</span>
+                  <strong>{formatNaira(row.amountKobo)}</strong>
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
+                  {row.paidAt ? new Date(row.paidAt).toLocaleDateString() : '—'}
+                  {row.periodLabel ? ` · ${row.periodLabel}` : ''}
+                  {/*
+                    * A reversal says so. Shown rather than hidden, because
+                    * money that came back is part of what happened and a
+                    * statement that dropped it would look wrong to anybody
+                    * holding the paper.
+                    */}
+                  {row.returned ? ` · ${t.pubStmtReturnedRow}` : ''}
+                </div>
+              </div>
+            ))
+          )}
+
+          <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 14 }}>
+            {t.pubStmtFooter}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CitizenPortalScreen() {
   const { t } = usePublicI18n();
   const [mode, setMode] = useState<SearchMode>('tin');
@@ -926,6 +1149,16 @@ export function CitizenPortalScreen() {
               {result.detail ??
                 t.pubCitizenFooter}
             </p>
+
+            {/*
+              * Only for a lookup that found one specific person. A name search
+              * answers with a count and never a record, so there is nobody to
+              * show a statement for — the same line the API draws, drawn again
+              * where the control lives.
+              */}
+            {mode !== 'name' && (
+              <PaymentStatement mode={mode} identifier={input.trim()} />
+            )}
           </div>
         )}
 
