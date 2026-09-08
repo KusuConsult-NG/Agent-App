@@ -651,3 +651,141 @@ button.link:hover { background: none; color: var(--green-500); }
 }
 
 .password__toggle:hover:not(:disabled) { background: none; text-decoration: underline; }
+
+/* ------------------------------------------------------- reading and rhythm
+ *
+ * Added after a look at the portal at 1440px, where the design system was
+ * doing its job and the pages still read as unfinished. The causes were not
+ * in the tokens — they were four things no single screen owns.
+ */
+
+/*
+ * A line of prose stops at a readable measure.
+ *
+ * `.content` is capped at 1400px because tables need the room, and every
+ * explanatory paragraph inherited that width: 140 characters a line, about
+ * twice what anybody reads comfortably. Tables keep the full width; sentences
+ * do not.
+ */
+.card__hint,
+.field__hint,
+.stat__hint,
+.alert__body {
+  max-width: 74ch;
+}
+
+/*
+ * `.card__hint` sets only a top margin, because it usually sits directly under
+ * a title with nothing after it. When something does follow — a filter bar, a
+ * form, a table — it needs the space back, or the sentence sits on the first
+ * label. Stated as a relationship rather than a margin on the paragraph, so a
+ * hint that is genuinely the last thing in a card still ends flush.
+ */
+.card__hint + .filters,
+.card__hint + .form-grid,
+.card__hint + .table-wrap,
+.card__hint + .stat-grid,
+.card__hint + form {
+  margin-top: 14px;
+}
+
+/*
+ * Disabled reads as "not yet", not as "broken".
+ *
+ * A flat grey fill on a green button looks like a rendering fault, and half
+ * the buttons on a publishing screen are legitimately disabled until the form
+ * above them is filled in. Keeping the button's own colour and taking its
+ * weight away says the same thing without the alarm.
+ */
+button:disabled,
+.button:disabled {
+  background: var(--green-700);
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+button.secondary:disabled {
+  background: var(--surface);
+  color: var(--green-700);
+  opacity: 0.45;
+}
+
+/*
+ * A long table keeps its headings.
+ *
+ * The published presumptive figures run to 36 rows and the whole page scrolls,
+ * so by the third sector an officer is reading unlabelled numbers and has to
+ * scroll back to find out which column is turnover and which is tax. Sticky
+ * headings cost nothing on a short table and are the difference on a long one.
+ */
+.table-wrap { overflow-x: auto; }
+
+.table-wrap--tall {
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.table-wrap--tall th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+/*
+ * A cell that is the same on every row.
+ *
+ * A legal citation repeated down 36 rows is 3,000 characters of the same
+ * sentence, and it crowds out the figures the table exists to show. Where the
+ * value genuinely varies it belongs in the table, quietly; where it does not,
+ * it belongs above the table and not in it at all.
+ */
+td.meta {
+  color: var(--muted);
+  font-size: 0.78rem;
+  max-width: 34ch;
+}
+
+/*
+ * Sections inside one card, rather than one card each.
+ *
+ * A screen that shows eight cards in a column gives all eight the same weight
+ * and tells the reader nothing about which is the point. Grouping the related
+ * ones under a single card with ruled subsections restores a second level of
+ * hierarchy without inventing a new component.
+ */
+.card__section {
+  padding-top: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.card__section:first-of-type {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.card__section-title {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/*
+ * A form whose fields line up.
+ *
+ * `.filters` already lays a row of controls out on a shared baseline, and the
+ * publishing forms hand-rolled widths instead, so a date input sat at whatever
+ * the browser gives it beside a text input stretching to fill. This is the
+ * same idea sized for a form rather than a filter bar.
+ */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px 14px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.form-grid .field { margin-bottom: 0; }
+.form-grid .field--wide { grid-column: span 2; }

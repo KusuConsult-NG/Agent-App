@@ -209,7 +209,7 @@ export function PayrollScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcPrTitle}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>{t.ofcPrIntro}</p>
+        <p className="card__hint">{t.ofcPrIntro}</p>
 
         <div className="filters">
           <div className="field">

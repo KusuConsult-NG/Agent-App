@@ -1154,6 +1154,7 @@ export interface TranslationDictionary {
   ofcPsBand: string;
   ofcPsClass: string;
   ofcPsAssumedTurnover: string;
+  ofcPsAllAdoptedUnder: string;
   ofcPsAnnualTax: string;
   ofcPsMonthlyTax: string;
   ofcPsExempt: string;
@@ -3799,6 +3800,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPsBand: "Size band",
     ofcPsClass: "Class",
     ofcPsAssumedTurnover: "Assumed annual turnover",
+    ofcPsAllAdoptedUnder: 'Every figure below was adopted under',
     ofcPsAnnualTax: "Tax a year",
     ofcPsMonthlyTax: "Tax a month",
     ofcPsExempt: "Exempt — nothing is payable",
@@ -6301,6 +6303,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPsBand: "Matakin girma",
     ofcPsClass: "Mataki",
     ofcPsAssumedTurnover: "Kudin shigar shekara da ake zato",
+    ofcPsAllAdoptedUnder: 'An amince da kowace lamba a kasa a karkashin',
     ofcPsAnnualTax: "Harajin shekara",
     ofcPsMonthlyTax: "Harajin wata",
     ofcPsExempt: "An kebe — babu abin biya",

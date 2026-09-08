@@ -113,7 +113,7 @@ export function ArrearsScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcArTitle}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        <p className="card__hint">
           {t.ofcArIntro}
         </p>
 

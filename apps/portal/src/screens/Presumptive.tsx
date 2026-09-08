@@ -198,11 +198,22 @@ export function PresumptiveScreen() {
     ? [...new Set(schedule.entries.map((entry) => entry.economicSector))]
     : [];
 
+  /**
+   * The instrument, when the whole schedule was adopted under one.
+   *
+   * `null` when the rows differ, and then the table keeps its column — a row
+   * adopted under a different regulation is exactly the thing an officer needs
+   * to see, and hiding it to tidy the table would hide the finding.
+   */
+  const instruments = new Set((schedule?.entries ?? []).map((entry) => entry.instrumentReference));
+  const oneInstrument =
+    instruments.size === 1 ? ([...instruments][0] ?? null) : null;
+
   return (
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcPsTitle}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>{t.ofcPsIntro}</p>
+        <p className="card__hint">{t.ofcPsIntro}</p>
         <ErrorAlert error={error} />
       </div>
 
@@ -248,7 +259,7 @@ export function PresumptiveScreen() {
 
           <div className="card">
             <h2 className="card__title">{t.ofcPsWhatItWouldCost}</h2>
-            <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+            <p className="card__hint">
               {t.ofcPsCheckIntro}
             </p>
 
@@ -396,7 +407,7 @@ export function PresumptiveScreen() {
 
           <div className="card">
             <h2 className="card__title">{t.ofcPsClasses}</h2>
-            <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+            <p className="card__hint">
               {t.ofcPsClassesIntro}
             </p>
             <Table
@@ -423,6 +434,11 @@ export function PresumptiveScreen() {
 
           <div className="card">
             <h2 className="card__title">{t.ofcPsTheTable}</h2>
+            {oneInstrument ? (
+              <p className="card__hint">
+                {t.ofcPsAllAdoptedUnder} {oneInstrument}
+              </p>
+            ) : null}
             <Table
               columns={[
                 {
@@ -452,11 +468,25 @@ export function PresumptiveScreen() {
                     <Money kobo={(BigInt(row.assumedAnnualTurnoverKobo) / 100n).toString()} />
                   ),
                 },
-                { key: 'instrumentReference', label: 'ofcPsInstrument' },
+                /*
+                  * Quiet, and only when it varies.
+                  *
+                  * The instrument is the same regulation on every row of a
+                  * schedule published in one go — thirty-six repetitions of a
+                  * seventy-character citation, crowding out the figures the
+                  * table exists to show. Where it is one instrument it is
+                  * stated once above the table instead; where a row was
+                  * adopted under something else the column comes back, because
+                  * then the difference is the interesting part.
+                  */
+                ...(oneInstrument
+                  ? []
+                  : [{ key: 'instrumentReference', label: 'ofcPsInstrument' as const, meta: true }]),
                 { key: 'version', label: 'ofcPsVersion', numeric: true },
               ]}
               rows={schedule.entries}
               empty="ofcPsNoEntries"
+              tall
             />
 
             {canConfigure ? (
@@ -470,8 +500,9 @@ export function PresumptiveScreen() {
               <ErrorAlert error={publishError} />
               {publishNote ? <Alert kind="success">{publishNote}</Alert> : null}
 
-              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>{t.ofcPsPublishClass}</h3>
-              <div className="filters">
+              <div className="card__section">
+              <h3 className="card__section-title">{t.ofcPsPublishClass}</h3>
+              <div className="form-grid">
                 <div className="field">
                   <label htmlFor="ps-new-lga">{t.pubVerifyLga}</label>
                   <select
@@ -589,8 +620,11 @@ export function PresumptiveScreen() {
                 </button>
               </p>
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcPsPublishFigure}</h3>
-              <div className="filters">
+              </div>
+
+              <div className="card__section">
+              <h3 className="card__section-title">{t.ofcPsPublishFigure}</h3>
+              <div className="form-grid">
                 <div className="field">
                   <label htmlFor="ps-fig-band">{t.ofcPsBand}</label>
                   <select
@@ -693,13 +727,15 @@ export function PresumptiveScreen() {
                 </button>
               </p>
 
+              </div>
+
               {canAdoptNano ? (
-                <>
-                  <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcPsAdoptExemption}</h3>
+                <div className="card__section">
+                  <h3 className="card__section-title">{t.ofcPsAdoptExemption}</h3>
                   <Alert kind="warning" title="ofcPsAdoptWarningTitle">
                     {t.ofcPsAdoptWarning}
                   </Alert>
-                  <div className="filters">
+                  <div className="form-grid">
                     <div className="field">
                       <label htmlFor="ps-nano-construction">{t.ofcPsConstruction}</label>
                       <select
@@ -772,7 +808,7 @@ export function PresumptiveScreen() {
                       {t.ofcPsAdoptExemption}
                     </button>
                   </p>
-                </>
+                </div>
               ) : null}
             </div>
           ) : null}

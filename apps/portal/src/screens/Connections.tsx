@@ -216,7 +216,7 @@ export function ConnectionsScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcIgTitle}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>{t.ofcIgIntro}</p>
+        <p className="card__hint">{t.ofcIgIntro}</p>
 
         <Alert kind="warning" title="ofcIgLimitsTitle">
           {t.ofcIgLimits}

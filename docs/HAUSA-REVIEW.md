@@ -383,7 +383,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2399 strings, grouped by where an agent meets them. Lower stakes
+2400 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1546,6 +1546,7 @@ instructions — but they are what an agent reads all day.
 | `ofcPsBand` | Size band | Matakin girma | ☐ | |
 | `ofcPsClass` | Class | Mataki | ☐ | |
 | `ofcPsAssumedTurnover` | Assumed annual turnover | Kudin shigar shekara da ake zato | ☐ | |
+| `ofcPsAllAdoptedUnder` | Every figure below was adopted under | An amince da kowace lamba a kasa a karkashin | ☐ | |
 | `ofcPsAnnualTax` | Tax a year | Harajin shekara | ☐ | |
 | `ofcPsMonthlyTax` | Tax a month | Harajin wata | ☐ | |
 | `ofcPsExempt` | Exempt — nothing is payable | An kebe — babu abin biya | ☐ | |

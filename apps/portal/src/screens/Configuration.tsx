@@ -898,7 +898,7 @@ export function ProgrammesScreen() {
           {!beneficiaries ? (
             <Loading rows={3} />
           ) : beneficiaries.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: '0.87rem' }}>{t.ofcCfNoEligibleYet}</p>
+            <p className="card__hint">{t.ofcCfNoEligibleYet}</p>
           ) : (
             <Table
               columns={[

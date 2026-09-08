@@ -159,13 +159,13 @@ export function EnumerationScreen() {
     <>
       <div className="card">
         <h2 className="card__title">{t.ofcEnTitle}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>{t.ofcEnIntro}</p>
+        <p className="card__hint">{t.ofcEnIntro}</p>
         <ErrorAlert error={error} />
       </div>
 
       <div className="card">
         <h2 className="card__title">{t.ofcEnRecorded}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        <p className="card__hint">
           {t.ofcEnRecordedIntro}
         </p>
         {recorded === null ? (
@@ -320,7 +320,7 @@ export function EnumerationScreen() {
 
       <div className="card">
         <h2 className="card__title">{t.ofcEnDisagreements}</h2>
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        <p className="card__hint">
           {t.ofcEnDisagreementsIntro}
         </p>
         {disagreements === null ? (

@@ -82,7 +82,13 @@ export function Alert({
   return (
     <div className={`alert alert--${kind}`} role={kind === 'error' ? 'alert' : 'status'}>
       {title && <strong>{text(title)}</strong>}
-      {children}
+      {/*
+        * Wrapped so the words can be given a reading measure without the box
+        * shrinking with them. An alert is a coloured band across the card;
+        * capping the band itself leaves it floating half-width and reading as
+        * a layout fault rather than as a notice.
+        */}
+      <div className="alert__body">{children}</div>
     </div>
   );
 }
@@ -146,26 +152,48 @@ export function Empty({ children }: { children: ReactNode }) {
   return <p className="empty">{children}</p>;
 }
 
+/** One place deciding how a cell is drawn, so the head and body cannot drift. */
+function cellClass(column: { numeric?: boolean; meta?: boolean }): string | undefined {
+  const names = [column.numeric ? 'numeric' : '', column.meta ? 'meta' : ''].filter(Boolean);
+  return names.length ? names.join(' ') : undefined;
+}
+
 export function Table({
   columns,
   rows,
   empty,
+  tall,
 }: {
-  columns: { key: string; label: Label; numeric?: boolean; render?: (row: any) => ReactNode }[];
+  columns: {
+    key: string;
+    label: Label;
+    numeric?: boolean;
+    /** Quiet and narrow, for a value that is context rather than the point. */
+    meta?: boolean;
+    render?: (row: any) => ReactNode;
+  }[];
   rows: any[];
   empty?: Label;
+  /**
+   * Scroll the rows rather than the page, and keep the headings in view.
+   *
+   * For a table long enough that a reader loses which column is which — the
+   * published presumptive figures run to 36 rows. Left off elsewhere, where a
+   * scroll container inside a page that already scrolls is just in the way.
+   */
+  tall?: boolean;
 }) {
   const text = useLabel();
   const { t } = usePortalI18n();
   if (rows.length === 0) return <Empty>{empty ? text(empty) : t.ofcNothingToShow}</Empty>;
 
   return (
-    <div className="table-wrap">
+    <div className={tall ? 'table-wrap table-wrap--tall' : 'table-wrap'}>
       <table>
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} className={column.numeric ? 'numeric' : undefined}>
+              <th key={column.key} className={cellClass(column)}>
                 {text(column.label)}
               </th>
             ))}
@@ -175,7 +203,7 @@ export function Table({
           {rows.map((row, index) => (
             <tr key={row.id ?? index}>
               {columns.map((column) => (
-                <td key={column.key} className={column.numeric ? 'numeric' : undefined}>
+                <td key={column.key} className={cellClass(column)}>
                   {column.render ? column.render(row) : (row[column.key] ?? '—')}
                 </td>
               ))}

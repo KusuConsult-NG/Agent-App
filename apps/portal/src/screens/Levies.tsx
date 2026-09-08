@@ -257,7 +257,7 @@ export function LeviesScreen() {
           * reads as a screen that failed to load rather than one that is doing
           * what it is meant to.
           */}
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        <p className="card__hint">
           {canReadTaxpayers ? t.ofcLvIntroAll : t.ofcLvIntroNoRegister}{' '}
           {t.ofcLvChooseOnce}
         </p>
