@@ -114,11 +114,24 @@ const NAMES = [
   ['Yakubu', 'Nyam', 'INDIVIDUAL'],
 ];
 
+/*
+ * Businesses with a sector each, because sector is not decoration here.
+ *
+ * The PAYE lead list narrows to the sectors that actually employ — a
+ * provisions stall is one person, a hotel is thirty — and the consumption-tax
+ * list narrows to the ones that serve. Businesses seeded without a sector
+ * matched neither, so both screens came up empty against a database that
+ * looked full.
+ */
 const BUSINESSES = [
-  'Jos Main Market Provisions',
-  'Rukuba Road Motor Spares',
-  'Bukuru Cold Room Enterprises',
-  'Plateau Agro Supplies',
+  { name: 'Jos Main Market Provisions', sector: 'RETAIL_TRADE' },
+  { name: 'Rukuba Road Motor Spares', sector: 'RETAIL_TRADE' },
+  { name: 'Bukuru Cold Room Enterprises', sector: 'MANUFACTURING' },
+  { name: 'Plateau Agro Supplies', sector: 'AGRICULTURE' },
+  { name: 'Terminus Grand Hotel', sector: 'HOTEL_HOSPITALITY' },
+  { name: 'Zawan Block Industries', sector: 'CONSTRUCTION' },
+  { name: 'Plateau Star Transport', sector: 'TRANSPORT_PASSENGER' },
+  { name: 'Rayfield Medical Centre', sector: 'HEALTHCARE' },
 ];
 
 async function main() {
@@ -201,21 +214,22 @@ async function main() {
     );
     taxpayers.push({ ...body, name: `${firstName} ${lastName}` });
   }
-  for (const [index, businessName] of BUSINESSES.entries()) {
+  for (const [index, business] of BUSINESSES.entries()) {
     const { body } = await post(
       '/taxpayers',
       {
         taxpayerType: 'BUSINESS',
-        businessName,
+        businessName: business.name,
         phone: `+23480320000${String(index + 10).padStart(2, '0')}`,
         address: `${index + 11} Beach Road, Jos`,
         lgaId: jos.id,
+        economicSector: business.sector,
         consentGiven: true,
         declarationAccepted: true,
       },
       { ...agentAuth, idempotencyKey: key('tp') },
     );
-    taxpayers.push({ ...body, name: businessName });
+    taxpayers.push({ ...body, name: business.name });
   }
   /*
    * One trader from the next Local Government Area along.
@@ -569,8 +583,10 @@ async function main() {
     },
     { ...agentAuth, idempotencyKey: key('grp'), allow: [400, 409, 422] },
   );
+  let tradersAssociation = null;
   if (group.body?.groupId ?? group.body?.id) {
     const groupId = group.body.groupId ?? group.body.id;
+    tradersAssociation = groupId;
     // An officer approves it, because members cannot be recorded until one has.
     await post(
       `/groups/${groupId}/review`,
@@ -599,6 +615,263 @@ async function main() {
       links.groupAttestation = attestation.body.invitationUrl;
       log('registered a cooperative whose leader has not yet confirmed its members');
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // The informal sector: a schedule, an enumeration, a payroll and a debt
+  //
+  // Five screens whose whole subject is people the tax net does not reach, and
+  // all five are unreadable empty. What follows is the shortest run through
+  // them that produces a state an officer would recognise: a published
+  // schedule, an association with standing, a count taken at a stall, a leader
+  // who disagrees with it, an estimate, an objection, and an employer's return.
+  //
+  // Driven through the endpoints the screens themselves call, so a screenshot
+  // taken afterwards is a picture of the platform rather than of the seed.
+  // -------------------------------------------------------------------------
+
+  /*
+   * Who is outside the net at all. Adopted before anything else, because
+   * assessment refuses to guess: with no policy on file the platform will not
+   * produce an estimate rather than produce one nobody adopted.
+   */
+  await post(
+    '/government/presumptive/nano-policy',
+    {
+      construction: 'CONJUNCTIVE',
+      turnoverCeilingKobo: '1200000000',
+      legalBasis:
+        'Opinion of the Attorney-General of Plateau State on section 29 of the Nigeria Tax ' +
+        'Act 2025, 12 January 2026.',
+      effectiveFrom: '2026-01-01',
+    },
+    { token: admin, allow: [409] },
+  );
+  log('adopted a reading of the nano exemption, so an estimate can say who is outside it');
+
+  /*
+   * Four classes of Local Government, and the turnover assumed in each.
+   *
+   * A trader in Wase does not turn over what the same trader turns over on
+   * Ahmadu Bello Way, and a single statewide figure would be a rural
+   * over-charge dressed as fairness. The classes are fixed for three years by
+   * the schema, so this is not a number anybody can move mid-year.
+   */
+  const classes = ['A', 'B', 'C', 'D'];
+  /*
+   * Jos North first, and class A, because that is where the seeded taxpayers
+   * trade. Classifying four arbitrary Councils leaves every assessment below
+   * refused with LGA_NOT_CLASSIFIED — which is the platform declining to
+   * invent a figure, and correct, and looks exactly like a broken seed.
+   */
+  const classedLgas = [jos, ...lgas.filter((lga) => lga.id !== jos.id).slice(0, 3)];
+  for (const [index, lga] of classedLgas.entries()) {
+    await post(
+      '/government/presumptive/lga-classes',
+      {
+        lgaId: lga.id,
+        classCode: classes[index],
+        indexInputs: {
+          roadAccess: index < 2 ? 'paved' : 'earth',
+          marketDays: index < 2 ? 6 : 2,
+          bankBranches: Math.max(0, 8 - index * 3),
+        },
+        indexSource: 'National Bureau of Statistics, Plateau State profile 2025',
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2029-01-01',
+      },
+      { token: admin, allow: [409] },
+    );
+  }
+  log(`classified ${classedLgas.length} Local Governments A to D, fixed to 2029`);
+
+  /*
+   * The schedule itself: sector by band by class. Deliberately more than one
+   * row per sector, because the screen exists to be read as a table and a
+   * table with one row in it demonstrates nothing about the shape of it.
+   */
+  /*
+   * Millions of naira a year, and they have to be plausible or nothing else
+   * is. A micro trader assumed to turn over ₦120m is not micro, would never
+   * fall under the ₦12m nano ceiling, and would make the exemption
+   * unreachable — the screen would show a hawker with no premises and no
+   * employees being charged, which is the failure the exemption exists to
+   * prevent. These are figures a Plateau trader would recognise.
+   */
+  const TURNOVERS = {
+    ARTISAN_CRAFT: { MICRO: 3.6, SMALL: 18, MEDIUM: 60 },
+    RETAIL_TRADE: { MICRO: 4.8, SMALL: 24, MEDIUM: 84 },
+    FOOD_BEVERAGE: { MICRO: 6, SMALL: 30, MEDIUM: 96 },
+  };
+  const CLASS_FACTOR = { A: 1, B: 0.7, C: 0.45, D: 0.25 };
+  let published = 0;
+  for (const [sector, bands] of Object.entries(TURNOVERS)) {
+    for (const [band, millions] of Object.entries(bands)) {
+      for (const classCode of classes) {
+        const naira = Math.round(millions * 1_000_000 * CLASS_FACTOR[classCode]);
+        const result = await post(
+          '/government/presumptive/schedule',
+          {
+            economicSector: sector,
+            sizeBand: band,
+            lgaClass: classCode,
+            assumedAnnualTurnoverKobo: String(naira * 100),
+            instrumentReference:
+              'Plateau State Revenue (Presumptive Assessment) Regulation 2026, First Schedule',
+            effectiveFrom: '2026-01-01',
+          },
+          { token: admin, allow: [409] },
+        );
+        if (result.status === 201) published += 1;
+      }
+    }
+  }
+  log(`published ${published} rows of assumed turnover — 1% of which is the charge`);
+
+  /*
+   * The association gets standing.
+   *
+   * Until an officer says so, its leader cannot contradict what an agent
+   * wrote down about a member — which is the control that makes the
+   * disagreement queue below possible at all.
+   */
+  if (tradersAssociation) {
+    await post(
+      `/groups/${tradersAssociation}/tax-role`,
+      {
+        taxRole: 'ATTESTATION',
+        reason:
+          'Recognised under the Rukuba Road market bye-law; the leader confirms who trades there.',
+      },
+      { token: admin, allow: [400, 409, 422] },
+    );
+    log('gave the traders association a part in enumeration, so its leader may confirm a count');
+  }
+
+  /*
+   * What the agent saw. Facts only — premises, equipment, people — because a
+   * form with a band on it invites a negotiation at the stall.
+   */
+  const OBSERVED = [
+    { premises: 'LOCK_UP_SHOP', equipmentCount: 3, peopleWorking: 2, economicSector: 'ARTISAN_CRAFT' },
+    { premises: 'STALL', equipmentCount: 1, peopleWorking: 0, economicSector: 'RETAIL_TRADE' },
+    { premises: 'NONE', equipmentCount: 0, peopleWorking: 0, economicSector: 'RETAIL_TRADE' },
+    { premises: 'BUILDING', equipmentCount: 8, peopleWorking: 5, economicSector: 'FOOD_BEVERAGE' },
+    { premises: 'KIOSK', equipmentCount: 2, peopleWorking: 1, economicSector: 'ARTISAN_CRAFT' },
+  ];
+  const observations = [];
+  for (const [index, facts] of OBSERVED.entries()) {
+    const subject = taxpayers[index];
+    if (!subject) continue;
+    const recorded = await post(
+      '/government/enumeration/observations',
+      {
+        taxpayerId: subject.taxpayerId,
+        ...facts,
+        ...(tradersAssociation && index < 3 ? { groupId: tradersAssociation } : {}),
+      },
+      { token: revenue, allow: [400, 409, 422] },
+    );
+    if (recorded.status === 201) observations.push({ ...recorded.body, subject });
+  }
+  log(`recorded ${observations.length} enumerations, three of them through the association`);
+
+  if (observations[0]) {
+    await post(
+      `/government/enumeration/observations/${observations[0].id}/attest`,
+      { agrees: true, attestedByName: 'Comfort Dalyop' },
+      { token: admin, allow: [400, 409, 422] },
+    );
+  }
+  if (observations[1]) {
+    /*
+     * The leader says smaller. Both accounts stay on file and the screen shows
+     * the band each would produce, because a disagreement that does not move
+     * the band is a phone call and one that does is a visit.
+     */
+    await post(
+      `/government/enumeration/observations/${observations[1].id}/attest`,
+      {
+        agrees: false,
+        attestedByName: 'Comfort Dalyop',
+        premises: 'NONE',
+        equipmentCount: 0,
+        peopleWorking: 0,
+      },
+      { token: admin, allow: [400, 409, 422] },
+    );
+  }
+  log('one count confirmed by the leader, one contradicted');
+
+  const assessments = [];
+  for (const observation of [observations[0], observations[2], observations[3]]) {
+    if (!observation) continue;
+    const assessed = await post(
+      `/government/enumeration/observations/${observation.id}/assess`,
+      {},
+      { token: revenue, allow: [400, 409, 422] },
+    );
+    if (assessed.status === 201) assessments.push({ ...assessed.body, observation });
+  }
+  const exempt = assessments.filter((row) => row.taxTier === 'NANO').length;
+  log(`raised ${assessments.length} estimates, ${exempt} of them recording an exemption`);
+
+  const chargeable = assessments.find((row) => row.taxTier !== 'NANO');
+  if (chargeable) {
+    await post(
+      `/government/enumeration/assessments/${chargeable.id}/object`,
+      {
+        ground: 'FACTS_WRONG',
+        statement:
+          'The taxpayer says two of the machines counted belong to a relative and were being ' +
+          'repaired on the day of the visit.',
+      },
+      { token: revenue, allow: [400, 409, 422] },
+    );
+    log('one estimate is under objection, so nothing chases the debt while it stands');
+  }
+
+  /*
+   * An employer nobody was collecting from.
+   *
+   * PAYE off a filed schedule is the least contentious money in the informal
+   * sector — the tax was deducted from wages already, and what is missing is
+   * the remittance. The schedule declares emoluments only; the platform works
+   * out what was owed, because a return that accepted a tax figure would make
+   * the liability negotiable at the counter.
+   */
+  const employer = taxpayers.find((row) => row.name === 'Bukuru Cold Room Enterprises');
+  if (employer) {
+    const filed = await post(
+      '/government/paye/returns',
+      {
+        employerTaxpayerId: employer.taxpayerId,
+        periodYear: 2026,
+        periodMonth: 7,
+        lines: [
+          { employeeName: 'Nanle Dung', grossEmolumentKobo: '18000000' },
+          { employeeName: 'Saratu Bitrus', grossEmolumentKobo: '12500000' },
+          { employeeName: 'Ezekiel Pam', grossEmolumentKobo: '9000000' },
+          { employeeName: 'Talatu Gyang', grossEmolumentKobo: '7500000' },
+        ],
+      },
+      { token: revenue, allow: [400, 409, 422] },
+    );
+    if (filed.status === 201) {
+      log('an employer filed a July schedule for four staff, and the platform priced it');
+    }
+  }
+
+  /*
+   * The connection graph, built from the vehicle register.
+   *
+   * Nothing here is surveillance: it reads records PSIRS already holds and
+   * says which of them belong to the same person, so a lead is a fact about
+   * the register rather than a fact about somebody's life.
+   */
+  const rebuilt = await post('/government/intelligence/rebuild', {}, { token: admin, allow: [403] });
+  if (rebuilt.status === 200 || rebuilt.status === 201) {
+    log('rebuilt the connection graph from the vehicle register');
   }
 
   /*

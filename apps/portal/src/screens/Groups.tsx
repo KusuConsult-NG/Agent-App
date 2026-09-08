@@ -38,6 +38,22 @@ interface GroupRow {
   leader_name: string;
   leader_phone: string;
   attested_members: string;
+  tax_role: string;
+}
+
+/**
+ * The one place a value needs different words from the enum dictionary.
+ *
+ * That dictionary is keyed by value, not by column, on the reasoning that the
+ * same word means the same thing wherever it appears — and it says that where
+ * a value ever needs two readings, the exception should be written down where
+ * it is visible. This is that exception. NONE is a premises on an enumeration
+ * observation ("No fixed premises") and a part in enumeration on a group, and
+ * a group with no part in enumeration has no premises to speak of.
+ */
+function taxRoleLabel(taxRole: string, t: ReturnType<typeof usePortalI18n>['t']): string {
+  if (taxRole === 'NONE') return t.ofcGpTaxRoleNone;
+  return enumLabel(taxRole, t);
 }
 
 interface MemberRow {
@@ -354,6 +370,48 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                     }
                   >{t.ofcGpMembers}</button>
                 ) : null,
+            },
+            {
+              /*
+               * What part this group plays in enumeration, and the control to
+               * change it.
+               *
+               * Shown as a column rather than buried in a detail screen
+               * because it is the answer to a question an officer asks about
+               * the list — which of these associations can contradict an
+               * agent's count — and a list that shows every group identically
+               * cannot answer it.
+               */
+              key: 'tax_role',
+              label: 'ofcGpTaxRole',
+              render: (row) =>
+                row.status === 'ACTIVE' && can('group:manage') ? (
+                  <select
+                    aria-label={`${t.ofcGpTaxRole} — ${row.name}`}
+                    value={row.tax_role}
+                    disabled={busy || reason.trim().length < 10}
+                    title={reason.trim().length < 10 ? t.ofcGpTaxRoleNeedsReason : undefined}
+                    onChange={(event) => {
+                      const taxRole = event.target.value;
+                      void act(async () => {
+                        await api.post(`/groups/${row.id}/tax-role`, { taxRole, reason });
+                        setGroups(
+                          (current) =>
+                            current?.map((g) =>
+                              g.id === row.id ? { ...g, tax_role: taxRole } : g,
+                            ) ?? current,
+                        );
+                        return `${row.name}: ${taxRoleLabel(taxRole, t)}`;
+                      });
+                    }}
+                  >
+                    <option value="NONE">{t.ofcGpTaxRoleNone}</option>
+                    <option value="ATTESTATION">{t.enumAttestation}</option>
+                    <option value="ENUMERATION">{t.enumEnumeration}</option>
+                  </select>
+                ) : (
+                  <span>{taxRoleLabel(row.tax_role, t)}</span>
+                ),
             },
             {
               key: 'attest',

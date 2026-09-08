@@ -217,6 +217,36 @@ groupRouter.post(
   ),
 );
 
+/*
+ * `group:manage`, the same permission as approving the group.
+ *
+ * Conferring standing is the same size of act as admitting the association in
+ * the first place, and a reason is required for the same reason it is there:
+ * an officer reading the audit log two years later needs to know why this
+ * union was allowed to contradict an agent's count of somebody's stall.
+ */
+groupRouter.post(
+  '/:id/tax-role',
+  requirePermission('group:manage'),
+  validateBody(
+    z.object({
+      taxRole: z.enum(['ENUMERATION', 'ATTESTATION', 'NONE']),
+      reason: z.string().min(10, 'Record why this group is being given this part'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await groups.setGroupTaxRole({
+          groupId: req.params.id,
+          taxRole: data.taxRole,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
 groupRouter.get(
   '/:id/members',
   requirePermission('group:read:own', 'group:read:all'),

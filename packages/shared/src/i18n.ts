@@ -985,6 +985,9 @@ export interface TranslationDictionary {
   ofcGpDistributions: string;
   ofcGpDistributionsIntro: string;
   ofcGpRegisteredGroups: string;
+  ofcGpTaxRole: string;
+  ofcGpTaxRoleNone: string;
+  ofcGpTaxRoleNeedsReason: string;
   ofcGpGroupsIntro: string;
   ofcGpMembersIntro: string;
   ofcGpMembershipEnded: string;
@@ -3369,6 +3372,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Distributions",
     ofcGpDistributionsIntro: "Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to see who has been awarded and who has actually collected.",
     ofcGpRegisteredGroups: "Registered groups",
+    ofcGpTaxRole: "Part in enumeration",
+    ofcGpTaxRoleNone: "No part",
+    ofcGpTaxRoleNeedsReason: "Write down the reason first. Giving a leader standing over what a member is assessed on is recorded.",
     ofcGpGroupsIntro: "Cooperatives, market associations and unions. The member count is confirmed membership only — what an agent recorded but the leader has not yet confirmed does not count towards anything.",
     ofcGpMembersIntro: "Only confirmed members count towards allocations and group-based programmes. Somebody who has left stays on this list: they were a member when whatever they already collected was awarded.",
     ofcGpMembershipEnded: "Reason a membership ended",
@@ -5605,6 +5611,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Rabo",
     ofcGpDistributionsIntro: "Taki, iri da sauran rabon da ke da adadi tsayayye a bayansu. Ka bude daya don ganin wanda aka ba da wanda ya karba a hakika.",
     ofcGpRegisteredGroups: "Kungiyoyin da aka yi wa rajista",
+    ofcGpTaxRole: "Rawar da take takawa a kidaya",
+    ofcGpTaxRoleNone: "Babu rawar da take takawa",
+    ofcGpTaxRoleNeedsReason: "Ka rubuta dalili tukuna. Ba shugaba iko a kan abin da za a kimanta wa dan kungiya ana ajiye shi a rubuce.",
     ofcGpGroupsIntro: "Kungiyoyin hadin kai, kungiyoyin kasuwa da kungiyoyin sana’a. Adadin mambobi shi ne wanda aka tabbatar kawai — abin da wakili ya rubuta amma shugaba bai tabbatar ba tukuna ba ya kirguwa a komai.",
     ofcGpMembersIntro: "Mambobin da aka tabbatar kawai ne ke kirguwa ga rabo da shirye-shiryen kungiya. Wanda ya fita yana nan a jerin: mamba ne a lokacin da aka ba shi abin da ya riga ya karba.",
     ofcGpMembershipEnded: "Dalilin da ya sa mamba ta kare",

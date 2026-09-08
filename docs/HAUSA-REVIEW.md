@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2133 strings, grouped by where an agent meets them. Lower stakes
+2136 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1103,6 +1103,9 @@ instructions — but they are what an agent reads all day.
 | `ofcGpDistributions` | Distributions | Rabo | ☐ | |
 | `ofcGpDistributionsIntro` | Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to see who has been awarded and who has actually collected. | Taki, iri da sauran rabon da ke da adadi tsayayye a bayansu. Ka bude daya don ganin wanda aka ba da wanda ya karba a hakika. | ☐ | |
 | `ofcGpRegisteredGroups` | Registered groups | Kungiyoyin da aka yi wa rajista | ☐ | |
+| `ofcGpTaxRole` | Part in enumeration | Rawar da take takawa a kidaya | ☐ | |
+| `ofcGpTaxRoleNone` | No part | Babu rawar da take takawa | ☐ | |
+| `ofcGpTaxRoleNeedsReason` | Write down the reason first. Giving a leader standing over what a member is assessed on is recorded. | Ka rubuta dalili tukuna. Ba shugaba iko a kan abin da za a kimanta wa dan kungiya ana ajiye shi a rubuce. | ☐ | |
 | `ofcGpGroupsIntro` | Cooperatives, market associations and unions. The member count is confirmed membership only — what an agent recorded but the leader has not yet confirmed does not count towards anything. | Kungiyoyin hadin kai, kungiyoyin kasuwa da kungiyoyin sana’a. Adadin mambobi shi ne wanda aka tabbatar kawai — abin da wakili ya rubuta amma shugaba bai tabbatar ba tukuna ba ya kirguwa a komai. | ☐ | |
 | `ofcGpMembersIntro` | Only confirmed members count towards allocations and group-based programmes. Somebody who has left stays on this list: they were a member when whatever they already collected was awarded. | Mambobin da aka tabbatar kawai ne ke kirguwa ga rabo da shirye-shiryen kungiya. Wanda ya fita yana nan a jerin: mamba ne a lokacin da aka ba shi abin da ya riga ya karba. | ☐ | |
 | `ofcGpMembershipEnded` | Reason a membership ended | Dalilin da ya sa mamba ta kare | ☐ | |

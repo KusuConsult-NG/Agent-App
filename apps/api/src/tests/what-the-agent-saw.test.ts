@@ -1391,6 +1391,76 @@ describe('the other cells of the schedule', () => {
     }
   });
 
+  it('gives a group its part in enumeration, and takes it back', async () => {
+    /*
+     * The control that makes attestation reachable at all.
+     *
+     * Phase 5 gave groups a tax role and nothing could set it: every group
+     * registered through the platform sat at NONE, so no association could
+     * ever attest and the disagreement queue could never fill. A column only
+     * a migration can write is a column the platform does not have.
+     *
+     * Both directions, because withdrawing matters as much as conferring: a
+     * union found to be inflating its members' figures has to stop being
+     * consulted the same day.
+     */
+    const association = await guild('NONE');
+    // Approved, because standing is only conferred on a group PSIRS admitted;
+    // the test below covers what happens when it has not been.
+    await pool.query(`UPDATE taxpayer_groups SET status = 'ACTIVE' WHERE id = $1`, [association]);
+    const officer = await loginAs('+2348000000001');
+
+    const conferred = await post(
+      `/groups/${association}/tax-role`,
+      { taxRole: 'ATTESTATION', reason: 'Recognised under the market bye-law of 2026.' },
+      { token: officer.accessToken },
+    );
+    assert.equal(conferred.status, 200, JSON.stringify(conferred.body));
+
+    const taxpayer = await trader('Now Attestable');
+    const observation = await observe(taxpayer, { groupId: association });
+    await attestObservation(pool, {
+      observationId: observation.id,
+      agrees: true,
+      attestedByName: 'Guild Leader',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const withdrawn = await post(
+      `/groups/${association}/tax-role`,
+      { taxRole: 'NONE', reason: 'Leader suspended pending an inflation complaint.' },
+      { token: officer.accessToken },
+    );
+    assert.equal(withdrawn.status, 200);
+
+    await assert.rejects(
+      observe(await trader('After Withdrawal'), { groupId: association }),
+      /has not been given a part/i,
+      'a group stripped of its role stops being able to stand over anybody',
+    );
+  });
+
+  it('refuses standing to a group nobody has approved', async () => {
+    // A pending registration is a claim that an association exists. Standing
+    // conferred before anybody checked would let a group vouch for itself.
+    const association = await guild('NONE');
+    const registered = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM taxpayer_groups WHERE id = $1',
+      [association],
+    );
+    assert.equal(registered!.status, 'PENDING', 'a newly registered group is not yet approved');
+
+    const officer = await loginAs('+2348000000001');
+    const response = await post(
+      `/groups/${association}/tax-role`,
+      { taxRole: 'ATTESTATION', reason: 'Recognised under the market bye-law of 2026.' },
+      { token: officer.accessToken },
+    );
+    assert.equal(response.status, 409, JSON.stringify(response.body));
+  });
+
   it('lets an association that enumerates its own members do so', async () => {
     /*
      * Two different parts a group can play. An attesting body confirms what an
