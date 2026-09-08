@@ -265,18 +265,40 @@ The status sentence, the paragraph about what is not shown, and the levy names
 were all in this state an hour ago and are fixed — the levy names because the
 catalogue already had `name_ha` and only the screen was ignoring it.
 
-### `enumAssigned` may be doing double duty
+### `enumAssigned` was doing double duty, and a TIN now has its own word
 
-The citizen page shows the state of somebody's TIN, and `ASSIGNED` renders
+The citizen page shows the state of somebody's TIN, and `ASSIGNED` rendered
 through the shared enum table as **`An ba wa wani`**. Read plainly that is
-*given to someone* — which is right for a case assigned to an officer, and
-reads oddly for a TIN, where the meaning is that a number has been issued to
-the person reading the screen.
+*given to someone* — right for a case handed to an officer, and on the citizen
+page it told a person their own Tax Identification Number belonged to somebody
+else. That is the `sanarwa` problem in Group 1 again: one Hausa word standing
+for two unrelated things.
 
-This is the `sanarwa` problem in Group 1 again: one Hausa word standing for
-two unrelated things. It is listed here rather than changed, because which
-word is right is yours to say. If TIN status wants its own words, the other
-four values are `An nema`, `Ba a nema ba`, `Ya gaza` and `Ana da shi`.
+`ENUM_LABELS` is keyed by value on the stated principle that a word means the
+same thing wherever it appears, and the module says an exception belongs
+written down beside it. So there is now one, scoped to the column:
+
+| Where | English | Hausa |
+|---|---|---|
+| `ASSIGNED` anywhere else | Assigned | An ba wa wani |
+| `taxpayers.tin_status` = `ASSIGNED` | Assigned | **An bayar** |
+
+**`An bayar` — *issued* — is the choice that needs your eye.** It follows
+`An nema` (requested) the way the English does, and it says nothing about who
+holds the number, which matters because the same label appears on an officer's
+screen about somebody else. If you would rather it named the holder, say so;
+the other four values in that column are `An nema`, `Ba a nema ba`, `Ya gaza`
+and `Ana da shi`, and they are unchanged.
+
+The English is deliberately identical in both rows. "Assigned" is right for a
+TIN, and an exception that quietly rewrote the English too would hide what this
+is: a Hausa fix, not a copy change.
+
+Two tests hold it. One checks every exception names a real column, a value that
+column can actually hold, and a key the dictionary has in both languages — a
+stale entry there is worse than none, because it looks like a decision. The
+other names the two Hausa strings, so a later tidy-up cannot collapse them back
+into one.
 
 ---
 
@@ -383,7 +405,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2400 strings, grouped by where an agent meets them. Lower stakes
+2401 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2661,6 +2683,7 @@ instructions — but they are what an agent reads all day.
 | `enumAssessment` | Assessment | Kimantawa | ☐ | |
 | `enumAssessmentCreated` | Assessment made | An yi kimantawa | ☐ | |
 | `enumAssigned` | Assigned | An ba wa wani | ☐ | |
+| `enumTinAssigned` | Assigned | An bayar | ☐ | |
 | `enumAttested` | Attested | An shaida | ☐ | |
 | `enumAuditor` | Auditor | Mai binciken lissafi | ☐ | |
 | `enumAuthorityLookup` | Authority lookup | Binciken hukuma | ☐ | |

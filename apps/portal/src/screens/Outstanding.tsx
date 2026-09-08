@@ -289,7 +289,11 @@ export function OutstandingScreen() {
                 columns={[
                   { key: 'display_name', label: 'colTaxpayerLabel' },
                   { key: 'phone', label: 'tpPhone' },
-                  { key: 'tin_status', label: 'appStatus', render: (row) => <Badge status={row.tin_status} /> },
+                  {
+                    key: 'tin_status',
+                    label: 'appStatus',
+                    render: (row) => <Badge status={row.tin_status} column="taxpayers.tin_status" />,
+                  },
                   { key: 'tin_attempts', label: 'ofcOsAttempts', numeric: true },
                   { key: 'tin_reason', label: 'ofcOsWhyNotYet', render: (row) => row.tin_reason ?? '—' },
                   { key: 'created_at', label: 'ofcRhRegistered', render: (row) => formatDate(row.created_at) },

@@ -57,7 +57,21 @@ export function Stat({
   );
 }
 
-export function Badge({ status }: { status: string | null | undefined }) {
+export function Badge({
+  status,
+  column,
+}: {
+  status: string | null | undefined;
+  /**
+   * Where the value came from, as `table.column`.
+   *
+   * Only for the handful of values that mean different things in different
+   * places — `ENUM_LABEL_EXCEPTIONS` in @psirs/shared is the list, and it is
+   * short on purpose. Everywhere else the shared word is the right word and
+   * this stays off.
+   */
+  column?: string;
+}) {
   const { t } = usePortalI18n();
   if (!status) return <>—</>;
   // `statusSeverity` lives in @psirs/shared because both front ends had their
@@ -66,7 +80,7 @@ export function Badge({ status }: { status: string | null | undefined }) {
   // The word inside the badge comes from the same package for the same
   // reason: it was the status as the database spells it, underscores taken
   // out, which is English on a screen an officer set to Hausa.
-  return <span className={`badge badge--${statusSeverity(status)}`}>{enumLabel(status, t)}</span>;
+  return <span className={`badge badge--${statusSeverity(status)}`}>{enumLabel(status, t, column)}</span>;
 }
 
 export function Alert({

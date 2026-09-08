@@ -261,6 +261,7 @@ export interface TranslationDictionary {
   enumAssessment: string;
   enumAssessmentCreated: string;
   enumAssigned: string;
+  enumTinAssigned: string;
   enumAttested: string;
   enumAuditor: string;
   enumAuthorityLookup: string;
@@ -2976,6 +2977,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumAssessment: "Assessment",
     enumAssessmentCreated: "Assessment made",
     enumAssigned: "Assigned",
+    enumTinAssigned: "Assigned",
     enumAttested: "Attested",
     enumAuditor: "Auditor",
     enumAuthorityLookup: "Authority lookup",
@@ -5479,6 +5481,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumAssessment: "Kimantawa",
     enumAssessmentCreated: "An yi kimantawa",
     enumAssigned: "An ba wa wani",
+    enumTinAssigned: "An bayar",
     enumAttested: "An shaida",
     enumAuditor: "Mai binciken lissafi",
     enumAuthorityLookup: "Binciken hukuma",

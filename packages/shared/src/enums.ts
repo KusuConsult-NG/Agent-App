@@ -394,6 +394,32 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
 };
 
 /**
+ * The exceptions the note above promised would be written down here.
+ *
+ * Keyed by the column the value came from, and holding only values that
+ * genuinely mean different things in different places. Every entry costs a
+ * second word in the dictionary and a call site that has to remember to say
+ * where it is, so the bar is that the shared word is *wrong*, not merely that
+ * a different one might read better.
+ *
+ * `taxpayers.tin_status` is the first. `ASSIGNED` is `An ba wa wani` — *given
+ * to someone* — which is right for a case handed to an officer and wrong for
+ * a Tax Identification Number, where the whole point is that the number has
+ * been issued to the person reading the screen. On the citizen page it told
+ * somebody their own TIN belonged to somebody else. `An bayar` — *issued* —
+ * follows `An nema` (requested) the way the English does.
+ *
+ * The English is deliberately unchanged: "Assigned" is right for a TIN, and
+ * an exception that quietly rewrote the English too would hide what this is.
+ */
+export const ENUM_LABEL_EXCEPTIONS: Record<
+  string,
+  Record<string, keyof TranslationDictionary>
+> = {
+  'taxpayers.tin_status': { ASSIGNED: 'enumTinAssigned' },
+};
+
+/**
  * The name a person reads for a database value.
  *
  * A value the map does not know still has to read as something — a screen
@@ -402,12 +428,19 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
  * underscores taken out, which is what every call site used to do. It is the
  * old behaviour kept for exactly the case the check above is designed to stop
  * reaching production.
+ *
+ * `column` names where the value came from, as `table.column`. Pass it only
+ * where the answer differs from the shared one; leaving it off is right
+ * everywhere else and is what nearly every call site does.
  */
 export function enumLabel(
   value: string | null | undefined,
   t: TranslationDictionary,
+  column?: string,
 ): string {
   if (!value) return '';
+  const exception = column ? ENUM_LABEL_EXCEPTIONS[column]?.[value] : undefined;
+  if (exception) return t[exception];
   const key = ENUM_LABELS[value];
   if (key) return t[key];
   return value.replace(/_/g, ' ').toLowerCase();

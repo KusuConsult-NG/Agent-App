@@ -1280,7 +1280,10 @@ export function CitizenPortalScreen() {
 
             <KeyValue
               items={[
-                [t.pubCitizenTinStatus, enumLabel(result.tinStatus, t) || '—'],
+                [
+                  t.pubCitizenTinStatus,
+                  enumLabel(result.tinStatus, t, 'taxpayers.tin_status') || '—',
+                ],
                 [
                 t.pubCitizenOutstanding,
                 result.hasOutstanding ? t.pubCitizenOutstandingYes : t.pubCitizenNone,
