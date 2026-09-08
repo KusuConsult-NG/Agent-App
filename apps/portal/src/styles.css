@@ -24,6 +24,24 @@
   --warning-bg: #fdf3e0;
   --info: #1c4f9c;
   --info-bg: #e8f0fb;
+  /*
+   * The type scale, named.
+   *
+   * These five sizes were already in the stylesheet — a card title is 0.95, a
+   * hint 0.8, an eyebrow 0.72 — and the screens then hand-wrote twelve more
+   * around them: 0.74, 0.75, 0.78, 0.82, 0.85, 0.87, 0.9, 1, 1.05. Nothing was
+   * wrong with any one of them and the set had no rhythm, which is most of why
+   * a portal built on a decent system still read as unfinished.
+   *
+   * Naming them does not change the design. It gives the screens something to
+   * reach for other than a number, and it makes the next size somebody invents
+   * visible in review.
+   */
+  --text-xs: 0.72rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.88rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.1rem;
   --radius: 10px;
   --shadow: 0 1px 2px rgba(6, 51, 28, 0.05), 0 6px 20px rgba(6, 51, 28, 0.05);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -270,6 +288,21 @@ input, select, textarea {
   background: var(--surface);
   border: 1px solid var(--line-strong);
   border-radius: 8px;
+}
+
+/*
+ * A tick box is not a text field.
+ *
+ * `input { width: 100% }` above is right for the fields it was written for and
+ * catastrophic for a checkbox: it stretches the box across the card and pushes
+ * its own label onto three lines. `.checkbox` sets a size and every screen that
+ * remembers to use it is fine; this is for the ones that do not, which is how
+ * the levy screen's "only those with something unpaid" ended up looking broken.
+ */
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  accent-color: var(--green-700);
 }
 
 input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
@@ -670,8 +703,23 @@ button.link:hover { background: none; color: var(--green-500); }
 .card__hint,
 .field__hint,
 .stat__hint,
-.alert__body {
+.alert__body,
+.card p,
+.card li {
   max-width: 74ch;
+}
+
+/*
+ * Except where the paragraph is a cell in a row of them.
+ *
+ * A `<p>` inside a table cell, a definition list or a flex row is a value, not
+ * prose, and a measure on it would leave a column half empty.
+ */
+td p,
+.kv p,
+.stat p,
+.signal-detail p {
+  max-width: none;
 }
 
 /*
@@ -789,3 +837,116 @@ td.meta {
 
 .form-grid .field { margin-bottom: 0; }
 .form-grid .field--wide { grid-column: span 2; }
+
+/* --------------------------------------------------------------- typography
+ *
+ * For the places a screen genuinely needs to set a size — a heading inside a
+ * card, a footnote under a figure — so it reaches for a step rather than a
+ * number.
+ */
+.t-xs { font-size: var(--text-xs); }
+.t-sm { font-size: var(--text-sm); }
+.t-base { font-size: var(--text-base); }
+.t-md { font-size: var(--text-md); }
+.t-lg { font-size: var(--text-lg); }
+.t-muted { color: var(--muted); }
+.t-flush { margin: 0; }
+
+/*
+ * The padding a flush card's own content needs.
+ *
+ * `.card--flush` drops the padding so a table can meet the card's edge, and
+ * every header above such a table then wrote `padding: '18px 18px 0'` inline —
+ * forty-six times, and it only takes one of them to be typed 16 for the column
+ * to stop lining up.
+ */
+.card__pad { padding: 18px 18px 0; }
+
+/* The same idea for a header above a table, and for a footer below one. */
+.card__pad--tight { padding: 14px 18px 0; }
+.card__pad--sides { padding: 0 18px; }
+.card__pad--foot { padding: 0 18px 16px; }
+
+/* --------------------------------------------------------------------- lists
+ *
+ * Ten class names were in use across seven officer screens and defined
+ * nowhere: `list`, `list__item`, `list__body`, `list__title`, `list__meta`,
+ * `field-row`, `field__label`, `stat-row`, `table__sub` and `public__lang`.
+ * The markup was borrowed from the agent app, which does define most of them,
+ * and the stylesheet was not — so a record's list of correction history, an
+ * officer's territories and an audit row's sub-line have all been rendering as
+ * unstyled default HTML on a screen where everything around them is designed.
+ *
+ * Sized for a desk rather than a handset: the agent's versions carry a tap
+ * target, which is right on a phone and too loose in a dense table view.
+ */
+.list { list-style: none; margin: 0; padding: 0; }
+
+.list__item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+  width: 100%;
+  text-align: left;
+}
+
+.list__item:last-child { border-bottom: none; }
+
+.list__body { flex: 1; min-width: 0; }
+
+.list__title {
+  font-weight: 650;
+  font-size: var(--text-base);
+  margin: 0;
+}
+
+.list__meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+/* A row of fields that share a baseline, without the filter bar's wrapping. */
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 14px;
+}
+
+.field-row .field { margin-bottom: 0; flex: 1; min-width: 170px; }
+
+/*
+ * The name of a value shown outside a form.
+ *
+ * `label` is styled as a form label and these are not in forms — an officer's
+ * territories are a fact about the account, not a field they are filling in.
+ */
+.field__label {
+  display: block;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+/* Figures on one line where a grid of tiles would overstate them. */
+.stat-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  margin-bottom: 14px;
+}
+
+/* The quiet second line inside a table cell. */
+.table__sub {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 2px;
+}

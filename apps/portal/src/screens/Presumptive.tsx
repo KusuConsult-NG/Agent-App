@@ -385,7 +385,7 @@ export function PresumptiveScreen() {
                   * can only show a figure is asking to be believed, and an
                   * estimate nobody can follow is one nobody can contest.
                   */}
-                <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcPsHowWeGotThere}</h3>
+                <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcPsHowWeGotThere}</h3>
                 <Table
                   columns={[
                     { key: 'step', label: 'ofcPsStep' },

@@ -529,7 +529,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 
   return (
     <div className="card card--flush">
-      <div style={{ padding: '18px 18px 0' }}>
+      <div className="card__pad">
         <h2 className="card__title">{t.ofcTrLiableFor}</h2>
         <p className="card__hint">{t.ofcTrWaiveBody}</p>
       </div>
@@ -633,7 +633,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
 
   return (
     <div className="card card--flush">
-      <div style={{ padding: '18px 18px 0' }}>
+      <div className="card__pad">
         <h2 className="card__title">{t.ofcTrVehiclesOnRecord}</h2>
         <p className="card__hint">{t.ofcTrVehiclesBody}</p>
 

@@ -177,9 +177,18 @@ export function RevenueScreen() {
         </Alert>
       )}
 
+      {/*
+        * Left full width, and it was worth trying the other way to find out.
+        *
+        * Paired two-up these four read as a comparison and the page halved,
+        * but every one of them carries five or six columns and `th` is
+        * nowrap: at 660 pixels the money column went off the edge of its own
+        * card. A summary whose figures need a sideways scroll is not a
+        * summary. Length is the cheaper cost.
+        */}
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhoseRevenue}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvWhoseRevenue}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
         <Table
           columns={[
             { key: 'mda', label: 'ofcRvMinistryDepartment', render: (row: MdaRow) => localName(lang, row.mda, row.mda_ha) },
@@ -202,8 +211,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvOwedToCouncils}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvCouncilsBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvOwedToCouncils}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvCouncilsBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'ofcRvCouncil' },
@@ -229,8 +238,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhereGenerated}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhereGeneratedBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvWhereGenerated}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvWhereGeneratedBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
@@ -256,8 +265,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvEachAgentGround}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvGroundBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvEachAgentGround}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvGroundBody}</p>
         <Table
           columns={[
             { key: 'agent_code', label: 'ofcRhAgent' },

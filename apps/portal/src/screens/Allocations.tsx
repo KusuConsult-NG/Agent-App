@@ -333,10 +333,10 @@ export function AllocationsScreen() {
 
       {awardsFor && (
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
+          <h2 className="card__title card__pad--tight">
             {t.ofcAlAwardsFor.replace('{{name}}', awardsFor.name)}
           </h2>
-          <p className="card__hint" style={{ padding: '0 18px' }}>
+          <p className="card__hint card__pad--sides">
             {t.ofcAlAwardsIntro}{' '}
             <button type="button" className="link" onClick={() => setAwardsFor(null)}>{t.ofcKycClose}</button>
           </p>

@@ -365,7 +365,7 @@ export function ReconciliationScreen() {
         * over. Those have moved to the queue below.
         */}
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcFnAwaitingSettlement}</h2>
           <p className="card__hint">{t.ofcFnAwaitingSettlementBody}</p>
         </div>
@@ -407,7 +407,7 @@ export function ReconciliationScreen() {
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcFnExceptionQueue}</h2>
           <p className="card__hint">{t.ofcFnExceptionQueueBody}</p>
         </div>
@@ -485,7 +485,7 @@ export function ReconciliationScreen() {
 
       {settlements && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcFnSettlements}</h2>
           </div>
           <Table
@@ -838,7 +838,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
                    */
                   const isRequester = row.requested_by_user_id === user.id;
                   if (isRequester) {
-                    return <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{t.ofcFnYourRequest}</span>;
+                    return <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>{t.ofcFnYourRequest}</span>;
                   }
                   return (
                     <div className="button-row">

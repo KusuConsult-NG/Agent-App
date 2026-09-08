@@ -95,7 +95,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
       <BankChangesCard />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgAwaitingGovernmentReview}</h2>
           <p className="card__hint">{t.ofcAgApplicantsCompleted}</p>
         </div>
@@ -124,7 +124,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <div>
               <h2 className="card__title">{t.ofcAgAllAgents}</h2>
@@ -339,7 +339,7 @@ export function AgentDetailScreen({
       <KycDocumentsCard agentId={agentId} onReviewed={load} />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcNavReferees}</h2>
           <p className="card__hint">{t.ofcAgRefereeHistoryKept}</p>
         </div>
@@ -396,7 +396,7 @@ export function AgentDetailScreen({
 
       <div className="grid-2">
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.appTraining}</h2>
           </div>
           <Table
@@ -412,7 +412,7 @@ export function AgentDetailScreen({
         </div>
 
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcAgDevices}</h2>
             <p className="card__hint">{t.ofcAgDevicesBody}</p>
           </div>
@@ -650,7 +650,7 @@ export function AgentDetailScreen({
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgClearanceHistory}</h2>
         </div>
         <Table
@@ -748,7 +748,7 @@ export function RefereesScreen() {
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgRefereeRiskFlags}</h2>
           <p className="card__hint">{t.ofcAgRefereeRiskBody}</p>
         </div>
@@ -838,7 +838,7 @@ export function RefereesScreen() {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgRefereesMultiple}</h2>
         </div>
         <Table

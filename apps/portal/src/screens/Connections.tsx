@@ -379,7 +379,7 @@ export function ConnectionsScreen() {
                 <Stat label="ofcAgOutstanding" value={<Money kobo={record.totalOwedKobo} />} />
               </div>
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcIgWhatWeClaim}</h3>
+              <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcIgWhatWeClaim}</h3>
 
               {canDecide ? (
                 <div className="field" style={{ maxWidth: 560 }}>
@@ -426,7 +426,7 @@ export function ConnectionsScreen() {
                     key: 'lawfulBasis',
                     label: 'ofcIgLawfulBasis',
                     render: (row: Connection) => (
-                      <span style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>
+                      <span style={{ fontSize: 'var(--text-sm)', color: 'var(--muted)' }}>
                         {row.lawfulBasis}
                       </span>
                     ),
@@ -469,7 +469,7 @@ export function ConnectionsScreen() {
                 empty="ofcIgNothingClaimed"
               />
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcIgWhatTheyOwe}</h3>
+              <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcIgWhatTheyOwe}</h3>
               <Table
                 columns={[
                   { key: 'reference', label: 'ofcIgReference' },

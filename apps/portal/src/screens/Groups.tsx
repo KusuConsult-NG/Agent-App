@@ -136,7 +136,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             style={{
               display: 'block',
               wordBreak: 'break-all',
-              fontSize: '0.78rem',
+              fontSize: 'var(--text-sm)',
               background: 'var(--surface-2, #f3f4f6)',
               padding: '8px 10px',
               borderRadius: 8,
@@ -215,7 +215,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {can('allocation:read:all') && rounds !== null && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcGpDistributions}</h2>
             <p className="card__hint">{t.ofcGpDistributionsIntro}</p>
           </div>
@@ -254,7 +254,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcGpRegisteredGroups}</h2>
           <p className="card__hint">{t.ofcGpGroupsIntro}</p>
           <div className="field" style={{ maxWidth: 260 }}>
@@ -274,7 +274,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {members && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <div>
                 <h2 className="card__title">
@@ -559,7 +559,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
             {round.quantity_per_beneficiary} {enumLabel(round.unit, t)} each

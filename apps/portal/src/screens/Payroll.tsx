@@ -301,7 +301,7 @@ export function PayrollScreen() {
             <Loading rows={2} />
           ) : (
             <>
-              <h3 style={{ marginTop: 0, fontSize: '0.95rem' }}>{t.ofcPrFiledBefore}</h3>
+              <h3 style={{ marginTop: 0, fontSize: 'var(--text-md)' }}>{t.ofcPrFiledBefore}</h3>
               <Table
                 columns={[
                   {
@@ -370,7 +370,7 @@ export function PayrollScreen() {
 
           {canFile ? (
             <>
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcPrFileAReturn}</h3>
+              <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcPrFileAReturn}</h3>
 
               {/*
                 * Said plainly, because the officer is about to be asked for it

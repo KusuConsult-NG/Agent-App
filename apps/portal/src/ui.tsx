@@ -177,9 +177,11 @@ export function Table({
   /**
    * Scroll the rows rather than the page, and keep the headings in view.
    *
-   * For a table long enough that a reader loses which column is which — the
-   * published presumptive figures run to 36 rows. Left off elsewhere, where a
-   * scroll container inside a page that already scrolls is just in the way.
+   * Decided by the table's own length rather than by each screen remembering
+   * to ask for it, because the screens did not: the audit log rendered 163
+   * rows into a page 21,593 pixels tall — twenty-four screenfuls, with the
+   * column headings off the top for twenty-three of them. Pass it explicitly
+   * to force it on or off.
    */
   tall?: boolean;
 }) {
@@ -187,8 +189,15 @@ export function Table({
   const { t } = usePortalI18n();
   if (rows.length === 0) return <Empty>{empty ? text(empty) : t.ofcNothingToShow}</Empty>;
 
+  /*
+   * Eighteen rows is about a screenful at this density. Below it a scroll
+   * container inside a page that already scrolls is just in the way; above it
+   * the headings are gone before the reader is halfway down.
+   */
+  const scrolls = tall ?? rows.length > 18;
+
   return (
-    <div className={tall ? 'table-wrap table-wrap--tall' : 'table-wrap'}>
+    <div className={scrolls ? 'table-wrap table-wrap--tall' : 'table-wrap'}>
       <table>
         <thead>
           <tr>

@@ -137,7 +137,7 @@ export function CatalogueScreen({ user }: { user: User }) {
 
       {history && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <div>
                 <h2 className="card__title">
@@ -428,7 +428,7 @@ function NewItemForm({
         </div>
 
         <fieldset style={{ border: 0, padding: 0, margin: '0 0 14px' }}>
-          <legend style={{ fontSize: '0.78rem', color: 'var(--muted)' }}>{t.ofcCfWhoItApplies}</legend>
+          <legend style={{ fontSize: 'var(--text-sm)', color: 'var(--muted)' }}>{t.ofcCfWhoItApplies}</legend>
           <div className="button-row">
             {['INDIVIDUAL', 'BUSINESS'].map((type) => (
               <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

@@ -140,7 +140,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
             value: Number(point.amount_kobo),
           }))}
         />
-        <p style={{ fontSize: '0.75rem', color: 'var(--muted)', margin: '8px 0 0' }}>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)', margin: '8px 0 0' }}>
           {data.dailyTrend[0]?.day} to {data.dailyTrend[data.dailyTrend.length - 1]?.day}
         </p>
       </div>
@@ -173,8 +173,16 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
         </div>
       </div>
 
+      {/*
+        * Who collected and which ministry it was collected for, side by side.
+        *
+        * Two answers to the same question — where did the month's money come
+        * from — and stacked full width they read as two unrelated screens, each
+        * a four-column table on a canvas wide enough for twelve.
+        */}
+      <div className="grid-2">
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcDbTopAgents}</h2>
           <p className="card__hint">{t.ofcDbTopAgentsBody}</p>
         </div>
@@ -196,7 +204,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcDbRevenueByMda}</h2>
         </div>
         <Table
@@ -212,6 +220,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           rows={data.revenueByMda}
           empty="ofcNoneMdaCollectionsRecorded"
         />
+      </div>
       </div>
 
       <PlatformKpis />
@@ -259,7 +268,7 @@ export function IntelligenceScreen() {
       <div className="card">
         <h2 className="card__title">{t.ofcDbIntelligenceTitle}</h2>
         <p className="card__hint">{t.ofcDbDrill}</p>
-        <p style={{ fontSize: '0.85rem', marginTop: 12 }}>
+        <p style={{ fontSize: 'var(--text-base)', marginTop: 12 }}>
           <button type="button" className="link" onClick={() => setDrill({})}>{t.ofcDbPlateauState}</button>
           {drill.lgaName && (
             <>

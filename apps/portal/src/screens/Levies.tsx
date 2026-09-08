@@ -397,7 +397,7 @@ export function LeviesScreen() {
                 empty="ofcNoneNothingCollectedFilter"
               />
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcLvByIndividualLevy}</h3>
+              <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcLvByIndividualLevy}</h3>
               <Table
                 columns={[
                   { key: 'code', label: 'ofcAgCode' },
@@ -425,6 +425,16 @@ export function LeviesScreen() {
         </div>
       )}
 
+      {/*
+        * Left full width, and it was worth trying the other way to find out.
+        *
+        * Side by side these two read as the comparison they are, and the page
+        * halved — but both carry five or six columns and `th` is nowrap, so at
+        * 660 pixels the settled figure and the levy's own name went off the
+        * edge of their cards. An officer chasing arrears needs to see which
+        * levy, and a column that has to be scrolled to is a column that is not
+        * there. Length is the cheaper cost.
+        */}
       {canReadDefaulters && (
         <div className="card">
           <h2 className="card__title">{t.ofcLvBehindOn.replace('{{levy}}', chosenLevy)}</h2>
@@ -475,7 +485,7 @@ export function LeviesScreen() {
             {t.ofcLvRegisteredUnder.replace('{{levy}}', chosenLevy)}
           </h2>
           <div className="filters">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
+            <label className="checkbox">
               <input
                 type="checkbox"
                 checked={filters.outstandingOnly}

@@ -99,7 +99,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <h2 className="card__title">{t.ofcNavPerformance}</h2>
             <p className="card__hint">{t.ofcPfIntro}</p>

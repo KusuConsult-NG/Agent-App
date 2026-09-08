@@ -225,7 +225,7 @@ export function FraudScreen() {
 
       {leakage && leakage.highRiskAgents.length > 0 && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcOvAgentsWithFlags}</h2>
           </div>
           <Table
@@ -245,7 +245,7 @@ export function FraudScreen() {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <div>
               <h2 className="card__title">{t.ofcOvFraudSignals}</h2>
@@ -600,7 +600,7 @@ export function AuditScreen() {
 
       {queryResult && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <h2 className="card__title">{queryResult.label}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
@@ -627,7 +627,7 @@ export function AuditScreen() {
       <ErrorAlert error={error} />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="filters">
             <div className="field">
               <label htmlFor="entity">{t.ofcOvEntityType}</label>

@@ -134,7 +134,7 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsEveryFlow}</h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsEveryFlow}</h2>
         <Table
           columns={[
             {
@@ -162,9 +162,15 @@ export function UsageScreen() {
         />
       </div>
 
+      {/*
+        * Where people stop, and where they are not starting at all. Two
+        * readings of the same reach question, and each is a short table — side
+        * by side they compare, stacked they read as separate reports.
+        */}
+      <div className="grid-2">
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsWhereGiveUp}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsWhereGiveUpBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsWhereGiveUp}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsWhereGiveUpBody}</p>
         <Table
           columns={[
             {
@@ -181,8 +187,8 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsReachBeyondJos}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsReachBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsReachBeyondJos}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsReachBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
@@ -200,10 +206,17 @@ export function UsageScreen() {
           empty="ofcNoneLgaEnoughActivityReport"
         />
       </div>
+      </div>
 
-      <div className="two-column">
+      {/*
+        * `two-column` was never a class. It is not in the stylesheet and never
+        * was, so these two cards have been stacking full width while reading
+        * as though somebody had put them side by side. `grid-2` is the one the
+        * portal actually has.
+        */}
+      <div className="grid-2">
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsOfflineQueue}</h2>
+          <h2 className="card__title card__pad--tight">{t.ofcUsOfflineQueue}</h2>
           <Table
             columns={[
               { key: 'event', label: 'ofcAgEvent' },
@@ -221,7 +234,7 @@ export function UsageScreen() {
         </div>
 
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.pubLanguage}</h2>
+          <h2 className="card__title card__pad--tight">{t.pubLanguage}</h2>
           <Table
             columns={[
               { key: 'language', label: 'pubLanguage' },
@@ -234,7 +247,7 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsScreensReached}</h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsScreensReached}</h2>
         <Table
           columns={[
             { key: 'surface', label: 'ofcAgApplication' },
