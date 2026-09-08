@@ -1048,6 +1048,7 @@ export interface TranslationDictionary {
   enumHasRecords: string;
   enumNotTrading: string;
   enumEnumeration: string;
+  enumBusinessObservation: string;
   enumAttestation: string;
   enumObjected: string;
   enumUpheld: string;
@@ -2041,6 +2042,8 @@ export interface TranslationDictionary {
   agEnNextWithLeader: string;
   agEnNextWithoutLeader: string;
   agEnBackToTaxpayer: string;
+  agEnQueuedTitle: string;
+  agEnQueuedNext: string;
   tpViewProfile: string;
   tpPossibleExisting: string;
   tpCheckSamePerson: string;
@@ -3457,6 +3460,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumHasRecords: "Has proper records",
     enumNotTrading: "No longer trading",
     enumEnumeration: "Enumeration only",
+    enumBusinessObservation: "Business written down",
     enumAttestation: "Enumeration and attestation",
     enumObjected: "Under objection",
     enumUpheld: "Upheld",
@@ -4391,6 +4395,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnNextWithLeader: "The association leader will be asked to confirm this. Nothing is charged until an officer looks at it.",
     agEnNextWithoutLeader: "An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice.",
     agEnBackToTaxpayer: "Back to the taxpayer",
+    agEnQueuedTitle: "Held on this phone",
+    agEnQueuedNext: "There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office works out the size then, not now.",
     tpViewProfile: "View profile",
     tpPossibleExisting: "Possible existing taxpayer",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
@@ -5723,6 +5729,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumHasRecords: "Yana da rikodi na gaskiya",
     enumNotTrading: "Ba ya kasuwanci kuma",
     enumEnumeration: "Kidaya kadai",
+    enumBusinessObservation: "An rubuta kasuwanci",
     enumAttestation: "Kidaya da tabbatarwa",
     enumObjected: "Ana kalubalanta",
     enumUpheld: "An amince",
@@ -6657,6 +6664,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnNextWithLeader: "Za a tambayi shugaban kungiya ya tabbatar da wannan. Ba a caji komai ba sai jami’i ya duba shi.",
     agEnNextWithoutLeader: "Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa.",
     agEnBackToTaxpayer: "Koma ga mai biyan haraji",
+    agEnQueuedTitle: "Yana kan wannan wayar",
+    agEnQueuedNext: "Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai fitar da girman a lokacin, ba yanzu ba.",
     tpViewProfile: "Duba bayanai",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",

@@ -171,7 +171,7 @@ export const CONNECTION_COPY: Record<ConnectionState, { label: string; detail: s
   OFFLINE: {
     label: 'Offline',
     detail:
-      'You can capture taxpayer details, which will be sent when you are back online. ' +
-      'Payments are not possible while offline.',
+      'You can register a taxpayer and write down a business, and both will be sent ' +
+      'when you are back online. Payments are not possible while offline.',
   },
 };

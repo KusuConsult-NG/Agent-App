@@ -15,11 +15,16 @@
  * What may be captured without a connection.
  *
  * Every type here is a *record of something observed* — who the taxpayer is,
- * what the vehicle is. None of them moves money, and that is the whole
- * selection rule. There is no payment draft type, and adding one would break
- * Addendum §23 no matter how carefully it were handled.
+ * what the vehicle is, what a stall looks like. None of them moves money, and
+ * that is the whole selection rule. There is no payment draft type, and adding
+ * one would break Addendum §23 no matter how carefully it were handled.
+ *
+ * BUSINESS_OBSERVATION is the closest any of them comes to the line, and stays
+ * the right side of it: it carries premises, equipment and people, and it
+ * carries no band and no amount. The band is worked out at sync, by the
+ * platform, from those facts. What is queued is what an agent saw.
  */
-export type DraftType = 'TAXPAYER_REGISTRATION' | 'VEHICLE_CAPTURE';
+export type DraftType = 'TAXPAYER_REGISTRATION' | 'VEHICLE_CAPTURE' | 'BUSINESS_OBSERVATION';
 
 /**
  * Fields that must never appear in a queued payload.

@@ -27,6 +27,8 @@ import { resolveTaxpayerReach } from '../services/report-scope';
 import * as vehicles from '../services/vehicles';
 import * as obligations from '../services/obligations';
 import { vehicleCaptureSchema } from './vehicles';
+import { observationCaptureSchema } from './government';
+import { recordObservation } from '../services/enumeration';
 import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 import { queueNotification } from '../services/notifications';
@@ -738,7 +740,7 @@ draftRouter.use(authenticate);
  * stored state gets its own reply, and the state that means "not finished" is
  * finished rather than reported as though it had been.
  */
-const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE'] as const;
+const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE', 'BUSINESS_OBSERVATION'] as const;
 
 draftRouter.post(
   '/sync',
@@ -967,6 +969,50 @@ draftRouter.post(
               actorRole: req.auth!.role,
             });
             await accept('vehicle', captured.vehicleId, captured.message);
+            continue;
+          }
+
+          if (draft.draftType === 'BUSINESS_OBSERVATION') {
+            const parsed = observationCaptureSchema.safeParse(draft.payload);
+            if (!parsed.success) {
+              await reject(
+                `Draft could not be accepted: ${parsed.error.issues
+                  .map((issue) => issue.message)
+                  .join('; ')}`,
+              );
+              continue;
+            }
+
+            /*
+             * The band is worked out here, now, from the facts the phone
+             * carried — not on the phone at capture time.
+             *
+             * The rule is simple enough to have run offline. Running it here
+             * is the point: the handset records what an agent saw and the
+             * platform concludes what size of business that is, and an agent
+             * paid commission is only safe to send out enumerating because
+             * those are two different jobs. A band computed on the handset is
+             * a band an altered handset computes differently.
+             *
+             * Which also means an observation queued last week is banded by
+             * today's rule rather than by whatever the phone was running when
+             * it was captured. That is the right way round: the rule is
+             * PSIRS's, and a capture is a record of a stall, not of a build.
+             */
+            const observation = await recordObservation(pool, {
+              ...parsed.data,
+              groupId: parsed.data.groupId ?? null,
+              latitude: parsed.data.latitude ?? null,
+              longitude: parsed.data.longitude ?? null,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              agentId,
+            });
+            await accept(
+              'presumptive_observation',
+              observation.id,
+              `Recorded. The office has this as a ${observation.sizeBand.toLowerCase()} business.`,
+            );
             continue;
           }
 

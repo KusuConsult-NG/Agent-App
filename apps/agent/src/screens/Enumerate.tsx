@@ -33,7 +33,8 @@
  */
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../lib/api';
+import { requestBackgroundSync, submitOrQueue } from '../lib/drafts';
 import { Alert, ErrorAlert, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -88,6 +89,16 @@ export function EnumerateScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [recorded, setRecorded] = useState<Recorded | null>(null);
+  /*
+   * Held on the phone rather than sent.
+   *
+   * A separate state from `recorded` because the two confirmations cannot say
+   * the same thing: a capture that reached the office comes back with a band,
+   * and one sitting in the queue has none — nothing has worked it out yet. A
+   * screen that showed a band here would be showing one the handset invented,
+   * which is the single thing this whole design refuses to do.
+   */
+  const [queued, setQueued] = useState(false);
 
   useEffect(() => {
     api
@@ -141,16 +152,41 @@ export function EnumerateScreen({
     if (!complete) return;
     setBusy(true);
     setError(null);
+    const payload = {
+      taxpayerId,
+      premises: form.premises,
+      equipmentCount: Number(form.equipmentCount),
+      peopleWorking: Number(form.peopleWorking),
+      economicSector: form.economicSector,
+      ...(form.groupId ? { groupId: form.groupId } : {}),
+    };
     try {
-      const result = await api.post<Recorded>('/government/enumeration/observations', {
-        taxpayerId,
-        premises: form.premises,
-        equipmentCount: Number(form.equipmentCount),
-        peopleWorking: Number(form.peopleWorking),
-        economicSector: form.economicSector,
-        ...(form.groupId ? { groupId: form.groupId } : {}),
-      });
-      setRecorded(result);
+      /*
+       * Sent if there is signal, queued if there is not, and the agent does
+       * not have to know which before they press it.
+       *
+       * The markets this programme exists to reach are the ones the network is
+       * worst in. An enumeration that required a connection would be collected
+       * where coverage already is, which is precisely where the missing
+       * taxpayers are not.
+       *
+       * A refusal is not a connectivity failure and is rethrown: a taxpayer
+       * that is not active, a group with no standing, a negative count. Those
+       * are the office answering, and queueing them would defer the same
+       * answer to a day when the trader is no longer standing there.
+       */
+      const outcome = await submitOrQueue<Recorded>(
+        'BUSINESS_OBSERVATION',
+        payload,
+        () => api.post<Recorded>('/government/enumeration/observations', payload),
+        isConnectivityFailure,
+      );
+      if (outcome.sent) {
+        setRecorded(outcome.result);
+      } else {
+        setQueued(true);
+        await requestBackgroundSync();
+      }
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -164,6 +200,33 @@ export function EnumerateScreen({
   const name =
     taxpayer.business_name ??
     [taxpayer.first_name, taxpayer.last_name].filter(Boolean).join(' ');
+
+  if (queued) {
+    return (
+      <>
+        <div className="card">
+          <h2 className="card__title">{t.agEnQueuedTitle}</h2>
+          <KeyValue
+            items={[
+              [t.agEnWho, name],
+              [t.agEnPremises, enumLabel(form.premises, t)],
+            ]}
+          />
+          {/*
+            * No band here, deliberately. Nothing has worked one out — the
+            * office does that when the capture arrives — and an agent shown a
+            * size on a phone with no signal would have been shown a guess.
+            */}
+          <Alert kind="warning" title={t.agEnWhatHappensNextTitle}>
+            {t.agEnQueuedNext}
+          </Alert>
+        </div>
+        <button type="button" onClick={() => navigate(`/taxpayers/${taxpayerId}`)}>
+          {t.agEnBackToTaxpayer}
+        </button>
+      </>
+    );
+  }
 
   if (recorded) {
     return (

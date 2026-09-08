@@ -23,7 +23,8 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { EnumerateScreen } from '../screens/Enumerate';
-import { api } from '../lib/api';
+import { ApiRequestError, api } from '../lib/api';
+import * as drafts from '../lib/drafts';
 
 const TAXPAYER = {
   taxpayer: {
@@ -65,8 +66,13 @@ function stub(recorded: Record<string, unknown> = {}) {
   });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.restoreAllMocks();
+  // The queue is a real IndexedDB store in these tests, and it outlives a
+  // render: a draft left by one case would be counted by the next.
+  for (const draft of await drafts.listDrafts()) {
+    await drafts.removeDraft(draft.clientReference);
+  }
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
@@ -192,6 +198,80 @@ describe('writing down a stall', () => {
     await waitFor(() => expect(screen.getByText(/Written down/i)).toBeTruthy());
     expect(screen.getByText(/Small/)).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/₦/);
+  });
+
+  it('keeps the count on the phone when there is no signal', async () => {
+    /*
+     * The markets worth enumerating are the ones the network is worst in. An
+     * enumeration that needed a connection would be collected where coverage
+     * already exists, which is exactly where the missing taxpayers are not.
+     *
+     * The agent does not have to know which happened before they press it:
+     * one button, sent if it can be and queued if it cannot.
+     */
+    vi.spyOn(api, 'post').mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
+    await fill({ premises: 'LOCK_UP_SHOP', equipment: '3', people: '2' });
+    fireEvent.click(screen.getByRole('button', { name: /Save what you saw/i }));
+
+    await waitFor(() => expect(screen.getByText(/Held on this phone/i)).toBeTruthy());
+
+    /*
+     * Read back out of the queue rather than watched going in. A spy on the
+     * module's own export never sees the call `submitOrQueue` makes to it, and
+     * would have passed on a screen that saved nothing at all.
+     */
+    const queue = await drafts.pendingDrafts();
+    expect(queue).toHaveLength(1);
+    expect(queue[0]!.draftType).toBe('BUSINESS_OBSERVATION');
+    expect(queue[0]!.payload).toEqual({
+      taxpayerId: 'tp-1',
+      premises: 'LOCK_UP_SHOP',
+      equipmentCount: 3,
+      peopleWorking: 2,
+      economicSector: 'ARTISAN_CRAFT',
+    });
+  });
+
+  it('shows no band on a count that has not reached the office', async () => {
+    /*
+     * Nothing has worked one out. The band is the platform's conclusion,
+     * reached when the capture arrives — a size shown on a phone with no
+     * signal would be one the handset invented, which is the single thing
+     * this whole design refuses to do.
+     */
+    vi.spyOn(api, 'post').mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
+    await fill({ premises: 'LOCK_UP_SHOP', equipment: '3', people: '2' });
+    fireEvent.click(screen.getByRole('button', { name: /Save what you saw/i }));
+
+    await waitFor(() => expect(screen.getByText(/Held on this phone/i)).toBeTruthy());
+    expect(screen.queryByText(/Size recorded/i)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\bSmall\b|\bMicro\b|\bMedium\b/);
+    expect(screen.getByText(/do not write it down a second time/i)).toBeTruthy();
+  });
+
+  it('does not queue a refusal the office would repeat', async () => {
+    /*
+     * A taxpayer who is not active, a group with no standing, a negative
+     * count: those are the office answering, not the network failing.
+     * Queueing one defers the same answer to a day when the trader is no
+     * longer standing there and the agent cannot fix it.
+     */
+    const refusal = new ApiRequestError(409, {
+      code: 'GROUP_HAS_NO_TAX_ROLE',
+      message: 'This group has not been given a part in enumeration.',
+    } as never);
+    vi.spyOn(api, 'post').mockRejectedValue(refusal);
+    render(<EnumerateScreen taxpayerId="tp-1" navigate={() => {}} />);
+    await fill({ premises: 'LOCK_UP_SHOP', equipment: '3', people: '2' });
+    fireEvent.click(screen.getByRole('button', { name: /Save what you saw/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/has not been given a part in enumeration/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/Held on this phone/i)).toBeNull();
+    expect(await drafts.pendingDrafts(), 'a refusal is not a lost connection').toEqual([]);
   });
 
   it('says the leader will be asked, when the count went through an association', async () => {

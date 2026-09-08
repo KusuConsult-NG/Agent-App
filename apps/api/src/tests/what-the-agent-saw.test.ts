@@ -1225,6 +1225,211 @@ describe('who may do what', () => {
 });
 
 /**
+ * A count taken where there is no signal.
+ *
+ * The Councils whose traders are least likely to be on the register are the
+ * ones the network is worst in. An enumeration that needed a connection would
+ * be collected where coverage already exists, which is exactly where the
+ * missing taxpayers are not — so the capture goes in the offline queue and is
+ * replayed when the handset comes back.
+ *
+ * What must survive that trip is the division of labour: the phone carries
+ * facts, and the platform concludes a band from them. A queue that carried a
+ * band would be a queue an altered handset could put a smaller number in.
+ */
+describe('an enumeration that waited for a signal', () => {
+  async function agentSession() {
+    const demo = await seedDemoAgent();
+    const session = await loginAs(demo!.phone, demo!.password, demo!.deviceIdentifier);
+    return { token: session.accessToken, deviceId: demo!.deviceIdentifier };
+  }
+
+  it('replays a queued count, and works out the band on arrival', async () => {
+    const taxpayer = await trader('No Signal');
+    const agent = await agentSession();
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-observation-000001',
+            draftType: 'BUSINESS_OBSERVATION',
+            capturedAt: new Date(Date.now() - 7_200_000).toISOString(),
+            payload: {
+              taxpayerId: taxpayer,
+              premises: 'LOCK_UP_SHOP',
+              equipmentCount: 3,
+              peopleWorking: 2,
+              economicSector: 'ARTISAN_CRAFT',
+            },
+          },
+        ],
+      },
+      agent,
+    );
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const [result] = response.body.results;
+    assert.equal(result.status, 'SYNCED', JSON.stringify(result));
+    assert.equal(result.entityType, 'presumptive_observation');
+
+    /*
+     * The band is not a column. `presumptive_observations` holds facts and
+     * nothing else, and the band is concluded from them — which is why the
+     * queue can carry a capture at all. So it is checked where the platform
+     * actually states it: in the reply the agent's phone reads back.
+     */
+    assert.match(
+      result.message,
+      /small business/i,
+      'the platform’s conclusion, reached when the capture arrived',
+    );
+
+    const stored = await queryOne<{
+      premises: string;
+      equipment_count: number;
+      people_working: number;
+    }>(
+      pool,
+      `SELECT premises, equipment_count, people_working
+         FROM presumptive_observations WHERE id = $1`,
+      [result.entityId],
+    );
+    assert.deepEqual(
+      { ...stored },
+      { premises: 'LOCK_UP_SHOP', equipment_count: 3, people_working: 2 },
+      'and the facts are the ones the phone carried, unaltered',
+    );
+  });
+
+  it('ignores a band a queued capture tried to name', async () => {
+    /*
+     * The property the whole arrangement rests on. A handset that could set a
+     * band is a handset somebody can modify to set a smaller one, and the
+     * agent holding it is paid commission on what that business later pays.
+     *
+     * The band is not accepted from the payload — it is concluded from the
+     * facts when the capture arrives — so a payload that names one gets the
+     * platform's answer regardless. A building with nine machines and six
+     * people is MEDIUM whatever the phone claimed, and this sends MICRO to
+     * prove the claim changes nothing rather than merely that it is absent.
+     */
+    const taxpayer = await trader('Says Its Own Band');
+    const agent = await agentSession();
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-observation-000002',
+            draftType: 'BUSINESS_OBSERVATION',
+            capturedAt: new Date().toISOString(),
+            payload: {
+              taxpayerId: taxpayer,
+              premises: 'BUILDING',
+              equipmentCount: 9,
+              peopleWorking: 6,
+              economicSector: 'ARTISAN_CRAFT',
+              sizeBand: 'MICRO',
+            },
+          },
+        ],
+      },
+      agent,
+    );
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const [result] = response.body.results;
+    assert.equal(result.status, 'SYNCED', JSON.stringify(result));
+    assert.match(
+      result.message,
+      /medium business/i,
+      'the phone said micro; the platform read the facts and said otherwise',
+    );
+
+    /*
+     * And the claim reached no column. There is nowhere for it to land —
+     * `presumptive_observations` holds facts only — but a payload key that
+     * quietly became a value somewhere is exactly the kind of thing that is
+     * only ever noticed by looking.
+     */
+    const row = await queryOne<Record<string, unknown>>(
+      pool,
+      'SELECT * FROM presumptive_observations WHERE id = $1',
+      [result.entityId],
+    );
+    assert.ok(
+      !Object.values(row!).includes('MICRO'),
+      'nothing on the row carries the band the handset asked for',
+    );
+  });
+
+  it('replays it once, however many times the phone sends it', async () => {
+    // A handset that loses its connection mid-sync retries the whole batch.
+    // Two observations of one stall would be two estimates of one trader.
+    const taxpayer = await trader('Sent Twice');
+    const agent = await agentSession();
+    const draft = {
+      clientReference: 'offline-observation-000003',
+      draftType: 'BUSINESS_OBSERVATION',
+      capturedAt: new Date().toISOString(),
+      payload: {
+        taxpayerId: taxpayer,
+        premises: 'STALL',
+        equipmentCount: 1,
+        peopleWorking: 0,
+        economicSector: 'RETAIL_TRADE',
+      },
+    };
+
+    const first = await post('/drafts/sync', { drafts: [draft] }, agent);
+    assert.equal(first.body.results[0].status, 'SYNCED', JSON.stringify(first.body));
+    const second = await post('/drafts/sync', { drafts: [draft] }, agent);
+    assert.equal(second.body.results[0].status, 'DUPLICATE', JSON.stringify(second.body));
+
+    const written = await queryOne<{ count: string }>(
+      pool,
+      'SELECT count(*)::text AS count FROM presumptive_observations WHERE taxpayer_id = $1',
+      [taxpayer],
+    );
+    assert.equal(written!.count, '1');
+  });
+
+  it('hands back a refusal the agent can act on, not a constraint', async () => {
+    // A group with no part in enumeration is the likeliest field mistake, and
+    // an agent reading the queue needs the sentence, not an error code.
+    const taxpayer = await trader('Wrong Group');
+    const association = await guild('NONE');
+    const agent = await agentSession();
+
+    const response = await post(
+      '/drafts/sync',
+      {
+        drafts: [
+          {
+            clientReference: 'offline-observation-000004',
+            draftType: 'BUSINESS_OBSERVATION',
+            capturedAt: new Date().toISOString(),
+            payload: {
+              taxpayerId: taxpayer,
+              premises: 'KIOSK',
+              equipmentCount: 1,
+              peopleWorking: 1,
+              economicSector: 'ARTISAN_CRAFT',
+              groupId: association,
+            },
+          },
+        ],
+      },
+      agent,
+    );
+    const [result] = response.body.results;
+    assert.equal(result.status, 'REJECTED');
+    assert.match(result.message, /has not been given a part/i);
+  });
+});
+
+/**
  * The rest of the schedule, which one LGA and one trade never reach.
  *
  * A presumptive schedule is a table: sector by band by LGA class. Everything

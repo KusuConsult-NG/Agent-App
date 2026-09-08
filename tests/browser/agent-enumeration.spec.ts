@@ -65,9 +65,24 @@ async function shot(page: Page, name: string): Promise<void> {
 async function openATaxpayer(page: Page, name = 'Amina'): Promise<void> {
   await page.goto(`${AGENT}/#/taxpayers`);
   await page.waitForTimeout(1500);
-  await page.getByRole('searchbox').first().fill(name);
-  await page.getByRole('button', { name: /^search$|^bincika$/i }).first().click();
-  await page.locator('.list__item').first().waitFor({ timeout: 20_000 });
+
+  /*
+   * Retried, because search is rate-limited and this spec searches six times
+   * in a couple of minutes. That limit is the platform working — a handset
+   * that could sweep the register at speed is a handset that leaks it — so it
+   * is waited out rather than turned off.
+   */
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.getByRole('searchbox').first().fill(name);
+    await page.getByRole('button', { name: /^search$|^bincika$/i }).first().click();
+    try {
+      await page.locator('.list__item').first().waitFor({ timeout: 8_000 });
+      break;
+    } catch {
+      if (attempt === 3) throw new Error(`No taxpayer matching "${name}" after four attempts.`);
+      await page.waitForTimeout(6_000);
+    }
+  }
   await page.locator('.list__item').first().click();
   await page.waitForTimeout(1800);
 }
@@ -156,6 +171,40 @@ test('the band comes back from the office, and still no amount', async ({ page }
   expect(console_.errors, console_.errors.join('\n')).toEqual([]);
 });
 
+test('a count taken with no signal is kept on the phone, with no band', async ({ page }) => {
+  /*
+   * The markets worth enumerating are the ones the network is worst in. An
+   * enumeration that needed a connection would be collected where coverage
+   * already exists, which is exactly where the missing taxpayers are not.
+   *
+   * The confirmation cannot say what the online one says: nothing has worked
+   * out a band yet. A size shown here would be one the handset invented.
+   */
+  const console_ = watchConsole(page);
+  await signIn(page);
+  await openATaxpayer(page);
+  await page.getByRole('button', { name: /Write down the business/i }).click();
+  await page.waitForTimeout(1500);
+
+  await page.getByLabel(/Where they trade from/i).selectOption('LOCK_UP_SHOP');
+  await page.getByRole('combobox', { name: 'Trade', exact: true }).selectOption('ARTISAN_CRAFT');
+  await page.getByLabel(/Machines or equipment/i).fill('3');
+  await page.getByLabel(/People working besides the owner/i).fill('2');
+
+  // The network drops between filling the form and pressing save, which is
+  // how it actually happens in a market.
+  await page.context().setOffline(true);
+  await page.getByRole('button', { name: /Save what you saw/i }).click();
+
+  await expect(page.getByText(/Held on this phone/i)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Size recorded/i)).toHaveCount(0);
+  await expect(page.getByText(/do not write it down a second time/i)).toBeVisible();
+  await shot(page, 'agent-enum-06-held-on-the-phone');
+
+  await page.context().setOffline(false);
+  expect(console_.errors, console_.errors.join('\n')).toEqual([]);
+});
+
 test('in Hausa, which is what most of these agents read', async ({ page }) => {
   const console_ = watchConsole(page);
   await signIn(page);
@@ -166,6 +215,6 @@ test('in Hausa, which is what most of these agents read', async ({ page }) => {
   await page.waitForTimeout(1500);
 
   await expect(page.getByText(/Ba kai ne kake sanya harajin ba/i)).toBeVisible({ timeout: 20_000 });
-  await shot(page, 'agent-enum-05-hausa');
+  await shot(page, 'agent-enum-07-hausa');
   expect(console_.errors, console_.errors.join('\n')).toEqual([]);
 });

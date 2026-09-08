@@ -625,25 +625,35 @@ governmentRouter.post(
  * `paye:file` the officer's — gating on the agent permission alone would have
  * left a revenue officer standing in a market unable to write anything down.
  */
+/**
+ * What an enumeration says, wherever it arrives from.
+ *
+ * Exported because the offline queue accepts the same capture: a handset with
+ * no signal saves it and `/drafts/sync` replays it later. One schema, so a
+ * capture cannot be accepted through the queue on terms the online route would
+ * have refused — which is the shape of hole a second, drifting copy makes.
+ */
+export const observationCaptureSchema = z.object({
+  taxpayerId: uuidSchema,
+  /*
+   * Facts only. No band, no turnover, no amount — an agent paid commission
+   * on what they collect, holding a form with a band on it, is being
+   * invited to negotiate somebody's tax at a stall.
+   */
+  premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']),
+  equipmentCount: z.number().int().min(0).max(1000),
+  peopleWorking: z.number().int().min(0).max(1000),
+  economicSector: z.enum(ECONOMIC_SECTOR_CODES),
+  groupId: uuidSchema.optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+});
+
 governmentRouter.post(
   '/enumeration/observations',
   requirePermission('assessment:create', 'paye:file'),
   validateBody(
-    z.object({
-      taxpayerId: uuidSchema,
-      /*
-       * Facts only. No band, no turnover, no amount — an agent paid commission
-       * on what they collect, holding a form with a band on it, is being
-       * invited to negotiate somebody's tax at a stall.
-       */
-      premises: z.enum(['NONE', 'STALL', 'KIOSK', 'LOCK_UP_SHOP', 'BUILDING']),
-      equipmentCount: z.number().int().min(0).max(1000),
-      peopleWorking: z.number().int().min(0).max(1000),
-      economicSector: z.enum(ECONOMIC_SECTOR_CODES),
-      groupId: uuidSchema.optional(),
-      latitude: z.number().min(-90).max(90).optional(),
-      longitude: z.number().min(-180).max(180).optional(),
-    }),
+    observationCaptureSchema,
     async (req, res, data) => {
       res.status(201).json(
         await recordObservation(pool, {

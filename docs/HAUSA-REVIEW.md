@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2163 strings, grouped by where an agent meets them. Lower stakes
+2166 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2650,6 +2650,7 @@ instructions — but they are what an agent reads all day.
 | `enumHasRecords` | Has proper records | Yana da rikodi na gaskiya | ☐ | |
 | `enumNotTrading` | No longer trading | Ba ya kasuwanci kuma | ☐ | |
 | `enumEnumeration` | Enumeration only | Kidaya kadai | ☐ | |
+| `enumBusinessObservation` | Business written down | An rubuta kasuwanci | ☐ | |
 | `enumAttestation` | Enumeration and attestation | Kidaya da tabbatarwa | ☐ | |
 | `enumObjected` | Under objection | Ana kalubalanta | ☐ | |
 | `enumUpheld` | Upheld | An amince | ☐ | |
@@ -2705,6 +2706,8 @@ instructions — but they are what an agent reads all day.
 | `agEnNextWithLeader` | The association leader will be asked to confirm this. Nothing is charged until an officer looks at it. | Za a tambayi shugaban kungiya ya tabbatar da wannan. Ba a caji komai ba sai jami’i ya duba shi. | ☐ | |
 | `agEnNextWithoutLeader` | An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice. | Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa. | ☐ | |
 | `agEnBackToTaxpayer` | Back to the taxpayer | Koma ga mai biyan haraji | ☐ | |
+| `agEnQueuedTitle` | Held on this phone | Yana kan wannan wayar | ☐ | |
+| `agEnQueuedNext` | There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office works out the size then, not now. | Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai fitar da girman a lokacin, ba yanzu ba. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |

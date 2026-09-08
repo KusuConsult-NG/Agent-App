@@ -80,6 +80,7 @@ export const ENUM_LABELS: Record<string, keyof TranslationDictionary> = {
   "BOTH": 'enumBoth',
   "BUILDING": 'enumBuilding',
   "BUSINESS": 'enumBusiness',
+  "BUSINESS_OBSERVATION": 'enumBusinessObservation',
   "BVN": 'enumBvn',
   "C": 'enumClassC',
   "CAMERA": 'enumCamera',
