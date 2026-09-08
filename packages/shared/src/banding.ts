@@ -31,6 +31,39 @@
  * they may not be told a sum.
  */
 
+/**
+ * The app version in which the band rule below last changed.
+ *
+ * A handset older than this is running a different rule, and will show a
+ * trader a size the office will not agree with. That is worse than showing
+ * nothing: an agent who says "I cannot tell you until the office looks" is
+ * unhelpful, and one who says "small" when the answer is medium has made a
+ * promise on the State's behalf that the notice will break.
+ *
+ * WHY THIS IS NOT THE GLOBAL MINIMUM VERSION.
+ *
+ * There is already a version gate, and it stops an outdated handset taking
+ * money. Raising it to cover a band-rule change would stop the same handset
+ * collecting revenue, which is a large price for a display that is wrong in a
+ * regime one part of the platform runs. An agent who cannot collect is an
+ * agent not working. So enumeration has a floor of its own, and it moves when
+ * the rule moves rather than when the app does.
+ *
+ * `bandFor` and this constant are changed together. `band-rule-version.test.ts`
+ * fails if the rule's behaviour changes and this does not, because a floor
+ * somebody forgot to raise is worse than no floor at all — it reads as a
+ * guarantee and holds nothing.
+ *
+ * It sits at 1.0.0 today, which blocks nobody, and that is correct rather
+ * than pending. The rule has not changed since the platform shipped, and a
+ * floor raised above the builds in the field to make the gate look busy would
+ * stop working handsets enumerating for no reason anybody could name. What
+ * the gate is for is the day the rule does change: the floor goes up in the
+ * same commit, and every handset still running the old arithmetic stops
+ * being able to tell a trader anything.
+ */
+export const BAND_RULE_SINCE = '1.0.0';
+
 export type SizeBand = 'MICRO' | 'SMALL' | 'MEDIUM';
 
 /** Where the trade is carried on, smallest first. */

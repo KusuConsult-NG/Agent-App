@@ -7,7 +7,12 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
 import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
-import { authenticate, requirePermission, requireStepUp } from '../middleware/auth';
+import {
+  authenticate,
+  requireCurrentBandRule,
+  requirePermission,
+  requireStepUp,
+} from '../middleware/auth';
 import {
   asyncHandler,
   koboSchema,
@@ -662,6 +667,7 @@ export const observationCaptureSchema = z.object({
 governmentRouter.post(
   '/enumeration/observations',
   requirePermission('assessment:create', 'paye:file'),
+  requireCurrentBandRule,
   validateBody(
     observationCaptureSchema,
     async (req, res, data) => {
