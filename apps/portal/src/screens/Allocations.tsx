@@ -29,7 +29,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { localName } from '@psirs/shared';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface Round {
   id: string;
@@ -54,18 +54,14 @@ interface Award {
   collected_at: string | null;
 }
 
-/** The units a round can be measured in, as the API accepts them. */
-const UNITS = [
-  ['BAG_50KG', '50kg bag'],
-  ['BAG_25KG', '25kg bag'],
-  ['LITRE', 'Litre'],
-  ['KILOGRAM', 'Kilogram'],
-  ['TRACTOR_DAY', 'Tractor day'],
-  ['SEEDLING', 'Seedling'],
-  ['UNIT', 'Unit'],
-] as const;
-
-const UNIT_LABEL = Object.fromEntries(UNITS) as Record<string, string>;
+/**
+ * The units a round can be measured in, as the API accepts them.
+ *
+ * Values only. Every one of them is already in the shared enum table, so the
+ * label comes from `enumLabel` at render time rather than being written out
+ * here — which is how two of them stayed English while the rest were keyed.
+ */
+const UNITS = ['BAG_50KG', 'BAG_25KG', 'LITRE', 'KILOGRAM', 'TRACTOR_DAY', 'SEEDLING', 'UNIT'] as const;
 
 export function AllocationsScreen() {
   const { lang, t } = usePortalI18n();
@@ -161,14 +157,14 @@ export function AllocationsScreen() {
 
   /** What is stopping this being created, in the words the officer needs. */
   const blockedBecause = ((): string | null => {
-    if (!form.programmeId) return 'Choose the programme this round distributes under.';
-    if (form.name.trim().length < 3) return 'Give the round a name people will recognise.';
+    if (!form.programmeId) return t.ofcAlChooseTheProgrammeThis;
+    if (form.name.trim().length < 3) return t.ofcAlGiveTheRoundA;
     const total = Number(form.totalQuantity);
     const each = Number(form.quantityPerBeneficiary);
-    if (!Number.isFinite(total) || total <= 0) return 'How much is there to distribute in total?';
-    if (!Number.isFinite(each) || each <= 0) return 'How much does each beneficiary receive?';
-    if (each > total) return 'One beneficiary cannot receive more than the whole round holds.';
-    if (!form.opensAt) return 'When does collection open?';
+    if (!Number.isFinite(total) || total <= 0) return t.ofcAlHowMuchIsThere;
+    if (!Number.isFinite(each) || each <= 0) return t.ofcAlHowMuchDoesEach;
+    if (each > total) return t.ofcAlOneBeneficiaryCannotReceive;
+    if (!form.opensAt) return t.ofcAlWhenDoesCollectionOpen;
     if (form.closesAt && form.closesAt <= form.opensAt) {
       return 'A round cannot close before it opens.';
     }
@@ -188,7 +184,7 @@ export function AllocationsScreen() {
         <h2 className="card__title">{t.ofcNavAllocations}</h2>
         <p className="card__hint">{t.ofcAlIntro}</p>
         <button type="button" onClick={() => setCreating((c) => !c)}>
-          {creating ? 'Cancel' : 'Create a round'}
+          {creating ? t.camCancel : t.ofcAlCreateARound}
         </button>
       </div>
 
@@ -235,9 +231,9 @@ export function AllocationsScreen() {
               value={form.unit}
               onChange={(e) => setForm({ ...form, unit: e.target.value })}
             >
-              {UNITS.map(([value, label]) => (
+              {UNITS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {enumLabel(value, t)}
                 </option>
               ))}
             </select>
@@ -325,11 +321,11 @@ export function AllocationsScreen() {
                     setCreating(false);
                     setForm({ ...form, name: '', totalQuantity: '', quantityPerBeneficiary: '' });
                   },
-                  'Round created. It awards nothing until you open it.',
+                  t.ofcAlRoundCreatedItAwards,
                 )
               }
             >
-              {busy === 'create' ? 'Creating…' : 'Create round'}
+              {busy === 'create' ? t.ofcAlCreating : t.ofcAlCreateRound}
             </button>
           </div>
         </div>
@@ -362,7 +358,7 @@ export function AllocationsScreen() {
                   key: 'collected_at',
                   label: 'ofcPfCollected',
                   render: (row: Award) =>
-                    row.collected_at ? formatDateTime(row.collected_at) : 'Not yet',
+                    row.collected_at ? formatDateTime(row.collected_at) : t.ofcAlNotYet,
                 },
                 {
                   key: 'release',
@@ -393,7 +389,7 @@ export function AllocationsScreen() {
               key: 'quantity',
               label: 'ofcAlDistributing',
               render: (row: Round) =>
-                `${row.total_quantity} × ${UNIT_LABEL[row.unit] ?? row.unit}, ${row.quantity_per_beneficiary} each`,
+                `${row.total_quantity} × ${enumLabel(row.unit, t)}, ${row.quantity_per_beneficiary} each`,
             },
             { key: 'collection_point', label: 'ofcAlCollectionPoint' },
             {

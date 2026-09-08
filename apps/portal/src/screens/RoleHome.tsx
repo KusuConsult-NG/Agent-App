@@ -428,7 +428,7 @@ export function RoleHomeScreen({
                         action.act(
                           row.id!,
                           () => api.post(`/agents/devices/${row.id}/approve`, {}),
-                          'Device approved.',
+                          t.ofcRhDeviceApproved,
                         )
                       }
                     >{t.ofcRhApprove}</button>
@@ -520,11 +520,11 @@ export function RoleHomeScreen({
                   action.act(
                     'tin-retry',
                     () => api.post('/taxpayers/tin-retry', {}),
-                    'Re-asked the TIN register for everyone still waiting.',
+                    t.ofcRhReAskedTheTin,
                   )
                 }
               >
-                {action.busy === 'tin-retry' ? 'Asking…' : 'Ask the register again'}
+                {action.busy === 'tin-retry' ? t.ofcRhAsking : t.ofcRhAskTheRegisterAgain}
               </button>
             </div>
           </div>
@@ -560,7 +560,7 @@ export function RoleHomeScreen({
                         )
                       }
                     >
-                      {action.busy === `doc-${row.id}` ? 'Preparing…' : 'Invoice document'}
+                      {action.busy === `doc-${row.id}` ? t.ofcRhPreparing : t.ofcRhInvoiceDocument}
                     </button>
                   ),
                 },
@@ -576,11 +576,11 @@ export function RoleHomeScreen({
                   action.act(
                     'remind',
                     () => api.post('/government/reminders/send-due', {}),
-                    'Reminders sent to taxpayers with something due.',
+                    t.ofcRhRemindersSentToTaxpayers,
                   )
                 }
               >
-                {action.busy === 'remind' ? 'Sending…' : 'Send payment reminders'}
+                {action.busy === 'remind' ? t.pubStmtSending : t.ofcRhSendPaymentReminders}
               </button>
             </div>
           </div>

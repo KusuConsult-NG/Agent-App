@@ -386,6 +386,7 @@ export function PasswordField({
   /** Shown in the browser's own refusal, which otherwise says only "match the requested format". */
   patternHint?: string;
 }) {
+  const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const id = useId();
   const hintId = `${id}-hint`;
@@ -414,10 +415,10 @@ export function PasswordField({
           type="button"
           className="password__toggle"
           aria-pressed={shown}
-          aria-label={shown ? 'Hide password' : 'Show password'}
+          aria-label={shown ? t.uiHidePassword : t.uiShowPassword}
           onClick={() => setShown((current) => !current)}
         >
-          {shown ? 'Hide' : 'Show'}
+          {shown ? t.uiHide : t.uiShow}
         </button>
       </div>
       {hint && (

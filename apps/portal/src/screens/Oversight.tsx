@@ -28,8 +28,8 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
   const entries = Object.entries(detail);
   if (entries.length === 0) return <span>—</span>;
 
-  const readable = entries.filter(([key]) => !key.endsWith('Id'));
-  const identifiers = entries.filter(([key]) => key.endsWith('Id'));
+  const readable = entries.filter(([key]) => !key.endsWith(t.ofcOvId));
+  const identifiers = entries.filter(([key]) => key.endsWith(t.ofcOvId));
 
   return (
     <div className="signal-detail">
@@ -129,7 +129,7 @@ export function FraudScreen() {
 
   async function review(id: string, decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED') {
     await withJustification({
-      question: 'Record what you found (at least 10 characters):',
+      question: t.ofcOvRecordWhatYouFound,
       minimum: 10,
       tooShort: t.ofcOvFlagNoteTooShort,
       run: async (note) => {
@@ -169,7 +169,7 @@ export function FraudScreen() {
                     const raised = result.flagsRaised ?? result.raised ?? 0;
                     setSweepResult(
                       raised === 0
-                        ? 'Sweep complete. Nothing new was flagged.'
+                        ? t.ofcOvSweepCompleteNothingNew
                         : `Sweep complete. ${raised} flag(s) raised for review.`,
                     );
                     load();
@@ -180,7 +180,7 @@ export function FraudScreen() {
                   }
                 }}
               >
-                {sweeping ? 'Sweeping…' : 'Run a fraud sweep now'}
+                {sweeping ? t.ofcOvSweeping : t.ofcOvRunAFraudSweep}
               </button>
             </div>
             {sweepResult && <Alert kind="success">{sweepResult}</Alert>}
@@ -341,7 +341,7 @@ interface AuditQuery {
   /** What must be picked first. Absent means the question can be asked as it is. */
   parameter?: {
     name: string;
-    prompt: string;
+    prompt: keyof TranslationDictionary;
     /** Where the options come from, and how to label them. */
     source: 'agents' | 'revenueItems' | 'taxpayerSearch';
   };
@@ -364,20 +364,20 @@ const AUDIT_QUERIES: AuditQuery[] = [
     key: 'agent-transactions',
     label: 'ofcOvOneAgentCollected',
     path: '/government/audit/queries/agent-transactions',
-    parameter: { name: 'agentId', prompt: 'Which agent?', source: 'agents' },
+    parameter: { name: 'agentId', prompt: 'ofcOvWhichAgent', source: 'agents' },
     period: true,
   },
   {
     key: 'receipts-by-item',
     label: 'ofcOvReceiptsOneItem',
     path: '/government/audit/queries/receipts-by-item',
-    parameter: { name: 'revenueItemCode', prompt: 'Which revenue item?', source: 'revenueItems' },
+    parameter: { name: 'revenueItemCode', prompt: 'ofcOvWhichRevenueItem', source: 'revenueItems' },
   },
   {
     key: 'taxpayer-access',
     label: 'ofcOvWhoLookedAtRecord',
     path: '/government/audit/queries/taxpayer-access',
-    parameter: { name: 'taxpayerId', prompt: 'Which taxpayer?', source: 'taxpayerSearch' },
+    parameter: { name: 'taxpayerId', prompt: 'ofcOvWhichTaxpayer', source: 'taxpayerSearch' },
   },
 ];
 
@@ -444,7 +444,7 @@ export function BackgroundWorkPanel() {
       <h2 className="card__title">{t.ofcOvUnattendedWork}</h2>
       <p className="card__hint">
         {health.healthy
-          ? 'Every scheduled job has run recently and succeeded.'
+          ? t.ofcOvEveryScheduledJobHas
           : `${health.needingAttention} of ${health.jobs.length} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.`}
       </p>
       <Table
@@ -472,7 +472,7 @@ export function BackgroundWorkPanel() {
             // no recent success, and that is the distinction worth a column.
             label: 'ofcOvLastSucceeded',
             render: (row: JobReport) =>
-              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : 'Never',
+              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : t.ofcArNeverPaid,
           },
           { key: 'message', label: 'ofcOvWhatThatMeans' },
         ]}
@@ -537,8 +537,7 @@ export function AuditScreen() {
                   setError({
                     code: 'VERIFICATION_UNAVAILABLE',
                     message:
-                      'The audit trail could not be checked just now. This is not a finding ' +
-                      'about the trail — try again, and tell support if it persists.',
+                      t.ofcOvTheAuditTrailCould,
                   } as ApiError);
               }
             }}
@@ -833,7 +832,7 @@ function AuditQueryParameters({
       )}
 
       <div className="field">
-        <label htmlFor="audit-parameter">{query.parameter!.prompt}</label>
+        <label htmlFor="audit-parameter">{t[query.parameter!.prompt]}</label>
         <select
           id="audit-parameter"
           value={value}
@@ -842,14 +841,14 @@ function AuditQueryParameters({
         >
           <option value="">
             {!options
-              ? 'Loading…'
+              ? t.ofcOvLoading
               : options.length === 0
                 ? source === 'taxpayerSearch'
                   ? searched
-                    ? 'No taxpayer matched that search'
-                    : 'Search for a taxpayer first'
-                  : 'Nothing to choose from'
-                : 'Select one'}
+                    ? t.ofcOvNoTaxpayerMatchedThat
+                    : t.ofcOvSearchForATaxpayer
+                  : t.ofcOvNothingToChooseFrom
+                : t.ofcOvSelectOne}
           </option>
           {(options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
@@ -883,7 +882,7 @@ function AuditQueryParameters({
       )}
 
       <button type="button" disabled={busy || !value} onClick={() => void run()}>
-        {busy ? 'Running…' : 'Run this query'}
+        {busy ? t.ofcOvRunning : t.ofcOvRunThisQuery}
       </button>
     </div>
   );

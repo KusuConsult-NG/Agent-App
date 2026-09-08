@@ -274,7 +274,7 @@ export function AgentDetailScreen({
         <Stat label="ofcAgAccessStage" value={<Badge status={detail.accessStage} />} />
         <Stat
           label="ofcAgMayCollectRevenue"
-          value={detail.canCollectRevenue ? 'Yes' : 'No'}
+          value={detail.canCollectRevenue ? t.tpYes : t.tpNo}
           variant={detail.canCollectRevenue ? 'accent' : 'alert'}
         />
       </div>
@@ -288,13 +288,13 @@ export function AgentDetailScreen({
           <p className="card__hint">{t.ofcAgEveryItemSatisfied}</p>
           <Checklist
             items={[
-              ['Identity verified (KYC)', checklist.kycCleared],
-              ['Referee cleared', checklist.refereeCleared],
-              ['Government approved', checklist.governmentApproved],
-              ['Mandatory training completed', checklist.trainingCompleted],
-              ['Commission bank account verified', checklist.bankVerified],
-              ['Agent agreement accepted', checklist.agreementAccepted],
-              ['Device registered', checklist.deviceRegistered],
+              [t.ofcAgIdentityVerifiedKyc, checklist.kycCleared],
+              [t.enumRefereeCleared, checklist.refereeCleared],
+              [t.ofcAgGovernmentApproved, checklist.governmentApproved],
+              [t.ofcAgMandatoryTrainingCompleted, checklist.trainingCompleted],
+              [t.ofcAgCommissionBankAccountVerified, checklist.bankVerified],
+              [t.ofcAgAgentAgreementAccepted, checklist.agreementAccepted],
+              [t.appStageDevice, checklist.deviceRegistered],
             ]}
           />
           {detail.outstanding.length > 0 && (
@@ -313,13 +313,13 @@ export function AgentDetailScreen({
           {detail.kyc ? (
             <KeyValue
               items={[
-                ['Document type', detail.kyc.identity_type],
-                ['Number on file', detail.kyc.identity_number_masked],
-                ['Status', <Badge key="s" status={detail.kyc.verification_status} />],
-                ['Liveness check', detail.kyc.liveness_result ?? 'Not performed'],
-                ['Submitted', formatDateTime(detail.kyc.submitted_at)],
-                ['Verified', formatDateTime(detail.kyc.verified_at)],
-                ['Failure reason', detail.kyc.failure_reason ?? '—'],
+                [t.ofcAgDocumentType, detail.kyc.identity_type],
+                [t.ofcAgNumberOnFile, detail.kyc.identity_number_masked],
+                [t.appStatus, <Badge key="s" status={detail.kyc.verification_status} />],
+                [t.ofcAgLivenessCheck, detail.kyc.liveness_result ?? t.enumNotPerformed],
+                [t.ofcAgSubmitted, formatDateTime(detail.kyc.submitted_at)],
+                [t.enumVerified, formatDateTime(detail.kyc.verified_at)],
+                [t.ofcAgFailureReason, detail.kyc.failure_reason ?? '—'],
               ]}
             />
           ) : (
@@ -367,7 +367,7 @@ export function AgentDetailScreen({
                             decision: 'CLEAR',
                             reason,
                           });
-                          return 'Referee cleared.';
+                          return t.ofcAgRefereeCleared;
                         })
                       }
                     >{t.ofcAgClear}</button>
@@ -381,7 +381,7 @@ export function AgentDetailScreen({
                             decision: 'REJECT',
                             reason,
                           });
-                          return 'Referee rejected.';
+                          return t.ofcAgRefereeRejected;
                         })
                       }
                     >{t.ofcAgReject}</button>
@@ -418,7 +418,7 @@ export function AgentDetailScreen({
           </div>
           <Table
             columns={[
-              { key: 'device_name', label: 'appDeviceLabel', render: (row) => row.device_name ?? 'Unnamed' },
+              { key: 'device_name', label: 'appDeviceLabel', render: (row) => row.device_name ?? t.ofcAgUnnamed },
               { key: 'pwa_version', label: 'ofcAgVersion' },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
@@ -441,7 +441,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/approve`);
-                              return 'Device approved. The agent can now collect from it.';
+                              return t.ofcAgDeviceApprovedTheAgent;
                             })
                           }
                         >{t.ofcRhApprove}</button>
@@ -463,7 +463,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/suspend`, { reason });
-                              return 'Device suspended and its sessions ended. It can be restored.';
+                              return t.ofcAgDeviceSuspendedAndIts;
                             })
                           }
                         >{t.ofcAgSuspend}</button>
@@ -476,7 +476,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/restore`, { reason });
-                              return 'Device restored. The agent can collect from it again.';
+                              return t.ofcAgDeviceRestoredTheAgent;
                             })
                           }
                         >{t.ofcAgRestore}</button>
@@ -489,7 +489,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/revoke`, { reason });
-                              return 'Device revoked and its sessions ended.';
+                              return t.ofcAgDeviceRevokedAndIts;
                             })
                           }
                         >{t.ofcAgRevoke}</button>
@@ -527,7 +527,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'APPROVE', reason });
-                    return 'Application approved.';
+                    return t.ofcAgApplicationApproved;
                   })
                 }
               >{t.ofcAgApproveApplication}</button>
@@ -538,7 +538,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'REQUEST_INFO', reason });
-                    return 'More information requested from the applicant.';
+                    return t.ofcAgMoreInformationRequestedFrom;
                   })
                 }
               >{t.ofcAgRequestMoreInformation}</button>
@@ -549,7 +549,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'REJECT', reason });
-                    return 'Application rejected.';
+                    return t.ofcAgApplicationRejected;
                   })
                 }
               >{t.ofcAgReject}</button>
@@ -580,7 +580,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/activate`, { territoryId });
-                    return 'Agent activated.';
+                    return t.ofcAgAgentActivated;
                   })
                 }
               >{t.ofcAgActivateAgent}</button>
@@ -625,7 +625,7 @@ export function AgentDetailScreen({
                   act(async () => {
                     await api.post(`/agents/${agentId}/territory`, { territoryId });
                     setTerritoryId('');
-                    return 'Territory reassigned. Future collections are attributed to it.';
+                    return t.ofcAgTerritoryReassignedFutureCollections;
                   })
                 }
               >{t.ofcAgReassignTerritory}</button>
@@ -641,7 +641,7 @@ export function AgentDetailScreen({
                 act(async () => {
                   await stepUp('agent.suspend', user.phone);
                   await api.post(`/agents/${agentId}/suspend`, { reason });
-                  return 'Agent suspended. Their sessions and devices have been disabled.';
+                  return t.ofcAgAgentSuspendedTheirSessions;
                 })
               }
             >{t.ofcAgSuspendAgent}</button>
@@ -710,10 +710,10 @@ export function RefereesScreen() {
       });
       setMessage(
         decision === 'CONFIRMED'
-          ? 'Flag upheld. This referee cannot be cleared until it is dismissed.'
+          ? t.ofcAgFlagUpheldThisReferee
           : decision === 'DISMISSED'
-            ? 'Flag dismissed. The referee can be cleared as normal.'
-            : 'Flag marked as under review.',
+            ? t.ofcAgFlagDismissedTheReferee
+            : t.ofcAgFlagMarkedAsUnder,
       );
       setReviewing(null);
       setNote('');
@@ -823,7 +823,7 @@ export function RefereesScreen() {
 
           <div className="button-row">
             <button type="button" disabled={busy || note.trim().length < 10} onClick={submitReview}>
-              {busy ? 'Saving…' : 'Record this'}
+              {busy ? t.agEnSaving : t.ofcAgRecordThis}
             </button>
             <button
               type="button"
@@ -935,8 +935,7 @@ export function BankChangesCard() {
       setError({
         code: 'CLIENT',
         message:
-          'Give a reason of at least 10 characters. It is the only record of why the account ' +
-          'somebody is paid into was moved.',
+          t.ofcAgGiveAReasonOf,
         moneyStatus: 'NOT_APPLICABLE',
       });
       return;
@@ -986,29 +985,29 @@ export function BankChangesCard() {
                 <KeyValue
                   items={[
                     [
-                      'Paid into now',
+                      t.morePaidIntoNow,
                       change.current
                         ? `${change.current.bankName} ${change.current.accountNumberMasked}`
                         : '—',
                     ],
-                    ['Would change to', `${change.bankName} ${change.accountNumberMasked}`],
-                    ['Name the agent gave', change.accountName],
+                    [t.moreWouldChangeTo, `${change.bankName} ${change.accountNumberMasked}`],
+                    [t.ofcAgNameTheAgentGave, change.accountName],
                     [
-                      'Name the bank returned',
+                      t.ofcAgNameTheBankReturned,
                       confirmed
-                        ? (change.verificationResolvedName ?? 'Confirmed, no name returned')
+                        ? (change.verificationResolvedName ?? t.ofcAgConfirmedNoNameReturned)
                         : change.verificationStatus === 'PENDING'
-                          ? 'The bank could not be reached'
+                          ? t.ofcAgTheBankCouldNot
                           : `Not confirmed${change.verificationReason ? `: ${change.verificationReason}` : ''}`,
                     ],
-                    ['Reason given', change.requestedReason],
+                    [t.ofcAgReasonGiven, change.requestedReason],
                     [
-                      'Asked for by',
+                      t.ofcAgAskedForBy,
                       change.requestedByRole === 'agent'
-                        ? 'The agent'
+                        ? t.ofcAgTheAgent
                         : `An officer (${change.requestedByRole ?? 'unknown role'})`,
                     ],
-                    ['Requested', formatDateTime(change.requestedAt)],
+                    [t.ofcRhRequested, formatDateTime(change.requestedAt)],
                   ]}
                 />
 
@@ -1026,8 +1025,8 @@ export function BankChangesCard() {
                   <Alert kind="warning" title="moreBankNotConfirmed">
                     <p style={{ margin: 0 }}>
                       {change.verificationStatus === 'PENDING'
-                        ? 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.'
-                        : 'This account cannot be approved while the bank does not confirm it. Refuse the request so the agent can send the right details.'}
+                        ? t.ofcAgTheBankVerificationService
+                        : t.ofcAgThisAccountCannotBe}
                     </p>
                   </Alert>
                 )}
@@ -1045,7 +1044,7 @@ export function BankChangesCard() {
                             {},
                           );
                           return result.verified
-                            ? 'The bank confirmed the account.'
+                            ? t.ofcAgTheBankConfirmedThe
                             : `The bank still did not confirm it (${result.outcome.toLowerCase()}).`;
                         })
                       }

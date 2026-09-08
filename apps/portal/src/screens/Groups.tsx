@@ -428,7 +428,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           `/groups/${row.id}/attestation-request`,
                         );
                         setAttestationLink({ name: row.name, url: result.invitationUrl });
-                        return 'Confirmation link created.';
+                        return t.ofcGpConfirmationLinkCreated;
                       })
                     }
                   >{t.ofcGpAskLeader}</button>

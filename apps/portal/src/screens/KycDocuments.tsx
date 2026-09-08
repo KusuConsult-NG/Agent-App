@@ -149,7 +149,7 @@ export function KycDocumentsCard({
                 label: { text: '' },
                 render: (row) => (
                   <button type="button" className="link" onClick={() => setOpen(row)}>
-                    {row.superseded_at ? 'View' : 'Open and review'}
+                    {row.superseded_at ? t.enumView : t.ofcKyOpenAndReview}
                   </button>
                 ),
               },
@@ -241,7 +241,7 @@ function DocumentViewer({
         else {
           setAccessError({
             code: 'CLIENT',
-            message: 'The access log could not be read.',
+            message: t.ofcKyTheAccessLogCould,
             moneyStatus: 'NOT_APPLICABLE',
           });
         }
@@ -304,7 +304,7 @@ function DocumentViewer({
           <p style={{ margin: 0 }}>
             {doc.rejection_reason
               ? `Reason given: ${doc.rejection_reason}`
-              : 'Reviewed on ' + formatDateTime(doc.reviewed_at)}
+              : `${t.ofcKyReviewedOn} ${formatDateTime(doc.reviewed_at)}`}
           </p>
         </Alert>
       ) : can('agent:approve') ? (

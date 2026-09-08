@@ -48,7 +48,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           ? caught.error
           : {
               code: 'NETWORK',
-              message: 'Could not reach the revenue platform. Check your connection.',
+              message: t.ofcLgCouldNotReachThe,
               moneyStatus: 'NOT_APPLICABLE',
             },
       );
@@ -116,10 +116,10 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
               type="button"
               className="password__toggle"
               aria-pressed={shown}
-              aria-label={shown ? 'Hide password' : 'Show password'}
+              aria-label={shown ? t.uiHidePassword : t.uiShowPassword}
               onClick={() => setShown((current) => !current)}
             >
-              {shown ? 'Hide' : 'Show'}
+              {shown ? t.uiHide : t.uiShow}
             </button>
           </div>
         </div>

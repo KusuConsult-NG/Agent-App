@@ -226,43 +226,49 @@ describe('the portal stays translated', () => {
 });
 
 /**
- * The blind spot the check above has, and where it is closed.
+ * The blind spot the check above has, now closed.
  *
  * `withoutLiterals` blanks the inside of every string before looking for JSX
  * text. That is right for the `${…}` in a template literal, and it means a
  * string literal rendered as an *expression child* is never examined:
  *
  *     {busy ? 'Searching…' : 'Check status'}
- *     [ 'Amount', <Money kobo={result.amountKobo} /> ]
+ *     [ 'Amount', <Money kobo={row.amountKobo} /> ]
+ *     const FLOW_LABEL = { collection: 'Taking a collection' }
  *
- * Both reach a citizen in English. Seven such strings were found on the public
- * pages, and four of them — `pubVerifyAmount`, `pubVerifyFingerprint`,
- * `pubRefereeSubmit`, `pubRefereeSubmitting` — already had Hausa in the
- * dictionary and in the review sheet. Somebody translated them, a reviewer
- * approved them, and the screen went on showing English. That is the worst
- * shape this failure takes, because the sheet says the work is done.
+ * None of those is a prop, a JSX child, or an object field the pattern above
+ * names, and all three reach an officer in English. Two hundred and thirty-
+ * seven of them were found across this portal and the agent app — and
+ * fifty-three already had Hausa in the dictionary, and in the review sheet,
+ * while the screen went on showing English. That is the worst shape this
+ * failure takes, because the sheet says the work is done.
  *
- * So the rule below is blunt: on the public pages, a capitalised literal is
- * either a dictionary key, an example somebody copies, or a bug.
- *
- * It covers the public pages and not the officer portal. Applying it there
- * reports around two hundred more — button labels, table headings, KeyValue
- * labels, `?? 'Unnamed'` fallbacks — and every one I sampled was real. That is
- * its own piece of work: each needs Hausa, and the Hausa needs the reviewer
- * this repository keeps `docs/HAUSA-REVIEW.md` for. Recorded there rather than
- * left as a number in a commit message.
+ * So the rule here is blunt where the one above is careful: a capitalised
+ * literal anywhere in a screen is a dictionary key, an example somebody
+ * copies, or a bug. It is cheap to satisfy — the fix is always a key — and it
+ * sees everything the other one cannot.
  */
-const PUBLIC_PAGES = import.meta.glob('../screens/Public.tsx', {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>;
+const ALL_SOURCES = SOURCES;
 
-/** Literals on the public pages that are correct as they stand. */
-const ALLOWED_ON_PUBLIC = new Set([
-  // A shape somebody copies off a printed receipt. A translated example is an
+/**
+ * Literals that are right as they stand, each for a stated reason.
+ *
+ * Kept deliberately short. If this list is growing, the check is being argued
+ * with rather than answered, and the answer is nearly always a dictionary key.
+ */
+const ALLOWED_LITERALS = new Set([
+  // Shapes somebody copies off a piece of paper. A translated example is an
   // example that does not work.
   'PSIRS/2026/000123',
+  // A place, not a phrase. It is the name of the State in both languages.
+  'Plateau State',
+  // A keyboard event code, not a word. It was briefly turned into a key
+  // during the sweep that added this rule, which would have compared a key
+  // press against the Hausa word for it and stopped Enter working.
+  'Enter',
+  // Wire values and identifiers that happen to be capitalised.
+  'Bearer ',
+  'Content-Type',
 ]);
 
 function capitalisedLiteralsIn(source: string): string[] {
@@ -270,23 +276,24 @@ function capitalisedLiteralsIn(source: string): string[] {
   const found: string[] = [];
   for (const match of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"/g)) {
     const text = (match[1] ?? match[2] ?? '').trim();
-    // A capitalised word followed by a lowercase one is how prose starts and
+    // A capitalised word followed by a lowercase one is how prose starts, and
     // is not how an enum value, a route or a CSS length is written.
     if (!/^[A-Z][a-z]/.test(text)) continue;
-    if (KEYS.has(text) || ALLOWED_ON_PUBLIC.has(text)) continue;
+    if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
     found.push(text);
   }
   return found;
 }
 
-describe('the public pages have no English of their own', () => {
-  it('has the page to check', () => {
-    expect(Object.keys(PUBLIC_PAGES).length).toBe(1);
-  });
-
+describe('no screen has English of its own', () => {
   it('routes even its expression literals through the dictionary', () => {
+    /*
+     * If this fails, the fix is a key in `packages/shared/src/i18n.ts` in both
+     * languages — which is also what puts the string in front of the reviewer
+     * who checks the Hausa. Adding it to ALLOWED_LITERALS is almost never it.
+     */
     const offenders: string[] = [];
-    for (const [path, source] of Object.entries(PUBLIC_PAGES)) {
+    for (const [path, source] of Object.entries(ALL_SOURCES)) {
       for (const text of capitalisedLiteralsIn(source)) offenders.push(`${path}: ${text}`);
     }
     expect(offenders).toEqual([]);

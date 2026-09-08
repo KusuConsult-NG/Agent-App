@@ -85,7 +85,7 @@ export function ReconciliationScreen() {
   async function record() {
     const receivedAmountKobo = toKobo(entry.receivedNaira);
     if (!receivedAmountKobo) {
-      setError({ code: 'INVALID_AMOUNT', message: 'Enter the credited amount in naira, for example 1250000.00.' } as ApiError);
+      setError({ code: 'INVALID_AMOUNT', message: t.ofcFnEnterTheCreditedAmount } as ApiError);
       return;
     }
     const gatewayReferences = entry.gatewayReferences
@@ -93,7 +93,7 @@ export function ReconciliationScreen() {
       .map((reference) => reference.trim())
       .filter(Boolean);
     if (gatewayReferences.length === 0) {
-      setError({ code: 'NO_REFERENCES', message: 'List the gateway references this credit covers.' } as ApiError);
+      setError({ code: 'NO_REFERENCES', message: t.ofcFnListTheGatewayReferences } as ApiError);
       return;
     }
 
@@ -132,14 +132,14 @@ export function ReconciliationScreen() {
     const receivedAmountKobo = toKobo(
       window.prompt(
         `Total now credited against ${row.settlement_reference}, in naira. ` +
-          'It has to account for the collections in the batch in full.',
+          t.ofcFnItHasToAccount,
         '',
       ) ?? '',
     );
     if (!receivedAmountKobo) return;
-    const bankReference = window.prompt('Bank reference for the credit that settles it', '') ?? '';
+    const bankReference = window.prompt(t.ofcFnBankReferenceForThe, '') ?? '';
     if (!bankReference.trim()) return;
-    const note = window.prompt('What the variance turned out to be', '') ?? '';
+    const note = window.prompt(t.ofcFnWhatTheVarianceTurned, '') ?? '';
     if (note.trim().length < 10) return;
 
     setBusy(true);
@@ -188,10 +188,10 @@ export function ReconciliationScreen() {
         setError({
           code: 'RECONCILIATION_ABORTED',
           moneyStatus: 'UNCONFIRMED',
-          nextStep: 'Re-run this period once the gateway is reachable.',
+          nextStep: t.ofcFnReRunThisPeriod,
           message:
             `Reconciliation did not run: ${result.abortReason ?? 'the gateway statement could not be retrieved.'} ` +
-            'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
+            t.ofcFnNothingWasComparedFor,
         });
         load();
         return;
@@ -458,7 +458,7 @@ export function ReconciliationScreen() {
                       className="small secondary"
                       onClick={() =>
                         void withJustification({
-                          question: 'Record how this exception was resolved (at least 10 characters):',
+                          question: t.ofcFnRecordHowThisException,
                           minimum: 10,
                           tooShort: t.ofcFnResolveTooShort,
                           run: async (resolution) => {
@@ -623,7 +623,7 @@ export function CommissionsScreen() {
                         className="small"
                         onClick={() =>
                           void withJustification({
-                            question: 'Reason for approving this payout (at least 5 characters):',
+                            question: t.ofcFnReasonForApprovingThis,
                             minimum: 5,
                             tooShort: t.ofcFnApprovePayoutTooShort,
                             run: async (reason) => {
@@ -646,7 +646,7 @@ export function CommissionsScreen() {
                         className="small secondary"
                         onClick={() =>
                           void withJustification({
-                            question: 'Bank transfer reference (at least 3 characters):',
+                            question: t.ofcFnBankTransferReferenceAt,
                             minimum: 3,
                             tooShort: t.ofcFnTransferReferenceTooShort,
                             run: async (bankReference) => {
@@ -671,7 +671,7 @@ export function CommissionsScreen() {
                         className="small secondary"
                         onClick={() =>
                           void withJustification({
-                            question: 'What did the bank say? (at least 10 characters)',
+                            question: t.ofcFnWhatDidTheBank,
                             minimum: 10,
                             tooShort: t.ofcFnPayoutFailedTooShort,
                             run: async (reason) => {
@@ -727,7 +727,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
 
   async function decide(id: string, decision: 'REVIEW' | 'APPROVE' | 'REJECT') {
     await withJustification({
-      question: 'Reason for this decision (at least 10 characters):',
+      question: t.ofcFnReasonForThisDecision,
       minimum: 10,
       tooShort: t.ofcFnDecisionTooShort,
       run: async (reason) => {

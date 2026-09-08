@@ -271,3 +271,56 @@ describe('nothing new arrives in English', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * The blind spot the check above shares with the portal's copy, now closed.
+ *
+ * `withoutLiterals` blanks the inside of every string before looking for JSX
+ * text — right for a template literal's `${…}`, and it means a literal
+ * rendered as an *expression child* is never examined:
+ *
+ *     {shown ? 'Hide' : 'Show'}
+ *     const UNITS = [['LITRE', 'Litre']]
+ *
+ * Both reach an agent in English, and neither is a prop, a JSX child, or an
+ * object field the pattern above names. So this rule is blunt where that one
+ * is careful: a capitalised literal in a translated surface is a dictionary
+ * key, an example somebody copies, or a bug. It is cheap to satisfy — the fix
+ * is always a key.
+ *
+ * The `Enter` in the allow-list is the keyboard event code, not a word. It was
+ * briefly turned into a dictionary key during the sweep that added this rule,
+ * which would have compared a key press against the Hausa word for it and
+ * stopped the Enter key working for anybody reading Hausa.
+ */
+const ALLOWED_LITERALS = new Set([
+  'PSIRS/2026/000123',
+  // A place, not a phrase; the same name in both languages.
+  'Plateau State',
+  // A keyboard event code. Translating it breaks the key.
+  'Enter',
+  'Bearer ',
+  'Content-Type',
+]);
+
+function capitalisedLiteralsIn(source: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const found: string[] = [];
+  for (const match of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"/g)) {
+    const text = (match[1] ?? match[2] ?? '').trim();
+    if (!/^[A-Z][a-z]/.test(text)) continue;
+    if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
+    found.push(text);
+  }
+  return found;
+}
+
+describe('no surface has English of its own', () => {
+  it('routes even its expression literals through the dictionary', () => {
+    const offenders: string[] = [];
+    for (const [path, source] of Object.entries(SURFACES)) {
+      for (const text of capitalisedLiteralsIn(source)) offenders.push(`${path}: ${text}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});

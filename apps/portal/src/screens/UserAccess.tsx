@@ -277,7 +277,7 @@ export function UserAccessScreen({ user }: { user: User }) {
 
           <div className="button-row">
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-              {busy ? 'Changing…' : 'Change access and sign them out'}
+              {busy ? t.ofcUaChanging : t.ofcUaChangeAccessAndSign}
             </button>
             <button
               type="button"
@@ -338,10 +338,10 @@ export function UserAccessScreen({ user }: { user: User }) {
               onClick={submitStatus}
             >
               {busy
-                ? 'Saving…'
+                ? t.agEnSaving
                 : chosenStatus === 'ACTIVE'
-                  ? 'Let them sign in again'
-                  : 'Sign them out and stop the account'}
+                  ? t.ofcUaLetThemSignIn
+                  : t.ofcUaSignThemOutAnd}
             </button>
             <button
               type="button"
@@ -424,7 +424,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                   disabled={busy || coverageReason.trim().length < 10}
                   onClick={submitCoverage}
                 >
-                  {busy ? 'Saving…' : 'Save territories'}
+                  {busy ? t.agEnSaving : t.ofcUaSaveTerritories}
                 </button>
                 <button type="button" className="secondary" onClick={() => setCoverage(null)}>{t.camCancel}</button>
               </div>
@@ -452,7 +452,7 @@ export function UserAccessScreen({ user }: { user: User }) {
             {
               key: 'last_login_at',
               label: 'ofcUaLastSignedIn',
-              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'),
+              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : t.ofcArNeverPaid),
             },
             {
               key: 'action',

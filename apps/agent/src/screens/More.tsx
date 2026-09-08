@@ -128,7 +128,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
             vehicleType: lookup.vehicle.vehicleType ?? 'PRIVATE',
             vehicleClass: lookup.vehicle.vehicleClass ?? undefined,
             colour: lookup.vehicle.colour ?? undefined,
-            ownerName: lookup.vehicle.ownerName ?? 'Unknown owner',
+            ownerName: lookup.vehicle.ownerName ?? t.moreUnknownOwner,
             taxpayerId,
           })
         ).vehicleId;
@@ -757,7 +757,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
             disabled={pushBusy || !pushManager.isSupported()}
             onClick={togglePush}
           >
-            {pushBusy ? <Spinner /> : pushStatus === 'granted' ? 'Disable Push Notifications' : 'Enable Push Notifications'}
+            {pushBusy ? <Spinner /> : pushStatus === 'granted' ? t.moreDisablePushNotifications : t.enablePush}
           </button>
         </div>
       </div>
@@ -898,7 +898,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
         reason: form.reason.trim(),
       });
       setMessage(
-        'Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change.',
+        t.moreSentToPsirsYour,
       );
       setForm({ bankName: '', bankCode: '', accountName: '', accountNumber: '', reason: '' });
       load();

@@ -98,15 +98,15 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
   const touched = Object.entries(form).filter(([key, value]) => key !== 'reason' && value.trim());
 
   const blockedBecause = ((): string | null => {
-    if (touched.length === 0) return 'Enter the corrected value in whichever field is wrong.';
+    if (touched.length === 0) return t.ofcTrEnterTheCorrectedValue;
     if (form.identityNumber.trim() && !form.identityType) {
-      return 'Name the type of identification when changing the number.';
+      return t.ofcTrNameTheTypeOf;
     }
     if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
-      return 'That date of birth is in the future. Check the year.';
+      return t.birthDateFuture;
     }
     if (form.reason.trim().length < 10) {
-      return 'Say what is being corrected and why, in at least 10 characters. It is the only record of why.';
+      return t.ofcTrSayWhatIsBeing;
     }
     return null;
   })();
@@ -192,7 +192,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
                     <div className="list__body">
                       <p className="list__title">{displayName(taxpayer)}</p>
                       <p className="list__meta">
-                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone}
+                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone}
                       </p>
                     </div>
                   </button>
@@ -208,9 +208,9 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           <h2 className="card__title">{displayName(chosen)}</h2>
           <KeyValue
             items={[
-              ['On record now', displayName(chosen)],
-              ['TIN', chosen.tin ?? 'Not yet assigned'],
-              ['Phone', chosen.phone],
+              [t.ofcTrOnRecordNow, displayName(chosen)],
+              ['TIN', chosen.tin ?? t.tpNotYetAssigned],
+              [t.tpPhone, chosen.phone],
             ]}
           />
 
@@ -295,7 +295,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
 
           <div className="button-row">
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-              {busy ? 'Correcting…' : 'Record this correction'}
+              {busy ? t.ofcTrCorrecting : t.ofcTrRecordThisCorrection}
             </button>
             <button type="button" className="secondary" onClick={() => setChosen(null)}>{t.tpChooseSomeoneElse}</button>
           </div>
@@ -790,7 +790,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
 
       <div className="button-row">
         <button type="button" disabled={busy || reason.trim().length < 10} onClick={submit}>
-          {busy ? 'Recording…' : status === 'ACTIVE' ? 'Put back on the register' : 'Take off the register'}
+          {busy ? t.ofcTrRecording : status === 'ACTIVE' ? t.ofcTrPutBackOnThe : t.ofcTrTakeOffRegister}
         </button>
       </div>
     </div>

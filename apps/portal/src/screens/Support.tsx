@@ -191,7 +191,7 @@ export function TicketDetailScreen({
     try {
       await api.post(`/support/tickets/${ticketId}/messages`, { body: reply, internal });
       setReply('');
-      setMessage(internal ? 'Internal note saved. The reporter cannot see it.' : 'Reply sent.');
+      setMessage(internal ? t.ofcSpInternalNoteSavedThe : t.ofcSpReplySent);
       setInternal(false);
       load();
     } catch (caught) {
@@ -241,14 +241,14 @@ export function TicketDetailScreen({
         </div>
         <KeyValue
           items={[
-            ['Status', <Badge status={ticket.status} key="s" />],
-            ['Priority', <Badge status={ticket.priority} key="p" />],
-            ['About', enumLabel(ticket.category, t)],
-            ['Reported by', `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
-            ['Contact', ticket.raised_by_phone],
-            ['Transaction', ticket.transaction_reference ?? '—'],
-            ['Raised', formatDateTime(ticket.created_at)],
-            ['Assigned to', ticket.assigned_to_name ?? 'Nobody yet'],
+            [t.appStatus, <Badge status={ticket.status} key="s" />],
+            [t.ofcSpPriority, <Badge status={ticket.priority} key="p" />],
+            [t.supAbout, enumLabel(ticket.category, t)],
+            [t.ofcSpReportedBy, `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
+            [t.ofcSpContact, ticket.raised_by_phone],
+            [t.supTransactionLabel, ticket.transaction_reference ?? '—'],
+            [t.ofcRhRaisedHeading, formatDateTime(ticket.created_at)],
+            [t.ofcSpAssignedTo, ticket.assigned_to_name ?? t.ofcSpNobodyYet],
           ]}
         />
         {ticket.resolution && (
@@ -304,11 +304,11 @@ export function TicketDetailScreen({
         </Alert>
       ) : (
         <form className="card" onSubmit={send}>
-          <h2 className="card__title">{internal ? 'Add an internal note' : 'Reply to the reporter'}</h2>
+          <h2 className="card__title">{internal ? t.ofcSpAddAnInternalNote : t.ofcSpReplyToTheReporter}</h2>
           <p className="card__hint">
             {internal
-              ? 'Only staff with support access can read this. The reporter never sees it.'
-              : 'This goes to the person who raised the ticket, and they are notified.'}
+              ? t.ofcSpOnlyStaffWithSupport
+              : t.ofcSpThisGoesToThe}
           </p>
           <textarea
             value={reply}
@@ -327,7 +327,7 @@ export function TicketDetailScreen({
               />{t.ofcSpKeepInternal}</label>
           )}
           <button type="submit" disabled={busy || reply.trim().length < 2}>
-            {busy ? 'Saving…' : internal ? 'Save internal note' : 'Send reply'}
+            {busy ? t.agEnSaving : internal ? t.ofcSpSaveInternalNote : t.ofcSpSendReply}
           </button>
         </form>
       )}

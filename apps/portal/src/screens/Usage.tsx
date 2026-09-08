@@ -19,6 +19,7 @@ import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Funnel {
   event: string;
@@ -38,12 +39,19 @@ interface Overview {
   screens: { surface: string; screen: string; views: string }[];
 }
 
-const FLOW_LABEL: Record<string, string> = {
-  'taxpayer.registration': 'Registering a taxpayer',
-  collection: 'Taking a collection',
-  'agent.application': 'Applying to become an agent',
-  'vehicle.capture': 'Capturing a vehicle',
+/** Keys rather than words, because this table is built before there is a reader. */
+const FLOW_LABEL: Record<string, keyof TranslationDictionary> = {
+  'taxpayer.registration': 'ofcUsRegisteringATaxpayer',
+  collection: 'ofcUsTakingACollection',
+  'agent.application': 'ofcUsApplyingToBecomeAn',
+  'vehicle.capture': 'ofcUsCapturingAVehicle',
 };
+
+/** The event's own name where the platform has no friendlier one for it. */
+function flowLabel(event: string, t: TranslationDictionary): string {
+  const key = FLOW_LABEL[event];
+  return key ? t[key] : event;
+}
 
 const percent = (part: string, whole: string) => {
   const total = Number(whole);
@@ -132,7 +140,7 @@ export function UsageScreen() {
             {
               key: 'event',
               label: 'ofcUsFlow',
-              render: (row: Funnel) => FLOW_LABEL[row.event] ?? row.event,
+              render: (row: Funnel) => flowLabel(row.event, t),
             },
             { key: 'started', label: 'ofcUsStarted' },
             { key: 'completed', label: 'ofcUsCompleted' },
@@ -162,7 +170,7 @@ export function UsageScreen() {
             {
               key: 'event',
               label: 'ofcUsFlow',
-              render: (row: { event: string }) => FLOW_LABEL[row.event] ?? row.event,
+              render: (row: { event: string }) => flowLabel(row.event, t),
             },
             { key: 'step', label: 'ofcUsLastStepReached' },
             { key: 'abandoned_here', label: 'ofcOsAttempts' },

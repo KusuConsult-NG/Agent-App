@@ -2621,6 +2621,187 @@ export interface TranslationDictionary {
   pubCitizenFooter: string;
   pubCitizenAlso: string;
   pubCitizenVerifyLink: string;
+  agSupYou: string;
+  collAuthorizedFieldOfficer: string;
+  moreDisablePushNotifications: string;
+  moreSentToPsirsYour: string;
+  moreUnknownOwner: string;
+  ofcAgAgentActivated: string;
+  ofcAgAgentAgreementAccepted: string;
+  ofcAgAgentSuspendedTheirSessions: string;
+  ofcAgApplicationApproved: string;
+  ofcAgApplicationRejected: string;
+  ofcAgAskedForBy: string;
+  ofcAgCommissionBankAccountVerified: string;
+  ofcAgConfirmedNoNameReturned: string;
+  ofcAgDeviceApprovedTheAgent: string;
+  ofcAgDeviceRestoredTheAgent: string;
+  ofcAgDeviceRevokedAndIts: string;
+  ofcAgDeviceSuspendedAndIts: string;
+  ofcAgDocumentType: string;
+  ofcAgFailureReason: string;
+  ofcAgFlagDismissedTheReferee: string;
+  ofcAgFlagMarkedAsUnder: string;
+  ofcAgFlagUpheldThisReferee: string;
+  ofcAgGiveAReasonOf: string;
+  ofcAgGovernmentApproved: string;
+  ofcAgIdentityVerifiedKyc: string;
+  ofcAgLivenessCheck: string;
+  ofcAgMandatoryTrainingCompleted: string;
+  ofcAgMoreInformationRequestedFrom: string;
+  ofcAgNameTheAgentGave: string;
+  ofcAgNameTheBankReturned: string;
+  ofcAgNumberOnFile: string;
+  ofcAgReasonGiven: string;
+  ofcAgRecordThis: string;
+  ofcAgRefereeCleared: string;
+  ofcAgRefereeRejected: string;
+  ofcAgTerritoryReassignedFutureCollections: string;
+  ofcAgTheAgent: string;
+  ofcAgTheBankConfirmedThe: string;
+  ofcAgTheBankCouldNot: string;
+  ofcAgTheBankVerificationService: string;
+  ofcAgThisAccountCannotBe: string;
+  ofcAgUnnamed: string;
+  ofcAlChooseTheProgrammeThis: string;
+  ofcAlCreateARound: string;
+  ofcAlCreateRound: string;
+  ofcAlCreating: string;
+  ofcAlGiveTheRoundA: string;
+  ofcAlHowMuchDoesEach: string;
+  ofcAlHowMuchIsThere: string;
+  ofcAlNotYet: string;
+  ofcAlOneBeneficiaryCannotReceive: string;
+  ofcAlRoundCreatedItAwards: string;
+  ofcAlWhenDoesCollectionOpen: string;
+  ofcCfActivate: string;
+  ofcCfAddToTheCatalogue: string;
+  ofcCfAdding: string;
+  ofcCfBusinesses: string;
+  ofcCfCalculatedByFormula: string;
+  ofcCfCurrent: string;
+  ofcCfEnterTheNewAmount: string;
+  ofcCfEnterTheNewRate: string;
+  ofcCfEvaluateAll: string;
+  ofcCfEvaluating: string;
+  ofcCfExistingAssessmentsAreUnaffected: string;
+  ofcCfForExampleRepealedBy: string;
+  ofcCfGiveAReasonFor: string;
+  ofcCfIndividuals: string;
+  ofcCfNoApprovedRateIn: string;
+  ofcCfNoNewAssessmentCan: string;
+  ofcCfNotEligible: string;
+  ofcCfOfAssessableAmount: string;
+  ofcCfProgressiveBands: string;
+  ofcCfRecordNewRateVersion: string;
+  ofcCfRecording: string;
+  ofcCfRestoreItem: string;
+  ofcCfTheItemGoesBack: string;
+  ofcCfWhatChangedForExample: string;
+  ofcCfWithdrawItem: string;
+  ofcDbAverageTimeToConfirm: string;
+  ofcDbDuplicateRegistrationsOverridden: string;
+  ofcDbNewTaxpayersThisMonth: string;
+  ofcDbReversalsAndRefunds: string;
+  ofcDbTaxpayersWithATin: string;
+  ofcDbTotalCollected: string;
+  ofcFaEnterTheMinimumVersion: string;
+  ofcFaEnterTheRecommendedVersion: string;
+  ofcFaNeverReportedAVersion: string;
+  ofcFaPublishThisMinimum: string;
+  ofcFaPublishing: string;
+  ofcFaSayWhyTheMinimum: string;
+  ofcFaShippedWithThePlatform: string;
+  ofcFnBankReferenceForThe: string;
+  ofcFnBankTransferReferenceAt: string;
+  ofcFnEnterTheCreditedAmount: string;
+  ofcFnItHasToAccount: string;
+  ofcFnListTheGatewayReferences: string;
+  ofcFnNothingWasComparedFor: string;
+  ofcFnReRunThisPeriod: string;
+  ofcFnReasonForApprovingThis: string;
+  ofcFnReasonForThisDecision: string;
+  ofcFnRecordHowThisException: string;
+  ofcFnWhatDidTheBank: string;
+  ofcFnWhatTheVarianceTurned: string;
+  ofcGpConfirmationLinkCreated: string;
+  ofcKyOpenAndReview: string;
+  ofcKyReviewedOn: string;
+  ofcKyTheAccessLogCould: string;
+  ofcLgCouldNotReachThe: string;
+  agStepSendingACode: string;
+  agStepCodeSentToNumber: string;
+  uiHide: string;
+  uiHidePassword: string;
+  uiShow: string;
+  uiShowPassword: string;
+  ofcOsAskTheGatewayAgain: string;
+  ofcOsAskTheTinService: string;
+  ofcOsAskingTheGateway: string;
+  ofcOsAskingTheTinService: string;
+  ofcOsEveryQueueYouCan: string;
+  ofcOsEveryRefundHasBeen: string;
+  ofcOsNotAttemptedYet: string;
+  ofcOsRetryComplete: string;
+  ofcOsSendToTheAuthority: string;
+  ofcOsSendingToTheAuthority: string;
+  ofcOvEveryScheduledJobHas: string;
+  ofcOvId: string;
+  ofcOvLoading: string;
+  ofcOvNoTaxpayerMatchedThat: string;
+  ofcOvNothingToChooseFrom: string;
+  ofcOvRecordWhatYouFound: string;
+  ofcOvRunAFraudSweep: string;
+  ofcOvRunThisQuery: string;
+  ofcOvRunning: string;
+  ofcOvSearchForATaxpayer: string;
+  ofcOvSelectOne: string;
+  ofcOvSweepCompleteNothingNew: string;
+  ofcOvSweeping: string;
+  ofcOvTheAuditTrailCould: string;
+  ofcOvWhichAgent: string;
+  ofcOvWhichRevenueItem: string;
+  ofcOvWhichTaxpayer: string;
+  ofcRhAskTheRegisterAgain: string;
+  ofcRhAsking: string;
+  ofcRhDeviceApproved: string;
+  ofcRhInvoiceDocument: string;
+  ofcRhPreparing: string;
+  ofcRhReAskedTheTin: string;
+  ofcRhRemindersSentToTaxpayers: string;
+  ofcRhSendPaymentReminders: string;
+  ofcRvEveryFigureHereCovers: string;
+  ofcRvNotMapped: string;
+  ofcRvTheseFiguresAreEmpty: string;
+  ofcSpAddAnInternalNote: string;
+  ofcSpAssignedTo: string;
+  ofcSpContact: string;
+  ofcSpInternalNoteSavedThe: string;
+  ofcSpNobodyYet: string;
+  ofcSpOnlyStaffWithSupport: string;
+  ofcSpReplySent: string;
+  ofcSpReplyToTheReporter: string;
+  ofcSpSaveInternalNote: string;
+  ofcSpSendReply: string;
+  ofcSpThisGoesToThe: string;
+  ofcTrCorrecting: string;
+  ofcTrEnterTheCorrectedValue: string;
+  ofcTrNameTheTypeOf: string;
+  ofcTrOnRecordNow: string;
+  ofcTrPutBackOnThe: string;
+  ofcTrRecordThisCorrection: string;
+  ofcTrRecording: string;
+  ofcTrSayWhatIsBeing: string;
+  ofcTxDirect: string;
+  ofcUaChangeAccessAndSign: string;
+  ofcUaChanging: string;
+  ofcUaLetThemSignIn: string;
+  ofcUaSaveTerritories: string;
+  ofcUaSignThemOutAnd: string;
+  ofcUsApplyingToBecomeAn: string;
+  ofcUsCapturingAVehicle: string;
+  ofcUsRegisteringATaxpayer: string;
+  ofcUsTakingACollection: string;
 }
 
 export const translations: Record<Language, TranslationDictionary> = {
@@ -4948,6 +5129,187 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
     pubCitizenAlso: 'Also available:',
     pubCitizenVerifyLink: 'Verify a payment receipt',
+    agSupYou: 'You',
+    collAuthorizedFieldOfficer: 'Authorized Field Officer',
+    moreDisablePushNotifications: 'Disable Push Notifications',
+    moreSentToPsirsYour: 'Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change.',
+    moreUnknownOwner: 'Unknown owner',
+    ofcAgAgentActivated: 'Agent activated.',
+    ofcAgAgentAgreementAccepted: 'Agent agreement accepted',
+    ofcAgAgentSuspendedTheirSessions: 'Agent suspended. Their sessions and devices have been disabled.',
+    ofcAgApplicationApproved: 'Application approved.',
+    ofcAgApplicationRejected: 'Application rejected.',
+    ofcAgAskedForBy: 'Asked for by',
+    ofcAgCommissionBankAccountVerified: 'Commission bank account verified',
+    ofcAgConfirmedNoNameReturned: 'Confirmed, no name returned',
+    ofcAgDeviceApprovedTheAgent: 'Device approved. The agent can now collect from it.',
+    ofcAgDeviceRestoredTheAgent: 'Device restored. The agent can collect from it again.',
+    ofcAgDeviceRevokedAndIts: 'Device revoked and its sessions ended.',
+    ofcAgDeviceSuspendedAndIts: 'Device suspended and its sessions ended. It can be restored.',
+    ofcAgDocumentType: 'Document type',
+    ofcAgFailureReason: 'Failure reason',
+    ofcAgFlagDismissedTheReferee: 'Flag dismissed. The referee can be cleared as normal.',
+    ofcAgFlagMarkedAsUnder: 'Flag marked as under review.',
+    ofcAgFlagUpheldThisReferee: 'Flag upheld. This referee cannot be cleared until it is dismissed.',
+    ofcAgGiveAReasonOf: 'Give a reason of at least 10 characters. It is the only record of why the account somebody is paid into was moved.',
+    ofcAgGovernmentApproved: 'Government approved',
+    ofcAgIdentityVerifiedKyc: 'Identity verified (KYC)',
+    ofcAgLivenessCheck: 'Liveness check',
+    ofcAgMandatoryTrainingCompleted: 'Mandatory training completed',
+    ofcAgMoreInformationRequestedFrom: 'More information requested from the applicant.',
+    ofcAgNameTheAgentGave: 'Name the agent gave',
+    ofcAgNameTheBankReturned: 'Name the bank returned',
+    ofcAgNumberOnFile: 'Number on file',
+    ofcAgReasonGiven: 'Reason given',
+    ofcAgRecordThis: 'Record this',
+    ofcAgRefereeCleared: 'Referee cleared.',
+    ofcAgRefereeRejected: 'Referee rejected.',
+    ofcAgTerritoryReassignedFutureCollections: 'Territory reassigned. Future collections are attributed to it.',
+    ofcAgTheAgent: 'The agent',
+    ofcAgTheBankConfirmedThe: 'The bank confirmed the account.',
+    ofcAgTheBankCouldNot: 'The bank could not be reached',
+    ofcAgTheBankVerificationService: 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.',
+    ofcAgThisAccountCannotBe: 'This account cannot be approved while the bank does not confirm it. Refuse the request so the agent can send the right details.',
+    ofcAgUnnamed: 'Unnamed',
+    ofcAlChooseTheProgrammeThis: 'Choose the programme this round distributes under.',
+    ofcAlCreateARound: 'Create a round',
+    ofcAlCreateRound: 'Create round',
+    ofcAlCreating: 'Creating…',
+    ofcAlGiveTheRoundA: 'Give the round a name people will recognise.',
+    ofcAlHowMuchDoesEach: 'How much does each beneficiary receive?',
+    ofcAlHowMuchIsThere: 'How much is there to distribute in total?',
+    ofcAlNotYet: 'Not yet',
+    ofcAlOneBeneficiaryCannotReceive: 'One beneficiary cannot receive more than the whole round holds.',
+    ofcAlRoundCreatedItAwards: 'Round created. It awards nothing until you open it.',
+    ofcAlWhenDoesCollectionOpen: 'When does collection open?',
+    ofcCfActivate: 'Activate',
+    ofcCfAddToTheCatalogue: 'Add to the catalogue',
+    ofcCfAdding: 'Adding…',
+    ofcCfBusinesses: 'Businesses',
+    ofcCfCalculatedByFormula: 'Calculated by formula',
+    ofcCfCurrent: 'Current',
+    ofcCfEnterTheNewAmount: 'Enter the new amount. Leave nothing to chance \\u2014 type 0 if the levy is being suspended.',
+    ofcCfEnterTheNewRate: 'Enter the new rate as a percentage. Type 0 if the levy is being suspended.',
+    ofcCfEvaluateAll: 'Evaluate all',
+    ofcCfEvaluating: 'Evaluating…',
+    ofcCfExistingAssessmentsAreUnaffected: 'Existing assessments are unaffected.',
+    ofcCfForExampleRepealedBy: 'For example: repealed by the Plateau State Finance Law amendment.',
+    ofcCfGiveAReasonFor: 'Give a reason for the rate change, in at least 10 characters.',
+    ofcCfIndividuals: 'Individuals',
+    ofcCfNoApprovedRateIn: 'No approved rate in force',
+    ofcCfNoNewAssessmentCan: 'No new assessment can be raised against a withdrawn item. Invoices already issued stay payable — withdrawing an item is not a decision to write off arrears.',
+    ofcCfNotEligible: 'Not eligible',
+    ofcCfOfAssessableAmount: '% of assessable amount',
+    ofcCfProgressiveBands: 'Progressive bands',
+    ofcCfRecordNewRateVersion: 'Record new rate version',
+    ofcCfRecording: 'Recording…',
+    ofcCfRestoreItem: 'Restore item',
+    ofcCfTheItemGoesBack: 'The item goes back into the catalogue and can be assessed against again.',
+    ofcCfWhatChangedForExample: 'What changed — for example, the tariff was confirmed against the gazette.',
+    ofcCfWithdrawItem: 'Withdraw item',
+    ofcDbAverageTimeToConfirm: 'Average time to confirm a payment',
+    ofcDbDuplicateRegistrationsOverridden: 'Duplicate registrations overridden',
+    ofcDbNewTaxpayersThisMonth: 'New taxpayers this month',
+    ofcDbReversalsAndRefunds: 'Reversals and refunds',
+    ofcDbTaxpayersWithATin: 'Taxpayers with a TIN',
+    ofcDbTotalCollected: 'Total collected',
+    ofcFaEnterTheMinimumVersion: 'Enter the minimum version as digits and dots, like 1.4.0.',
+    ofcFaEnterTheRecommendedVersion: 'Enter the recommended version as digits and dots, like 1.4.0.',
+    ofcFaNeverReportedAVersion: 'Never reported a version',
+    ofcFaPublishThisMinimum: 'Publish this minimum',
+    ofcFaPublishing: 'Publishing…',
+    ofcFaSayWhyTheMinimum: 'Say why the minimum is moving, in at least 10 characters. It is what an agent who is locked out will be shown.',
+    ofcFaShippedWithThePlatform: 'Shipped with the platform',
+    ofcFnBankReferenceForThe: 'Bank reference for the credit that settles it',
+    ofcFnBankTransferReferenceAt: 'Bank transfer reference (at least 3 characters):',
+    ofcFnEnterTheCreditedAmount: 'Enter the credited amount in naira, for example 1250000.00.',
+    ofcFnItHasToAccount: 'It has to account for the collections in the batch in full.',
+    ofcFnListTheGatewayReferences: 'List the gateway references this credit covers.',
+    ofcFnNothingWasComparedFor: 'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
+    ofcFnReRunThisPeriod: 'Re-run this period once the gateway is reachable.',
+    ofcFnReasonForApprovingThis: 'Reason for approving this payout (at least 5 characters):',
+    ofcFnReasonForThisDecision: 'Reason for this decision (at least 10 characters):',
+    ofcFnRecordHowThisException: 'Record how this exception was resolved (at least 10 characters):',
+    ofcFnWhatDidTheBank: 'What did the bank say? (at least 10 characters)',
+    ofcFnWhatTheVarianceTurned: 'What the variance turned out to be',
+    ofcGpConfirmationLinkCreated: 'Confirmation link created.',
+    ofcKyOpenAndReview: 'Open and review',
+    ofcKyReviewedOn: 'Reviewed on',
+    ofcKyTheAccessLogCould: 'The access log could not be read.',
+    ofcLgCouldNotReachThe: 'Could not reach the revenue platform. Check your connection.',
+    agStepSendingACode: 'Sending a one-time code…',
+    agStepCodeSentToNumber: 'We sent a code to your registered number.',
+    uiHide: 'Hide',
+    uiHidePassword: 'Hide password',
+    uiShow: 'Show',
+    uiShowPassword: 'Show password',
+    ofcOsAskTheGatewayAgain: 'Ask the gateway again',
+    ofcOsAskTheTinService: 'Ask the TIN service again',
+    ofcOsAskingTheGateway: 'Asking the gateway…',
+    ofcOsAskingTheTinService: 'Asking the TIN service…',
+    ofcOsEveryQueueYouCan: 'Every queue you can see is empty. Others are guarded by permissions your role does not hold.',
+    ofcOsEveryRefundHasBeen: 'Every refund has been returned, every taxpayer has their TIN, and the vehicle authority has acknowledged every renewal.',
+    ofcOsNotAttemptedYet: 'Not attempted yet',
+    ofcOsRetryComplete: 'Retry complete.',
+    ofcOsSendToTheAuthority: 'Send to the authority again',
+    ofcOsSendingToTheAuthority: 'Sending to the authority…',
+    ofcOvEveryScheduledJobHas: 'Every scheduled job has run recently and succeeded.',
+    ofcOvId: 'Id',
+    ofcOvLoading: 'Loading…',
+    ofcOvNoTaxpayerMatchedThat: 'No taxpayer matched that search',
+    ofcOvNothingToChooseFrom: 'Nothing to choose from',
+    ofcOvRecordWhatYouFound: 'Record what you found (at least 10 characters):',
+    ofcOvRunAFraudSweep: 'Run a fraud sweep now',
+    ofcOvRunThisQuery: 'Run this query',
+    ofcOvRunning: 'Running…',
+    ofcOvSearchForATaxpayer: 'Search for a taxpayer first',
+    ofcOvSelectOne: 'Select one',
+    ofcOvSweepCompleteNothingNew: 'Sweep complete. Nothing new was flagged.',
+    ofcOvSweeping: 'Sweeping…',
+    ofcOvTheAuditTrailCould: 'The audit trail could not be checked just now. This is not a finding about the trail — try again, and tell support if it persists.',
+    ofcOvWhichAgent: 'Which agent?',
+    ofcOvWhichRevenueItem: 'Which revenue item?',
+    ofcOvWhichTaxpayer: 'Which taxpayer?',
+    ofcRhAskTheRegisterAgain: 'Ask the register again',
+    ofcRhAsking: 'Asking…',
+    ofcRhDeviceApproved: 'Device approved.',
+    ofcRhInvoiceDocument: 'Invoice document',
+    ofcRhPreparing: 'Preparing…',
+    ofcRhReAskedTheTin: 'Re-asked the TIN register for everyone still waiting.',
+    ofcRhRemindersSentToTaxpayers: 'Reminders sent to taxpayers with something due.',
+    ofcRhSendPaymentReminders: 'Send payment reminders',
+    ofcRvEveryFigureHereCovers: 'Every figure here covers your territories only, not the whole state.',
+    ofcRvNotMapped: 'Not mapped',
+    ofcRvTheseFiguresAreEmpty: 'These figures are empty because your account covers no territory yet.',
+    ofcSpAddAnInternalNote: 'Add an internal note',
+    ofcSpAssignedTo: 'Assigned to',
+    ofcSpContact: 'Contact',
+    ofcSpInternalNoteSavedThe: 'Internal note saved. The reporter cannot see it.',
+    ofcSpNobodyYet: 'Nobody yet',
+    ofcSpOnlyStaffWithSupport: 'Only staff with support access can read this. The reporter never sees it.',
+    ofcSpReplySent: 'Reply sent.',
+    ofcSpReplyToTheReporter: 'Reply to the reporter',
+    ofcSpSaveInternalNote: 'Save internal note',
+    ofcSpSendReply: 'Send reply',
+    ofcSpThisGoesToThe: 'This goes to the person who raised the ticket, and they are notified.',
+    ofcTrCorrecting: 'Correcting…',
+    ofcTrEnterTheCorrectedValue: 'Enter the corrected value in whichever field is wrong.',
+    ofcTrNameTheTypeOf: 'Name the type of identification when changing the number.',
+    ofcTrOnRecordNow: 'On record now',
+    ofcTrPutBackOnThe: 'Put back on the register',
+    ofcTrRecordThisCorrection: 'Record this correction',
+    ofcTrRecording: 'Recording…',
+    ofcTrSayWhatIsBeing: 'Say what is being corrected and why, in at least 10 characters. It is the only record of why.',
+    ofcTxDirect: 'Direct',
+    ofcUaChangeAccessAndSign: 'Change access and sign them out',
+    ofcUaChanging: 'Changing…',
+    ofcUaLetThemSignIn: 'Let them sign in again',
+    ofcUaSaveTerritories: 'Save territories',
+    ofcUaSignThemOutAnd: 'Sign them out and stop the account',
+    ofcUsApplyingToBecomeAn: 'Applying to become an agent',
+    ofcUsCapturingAVehicle: 'Capturing a vehicle',
+    ofcUsRegisteringATaxpayer: 'Registering a taxpayer',
+    ofcUsTakingACollection: 'Taking a collection',
   },
   ha: {
     appName: 'Hukumar Haraji ta Jihar Filato (PSIRS)',
@@ -7269,6 +7631,187 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
     pubCitizenAlso: 'Akwai kuma:',
     pubCitizenVerifyLink: 'Tantance rasitin biyan kudi',
+    agSupYou: 'Kai',
+    collAuthorizedFieldOfficer: 'Jami’in fili mai izini',
+    moreDisablePushNotifications: 'Kashe sanarwar turawa',
+    moreSentToPsirsYour: 'An tura wa PSIRS. Kwamishan naka zai ci gaba da zuwa asusunka na yanzu har sai wani jami’i ya amince da canjin.',
+    moreUnknownOwner: 'Ba a san mai shi ba',
+    ofcAgAgentActivated: 'An kunna wakilin.',
+    ofcAgAgentAgreementAccepted: 'An amince da yarjejeniyar wakili',
+    ofcAgAgentSuspendedTheirSessions: 'An dakatar da wakilin. An kashe zamansa da na’urorinsa.',
+    ofcAgApplicationApproved: 'An amince da bukatar.',
+    ofcAgApplicationRejected: 'An ki bukatar.',
+    ofcAgAskedForBy: 'Wanda ya nema',
+    ofcAgCommissionBankAccountVerified: 'An tabbatar da asusun bankin kwamishan',
+    ofcAgConfirmedNoNameReturned: 'An tabbatar, amma ba a mayar da suna ba',
+    ofcAgDeviceApprovedTheAgent: 'An amince da na’urar. Yanzu wakili zai iya karba da ita.',
+    ofcAgDeviceRestoredTheAgent: 'An mayar da na’urar. Wakili zai iya sake karba da ita.',
+    ofcAgDeviceRevokedAndIts: 'An janye na’urar kuma an kawo karshen zamanta.',
+    ofcAgDeviceSuspendedAndIts: 'An dakatar da na’urar kuma an kawo karshen zamanta. Ana iya mayar da ita.',
+    ofcAgDocumentType: 'Nau’in takarda',
+    ofcAgFailureReason: 'Dalilin gazawa',
+    ofcAgFlagDismissedTheReferee: 'An soke gargadin. Ana iya tabbatar da mai shaida kamar yadda aka saba.',
+    ofcAgFlagMarkedAsUnder: 'An sanya gargadin a matsayin ana bincike.',
+    ofcAgFlagUpheldThisReferee: 'An tabbatar da gargadin. Ba za a iya tabbatar da wannan mai shaida ba sai an soke shi.',
+    ofcAgGiveAReasonOf: 'Ka bayar da dalili na akalla haruffa 10. Shi ne kadai rikodin dalilin da ya sa aka sauya asusun da ake biyan wani a ciki.',
+    ofcAgGovernmentApproved: 'Gwamnati ta amince',
+    ofcAgIdentityVerifiedKyc: 'An tabbatar da shaida (KYC)',
+    ofcAgLivenessCheck: 'Tabbatar da mutum na gaske',
+    ofcAgMandatoryTrainingCompleted: 'An kammala horon wajibi',
+    ofcAgMoreInformationRequestedFrom: 'An nemi karin bayani daga mai nema.',
+    ofcAgNameTheAgentGave: 'Sunan da wakili ya bayar',
+    ofcAgNameTheBankReturned: 'Sunan da banki ya mayar',
+    ofcAgNumberOnFile: 'Lambar da ke rubuce',
+    ofcAgReasonGiven: 'Dalilin da aka bayar',
+    ofcAgRecordThis: 'Rubuta wannan',
+    ofcAgRefereeCleared: 'An tabbatar da mai shaida.',
+    ofcAgRefereeRejected: 'An ki mai shaida.',
+    ofcAgTerritoryReassignedFutureCollections: 'An sauya yankin. Za a danganta karbar kudi ta gaba da shi.',
+    ofcAgTheAgent: 'Wakilin',
+    ofcAgTheBankConfirmedThe: 'Banki ya tabbatar da asusun.',
+    ofcAgTheBankCouldNot: 'Ba a samu banki ba',
+    ofcAgTheBankVerificationService: 'Ba a samu sabis din tabbatar da banki ba. Ka sake gwadawa kafin ka yanke shawara — ba za a iya amincewa da asusun da ba a tabbatar ba.',
+    ofcAgThisAccountCannotBe: 'Ba za a iya amincewa da wannan asusu ba matukar banki bai tabbatar da shi ba. Ka ki bukatar domin wakili ya aiko da bayanan da suka dace.',
+    ofcAgUnnamed: 'Ba shi da suna',
+    ofcAlChooseTheProgrammeThis: 'Ka zabi shirin da wannan zagaye zai rarraba a karkashinsa.',
+    ofcAlCreateARound: 'Kirkiri zagaye',
+    ofcAlCreateRound: 'Kirkiri zagaye',
+    ofcAlCreating: 'Ana kirkira…',
+    ofcAlGiveTheRoundA: 'Ka ba zagayen suna da mutane za su gane.',
+    ofcAlHowMuchDoesEach: 'Nawa kowane mai amfana zai samu?',
+    ofcAlHowMuchIsThere: 'Nawa ne za a rarraba gaba daya?',
+    ofcAlNotYet: 'Ba tukuna',
+    ofcAlOneBeneficiaryCannotReceive: 'Mai amfana daya ba zai iya samun fiye da abin da zagayen ya kunsa ba.',
+    ofcAlRoundCreatedItAwards: 'An kirkiri zagayen. Ba ya bayar da komai sai ka bude shi.',
+    ofcAlWhenDoesCollectionOpen: 'Yaushe karbar za ta bude?',
+    ofcCfActivate: 'Kunna',
+    ofcCfAddToTheCatalogue: 'Kara a cikin kundin',
+    ofcCfAdding: 'Ana karawa…',
+    ofcCfBusinesses: 'Kasuwanci',
+    ofcCfCalculatedByFormula: 'An kirga ta hanyar tsari',
+    ofcCfCurrent: 'Na yanzu',
+    ofcCfEnterTheNewAmount: 'Ka shigar da sabon adadin. Kada ka bar komai a zato — ka rubuta 0 idan ana dakatar da harajin.',
+    ofcCfEnterTheNewRate: 'Ka shigar da sabon farashin a matsayin kaso. Ka rubuta 0 idan ana dakatar da harajin.',
+    ofcCfEvaluateAll: 'Auna duka',
+    ofcCfEvaluating: 'Ana auna…',
+    ofcCfExistingAssessmentsAreUnaffected: 'Kimantawar da ake da ita ba za ta shafu ba.',
+    ofcCfForExampleRepealedBy: 'Misali: an soke shi ta gyaran Dokar Kudi ta Jihar Filato.',
+    ofcCfGiveAReasonFor: 'Ka bayar da dalilin canjin farashin, a cikin akalla haruffa 10.',
+    ofcCfIndividuals: 'Mutane',
+    ofcCfNoApprovedRateIn: 'Babu farashin da aka amince da shi a aiki',
+    ofcCfNoNewAssessmentCan: 'Ba za a iya yin sabon kimantawa a kan nau’in da aka janye ba. Takardun da aka riga aka bayar suna nan a biya — janye nau’i ba shawara ba ce ta yafe bashin da ake bin mutane.',
+    ofcCfNotEligible: 'Bai cancanta ba',
+    ofcCfOfAssessableAmount: '% na adadin da ake kimantawa',
+    ofcCfProgressiveBands: 'Matakan haraji masu hawa',
+    ofcCfRecordNewRateVersion: 'Rubuta sabon salon farashi',
+    ofcCfRecording: 'Ana rubutawa…',
+    ofcCfRestoreItem: 'Mayar da nau’in',
+    ofcCfTheItemGoesBack: 'Nau’in yana komawa cikin kundin kuma ana iya sake kimanta shi.',
+    ofcCfWhatChangedForExample: 'Me ya canza — misali, an tabbatar da kudin a kan jaridar gwamnati.',
+    ofcCfWithdrawItem: 'Janye nau’in',
+    ofcDbAverageTimeToConfirm: 'Matsakaicin lokacin tabbatar da biya',
+    ofcDbDuplicateRegistrationsOverridden: 'Rijistar da aka maimaita da aka wuce',
+    ofcDbNewTaxpayersThisMonth: 'Sabbin masu biyan haraji a wannan wata',
+    ofcDbReversalsAndRefunds: 'Mayarwa da dawo da kudi',
+    ofcDbTaxpayersWithATin: 'Masu biyan haraji da ke da TIN',
+    ofcDbTotalCollected: 'Jimlar abin da aka karba',
+    ofcFaEnterTheMinimumVersion: 'Ka shigar da mafi karancin salo da lambobi da digo, kamar 1.4.0.',
+    ofcFaEnterTheRecommendedVersion: 'Ka shigar da salon da ake ba da shawara da lambobi da digo, kamar 1.4.0.',
+    ofcFaNeverReportedAVersion: 'Bai taba bayar da rahoton salo ba',
+    ofcFaPublishThisMinimum: 'Buga wannan mafi karanci',
+    ofcFaPublishing: 'Ana bugawa…',
+    ofcFaSayWhyTheMinimum: 'Ka fadi dalilin da ya sa ake motsa mafi karanci, a cikin akalla haruffa 10. Shi ne abin da wakilin da aka killace zai gani.',
+    ofcFaShippedWithThePlatform: 'An aiko shi tare da dandalin',
+    ofcFnBankReferenceForThe: 'Lambar banki na kudin da ya kammala shi',
+    ofcFnBankTransferReferenceAt: 'Lambar tura kudi ta banki (akalla haruffa 3):',
+    ofcFnEnterTheCreditedAmount: 'Ka shigar da adadin da aka shigar a naira, misali 1250000.00.',
+    ofcFnItHasToAccount: 'Dole ne ya biya karbar da ke cikin rukunin gaba daya.',
+    ofcFnListTheGatewayReferences: 'Ka jera lambobin shigarwar da wannan kudi ya kunsa.',
+    ofcFnNothingWasComparedFor: 'Ba a kwatanta komai a wannan lokaci ba, don haka ba a tabbatar da komai game da shi ba. Ka sake gwadawa idan an samu shigarwar.',
+    ofcFnReRunThisPeriod: 'Ka sake gudanar da wannan lokaci idan an samu shigarwar.',
+    ofcFnReasonForApprovingThis: 'Dalilin amincewa da wannan fitar da kudi (akalla haruffa 5):',
+    ofcFnReasonForThisDecision: 'Dalilin wannan shawara (akalla haruffa 10):',
+    ofcFnRecordHowThisException: 'Ka rubuta yadda aka warware wannan matsala (akalla haruffa 10):',
+    ofcFnWhatDidTheBank: 'Me banki ya ce? (akalla haruffa 10)',
+    ofcFnWhatTheVarianceTurned: 'Abin da bambancin ya zamo',
+    ofcGpConfirmationLinkCreated: 'An kirkiri hanyar tabbatarwa.',
+    ofcKyOpenAndReview: 'Bude ka duba',
+    ofcKyReviewedOn: 'An duba a ranar',
+    ofcKyTheAccessLogCould: 'Ba a iya karanta rikodin shiga ba.',
+    ofcLgCouldNotReachThe: 'Ba a iya isa ga dandalin haraji ba. Ka duba haduwarka da yanar gizo.',
+    agStepSendingACode: 'Ana aika lamba ta lokaci daya…',
+    agStepCodeSentToNumber: 'Mun aika lamba zuwa lambarka da aka yi rijista.',
+    uiHide: 'Boye',
+    uiHidePassword: 'Boye kalmar sirri',
+    uiShow: 'Nuna',
+    uiShowPassword: 'Nuna kalmar sirri',
+    ofcOsAskTheGatewayAgain: 'Sake tambayar shigarwar',
+    ofcOsAskTheTinService: 'Sake tambayar sabis din TIN',
+    ofcOsAskingTheGateway: 'Ana tambayar shigarwar…',
+    ofcOsAskingTheTinService: 'Ana tambayar sabis din TIN…',
+    ofcOsEveryQueueYouCan: 'Duk jerin da za ka iya gani babu komai a ciki. Sauran suna karkashin izinin da matsayinka bai kunsa ba.',
+    ofcOsEveryRefundHasBeen: 'An mayar da kowane kudi, kowane mai biyan haraji yana da TIN dinsa, kuma hukumar ababen hawa ta amsa kowane sabuntawa.',
+    ofcOsNotAttemptedYet: 'Ba a gwada ba tukuna',
+    ofcOsRetryComplete: 'An kammala sake gwadawa.',
+    ofcOsSendToTheAuthority: 'Sake turawa hukumar',
+    ofcOsSendingToTheAuthority: 'Ana turawa hukumar…',
+    ofcOvEveryScheduledJobHas: 'Kowane aikin da aka tsara ya gudana kwanan nan kuma ya yi nasara.',
+    ofcOvId: 'Lamba',
+    ofcOvLoading: 'Ana lodi…',
+    ofcOvNoTaxpayerMatchedThat: 'Babu mai biyan haraji da ya dace da wannan bincike',
+    ofcOvNothingToChooseFrom: 'Babu abin da za a zaba',
+    ofcOvRecordWhatYouFound: 'Ka rubuta abin da ka gano (akalla haruffa 10):',
+    ofcOvRunAFraudSweep: 'Gudanar da sharewar zamba yanzu',
+    ofcOvRunThisQuery: 'Gudanar da wannan tambaya',
+    ofcOvRunning: 'Ana gudanarwa…',
+    ofcOvSearchForATaxpayer: 'Ka fara neman mai biyan haraji',
+    ofcOvSelectOne: 'Ka zabi daya',
+    ofcOvSweepCompleteNothingNew: 'An kammala sharewar. Ba a sami sabon abin gargadi ba.',
+    ofcOvSweeping: 'Ana sharewa…',
+    ofcOvTheAuditTrailCould: 'Ba a iya duba tarihin binciken a yanzu ba. Wannan ba bincike ba ne a kan tarihin — ka sake gwadawa, ka kuma sanar da tallafi idan ya ci gaba.',
+    ofcOvWhichAgent: 'Wane wakili?',
+    ofcOvWhichRevenueItem: 'Wane nau’in haraji?',
+    ofcOvWhichTaxpayer: 'Wane mai biyan haraji?',
+    ofcRhAskTheRegisterAgain: 'Sake tambayar rijistar',
+    ofcRhAsking: 'Ana tambaya…',
+    ofcRhDeviceApproved: 'An amince da na’urar.',
+    ofcRhInvoiceDocument: 'Takardar biyan kudi',
+    ofcRhPreparing: 'Ana shirya…',
+    ofcRhReAskedTheTin: 'An sake tambayar rijistar TIN game da duk wanda ke jira.',
+    ofcRhRemindersSentToTaxpayers: 'An aika tunatarwa ga masu biyan haraji da ke da abin biya.',
+    ofcRhSendPaymentReminders: 'Aika tunatarwar biya',
+    ofcRvEveryFigureHereCovers: 'Kowace lamba a nan ta shafi yankunanka ne kadai, ba dukan jihar ba.',
+    ofcRvNotMapped: 'Ba a danganta ba',
+    ofcRvTheseFiguresAreEmpty: 'Wadannan lambobi babu komai a cikinsu domin asusunka bai kunshi wani yanki ba tukuna.',
+    ofcSpAddAnInternalNote: 'Kara bayanin cikin gida',
+    ofcSpAssignedTo: 'An ba wa',
+    ofcSpContact: 'Hanyar tuntuba',
+    ofcSpInternalNoteSavedThe: 'An ajiye bayanin cikin gida. Wanda ya kawo korafin ba zai gan shi ba.',
+    ofcSpNobodyYet: 'Ba wanda ya karba tukuna',
+    ofcSpOnlyStaffWithSupport: 'Ma’aikatan da ke da izinin tallafi ne kadai za su iya karanta wannan. Wanda ya kawo korafin ba ya ganin sa ko kadan.',
+    ofcSpReplySent: 'An aika amsar.',
+    ofcSpReplyToTheReporter: 'Amsa wa wanda ya kawo korafin',
+    ofcSpSaveInternalNote: 'Ajiye bayanin cikin gida',
+    ofcSpSendReply: 'Aika amsar',
+    ofcSpThisGoesToThe: 'Wannan zai je wa wanda ya kawo korafin, kuma za a sanar da shi.',
+    ofcTrCorrecting: 'Ana gyarawa…',
+    ofcTrEnterTheCorrectedValue: 'Ka shigar da darajar da aka gyara a duk filin da ba daidai ba ne.',
+    ofcTrNameTheTypeOf: 'Ka fadi nau’in shaidar mutum idan kana canza lambar.',
+    ofcTrOnRecordNow: 'Abin da ke rubuce yanzu',
+    ofcTrPutBackOnThe: 'Mayar da shi cikin rijistar',
+    ofcTrRecordThisCorrection: 'Rubuta wannan gyara',
+    ofcTrRecording: 'Ana rubutawa…',
+    ofcTrSayWhatIsBeing: 'Ka fadi abin da ake gyarawa da dalili, a cikin akalla haruffa 10. Shi ne kadai rikodin dalilin.',
+    ofcTxDirect: 'Kai tsaye',
+    ofcUaChangeAccessAndSign: 'Canza izini ka fitar da su',
+    ofcUaChanging: 'Ana canzawa…',
+    ofcUaLetThemSignIn: 'Bar su su sake shiga',
+    ofcUaSaveTerritories: 'Ajiye yankunan',
+    ofcUaSignThemOutAnd: 'Fitar da su ka dakatar da asusun',
+    ofcUsApplyingToBecomeAn: 'Nema domin zama wakili',
+    ofcUsCapturingAVehicle: 'Daukar bayanan mota',
+    ofcUsRegisteringATaxpayer: 'Yin rijistar mai biyan haraji',
+    ofcUsTakingACollection: 'Karbar kudi',
   },
 };
 

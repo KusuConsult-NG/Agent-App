@@ -119,10 +119,10 @@ export function StepUpPrompt({
 
       <p className="card__hint">
         {sending
-          ? 'Sending a one-time code…'
+          ? t.agStepSendingACode
           : destination
             ? `We sent a code to ${maskPhone(destination)}. It is only for this one action.`
-            : 'We sent a code to your registered number.'}
+            : t.agStepCodeSentToNumber}
       </p>
 
       <ErrorAlert error={error} />

@@ -5,6 +5,7 @@ import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -25,17 +26,17 @@ interface RevenueItem {
   status_reason: string | null;
 }
 
-function describeRate(item: RevenueItem): string {
-  if (!item.rate_type) return 'No approved rate in force';
+function describeRate(item: RevenueItem, t: TranslationDictionary): string {
+  if (!item.rate_type) return t.ofcCfNoApprovedRateIn;
   switch (item.rate_type) {
     case 'FIXED':
       return item.fixed_amount_kobo ? formatNaira(BigInt(item.fixed_amount_kobo)) : '—';
     case 'PERCENTAGE':
-      return `${((item.rate_basis_points ?? 0) / 100).toFixed(2)}% of assessable amount`;
+      return `${((item.rate_basis_points ?? 0) / 100).toFixed(2)}${t.ofcCfOfAssessableAmount}`;
     case 'TIERED':
-      return 'Progressive bands';
+      return t.ofcCfProgressiveBands;
     case 'FORMULA':
-      return 'Calculated by formula';
+      return t.ofcCfCalculatedByFormula;
     default:
       return item.rate_type;
   }
@@ -168,9 +169,9 @@ export function CatalogueScreen({ user }: { user: User }) {
               {
                 key: 'effective_to',
                 label: 'ofcTo',
-                render: (row) => (row.effective_to ? formatDate(row.effective_to) : 'Current'),
+                render: (row) => (row.effective_to ? formatDate(row.effective_to) : t.ofcCfCurrent),
               },
-              { key: 'changed_by', label: 'ofcCfChangedBy', render: (row) => row.changed_by ?? 'System' },
+              { key: 'changed_by', label: 'ofcCfChangedBy', render: (row) => row.changed_by ?? t.ofcOvSystem },
               {
                 key: 'requested_reason',
                 label: 'ofcAgReason',
@@ -195,7 +196,7 @@ export function CatalogueScreen({ user }: { user: User }) {
               { key: 'name', label: 'colRevenueItem', render: (row: RevenueItem) => localName(lang, row.name, row.name_ha) },
               { key: 'category_name', label: 'ofcAgCategory', render: (row: RevenueItem) => localName(lang, row.category_name, row.category_name_ha) },
               { key: 'frequency', label: 'ofcCfFrequency', render: (row) => <Badge status={row.frequency} /> },
-              { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row) },
+              { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row, t) },
               {
                 key: 'version',
                 label: 'ofcAgVersion',
@@ -205,7 +206,7 @@ export function CatalogueScreen({ user }: { user: User }) {
               {
                 key: 'commission_eligible',
                 label: 'navCommission',
-                render: (row) => (row.commission_eligible ? 'Eligible' : 'Not eligible'),
+                render: (row) => (row.commission_eligible ? t.ofcCfEligible : t.ofcCfNotEligible),
               },
               {
                 key: 'status',
@@ -245,7 +246,7 @@ export function CatalogueScreen({ user }: { user: User }) {
                         className="small secondary"
                         onClick={() => setWithdrawing(row)}
                       >
-                        {row.status === 'ACTIVE' ? 'Withdraw' : 'Restore'}
+                        {row.status === 'ACTIVE' ? t.ofcPrWithdraw : t.ofcAgRestore}
                       </button>
                     )}
                   </div>
@@ -436,7 +437,7 @@ function NewItemForm({
                   checked={form.applicableTaxpayerTypes.includes(type)}
                   onChange={() => toggleType(type)}
                 />
-                {type === 'INDIVIDUAL' ? 'Individuals' : 'Businesses'}
+                {type === 'INDIVIDUAL' ? t.ofcCfIndividuals : t.ofcCfBusinesses}
               </label>
             ))}
           </div>
@@ -461,7 +462,7 @@ function NewItemForm({
           type="submit"
           disabled={busy || form.applicableTaxpayerTypes.length === 0 || !form.categoryId}
         >
-          {busy ? 'Adding…' : 'Add to the catalogue'}
+          {busy ? t.ofcCfAdding : t.ofcCfAddToTheCatalogue}
         </button>
       </form>
     </div>
@@ -496,12 +497,12 @@ function WithdrawItemForm({
       <div className="card__header">
         <div>
           <h2 className="card__title">
-            {restoring ? 'Restore' : 'Withdraw'} — {localName(lang, item.name, item.name_ha)}
+            {restoring ? t.ofcAgRestore : t.ofcPrWithdraw} — {localName(lang, item.name, item.name_ha)}
           </h2>
           <p className="card__hint">
             {restoring
-              ? 'The item goes back into the catalogue and can be assessed against again.'
-              : 'No new assessment can be raised against a withdrawn item. Invoices already issued stay payable — withdrawing an item is not a decision to write off arrears.'}
+              ? t.ofcCfTheItemGoesBack
+              : t.ofcCfNoNewAssessmentCan}
           </p>
         </div>
         <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
@@ -546,8 +547,8 @@ function WithdrawItemForm({
             onChange={(event) => setReason(event.target.value)}
             placeholder={
               restoring
-                ? 'What changed — for example, the tariff was confirmed against the gazette.'
-                : 'For example: repealed by the Plateau State Finance Law amendment.'
+                ? t.ofcCfWhatChangedForExample
+                : t.ofcCfForExampleRepealedBy
             }
           />
         </label>
@@ -558,7 +559,7 @@ function WithdrawItemForm({
 
         <div className="button-row">
           <button type="submit" disabled={busy || reason.trim().length < 5}>
-            {busy ? 'Saving…' : restoring ? 'Restore item' : 'Withdraw item'}
+            {busy ? t.agEnSaving : restoring ? t.ofcCfRestoreItem : t.ofcCfWithdrawItem}
           </button>
         </div>
       </form>
@@ -600,9 +601,9 @@ function RateChangeForm({
    * of zero is a decision somebody should have to type.
    */
   const rateProblem = ((): string | null => {
-    if (reason.trim().length < 10) return 'Give a reason for the rate change, in at least 10 characters.';
+    if (reason.trim().length < 10) return t.ofcCfGiveAReasonFor;
     if (rateType === 'FIXED') {
-      if (!amount.trim()) return 'Enter the new amount. Leave nothing to chance \u2014 type 0 if the levy is being suspended.';
+      if (!amount.trim()) return t.ofcCfEnterTheNewAmount;
       try {
         const kobo = nairaToKobo(amount);
         if (kobo < 0n) return 'A rate cannot be negative.';
@@ -613,7 +614,7 @@ function RateChangeForm({
     }
     if (rateType === 'PERCENTAGE') {
       const typed = percent.trim();
-      if (!typed) return 'Enter the new rate as a percentage. Type 0 if the levy is being suspended.';
+      if (!typed) return t.ofcCfEnterTheNewRate;
       // Deliberately stricter than parseFloat: the whole box must be a number.
       if (!/^\d+(?:\.\d{1,2})?$/.test(typed)) {
         return `\u201c${typed}\u201d is not a percentage. Enter it as 5 or 5.00.`;
@@ -649,7 +650,7 @@ function RateChangeForm({
 
       onDone(
         `A new rate version for "${localName(lang, item.name, item.name_ha)}" has been recorded, effective ${effectiveFrom}. ` +
-          'Existing assessments are unaffected.',
+          t.ofcCfExistingAssessmentsAreUnaffected,
       );
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -731,7 +732,7 @@ function RateChangeForm({
 
       <div className="button-row">
         <button type="button" disabled={busy || rateProblem !== null} onClick={submit}>
-          {busy ? 'Recording…' : 'Record new rate version'}
+          {busy ? t.ofcCfRecording : t.ofcCfRecordNewRateVersion}
         </button>
         <button type="button" className="secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
@@ -816,7 +817,7 @@ export function ProgrammesScreen() {
               {
                 key: 'requires_no_arrears',
                 label: 'ofcCfRequiresNoArrears',
-                render: (row) => (row.requires_no_arrears ? 'Yes' : 'No'),
+                render: (row) => (row.requires_no_arrears ? t.tpYes : t.tpNo),
               },
               { key: 'eligible_taxpayers', label: 'ofcCfEligible', numeric: true },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
@@ -838,7 +839,7 @@ export function ProgrammesScreen() {
                           disabled={evaluating === row.id}
                           onClick={() => void evaluateAll(row)}
                         >
-                          {evaluating === row.id ? 'Evaluating…' : 'Evaluate all'}
+                          {evaluating === row.id ? t.ofcCfEvaluating : t.ofcCfEvaluateAll}
                         </button>
                         <button
                           type="button"
@@ -871,7 +872,7 @@ export function ProgrammesScreen() {
                             }
                           }}
                         >
-                          {row.status === 'ACTIVE' ? 'Close' : 'Activate'}
+                          {row.status === 'ACTIVE' ? t.ofcKycClose : t.ofcCfActivate}
                         </button>
                       </>
                     )}

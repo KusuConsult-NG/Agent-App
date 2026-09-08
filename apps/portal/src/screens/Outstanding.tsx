@@ -23,6 +23,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Refund {
   id: string;
@@ -81,11 +82,19 @@ interface AwaitingAuthority {
 }
 
 /** A queue the signed-in officer may not read, stated rather than hidden. */
-function NotYours({ what, permission }: { what: string; permission: string }) {
+/**
+ * `what` is a dictionary key, not a heading.
+ *
+ * It was `string` and every call site passed English, which is how four
+ * headings on this screen stayed untranslated while everything around them was
+ * keyed. Typed this way the compiler holds the boundary — the same trade
+ * `Stat`, `Table` and `Alert` already make.
+ */
+function NotYours({ what, permission }: { what: keyof TranslationDictionary; permission: string }) {
   const { t } = usePortalI18n();
   return (
     <div className="card">
-      <h2 className="card__title">{what}</h2>
+      <h2 className="card__title">{t[what]}</h2>
       <p className="card__hint">{t.ofcOsReadingNeeds}<code>{permission}</code>{t.ofcOsNotYours}</p>
     </div>
   );
@@ -159,7 +168,7 @@ export function OutstandingScreen() {
       // the word "complete" would be the cheerful reading of a citizen still
       // waiting for their money.
       const left = result.stillOutstanding ?? result.stillFailing ?? 0;
-      setMessage({ text: result.message ?? 'Retry complete.', resolved: left === 0 });
+      setMessage({ text: result.message ?? t.ofcOsRetryComplete, resolved: left === 0 });
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -187,10 +196,8 @@ export function OutstandingScreen() {
         <Alert kind="success" title="ofcOsNothingOutstanding">
           <p style={{ margin: 0 }}>
             {readsRefunds && readsTins && readsVehicles
-              ? 'Every refund has been returned, every taxpayer has their TIN, and the vehicle ' +
-                'authority has acknowledged every renewal.'
-              : 'Every queue you can see is empty. Others are guarded by permissions your role ' +
-                'does not hold.'}
+              ? t.ofcOsEveryRefundHasBeen
+              : t.ofcOsEveryQueueYouCan}
           </p>
         </Alert>
       ) : (
@@ -214,7 +221,7 @@ export function OutstandingScreen() {
 
       {/* Money first. A citizen waiting on a refund outranks a missing number. */}
       {!readsRefunds ? (
-        <NotYours what="Refunds owed to taxpayers" permission="payment:read:all" />
+        <NotYours what="ofcOsRefundsOwed" permission="payment:read:all" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -240,7 +247,7 @@ export function OutstandingScreen() {
                   {
                     key: 'failure_reason',
                     label: 'ofcOsWhyNotYet',
-                    render: (row) => row.failure_reason ?? 'Not attempted yet',
+                    render: (row) => row.failure_reason ?? t.ofcOsNotAttemptedYet,
                   },
                   {
                     key: 'last_attempt_at',
@@ -258,7 +265,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('refunds', '/government/refunds/retry')}
                 >
-                  {busy === 'refunds' ? 'Asking the gateway…' : 'Ask the gateway again'}
+                  {busy === 'refunds' ? t.ofcOsAskingTheGateway : t.ofcOsAskTheGatewayAgain}
                 </button>
               )}
             </>
@@ -267,7 +274,7 @@ export function OutstandingScreen() {
       )}
 
       {!readsTins ? (
-        <NotYours what="Taxpayers waiting for a TIN" permission="taxpayer:tin_sync" />
+        <NotYours what="ofcOsWaitingTinTitle" permission="taxpayer:tin_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -296,7 +303,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('tins', '/taxpayers/tin-retry')}
                 >
-                  {busy === 'tins' ? 'Asking the TIN service…' : 'Ask the TIN service again'}
+                  {busy === 'tins' ? t.ofcOsAskingTheTinService : t.ofcOsAskTheTinService}
                 </button>
               )}
             </>
@@ -305,7 +312,7 @@ export function OutstandingScreen() {
       )}
 
       {!readsVehicles ? (
-        <NotYours what="Renewals the vehicle authority has not acknowledged" permission="vehicle:authority_sync" />
+        <NotYours what="ofcOsRenewalsUnackTitle" permission="vehicle:authority_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -342,7 +349,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('renewals', '/vehicles/renewals/authority-retry')}
                 >
-                  {busy === 'renewals' ? 'Sending to the authority…' : 'Send to the authority again'}
+                  {busy === 'renewals' ? t.ofcOsSendingToTheAuthority : t.ofcOsSendToTheAuthority}
                 </button>
               )}
             </>
@@ -383,7 +390,7 @@ export function OutstandingScreen() {
         * paid or the record is put back.
         */}
       {!readsTaxpayers ? (
-        <NotYours what="Ended records that still owe" permission="taxpayer:read:all" />
+        <NotYours what="ofcOsEndedOwingTitle" permission="taxpayer:read:all" />
       ) : (
         ended && (
           <div className="card card--flush">

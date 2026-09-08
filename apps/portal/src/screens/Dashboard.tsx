@@ -386,19 +386,19 @@ function PlatformKpis() {
         </div>
         <KeyValue
           items={[
-            ['Total collected', <Money key="c" kobo={kpis.total_collection_kobo} />],
-            ['Active agents', Number(kpis.active_agents ?? 0).toLocaleString()],
-            ['Taxpayers with a TIN', Number(kpis.taxpayers_with_tin ?? 0).toLocaleString()],
-            ['New taxpayers this month', Number(kpis.new_taxpayers_this_month ?? 0).toLocaleString()],
-            ['Average time to confirm a payment', duration],
-            ['Reversals and refunds', Number(kpis.reversals ?? 0).toLocaleString()],
-            ['Open fraud flags', Number(kpis.suspicious_transactions ?? 0).toLocaleString()],
+            [t.ofcDbTotalCollected, <Money key="c" kobo={kpis.total_collection_kobo} />],
+            [t.ofcAgActiveAgents, Number(kpis.active_agents ?? 0).toLocaleString()],
+            [t.ofcDbTaxpayersWithATin, Number(kpis.taxpayers_with_tin ?? 0).toLocaleString()],
+            [t.ofcDbNewTaxpayersThisMonth, Number(kpis.new_taxpayers_this_month ?? 0).toLocaleString()],
+            [t.ofcDbAverageTimeToConfirm, duration],
+            [t.ofcDbReversalsAndRefunds, Number(kpis.reversals ?? 0).toLocaleString()],
+            [t.ofcPfOpenFraudFlags, Number(kpis.suspicious_transactions ?? 0).toLocaleString()],
             [
-              'Duplicate registrations overridden',
+              t.ofcDbDuplicateRegistrationsOverridden,
               Number(kpis.duplicate_registrations_overridden ?? 0).toLocaleString(),
             ],
             [
-              'Failed receipt verifications',
+              t.ofcOvFailedVerifications,
               Number(kpis.receipt_verification_failures ?? 0).toLocaleString(),
             ],
           ]}

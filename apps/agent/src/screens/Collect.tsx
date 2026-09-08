@@ -692,9 +692,9 @@ export function TransactionScreen({
                   amountKobo: transaction.total_amount_kobo,
                   paymentMethod: transaction.payment_status || 'POS / Online',
                   channel: 'FIELD_AGENT',
-                  lgaName: 'Plateau State',
+                  lgaName: t.ofcDbPlateauState,
                   wardName: null,
-                  agentName: 'Authorized Field Officer',
+                  agentName: t.collAuthorizedFieldOfficer,
                   agentCode: 'AGT',
                   issuedAt: new Date().toISOString(),
                   /*

@@ -39,7 +39,7 @@ export interface PickedTaxpayer {
  * is passed in so it can be in the agent's own language: this is a plain
  * function and cannot reach the dictionary itself.
  */
-export function taxpayerDisplayName(taxpayer: PickedTaxpayer, unnamed = 'Unnamed taxpayer'): string {
+export function taxpayerDisplayName(taxpayer: PickedTaxpayer, unnamed = ''): string {
   return (
     taxpayer.business_name ||
     `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||

@@ -340,7 +340,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
               className={`thread__item${message.mine ? ' thread__item--mine' : ''}`}
             >
               <p className="thread__meta">
-                {message.mine ? 'You' : `${message.author_name} · PSIRS`} ·{' '}
+                {message.mine ? t.agSupYou : `${message.author_name} · PSIRS`} ·{' '}
                 {new Date(message.created_at).toLocaleString('en-NG')}
               </p>
               <p className="thread__body">{message.body}</p>

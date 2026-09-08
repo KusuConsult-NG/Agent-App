@@ -127,8 +127,8 @@ export function RevenueScreen() {
         >
           <p style={{ margin: 0 }}>
             {territories.length === 0
-              ? 'These figures are empty because your account covers no territory yet.'
-              : 'Every figure here covers your territories only, not the whole state.'}
+              ? t.ofcRvTheseFiguresAreEmpty
+              : t.ofcRvEveryFigureHereCovers}
           </p>
         </Alert>
       )}
@@ -277,7 +277,7 @@ export function RevenueScreen() {
               render: (row: AgentRow) =>
                 row.centre_latitude && row.centre_longitude
                   ? `${row.centre_latitude}, ${row.centre_longitude}`
-                  : 'Not mapped',
+                  : t.ofcRvNotMapped,
             },
           ]}
           rows={data.agents}

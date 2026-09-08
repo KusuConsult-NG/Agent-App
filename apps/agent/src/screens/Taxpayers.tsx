@@ -37,15 +37,27 @@ interface TaxpayerSummary {
   status: string;
 }
 
-function displayName(taxpayer: {
-  business_name?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-}): string {
+/**
+ * `t` is passed in because this sits outside the component and a hook cannot
+ * reach it here.
+ *
+ * The fallback used to be reached with `??`, which only catches null and
+ * undefined — and `.trim()` returns an empty string, never null. So a taxpayer
+ * with no business name and no first or last name rendered as a blank row
+ * rather than as "Unnamed taxpayer". `||` is the operator this always wanted.
+ */
+function displayName(
+  taxpayer: {
+    business_name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  },
+  t: TranslationDictionary,
+): string {
   return (
-    taxpayer.business_name ??
-    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ??
-    'Unnamed taxpayer'
+    taxpayer.business_name ||
+    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||
+    t.tpUnnamedTaxpayer
   );
 }
 
@@ -111,7 +123,7 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
                     onClick={() => navigate(`/taxpayers/${taxpayer.id}`)}
                   >
                     <div className="list__body">
-                      <p className="list__title">{displayName(taxpayer)}</p>
+                      <p className="list__title">{displayName(taxpayer, t)}</p>
                       <p className="list__meta">
                         {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone} ·{' '}
                         {taxpayer.lga_name}
@@ -959,7 +971,7 @@ export function TaxpayerScreen({
   return (
     <>
       <div className="card">
-        <h2 className="card__title">{displayName(taxpayer as never)}</h2>
+        <h2 className="card__title">{displayName(taxpayer as never, t)}</h2>
         <KeyValue
           items={[
             ['TIN', taxpayer.tin ?? t.tpNotYetAssigned],

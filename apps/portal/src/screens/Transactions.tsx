@@ -156,7 +156,7 @@ export function TransactionsScreen() {
               { key: 'taxpayer_name', label: 'colTaxpayerLabel' },
               { key: 'revenue_item', label: 'colRevenueItem', render: (row: TransactionRow) => localName(lang, row.revenue_item, row.revenue_item_ha) },
               { key: 'lga', label: 'tpLgaShort' },
-              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? 'Direct' },
+              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? t.ofcTxDirect },
               {
                 key: 'amount_kobo',
                 label: 'pubVerifyAmount',

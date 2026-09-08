@@ -76,13 +76,13 @@ export function FieldAppScreen() {
   useEffect(load, [load]);
 
   const blockedBecause = ((): string | null => {
-    if (!VERSION.test(minimum.trim())) return 'Enter the minimum version as digits and dots, like 1.4.0.';
-    if (!VERSION.test(recommended.trim())) return 'Enter the recommended version as digits and dots, like 1.4.0.';
+    if (!VERSION.test(minimum.trim())) return t.ofcFaEnterTheMinimumVersion;
+    if (!VERSION.test(recommended.trim())) return t.ofcFaEnterTheRecommendedVersion;
     if (compareVersions(minimum.trim(), recommended.trim()) > 0) {
       return `A minimum of ${minimum.trim()} is above the recommended ${recommended.trim()}, so even a handset on the newest build would be refused.`;
     }
     if (notes.trim().length < 10) {
-      return 'Say why the minimum is moving, in at least 10 characters. It is what an agent who is locked out will be shown.';
+      return t.ofcFaSayWhyTheMinimum;
     }
     return null;
   })();
@@ -156,7 +156,7 @@ export function FieldAppScreen() {
             {
               key: 'version',
               label: 'ofcFaBuild',
-              render: (row: FleetRow) => row.version ?? 'Never reported a version',
+              render: (row: FleetRow) => row.version ?? t.ofcFaNeverReportedAVersion,
             },
             { key: 'devices', label: 'ofcFaHandsets', numeric: true },
             {
@@ -234,7 +234,7 @@ export function FieldAppScreen() {
 
         <div className="button-row">
           <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-            {busy ? 'Publishing…' : 'Publish this minimum'}
+            {busy ? t.ofcFaPublishing : t.ofcFaPublishThisMinimum}
           </button>
         </div>
       </div>
@@ -271,7 +271,7 @@ export function FieldAppScreen() {
               // The seeded row that shipped with the platform has no author,
               // and saying so is more honest than leaving a dash to be read as
               // missing data.
-              render: (row: PublishedVersion) => row.publishedBy ?? 'Shipped with the platform',
+              render: (row: PublishedVersion) => row.publishedBy ?? t.ofcFaShippedWithThePlatform,
             },
             { key: 'notes', label: 'ofcFaWhy' },
           ]}
