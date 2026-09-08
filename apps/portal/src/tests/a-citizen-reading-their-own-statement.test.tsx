@@ -108,6 +108,72 @@ describe('a citizen reading their own statement', () => {
     expect(show).toHaveProperty('disabled', false);
   });
 
+  it('asks for the period before it asks for a code, not after', async () => {
+    /*
+     * The code is consumed by the statement it opens. A citizen who picked the
+     * window afterwards would spend a code discovering they could not change
+     * it — so the dates are on the screen before the button that sends one.
+     */
+    await lookUp('By TIN', '841446134');
+    expect(screen.getByLabelText(/^From$/i)).toBeTruthy();
+    expect(screen.getByLabelText(/^To$/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Send me a code/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Code from the SMS/i)).toBeTruthy());
+  });
+
+  it('sends the period the citizen chose', async () => {
+    await lookUp('By TIN', '841446134');
+    fireEvent.change(screen.getByLabelText(/^From$/i), { target: { value: '2025-01-01' } });
+    fireEvent.change(screen.getByLabelText(/^To$/i), { target: { value: '2025-12-31' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Send me a code/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Code from the SMS/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Code from the SMS/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /Show my payments/i }));
+
+    await waitFor(() => {
+      const shown = posted.find((entry) => entry.path === '/citizen-status/statement');
+      expect(shown!.body).toMatchObject({ from: '2025-01-01', to: '2025-12-31' });
+    });
+  });
+
+  it('will not spend a code on a period that runs backwards', async () => {
+    /*
+     * The server refuses it too, but by then the code is gone. Saying so here
+     * costs the citizen nothing; learning it from a 400 costs them an SMS and
+     * a second wait.
+     */
+    await lookUp('By TIN', '841446134');
+    fireEvent.change(screen.getByLabelText(/^From$/i), { target: { value: '2026-12-31' } });
+    fireEvent.change(screen.getByLabelText(/^To$/i), { target: { value: '2026-01-01' } });
+
+    expect(screen.getByText(/start of the period is after its end/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Send me a code/i })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(posted, 'nothing was asked of the server').toEqual([]);
+  });
+
+  it('says a different period needs a new code, rather than failing quietly', async () => {
+    await lookUp('By TIN', '841446134');
+    fireEvent.click(screen.getByRole('button', { name: /Send me a code/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Code from the SMS/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Code from the SMS/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /Show my payments/i }));
+    await waitFor(() => expect(screen.getByText(/What it went to/i)).toBeTruthy());
+
+    const again = screen.getByRole('button', { name: /Look at a different period/i });
+    expect(again.textContent, 'the cost is on the button, not discovered later').toMatch(
+      /new code/i,
+    );
+
+    fireEvent.click(again);
+    await waitFor(() => expect(screen.getByLabelText(/^From$/i)).toBeTruthy());
+    expect(screen.queryByText(/What it went to/i)).toBeNull();
+  });
+
   it('shows what was paid and what it went to', async () => {
     await lookUp('By TIN', '841446134');
     fireEvent.click(screen.getByRole('button', { name: /Send me a code/i }));

@@ -2584,6 +2584,10 @@ export interface TranslationDictionary {
   pubCitizenOutstanding: string;
   pubCitizenOutstandingYes: string;
   pubCitizenNone: string;
+  pubStmtFrom: string;
+  pubStmtTo: string;
+  pubStmtBackwards: string;
+  pubStmtAnotherPeriod: string;
   pubStmtTitle: string;
   pubStmtIntro: string;
   pubStmtSendCode: string;
@@ -4894,6 +4898,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenOutstanding: 'Outstanding obligations',
     pubCitizenOutstandingYes: 'Yes — please contact PSIRS',
     pubCitizenNone: 'None',
+    pubStmtFrom: "From",
+    pubStmtTo: "To",
+    pubStmtBackwards: "The start of the period is after its end.",
+    pubStmtAnotherPeriod: "Look at a different period (sends a new code)",
     pubStmtTitle: "What you have already paid",
     pubStmtIntro: "To see your payments we send a code to the phone number on your record. It is never sent to a number typed here.",
     pubStmtSendCode: "Send me a code",
@@ -7198,6 +7206,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenOutstanding: 'Harajin da ake bin ka',
     pubCitizenOutstandingYes: 'Eh — da fatan za ka tuntubi PSIRS',
     pubCitizenNone: 'Babu',
+    pubStmtFrom: "Daga",
+    pubStmtTo: "Zuwa",
+    pubStmtBackwards: "Farkon lokacin ya zo bayan karshensa.",
+    pubStmtAnotherPeriod: "Duba wani lokaci dabam (za a aika sabuwar lamba)",
     pubStmtTitle: "Abin da ka riga ka biya",
     pubStmtIntro: "Domin ganin biyayyarka muna aika lamba zuwa lambar wayar da ke rubuce a bayananka. Ba a taba aika ta zuwa lambar da aka rubuta a nan ba.",
     pubStmtSendCode: "Aiko min da lamba",

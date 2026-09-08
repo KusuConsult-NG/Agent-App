@@ -814,6 +814,26 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
+  /*
+   * The period is chosen before the code is asked for, not after.
+   *
+   * A one-time code is consumed by the statement it opens, so a citizen who
+   * picked the window afterwards would burn a code discovering they could not
+   * change it. Choosing first costs nothing and means the code opens the
+   * statement they actually wanted.
+   *
+   * Twelve months to today by default, because "what have I paid this past
+   * year" is the question people arrive with. Somebody reconciling a tax year
+   * or checking a levy they think they paid twice sets their own.
+   */
+  const today = new Date();
+  const yearAgo = new Date(today);
+  yearAgo.setFullYear(today.getFullYear() - 1);
+  const asDate = (value: Date) => value.toISOString().slice(0, 10);
+  const [from, setFrom] = useState(asDate(yearAgo));
+  const [to, setTo] = useState(asDate(today));
+  const backwards = from > to;
+
   const body = mode === 'tin' ? { tin: identifier } : { phone: identifier };
 
   async function requestCode() {
@@ -837,6 +857,8 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       const data = await api.publicPost<CitizenStatement>('/citizen-status/statement', {
         ...body,
         code: code.trim(),
+        from,
+        to,
       });
       setStatement(data);
       setStage('shown');
@@ -859,14 +881,51 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       <ErrorAlert error={error} />
 
       {stage === 'idle' && (
-        <button
-          type="button"
-          disabled={busy}
-          style={{ width: '100%', justifyContent: 'center' }}
-          onClick={() => void requestCode()}
-        >
-          {busy ? t.pubStmtSending : t.pubStmtSendCode}
-        </button>
+        <>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="stmt-from">{t.pubStmtFrom}</label>
+              <input
+                id="stmt-from"
+                type="date"
+                value={from}
+                max={to}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="stmt-to">{t.pubStmtTo}</label>
+              <input
+                id="stmt-to"
+                type="date"
+                value={to}
+                min={from}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/*
+            * Said here rather than refused by the server after a code has been
+            * spent. `max` and `min` above stop most of it; a keyboard-entered
+            * date gets past them, and the citizen should not learn that from a
+            * 400 that also cost them their code.
+            */}
+          {backwards && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--danger, #b00)', margin: '0 0 10px' }}>
+              {t.pubStmtBackwards}
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={busy || backwards}
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => void requestCode()}
+          >
+            {busy ? t.pubStmtSending : t.pubStmtSendCode}
+          </button>
+        </>
       )}
 
       {stage !== 'idle' && !statement && (
@@ -978,6 +1037,40 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
               </div>
             ))
           )}
+
+          {/*
+            * Another period means another code, and the button says so.
+            *
+            * The code that opened this statement was consumed by it. Offering
+            * a silent date change here would look like it should just work and
+            * fail with an expired-code message that explains nothing.
+            */}
+          <button
+            type="button"
+            className="secondary"
+            /*
+              * Allowed to wrap. Buttons are `white-space: nowrap` everywhere
+              * else in the portal, which is right for the short labels they
+              * carry; this label has to say that a new code is sent, and at
+              * phone width it ran outside its own border — longer still in
+              * Hausa. Shortening it would drop the part worth saying.
+              */
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              marginTop: 14,
+              whiteSpace: 'normal',
+              textAlign: 'center',
+            }}
+            onClick={() => {
+              setStatement(null);
+              setCode('');
+              setError(null);
+              setStage('idle');
+            }}
+          >
+            {t.pubStmtAnotherPeriod}
+          </button>
 
           <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 14 }}>
             {t.pubStmtFooter}

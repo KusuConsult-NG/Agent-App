@@ -305,7 +305,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2201 strings, grouped by where an agent meets them. Lower stakes
+2205 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2282,6 +2282,10 @@ instructions — but they are what an agent reads all day.
 | `pubCitizenOutstanding` | Outstanding obligations | Harajin da ake bin ka | ☐ | |
 | `pubCitizenOutstandingYes` | Yes — please contact PSIRS | Eh — da fatan za ka tuntubi PSIRS | ☐ | |
 | `pubCitizenNone` | None | Babu | ☐ | |
+| `pubStmtFrom` | From | Daga | ☐ | |
+| `pubStmtTo` | To | Zuwa | ☐ | |
+| `pubStmtBackwards` | The start of the period is after its end. | Farkon lokacin ya zo bayan karshensa. | ☐ | |
+| `pubStmtAnotherPeriod` | Look at a different period (sends a new code) | Duba wani lokaci dabam (za a aika sabuwar lamba) | ☐ | |
 | `pubStmtTitle` | What you have already paid | Abin da ka riga ka biya | ☐ | |
 | `pubStmtIntro` | To see your payments we send a code to the phone number on your record. It is never sent to a number typed here. | Domin ganin biyayyarka muna aika lamba zuwa lambar wayar da ke rubuce a bayananka. Ba a taba aika ta zuwa lambar da aka rubuta a nan ba. | ☐ | |
 | `pubStmtSendCode` | Send me a code | Aiko min da lamba | ☐ | |
