@@ -18,17 +18,36 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**Every instruction in the agent app addresses the agent as `ka`: masculine
-singular.** A woman collecting revenue in Bokkos is addressed as a man by every
-imperative in the application she uses all day.
+**216 strings address the reader as `ka`: masculine singular.** A woman
+collecting revenue in Bokkos is addressed as a man by the application she uses
+all day.
 
 The options are `ki`, the impersonal subjunctive (`A duba…`), or the polite
 plural `ku`, which is gender-neutral. This is a decision about who PSIRS
-believes its agents are, and no translator can make it.
+believes it is talking to, and no translator can make it.
 
-It should be settled before Phase 0 rather than discovered during it: it
-touches every imperative string in the dictionary, so answering it late means
-re-reading everything answered before it.
+**It is not only about agents.** The review sheet framed this as a question
+about field staff. Counting the dictionary says otherwise:
+
+| Who reads it | Strings |
+|---|---|
+| The agent app | 122 |
+| The officer portal | 62 |
+| Citizens, referees and group leaders | 32 |
+| **Total** | **216** of 2,986 |
+
+So a female revenue officer in Jos is addressed as a man by her own portal, and
+so is a woman looking up her own tax status with no account at all. `ku`, the
+polite plural, is the only one of the three options that is both
+gender-neutral and unremarkable to address a stranger with — which may matter
+more for the 32 than for the 122.
+
+The forms in play are `ka` (148 strings), the possessive `-nka` / `-rka` (89),
+`kada ka` for a negative imperative (13) and `naka` / `taka` (5); some strings
+carry more than one. Nothing currently uses `ku`.
+
+It should be settled before Phase 0 rather than discovered during it: answering
+it late means re-reading whatever was reviewed before it.
 
 > `HAUSA-REVIEW.md` § *Group 3 — wording, register, and one question for PSIRS*
 
@@ -49,6 +68,12 @@ enters it*.
 Proposed, pending you: `lada` throughout (`Lada`, `asusun ladanka`, `a biya
 lada`). `kaso` if "share" or "percentage" is wanted specifically. Two readers
 arrived at `lada` independently, which is corroboration and not proof.
+
+**What saying yes would cost:** `kwamishan` appears in **49 strings**, 48 of
+them on screens about money. `lada` appears in none, so the word is free to
+take and nothing else has to move out of its way. It is a large change but a
+mechanical one, and it is the sort that gets harder the longer the other
+answers arrive first.
 
 **2.2 — `paymentUnconfirmedBody` wraps a negation around an affirmative.**
 `ba a … ba` encloses `an karbi wannan kudin` — *this money HAS been received*.
@@ -79,10 +104,29 @@ or register, and they need fixing whatever is decided about wording.
 | `statusOffline` / `offlineMessage` | `BA HANYAR SADARWA` in one, `Babu hanyar sadarwa` in the other, for the same thing. |
 | `statusFailed` / `paymentFailed` | `BA TA YI BA` treats the subject as feminine; `bai yi nasara ba` treats it as masculine. Same subject, two agreements. |
 | `needDeclaration` / `enablePush` | `sanarwa` does duty for both the *declaration* a taxpayer accepts and a push *notification*. One word, two unrelated things. |
-| `receiptCodeShape` | Calls `T7C72-QTUDN` a `lambar rasit`, but that is already the receipt **number**; the verification **code** is `lambar tabbatarwa`. If this string means the code, it points the agent at the wrong field. |
+| `receiptCodeShape` | Calls `T7C72-QTUDN` a `lambar rasit`, but that is already the receipt **number**. See below — it is wider than one string. |
 
 One further item in this group, `Mungode` → `Mun gode`, was a word-separation
 typo and has been corrected. It is the only change made without you.
+
+**The receipt-code one is four strings, not one, and English is part of it.**
+Checking what the screen actually validates: `Verify.tsx` calls
+`verificationCodeFrom()`, so the thing being typed is the code printed under
+the QR square — not the `PSIRS/2026/000011` reference. English names it three
+ways for two objects, and Hausa has two words for the three:
+
+| English | Hausa now | Key |
+|---|---|---|
+| Receipt Number — `PSIRS/2026/000011` | `Lambar Rasit` | `receiptNumber` |
+| "the receipt code" — `T7C72-QTUDN` | `lambar rasit` ← collides | `verifyTypeCode` |
+| "a PSIRS receipt code" | `lambar rasit` ← collides | `verifyNotAReceiptCode` |
+| "A receipt code looks like…" | `Lambar rasit` ← collides | `receiptCodeShape` |
+| Verification Code | `Lambar Tabbatarwa` | `verificationCode` |
+
+So changing the one string the sheet names would leave it disagreeing with the
+three around it. What is wanted is one Hausa term for `T7C72-QTUDN`, used in
+all four — and it is worth deciding whether English should stop calling it a
+"receipt code" at the same time, since that phrase is why the Hausa collided.
 
 > `HAUSA-REVIEW.md` § *Group 1 — content errors*
 
@@ -161,8 +205,14 @@ description.** They have their own keys (`navTaxpayers` and the rest), so a
 short label here will not disturb the longer term where it reads correctly in
 prose.
 
-`navProfile` is an empty key: the tab still shows the English word "Profile". A
-Hausa word for it would be welcome.
+`navProfile` is not an empty key — it holds the string `Profile` on **both**
+sides, so a Hausa reader sees an English word rather than a blank. It is the
+only string in the dictionary in that state: `hausa-dictionary-consistency`
+carries an `AWAITING_REVIEW` list, `navProfile` is its single entry, and a test
+fails if anything is added to it that has since been translated. So the debt is
+one word, and it is being counted.
+
+A Hausa word for it would close the list entirely.
 
 > `HAUSA-REVIEW.md` § *One specific question: the tab bar*
 
@@ -174,8 +224,13 @@ Hausa word for it would be welcome.
 typographic `’`. A reader pointed out that if the argument for avoiding hooked
 letters is that agents type on phone keyboards, then `Nau’in` and `A’a` should
 use the ASCII `'` by the same logic. These are display strings rather than typed
-input, so the argument is weaker than it looks — but it is your call, and the
-inconsistency is real.
+input, so the argument is weaker than it looks.
+
+**There is nothing inconsistent to repair, which changes what is being asked.**
+Counting: **273** Hausa strings use `’` and **none** use the ASCII `'`. So this
+is not "the dictionary is mixed, pick one" — it is already one, and the question
+is only whether to convert all 273. That is a single scripted change if you want
+it, and no change at all if you do not.
 
 That reader agreed with the no-hooked-letters decision and would not overrule
 it.
