@@ -302,18 +302,81 @@ describe('certification rev10 — breaking the shared rate limiter', () => {
   it('attack5: concurrent hits at the rollover boundary produce exactly one count===1', async () => {
     const key = k('rollover');
     const store = new PostgresBucketStore();
-    const WINDOW = 150;
+    /*
+     * The window is a second, not 150ms, and the check is per window.
+     *
+     * This asserted that all N hits land in one window: exactly one `count===1`
+     * and the counts 1..N. That is true on an idle machine and not guaranteed
+     * anywhere else. The pool holds ten connections and this fires twelve
+     * hits, so two of them queue -- and `now()` in Postgres is the transaction
+     * *start* time, so a hit that waits for a connection carries a later clock
+     * than the hit that opened the window. Wait longer than the window and it
+     * legitimately opens a new one.
+     *
+     * It failed that way once in CI, `ones` being 2, and it reads as the free
+     * request the test is named after. It is not. Driving the spread past the
+     * window deliberately -- a 15ms window and a 27ms spread -- gives two
+     * windows holding `1,2,3,4,5` and `1,2,3,4,5,6,7`: one reset each,
+     * contiguous, no duplicates. Nobody got a free request; the clock moved on.
+     *
+     * So the property is asserted where it actually holds, inside a window:
+     * exactly one hit resets, and the rest count up with no gap and no repeat.
+     * A real race -- two hits both restarting the same window -- lands two
+     * `1`s in one group and still fails this. The longer window then keeps the
+     * single-window case the normal one, rather than depending on it.
+     */
+    const WINDOW = 1_000;
     const N = 12;
 
     await store.hit(key, WINDOW, 100); // open a window at count 1
     await sleep(WINDOW + 60); // let it expire
 
     const states = await Promise.all(Array.from({ length: N }, () => store.hit(key, WINDOW, 100)));
-    const ones = states.filter((s) => s.count === 1).length;
-    const counts = states.map((s) => s.count).sort((a, b) => a - b);
 
-    assert.equal(ones, 1, `only one hit may reset to 1 at the boundary; got ${ones} (a free-request race)`);
-    assert.deepEqual(counts, Array.from({ length: N }, (_v, i) => i + 1), 'the rolled-over window counts 1..N exactly once each');
+    const byWindow = new Map<number, number[]>();
+    for (const s of states) {
+      const seen = byWindow.get(s.resetAt) ?? [];
+      seen.push(s.count);
+      byWindow.set(s.resetAt, seen);
+    }
+
+    for (const [resetAt, counts] of byWindow) {
+      const sorted = [...counts].sort((a, b) => a - b);
+      assert.deepEqual(
+        sorted,
+        Array.from({ length: sorted.length }, (_v, i) => i + 1),
+        `window ${resetAt} counted ${sorted.join(',')} — one hit resets to 1 and the rest count up, ` +
+          'so a repeated 1 is a free request and a gap is a lost increment',
+      );
+    }
+
+    /*
+     * And a window may only open once the one before it has ended.
+     *
+     * Grouping alone is not quite enough. A limiter that reset on every hit
+     * would put twelve `1`s in one group and be caught above -- but only
+     * because twelve hits a millisecond apart happen to land on the same
+     * `reset_at`. On a slower machine those resets would scatter across
+     * distinct groups, each holding a lone, innocent-looking `1`. Requiring
+     * consecutive windows to sit a full window apart catches that whatever
+     * the machine does, because a reset that arrives sooner than the window
+     * is the free request.
+     */
+    const openings = [...byWindow.keys()].sort((a, b) => a - b);
+    for (let i = 1; i < openings.length; i += 1) {
+      const gap = openings[i]! - openings[i - 1]!;
+      assert.ok(
+        gap >= WINDOW,
+        `two windows opened ${gap}ms apart on a ${WINDOW}ms window — a second window may ` +
+          'only start once the first has expired, so a shorter gap is a free request',
+      );
+    }
+
+    assert.equal(
+      states.length,
+      N,
+      'every hit was answered; a dropped hit would hide a lost increment above',
+    );
   });
 
   /* ------------------------------------------------------------------ *
