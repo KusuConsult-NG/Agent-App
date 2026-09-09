@@ -324,3 +324,37 @@ describe('no surface has English of its own', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * The language that hides in a date rather than in a label.
+ *
+ * `toLocaleString('en-NG')` renders an English month to an agent working in
+ * Hausa just as surely as an English button would, and no rule above can see
+ * it. There were seven of them in this application, written inline because it
+ * had no date helper at all.
+ *
+ * A bare `toLocaleDateString()` is worse still. With no locale at all the order
+ * of the day and the month is whatever the browser prefers, so one receipt
+ * reads 9/8 in Jos and 8/9 in a browser set to American English — the same
+ * date, two meanings, and no way for the reader to tell which they have. There
+ * was one, on the citizen statement.
+ *
+ * `formatDateIn` and `formatDateTimeIn` in @psirs/shared take the month from
+ * the dictionary, so it is deterministic and the reviewer sees the twelve
+ * words. A screen wanting a shape they do not offer should widen them rather
+ * than reach past, because the next person to reach past will pin a locale.
+ */
+describe('no screen picks its own locale', () => {
+  it('formats every date through the dictionary', () => {
+    const offenders: string[] = [];
+    for (const [path, source] of Object.entries(SURFACES)) {
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      for (const match of code.matchAll(
+        /toLocale(?:Date|Time)String\(|toLocaleString\(\s*['"][^'"]+['"]/g,
+      )) {
+        offenders.push(`${path}: ${match[0].slice(0, 40)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

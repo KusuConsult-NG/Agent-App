@@ -17,7 +17,7 @@ import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } fr
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { useI18n } from '../lib/i18n';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, formatDateTimeIn, localName } from '@psirs/shared';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -794,7 +794,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
                   <p className="list__meta">
                     {t.moreDraftCaptured.replace(
                       '{{when}}',
-                      new Date(draft.capturedAt).toLocaleString('en-NG'),
+                      formatDateTimeIn(draft.capturedAt, t),
                     )}
                     {draft.message ? ` · ${draft.message}` : ''}
                   </p>

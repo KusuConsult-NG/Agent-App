@@ -299,3 +299,37 @@ describe('no screen has English of its own', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * And the language that hides in a helper rather than in a screen.
+ *
+ * `toLocaleDateString('en-NG')` is not a capitalised literal and no rule above
+ * can see it, but it renders an English month on a Hausa screen just as surely
+ * as an English button would. It was written out eighty times across the two
+ * applications before anybody looked.
+ *
+ * A bare `toLocaleDateString()` is worse still. With no locale at all the order
+ * of the day and the month is whatever the browser prefers, so one receipt
+ * reads 9/8 in Jos and 8/9 in a browser set to American English — the same
+ * date, two meanings, and no way for the reader to tell which they have. There
+ * was one, on the citizen statement.
+ *
+ * The fix is `formatDate` / `formatDateIn`, which take the month from the
+ * dictionary. A screen that needs a format those do not offer should widen
+ * them rather than reach past them, because the next person to reach past will
+ * pin a locale again.
+ */
+describe('no screen picks its own locale', () => {
+  it('formats every date through the dictionary', () => {
+    const offenders: string[] = [];
+    for (const [path, source] of Object.entries(ALL_SOURCES)) {
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      for (const match of code.matchAll(
+        /toLocale(?:Date|Time)String\(|toLocaleString\(\s*['"][^'"]+['"]/g,
+      )) {
+        offenders.push(`${path}: ${match[0].slice(0, 40)}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

@@ -260,6 +260,37 @@ export interface TranslationDictionary {
   enumArtisanGuild: string;
   enumAssessment: string;
   enumAssessmentCreated: string;
+  dowSun: string;
+  dowMon: string;
+  dowTue: string;
+  dowWed: string;
+  dowThu: string;
+  dowFri: string;
+  dowSat: string;
+  monthJan: string;
+  monthFeb: string;
+  monthMar: string;
+  monthApr: string;
+  monthMay: string;
+  monthJun: string;
+  monthJul: string;
+  monthAug: string;
+  monthSep: string;
+  monthOct: string;
+  monthNov: string;
+  monthDec: string;
+  monJan: string;
+  monFeb: string;
+  monMar: string;
+  monApr: string;
+  monMay: string;
+  monJun: string;
+  monJul: string;
+  monAug: string;
+  monSep: string;
+  monOct: string;
+  monNov: string;
+  monDec: string;
   enumAssigned: string;
   enumTinAssigned: string;
   enumAttested: string;
@@ -2976,6 +3007,37 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumArtisanGuild: "Artisan guild",
     enumAssessment: "Assessment",
     enumAssessmentCreated: "Assessment made",
+    dowSun: 'Sunday',
+    dowMon: 'Monday',
+    dowTue: 'Tuesday',
+    dowWed: 'Wednesday',
+    dowThu: 'Thursday',
+    dowFri: 'Friday',
+    dowSat: 'Saturday',
+    monthJan: 'January',
+    monthFeb: 'February',
+    monthMar: 'March',
+    monthApr: 'April',
+    monthMay: 'May',
+    monthJun: 'June',
+    monthJul: 'July',
+    monthAug: 'August',
+    monthSep: 'September',
+    monthOct: 'October',
+    monthNov: 'November',
+    monthDec: 'December',
+    monJan: 'Jan',
+    monFeb: 'Feb',
+    monMar: 'Mar',
+    monApr: 'Apr',
+    monMay: 'May',
+    monJun: 'Jun',
+    monJul: 'Jul',
+    monAug: 'Aug',
+    monSep: 'Sept',
+    monOct: 'Oct',
+    monNov: 'Nov',
+    monDec: 'Dec',
     enumAssigned: "Assigned",
     enumTinAssigned: "Assigned",
     enumAttested: "Attested",
@@ -5480,6 +5542,37 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumArtisanGuild: "Kungiyar masu sana’a",
     enumAssessment: "Kimantawa",
     enumAssessmentCreated: "An yi kimantawa",
+    dowSun: 'Lahadi',
+    dowMon: 'Litinin',
+    dowTue: 'Talata',
+    dowWed: 'Laraba',
+    dowThu: 'Alhamis',
+    dowFri: 'Jumma’a',
+    dowSat: 'Asabar',
+    monthJan: 'Janairu',
+    monthFeb: 'Faburairu',
+    monthMar: 'Maris',
+    monthApr: 'Afirilu',
+    monthMay: 'Mayu',
+    monthJun: 'Yuni',
+    monthJul: 'Yuli',
+    monthAug: 'Agusta',
+    monthSep: 'Satumba',
+    monthOct: 'Oktoba',
+    monthNov: 'Nuwamba',
+    monthDec: 'Disamba',
+    monJan: 'Jan',
+    monFeb: 'Fab',
+    monMar: 'Mar',
+    monApr: 'Afi',
+    monMay: 'May',
+    monJun: 'Yun',
+    monJul: 'Yul',
+    monAug: 'Agu',
+    monSep: 'Sat',
+    monOct: 'Okt',
+    monNov: 'Nuw',
+    monDec: 'Dis',
     enumAssigned: "An ba wa wani",
     enumTinAssigned: "An bayar",
     enumAttested: "An shaida",

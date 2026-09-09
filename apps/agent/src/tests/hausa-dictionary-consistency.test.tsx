@@ -86,6 +86,21 @@ describe('the Hausa dictionary holds together', () => {
     // an event the API emits, not a phrase — translating it would return no
     // rows.
     'ofcOvActionPlaceholder',
+    /*
+     * Months whose Hausa abbreviation is the English one.
+     *
+     * Janairu, Maris and Mayu shorten to Jan, Mar and May, which is what the
+     * English shortens to as well. They are not untranslated — they are
+     * translated and come out the same, and inventing a difference to make
+     * this list shorter would put a word in front of a reader that no Hausa
+     * speaker writes.
+     *
+     * The long forms differ (`monthJan` is Janairu), so a reviewer checking
+     * whether the months were done at all has somewhere to look.
+     */
+    'monJan',
+    'monMar',
+    'monMay',
   ];
 
   it('passes no English off as Hausa', () => {

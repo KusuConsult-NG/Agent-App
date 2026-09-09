@@ -20,7 +20,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatDateTimeIn, localName } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -763,7 +763,7 @@ export function TransactionScreen({
             {transaction.expires_at
               ? t.colInvoiceValidUntil.replace(
                   '{{date}}',
-                  new Date(transaction.expires_at).toLocaleDateString('en-NG'),
+                  formatDateIn(transaction.expires_at, t),
                 )
               : ''}
             .{' '}
@@ -805,7 +805,7 @@ export function TransactionScreen({
               <div className="list__body">
                 <p className="list__title">{enumLabel(event.to_status, t)}</p>
                 <p className="list__meta">
-                  {new Date(event.created_at).toLocaleString('en-NG')}
+                  {formatDateTimeIn(event.created_at, t)}
                   {event.reason ? ` · ${event.reason}` : ''}
                 </p>
               </div>

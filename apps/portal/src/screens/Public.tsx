@@ -1027,7 +1027,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
                   <strong>{formatNaira(row.amountKobo)}</strong>
                 </div>
                 <div style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
-                  {row.paidAt ? new Date(row.paidAt).toLocaleDateString() : '—'}
+                  {formatDate(row.paidAt)}
                   {periodOf(row) ? ` · ${periodOf(row)}` : ''}
                   {/*
                     * A reversal says so. Shown rather than hidden, because

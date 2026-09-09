@@ -918,7 +918,7 @@ export function ProgrammesScreen() {
                 {
                   key: 'evaluated_at',
                   label: 'ofcCfEvaluated',
-                  render: (row) => new Date(row.evaluated_at).toLocaleDateString('en-NG'),
+                  render: (row) => formatDate(row.evaluated_at),
                 },
               ]}
               rows={beneficiaries}

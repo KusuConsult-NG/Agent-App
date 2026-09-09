@@ -19,6 +19,7 @@ import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle }
 import { Alert, ErrorAlert, Field, KeyValue, Money, Spinner } from '../ui';
 import type { ConnectionState } from '../lib/device';
 import { useI18n } from '../lib/i18n';
+import { formatDateIn } from '@psirs/shared';
 
 /** Exactly the shape `GET /verify/:code` returns. */
 interface VerificationResult {
@@ -211,7 +212,7 @@ function VerificationOutcome({ result }: { result: VerificationResult }) {
             [t.tpLga, result.lga ?? '—'],
             [
               t.verifyIssued,
-              result.issuedAt ? new Date(result.issuedAt).toLocaleDateString('en-NG') : '—',
+              formatDateIn(result.issuedAt, t),
             ],
             [
               t.verifyFingerprint,

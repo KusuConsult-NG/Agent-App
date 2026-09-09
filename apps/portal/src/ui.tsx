@@ -1,9 +1,16 @@
 /** Shared presentation components for the government portal. */
 
 import type { ReactNode } from 'react';
-import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
+import {
+  enumLabel,
+  formatDateIn,
+  formatDateTimeIn,
+  formatNaira,
+  getTranslation,
+  statusSeverity,
+} from '@psirs/shared';
 import type { ApiError } from './lib/api';
-import { usePortalI18n } from './lib/i18n';
+import { getPortalLanguage, usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
 export function Money({ kobo }: { kobo: string | number | bigint | null | undefined }) {
@@ -322,24 +329,22 @@ export function Checklist({ items }: { items: [string, boolean][] }) {
   );
 }
 
+/*
+ * The reader's language, read here rather than passed in.
+ *
+ * These two are called from seventy-two places across the screens, almost
+ * always inside a table column's `render`, where there is no hook and often no
+ * component. Threading `t` through all of them would be a diff about nothing
+ * and would miss one. The language lives in a module the same way it does for
+ * the toggle, and changing it re-renders every screen through `usePortalI18n`,
+ * so a date drawn on the next render is drawn in the new language.
+ */
 export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('en-NG', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTimeIn(value, getTranslation(getPortalLanguage()));
 }
 
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return '—';
-  return new Date(value).toLocaleDateString('en-NG', {
-    year: 'numeric',
-    month: 'short',
-    day: '2-digit',
-  });
+  return formatDateIn(value, getTranslation(getPortalLanguage()));
 }
 
 /**

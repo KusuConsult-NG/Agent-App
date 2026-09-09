@@ -19,7 +19,7 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatDateTimeIn } from '@psirs/shared';
 
 /** The categories the API accepts, in the words an agent would use. */
 const CATEGORIES: {
@@ -320,7 +320,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
                   React.ReactNode,
                 ][])
               : []),
-            [t.supReported, new Date(ticket.created_at).toLocaleString('en-NG')],
+            [t.supReported, formatDateTimeIn(ticket.created_at, t)],
           ]}
         />
       </div>
@@ -330,7 +330,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         <ol className="thread">
           <li className="thread__item thread__item--mine">
             <p className="thread__meta">
-              {t.supYouAt.replace('{{when}}', new Date(ticket.created_at).toLocaleString('en-NG'))}
+              {t.supYouAt.replace('{{when}}', formatDateTimeIn(ticket.created_at, t))}
             </p>
             <p className="thread__body">{ticket.description}</p>
           </li>
@@ -341,7 +341,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
             >
               <p className="thread__meta">
                 {message.mine ? t.agSupYou : `${message.author_name} · PSIRS`} ·{' '}
-                {new Date(message.created_at).toLocaleString('en-NG')}
+                {formatDateTimeIn(message.created_at, t)}
               </p>
               <p className="thread__body">{message.body}</p>
             </li>

@@ -46,7 +46,7 @@ import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatLongDateIn } from '@psirs/shared';
 
 export function App() {
   const { t } = usePortalI18n();
@@ -195,7 +195,7 @@ export function App() {
         <header className="topbar">
           <h1>{t[activeLabel]}</h1>
           <div className="topbar__meta">
-            <div>{new Date().toLocaleDateString('en-NG', { dateStyle: 'full' })}</div>
+            <div>{formatLongDateIn(new Date(), t)}</div>
             <div>{t.authPsirsFull}</div>
           </div>
         </header>

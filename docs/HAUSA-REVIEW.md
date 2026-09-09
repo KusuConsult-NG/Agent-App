@@ -267,12 +267,48 @@ labels, and every renewal wrote the same words, so a motorist's 2025 and 2026
 renewals counted as **one** period against the minimum that gates programme
 eligibility. Somebody two years into paying looked like somebody assessed once.
 
-**One question left for you.** The period prints as `2026-09-08 – 2027-09-08`
-rather than "08 Sept 2026", because `formatDate` is fixed to `en-NG` and would
-put an English month inside a Hausa sentence. The ISO form reads the same in
-both languages and matches the line above it on that screen. Whether the
-portal should have Hausa month names at all — and which ones — is yours to
-say; it affects every date on every screen, not just this one.
+### And every other date, which was the same problem one layer down
+
+`formatDate` was fixed to `en-NG`, written out eighty times across the two
+applications, so every date on every screen said "08 Sept 2026" to a reader in
+Hausa. The month is the only word in a date; the day and the year are digits.
+
+The one-line fix would have been to pass `'ha'` to `toLocaleDateString`. ICU
+does know Hausa. It was rejected for two reasons, and the second is the one
+that matters to you: it would put twelve Hausa words on every screen that this
+sheet never shows you. The doctrine here is that nothing visible reaches a
+person without passing the dictionary first, and month names are not an
+exception to it. (The other reason is that a browser built with a trimmed ICU
+renders English silently, which looks fixed and is not.)
+
+So the months are dictionary strings, and here they are. **They were seeded
+from ICU and want your eye**, particularly `Sat`:
+
+| | Hausa |
+|---|---|
+| Short months | Jan · Fab · Mar · Afi · May · Yun · Yul · Agu · **Sat** · Okt · Nuw · Dis |
+| Long months | Janairu · Faburairu · Maris · Afirilu · Mayu · Yuni · Yuli · Agusta · Satumba · Oktoba · Nuwamba · Disamba |
+| Weekdays | Lahadi · Litinin · Talata · Laraba · Alhamis · Jumma’a · Asabar |
+
+`Sat` is Satumba shortened, and it is also how English shortens Saturday. On a
+screen carrying both a date and a day that is a real ambiguity, and the fix if
+you want one is a different abbreviation, not a different mechanism.
+
+Three of the short months — `Jan`, `Mar`, `May` — are spelt the same in both
+languages, because Janairu, Maris and Mayu shorten the same way English does.
+They are recorded in the dictionary guard's `SAME_IN_BOTH` list so nobody later
+mistakes them for strings that were never translated.
+
+ICU writes `Jummaʼa` with a modifier letter apostrophe. This dictionary writes
+every apostrophe as `’`, so it is `Jumma’a` here. That correction is the kind
+of thing the dictionary route puts in front of you and
+`toLocaleDateString('ha')` would have rendered silently for ever.
+
+**One thing deliberately left as digits.** The vehicle period on the citizen
+statement prints `2026-09-08 – 2027-09-08` rather than spelling the months. A
+period is a span, it sits beside the statement's own window line which is
+already written that way, and two spelt-out months in one line of a payment row
+is more words than the row can carry. Say if you would rather see them.
 
 ### `enumAssigned` was doing double duty, and a TIN now has its own word
 
@@ -414,7 +450,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2401 strings, grouped by where an agent meets them. Lower stakes
+2432 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2691,6 +2727,37 @@ instructions — but they are what an agent reads all day.
 | `enumArtisanGuild` | Artisan guild | Kungiyar masu sana’a | ☐ | |
 | `enumAssessment` | Assessment | Kimantawa | ☐ | |
 | `enumAssessmentCreated` | Assessment made | An yi kimantawa | ☐ | |
+| `dowSun` | Sunday | Lahadi | ☐ | |
+| `dowMon` | Monday | Litinin | ☐ | |
+| `dowTue` | Tuesday | Talata | ☐ | |
+| `dowWed` | Wednesday | Laraba | ☐ | |
+| `dowThu` | Thursday | Alhamis | ☐ | |
+| `dowFri` | Friday | Jumma’a | ☐ | |
+| `dowSat` | Saturday | Asabar | ☐ | |
+| `monthJan` | January | Janairu | ☐ | |
+| `monthFeb` | February | Faburairu | ☐ | |
+| `monthMar` | March | Maris | ☐ | |
+| `monthApr` | April | Afirilu | ☐ | |
+| `monthMay` | May | Mayu | ☐ | |
+| `monthJun` | June | Yuni | ☐ | |
+| `monthJul` | July | Yuli | ☐ | |
+| `monthAug` | August | Agusta | ☐ | |
+| `monthSep` | September | Satumba | ☐ | |
+| `monthOct` | October | Oktoba | ☐ | |
+| `monthNov` | November | Nuwamba | ☐ | |
+| `monthDec` | December | Disamba | ☐ | |
+| `monJan` | Jan | Jan | ☐ | |
+| `monFeb` | Feb | Fab | ☐ | |
+| `monMar` | Mar | Mar | ☐ | |
+| `monApr` | Apr | Afi | ☐ | |
+| `monMay` | May | May | ☐ | |
+| `monJun` | Jun | Yun | ☐ | |
+| `monJul` | Jul | Yul | ☐ | |
+| `monAug` | Aug | Agu | ☐ | |
+| `monSep` | Sept | Sat | ☐ | |
+| `monOct` | Oct | Okt | ☐ | |
+| `monNov` | Nov | Nuw | ☐ | |
+| `monDec` | Dec | Dis | ☐ | |
 | `enumAssigned` | Assigned | An ba wa wani | ☐ | |
 | `enumTinAssigned` | Assigned | An bayar | ☐ | |
 | `enumAttested` | Attested | An shaida | ☐ | |
