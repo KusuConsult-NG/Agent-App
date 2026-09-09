@@ -13,7 +13,13 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../lib/api';
-import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
+import {
+  CAMERA_UNAVAILABLE_TEXT,
+  CameraUnavailable,
+  scanForCode,
+  verificationCodeFrom,
+  type ScanHandle,
+} from '../lib/scanner';
 import { Alert, ErrorAlert, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -105,7 +111,7 @@ export function CollectionScreen() {
       setScanning(false);
       setCameraError(
         caught instanceof CameraUnavailable
-          ? caught.message
+          ? t[CAMERA_UNAVAILABLE_TEXT[caught.reason]]
           : t.allocCameraFailed,
       );
     }

@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 2,975 strings; that one is two pages and links back
+> because it carries all 2,978 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **2,975 dictionary strings and 30 message
+It listed 78 strings. It now lists **2,978 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-2,975 strings is worse than no sheet, because it looks complete; this one cannot
+2,978 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 2,975 keys exist in both languages; nothing is missing and nothing is spare.
+- All 2,978 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 2,975 strings: where the
+- The glossary below is applied consistently across all 2,978 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout.
@@ -123,12 +123,13 @@ anyone's Hausa. They need fixing whatever you decide about wording.
 `Mungode` → `Mun gode` in `civicDutyThanks` was a plain word-separation typo
 and has been corrected already.
 
-Three changes have now been made without you: that typo, the receipt-code
-terminology, and the deletion of `scanHelp`. None of them invents Hausa — one
-split a word, one reuses `tantancewa`, which the dictionary already used for
-this exact object, and one removed a string rather than writing one. The rest
-of this sheet still waits on you. `HAUSA-REVIEW-QUESTIONS.md` sets out all
-three in full.
+Five changes have now been made without you: that typo, the receipt-code
+terminology, the deletion of `scanHelp`, the deletion of the dead camera
+scanner along with ten strings only it used, and three new strings for the
+three ways a camera can refuse to open. Only the last adds to your reading, and
+even it invents no vocabulary — `burauza`, `izini` and `saiti` were all already
+here. The rest of this sheet still waits on you.
+`HAUSA-REVIEW-QUESTIONS.md` sets out all five in full.
 
 ### Group 2 — the one it called dangerous
 
@@ -464,7 +465,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2909 strings, grouped by where an agent meets them. Lower stakes
+2912 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3608,6 +3609,9 @@ instructions — but they are what an agent reads all day.
 | `agEnBandSoFarTitle` | Size from what you have written | Girma daga abin da ka rubuta | ☐ | |
 | `agEnBandSoFar` | This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice. | Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
+| `scanCameraDenied` | PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead. | PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar. | ☐ | |
+| `scanCameraMissing` | No camera was found on this device. Type the code instead. | Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar. | ☐ | |
+| `scanCameraUnsupported` | This browser cannot open the camera. Type the code instead. | Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar. | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |
 | `statusFailed` | FAILED | BA TA YI BA | ☐ | |

@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 2,975 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 2,978 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**320 strings address the reader as `ka`: masculine singular.** A woman
+**323 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,18 +31,18 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 167 |
+| The agent app | 170 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **320** of 2,975 |
+| **Total** | **323** of 2,978 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 167.
+more for the 42 than for the 170.
 
-The forms are `ka` (325 occurrences), the possessive `-nka` (56), `-rka` (42),
+The forms are `ka` (329 occurrences), the possessive `-nka` (56), `-rka` (43),
 `dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
 than one. Nothing currently uses `ku`.
 
@@ -54,8 +54,9 @@ missing `dinka`, `kanka` and `maka`. Correcting those gave 222, which was still
 wrong: the pattern was case-sensitive, and Hausa imperatives open sentences
 constantly. `Ka nemo…`, `Ka tabbatar…`, `Ka yi…` — **144 occurrences across 103
 further strings** were invisible. 321 was the number after both corrections;
-it is 320 now because deleting the dead camera-scanner path took `camAlign`
-(“Ka daidaita QR code…”) with it.
+it moved to 320 when deleting the dead camera-scanner path took `camAlign`
+(“Ka daidaita QR code…”) with it, and to 323 when the three camera-refusal
+strings below were written in the same convention as everything around them.
 
 ### What it would cost to change
 
@@ -67,7 +68,7 @@ node scripts/ka-address-preview.mjs            # the scale
 node scripts/ka-address-preview.mjs --write ku # the sheet to correct
 ```
 
-**314 of the 320 are a mechanical substitution. 6 need a human. None defeats
+**317 of the 323 are a mechanical substitution. 6 need a human. None defeats
 the rules.** So this is a scripted pass and a review, not a re-translation —
 which is worth knowing before the size of the number decides the answer.
 
@@ -144,12 +145,21 @@ or register, and they need fixing whatever is decided about wording.
 One further item in this group, `Mungode` → `Mun gode`, was a word-separation
 typo and has been corrected.
 
-Three changes have now been made without you, and all three are named here
-rather than buried: that typo, the receipt-code terminology below, and the
-deletion of `scanHelp`. None of them invents Hausa — the typo split a word, the
-second reuses `tantancewa`, which was already in the dictionary for this exact
-object, and the third removed a string instead of writing one. Everything else
-on this page still waits.
+Five changes have now been made without you, all named below rather than
+buried:
+
+1. the `Mungode` typo — a word split back in two;
+2. the receipt-code terminology — five strings, reusing `tantancewa`, which the
+   dictionary already used for this exact object;
+3. `scanHelp` deleted — no screen showed it and its English was false;
+4. the dead camera scanner deleted, taking ten strings only it used;
+5. **three new strings written** — `scanCameraDenied`, `scanCameraMissing`,
+   `scanCameraUnsupported`.
+
+Only the last invents anything, and it is the arrangement rather than the
+vocabulary: every word in it is already in the dictionary. It is the one item
+on this list that adds to your reading rather than subtracting from it, and it
+is set out in full below. Everything else on this page still waits.
 
 **The receipt-code one is done, and it was never really a Hausa error.**
 
@@ -229,25 +239,50 @@ Ten strings existed only for that screen and went with it: `camAlign`,
 `camNoAccess`, `camSwitchFailed`, `camTryAgain` and `scanQr`. If you have
 already reviewed any of them, that work is not lost — it is in the dictionary's
 history — but they are out of the sheet, and the total fell from 2,985 to
-2,975. `camCancel` stays; seven live screens use it.
+2,978. `camCancel` stays; seven live screens use it.
 
-**One thing this turned up that is a real gap, and is not fixed.** When the
-camera cannot be opened on the *live* scanner, `Collection.tsx` and
-`Verify.tsx` render `caught.message` straight from `scanner.ts` — and those
-three messages are English literals in the source, not dictionary strings:
+**One thing this turned up was a real gap, and it is now closed — with three
+strings that need your reading.** When the camera could not be opened on the
+*live* scanner, `Collection.tsx` and `Verify.tsx` rendered `caught.message`
+straight from `scanner.ts`, and those three messages were English literals in
+the source:
 
 > "PSIRS does not have permission to use the camera. Allow it in your browser
 > settings, or type the code printed under the QR square."
 
-So a Hausa-speaking agent who declines the camera permission, or whose handset
-has no camera, is answered in English. `camNoAccess` and `camTryAgain` were
-strings for exactly that situation, attached to the wrong screen. Fixing it
-means moving those three messages into the dictionary and translating them —
-three new strings for you to read, and a code change to raise them. It is
-listed here rather than done quietly.
+Worse than untranslated: both screens already held a translated string for this
+—`allocCameraFailed` and `verifyCameraFailed` — and the English one *won*. The
+Hausa was the fallback, reached only when the failure was something other than
+the three that actually happen. So an agent who declined the camera permission
+was answered in English by an application that has offered Hausa since it was
+built, and nothing failed, because an English sentence in an error's `message`
+looks exactly like a working one.
+
+The three refusals now have their own strings, and they are **new drafts
+nobody has read**:
+
+| Key | English | Hausa |
+|---|---|---|
+| `scanCameraDenied` | PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead. | PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar. |
+| `scanCameraMissing` | No camera was found on this device. Type the code instead. | Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar. |
+| `scanCameraUnsupported` | This browser cannot open the camera. Type the code instead. | Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar. |
+
+**Nothing here is invented vocabulary.** `burauza` is what the dictionary
+already calls a browser, in `ofcAcSessionsHint` and `moreNoWebBluetooth`;
+`izini` is permission, as in `ofcAgClear` and `enumRevoked`; `saiti` is a
+setting; *Maimakon haka ka rubuta lambar* is lifted whole from
+`allocCameraFailed`. What is new is the arrangement, and that is what needs a
+reading.
+
+Two things worth your eye in particular. The English dropped "printed under the
+QR square", because the collection screen's code is not printed under one — the
+same over-specific claim `scanHelp` was deleted for. And all three are written
+with `ka`, like everything around them, which is why the count in question 1
+moved: if you choose `ku`, these change with the rest rather than needing a
+separate decision.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 2,975 keys
+raised the obvious next question, so it was measured: **33 of the 2,978 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four

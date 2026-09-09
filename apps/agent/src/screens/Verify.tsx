@@ -15,7 +15,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
-import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
+import {
+  CAMERA_UNAVAILABLE_TEXT,
+  CameraUnavailable,
+  scanForCode,
+  verificationCodeFrom,
+  type ScanHandle,
+} from '../lib/scanner';
 import { Alert, ErrorAlert, Field, KeyValue, Money, Spinner } from '../ui';
 import type { ConnectionState } from '../lib/device';
 import { useI18n } from '../lib/i18n';
@@ -108,7 +114,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       setScanning(false);
       setCameraError(
         caught instanceof CameraUnavailable
-          ? caught.message
+          ? t[CAMERA_UNAVAILABLE_TEXT[caught.reason]]
           : t.verifyCameraFailed,
       );
     }

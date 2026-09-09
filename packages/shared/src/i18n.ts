@@ -2948,6 +2948,9 @@ export interface TranslationDictionary {
   allocRecorded: string;
   allocCodeUsed: string;
   scanCamera: string;
+  scanCameraDenied: string;
+  scanCameraMissing: string;
+  scanCameraUnsupported: string;
   verifyCheckReceipt: string;
   verifyScanQr: string;
   verifyTypeCode: string;
@@ -5991,6 +5994,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "Recorded",
     allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
     scanCamera: "Camera",
+    scanCameraDenied: "PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead.",
+    scanCameraMissing: "No camera was found on this device. Type the code instead.",
+    scanCameraUnsupported: "This browser cannot open the camera. Type the code instead.",
     verifyCheckReceipt: "Check a receipt",
     verifyScanQr: "Scan the QR code",
     verifyTypeCode: "Or type the verification code",
@@ -9003,6 +9009,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "An rubuta",
     allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
     scanCamera: "Kyamara",
+    scanCameraDenied: "PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar.",
+    scanCameraMissing: "Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar.",
+    scanCameraUnsupported: "Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar.",
     verifyCheckReceipt: "Duba rasit",
     verifyScanQr: "Duba lambar QR",
     verifyTypeCode: "Ko rubuta lambar tantancewa",

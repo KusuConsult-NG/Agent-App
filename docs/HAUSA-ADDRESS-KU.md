@@ -17,9 +17,9 @@ Paradigm: **ku** — polite plural (gender-neutral).
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `muku` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanku` | **confirm this one** |
 
-320 strings, 442 occurrences.
+323 strings, 447 occurrences.
 
-## The agent app — 167 strings
+## The agent app — 170 strings
 
 ### `agEnBandSoFar`
 
@@ -842,6 +842,24 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS.
 - Now: Babu takardar gwamnati da ta dace da wannan lamba ko code. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta fitar da shi ba.
 - Would become: Babu takardar gwamnati da ta dace da wannan lamba ko code. Idan an ba ku rasit mai wannan lamba, ba PSIRS ce ta fitar da shi ba.
+
+### `scanCameraDenied`
+
+- English: PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead.
+- Now: PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar.
+- Would become: PSIRS ba ta da izinin amfani da kyamara. Ku ba da izini a saitin burauzarku, ko ku rubuta lambar.
+
+### `scanCameraMissing`
+
+- English: No camera was found on this device. Type the code instead.
+- Now: Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar.
+- Would become: Ba a samu kyamara a wannan na’ura ba. Maimakon haka ku rubuta lambar.
+
+### `scanCameraUnsupported`
+
+- English: This browser cannot open the camera. Type the code instead.
+- Now: Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar.
+- Would become: Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ku rubuta lambar.
 
 ### `searchAnotherArea`
 
