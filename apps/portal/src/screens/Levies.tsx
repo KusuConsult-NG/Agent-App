@@ -346,7 +346,7 @@ export function LeviesScreen() {
                 outstandingOnly: false,
               })
             }
-          >{t.ofcAgClear}</button>
+          >{t.appClearFilters}</button>
         </div>
       </div>
 

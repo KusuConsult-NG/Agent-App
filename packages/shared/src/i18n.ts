@@ -2693,6 +2693,17 @@ export interface TranslationDictionary {
   appVerifying: string;
   appStillNeeded: string;
   appStatus: string;
+  /**
+   * Emptying a filter row, which is not the same act as clearing an agent.
+   *
+   * The Levies screen borrowed `ofcAgClear` for its filter reset. In English
+   * that reads fine, because "Clear" happens to mean both things. In Hausa
+   * `ofcAgClear` is "Ba da izini" -- grant permission -- so a Hausa-reading
+   * officer was offered "Grant permission" beside their filters. One word, one
+   * thing: the clearance decision keeps `ofcAgClear`, and resetting a form
+   * gets this.
+   */
+  appClearFilters: string;
   appDocumentOnFile: string;
   appRefereeNoAccount: string;
   appRefereeShareLink: string;
@@ -5794,6 +5805,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     appVerifying: "Verifying…",
     appStillNeeded: "Still needed before this can be submitted:",
     appStatus: "Status",
+    appClearFilters: "Clear",
     appDocumentOnFile: "Document on file",
     appRefereeNoAccount: "They do not need an account — they receive a secure link.",
     appRefereeShareLink: "If your referee did not receive the message, share this link with them directly:",
@@ -8816,6 +8828,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     appVerifying: "Ana tabbatarwa…",
     appStillNeeded: "Abin da ya rage kafin a iya turawa:",
     appStatus: "Matsayi",
+    appClearFilters: "Sake saita",
     appDocumentOnFile: "Takardar da ke rijista",
     appRefereeNoAccount: "Ba sa bukatar asusu — za su karbi hanyar sadarwa mai tsaro.",
     appRefereeShareLink: "Idan mai shaidarka bai karbi sakon ba, ka aika masa da wannan hanyar kai tsaye:",

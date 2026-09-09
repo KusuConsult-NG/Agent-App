@@ -450,7 +450,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2919 strings, grouped by where an agent meets them. Lower stakes
+2920 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2469,6 +2469,7 @@ instructions — but they are what an agent reads all day.
 | `appVerifying` | Verifying… | Ana tabbatarwa… | ☐ | |
 | `appStillNeeded` | Still needed before this can be submitted: | Abin da ya rage kafin a iya turawa: | ☐ | |
 | `appStatus` | Status | Matsayi | ☐ | |
+| `appClearFilters` | Clear | Sake saita | ☐ | |
 | `appDocumentOnFile` | Document on file | Takardar da ke rijista | ☐ | |
 | `appRefereeNoAccount` | They do not need an account — they receive a secure link. | Ba sa bukatar asusu — za su karbi hanyar sadarwa mai tsaro. | ☐ | |
 | `appRefereeShareLink` | If your referee did not receive the message, share this link with them directly: | Idan mai shaidarka bai karbi sakon ba, ka aika masa da wannan hanyar kai tsaye: | ☐ | |

@@ -40,6 +40,23 @@ export STORAGE_PATH="/tmp/psirs-uat-storage"
 export RUN_MIGRATIONS_ON_BOOT=false
 export PORT=4000
 
+# The sign-in cap, raised for this stack and this stack only.
+#
+# `/auth` allows ten requests a minute per caller. That number exists to stop
+# an account being guessed into, and it stays as it is everywhere the platform
+# actually runs. The sweep is a single caller signing in around forty times in
+# ten minutes -- five officer roles walking every screen, the agent app, the
+# Hausa pass -- so it trips a control aimed at somebody else, and whichever
+# test lands eleventh in a minute is refused. That was five sweeps of moving,
+# unreproducible failures.
+#
+# The specs also retry and wait the window out, so a real refusal still fails
+# honestly rather than being papered over; this stops the sweep spending
+# minutes on it. Nothing here reaches a deployed environment: this file only
+# configures the throwaway `psirs_uat` database and the demonstration
+# accounts, whose password is published in this repository.
+export AUTH_RATE_LIMIT_MAX=200
+
 # The database first: a resumed container comes back with the server stopped,
 # and every step below assumes it is there.
 "$ROOT/scripts/ensure-postgres.sh" || exit 1

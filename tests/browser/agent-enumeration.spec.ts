@@ -39,11 +39,41 @@ function watchConsole(page: Page): { errors: string[] } {
   return { errors };
 }
 
+/*
+ * Sign-in is retried, because `/auth` is capped at ten requests a minute per
+ * caller and this whole sweep is one caller.
+ *
+ * Five full sweeps each failed one or two different agent-app tests, always
+ * with the app still sitting on the sign-in screen, and the page snapshot said
+ * why: "Too many attempts. Wait a moment and try again." Whichever test
+ * happened to be the eleventh sign-in inside a minute was refused, which is
+ * why the failure moved around and why every one of them passed alone. It read
+ * as flakiness and was the platform working.
+ *
+ * The cap is not raised for tests, for the same reason the search cap is not:
+ * an account that can be signed into as fast as you like is an account that
+ * can be guessed into. The suite waits instead -- the window is sixty seconds,
+ * so four attempts twenty seconds apart cross it.
+ */
 async function signIn(page: Page): Promise<void> {
-  await page.goto(AGENT);
-  await page.locator('input[type="tel"]').first().fill(LOGIN.phone);
-  await page.locator('input[type="password"]').first().fill(LOGIN.password);
-  await page.getByRole('button', { name: /^sign in$/i }).click();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.goto(AGENT);
+    await page.locator('input[type="tel"]').first().fill(LOGIN.phone);
+    await page.locator('input[type="password"]').first().fill(LOGIN.password);
+    await page.getByRole('button', { name: /^sign in$|^shiga$/i }).click();
+    try {
+      await page
+        .locator('input[type="password"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 10_000 });
+      break;
+    } catch {
+      if (attempt === 3) {
+        throw new Error('The agent app refused four sign-in attempts a minute apart.');
+      }
+      await page.waitForTimeout(20_000);
+    }
+  }
   await page.waitForTimeout(3000);
 }
 

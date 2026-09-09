@@ -87,6 +87,22 @@ async function shot(page: Page, name: string): Promise<void> {
 
 test.use({ viewport: DESKTOP });
 
+/*
+ * Every test in this file photographs a full page, and these pages got long.
+ *
+ * Two full sweeps died inside `page.screenshot({ fullPage: true })` on the
+ * 45-second default -- once on the objection decision, once on the
+ * association's standing -- and both passed alone in under four seconds. The
+ * screens are the reason: an arrears worklist, a presumptive schedule and an
+ * enumeration queue are tall tables, and a full-page capture of a tall table
+ * on a loaded machine is slow work rather than stuck work. Same finding as the
+ * officer role walk, the citizen statement and the enumeration spec: a test
+ * that honestly waits for something real needs a clock that fits it.
+ */
+test.beforeEach(() => {
+  test.slow();
+});
+
 test('the arrears worklist, ordered by what is worth collecting', async ({ page }) => {
   /*
    * Phase 1. Every unpaid invoice on the platform was already visible; what
