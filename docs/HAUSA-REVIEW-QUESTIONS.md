@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**216 strings address the reader as `ka`: masculine singular.** A woman
+**321 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -27,24 +27,57 @@ plural `ku`, which is gender-neutral. This is a decision about who PSIRS
 believes it is talking to, and no translator can make it.
 
 **It is not only about agents.** The review sheet framed this as a question
-about field staff. Counting the dictionary says otherwise:
+about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 122 |
-| The officer portal | 62 |
-| Citizens, referees and group leaders | 32 |
-| **Total** | **216** of 2,986 |
+| The agent app | 168 |
+| The officer portal | 111 |
+| Citizens, referees and group leaders | 42 |
+| **Total** | **321** of 2,986 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 32 than for the 122.
+more for the 42 than for the 168.
 
-The forms in play are `ka` (148 strings), the possessive `-nka` / `-rka` (89),
-`kada ka` for a negative imperative (13) and `naka` / `taka` (5); some strings
-carry more than one. Nothing currently uses `ku`.
+The forms are `ka` (326 occurrences), the possessive `-nka` (56), `-rka` (42),
+`dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
+than one. Nothing currently uses `ku`.
+
+**Two earlier figures in this document were wrong, and the second was worse.**
+It said 216. That over-counted by treating `kai` as the pronoun — all 49 of its
+uses here are something else (`Kimanta kai`, self-assessment; `kai tsaye`,
+directly; `ya kai`, reached; `hadin kai`, cooperation) — and under-counted by
+missing `dinka`, `kanka` and `maka`. Correcting those gave 222, which was still
+wrong: the pattern was case-sensitive, and Hausa imperatives open sentences
+constantly. `Ka nemo…`, `Ka tabbatar…`, `Ka yi…` — **144 occurrences across 103
+further strings** were invisible. 321 is the number after both corrections.
+
+### What it would cost to change
+
+`scripts/ka-address-preview.mjs` answers that from the dictionary rather than
+from anyone's estimate:
+
+```
+node scripts/ka-address-preview.mjs            # the scale
+node scripts/ka-address-preview.mjs --write ku # the sheet to correct
+```
+
+**315 of the 321 are a mechanical substitution. 6 need a human. None defeats
+the rules.** So this is a scripted pass and a review, not a re-translation —
+which is worth knowing before the size of the number decides the answer.
+
+`docs/HAUSA-ADDRESS-KU.md` and `docs/HAUSA-ADDRESS-KI.md` are that sheet, one
+per option: every string, its English, its Hausa now, and what the rules would
+make of it. **They are machine output and not translations.** A program that
+does not speak Hausa applied a substitution table; two rows of that table are
+flagged for confirmation, because `maka` → `muku` is suppletive rather than
+suffixal and `kanka` is a reflexive whose plural reading may not be the one
+wanted. Verb agreement beyond the pronoun is not attempted at all. Correct the
+sheet freely — the corrections are what would be applied, not the generated
+text.
 
 It should be settled before Phase 0 rather than discovered during it: answering
 it late means re-reading whatever was reviewed before it.
