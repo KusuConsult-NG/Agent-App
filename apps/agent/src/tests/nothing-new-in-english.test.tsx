@@ -299,6 +299,7 @@ const ALLOWED_LITERALS = new Set([
   'Plateau State',
   // A keyboard event code. Translating it breaks the key.
   'Enter',
+  'Escape',
   'Bearer ',
   'Content-Type',
 ]);

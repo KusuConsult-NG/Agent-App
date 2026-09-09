@@ -8,8 +8,9 @@ It assumes nothing about the audience's technical background and it does not ask
 you to explain any. Everything below is a thing to do on screen, followed by the
 sentence that says why it matters.
 
-Read it once before the room. Twenty-five minutes of demonstration, ten minutes
-of questions, and about fifteen minutes of setup beforehand.
+Read it once before the room. Thirty minutes of demonstration, ten minutes of
+questions, and about fifteen minutes of setup beforehand. Act 6 is the one to
+drop if the room is a funder rather than a revenue or audit audience.
 
 ---
 
@@ -337,7 +338,131 @@ account.
 
 ---
 
-## Act 6 · The oversight side, briefly (4 minutes)
+## Act 6 · The officer's own command centre (6 minutes)
+
+Do this act for PSIRS management, an audit committee or a ministry team. For a
+funder, skip to Act 7 — they came for the money story and they have just had it.
+
+Everything so far followed one collection forward. This act is the other
+direction: an officer arriving at a screen with a question and no reference
+number.
+
+**Tab 2**, signed in as the **auditor**.
+
+### One box, and then the whole file
+
+**Do:** type `TXN-2026` into the search box in the top bar, beside the screen
+title — *Search government records*.
+
+> A transaction reference, a TIN, a person's name or a receipt number, all in
+> the same box. An officer holding a scrap of paper does not have to know which
+> kind of number is on it before the platform will help them.
+>
+> It is in the bar rather than on a screen of its own deliberately: a search an
+> officer has to navigate to is a search they use once. And it grants nothing —
+> every kind of result is checked against the same permission that kind's own
+> screen requires, so a search cannot show an officer something the platform
+> would refuse to open.
+
+**Do:** open one of the transactions.
+
+**Point along the chain:** taxpayer, agent, revenue item, where it was
+collected, the assessment, the invoice, the payment, the gateway, the receipt,
+the settlement, the reconciliation run, the commission.
+
+> One collection, from the person who paid to the bank credit that paid the
+> government, on one screen. Nobody joined those up by hand, and nobody had to
+> ask somebody with database access to do it and wait.
+
+**Point at "What happened, in order".**
+
+> The platform's own record and the officers' actions on one clock — and where
+> an officer changed something, what it was before and what it is now.
+
+**Now the part worth the act.** Open a private window, sign in as the
+**supervisor**, and open the same transaction.
+
+**Point at the two greyed panels** — *Not shown to your role*.
+
+> The settlement and the audit trail. The sections are still named and still
+> listed. This officer's permissions do not reach them, so the platform
+> withholds the contents and says that is what it is doing.
+>
+> A panel that is empty because there is nothing there and a panel that is empty
+> because you may not see it look identical, and one of them means the money is
+> missing. This platform will not let an officer confuse the two.
+
+### What the Service expects, and what it is on course for
+
+**Targets & forecast**, as the **revenue officer**.
+
+**Point at the two target rows:** target, collected, achievement, gap.
+
+**Then at the roll-up card** — the State target beside the sum apportioned
+below it, and **LGAs with no target: 16 of 17**.
+
+> Those two figures are not meant to agree, and the card says so — the State
+> figure normally carries headroom on purpose. The number to look at is the
+> sixteen LGAs nobody has given a target to. That is where a shortfall comes
+> from, and it is the one thing a table of achievement percentages will never
+> show you, because an LGA with no target cannot miss it.
+
+**Then the forecast.** Read its own first line out:
+
+> *This is a forecast, not a target and not guaranteed revenue.*
+
+**And point at what it says underneath:**
+
+> *A straight run rate. There is not enough history to know the collection
+> curve, so this is likely to be wrong early and late in the period.*
+>
+> It is telling you it is the weaker of the two methods it has, and why. Once
+> PSIRS has a year of its own collections it uses the curve instead. A
+> projection that will not say what it assumed is a number somebody quotes in a
+> budget meeting and nobody can defend.
+
+### An auditor who can defend the sample
+
+**Audit workbench**, back as the auditor.
+
+**Point at the sample:** drawn at random, the seed it was drawn from, the
+population it came from, three items examined and two not.
+
+> Somebody else can take that seed and reproduce this exact draw. That is the
+> difference between a sample and a selection, and it is the first thing an
+> external auditor asks about an internal one.
+
+**Do:** press **Complete this sample**.
+
+**Point at the refusal:** *2 item(s) in this sample have not been examined.*
+
+> A sample can be completed only when every item in it has a finding.
+> Half-finished work reported as complete is worse than no sample at all, because
+> somebody downstream will rely on it.
+
+**Point at the two reports.** One says **SIGNED**, one does not.
+
+> Generating a report freezes its figures and gives them a checksum a reader can
+> recompute. Signing is a separate step, usually a different officer, and it
+> asks for a second factor before it will accept the signature.
+>
+> After that, the database itself refuses to let the figures move underneath the
+> signature. An officer whose name is on a report cannot have the report changed
+> under them.
+
+### The rest, in one minute
+
+- **Cases** — one case here, opened by the auditor about the collection still
+  awaiting its bank credit and handed to finance. Work moves between
+  departments and the case carries every step of it with it.
+- **Inbox** — the finance officer was told the case was assigned to them; the
+  auditor was told when finance answered. Neither found out by looking.
+- **Where I am signed in** — every browser and machine this account is signed in
+  on, and a button to end any of them.
+
+---
+
+## Act 7 · The oversight side, briefly (4 minutes)
 
 Do not walk every screen. Pick three.
 
@@ -426,7 +551,7 @@ no screen anyone is offered that the system will then refuse them.
 
 > Built. Every screen you have seen is the real application talking to the real
 > API against a real PostgreSQL database. The financial rules are enforced by the
-> database, not by the interface. There are 1,280 automated tests covering the
+> database, not by the interface. There are 1,747 automated tests covering the
 > API, and the whole walkthrough you just watched is itself an automated test
 > suite that photographs every screen — `docs/UAT-WALKTHROUGH.md` and the 115
 > screenshots beside it.
@@ -455,6 +580,12 @@ Do not troubleshoot in front of the room. Move to the next act and come back.
 - `docs/SECURITY.md` — the controls, and what each one is protecting against
 - `docs/SOP-FINANCE-RECONCILIATION.md` — the finance officer's daily procedure
 - `docs/SOP-AGENT-LIFECYCLE.md` — recruiting, clearing and removing an agent
+- `docs/ROLE-ACTION-MATRIX.md` — every permission, which roles hold it and which
+  endpoints enforce it. It is generated from the code rather than written
+  alongside it, and the build fails if the two disagree, so it cannot drift into
+  describing a system that is not the one running
+- `docs/OFFICER-READINESS-GAP-ASSESSMENT.md` — the officer-facing checklist this
+  platform was assessed against, item by item
 
 And the sentence to close on, which is the one you opened with:
 

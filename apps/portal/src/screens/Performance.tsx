@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { Alert, Badge, ErrorAlert, Growth, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 interface AgentRow {
@@ -43,6 +43,12 @@ interface AgentRow {
   commission_earned_kobo: string;
   open_fraud_flags: string;
   active_days: string;
+  /** This month and the same days of last month, so a decline is visible. */
+  month_kobo: string;
+  previous_month_kobo: string;
+  /** Basis points, or null where the agent has no previous month. */
+  growth_bp: number | null;
+  categories_processed: string;
 }
 
 export function PerformanceScreen({ navigate }: { navigate: (path: string) => void }) {
@@ -144,7 +150,21 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                 numeric: true,
                 render: (row) => <Money kobo={row.collected_kobo} />,
               },
+              {
+                /*
+                 * The column that turns a ranking into a management tool.
+                 *
+                 * Sorted by size, an agent whose collections halved is simply
+                 * further down the list and looks like a smaller agent. The
+                 * direction is the thing a supervisor acts on.
+                 */
+                key: 'growth_bp',
+                label: 'ofcPfGrowth',
+                numeric: true,
+                render: (row) => <Growth basisPoints={row.growth_bp} />,
+              },
               { key: 'successful_transactions', label: 'ofcNavTransactions', numeric: true },
+              { key: 'categories_processed', label: 'ofcPfCategories', numeric: true },
               {
                 key: 'average_transaction_kobo',
                 label: 'ofcPfAverage',

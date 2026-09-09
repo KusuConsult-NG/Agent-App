@@ -1,9 +1,10 @@
 /** Transaction monitoring and export (PRD §48, §49). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { Badge, ErrorAlert, ExportButtons, Loading, Money, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
 
 interface TransactionRow {
@@ -43,7 +44,20 @@ export function TransactionsScreen() {
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
-  const [filters, setFilters] = useState({ status: '', lgaId: '', from: '', to: '' });
+  /*
+   * Kept in the URL and in this session, not in component state.
+   *
+   * An officer who narrowed this list to one LGA and one week, opened a
+   * transaction to read it, and pressed back used to get the unfiltered list
+   * and start again -- which on this screen is most of what they spend the day
+   * doing.
+   */
+  const [filters, setFilters] = useFilters('transactions', '/transactions', {
+    status: '',
+    lgaId: '',
+    from: '',
+    to: '',
+  });
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams({ limit: '200' });
@@ -71,13 +85,6 @@ export function TransactionsScreen() {
       });
   }, [buildQuery]);
 
-  async function exportCsv() {
-    const params = buildQuery();
-    params.set('format', 'csv');
-    const csv = await api.get<string>(`/government/transactions?${params.toString()}`);
-    downloadCsv(`plateau-transactions-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-  }
-
   return (
     <>
       <div className="card">
@@ -87,7 +94,7 @@ export function TransactionsScreen() {
             <select
               id="status"
               value={filters.status}
-              onChange={(event) => setFilters({ ...filters, status: event.target.value })}
+              onChange={(event) => setFilters({ status: event.target.value })}
             >
               <option value="">{t.ofcAllStatuses}</option>
               {STATUSES.map((status) => (
@@ -103,7 +110,7 @@ export function TransactionsScreen() {
             <select
               id="lga"
               value={filters.lgaId}
-              onChange={(event) => setFilters({ ...filters, lgaId: event.target.value })}
+              onChange={(event) => setFilters({ lgaId: event.target.value })}
             >
               <option value="">{t.ofcAllLgas}</option>
               {lgas.map((lga) => (
@@ -120,7 +127,7 @@ export function TransactionsScreen() {
               id="from"
               type="date"
               value={filters.from}
-              onChange={(event) => setFilters({ ...filters, from: event.target.value })}
+              onChange={(event) => setFilters({ from: event.target.value })}
             />
           </div>
 
@@ -130,11 +137,15 @@ export function TransactionsScreen() {
               id="to"
               type="date"
               value={filters.to}
-              onChange={(event) => setFilters({ ...filters, to: event.target.value })}
+              onChange={(event) => setFilters({ to: event.target.value })}
             />
           </div>
 
-          <button type="button" className="secondary" onClick={exportCsv}>{t.ofcExportCsv}</button>
+          <ExportButtons
+            path={`/government/transactions?${buildQuery().toString()}`}
+            filename={`plateau-transactions-${new Date().toISOString().slice(0, 10)}`}
+            disabled={!rows || rows.length === 0}
+          />
         </div>
       </div>
 

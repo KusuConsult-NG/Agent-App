@@ -27,7 +27,9 @@ interface FlagInput {
     | 'DEVICE'
     | 'REFEREE'
     | 'COMMISSION'
-    | 'SETTLEMENT';
+    | 'SETTLEMENT'
+    | 'USER'
+    | 'DOCUMENT';
   entityId: string;
   agentId?: string | null;
   transactionId?: string | null;
@@ -77,6 +79,20 @@ const DECISION_HOLDS: Record<FraudRule | 'AMOUNT_MISMATCH', string> = {
   // its variance, the same batch never produces new evidence.
   SETTLEMENT_VARIANCE: '90 days',
   DUPLICATE_TAXPAYER_DETAILS: '90 days',
+  /*
+   * The four that watch the office rather than the field.
+   *
+   * All read a window measured in days, so a dismissal has to hold for at
+   * least that long or the sweep re-raises the flag from evidence the officer
+   * has already been shown. A regenerated document is the exception in kind
+   * rather than in length: reissues accumulate and never fall out of the
+   * count, so the hold is what stops a decided flag returning every quarter
+   * of an hour for the rest of the document's life.
+   */
+  REPEATED_RECEIPT_REGENERATION: '90 days',
+  UNUSUAL_TRANSACTION_TIMING: '7 days',
+  UNUSUAL_OFFICER_ACTIVITY: '7 days',
+  FREQUENT_MANUAL_INTERVENTION: '30 days',
 };
 
 type RaiseOutcome = 'RAISED' | 'ALREADY_OPEN' | 'ALREADY_DECIDED';
@@ -142,6 +158,43 @@ const THRESHOLDS = {
   reversalRatePercent: 15,
   reversalMinimumSample: 10,
   refereeAgentLimit: 5,
+  /*
+   * Watching the office.
+   *
+   * Each of these is deliberately loose. A flag costs an officer's attention
+   * and, where it lands on an agent, their commission; a threshold tight
+   * enough to catch every wrongdoer catches the whole of a busy Monday with
+   * it, and a queue that is mostly noise is a queue nobody reads. These are
+   * set to fire on the shape that is hard to explain, not on the shape that is
+   * merely above average.
+   */
+
+  // A receipt is issued once. Two documents for one entity is a reversal and a
+  // reissue, which is ordinary; four is somebody producing copies.
+  receiptReissues: 3,
+  // The same person pulling the same document down again and again. A
+  // legitimate reprint or two happens at a counter; twelve does not.
+  receiptRetrievalsPerDay: 12,
+  /*
+   * Local night, in Africa/Lagos, which is where every one of these markets
+   * is. Collections do happen in the evening -- a motor park at eight is a
+   * working place -- so the window is the part of the night when a receipt
+   * being written means somebody is at a keyboard rather than at a stall.
+   */
+  nightStartHour: 23,
+  nightEndHour: 5,
+  nightTransactionsPerWeek: 6,
+  /*
+   * An officer's own working rhythm, not a fleet average: a busy revenue
+   * office legitimately writes ten times what a small one does, so the
+   * comparison is against what this officer did over the preceding weeks.
+   */
+  officerActivityMultiple: 4,
+  officerActivityFloor: 60,
+  officerActivityBaselineDays: 28,
+  // Reversals, corrections and adjustments by one officer in a month. Every
+  // one is individually approved; the pattern is what nobody sees.
+  manualInterventionsPerMonth: 15,
 } as const;
 
 /**
@@ -454,7 +507,284 @@ export async function runFraudSweep(client: PoolClient): Promise<{ flagsRaised: 
     raised += 1;
   }
 
+  raised += await sweepReceiptRegeneration(client);
+  raised += await sweepTransactionTiming(client);
+  raised += await sweepOfficerActivity(client);
+  raised += await sweepManualIntervention(client);
+
   return { flagsRaised: raised };
+}
+
+/**
+ * A document that is supposed to exist once, existing several times.
+ *
+ * Issuance on this platform is idempotent -- `issueReceipt` returns the
+ * document already on file rather than rendering a second one -- so a receipt
+ * cannot simply be regenerated at will. There are two ways more than one ends
+ * up in circulation anyway, and this rule watches both.
+ *
+ * A reversal revokes the receipt; if the payment is later re-verified a fresh
+ * one is issued, which is correct, and a taxpayer whose transaction has been
+ * reversed and reissued four times is not having an ordinary week. And a
+ * single document can be pulled down again and again, which is the same thing
+ * from the other end: nothing about a PDF stops the eighth copy circulating as
+ * though it were the first.
+ *
+ * Filed against the document rather than the transaction. The money may be
+ * perfectly good; what is in question is how many pieces of paper claim it.
+ */
+async function sweepReceiptRegeneration(client: PoolClient): Promise<number> {
+  let raised = 0;
+
+  const reissued = await query<{
+    entity_type: string;
+    entity_id: string;
+    latest_document_id: string;
+    issues: string;
+  }>(
+    client,
+    `SELECT entity_type,
+            entity_id::text AS entity_id,
+            (array_agg(id ORDER BY created_at DESC))[1]::text AS latest_document_id,
+            count(*)::text AS issues
+       FROM documents
+      WHERE entity_type IS NOT NULL
+        AND entity_id IS NOT NULL
+        AND document_type IN ('RECEIPT', 'VEHICLE_RENEWAL')
+      GROUP BY entity_type, entity_id
+     HAVING count(*) >= $1`,
+    [THRESHOLDS.receiptReissues],
+  );
+
+  for (const row of reissued) {
+    await raiseFlag(client, {
+      rule: 'REPEATED_RECEIPT_REGENERATION',
+      severity: 'HIGH',
+      entityType: 'DOCUMENT',
+      entityId: row.latest_document_id,
+      detail: {
+        reason: 'REISSUED',
+        documentsIssued: Number.parseInt(row.issues, 10),
+        forEntityType: row.entity_type,
+        forEntityId: row.entity_id,
+        threshold: THRESHOLDS.receiptReissues,
+      },
+    });
+    raised += 1;
+  }
+
+  /*
+   * Retrievals are counted per person, not per document.
+   *
+   * A receipt a hundred citizens verify is a receipt doing its job; the same
+   * officer fetching one document twelve times in a day is the signal. The
+   * count excludes VERIFY, which is the public check anybody may run against a
+   * verification code and carries no actor at all.
+   */
+  const retrieved = await query<{ document_id: string; accessed_by: string; retrievals: string }>(
+    client,
+    `SELECT document_id::text AS document_id,
+            accessed_by::text AS accessed_by,
+            count(*)::text AS retrievals
+       FROM document_access_logs
+      WHERE access_type IN ('DOWNLOAD', 'SHARE')
+        AND accessed_by IS NOT NULL
+        AND created_at > now() - interval '1 day'
+      GROUP BY document_id, accessed_by
+     HAVING count(*) > $1`,
+    [THRESHOLDS.receiptRetrievalsPerDay],
+  );
+
+  for (const row of retrieved) {
+    await raiseFlag(client, {
+      rule: 'REPEATED_RECEIPT_REGENERATION',
+      severity: 'MEDIUM',
+      entityType: 'DOCUMENT',
+      entityId: row.document_id,
+      detail: {
+        reason: 'RETRIEVED',
+        retrievalsInLastDay: Number.parseInt(row.retrievals, 10),
+        byUserId: row.accessed_by,
+        threshold: THRESHOLDS.receiptRetrievalsPerDay,
+      },
+    });
+    raised += 1;
+  }
+
+  return raised;
+}
+
+/**
+ * Collections written in the middle of the night.
+ *
+ * The hour is read in Africa/Lagos, because the question is what the person
+ * was doing at the time and not what UTC said. A single late transaction
+ * proves nothing -- a motor park runs late, and a queue that closes at
+ * midnight closes at midnight -- so the rule needs a habit: several, over a
+ * week, by the same agent.
+ *
+ * What it is really asking is whether collections are being *entered* rather
+ * than *taken*: a day's cash written up at three in the morning, from a
+ * notebook, with the amounts decided afterwards.
+ */
+async function sweepTransactionTiming(client: PoolClient): Promise<number> {
+  let raised = 0;
+
+  const nightWorkers = await query<{ agent_id: string; night_count: string; total: string }>(
+    client,
+    `SELECT agent_id,
+            count(*) FILTER (
+              WHERE EXTRACT(HOUR FROM created_at AT TIME ZONE 'Africa/Lagos') >= $1
+                 OR EXTRACT(HOUR FROM created_at AT TIME ZONE 'Africa/Lagos') < $2
+            )::text AS night_count,
+            count(*)::text AS total
+       FROM transactions
+      WHERE agent_id IS NOT NULL
+        AND created_at > now() - interval '7 days'
+      GROUP BY agent_id`,
+    [THRESHOLDS.nightStartHour, THRESHOLDS.nightEndHour],
+  );
+
+  for (const row of nightWorkers) {
+    const nightCount = Number.parseInt(row.night_count, 10);
+    if (nightCount < THRESHOLDS.nightTransactionsPerWeek) continue;
+    await raiseFlag(client, {
+      rule: 'UNUSUAL_TRANSACTION_TIMING',
+      severity: 'MEDIUM',
+      entityType: 'AGENT',
+      entityId: row.agent_id,
+      agentId: row.agent_id,
+      detail: {
+        nightTransactionsInLastWeek: nightCount,
+        transactionsInLastWeek: Number.parseInt(row.total, 10),
+        nightBeginsAtHour: THRESHOLDS.nightStartHour,
+        nightEndsAtHour: THRESHOLDS.nightEndHour,
+        timeZone: 'Africa/Lagos',
+      },
+    });
+    raised += 1;
+  }
+
+  return raised;
+}
+
+/**
+ * An officer whose day does not look like their other days.
+ *
+ * Compared against the officer's own preceding four weeks rather than against
+ * their colleagues, because revenue offices differ by an order of magnitude
+ * and a fleet average would flag the busiest office every morning and never
+ * notice a quiet one doubling.
+ *
+ * The floor matters as much as the multiple. Four times a baseline of two
+ * actions is eight actions, which is a Tuesday; without it the rule would
+ * spend its life reporting officers who normally do very little and today did
+ * a little more. Both conditions have to hold.
+ */
+async function sweepOfficerActivity(client: PoolClient): Promise<number> {
+  let raised = 0;
+
+  const officers = await query<{ actor_id: string; today: string; baseline_per_day: string }>(
+    client,
+    `WITH recent AS (
+       SELECT actor_id,
+              count(*) FILTER (WHERE created_at > now() - interval '1 day')::numeric AS today,
+              count(*) FILTER (
+                WHERE created_at <= now() - interval '1 day'
+                  AND created_at > now() - ($1 || ' days')::interval
+              )::numeric AS earlier
+         FROM audit_logs
+        WHERE actor_id IS NOT NULL
+          AND result = 'SUCCESS'
+          AND created_at > now() - ($1 || ' days')::interval
+        GROUP BY actor_id
+     )
+     SELECT r.actor_id::text AS actor_id,
+            r.today::text AS today,
+            (r.earlier / GREATEST($1::numeric - 1, 1))::text AS baseline_per_day
+       FROM recent r
+       JOIN users u ON u.id = r.actor_id
+      WHERE u.role <> 'agent'`,
+    [THRESHOLDS.officerActivityBaselineDays],
+  );
+
+  for (const row of officers) {
+    const today = Number(row.today);
+    const baseline = Number(row.baseline_per_day);
+    if (today < THRESHOLDS.officerActivityFloor) continue;
+    /*
+     * A baseline of zero is a new officer's first working day, not a spike.
+     * Dividing by it would make every joiner's first afternoon an anomaly and
+     * teach the queue's readers to dismiss the rule.
+     */
+    if (baseline <= 0) continue;
+    if (today < baseline * THRESHOLDS.officerActivityMultiple) continue;
+
+    await raiseFlag(client, {
+      rule: 'UNUSUAL_OFFICER_ACTIVITY',
+      severity: 'MEDIUM',
+      entityType: 'USER',
+      entityId: row.actor_id,
+      detail: {
+        actionsInLastDay: today,
+        usualActionsPerDay: Number(baseline.toFixed(2)),
+        baselineDays: THRESHOLDS.officerActivityBaselineDays,
+        multiple: Number((today / baseline).toFixed(2)),
+      },
+    });
+    raised += 1;
+  }
+
+  return raised;
+}
+
+/**
+ * How often one officer has had to step in and change the record by hand.
+ *
+ * Every one of these is individually legitimate: each was requested with a
+ * reason, approved by somebody else, and written to the audit log. That is
+ * exactly why the pattern is invisible -- nobody is looking at the fifteen
+ * together, because each was looked at once, alone, weeks apart.
+ *
+ * A high count is not an accusation. It is as likely to mean a broken upstream
+ * process, or an officer covering for one, as anything else; either way it is
+ * the thing PSIRS would want to know about and currently could not see.
+ */
+async function sweepManualIntervention(client: PoolClient): Promise<number> {
+  let raised = 0;
+
+  const interveners = await query<{ requested_by: string; count: string; kinds: string[] }>(
+    client,
+    `SELECT requested_by::text AS requested_by,
+            count(*)::text AS count,
+            array_agg(DISTINCT approval_type) AS kinds
+       FROM approvals
+      WHERE approval_type IN (
+              'MANUAL_CORRECTION', 'TAXPAYER_ADJUSTMENT', 'PAYMENT_REVERSAL',
+              'REFUND', 'COMMISSION_ADJUSTMENT')
+        AND status IN ('APPROVED', 'EXECUTED')
+        AND requested_at > now() - interval '30 days'
+      GROUP BY requested_by
+     HAVING count(*) > $1`,
+    [THRESHOLDS.manualInterventionsPerMonth],
+  );
+
+  for (const row of interveners) {
+    await raiseFlag(client, {
+      rule: 'FREQUENT_MANUAL_INTERVENTION',
+      severity: 'MEDIUM',
+      entityType: 'USER',
+      entityId: row.requested_by,
+      detail: {
+        interventionsInLastMonth: Number.parseInt(row.count, 10),
+        kinds: row.kinds,
+        threshold: THRESHOLDS.manualInterventionsPerMonth,
+      },
+    });
+    raised += 1;
+  }
+
+  return raised;
 }
 
 /** Revenue leakage dashboard (PRD §72). */

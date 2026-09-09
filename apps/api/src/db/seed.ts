@@ -12,7 +12,7 @@
  * it can be re-run against an existing database without duplicating anything.
  */
 
-import { PLATEAU_LGAS, TRAINING_MODULES, nairaToKobo } from '@psirs/shared';
+import { PLATEAU_LGAS, ROLES, TRAINING_MODULES, nairaToKobo, permissionsForRole } from '@psirs/shared';
 import { pool, queryOne, withTransaction, closePool } from './pool';
 import { config } from '../config';
 import { describeDatabase } from '../env';
@@ -867,7 +867,101 @@ your authority.
 By accepting, you confirm that you have read and understood this agreement and
 that the information in your application is true.`;
 
+/**
+ * The roles, and the permissions each starts with.
+ *
+ * Migration 059 moved the role-to-permission map out of `rbac.ts` and into the
+ * database, and seeded it. This is here for the two cases the migration cannot
+ * cover: a database created after that migration and then emptied — which is
+ * every test shard between files — and a role added to the compiled list in a
+ * later release.
+ *
+ * IT NEVER OVERWRITES A GRANT SOMEBODY MADE.
+ *
+ * A role that already has grants is left exactly as it is. Re-applying the
+ * compiled map on every seed would silently undo an administrator's
+ * delegation — which is the entire capability this table exists to provide, so
+ * quietly reverting it would be worse than never having built it.
+ */
+async function seedRoles(): Promise<void> {
+  console.log('  seeding roles and permissions...');
+  const PORTAL: readonly string[] = [
+    'supervisor',
+    'revenue_officer',
+    'finance_officer',
+    'auditor',
+    'admin',
+  ];
+  const LABELS: Record<string, [string, string]> = {
+    agent: ['Field agent', 'Wakilin filin aiki'],
+    supervisor: ['Supervisor', 'Mai kula'],
+    revenue_officer: ['Revenue officer', 'Jami’in haraji'],
+    finance_officer: ['Finance officer', 'Jami’in kudi'],
+    auditor: ['Auditor', 'Mai bincike'],
+    admin: ['Administrator', 'Mai gudanarwa'],
+    // No `taxpayer`. Migration 007 removed it from the role list and
+    // `integration.test.ts` asserts the database still refuses such a row — a
+    // citizen never signs in, so there is no credential to phish.
+  };
+
+  /*
+   * How many rows each shipped role may export.
+   *
+   * Seeded rather than left to the column default, because the default is the
+   * floor a role PSIRS creates gets and these six are decisions: the auditor
+   * needs the whole population or an examination is not one; the field agent
+   * takes nothing out at all.
+   *
+   * Only applied when the row is created. An administrator who has raised a
+   * limit has made a decision, and a re-seed must not quietly put it back --
+   * which is the same rule the permission grants below follow.
+   */
+  const EXPORT_LIMITS: Record<string, number> = {
+    agent: 0,
+    supervisor: 20_000,
+    revenue_officer: 20_000,
+    finance_officer: 50_000,
+    auditor: 100_000,
+    admin: 50_000,
+  };
+
+  await withTransaction(async (client) => {
+    for (const [name, [label, labelHa]] of Object.entries(LABELS)) {
+      await client.query(
+        `INSERT INTO roles (name, label, label_ha, is_system, is_portal, export_row_limit)
+         VALUES ($1,$2,$3,TRUE,$4,$5)
+         ON CONFLICT (name) DO UPDATE SET label = EXCLUDED.label,
+                                          label_ha = EXCLUDED.label_ha`,
+        [name, label, labelHa, PORTAL.includes(name), EXPORT_LIMITS[name] ?? 5000],
+      );
+    }
+
+    for (const role of ROLES) {
+      const held = await queryOne<{ count: string }>(
+        client,
+        'SELECT count(*)::text FROM role_permissions WHERE role = $1',
+        [role],
+      );
+      // Already configured — including deliberately configured down to nothing
+      // is not possible here, because a role with no grants is indistinguishable
+      // from an unseeded one. That ambiguity is accepted: a role stripped to
+      // zero permissions is not a state anybody wants to preserve.
+      if (Number(held!.count) > 0) continue;
+
+      for (const permission of permissionsForRole(role)) {
+        await client.query(
+          `INSERT INTO role_permissions (role, permission, reason)
+           VALUES ($1,$2,'Seeded from the compiled map')
+           ON CONFLICT DO NOTHING`,
+          [role, permission],
+        );
+      }
+    }
+  });
+}
+
 async function seedReferenceData(): Promise<void> {
+  await seedRoles();
   console.log('  seeding geography...');
   await withTransaction(async (client) => {
     for (const lga of PLATEAU_LGAS) {

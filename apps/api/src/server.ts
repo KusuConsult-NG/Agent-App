@@ -12,9 +12,12 @@ import { config, envFileLoaded } from './config';
 import { describeDatabase } from './env';
 import { closePool, pool, withTransaction } from './db/pool';
 import { runMigrations } from './db/migrate';
+import * as rbacStore from './services/rbac-store';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
+import { raiseSystemAlerts } from './services/officer-inbox';
+import { raiseIntegrationAlerts } from './services/integration-health';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
@@ -122,6 +125,15 @@ async function main() {
     log.info('skipping migrations on boot; the deploy pipeline owns them', { component: 'boot' });
   }
 
+  /*
+   * Read the role-to-permission map before taking any traffic.
+   *
+   * So the first request of the day is not the one that pays for the query, and
+   * so a database that cannot answer it is discovered on boot rather than on
+   * somebody's first sign-in.
+   */
+  await rbacStore.warm();
+
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info('listening', {
@@ -147,6 +159,15 @@ async function main() {
     schedule('fraud-sweep', async () => {
       await withTransaction((client) => runFraudSweep(client));
       return null;
+    }),
+
+    schedule('system-alerts', async () => {
+      const { raised } = await withTransaction(async (client) => {
+        const jobs = await raiseSystemAlerts(client);
+        const integrations = await raiseIntegrationAlerts(client);
+        return { raised: jobs.raised + integrations.raised };
+      });
+      return raised > 0 ? `${raised} alert(s) raised` : null;
     }),
 
     schedule('tin-catch-up', async () => {

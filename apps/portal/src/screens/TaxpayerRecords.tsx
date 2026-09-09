@@ -185,7 +185,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           )}
 
           {results && results.length > 0 && (
-            <ul className="list">
+            <ul className="list list--rows">
               {results.map((taxpayer) => (
                 <li key={taxpayer.id}>
                   <button type="button" className="list__item" onClick={() => setChosen(taxpayer)}>

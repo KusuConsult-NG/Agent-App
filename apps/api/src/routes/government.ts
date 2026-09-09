@@ -3,9 +3,10 @@
  * audit, reports and incentive programmes (PRD §37-§39, §45-§49, §67, §72).
  */
 
-import { Router } from 'express';
+import express, { Router } from 'express';
+import type { Response } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTOR_CODES, parseKobo } from '@psirs/shared';
+import { ECONOMIC_SECTOR_CODES, parseKobo, type Permission } from '@psirs/shared';
 import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
 import {
   authenticate,
@@ -66,7 +67,18 @@ import * as incentives from '../services/incentives';
 import * as support from '../services/support';
 import * as commission from '../services/commission';
 import { leakageDashboard, runFraudSweep } from '../services/fraud';
+import * as cases from '../services/cases';
+import * as investigation from '../services/investigation';
+import * as targets from '../services/targets';
+import * as organisation from '../services/organisation';
+import * as periods from '../services/periods';
+import * as rbacStore from '../services/rbac-store';
+import * as workbench from '../services/audit-workbench';
+import * as exporting from '../services/export';
+import * as officerDevices from '../services/officer-devices';
+import * as inbox from '../services/officer-inbox';
 import { integrationStatus } from '../integrations';
+import { integrationHealth } from '../services/integration-health';
 import { jobHealth } from '../services/jobs';
 import { sendDueReminders } from '../services/reminders';
 
@@ -1050,9 +1062,9 @@ governmentRouter.get(
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
       limit: z.coerce.number().int().min(1).max(500).default(100),
-      format: z.enum(['json', 'csv']).default('json'),
+      format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       const rows = await query(
         pool,
         `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.status,
@@ -1088,13 +1100,20 @@ governmentRouter.get(
         ],
       );
 
-      if (data.format === 'csv') {
-        res.setHeader('content-type', 'text/csv');
-        res.setHeader('content-disposition', 'attachment; filename="transactions.csv"');
-        res.send(reports.toCsv(rows));
-        return;
-      }
-      res.json(rows);
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: 'Transactions',
+        filename: 'transactions',
+        parameters: {
+          status: data.status,
+          lgaId: data.lgaId,
+          agentId: data.agentId,
+          revenueItemId: data.revenueItemId,
+          from: data.from,
+          to: data.to,
+        },
+      });
     },
   ),
 );
@@ -1314,6 +1333,33 @@ governmentRouter.post(
       reason: z.string().min(10, 'Explain what is being requested and why'),
     }),
     async (req, res, data) => {
+      /*
+       * Some approvals need more than `approval:request`.
+       *
+       * This endpoint accepts eleven kinds of request under one permission, so
+       * an officer who may ask for an agent activation could also ask for a
+       * payment reversal -- and `payment:reverse:request` existed, was granted
+       * to two roles, and was checked by nothing, which is authority that
+       * looks real and confers nothing. Generating the role-action matrix is
+       * what made that visible.
+       *
+       * One entry, because one is what the catalogue declares. A kind that is
+       * absent here is governed by `approval:request` alone, which is a
+       * statement rather than an oversight: the control on a refund or a rate
+       * change is the *approver*, who is never the requester.
+       */
+      const ALSO_NEEDED: Partial<Record<typeof data.approvalType, Permission>> = {
+        PAYMENT_REVERSAL: 'payment:reverse:request',
+      };
+      const extra = ALSO_NEEDED[data.approvalType];
+      if (extra && !req.auth!.permissions.includes(extra)) {
+        throw forbidden(
+          `Requesting a ${data.approvalType.toLowerCase().replace(/_/g, ' ')} needs the ` +
+            `${extra} permission.`,
+          'Ask an officer who holds it to raise the request.',
+        );
+      }
+
       const approval = await withTransaction(async (client) => {
         const row = await queryOne<{ id: string }>(
           client,
@@ -1338,6 +1384,36 @@ governmentRouter.post(
           newValue: { approvalType: data.approvalType, entityId: data.entityId },
           reason: data.reason,
         });
+
+        /*
+         * Tell whoever reviews these, rather than waiting for them to look.
+         *
+         * Addressed to a role, not a person: an approval waiting on a named
+         * officer waits through their leave, and a reversal or a refund
+         * sitting unreviewed is money the platform is holding from somebody.
+         *
+         * Which role is derived from the permission rather than named here --
+         * `approval:review` is what the reviewing endpoint requires, and since
+         * migration 059 which roles hold it is PSIRS's decision rather than a
+         * constant in this file.
+         */
+        const reviewers = await query<{ role: string }>(
+          client,
+          `SELECT DISTINCT role FROM role_permissions WHERE permission = 'approval:review'`,
+        );
+        for (const reviewer of reviewers) {
+          await inbox.raise(client, {
+            role: reviewer.role,
+            kind: 'APPROVAL_WAITING',
+            severity: 'WARNING',
+            subject: `${data.approvalType} is waiting for a decision`,
+            body: data.reason,
+            entityType: 'approval',
+            entityId: row!.id,
+            dedupeKey: `approval:${row!.id}:${reviewer.role}`,
+          });
+        }
+
         return row!;
       });
 
@@ -2036,9 +2112,9 @@ governmentRouter.get(
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
       limit: z.coerce.number().int().max(500).default(100),
-      format: z.enum(['json', 'csv']).default('json'),
+      format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
-    async (_req, res, data) => {
+    async (req, res, data) => {
       const rows = await query(
         pool,
         `SELECT a.sequence_no, a.created_at, a.action, a.entity_type, a.entity_id, a.result,
@@ -2063,13 +2139,20 @@ governmentRouter.get(
         ],
       );
 
-      if (data.format === 'csv') {
-        res.setHeader('content-type', 'text/csv');
-        res.setHeader('content-disposition', 'attachment; filename="audit-log.csv"');
-        res.send(reports.toCsv(rows));
-        return;
-      }
-      res.json(rows);
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: 'Audit log',
+        filename: 'audit-log',
+        parameters: {
+          entityType: data.entityType,
+          entityId: data.entityId,
+          actorId: data.actorId,
+          action: data.action,
+          from: data.from,
+          to: data.to,
+        },
+      });
     },
   ),
 );
@@ -2481,12 +2564,1030 @@ governmentRouter.get(
   }),
 );
 
+// ---------------------------------------------------------------------------
+// Finding one thing, and seeing the whole of it
+// ---------------------------------------------------------------------------
+
+/**
+ * The signed-in officer, as the services below want them.
+ *
+ * Permissions travel with the viewer rather than being re-derived from the
+ * role, so gating a section of a 360 view and gating the screen that section
+ * came from are the same decision made from the same source.
+ */
+/**
+ * Send a result set in whichever format was asked for, and record that it left.
+ *
+ * The three formats share one path deliberately. When CSV was the only answer
+ * the check for it sat inline at the end of a handler, and adding two more
+ * would have meant three copies of the same content-type, filename and audit
+ * decision in every endpoint that exports -- with the audit line being the one
+ * a hurried copy would drop.
+ *
+ * `json` is the screen and is deliberately not an export: it is the same rows
+ * an officer is already looking at, it stays inside the session, and treating
+ * every page of a table as a data export would fill the audit log with noise
+ * and make the entries that matter unfindable. Reads worth recording are
+ * recorded through `recordReportView`, which the report screens call by name.
+ */
+async function deliver(
+  req: RouteRequest,
+  res: Response,
+  options: {
+    rows: Record<string, unknown>[];
+    format: 'json' | exporting.ExportFormat;
+    subject: string;
+    filename: string;
+    parameters: Record<string, unknown>;
+  },
+): Promise<void> {
+  const { rows, format, subject, filename, parameters } = options;
+  if (format === 'json') {
+    res.json(rows);
+    return;
+  }
+
+  /*
+   * The gate is here rather than on the route, because the format is a query
+   * parameter and the permission is about the format. Putting `data:export` on
+   * the route would take the screen away from an officer to stop them taking
+   * the file, which is the opposite of what it is for.
+   */
+  if (!req.auth!.permissions.includes('data:export')) {
+    throw forbidden(
+      'Your role may read this on screen and may not export it.',
+      'Ask an administrator to grant your role the export permission.',
+    );
+  }
+
+  /*
+   * The limit is checked and the export recorded before a byte is written,
+   * inside a transaction, so a refusal is a clean 403 rather than a half-sent
+   * file -- and so an export that fails to be recorded does not happen.
+   */
+  await withTransaction((client) =>
+    exporting.recordExport(
+      client,
+      {
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+        subject,
+        format,
+        parameters,
+      },
+      rows.length,
+    ),
+  );
+
+  if (format === 'csv') {
+    res.setHeader('content-type', 'text/csv');
+    res.setHeader('content-disposition', `attachment; filename="${filename}.csv"`);
+    res.send(reports.toCsv(rows));
+    return;
+  }
+
+  if (format === 'xlsx') {
+    res.setHeader(
+      'content-type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('content-disposition', `attachment; filename="${filename}.xlsx"`);
+    res.send(exporting.toXlsx(rows, subject));
+    return;
+  }
+
+  const pdf = await exporting.renderReportPdf({
+    title: subject,
+    rows,
+    parameters,
+    generatedBy: `${req.auth!.role} ${req.auth!.userId}`,
+  });
+  res.setHeader('content-type', 'application/pdf');
+  res.setHeader('content-disposition', `attachment; filename="${filename}.pdf"`);
+  res.send(pdf);
+}
+
+function officer(req: RouteRequest): investigation.Viewer {
+  return {
+    userId: req.auth!.userId,
+    role: req.auth!.role,
+    permissions: req.auth!.permissions,
+  };
+}
+
+/*
+ * One box, every kind of government reference.
+ *
+ * The permission here is deliberately the weakest one any portal role holds —
+ * `catalogue:read`, which all five have — because this endpoint grants nothing
+ * on its own. Each *kind* of result is gated separately inside `globalSearch`
+ * on the permission its own screen requires, so a supervisor searching a
+ * receipt number gets the receipt and no settlement, and an officer who cannot
+ * open the users screen cannot enumerate staff from here either.
+ *
+ * Gating the endpoint itself on something stronger would only mean the roles
+ * that hold less get no search at all, while changing nothing about what any
+ * of them can see through it.
+ */
+governmentRouter.get(
+  '/search',
+  requirePermission('catalogue:read'),
+  validateQuery(
+    z.object({
+      q: z.string().trim().min(2).max(120),
+      limit: z.coerce.number().int().min(1).max(25).default(5),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await investigation.globalSearch(pool, officer(req), { term: data.q, limit: data.limit }, scope));
+    },
+  ),
+);
+
+/*
+ * Transaction 360.
+ *
+ * Gated on being able to see a transaction at all; everything beyond that —
+ * the payments, the settlement, the commission, the audit history — is gated
+ * section by section inside the service, and the answer names what it withheld
+ * so an investigator can tell an empty section from a hidden one.
+ *
+ * `:key` is an id or a reference. An officer arriving from a citizen's SMS has
+ * the reference and one arriving from a list has the id, and making them care
+ * which is a needless way to lose people.
+ */
+governmentRouter.get(
+  '/transactions/:key/full',
+  requirePermission('payment:read:all', 'report:read:all', 'report:read:territory'),
+  asyncHandler(async (req, res) => {
+    const scope = await resolveReportScope(pool, req.auth!);
+    res.json(await investigation.transaction360(pool, officer(req), req.params.key!, scope));
+  }),
+);
+
+/*
+ * The taxpayer base as a population, not as a count.
+ *
+ * "Active" here means paying within the window, not `status = 'ACTIVE'` — see
+ * the service. A register full of people who last paid two years ago reports
+ * 100% active under the other reading, which is the reading the dashboard had.
+ */
+governmentRouter.get(
+  '/taxpayers/analytics',
+  requirePermission('report:read:all', 'report:read:territory', 'taxpayer:read:all'),
+  validateQuery(
+    z.object({
+      lgaId: uuidSchema.optional(),
+      wardId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.taxpayerAnalytics(pool, data, scope));
+    },
+  ),
+);
+
+/** Commission by place and by month, which is how a Council asks about it. */
+governmentRouter.get(
+  '/commissions/by-place',
+  requirePermission('commission:read:all'),
+  validateQuery(
+    z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await reports.commissionByPlaceAndPeriod(pool, data, scope));
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Revenue targets and forecasting
+// ---------------------------------------------------------------------------
+
+/*
+ * Target versus actual.
+ *
+ * Every reporting role reads this: an achievement percentage is meaningless to
+ * a finance officer who can see the actual and not the number it is measured
+ * against. Setting one is `target:manage` and sits with the administrator and
+ * the revenue officer alone.
+ */
+governmentRouter.get(
+  '/targets',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+      scope: z.enum(targets.TARGET_SCOPES).optional(),
+      periodKind: z.enum(targets.TARGET_PERIODS).optional(),
+      lgaId: uuidSchema.optional(),
+      includeInactive: z.coerce.boolean().optional(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      res.json(await targets.targetProgress(pool, data, scope));
+    },
+  ),
+);
+
+/** The state figure beside the sum of what was apportioned below it. */
+governmentRouter.get(
+  '/targets/rollup',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    async (_req, res, data) => {
+      res.json(await targets.targetRollup(pool, data));
+    },
+  ),
+);
+
+/*
+ * The calendar period a label names, resolved on the server.
+ *
+ * A client computing "this month" from its own clock can be wrong about it, and
+ * a target set against the wrong dates is silently wrong for a month.
+ */
+governmentRouter.get(
+  '/targets/period',
+  requirePermission('target:read:all'),
+  validateQuery(
+    z.object({
+      kind: z.enum(targets.TARGET_PERIODS),
+      anchor: z.coerce.date().optional(),
+    }),
+    async (_req, res, data) => {
+      const period = targets.resolvePeriod(data.kind, data.anchor);
+      res.json({
+        kind: data.kind,
+        periodStart: period.start.toISOString().slice(0, 10),
+        periodEnd: period.end.toISOString().slice(0, 10),
+      });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/targets',
+  requirePermission('target:manage'),
+  validateBody(
+    z.object({
+      scope: z.enum(targets.TARGET_SCOPES),
+      lgaId: uuidSchema.nullish(),
+      categoryId: uuidSchema.nullish(),
+      revenueItemId: uuidSchema.nullish(),
+      agentId: uuidSchema.nullish(),
+      periodKind: z.enum(targets.TARGET_PERIODS),
+      periodStart: z.coerce.date(),
+      periodEnd: z.coerce.date(),
+      amountKobo: koboSchema,
+      note: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      const result = await targets.setTarget(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        { ...data, amountKobo: BigInt(data.amountKobo) },
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/targets/:id/withdraw',
+  requirePermission('target:manage'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await targets.withdrawTarget(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * A forecast, labelled as one.
+ *
+ * The payload carries `is_forecast`, the `basis` it was computed from and a
+ * confidence, because a projection presented as a bare figure is how an
+ * estimate becomes a number somebody budgets against. The brief asks
+ * specifically that this be clearly labelled and not treated as guaranteed
+ * revenue.
+ */
+governmentRouter.get(
+  '/forecast',
+  requirePermission('target:read:all', 'report:read:all', 'report:read:territory'),
+  validateQuery(
+    z.object({
+      periodKind: z.enum(targets.TARGET_PERIODS).default('MONTHLY'),
+      periodStart: z.coerce.date().optional(),
+      periodEnd: z.coerce.date().optional(),
+      lgaId: uuidSchema.nullish(),
+      categoryId: uuidSchema.nullish(),
+      revenueItemId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const scope = await resolveReportScope(pool, req.auth!);
+      const period =
+        data.periodStart && data.periodEnd
+          ? { start: data.periodStart, end: data.periodEnd }
+          : targets.resolvePeriod(data.periodKind);
+      res.json(
+        await targets.forecast(
+          pool,
+          {
+            periodStart: period.start,
+            periodEnd: period.end,
+            lgaId: data.lgaId,
+            categoryId: data.categoryId,
+            revenueItemId: data.revenueItemId,
+          },
+          scope,
+        ),
+      );
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Roles and permissions, which are now data
+// ---------------------------------------------------------------------------
+
+/*
+ * The map an administrator can change without a deployment.
+ *
+ * Reading it is `user:manage` — the same permission that already governs who
+ * holds which role, and the delegation of authority is not something every
+ * officer needs to browse.
+ */
+governmentRouter.get(
+  '/roles',
+  requirePermission('user:manage'),
+  asyncHandler(async (_req, res) => {
+    res.json({
+      roles: await rbacStore.listRoles(pool),
+      /*
+       * Every permission that exists, not only those currently granted.
+       *
+       * Listing only what is held would make the unheld ones ungrantable,
+       * which is the opposite of the point.
+       */
+      grantable: rbacStore.grantablePermissions(),
+    });
+  }),
+);
+
+governmentRouter.post(
+  '/roles',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      name: z.string().trim().min(3).max(40),
+      label: z.string().trim().min(2).max(80),
+      labelHa: z.string().trim().max(80).nullish(),
+      description: z.string().trim().max(500).nullish(),
+      isPortal: z.boolean().default(false),
+      /*
+       * Starting from an existing role rather than from nothing.
+       *
+       * A role created empty gets given everything a week later, one emergency
+       * at a time. Copying the nearest role and taking things away is the safer
+       * habit, so it is the easy one.
+       */
+      copyFrom: z.string().trim().max(40).nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await rbacStore.createRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+/*
+ * Closing a role, and reopening one.
+ *
+ * Both step-up, for the same reason granting is: since migration 060 a retired
+ * role cannot be assigned to anybody, so retiring one takes a route into the
+ * organisation away and restoring it hands that route back. Neither should be
+ * one click from a session somebody walked away from.
+ */
+governmentRouter.post(
+  '/roles/:name/retire',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await rbacStore.retireRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * How much of the register this role may take out in one file.
+ *
+ * Step-up, like the grants beside it. Raising an export limit does not change
+ * what an officer may see -- it changes how much of it can leave on a laptop,
+ * which is the same size of decision.
+ */
+governmentRouter.post(
+  '/roles/:name/export-limit',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      limit: z.coerce.number().int().min(0).max(1_000_000),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      await rbacStore.setExportLimit(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.limit,
+        data.reason,
+      );
+      res.json({ limit: data.limit });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/roles/:name/restore',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      await rbacStore.restoreRole(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.name!,
+        data.reason,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Granting and revoking, both step-up.
+ *
+ * This is the platform's delegation of authority; changing it is at least as
+ * consequential as changing one officer's role, which already requires step-up.
+ */
+governmentRouter.post(
+  '/roles/:name/grant',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      permission: z.string().trim().min(3).max(60),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      await rbacStore.grant(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        { role: req.params.name!, ...data },
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Revoking ends the sessions of everybody holding the role.
+ *
+ * The grant map is cached for thirty seconds, and thirty seconds is a long time
+ * for an officer whose authority has just been withdrawn to keep exercising it.
+ * Signing them out makes the withdrawal immediate, and is a visible and correct
+ * consequence of it.
+ */
+governmentRouter.post(
+  '/roles/:name/revoke',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({
+      permission: z.string().trim().min(3).max(60),
+      reason: z.string().trim().min(10).max(1000),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await rbacStore.revoke(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          { role: req.params.name!, ...data },
+        ),
+      );
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Financial periods
+// ---------------------------------------------------------------------------
+
+/*
+ * Whether a month is closed is not a privileged fact.
+ *
+ * An officer looking at a March figure needs to know whether March can still
+ * move, so reading periods is open to every reporting role. Closing is finance;
+ * reopening is the administrator — deliberately not the same person, because
+ * the officer who closes the books also being the one who can unclose them
+ * removes most of what a period lock is for.
+ */
+governmentRouter.get(
+  '/periods',
+  requirePermission('period:read'),
+  validateQuery(
+    z.object({ limit: z.coerce.number().int().min(1).max(120).default(36) }),
+    async (_req, res, data) => {
+      res.json(await periods.listPeriods(pool, data));
+    },
+  ),
+);
+
+/** What a period holds right now — the same query the close writes down. */
+governmentRouter.get(
+  '/periods/figures',
+  requirePermission('period:read'),
+  validateQuery(
+    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    async (_req, res, data) => {
+      res.json(await periods.periodFigures(pool, data.periodStart, data.periodEnd));
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods',
+  requirePermission('period:close'),
+  validateBody(
+    z.object({
+      periodStart: z.coerce.date(),
+      periodEnd: z.coerce.date(),
+      label: z.string().trim().max(40).optional(),
+    }),
+    async (req, res, data) => {
+      const result = await periods.openPeriod(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods/:id/begin-closing',
+  requirePermission('period:close'),
+  asyncHandler(async (req, res) => {
+    res.json(
+      await periods.beginClosing(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+      ),
+    );
+  }),
+);
+
+/*
+ * Closing, which the database then enforces.
+ *
+ * `requireStepUp` because after this the four tables that decide what the month
+ * collected refuse to be written — that is a bigger decision than most, and the
+ * platform already reserves step-up for exactly this size of action.
+ */
+governmentRouter.post(
+  '/periods/:id/close',
+  requirePermission('period:close'),
+  requireStepUp('financial.period.close'),
+  validateBody(
+    z.object({
+      note: z.string().trim().min(10).max(2000),
+      /*
+       * Closing over an unresolved exception freezes a figure already known to
+       * be wrong. It is sometimes the right call — a deadline is a deadline —
+       * and it is never a silent one.
+       */
+      overrideReason: z.string().trim().min(10).max(2000).optional(),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await periods.closePeriod(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data,
+        ),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/periods/:id/reopen',
+  requirePermission('period:reopen'),
+  requireStepUp('financial.period.reopen'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      res.json(
+        await periods.reopenPeriod(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data.reason,
+        ),
+      );
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// The organisation the officers work in
+// ---------------------------------------------------------------------------
+
+/*
+ * Reading the structure is open to every portal role; changing it is not.
+ *
+ * `case:read:all` is the gate, and the choice is deliberate on both sides.
+ * It is held by exactly the five portal roles and by no field agent, which is
+ * the boundary that matters — the organisation chart is not an agent's to
+ * read. And it is *not* `report:read:territory`, which would be the obvious
+ * pair: a route that accepts that permission is promising to narrow its answer
+ * to the caller's territories, and the chart is not territory data. Claiming a
+ * scope and then not applying it is the leak `a-report-that-forgets-whose-it-
+ * is.test.ts` exists to catch, and it is right to.
+ *
+ * Creating a department, or moving somebody, is `user:manage`: the
+ * administrator's permission, and the same one that governs who holds which
+ * role.
+ */
+governmentRouter.get(
+  '/departments',
+  requirePermission('case:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json(await organisation.listDepartments(pool));
+  }),
+);
+
+governmentRouter.post(
+  '/departments',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      code: z.string().trim().min(2).max(20),
+      name: z.string().trim().min(2).max(120),
+      nameHa: z.string().trim().max(120).nullish(),
+      description: z.string().trim().max(1000).nullish(),
+      function: z.enum(organisation.DEPARTMENT_FUNCTIONS),
+      headUserId: uuidSchema.nullish(),
+      parentId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.createDepartment(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/departments/:id/update',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      name: z.string().trim().min(2).max(120).optional(),
+      nameHa: z.string().trim().max(120).nullish(),
+      description: z.string().trim().max(1000).nullish(),
+      headUserId: uuidSchema.nullish(),
+      parentId: uuidSchema.nullish(),
+      status: z.enum(['ACTIVE', 'CLOSED']).optional(),
+    }),
+    async (req, res, data) => {
+      await organisation.updateDepartment(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data,
+      );
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/offices',
+  requirePermission('case:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json(await organisation.listOffices(pool));
+  }),
+);
+
+governmentRouter.post(
+  '/offices',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      code: z.string().trim().min(2).max(20),
+      name: z.string().trim().min(2).max(120),
+      nameHa: z.string().trim().max(120).nullish(),
+      lgaId: uuidSchema,
+      address: z.string().trim().max(300).nullish(),
+      phone: z.string().trim().max(30).nullish(),
+      coversLgaIds: z.array(uuidSchema).max(17).optional(),
+      headUserId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.createOffice(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        data,
+      );
+      res.status(201).json(result);
+    },
+  ),
+);
+
+/*
+ * Move an officer, and leave a dated record of every part that moved.
+ *
+ * One transfer row per thing that actually changed rather than one saying
+ * "posting changed": "when did she move to Finance" and "when did he stop
+ * reporting to Bala" are separate questions, and a combined row makes both a
+ * JSON dig.
+ */
+governmentRouter.post(
+  '/users/:id/posting',
+  requirePermission('user:manage'),
+  validateBody(
+    z.object({
+      departmentId: uuidSchema.nullish(),
+      revenueOfficeId: uuidSchema.nullish(),
+      supervisorId: uuidSchema.nullish(),
+      jobTitle: z.string().trim().max(120).nullish(),
+      staffNumber: z.string().trim().max(40).nullish(),
+      reason: z.string().trim().min(10).max(1000),
+      effectiveFrom: z.coerce.date().optional(),
+    }),
+    async (req, res, data) => {
+      const result = await organisation.repost(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data,
+      );
+      res.json(result);
+    },
+  ),
+);
+
+/** One officer's posting history. `audit:read` sees it too — it is evidence. */
+governmentRouter.get(
+  '/users/:id/transfers',
+  requirePermission('user:manage', 'audit:read'),
+  asyncHandler(async (req, res) => {
+    res.json(await organisation.transfersFor(pool, req.params.id!));
+  }),
+);
+
+/*
+ * Who was posted where, and when.
+ *
+ * The question a revenue dispute asks — "who was responsible for Jos North in
+ * March" — and the reason postings are a table rather than a log.
+ */
+governmentRouter.get(
+  '/transfers',
+  requirePermission('user:manage', 'audit:read'),
+  validateQuery(
+    z.object({
+      from: z.coerce.date().optional(),
+      to: z.coerce.date().optional(),
+      kind: z.enum(organisation.TRANSFER_KINDS).optional(),
+    }),
+    async (_req, res, data) => {
+      res.json(await organisation.postingHistory(pool, data));
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Cases: the work that crosses a department
+// ---------------------------------------------------------------------------
+
+/** Everything waiting for this officer, wherever it came from. */
+governmentRouter.get(
+  '/my-work',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json(await cases.myWork(pool, officer(req)));
+  }),
+);
+
+governmentRouter.get(
+  '/cases',
+  requirePermission('case:read:all'),
+  validateQuery(
+    z.object({
+      status: z.enum(cases.CASE_STATUSES).optional(),
+      open: z.coerce.boolean().optional(),
+      department: z.enum(cases.CASE_DEPARTMENTS).optional(),
+      assigneeId: uuidSchema.optional(),
+      category: z.enum(cases.CASE_CATEGORIES).optional(),
+      priority: z.enum(cases.CASE_PRIORITIES).optional(),
+      riskLevel: z.enum(cases.CASE_RISK_LEVELS).optional(),
+      transactionId: uuidSchema.optional(),
+      agentId: uuidSchema.optional(),
+      taxpayerId: uuidSchema.optional(),
+      overdue: z.coerce.boolean().optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }),
+    async (_req, res, data) => {
+      res.json(await cases.listCases(pool, data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/cases/:id',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    res.json(await cases.getCase(pool, officer(req), req.params.id!));
+  }),
+);
+
+governmentRouter.post(
+  '/cases',
+  requirePermission('case:create'),
+  validateBody(
+    z.object({
+      subject: z.string().trim().min(5).max(200),
+      description: z.string().trim().max(4000).optional(),
+      category: z.enum(cases.CASE_CATEGORIES).default('GENERAL'),
+      riskLevel: z.enum(cases.CASE_RISK_LEVELS).default('MEDIUM'),
+      priority: z.enum(cases.CASE_PRIORITIES).default('NORMAL'),
+      department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      departmentId: uuidSchema.nullish(),
+      assigneeId: uuidSchema.nullish(),
+      transactionId: uuidSchema.nullish(),
+      agentId: uuidSchema.nullish(),
+      taxpayerId: uuidSchema.nullish(),
+      subjectUserId: uuidSchema.nullish(),
+      lgaId: uuidSchema.nullish(),
+      sourceType: z.enum(['MANUAL', 'FRAUD_FLAG', 'RECONCILIATION_EXCEPTION',
+                          'SUPPORT_TICKET', 'APPROVAL']).default('MANUAL'),
+      sourceId: uuidSchema.nullish(),
+      dueAt: z.coerce.date().nullish(),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await cases.openCase(pool, officer(req), data));
+    },
+  ),
+);
+
+/*
+ * A comment, or an internal note.
+ *
+ * `case:contribute` rather than `case:manage`: the whole point of the workspace
+ * is that a finance officer can answer a question on an auditor's case without
+ * being given authority over it. Adding text does not move the case.
+ */
+governmentRouter.post(
+  '/cases/:id/comments',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      body: z.string().trim().min(1).max(4000),
+      internal: z.boolean().default(false),
+      mentions: z.array(uuidSchema).max(20).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.comment(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/evidence',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      documentId: uuidSchema,
+      body: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.attachEvidence(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * The three that move a case, and all three are `case:contribute` on the route.
+ *
+ * The real gate is inside the service: `case:manage`, or having opened this
+ * case, or having it assigned to you. That cannot be expressed as a permission
+ * on a route because it is a fact about the row, and putting `case:manage` here
+ * instead would mean a finance officer could raise a settlement discrepancy and
+ * then be unable to resolve it — a suggestion box, not a queue.
+ */
+governmentRouter.post(
+  '/cases/:id/assign',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      assigneeId: uuidSchema.nullable(),
+      department: z.enum(cases.CASE_DEPARTMENTS).nullish(),
+      departmentId: uuidSchema.nullish(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.assign(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/status',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      status: z.enum(cases.CASE_STATUSES),
+      resolution: z.string().trim().max(4000).optional(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.setStatus(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
+/*
+ * Escalate: up the reporting line, to a person.
+ *
+ * ESCALATED used to be a status and nothing more — the case changed colour and
+ * stayed on the same desk. This resolves who is above, moves it to them, and
+ * records how the platform decided that. When there is nobody above, it refuses
+ * rather than marking the case escalated and leaving it where it was.
+ */
+governmentRouter.post(
+  '/cases/:id/escalate',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(1000) }),
+    async (req, res, data) => {
+      res.json(await cases.escalate(pool, officer(req), req.params.id!, data));
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/cases/:id/priority',
+  requirePermission('case:contribute'),
+  validateBody(
+    z.object({
+      priority: z.enum(cases.CASE_PRIORITIES).optional(),
+      dueAt: z.coerce.date().nullish(),
+      reason: z.string().trim().max(1000).optional(),
+    }),
+    async (req, res, data) => {
+      await cases.setPriority(pool, officer(req), req.params.id!, data);
+      res.status(204).end();
+    },
+  ),
+);
+
 /** Source-of-truth map and integration state (PRD §82). */
 governmentRouter.get(
   '/platform/integrations',
   requirePermission('system:configure', 'audit:read'),
   asyncHandler(async (_req, res) => {
-    res.json(integrationStatus());
+    /*
+     * Which adapter is configured, and whether it is answering.
+     *
+     * This endpoint used to report only the first, which is a fact about
+     * deployment: it tells an officer that the real TIN service is selected
+     * rather than the mock, and nothing about whether it responded this
+     * morning. Both are worth knowing and neither substitutes for the other --
+     * a mock answering perfectly is not the same news as the service
+     * answering.
+     */
+    res.json({ ...integrationStatus(), ...(await integrationHealth(pool)) });
   }),
 );
 
@@ -2501,6 +3602,506 @@ governmentRouter.get(
  * role, so scoping a query to "their own tickets" and gating a screen are the
  * same decision made from the same source.
  */
+// ---------------------------------------------------------------------------
+// The auditor's workbench: samples and signed reports (Addendum §25, §26)
+// ---------------------------------------------------------------------------
+
+/*
+ * Its own viewer, rather than `officer(req)`.
+ *
+ * The workbench scopes its draws and its reports through `resolveReportScope`,
+ * which needs the permission list at its declared type; `investigation.Viewer`
+ * widens it to `string[]`, and widening it here would mean casting it back at
+ * the point where the territory filter is chosen. That is the last place worth
+ * having a cast.
+ */
+function auditor(req: RouteRequest): workbench.Viewer {
+  return {
+    userId: req.auth!.userId,
+    role: req.auth!.role,
+    permissions: req.auth!.permissions,
+  };
+}
+
+/*
+ * Drawing a sample.
+ *
+ * Scoped like every other report: a supervisor drawing a sample gets one from
+ * their own territories, and the scope they drew under is written into the
+ * criteria so a reader knows which population the denominator refers to.
+ */
+governmentRouter.post(
+  '/audit/samples',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({
+      title: z.string().trim().min(5).max(200),
+      method: z.enum(['RANDOM', 'SYSTEMATIC', 'HIGHEST_VALUE']).default('RANDOM'),
+      size: z.coerce.number().int().min(1).max(500),
+      seed: z.string().trim().min(4).max(100).nullish(),
+      criteria: z
+        .object({
+          from: z.string().date().nullish(),
+          to: z.string().date().nullish(),
+          revenueCategoryId: uuidSchema.nullish(),
+          lgaId: uuidSchema.nullish(),
+          agentId: uuidSchema.nullish(),
+          minimumKobo: z.string().regex(/^\d+$/).nullish(),
+          maximumKobo: z.string().regex(/^\d+$/).nullish(),
+          status: z.string().trim().max(40).nullish(),
+        })
+        .default({}),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await workbench.drawSample(auditor(req), data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/samples',
+  requirePermission('audit:sample'),
+  validateQuery(
+    z.object({
+      status: z.enum(['DRAWN', 'IN_REVIEW', 'COMPLETED']).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    }),
+    async (_req, res, data) => {
+      res.json({ samples: await workbench.listSamples(pool, data) });
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/samples/:id',
+  requirePermission('audit:sample'),
+  asyncHandler(async (req, res) => {
+    res.json(await workbench.getSample(pool, req.params.id));
+  }),
+);
+
+governmentRouter.post(
+  '/audit/samples/items/:id/finding',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({
+      outcome: z.enum(['CLEAN', 'EXCEPTION', 'NOT_AVAILABLE']),
+      finding: z.string().trim().max(2000).nullish(),
+      caseId: uuidSchema.nullish(),
+    }),
+    async (req, res, data) => {
+      await workbench.recordFinding(auditor(req), req.params.id!, data);
+      res.json({ recorded: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/samples/:id/complete',
+  requirePermission('audit:sample'),
+  validateBody(
+    z.object({ note: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.completeSample(auditor(req), req.params.id!, data.note);
+      res.json({ completed: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/reports',
+  requirePermission('audit:report'),
+  validateBody(
+    z.object({
+      reportType: z.enum(workbench.REPORT_TYPES),
+      title: z.string().trim().min(5).max(200),
+      parameters: z
+        .object({
+          from: z.string().date().nullish(),
+          to: z.string().date().nullish(),
+          lgaId: uuidSchema.nullish(),
+          agentId: uuidSchema.nullish(),
+          sampleId: uuidSchema.nullish(),
+          userId: uuidSchema.nullish(),
+        })
+        .default({}),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(await workbench.generateReport(auditor(req), data));
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/audit/reports',
+  requirePermission('audit:report'),
+  validateQuery(
+    z.object({
+      reportType: z.enum(workbench.REPORT_TYPES).optional(),
+      limit: z.coerce.number().int().min(1).max(200).default(50),
+    }),
+    async (_req, res, data) => {
+      res.json({ reports: await workbench.listReports(pool, data) });
+    },
+  ),
+);
+
+/*
+ * Reading a report is itself recorded.
+ *
+ * "Reports generated" was marked partial in the officer-readiness assessment
+ * because exports were audited and report views were not: the log could show
+ * that nobody had taken a copy of a taxpayer's history while an officer had
+ * read it forty times.
+ */
+governmentRouter.get(
+  '/audit/reports/:id',
+  requirePermission('audit:report'),
+  asyncHandler(async (req, res) => {
+    const report = await workbench.getReport(pool, req.params.id!);
+    await withTransaction((client) =>
+      exporting.recordReportView(
+        client,
+        {
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+          subject: String(report.report_number),
+          parameters: (report.parameters ?? {}) as Record<string, unknown>,
+        },
+        Number(report.row_count),
+      ),
+    );
+    res.json(report);
+  }),
+);
+
+/*
+ * And a signed report, as a file somebody can put in a folder.
+ *
+ * The rows come out of the frozen payload rather than being re-queried, which
+ * is the whole point of the object: the PDF a reviewer opens in June carries
+ * the figures signed in March, and its checksum line lets them confirm that
+ * without taking the platform's word for it.
+ */
+governmentRouter.get(
+  '/audit/reports/:id/export',
+  requirePermission('audit:report'),
+  validateQuery(
+    z.object({ format: z.enum(['csv', 'xlsx', 'pdf']).default('pdf') }),
+    async (req, res, data) => {
+      const report = await workbench.getReport(pool, req.params.id!);
+      const rows = ((report.payload as { rows?: Record<string, unknown>[] })?.rows ??
+        []) as Record<string, unknown>[];
+
+      if (data.format === 'pdf') {
+        if (!req.auth!.permissions.includes('data:export')) {
+          throw forbidden(
+            'Your role may read this on screen and may not export it.',
+            'Ask an administrator to grant your role the export permission.',
+          );
+        }
+        await withTransaction((client) =>
+          exporting.recordExport(
+            client,
+            {
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              subject: String(report.report_number),
+              format: 'pdf',
+              parameters: (report.parameters ?? {}) as Record<string, unknown>,
+            },
+            rows.length,
+          ),
+        );
+        const pdf = await exporting.renderReportPdf({
+          title: String(report.title),
+          rows,
+          parameters: (report.parameters ?? {}) as Record<string, unknown>,
+          generatedBy: String(report.generated_by_name ?? 'PSIRS'),
+          reportNumber: String(report.report_number),
+          checksum: String(report.checksum),
+        });
+        res.setHeader('content-type', 'application/pdf');
+        res.setHeader(
+          'content-disposition',
+          `attachment; filename="${String(report.report_number).replace(/\//g, '-')}.pdf"`,
+        );
+        res.send(pdf);
+        return;
+      }
+
+      await deliver(req, res, {
+        rows,
+        format: data.format,
+        subject: String(report.title),
+        filename: String(report.report_number).replace(/\//g, '-'),
+        parameters: (report.parameters ?? {}) as Record<string, unknown>,
+      });
+    },
+  ),
+);
+
+/*
+ * Signing, and withdrawing.
+ *
+ * Both step-up. A signature is an officer's name on figures that will be read
+ * as settled, and a withdrawal takes a signed report out of circulation; a
+ * session somebody walked away from should be able to do neither.
+ */
+governmentRouter.post(
+  '/audit/reports/:id/sign',
+  requirePermission('audit:sign'),
+  requireStepUp('audit.report.sign'),
+  validateBody(
+    z.object({ note: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.signReport(auditor(req), req.params.id!, data.note);
+      res.json({ signed: true });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/audit/reports/:id/withdraw',
+  requirePermission('audit:report'),
+  requireStepUp('audit.report.sign'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(2000) }),
+    async (req, res, data) => {
+      await workbench.withdrawReport(auditor(req), req.params.id!, data.reason);
+      res.json({ withdrawn: true });
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// The officer's inbox, and the platform's own alarms (Addendum §1, §29)
+// ---------------------------------------------------------------------------
+
+/*
+ * No permission, for the reason `/sessions/mine` has none: the answer is about
+ * the officer asking, and an officer whose role somebody narrowed still needs
+ * to read what they were told.
+ */
+governmentRouter.get(
+  '/inbox',
+  validateQuery(
+    z.object({
+      unreadOnly: z.coerce.boolean().default(false),
+      limit: z.coerce.number().int().min(1).max(200).default(100),
+    }),
+    async (req, res, data) => {
+      const viewer = { userId: req.auth!.userId, role: req.auth!.role };
+      res.json({
+        notifications: await inbox.inboxFor(pool, viewer, data),
+        unread: await inbox.unreadCount(pool, viewer),
+      });
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/inbox/:id/read',
+  asyncHandler(async (req, res) => {
+    await inbox.markRead({ userId: req.auth!.userId, role: req.auth!.role }, req.params.id!);
+    res.json({ read: true });
+  }),
+);
+
+governmentRouter.post(
+  '/inbox/read-all',
+  asyncHandler(async (req, res) => {
+    const read = await inbox.markAllRead({ userId: req.auth!.userId, role: req.auth!.role });
+    res.json({ read });
+  }),
+);
+
+/*
+ * What one officer has been doing.
+ *
+ * `audit:read`, because that is literally what this is: the audit log about
+ * one person, counted instead of listed. Gating it on `user:manage` would put
+ * a supervisor's ordinary question -- what did my officer work on this week --
+ * behind the authority to change roles, and every officer who holds
+ * `audit:read` can already read every one of these rows one at a time.
+ *
+ * An officer reading their own needs nothing at all, which the service cannot
+ * decide because it does not know who is asking. So the route does.
+ */
+governmentRouter.get(
+  '/users/:id/activity',
+  validateQuery(
+    z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }),
+    async (req, res, data) => {
+      const own = req.params.id === req.auth!.userId;
+      if (!own && !req.auth!.permissions.includes('audit:read')) {
+        throw forbidden(
+          'You may read your own activity, and this is not yours.',
+          'Reading another officer’s work needs the audit permission.',
+        );
+      }
+      res.json(await inbox.activityFor(pool, req.params.id!, data.days));
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Where an officer is signed in, and on what (Addendum §1)
+// ---------------------------------------------------------------------------
+
+/*
+ * An officer's own sessions and devices need no permission at all.
+ *
+ * Requiring one would mean an officer whose role somebody narrowed could no
+ * longer see that their old laptop is still signed in -- which is precisely
+ * the officer most likely to need to look. Authentication is the whole of the
+ * authority here, because the answer is about the person asking.
+ */
+governmentRouter.get(
+  '/sessions/mine',
+  asyncHandler(async (req, res) => {
+    res.json({
+      sessions: await officerDevices.sessionsFor(pool, req.auth!.userId, req.auth!.sessionId),
+      devices: await officerDevices.devicesFor(pool, req.auth!.userId),
+    });
+  }),
+);
+
+governmentRouter.post(
+  '/sessions/:id/end',
+  validateBody(
+    z.object({ reason: z.string().trim().max(500).default('Ended by the officer') }),
+    async (req, res, data) => {
+      await officerDevices.endSession(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        {
+          // Their own without a permission; anybody's with `user:manage`.
+          mayEndAnyone: req.auth!.permissions.includes('user:manage'),
+          reason: data.reason,
+        },
+      );
+      res.json({ ended: true });
+    },
+  ),
+);
+
+/*
+ * And an administrator's view of somebody else's.
+ *
+ * `user:manage` rather than `user:read:all`: seeing where a colleague is
+ * signed in, from which address, on what machine, is a supervisory act rather
+ * than part of reading the staff list.
+ */
+governmentRouter.get(
+  '/users/:id/sessions',
+  requirePermission('user:manage'),
+  asyncHandler(async (req, res) => {
+    res.json({
+      sessions: await officerDevices.sessionsFor(pool, req.params.id!, null),
+      devices: await officerDevices.devicesFor(pool, req.params.id!),
+    });
+  }),
+);
+
+/*
+ * Blocking a machine, and lifting it. Both step-up.
+ *
+ * A block ends every session the device holds and stops it opening another --
+ * enforced on the row by migration 063, because the case it exists for is a
+ * laptop already in somebody else's hands. That is the same size of decision
+ * as changing an officer's role, and gets the same extra verification.
+ */
+governmentRouter.post(
+  '/devices/:id/block',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(500) }),
+    async (req, res, data) => {
+      res.json(
+        await officerDevices.blockDevice(
+          { userId: req.auth!.userId, role: req.auth!.role },
+          req.params.id!,
+          data.reason,
+        ),
+      );
+    },
+  ),
+);
+
+governmentRouter.post(
+  '/devices/:id/unblock',
+  requirePermission('user:manage'),
+  requireStepUp('user.role.change'),
+  validateBody(
+    z.object({ reason: z.string().trim().min(10).max(500) }),
+    async (req, res, data) => {
+      await officerDevices.unblockDevice(
+        { userId: req.auth!.userId, role: req.auth!.role },
+        req.params.id!,
+        data.reason,
+      );
+      res.json({ unblocked: true });
+    },
+  ),
+);
+
+// ---------------------------------------------------------------------------
+// Evidence that did not come from this platform (Addendum §23)
+// ---------------------------------------------------------------------------
+
+/*
+ * The body is the file, not a multipart envelope.
+ *
+ * The same decision the KYC upload made and for the same reason: an officer
+ * attaches one document at a time, and parsing a multipart body to find it
+ * would be a dependency and a parser for no gain. The declared type is checked
+ * against the bytes inside `uploadEvidence`, because a Content-Type header is
+ * the uploader's claim and nothing more.
+ */
+const evidenceBody = express.raw({
+  type: cases.EVIDENCE_CONTENT_TYPES,
+  limit: cases.MAX_EVIDENCE_BYTES,
+});
+
+governmentRouter.post(
+  '/cases/:id/evidence/upload',
+  requirePermission('case:contribute'),
+  evidenceBody,
+  validateQuery(
+    z.object({
+      filename: z.string().trim().min(1).max(200),
+      description: z.string().trim().min(3).max(500),
+      provenance: z.string().trim().min(3).max(500),
+    }),
+    async (req, res, data) => {
+      res.status(201).json(
+        await cases.uploadEvidence(pool, officer(req), req.params.id!, {
+          bytes: Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0),
+          declaredContentType: (req.header('content-type') ?? '').split(';')[0]!.trim(),
+          filename: data.filename,
+          description: data.description,
+          provenance: data.provenance,
+        }),
+      );
+    },
+  ),
+);
+
+governmentRouter.get(
+  '/cases/evidence/:id/file',
+  requirePermission('case:read:all'),
+  asyncHandler(async (req, res) => {
+    const file = await cases.readEvidence(pool, officer(req), req.params.id!);
+    res.setHeader('content-type', file.contentType);
+    // Never cached: this is somebody's bank advice on an open investigation.
+    res.setHeader('cache-control', 'private, no-store');
+    res.setHeader('content-disposition', `inline; filename="${file.filename}"`);
+    res.send(file.bytes);
+  }),
+);
+
 function viewerFrom(req: RouteRequest): support.Viewer {
   return {
     userId: req.auth!.userId,

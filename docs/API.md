@@ -361,7 +361,7 @@ process would be a lost capture wearing the costume of a successful one.
 |---|---|---|
 | `GET` | `/government/dashboard` · `/kpis` | `report:read:all` |
 | `GET` | `/government/intelligence/geography` | drill State → LGA → Ward → Community |
-| `GET` | `/government/transactions?format=json\|csv` | `payment:read:all` |
+| `GET` | `/government/transactions?format=json\|csv\|xlsx\|pdf` | `payment:read:all`; any format but `json` also needs `data:export` |
 | `POST` | `/government/reconciliation/run` · `/recover` | `payment:reconcile` |
 | `GET` | `/government/reconciliation/exceptions` | exception queue |
 | `POST` | `/government/reconciliation/exceptions/:id/resolve` | resolution required |
@@ -374,10 +374,75 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
-| `GET` | `/government/audit?format=json\|csv` | `audit:read` |
+| `GET` | `/government/roles` | `user:manage` — every role, its permissions, its officers, and how many rows it may export |
+| `POST` | `/government/roles` | `user:manage`, step-up — create a role, optionally copying an existing one's grants |
+| `POST` | `/government/roles/:name/grant` · `/revoke` | `user:manage`, step-up — the delegation of authority, as data since migration 059 |
+| `POST` | `/government/roles/:name/retire` · `/restore` | `user:manage`, step-up — a retired role cannot be assigned (migration 060) |
+| `POST` | `/government/roles/:name/export-limit` | `user:manage`, step-up — rows the role may take out in one file; 0 means none |
+| `GET` | `/government/audit?format=json\|csv\|xlsx\|pdf` | `audit:read`; any format but `json` also needs `data:export` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
+| `POST`/`GET` | `/government/audit/samples` | `audit:sample` — draw a sample, or list what has been drawn |
+| `GET` | `/government/audit/samples/:id` | the sample, its seed, and every transaction it selected |
+| `POST` | `/government/audit/samples/items/:id/finding` | `CLEAN`, `EXCEPTION` (which must say what was wrong) or `NOT_AVAILABLE` |
+| `POST` | `/government/audit/samples/:id/complete` | refused while any item is still unexamined |
+| `POST`/`GET` | `/government/audit/reports` | `audit:report` — generate a report of one of thirteen kinds, or list them |
+| `GET` | `/government/audit/reports/:id` | the frozen payload, plus `checksumMatches` recomputed on read; the read is itself audited |
+| `GET` | `/government/audit/reports/:id/export?format=csv\|xlsx\|pdf` | the frozen payload as a file, carrying the report number and checksum |
+| `POST` | `/government/audit/reports/:id/sign` | `audit:sign`, step-up `audit.report.sign` |
+| `POST` | `/government/audit/reports/:id/withdraw` | `audit:report`, step-up — a report is never deleted |
 | `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |
+| `GET` | `/government/search?q=` | `catalogue:read` — see below; each result kind is gated separately |
+| `GET` | `/government/transactions/:key/full` | Transaction 360; `:key` is an id or a reference |
+| `GET` | `/government/my-work` | `case:read:all` — everything waiting for the signed-in officer |
+| `GET`/`POST` | `/government/cases` | `case:read:all` / `case:create` |
+| `GET` | `/government/cases/:id` | the case and its whole history |
+| `POST` | `/government/cases/:id/comments` · `/evidence` | `case:contribute` |
+| `POST` | `/government/cases/:id/evidence/upload` | `case:contribute`; the body is the file, its type checked against the bytes |
+| `GET` | `/government/cases/evidence/:id/file` | `case:read:all`; the read is audited |
+| `GET` | `/government/platform/integrations` | `system:configure` or `audit:read` — which adapter is configured *and* whether it is answering |
+| `GET` | `/government/inbox?unreadOnly=` | no permission — what this officer and their role were told |
+| `POST` | `/government/inbox/:id/read` · `/inbox/read-all` | their own, or their role's |
+| `GET` | `/government/users/:id/activity?days=` | their own without a permission; anybody else's with `audit:read` |
+| `GET` | `/government/sessions/mine` | no permission — an officer's own sessions and machines |
+| `POST` | `/government/sessions/:id/end` | their own; anybody's with `user:manage` |
+| `GET` | `/government/users/:id/sessions` | `user:manage` |
+| `POST` | `/government/devices/:id/block` · `/unblock` | `user:manage`, step-up `user.role.change` |
+| `POST` | `/government/cases/:id/assign` · `/status` · `/priority` | `case:contribute` on the route; the row decides |
+
+### Global search, Transaction 360, and cases
+
+`GET /government/search` is gated on the weakest permission any portal role
+holds, and that is deliberate: it grants nothing on its own. Every *kind* of
+result — transaction, receipt, taxpayer, agent, officer, vehicle, case — is
+gated separately inside the service on the permission that kind's own screen
+requires, and territory scope narrows a supervisor to their own LGAs. Gating the
+endpoint itself more tightly would only mean the roles that hold less get no
+search, while changing nothing about what any of them can see through it.
+
+`GET /government/transactions/:key/full` assembles the whole chain — taxpayer,
+agent, revenue item, assessment, invoice, payments, gateway, receipt, refunds,
+settlement, reconciliation, commission, payout — plus a timeline that merges
+`transaction_events` with `audit_logs` in time order, carrying the before and
+after of every change. Sections the caller may not see are omitted **and named
+in `withheld`**: an empty `commission` and a hidden one look identical, and an
+investigator who cannot tell them apart will conclude something false.
+
+A transaction outside the caller's territory scope answers `404`, not `403`.
+"No such reference" and "not yours" are the same answer to somebody who should
+not know the row exists.
+
+The three case endpoints that move a case are `case:contribute` on the route,
+and the real gate is inside `services/cases.ts`: `case:manage`, **or** having
+opened this case, **or** having it assigned to you. That cannot be expressed as
+a route permission because it is a fact about the row — and requiring
+`case:manage` instead would let a finance officer raise a settlement discrepancy
+and then be unable to resolve it.
+
+`case_events` is append-only and the database enforces it: an `UPDATE` or
+`DELETE` is refused by trigger, and a case is `CLOSED` rather than deleted.
+A case cannot be `RESOLVED` without a resolution, checked in the service and
+again by a CHECK constraint.
 
 `GET /government/workers` answers for every declared background job: when it
 last started, when it last *succeeded* — the reading that separates a job

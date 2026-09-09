@@ -1,10 +1,11 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
+import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -490,12 +491,33 @@ export function AuditScreen() {
   const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
   const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
-  const [filters, setFilters] = useState({ action: '', entityType: '' });
+  /*
+   * Kept in the URL and in this session. An auditor who filtered to one action,
+   * opened the transaction it named and came back used to get the whole log.
+   */
+  const [filters, setFilters] = useFilters('audit', '/audit', { action: '', entityType: '' });
+
+  /*
+   * One builder for the screen and the export.
+   *
+   * They were separate, and drifted: the screen read 150 entries and the
+   * export sent 500 with the same two filters written out again. An officer
+   * exporting what they were looking at should get what they were looking at,
+   * filtered the same way -- so the only difference is how many rows, which is
+   * the one difference that is deliberate.
+   */
+  const auditQuery = useCallback(
+    (limit: number) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (filters.action) params.set('action', filters.action);
+      if (filters.entityType) params.set('entityType', filters.entityType);
+      return params;
+    },
+    [filters],
+  );
 
   useEffect(() => {
-    const params = new URLSearchParams({ limit: '150' });
-    if (filters.action) params.set('action', filters.action);
-    if (filters.entityType) params.set('entityType', filters.entityType);
+    const params = auditQuery(150);
 
     setEntries(null);
     api
@@ -504,7 +526,7 @@ export function AuditScreen() {
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
       });
-  }, [filters]);
+  }, [auditQuery]);
 
   return (
     <>
@@ -634,7 +656,7 @@ export function AuditScreen() {
               <input
                 id="entity"
                 value={filters.entityType}
-                onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
+                onChange={(event) => setFilters({ entityType: event.target.value })}
                 placeholder={t.ofcOvEntityPlaceholder}
               />
             </div>
@@ -643,21 +665,14 @@ export function AuditScreen() {
               <input
                 id="action"
                 value={filters.action}
-                onChange={(event) => setFilters({ ...filters, action: event.target.value })}
+                onChange={(event) => setFilters({ action: event.target.value })}
                 placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                const params = new URLSearchParams({ limit: '500', format: 'csv' });
-                if (filters.action) params.set('action', filters.action);
-                if (filters.entityType) params.set('entityType', filters.entityType);
-                const csv = await api.get<string>(`/government/audit?${params.toString()}`);
-                downloadCsv(`plateau-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-              }}
-            >{t.ofcExportCsv}</button>
+            <ExportButtons
+              path={`/government/audit?${auditQuery(500).toString()}`}
+              filename={`plateau-audit-${new Date().toISOString().slice(0, 10)}`}
+            />
           </div>
         </div>
 
@@ -676,6 +691,22 @@ export function AuditScreen() {
               { key: 'entity_type', label: 'ofcOvEntity' },
               { key: 'result', label: 'ofcOvResult', render: (row) => <Badge status={row.result} /> },
               { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
+              {
+                /*
+                 * What the action actually changed.
+                 *
+                 * The columns to the left say who did what, and until now that
+                 * was the whole of this screen: an auditor who wanted to know
+                 * what an action *did* opened Transaction 360, which only
+                 * helps if you already know which transaction. The diff is
+                 * rendered here rather than both sides in full, because a
+                 * reader asked to spot which of fourteen fields moved does not
+                 * spot it.
+                 */
+                key: 'change',
+                label: 'ofcOvChange',
+                render: (row) => <BeforeAfter before={row.old_value} after={row.new_value} />,
+              },
               {
                 key: 'hash',
                 label: 'ofcOvHash',

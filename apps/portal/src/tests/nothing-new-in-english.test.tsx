@@ -108,6 +108,20 @@ function looksLikeCode(text: string): boolean {
     // A run that opens with a semicolon or a comma is the tail of a statement
     // the pattern walked into, never a sentence somebody wrote.
     /^[;,]/.test(text) ||
+    /*
+     * A bare pipe: the middle of a type union.
+     *
+     * `field: Record<string, unknown> | null; next: Record<…>` puts the union
+     * tail between two angle brackets, which is exactly the shape the
+     * between-tags pattern is looking for. Four of these appeared with the
+     * transaction file and the case workspace, and none of them is a string an
+     * officer will ever read.
+     *
+     * Matched as a standalone `|` rather than by naming `Record`, because the
+     * next one will be a `string | null` or a `Date | undefined`. No sentence
+     * in this application contains a pipe surrounded by spaces.
+     */
+    /(^|\s)\|(\s|$)/.test(text) ||
     text.endsWith('(') ||
     /^[a-z][A-Za-z0-9_]*$/.test(text) ||
     // `something.method(` — a call. No sentence contains one.
@@ -266,6 +280,21 @@ const ALLOWED_LITERALS = new Set([
   // during the sweep that added this rule, which would have compared a key
   // press against the Hausa word for it and stopped Enter working.
   'Enter',
+  'Escape',
+  /*
+   * A reason written into the audit trail, not shown to the officer writing it.
+   *
+   * It is stored and read back later by somebody else — an auditor, possibly
+   * reading in the other language — so translating it would record whichever
+   * language the officer's browser happened to be in, and two identical actions
+   * would be filed under two different words. Same reasoning as
+   * `ofcOvActionPlaceholder` above.
+   *
+   * The better answer is a stable code the reading screen translates, the way
+   * statuses work. That is a change to how sessions are ended rather than to
+   * this list, and it is noted rather than done here.
+   */
+  'Ended by the officer',
   // Wire values and identifiers that happen to be capitalised.
   'Bearer ',
   'Content-Type',

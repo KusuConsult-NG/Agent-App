@@ -41,16 +41,104 @@ export async function executiveDashboard(
   const { statewide, territoryIds, lgaIds } = scopeParams(scope);
   const scoped = [statewide, territoryIds];
   const tx = transactionScopeSql('t', 1, 2);
-  const [totals, counts, byCategory, byLga, byAgent, byMda, trend, exceptions] = await Promise.all([
+  const [
+    totals,
+    counts,
+    byCategory,
+    byLga,
+    byAgent,
+    byMda,
+    byChannel,
+    byTaxpayerType,
+    byItem,
+    trend,
+    exceptions,
+  ] = await Promise.all([
     queryOne(
       db,
-      `SELECT
-         COALESCE(SUM(amount_kobo) FILTER (WHERE created_at::date = CURRENT_DATE),0)::text AS today_kobo,
-         COALESCE(SUM(amount_kobo) FILTER (WHERE created_at >= date_trunc('week', CURRENT_DATE)),0)::text AS week_kobo,
-         COALESCE(SUM(amount_kobo) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE)),0)::text AS month_kobo,
-         COALESCE(SUM(amount_kobo) FILTER (WHERE created_at >= date_trunc('year', CURRENT_DATE)),0)::text AS ytd_kobo,
-         COALESCE(SUM(amount_kobo),0)::text AS total_kobo
-       FROM transactions t WHERE status IN ${REVENUE_STATES} AND ${tx}`,
+      /*
+       * Each period beside the one before it.
+       *
+       * A collections figure on its own is a number an officer reads; the same
+       * figure beside last month's is one they can act on. Ten items on the
+       * officer readiness assessment read Missing for the want of the second
+       * column — yesterday's revenue, previous-period comparison, growth,
+       * decline, declining categories, growth per place, growth per agent.
+       *
+       * THE COMPARISONS ARE LIKE FOR LIKE, WHICH IS THE WHOLE DIFFICULTY.
+       *
+       * "This month against last month" on the 8th of March compares eight days
+       * with thirty-one and reports a catastrophe every month. So each previous
+       * period is cut at the same point through itself: last month means the
+       * first eight days of February, and the year-to-date comparison is the
+       * same calendar window a year earlier. The unshortened previous month is
+       * returned too, as `previous_month_whole_kobo`, because at month end an
+       * officer wants the real figure and by then the two agree.
+       *
+       * Growth is basis points, and NULL rather than zero when the previous
+       * period collected nothing: "grew by 0%" and "there is nothing to compare
+       * against" are different answers and only one of them is true of a new
+       * LGA's first month.
+       */
+      `WITH windows AS (
+         SELECT
+           CURRENT_DATE                                   AS today,
+           CURRENT_DATE - 1                               AS yesterday,
+           date_trunc('week', CURRENT_DATE)::date         AS week_start,
+           (date_trunc('week', CURRENT_DATE) - interval '7 days')::date  AS prev_week_start,
+           date_trunc('month', CURRENT_DATE)::date        AS month_start,
+           (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_month_start,
+           (date_trunc('month', CURRENT_DATE) - interval '1 day')::date   AS prev_month_end,
+           date_trunc('year', CURRENT_DATE)::date         AS year_start,
+           (date_trunc('year', CURRENT_DATE) - interval '1 year')::date   AS prev_year_start,
+           (CURRENT_DATE - date_trunc('week', CURRENT_DATE)::date)  AS days_into_week,
+           (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_into_month
+       ),
+       sums AS (
+         SELECT
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.today),0) AS today,
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date = w.yesterday),0) AS yesterday,
+
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.week_start),0) AS week,
+           COALESCE(SUM(t.amount_kobo) FILTER (
+             WHERE t.created_at::date >= w.prev_week_start
+               AND t.created_at::date <= w.prev_week_start + w.days_into_week),0) AS prev_week,
+
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.month_start),0) AS month,
+           COALESCE(SUM(t.amount_kobo) FILTER (
+             WHERE t.created_at::date >= w.prev_month_start
+               AND t.created_at::date <= LEAST(
+                     w.prev_month_start + w.days_into_month, w.prev_month_end)),0) AS prev_month,
+           COALESCE(SUM(t.amount_kobo) FILTER (
+             WHERE t.created_at::date BETWEEN w.prev_month_start AND w.prev_month_end),0)
+             AS prev_month_whole,
+
+           COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.created_at::date >= w.year_start),0) AS ytd,
+           COALESCE(SUM(t.amount_kobo) FILTER (
+             WHERE t.created_at::date >= w.prev_year_start
+               AND t.created_at::date <= (w.today - interval '1 year')::date),0) AS prev_ytd,
+
+           COALESCE(SUM(t.amount_kobo),0) AS total
+         FROM transactions t CROSS JOIN windows w
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+       )
+       SELECT
+         today::text            AS today_kobo,
+         yesterday::text        AS yesterday_kobo,
+         week::text             AS week_kobo,
+         prev_week::text        AS previous_week_kobo,
+         month::text            AS month_kobo,
+         prev_month::text       AS previous_month_kobo,
+         prev_month_whole::text AS previous_month_whole_kobo,
+         ytd::text              AS ytd_kobo,
+         prev_ytd::text         AS previous_ytd_kobo,
+         total::text            AS total_kobo,
+         -- Basis points, NULL when there is nothing to compare against.
+         (((today - yesterday) * 10000) / NULLIF(yesterday, 0))::bigint       AS day_growth_bp,
+         (((week - prev_week) * 10000) / NULLIF(prev_week, 0))::bigint        AS week_growth_bp,
+         (((month - prev_month) * 10000) / NULLIF(prev_month, 0))::bigint     AS month_growth_bp,
+         (((ytd - prev_ytd) * 10000) / NULLIF(prev_ytd, 0))::bigint           AS year_growth_bp
+       FROM sums`,
       scoped,
     ),
     queryOne(
@@ -83,19 +171,111 @@ export async function executiveDashboard(
            WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED') AND ${tx}) AS commission_liability_kobo,
          (SELECT COALESCE(SUM(c.amount_kobo),0)::text FROM commissions c
            LEFT JOIN transactions t ON t.id = c.transaction_id
-           WHERE c.status = 'PAID' AND ${tx}) AS commission_paid_kobo`,
+           WHERE c.status = 'PAID' AND ${tx}) AS commission_paid_kobo,
+
+         /*
+          * Money the State took and gave back, as headline figures.
+          *
+          * Both were countable per agent and nowhere at the top, so an
+          * administrator asking "how much did we reverse this month" had to
+          * add up a performance table. Reversal and refund are kept apart
+          * because they are different events: a reversal voids the receipt,
+          * a refund moves money out of the government account, and a
+          * transaction can be one without the other.
+          */
+         (SELECT count(*)::text FROM transactions t
+           WHERE t.status = 'REVERSED' AND ${tx}) AS reversed_transactions,
+         (SELECT COALESCE(SUM(t.amount_kobo),0)::text FROM transactions t
+           WHERE t.status = 'REVERSED' AND ${tx}) AS reversed_kobo,
+         (SELECT count(*)::text FROM transactions t
+           WHERE t.status = 'REFUNDED' AND ${tx}) AS refunded_transactions,
+         (SELECT COALESCE(SUM(r.amount_kobo),0)::text FROM refunds r
+           JOIN transactions t ON t.id = r.transaction_id
+           WHERE r.status = 'COMPLETED' AND ${tx}) AS refunded_kobo,
+
+         (SELECT count(*)::text FROM agents a
+           WHERE a.operational_status = 'SUSPENDED'
+             AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS agents_suspended,
+
+         /*
+          * Agents online, from the sessions the platform already keeps.
+          *
+          * sessions.last_used_at is written on every authenticated request,
+          * so presence is a fact the platform holds and had never read. Fifteen
+          * minutes rather than five: a field agent registering a taxpayer works
+          * offline between syncs, and a five-minute window would report them
+          * absent while they are standing in the market.
+          *
+          * This is "recently active", not "logged in" — a distinction worth
+          * keeping, because a revoked session with a recent timestamp is not
+          * somebody working.
+          */
+         (SELECT count(DISTINCT a.id)::text
+            FROM agents a
+            JOIN sessions s ON s.user_id = a.user_id
+           WHERE s.revoked_at IS NULL
+             AND s.last_used_at > now() - interval '15 minutes'
+             AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS agents_online,
+
+         /*
+          * What is assessed and unpaid — the floor under "expected revenue".
+          *
+          * Deliberately the floor and not a projection: this is money already
+          * invoiced and owed, which is a fact, and the forecast is a separate
+          * figure that says out loud that it is arithmetic.
+          */
+         (SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo),0)::text
+            FROM invoices i
+            JOIN taxpayers tp ON tp.id = i.taxpayer_id
+           WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+             AND ($1 OR tp.lga_id = ANY($3::uuid[]))) AS expected_revenue_kobo`,
       [statewide, territoryIds, lgaIds],
     ),
     query(
       db,
-      `SELECT rc.name AS category, rc.name_ha AS category_ha,
-              count(t.id)::text AS transactions,
-              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
-         FROM transactions t
-         JOIN revenue_items ri ON ri.id = t.revenue_item_id
-         JOIN revenue_categories rc ON rc.id = ri.category_id
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
-        GROUP BY rc.name, rc.name_ha ORDER BY SUM(t.amount_kobo) DESC`,
+      /*
+       * Each category this month, last month, and what that says.
+       *
+       * `growth_bp` is what makes a declining category visible: the dashboard
+       * ranked by size, so a category that halved was still near the top and
+       * looked healthy. `contribution_bp` is its share of the month, which is
+       * the figure an officer actually quotes.
+       *
+       * The all-time total stays as `amount_kobo` because several screens read
+       * it, and the monthly pair is added beside it rather than replacing it.
+       */
+      `WITH bounds AS (
+         SELECT date_trunc('month', CURRENT_DATE)::date AS month_start,
+                (date_trunc('month', CURRENT_DATE) - interval '1 month')::date AS prev_start,
+                (date_trunc('month', CURRENT_DATE) - interval '1 day')::date AS prev_end,
+                (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date) AS days_in
+       ),
+       rows AS (
+         SELECT rc.name AS category, rc.name_ha AS category_ha,
+                count(t.id) AS transactions,
+                COALESCE(SUM(t.amount_kobo),0) AS amount,
+                COALESCE(SUM(t.amount_kobo) FILTER (
+                  WHERE t.created_at::date >= b.month_start),0) AS this_month,
+                COALESCE(SUM(t.amount_kobo) FILTER (
+                  WHERE t.created_at::date >= b.prev_start
+                    AND t.created_at::date <= LEAST(b.prev_start + b.days_in, b.prev_end)),0)
+                  AS prev_month
+           FROM transactions t
+           JOIN revenue_items ri ON ri.id = t.revenue_item_id
+           JOIN revenue_categories rc ON rc.id = ri.category_id
+           CROSS JOIN bounds b
+          WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+          GROUP BY rc.name, rc.name_ha
+       )
+       SELECT category, category_ha,
+              transactions::text,
+              amount::text AS amount_kobo,
+              this_month::text AS month_kobo,
+              prev_month::text AS previous_month_kobo,
+              (((this_month - prev_month) * 10000) / NULLIF(prev_month, 0))::bigint AS growth_bp,
+              ((this_month * 10000) / NULLIF(SUM(this_month) OVER (), 0))::bigint AS contribution_bp
+         FROM rows
+        ORDER BY amount DESC`,
       scoped,
     ),
     query(
@@ -136,6 +316,66 @@ export async function executiveDashboard(
         GROUP BY m.name, m.name_ha ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
+    /*
+     * How the money arrived.
+     *
+     * transactions.channel has been written on every row since the platform
+     * started and nothing had ever grouped by it, so "how much came through
+     * agents against the taxpayer portal" was unanswerable — which is the
+     * question behind every decision about where to put agents.
+     */
+    query(
+      db,
+      `SELECT t.channel,
+              count(t.id)::text AS transactions,
+              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
+         FROM transactions t
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        GROUP BY t.channel ORDER BY SUM(t.amount_kobo) DESC`,
+      scoped,
+    ),
+
+    /*
+     * Individuals against businesses.
+     *
+     * Two populations with different collection economics and different
+     * compliance behaviour, reported as one number.
+     */
+    query(
+      db,
+      `SELECT tp.taxpayer_type,
+              count(t.id)::text AS transactions,
+              count(DISTINCT t.taxpayer_id)::text AS taxpayers,
+              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
+              COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo
+         FROM transactions t
+         JOIN taxpayers tp ON tp.id = t.taxpayer_id
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        GROUP BY tp.taxpayer_type ORDER BY SUM(t.amount_kobo) DESC`,
+      scoped,
+    ),
+
+    /*
+     * One level below the category, which is where an officer's work is.
+     *
+     * "Local Government Levies" is a heading; "Shops and Kiosks Levy" is the
+     * thing somebody is responsible for. The dashboard stopped at the heading.
+     */
+    query(
+      db,
+      `SELECT ri.name AS item, ri.name_ha AS item_ha, ri.code,
+              rc.name AS category, rc.name_ha AS category_ha,
+              count(t.id)::text AS transactions,
+              COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
+         FROM transactions t
+         JOIN revenue_items ri ON ri.id = t.revenue_item_id
+         JOIN revenue_categories rc ON rc.id = ri.category_id
+        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        GROUP BY ri.name, ri.name_ha, ri.code, rc.name, rc.name_ha
+        ORDER BY SUM(t.amount_kobo) DESC LIMIT 25`,
+      scoped,
+    ),
+
     query(
       db,
       `SELECT to_char(day, 'YYYY-MM-DD') AS day,
@@ -184,6 +424,9 @@ export async function executiveDashboard(
     revenueByLga: byLga,
     revenueByAgent: byAgent,
     revenueByMda: byMda,
+    revenueByChannel: byChannel,
+    revenueByTaxpayerType: byTaxpayerType,
+    revenueByItem: byItem,
     dailyTrend: trend,
     exceptions,
     scope,
@@ -209,37 +452,77 @@ export async function geographicIntelligence(
    */
 
   if (params.wardId) {
+    const { previousFrom, previousTo } = precedingWindow(from, to);
     return query(
       db,
       `SELECT COALESCE(tp.community, 'Not recorded') AS level, 'COMMUNITY' AS level_type,
               count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
-              count(DISTINCT t.taxpayer_id)::text AS taxpayers
+              count(DISTINCT t.taxpayer_id)::text AS taxpayers,
+              COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
+              (SELECT COALESCE(SUM(p.amount_kobo),0)::text
+                 FROM transactions p JOIN taxpayers ptp ON ptp.id = p.taxpayer_id
+                WHERE p.ward_id = $1 AND p.status IN ${REVENUE_STATES}
+                  AND ptp.community IS NOT DISTINCT FROM tp.community
+                  AND p.created_at BETWEEN $6 AND $7
+                  AND ${transactionScopeSql('p', 4, 5)}) AS previous_amount_kobo,
+              (SELECT count(*)::text FROM taxpayers reg
+                WHERE reg.ward_id = $1 AND reg.status = 'ACTIVE'
+                  AND reg.community IS NOT DISTINCT FROM tp.community) AS registered_taxpayers
          FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
         WHERE t.ward_id = $1 AND t.status IN ${REVENUE_STATES}
           AND t.created_at BETWEEN $2 AND $3
           AND ${transactionScopeSql('t', 4, 5)}
         GROUP BY tp.community ORDER BY SUM(t.amount_kobo) DESC`,
-      [params.wardId, from, to, statewide, territoryIds],
-    );
+      [params.wardId, from, to, statewide, territoryIds, previousFrom, previousTo],
+    ).then((rows) => rows.map(withGrowthAndCompliance));
   }
 
   if (params.lgaId) {
+    const { previousFrom, previousTo } = precedingWindow(from, to);
     return query(
       db,
       `SELECT w.name AS level, 'WARD' AS level_type, w.id AS level_id,
               count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
-              count(DISTINCT t.taxpayer_id)::text AS taxpayers
+              count(DISTINCT t.taxpayer_id)::text AS taxpayers,
+              COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
+              (SELECT COALESCE(SUM(p.amount_kobo),0)::text
+                 FROM transactions p
+                WHERE p.ward_id = w.id AND p.status IN ${REVENUE_STATES}
+                  AND p.created_at BETWEEN $7 AND $8
+                  AND ${transactionScopeSql('p', 4, 5)}) AS previous_amount_kobo,
+              (SELECT count(*)::text FROM taxpayers tp
+                WHERE tp.ward_id = w.id AND tp.status = 'ACTIVE') AS registered_taxpayers
          FROM wards w
          LEFT JOIN transactions t ON t.ward_id = w.id AND t.status IN ${REVENUE_STATES}
               AND t.created_at BETWEEN $2 AND $3
               AND ${transactionScopeSql('t', 4, 5)}
         WHERE w.lga_id = $1 AND ($4 OR w.lga_id = ANY($6::uuid[]))
         GROUP BY w.name, w.id ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
-      [params.lgaId, from, to, statewide, territoryIds, lgaIds],
-    );
+      [params.lgaId, from, to, statewide, territoryIds, lgaIds, previousFrom, previousTo],
+    ).then((rows) => rows.map(withGrowthAndCompliance));
   }
+
+  /*
+   * The state view, with three columns the brief asked for and this had not.
+   *
+   * `average_kobo` — a place collecting ₦2m from 40 transactions and one
+   * collecting it from 4,000 are different problems, and the totals look
+   * identical.
+   *
+   * `growth_bp` — the same window immediately before this one. "Ward B's
+   * collections increased 48% after agent deployment" is the brief's own
+   * example of what makes this screen worth opening, and nothing computed it.
+   *
+   * `compliance_bp` — the share of registered taxpayers in the place who paid
+   * anything at all in the window. This is the figure behind the brief's other
+   * example: 4,000 registered taxpayers and 35% payment activity. It is
+   * deliberately "paid anything", not a compliance score, because the score is
+   * per taxpayer and averaging scores across a place answers a subtly different
+   * question than the one an officer is asking.
+   */
+  const { previousFrom, previousTo } = precedingWindow(from, to);
 
   return query(
     db,
@@ -247,15 +530,63 @@ export async function geographicIntelligence(
             count(t.id)::text AS transactions,
             COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo,
             count(DISTINCT t.taxpayer_id)::text AS taxpayers,
-            count(DISTINCT t.agent_id)::text AS agents
+            count(DISTINCT t.agent_id)::text AS agents,
+            COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
+            (SELECT COALESCE(SUM(p.amount_kobo),0)::text
+               FROM transactions p
+              WHERE p.lga_id = l.id AND p.status IN ${REVENUE_STATES}
+                AND p.created_at BETWEEN $6 AND $7
+                AND ${transactionScopeSql('p', 3, 4)}) AS previous_amount_kobo,
+            (SELECT count(*)::text FROM taxpayers tp
+              WHERE tp.lga_id = l.id AND tp.status = 'ACTIVE') AS registered_taxpayers
        FROM lgas l
        LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES}
             AND t.created_at BETWEEN $1 AND $2
             AND ${transactionScopeSql('t', 3, 4)}
       WHERE ${lgaScopeSql('l', 3, 5)}
       GROUP BY l.name, l.id, l.zone ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
-    [from, to, statewide, territoryIds, lgaIds],
-  );
+    [from, to, statewide, territoryIds, lgaIds, previousFrom, previousTo],
+  ).then((rows) => rows.map(withGrowthAndCompliance));
+}
+
+/**
+ * The window of the same length immediately before this one.
+ *
+ * "Growth" needs a comparable, and the only defensible comparable for an
+ * arbitrary window the caller chose is the window of equal length that ended
+ * the day before it began. A fixed "last month" would compare a three-day
+ * query against a whole month.
+ */
+function precedingWindow(from: Date, to: Date): { previousFrom: Date; previousTo: Date } {
+  const spanDays = Math.max(1, Math.round((to.getTime() - from.getTime()) / 86_400_000) + 1);
+  return {
+    previousFrom: new Date(from.getTime() - spanDays * 86_400_000),
+    previousTo: new Date(from.getTime() - 86_400_000),
+  };
+}
+
+/**
+ * Growth and compliance, computed once for every geography row.
+ *
+ * In TypeScript rather than in each of the three SQL branches, because the
+ * ward and community queries need the same two columns and repeating a
+ * `NULLIF` division in three places is how two of them end up disagreeing.
+ * Basis points throughout, and null rather than zero when there is nothing to
+ * divide by — "grew 0%" and "there was nothing here before" are different
+ * answers, and only one is true of a newly deployed ward.
+ */
+function withGrowthAndCompliance(row: Record<string, unknown>): Record<string, unknown> {
+  const current = BigInt((row.amount_kobo as string) ?? '0');
+  const previous = BigInt((row.previous_amount_kobo as string) ?? '0');
+  const registered = Number((row.registered_taxpayers as string) ?? '0');
+  const paying = Number((row.taxpayers as string) ?? '0');
+
+  return {
+    ...row,
+    growth_bp:
+      previous > 0n ? Number(((current - previous) * 10_000n) / previous) : null,
+    compliance_bp: registered > 0 ? Math.round((paying / registered) * 10_000) : null,
+  };
 }
 
 /** Agent performance (PRD §39). */
@@ -284,7 +615,37 @@ export async function agentPerformance(
               WHERE c.agent_id = a.id AND c.status <> 'REVERSED') AS commission_earned_kobo,
             (SELECT count(*)::text FROM fraud_flags f
               WHERE f.agent_id = a.id AND f.status IN ('OPEN','UNDER_REVIEW')) AS open_fraud_flags,
-            count(DISTINCT t.created_at::date)::text AS active_days
+            count(DISTINCT t.created_at::date)::text AS active_days,
+            /*
+             * The two columns that turn a ranking into a management tool.
+             *
+             * categories_processed — an agent working one levy and an agent
+             * working six are different deployments, and the collection totals
+             * hide it.
+             *
+             * previous_month_kobo — the same days of last month, so an agent
+             * whose collections halved is visible rather than merely lower down
+             * a list that is sorted by size. Cut at the same point through the
+             * month for the reason the dashboard's comparisons are: eight days
+             * against thirty-one reports a catastrophe every month.
+             */
+            (SELECT count(DISTINCT ri.category_id)::text
+               FROM transactions ct
+               JOIN revenue_items ri ON ri.id = ct.revenue_item_id
+              WHERE ct.agent_id = a.id AND ct.status IN ${REVENUE_STATES})
+              AS categories_processed,
+            COALESCE(SUM(t.amount_kobo) FILTER (
+              WHERE t.status IN ${REVENUE_STATES}
+                AND t.created_at::date >= date_trunc('month', CURRENT_DATE)::date),0)::text
+              AS month_kobo,
+            COALESCE(SUM(t.amount_kobo) FILTER (
+              WHERE t.status IN ${REVENUE_STATES}
+                AND t.created_at::date >= (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
+                AND t.created_at::date <= LEAST(
+                      (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
+                        + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date),
+                      (date_trunc('month', CURRENT_DATE) - interval '1 day')::date)),0)::text
+              AS previous_month_kobo
        FROM agents a
        JOIN users u ON u.id = a.user_id
        LEFT JOIN lgas l ON l.id = a.lga_id
@@ -295,6 +656,17 @@ export async function agentPerformance(
       ORDER BY COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES}),0) DESC
       LIMIT $2`,
     [params.agentId ?? null, params.limit ?? 100, statewide, territoryIds],
+  ).then((rows) =>
+    rows.map((row) => {
+      const month = BigInt(row.month_kobo as string);
+      const previous = BigInt(row.previous_month_kobo as string);
+      return {
+        ...row,
+        // Null rather than zero: an agent deployed this month has nothing to
+        // compare against, which is not the same as flat.
+        growth_bp: previous > 0n ? Number(((month - previous) * 10_000n) / previous) : null,
+      };
+    }),
   );
 }
 
@@ -1328,4 +1700,217 @@ export async function defaultersByCategory(
     defaulters: rows.length,
     rows,
   };
+}
+
+/**
+ * The taxpayer base, as a population rather than as a count.
+ *
+ * The dashboard reported two numbers about taxpayers — how many, and how many
+ * were registered this month — and a revenue officer plans against neither. The
+ * questions they actually ask are: how many of these people are still paying,
+ * how often, how much, and where are the ones who have stopped.
+ *
+ * ACTIVE MEANS PAID RECENTLY, NOT `status = 'ACTIVE'`
+ *
+ * `taxpayers.status` says whether a record is live — whether the person is
+ * still on the register at all. It says nothing about whether they are paying,
+ * so a register full of people who last paid in 2024 reports 100% active. The
+ * cohort split here is on payment behaviour within a window, which is what the
+ * word means to the officer asking.
+ *
+ * Ninety days rather than a year, because most Plateau levies are collected at
+ * least quarterly, and a taxpayer who has missed a quarter is the one worth
+ * knowing about while there is still time to visit them.
+ */
+export async function taxpayerAnalytics(
+  db: Db,
+  params: { lgaId?: string; wardId?: string; categoryId?: string } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, lgaIds } = scopeParams(scope);
+  const filters = [params.lgaId ?? null, params.wardId ?? null, statewide, lgaIds];
+
+  const [cohorts, byLga, byCategory, frequency] = await Promise.all([
+    queryOne(
+      db,
+      `WITH base AS (
+         SELECT tp.id, tp.taxpayer_type, tp.created_at,
+                (SELECT max(t.created_at) FROM transactions t
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS last_paid_at,
+                (SELECT COALESCE(SUM(t.amount_kobo),0) FROM transactions t
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS paid_kobo,
+                (SELECT count(*) FROM transactions t
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS payments
+           FROM taxpayers tp
+          WHERE tp.status = 'ACTIVE'
+            AND ($1::uuid IS NULL OR tp.lga_id = $1)
+            AND ($2::uuid IS NULL OR tp.ward_id = $2)
+            AND ($3 OR tp.lga_id = ANY($4::uuid[]))
+       )
+       SELECT
+         count(*)::text AS total,
+         count(*) FILTER (WHERE taxpayer_type = 'INDIVIDUAL')::text AS individuals,
+         count(*) FILTER (WHERE taxpayer_type = 'BUSINESS')::text AS businesses,
+         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::text
+           AS new_this_month,
+         count(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE) - interval '1 month'
+                            AND created_at < date_trunc('month', CURRENT_DATE))::text
+           AS new_last_month,
+         -- Paying within the window, not merely on the register.
+         count(*) FILTER (WHERE last_paid_at > now() - interval '90 days')::text AS active,
+         count(*) FILTER (WHERE last_paid_at IS NULL
+                            OR last_paid_at <= now() - interval '90 days')::text AS inactive,
+         count(*) FILTER (WHERE last_paid_at IS NULL)::text AS never_paid,
+         COALESCE(ROUND(AVG(paid_kobo) FILTER (WHERE payments > 0)),0)::text AS average_lifetime_kobo,
+         COALESCE(ROUND(AVG(payments)::numeric, 2),0)::text AS average_payments_each,
+         COALESCE(SUM(paid_kobo),0)::text AS lifetime_kobo
+       FROM base`,
+      filters,
+    ),
+
+    query(
+      db,
+      `SELECT l.name AS lga,
+              count(tp.id)::text AS taxpayers,
+              count(tp.id) FILTER (WHERE tp.created_at >= date_trunc('month', CURRENT_DATE))::text
+                AS new_this_month,
+              count(tp.id) FILTER (WHERE EXISTS (
+                SELECT 1 FROM transactions t
+                 WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}
+                   AND t.created_at > now() - interval '90 days'))::text AS active,
+              COALESCE(SUM(tc.outstanding_amount_kobo),0)::text AS outstanding_kobo,
+              COALESCE(ROUND(AVG(tc.score)),0)::text AS average_compliance_score
+         FROM lgas l
+         /*
+          * The ward filter belongs on the join, not on the WHERE.
+          *
+          * Applied as a predicate it would drop every LGA that has no taxpayer
+          * in that ward, which is all but one of them — and the point of this
+          * table is that an LGA with an empty register still appears, because
+          * that is the one worth noticing.
+          */
+         LEFT JOIN taxpayers tp
+                ON tp.lga_id = l.id AND tp.status = 'ACTIVE'
+               AND ($2::uuid IS NULL OR tp.ward_id = $2)
+         LEFT JOIN taxpayer_compliance tc ON tc.taxpayer_id = tp.id
+        WHERE ($1::uuid IS NULL OR l.id = $1)
+          AND ($3 OR l.id = ANY($4::uuid[]))
+        GROUP BY l.name ORDER BY count(tp.id) DESC`,
+      filters,
+    ),
+
+    /*
+     * Which levies the register is actually engaged with.
+     *
+     * Grouped through the assessments raised against each taxpayer rather than
+     * through their transactions, so a taxpayer assessed and not paying still
+     * appears — which is the whole point of asking.
+     */
+    query(
+      db,
+      `SELECT rc.name AS category, rc.name_ha AS category_ha,
+              count(DISTINCT asm.taxpayer_id)::text AS taxpayers,
+              count(DISTINCT asm.taxpayer_id) FILTER (
+                WHERE asm.status IN ('SETTLED'))::text AS taxpayers_paid
+         FROM assessments asm
+         JOIN taxpayers tp ON tp.id = asm.taxpayer_id
+         JOIN revenue_items ri ON ri.id = asm.revenue_item_id
+         JOIN revenue_categories rc ON rc.id = ri.category_id
+        WHERE tp.status = 'ACTIVE'
+          AND ($1::uuid IS NULL OR tp.lga_id = $1)
+          AND ($2::uuid IS NULL OR tp.ward_id = $2)
+          AND ($3 OR tp.lga_id = ANY($4::uuid[]))
+        GROUP BY rc.name, rc.name_ha ORDER BY count(DISTINCT asm.taxpayer_id) DESC`,
+      filters,
+    ),
+
+    /*
+     * How often somebody who pays, pays.
+     *
+     * Bucketed rather than averaged: a mean over a population where most people
+     * paid once and a few paid twelve times describes nobody in it.
+     */
+    query(
+      db,
+      `WITH counts AS (
+         SELECT t.taxpayer_id, count(*) AS payments,
+                COALESCE(ROUND(AVG(t.amount_kobo)),0) AS average_kobo
+           FROM transactions t
+           JOIN taxpayers tp ON tp.id = t.taxpayer_id
+          WHERE t.status IN ${REVENUE_STATES}
+            AND t.created_at > now() - interval '365 days'
+            AND ($1::uuid IS NULL OR tp.lga_id = $1)
+            AND ($2::uuid IS NULL OR tp.ward_id = $2)
+            AND ($3 OR tp.lga_id = ANY($4::uuid[]))
+          GROUP BY t.taxpayer_id
+       )
+       SELECT CASE
+                WHEN payments = 1 THEN 'ONCE'
+                WHEN payments BETWEEN 2 AND 3 THEN 'TWO_TO_THREE'
+                WHEN payments BETWEEN 4 AND 11 THEN 'FOUR_TO_ELEVEN'
+                ELSE 'TWELVE_OR_MORE'
+              END AS band,
+              count(*)::text AS taxpayers,
+              COALESCE(ROUND(AVG(average_kobo)),0)::text AS average_payment_kobo
+         FROM counts
+        GROUP BY band`,
+      filters,
+    ),
+  ]);
+
+  return { cohorts, byLga, byCategory, paymentFrequency: frequency, scope };
+}
+
+/**
+ * Commission grouped the two ways finance actually asks for it.
+ *
+ * Per agent and per payout batch existed. "What did Jos North cost us in
+ * commission last quarter" did not, and it is the figure a Council asks about
+ * when the remittance lands.
+ */
+export async function commissionByPlaceAndPeriod(
+  db: Db,
+  params: { from?: Date; to?: Date } = {},
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
+  const { statewide, territoryIds } = scopeParams(scope);
+  const from = params.from ?? new Date(Date.now() - 365 * 86_400_000);
+  const to = params.to ?? new Date();
+
+  const [byLga, byPeriod] = await Promise.all([
+    query(
+      db,
+      `SELECT l.name AS lga,
+              count(c.id)::text AS commissions,
+              COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
+              COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              COALESCE(SUM(c.amount_kobo) FILTER (
+                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo,
+              COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'REVERSED'),0)::text
+                AS reversed_kobo
+         FROM commissions c
+         JOIN transactions t ON t.id = c.transaction_id
+         JOIN lgas l ON l.id = t.lga_id
+        WHERE c.created_at BETWEEN $1 AND $2 AND ${transactionScopeSql('t', 3, 4)}
+        GROUP BY l.name ORDER BY SUM(c.amount_kobo) DESC`,
+      [from, to, statewide, territoryIds],
+    ),
+    query(
+      db,
+      `SELECT to_char(date_trunc('month', c.created_at), 'YYYY-MM') AS period,
+              count(c.id)::text AS commissions,
+              COALESCE(SUM(c.amount_kobo),0)::text AS accrued_kobo,
+              COALESCE(SUM(c.amount_kobo) FILTER (WHERE c.status = 'PAID'),0)::text AS paid_kobo,
+              COALESCE(SUM(c.amount_kobo) FILTER (
+                WHERE c.status IN ('PENDING','ELIGIBLE','APPROVED')),0)::text AS outstanding_kobo
+         FROM commissions c
+         JOIN transactions t ON t.id = c.transaction_id
+        WHERE c.created_at BETWEEN $1 AND $2 AND ${transactionScopeSql('t', 3, 4)}
+        GROUP BY date_trunc('month', c.created_at)
+        ORDER BY date_trunc('month', c.created_at) DESC`,
+      [from, to, statewide, territoryIds],
+    ),
+  ]);
+
+  return { byLga, byPeriod };
 }
