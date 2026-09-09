@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 2,986 strings; that one is two pages and links back
+> because it carries all 2,985 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **2,986 dictionary strings and 30 message
+It listed 78 strings. It now lists **2,985 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-2,986 strings is worse than no sheet, because it looks complete; this one cannot
+2,985 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 2,986 keys exist in both languages; nothing is missing and nothing is spare.
+- All 2,985 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 2,986 strings: where the
+- The glossary below is applied consistently across all 2,985 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout.
@@ -114,14 +114,21 @@ anyone's Hausa. They need fixing whatever you decide about wording.
 
 | Key | What is wrong |
 |---|---|
-| `scanHelp` | The English says "the receipt QR code **or vehicle license**". The Hausa names only the receipt. Half the instruction is missing, and an agent scanning a vehicle licence is told this screen does not do that. |
+| ~~`scanHelp`~~ | **Fixed, by deletion.** The English was false — neither camera screen reads a vehicle licence — and no screen ever displayed the string. See `HAUSA-REVIEW-QUESTIONS.md` § 3. |
 | `statusOffline` / `offlineMessage` | `BA HANYAR SADARWA` in one, `Babu hanyar sadarwa` in the other, for the same thing. |
 | `statusFailed` / `paymentFailed` | `BA TA YI BA` treats the subject as feminine; `bai yi nasara ba` treats it as masculine. Same subject, two agreements. |
 | `needDeclaration` / `enablePush` | `sanarwa` does duty for both the *declaration* a taxpayer accepts and a push *notification*. One word, two unrelated things. |
-| `receiptCodeShape` | Calls `T7C72-QTUDN` a `lambar rasit`, but `lambar rasit` is already the receipt **number** (`receiptNumber`) and the verification **code** is `lambar tabbatarwa` (`verificationCode`). If this string means the verification code, it points the agent at the wrong field. |
+| ~~`receiptCodeShape`~~ | **Fixed.** It called `T7C72-QTUDN` a `lambar rasit`, which is the receipt **number**. The English was wrong first, in five strings; all five now say *verification code* / `lambar tantancewa`. One word left to confirm — see `HAUSA-REVIEW-QUESTIONS.md` § 3. |
 
 `Mungode` → `Mun gode` in `civicDutyThanks` was a plain word-separation typo
-and has been corrected already. It is the only change made without you.
+and has been corrected already.
+
+Three changes have now been made without you: that typo, the receipt-code
+terminology, and the deletion of `scanHelp`. None of them invents Hausa — one
+split a word, one reuses `tantancewa`, which the dictionary already used for
+this exact object, and one removed a string rather than writing one. The rest
+of this sheet still waits on you. `HAUSA-REVIEW-QUESTIONS.md` sets out all
+three in full.
 
 ### Group 2 — the one it called dangerous
 
@@ -457,7 +464,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2920 strings, grouped by where an agent meets them. Lower stakes
+2919 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3618,7 +3625,6 @@ instructions — but they are what an agent reads all day.
 | `statusOnline` | ONLINE | AKWAI HANYAR SADARWA (ONLINE) | ☐ | |
 | `offlineMessage` | You are offline. Saved records will sync when signal returns. | Babu hanyar sadarwa a yanzu. Za a aika bayanan da zaran an samu netiwok. | ☐ | |
 | `offlineNotice` | Captured offline. No money has been marked as received until confirmed. | An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar. | ☐ | |
-| `scanHelp` | Align the receipt QR code or vehicle license inside the frame. | Sanya lambar QR ta rasit din a tsakiyar akwatin. | ☐ | |
 | `civicDutyThanks` | Thank you for fulfilling your civic duty. | Mun gode da kuka sauke nauyin da ya rataya a wuyanku. | ☐ | |
 | `paymentSuccess` | Payment Successful | An Biyar da Kudi Cikin Nasara | ☐ | |
 | `agSupYou` | You | Kai | ☐ | |

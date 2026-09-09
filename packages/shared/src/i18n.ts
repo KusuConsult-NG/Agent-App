@@ -3028,7 +3028,6 @@ export interface TranslationDictionary {
   // Messages & Alerts
   offlineMessage: string;
   offlineNotice: string;
-  scanHelp: string;
   civicDutyThanks: string;
   paymentSuccess: string;
 
@@ -6072,7 +6071,6 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     offlineMessage: 'You are offline. Saved records will sync when signal returns.',
     offlineNotice: 'Captured offline. No money has been marked as received until confirmed.',
-    scanHelp: 'Align the receipt QR code or vehicle license inside the frame.',
     civicDutyThanks: 'Thank you for fulfilling your civic duty.',
     paymentSuccess: 'Payment Successful',
     pubService: 'Plateau State Internal Revenue Service',
@@ -9095,7 +9093,6 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     offlineMessage: 'Babu hanyar sadarwa a yanzu. Za a aika bayanan da zaran an samu netiwok.',
     offlineNotice: 'An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar.',
-    scanHelp: 'Sanya lambar QR ta rasit din a tsakiyar akwatin.',
     civicDutyThanks: 'Mun gode da kuka sauke nauyin da ya rataya a wuyanku.',
     paymentSuccess: 'An Biyar da Kudi Cikin Nasara',
     pubService: 'Hukumar Karbar Haraji ta Jihar Filato',

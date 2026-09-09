@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 2,986 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 2,985 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -34,7 +34,7 @@ about field staff. Counting says otherwise:
 | The agent app | 168 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **321** of 2,986 |
+| **Total** | **321** of 2,985 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
@@ -133,7 +133,7 @@ or register, and they need fixing whatever is decided about wording.
 
 | Key | What is wrong |
 |---|---|
-| `scanHelp` | English says "the receipt QR code **or vehicle license**"; the Hausa names only the receipt. An agent scanning a licence is told the screen does not do that. |
+| ~~`scanHelp`~~ | **Fixed, by deletion.** No screen ever showed it, and the English half the Hausa was missing was not true — see below. |
 | `statusOffline` / `offlineMessage` | `BA HANYAR SADARWA` in one, `Babu hanyar sadarwa` in the other, for the same thing. |
 | `statusFailed` / `paymentFailed` | `BA TA YI BA` treats the subject as feminine; `bai yi nasara ba` treats it as masculine. Same subject, two agreements. |
 | `needDeclaration` / `enablePush` | `sanarwa` does duty for both the *declaration* a taxpayer accepts and a push *notification*. One word, two unrelated things. |
@@ -142,11 +142,12 @@ or register, and they need fixing whatever is decided about wording.
 One further item in this group, `Mungode` → `Mun gode`, was a word-separation
 typo and has been corrected.
 
-Two changes have now been made without you, and both are named here rather than
-buried: that typo, and the receipt-code terminology below. Neither invents
-Hausa — the typo split a word, and the other reuses `tantancewa`, which was
-already in the dictionary for this exact object. Everything else on this page
-still waits.
+Three changes have now been made without you, and all three are named here
+rather than buried: that typo, the receipt-code terminology below, and the
+deletion of `scanHelp`. None of them invents Hausa — the typo split a word, the
+second reuses `tantancewa`, which was already in the dictionary for this exact
+object, and the third removed a string instead of writing one. Everything else
+on this page still waits.
 
 **The receipt-code one is done, and it was never really a Hausa error.**
 
@@ -180,6 +181,50 @@ uses `Tabbatar` while `ofcOvVerifyChain` ("Verify chain integrity") uses
 `Tantance`, so both roots already translate *verify* somewhere. If `tabbatarwa`
 is the better word for a code somebody checks a receipt with, say so — it is
 now one decision in five places rather than a different word on each screen.
+
+**`scanHelp` is done too, and it was English again — twice over.**
+
+The reading was that the Hausa dropped half the instruction: English said
+"Align the receipt QR code **or vehicle license** inside the frame", the Hausa
+said only *Sanya lambar QR ta rasit din a tsakiyar akwatin*. The obvious repair
+is to add the licence clause to the Hausa. Both halves of that turned out to be
+wrong.
+
+*The English is not true.* Both camera screens — `Collection.tsx` and
+`Verify.tsx` — pass what the camera reads to `verificationCodeFrom()`, which
+accepts a five-and-five verification code or a URL ending in one, and nothing
+else. Point either screen at a vehicle licence and it returns null. Adding
+`ko lasisin mota` to the Hausa would have translated a false claim into a
+second language, which is the same mistake the receipt-code work above had just
+finished undoing.
+
+*And no screen showed the string at all.* `scanHelp` was referenced nowhere
+outside the dictionary and this sheet. It arrived in one commit alongside
+`CameraScannerModal.tsx`, whose own comment mentions "vehicle plate codes" and
+which was never wired into a screen. The two live scanners carry their own
+hints — `allocScanHint` on the collection screen, `verifyOfflineBody` on
+verification — and those are accurate.
+
+So the string was deleted rather than translated. **Nothing to review here, and
+nothing to decide** — it is recorded because a reported defect that quietly
+disappears is worse than one that is explained. If PSIRS does want licence
+scanning, that is a feature request against the scanner, and the help text
+follows it rather than the other way round.
+
+**And `scanHelp` was not the only dead string in this table.** Checking it
+raised the obvious next question, so it was measured: **33 of the 2,985 keys
+are never named anywhere outside the dictionary**, and four of them are in the
+table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
+`civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
+remaining rows in this section therefore concern at least one string no screen
+currently displays.
+
+That is not a reason to delete them and it changes none of the Hausa: a string
+can be unused because a screen is still coming. It is a reason to spend your
+attention on the rows that reach somebody first — `needDeclaration` /
+`enablePush` and `paymentFailed` are all live. The 33 need a pass to sort the
+planned from the abandoned, and that is a code question rather than a
+translation one; it is not being asked of you here.
 
 > `HAUSA-REVIEW.md` § *Group 1 — content errors*
 
