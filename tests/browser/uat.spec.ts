@@ -1139,6 +1139,19 @@ test.describe('The officer portal in Hausa', () => {
   test.use({ viewport: DESKTOP });
 
   test('an administrator can work every screen in Hausa', async ({ page }) => {
+    /*
+     * The same clock the English walk needed, for the same reason.
+     *
+     * This walks every screen an administrator is offered, and the merge with
+     * main added eight more of them -- the command centre, exports, the inbox,
+     * departments, postings, targets, periods and the taxpayer base. The
+     * English walk was given a longer budget when the menu reached twenty-six
+     * screens; this one was not, and it is the same menu. A walk that grows
+     * with the platform has to be told it is allowed to take longer, or every
+     * screen anybody adds brings it closer to failing for having more to
+     * check.
+     */
+    test.slow();
     const console_ = watchConsole(page);
     await signInToPortal(page, 'admin');
 
@@ -1165,8 +1178,26 @@ test.describe('The officer portal in Hausa', () => {
     const offenders: string[] = [];
     for (const [index, link] of links.entries()) {
       await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
-      await page.waitForTimeout(1200);
+      /*
+       * Wait on the screen's own requests rather than a flat 1,200ms, as the
+       * English walk does. Sleeping past a screen that had already finished
+       * cost this test a third of its budget; sleeping short of one that had
+       * not meant reading a half-drawn page for English, which is how a
+       * missing translation goes unnoticed.
+       */
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await page.waitForTimeout(350);
       const text = await page.locator('.content').innerText().catch(() => '');
+      /*
+       * Say the screen rendered before searching it for English.
+       *
+       * The read falls back to an empty string, and an empty string contains
+       * no English -- so a screen that never drew would have been reported as
+       * translated. The English walk has always asserted this; this one was
+       * looking for the absence of something in a page it had not established
+       * was there.
+       */
+      expect(text, `${link.label} renders something in Hausa`).not.toHaveLength(0);
       for (const key of englishStillShowing(text)) offenders.push(`${link.label}: ${key}`);
       if (index < 6) {
         await shot(page, `portal-ha-${String(index + 2).padStart(2, '0')}-${slug(link.label)}`);
