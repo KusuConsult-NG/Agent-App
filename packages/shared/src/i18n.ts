@@ -26,7 +26,6 @@ export interface TranslationDictionary {
   downloadReceipt: string;
   shareReceipt: string;
   printBluetooth: string;
-  scanQr: string;
   registerTaxpayer: string;
   renewVehicle: string;
   pairPrinter: string;
@@ -2653,16 +2652,7 @@ export interface TranslationDictionary {
   tpVehicles: string;
   tpExpires: string;
   tpNoRenewal: string;
-  camAlign: string;
   camCancel: string;
-  camClose: string;
-  camFlip: string;
-  camInitializing: string;
-  camTryAgain: string;
-  camFlashOn: string;
-  camFlashOff: string;
-  camNoAccess: string;
-  camSwitchFailed: string;
 
   /**
    * The agent's own application: the clearance steps, the documents PSIRS
@@ -3362,7 +3352,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     downloadReceipt: 'Download Receipt',
     shareReceipt: 'Share Receipt',
     printBluetooth: 'Print (Bluetooth Thermal)',
-    scanQr: 'Scan QR / Barcode',
     registerTaxpayer: 'Register Taxpayer',
     renewVehicle: 'Renew Vehicle',
     pairPrinter: 'Pair Bluetooth Printer',
@@ -5769,16 +5758,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpVehicles: "Vehicles",
     tpExpires: "Expires {{date}}",
     tpNoRenewal: "No renewal on record",
-    camAlign: "Align QR code or barcode inside frame",
     camCancel: "Cancel",
-    camClose: "Close scanner",
-    camFlip: "Flip camera",
-    camInitializing: "Initializing camera...",
-    camTryAgain: "Try again",
-    camFlashOn: "Flash: ON",
-    camFlashOff: "Flash: OFF",
-    camNoAccess: "Could not access the device camera.",
-    camSwitchFailed: "The camera could not be switched.",
     appStageSubmitted: "Application submitted",
     appStageKyc: "Identity verified",
     appStageReview: "Ready for government review",
@@ -6388,7 +6368,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     downloadReceipt: 'Sauke Rasit (PDF)',
     shareReceipt: 'Tura Rasit',
     printBluetooth: 'Buga Rasit a Inji (Bluetooth)',
-    scanQr: 'Duba Lambar QR',
     registerTaxpayer: 'Yi Rajistar Mai Biyan Haraji',
     renewVehicle: 'Sabunta Lasisin Mota',
     pairPrinter: 'Hada Injin Buga Rasit',
@@ -8791,16 +8770,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpVehicles: "Motoci",
     tpExpires: "Zai kare {{date}}",
     tpNoRenewal: "Babu sabuntawa a rajista",
-    camAlign: "Ka daidaita QR code ko barcode cikin firam",
     camCancel: "Soke",
-    camClose: "Rufe na’urar dubawa",
-    camFlip: "Juya kyamara",
-    camInitializing: "Ana shirya kyamara...",
-    camTryAgain: "Sake gwadawa",
-    camFlashOn: "Fitila: A KUNNE",
-    camFlashOff: "Fitila: A KASHE",
-    camNoAccess: "Ba a iya samun kyamarar na’ura ba.",
-    camSwitchFailed: "Ba a iya canza kyamara ba.",
     appStageSubmitted: "An mika bukata",
     appStageKyc: "An tabbatar da shaida",
     appStageReview: "A shirye don nazarin gwamnati",

@@ -17,9 +17,9 @@ Paradigm: **ki** — feminine singular.
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `miki` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanki` | **confirm this one** |
 
-321 strings, 443 occurrences.
+320 strings, 442 occurrences.
 
-## The agent app — 168 strings
+## The agent app — 167 strings
 
 ### `agEnBandSoFar`
 
@@ -344,12 +344,6 @@ Paradigm: **ki** — feminine singular.
 - English: That date of birth is before 1900. Check the year.
 - Now: Ranar haihuwar kafin shekarar 1900 ce. Ka duba shekarar.
 - Would become: Ranar haihuwar kafin shekarar 1900 ce. Ki duba shekarar.
-
-### `camAlign`
-
-- English: Align QR code or barcode inside frame
-- Now: Ka daidaita QR code ko barcode cikin firam
-- Would become: Ki daidaita QR code ko barcode cikin firam
 
 ### `cashChannelReminder`
 

@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 2,985 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 2,975 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**321 strings address the reader as `ka`: masculine singular.** A woman
+**320 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,18 +31,18 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 168 |
+| The agent app | 167 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **321** of 2,985 |
+| **Total** | **320** of 2,975 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 168.
+more for the 42 than for the 167.
 
-The forms are `ka` (326 occurrences), the possessive `-nka` (56), `-rka` (42),
+The forms are `ka` (325 occurrences), the possessive `-nka` (56), `-rka` (42),
 `dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
 than one. Nothing currently uses `ku`.
 
@@ -53,7 +53,9 @@ directly; `ya kai`, reached; `hadin kai`, cooperation) — and under-counted by
 missing `dinka`, `kanka` and `maka`. Correcting those gave 222, which was still
 wrong: the pattern was case-sensitive, and Hausa imperatives open sentences
 constantly. `Ka nemo…`, `Ka tabbatar…`, `Ka yi…` — **144 occurrences across 103
-further strings** were invisible. 321 is the number after both corrections.
+further strings** were invisible. 321 was the number after both corrections;
+it is 320 now because deleting the dead camera-scanner path took `camAlign`
+(“Ka daidaita QR code…”) with it.
 
 ### What it would cost to change
 
@@ -65,7 +67,7 @@ node scripts/ka-address-preview.mjs            # the scale
 node scripts/ka-address-preview.mjs --write ku # the sheet to correct
 ```
 
-**315 of the 321 are a mechanical substitution. 6 need a human. None defeats
+**314 of the 320 are a mechanical substitution. 6 need a human. None defeats
 the rules.** So this is a scripted pass and a review, not a re-translation —
 which is worth knowing before the size of the number decides the answer.
 
@@ -211,8 +213,41 @@ disappears is worse than one that is explained. If PSIRS does want licence
 scanning, that is a feature request against the scanner, and the help text
 follows it rather than the other way round.
 
+**The dead scanner it came from is gone now, and took ten more strings.**
+
+`CameraScannerModal.tsx` and `lib/camera-scanner.ts` have been deleted, with
+the trailing block of CSS that only they used. Nothing imported either file.
+Their scanner also could not have worked where it mattered: the "Canvas-based
+QR extraction fallback" its own header advertises, for browsers without the
+native `BarcodeDetector`, draws the video frame to a canvas and returns null.
+It decodes nothing. Had it ever been wired up, an agent on iOS would have got a
+running camera, a flat battery and no scan, with no error shown. The live
+scanner loads a real decoder.
+
+Ten strings existed only for that screen and went with it: `camAlign`,
+`camClose`, `camFlashOff`, `camFlashOn`, `camFlip`, `camInitializing`,
+`camNoAccess`, `camSwitchFailed`, `camTryAgain` and `scanQr`. If you have
+already reviewed any of them, that work is not lost — it is in the dictionary's
+history — but they are out of the sheet, and the total fell from 2,985 to
+2,975. `camCancel` stays; seven live screens use it.
+
+**One thing this turned up that is a real gap, and is not fixed.** When the
+camera cannot be opened on the *live* scanner, `Collection.tsx` and
+`Verify.tsx` render `caught.message` straight from `scanner.ts` — and those
+three messages are English literals in the source, not dictionary strings:
+
+> "PSIRS does not have permission to use the camera. Allow it in your browser
+> settings, or type the code printed under the QR square."
+
+So a Hausa-speaking agent who declines the camera permission, or whose handset
+has no camera, is answered in English. `camNoAccess` and `camTryAgain` were
+strings for exactly that situation, attached to the wrong screen. Fixing it
+means moving those three messages into the dictionary and translating them —
+three new strings for you to read, and a code change to raise them. It is
+listed here rather than done quietly.
+
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 2,985 keys
+raised the obvious next question, so it was measured: **33 of the 2,975 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
