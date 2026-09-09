@@ -7,6 +7,26 @@
  */
 
 import { formatNaira, parseKobo, type Kobo } from './money';
+import { translations, type Language } from './i18n';
+
+/**
+ * Whose language a printed receipt is in.
+ *
+ * The citizen's, not the agent's. A taxpayer holds no account here — the paper
+ * and an SMS are the only copies of this they ever get — so migration 047 gave
+ * `taxpayers` a `preferred_language`, set by the agent standing in front of
+ * them at registration, and the message queue has honoured it since. The
+ * printed receipt was the one thing that did not: it was hardcoded English,
+ * and two of its fields were being filled from the *agent's* dictionary, so a
+ * Hausa-reading agent and an English-reading citizen produced a receipt in
+ * neither language consistently.
+ *
+ * The rule is the one `a-receipt-in-a-language-they-read.test.ts` already
+ * states: a receipt they cannot read is a receipt they cannot check.
+ */
+function labels(language: Language) {
+  return translations[language] ?? translations.en;
+}
 
 export type PaperWidth = '58mm' | '80mm';
 
@@ -228,15 +248,28 @@ export class EscposBuilder {
     return this;
   }
 
+  /**
+   * A label and its value, on one line where they fit and two where they do
+   * not.
+   *
+   * Both sides are measured *after* folding, which is the only length the
+   * printer will agree with. Most of the fold is one character for one — `’`
+   * to `'` — but `…` becomes three and `₦` becomes four, so measuring the
+   * source would pad a line to a width the paper does not have. That matters
+   * more now than it did: a Hausa label is routinely longer than its English,
+   * and `Jimlar Kudin da Aka Biya` against `NGN 5,000.00` is already past 32
+   * columns before any of this.
+   */
   public keyValuePair(key: string, value: string): this {
-    const sanitizedVal = value.replace(/₦/g, 'NGN ');
-    if (key.length + sanitizedVal.length + 1 <= this.columns) {
-      const spaces = this.columns - (key.length + sanitizedVal.length);
-      this.textLine(`${key}${' '.repeat(spaces)}${sanitizedVal}`);
+    const printedKey = toPrintableAscii(key);
+    const printedValue = toPrintableAscii(value);
+    if (printedKey.length + printedValue.length + 1 <= this.columns) {
+      const spaces = this.columns - (printedKey.length + printedValue.length);
+      this.textLine(`${printedKey}${' '.repeat(spaces)}${printedValue}`);
     } else {
-      this.textLine(key);
-      const indent = Math.max(0, this.columns - sanitizedVal.length);
-      this.textLine(`${' '.repeat(indent)}${sanitizedVal}`);
+      this.textLine(printedKey);
+      const indent = Math.max(0, this.columns - printedValue.length);
+      this.textLine(`${' '.repeat(indent)}${printedValue}`);
     }
     return this;
   }
@@ -272,7 +305,12 @@ export class EscposBuilder {
 /**
  * Builds an official PSIRS ESC/POS thermal receipt byte array.
  */
-export function encodeReceiptEscpos(data: ReceiptPrintData, paperWidth: PaperWidth = '58mm'): Uint8Array {
+export function encodeReceiptEscpos(
+  data: ReceiptPrintData,
+  paperWidth: PaperWidth = '58mm',
+  language: Language = 'en',
+): Uint8Array {
+  const t = labels(language);
   const dateStr = typeof data.issuedAt === 'string' ? data.issuedAt : data.issuedAt.toISOString();
   const formattedDate = dateStr.replace('T', ' ').slice(0, 19);
   const formattedAmount = formatNaira(parseKobo(data.amountKobo));
@@ -282,57 +320,61 @@ export function encodeReceiptEscpos(data: ReceiptPrintData, paperWidth: PaperWid
   builder
     .alignCenter()
     .setBold(true)
-    .textLine('PLATEAU STATE GOVERNMENT')
-    .textLine('INTERNAL REVENUE SERVICE')
+    .textLine(t.rcpGovernment)
+    .textLine(t.rcpBureau)
     .setBold(false)
-    .textLine('Digital Grassroots Platform')
+    .textLine(t.rcpPlatform)
     .doubleDivider()
     .setBold(true)
-    .textLine('OFFICIAL REVENUE RECEIPT')
+    .textLine(t.rcpTitle)
     .setBold(false)
     .divider()
     .alignLeft()
-    .keyValuePair('Receipt No:', data.receiptNumber)
-    .keyValuePair('Date / Time:', formattedDate)
-    .keyValuePair('Reference:', data.paymentReference)
-    .keyValuePair('LGA:', data.lgaName);
+    .keyValuePair(`${t.receiptNumber}:`, data.receiptNumber)
+    .keyValuePair(`${t.rcpDateTime}:`, formattedDate)
+    .keyValuePair(`${t.rcpReference}:`, data.paymentReference)
+    .keyValuePair(`${t.rcpLga}:`, data.lgaName);
 
   if (data.wardName) {
-    builder.keyValuePair('Ward:', data.wardName);
+    builder.keyValuePair(`${t.rcpWard}:`, data.wardName);
   }
 
   builder
     .divider()
-    .keyValuePair('Taxpayer:', data.taxpayerName);
+    .keyValuePair(`${t.rcpTaxpayer}:`, data.taxpayerName);
 
   if (data.taxpayerTin) {
+    // Not translated, deliberately. `TIN` is the acronym in both languages,
+    // and the dictionary's long form — `Lambar Shaida ta Haraji (TIN)` — is
+    // thirty of a 58mm receipt's thirty-two columns, which would push every
+    // TIN onto its own line to say nothing extra.
     builder.keyValuePair('TIN:', data.taxpayerTin);
   }
   if (data.taxpayerPhone) {
-    builder.keyValuePair('Phone:', data.taxpayerPhone);
+    builder.keyValuePair(`${t.rcpPhone}:`, data.taxpayerPhone);
   }
 
   builder
     .divider()
-    .keyValuePair('Service:', data.revenueItemName)
-    .keyValuePair('Category:', data.revenueCategoryName)
+    .keyValuePair(`${t.rcpItem}:`, data.revenueItemName)
+    .keyValuePair(`${t.rcpCategory}:`, data.revenueCategoryName)
     .divider()
     .alignRight()
     .setBold(true)
-    .keyValuePair('TOTAL PAID:', formattedAmount)
+    .keyValuePair(`${t.totalPaid.toUpperCase()}:`, formattedAmount)
     .setBold(false)
     .alignLeft()
-    .keyValuePair('Payment Mode:', data.paymentMethod)
-    .keyValuePair('Agent ID:', data.agentCode)
-    .keyValuePair('Agent Name:', data.agentName)
+    .keyValuePair(`${t.paymentMode}:`, data.paymentMethod)
+    .keyValuePair(`${t.rcpAgentCode}:`, data.agentCode)
+    .keyValuePair(`${t.rcpAgentName}:`, data.agentName)
     .divider()
     .alignCenter()
     .setBold(true)
-    .textLine('SCAN TO VERIFY AUTHENTICITY')
+    .textLine(t.rcpScanToVerify)
     .setBold(false);
 
   if (data.verificationCode) {
-    builder.textLine(`Verification Code: ${data.verificationCode}`);
+    builder.textLine(`${t.verificationCode}: ${data.verificationCode}`);
   }
 
   builder.feed(1);
@@ -340,14 +382,14 @@ export function encodeReceiptEscpos(data: ReceiptPrintData, paperWidth: PaperWid
     builder.qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4).textLine(data.verificationUrl);
   } else {
     // No site to send them to, so tell them what to do with the code instead.
-    builder.textLine('Check this receipt at any PSIRS office');
-    builder.textLine('or on the PSIRS website, using the code above.');
+    builder.textLine(t.rcpCheckOffice);
+    builder.textLine(t.rcpCheckOfficeCont);
   }
 
   builder
     .feed(1)
-    .textLine('Government Revenue Office')
-    .textLine('Thank you for your civic duty')
+    .textLine(t.rcpOffice)
+    .textLine(t.rcpThanks)
     .feed(2)
     .cut();
 
@@ -360,7 +402,9 @@ export function encodeReceiptEscpos(data: ReceiptPrintData, paperWidth: PaperWid
 export function encodeVehicleRenewalEscpos(
   data: VehicleRenewalPrintData,
   paperWidth: PaperWidth = '58mm',
+  language: Language = 'en',
 ): Uint8Array {
+  const t = labels(language);
   const fromStr = typeof data.validFrom === 'string' ? data.validFrom : data.validFrom.toISOString().slice(0, 10);
   const untilStr = typeof data.validUntil === 'string' ? data.validUntil : data.validUntil.toISOString().slice(0, 10);
   const formattedAmount = formatNaira(parseKobo(data.amountKobo));
@@ -370,40 +414,40 @@ export function encodeVehicleRenewalEscpos(
   builder
     .alignCenter()
     .setBold(true)
-    .textLine('PLATEAU STATE GOVERNMENT')
-    .textLine('MOTOR VEHICLE ADMINISTRATION')
+    .textLine(t.rcpGovernment)
+    .textLine(t.rcpVehAdmin)
     .setBold(false)
-    .textLine('Vehicle Licensing & Renewal')
+    .textLine(t.rcpVehLicensing)
     .doubleDivider()
     .setBold(true)
-    .textLine('VEHICLE RENEWAL CLEARANCE')
+    .textLine(t.rcpVehTitle)
     .setBold(false)
     .divider()
     .alignLeft()
-    .keyValuePair('Plate No:', data.registrationNumber)
-    .keyValuePair('Doc No:', data.documentNumber)
-    .keyValuePair('Receipt No:', data.receiptNumber)
+    .keyValuePair(`${t.rcpVehPlate}:`, data.registrationNumber)
+    .keyValuePair(`${t.rcpVehDoc}:`, data.documentNumber)
+    .keyValuePair(`${t.receiptNumber}:`, data.receiptNumber)
     .divider()
-    .keyValuePair('Owner:', data.ownerName)
-    .keyValuePair('Phone:', data.ownerPhone)
-    .keyValuePair('Make/Model:', `${data.vehicleMake} ${data.vehicleModel}`)
-    .keyValuePair('Year:', data.vehicleYear ? String(data.vehicleYear) : 'N/A');
+    .keyValuePair(`${t.rcpVehOwner}:`, data.ownerName)
+    .keyValuePair(`${t.rcpPhone}:`, data.ownerPhone)
+    .keyValuePair(`${t.rcpVehMakeModel}:`, `${data.vehicleMake} ${data.vehicleModel}`)
+    .keyValuePair(`${t.rcpVehYear}:`, data.vehicleYear ? String(data.vehicleYear) : 'N/A');
 
   if (data.chassisNumber) {
-    builder.keyValuePair('Chassis:', data.chassisNumber);
+    builder.keyValuePair(`${t.rcpVehChassis}:`, data.chassisNumber);
   }
 
   builder
     .divider()
-    .keyValuePair('Valid From:', fromStr)
-    .keyValuePair('Valid Until:', untilStr)
+    .keyValuePair(`${t.rcpVehFrom}:`, fromStr)
+    .keyValuePair(`${t.rcpVehUntil}:`, untilStr)
     .setBold(true)
-    .keyValuePair('FEE PAID:', formattedAmount)
+    .keyValuePair(`${t.rcpVehFee}:`, formattedAmount)
     .setBold(false)
     .divider()
     .alignCenter()
     .setBold(true)
-    .textLine('OFFICIAL DIGITAL CLEARANCE')
+    .textLine(t.rcpVehOfficial)
     .setBold(false)
     .textLine(`Security Code: ${data.verificationCode}`)
     .feed(1);
@@ -411,7 +455,7 @@ export function encodeVehicleRenewalEscpos(
   if (data.verificationUrl) {
     builder.qrCode(data.verificationUrl, paperWidth === '80mm' ? 5 : 4).textLine(data.verificationUrl);
   } else {
-    builder.textLine('Check with the code above at any PSIRS office.');
+    builder.textLine(t.rcpVehCheck);
   }
 
   builder.feed(2).cut();

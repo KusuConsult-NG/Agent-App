@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 2,989 strings; that one is two pages and links back
+> because it carries all 3,022 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **2,989 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,022 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-2,989 strings is worse than no sheet, because it looks complete; this one cannot
+3,022 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 2,989 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,022 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 2,989 strings: where the
+- The glossary below is applied consistently across all 3,022 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -468,7 +468,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2923 strings, grouped by where an agent meets them. Lower stakes
+2956 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3617,6 +3617,39 @@ instructions — but they are what an agent reads all day.
 | `agEnBandSoFarTitle` | Size from what you have written | Girma daga abin da ka rubuta | ☐ | |
 | `agEnBandSoFar` | This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice. | Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
+| `rcpGovernment` | PLATEAU STATE GOVERNMENT | GWAMNATIN JIHAR FILATO | ☐ | |
+| `rcpThanks` | Thank you for your civic duty | Mun gode da sauke nauyin ku | ☐ | |
+| `rcpBureau` | INTERNAL REVENUE SERVICE | HUKUMAR KARBAR HARAJI | ☐ | |
+| `rcpPlatform` | Digital Grassroots Platform | Tsarin Karbar Haraji na Dijital | ☐ | |
+| `rcpTitle` | OFFICIAL REVENUE RECEIPT | RASIT NA HARAJI NA HUKUMA | ☐ | |
+| `rcpDateTime` | Date / Time | Kwanan Wata / Lokaci | ☐ | |
+| `rcpReference` | Reference | Lambar Tunani | ☐ | |
+| `rcpLga` | LGA | Karamar Hukuma | ☐ | |
+| `rcpWard` | Ward | Gunduma | ☐ | |
+| `rcpTaxpayer` | Taxpayer | Mai Biyan Haraji | ☐ | |
+| `rcpPhone` | Phone | Lambar Waya | ☐ | |
+| `rcpItem` | Service | Hidima | ☐ | |
+| `rcpCategory` | Category | Rukuni | ☐ | |
+| `rcpAgentCode` | Agent ID | Lambar Wakili | ☐ | |
+| `rcpAgentName` | Agent Name | Sunan Wakili | ☐ | |
+| `rcpScanToVerify` | SCAN TO VERIFY AUTHENTICITY | DUBA DOMIN TANTANCE SAHIHANCI | ☐ | |
+| `rcpCheckOffice` | Check this receipt at any | Ka duba wannan rasit a | ☐ | |
+| `rcpCheckOfficeCont` | PSIRS office with the code. | kowane ofishin PSIRS. | ☐ | |
+| `rcpOffice` | Government Revenue Office | Ofishin Karbar Harajin Gwamnati | ☐ | |
+| `rcpVehAdmin` | MOTOR VEHICLE ADMINISTRATION | HUKUMAR KULA DA MOTOCI | ☐ | |
+| `rcpVehLicensing` | Vehicle Licensing & Renewal | Lasisi da Sabunta Takardun Mota | ☐ | |
+| `rcpVehTitle` | VEHICLE RENEWAL CLEARANCE | TAKARDAR SABUNTA MOTA | ☐ | |
+| `rcpVehPlate` | Plate Number | Lambar Mota | ☐ | |
+| `rcpVehDoc` | Document Number | Lambar Takarda | ☐ | |
+| `rcpVehOwner` | Owner | Mai Mota | ☐ | |
+| `rcpVehMakeModel` | Make/Model | Nau’i/Samfuri | ☐ | |
+| `rcpVehYear` | Year | Shekara | ☐ | |
+| `rcpVehChassis` | Chassis | Lambar Chassis | ☐ | |
+| `rcpVehFrom` | Valid From | Yana aiki daga | ☐ | |
+| `rcpVehUntil` | Valid Until | Yana aiki har | ☐ | |
+| `rcpVehFee` | FEE PAID | KUDIN DA AKA BIYA | ☐ | |
+| `rcpVehOfficial` | OFFICIAL DIGITAL CLEARANCE | TAKARDAR HUKUMA TA DIJITAL | ☐ | |
+| `rcpVehCheck` | Check the code at PSIRS. | Ka duba lambar a PSIRS. | ☐ | |
 | `connOnline` | Online | Akwai hanyar sadarwa | ☐ | |
 | `connOnlineDetail` | All services are available. | Duk ayyukan suna aiki. | ☐ | |
 | `connLimited` | Poor connection | Hanyar sadarwa mai rauni | ☐ | |

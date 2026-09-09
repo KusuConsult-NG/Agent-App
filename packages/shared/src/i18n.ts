@@ -2948,6 +2948,39 @@ export interface TranslationDictionary {
   allocRecorded: string;
   allocCodeUsed: string;
   scanCamera: string;
+  rcpGovernment: string;
+  rcpThanks: string;
+  rcpBureau: string;
+  rcpPlatform: string;
+  rcpTitle: string;
+  rcpDateTime: string;
+  rcpReference: string;
+  rcpLga: string;
+  rcpWard: string;
+  rcpTaxpayer: string;
+  rcpPhone: string;
+  rcpItem: string;
+  rcpCategory: string;
+  rcpAgentCode: string;
+  rcpAgentName: string;
+  rcpScanToVerify: string;
+  rcpCheckOffice: string;
+  rcpCheckOfficeCont: string;
+  rcpOffice: string;
+  rcpVehAdmin: string;
+  rcpVehLicensing: string;
+  rcpVehTitle: string;
+  rcpVehPlate: string;
+  rcpVehDoc: string;
+  rcpVehOwner: string;
+  rcpVehMakeModel: string;
+  rcpVehYear: string;
+  rcpVehChassis: string;
+  rcpVehFrom: string;
+  rcpVehUntil: string;
+  rcpVehFee: string;
+  rcpVehOfficial: string;
+  rcpVehCheck: string;
   connOnline: string;
   connOnlineDetail: string;
   connLimited: string;
@@ -6005,6 +6038,39 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "Recorded",
     allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
     scanCamera: "Camera",
+    rcpGovernment: "PLATEAU STATE GOVERNMENT",
+    rcpThanks: "Thank you for your civic duty",
+    rcpBureau: "INTERNAL REVENUE SERVICE",
+    rcpPlatform: "Digital Grassroots Platform",
+    rcpTitle: "OFFICIAL REVENUE RECEIPT",
+    rcpDateTime: "Date / Time",
+    rcpReference: "Reference",
+    rcpLga: "LGA",
+    rcpWard: "Ward",
+    rcpTaxpayer: "Taxpayer",
+    rcpPhone: "Phone",
+    rcpItem: "Service",
+    rcpCategory: "Category",
+    rcpAgentCode: "Agent ID",
+    rcpAgentName: "Agent Name",
+    rcpScanToVerify: "SCAN TO VERIFY AUTHENTICITY",
+    rcpCheckOffice: "Check this receipt at any",
+    rcpCheckOfficeCont: "PSIRS office with the code.",
+    rcpOffice: "Government Revenue Office",
+    rcpVehAdmin: "MOTOR VEHICLE ADMINISTRATION",
+    rcpVehLicensing: "Vehicle Licensing & Renewal",
+    rcpVehTitle: "VEHICLE RENEWAL CLEARANCE",
+    rcpVehPlate: "Plate Number",
+    rcpVehDoc: "Document Number",
+    rcpVehOwner: "Owner",
+    rcpVehMakeModel: "Make/Model",
+    rcpVehYear: "Year",
+    rcpVehChassis: "Chassis",
+    rcpVehFrom: "Valid From",
+    rcpVehUntil: "Valid Until",
+    rcpVehFee: "FEE PAID",
+    rcpVehOfficial: "OFFICIAL DIGITAL CLEARANCE",
+    rcpVehCheck: "Check the code at PSIRS.",
     connOnline: "Online",
     connOnlineDetail: "All services are available.",
     connLimited: "Poor connection",
@@ -9031,6 +9097,39 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "An rubuta",
     allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
     scanCamera: "Kyamara",
+    rcpGovernment: "GWAMNATIN JIHAR FILATO",
+    rcpThanks: "Mun gode da sauke nauyin ku",
+    rcpBureau: "HUKUMAR KARBAR HARAJI",
+    rcpPlatform: "Tsarin Karbar Haraji na Dijital",
+    rcpTitle: "RASIT NA HARAJI NA HUKUMA",
+    rcpDateTime: "Kwanan Wata / Lokaci",
+    rcpReference: "Lambar Tunani",
+    rcpLga: "Karamar Hukuma",
+    rcpWard: "Gunduma",
+    rcpTaxpayer: "Mai Biyan Haraji",
+    rcpPhone: "Lambar Waya",
+    rcpItem: "Hidima",
+    rcpCategory: "Rukuni",
+    rcpAgentCode: "Lambar Wakili",
+    rcpAgentName: "Sunan Wakili",
+    rcpScanToVerify: "DUBA DOMIN TANTANCE SAHIHANCI",
+    rcpCheckOffice: "Ka duba wannan rasit a",
+    rcpCheckOfficeCont: "kowane ofishin PSIRS.",
+    rcpOffice: "Ofishin Karbar Harajin Gwamnati",
+    rcpVehAdmin: "HUKUMAR KULA DA MOTOCI",
+    rcpVehLicensing: "Lasisi da Sabunta Takardun Mota",
+    rcpVehTitle: "TAKARDAR SABUNTA MOTA",
+    rcpVehPlate: "Lambar Mota",
+    rcpVehDoc: "Lambar Takarda",
+    rcpVehOwner: "Mai Mota",
+    rcpVehMakeModel: "Nau’i/Samfuri",
+    rcpVehYear: "Shekara",
+    rcpVehChassis: "Lambar Chassis",
+    rcpVehFrom: "Yana aiki daga",
+    rcpVehUntil: "Yana aiki har",
+    rcpVehFee: "KUDIN DA AKA BIYA",
+    rcpVehOfficial: "TAKARDAR HUKUMA TA DIJITAL",
+    rcpVehCheck: "Ka duba lambar a PSIRS.",
     connOnline: "Akwai hanyar sadarwa",
     connOnlineDetail: "Duk ayyukan suna aiki.",
     connLimited: "Hanyar sadarwa mai rauni",

@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 2,989 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,022 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**328 strings address the reader as `ka`: masculine singular.** A woman
+**330 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,16 +31,16 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 175 |
+| The agent app | 177 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **328** of 2,989 |
+| **Total** | **330** of 3,022 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 175.
+more for the 42 than for the 177.
 
 The forms are `ka` (337 occurrences), the possessive `-nka` (56), `-rka` (44),
 `dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
@@ -56,8 +56,9 @@ constantly. `Ka nemo…`, `Ka tabbatar…`, `Ka yi…` — **144 occurrences acr
 further strings** were invisible. 321 was the number after both corrections;
 it moved to 320 when deleting the dead camera-scanner path took `camAlign`
 (“Ka daidaita QR code…”) with it, to 323 when the three camera-refusal
-strings below were written in the same convention as everything around them, and
-to 328 with the eleven strings the `lib/` lint pass brought in.
+strings below were written in the same convention as everything around them, to
+328 with the eleven strings the `lib/` lint pass brought in, and to 330 with
+the receipt template.
 
 ### What it would cost to change
 
@@ -69,7 +70,7 @@ node scripts/ka-address-preview.mjs            # the scale
 node scripts/ka-address-preview.mjs --write ku # the sheet to correct
 ```
 
-**322 of the 328 are a mechanical substitution. 6 need a human. None defeats
+**324 of the 330 are a mechanical substitution. 6 need a human. None defeats
 the rules.** So this is a scripted pass and a review, not a re-translation —
 which is worth knowing before the size of the number decides the answer.
 
@@ -158,7 +159,9 @@ buried:
    `scanCameraUnsupported`;
 6. **eleven more written**, after the same check was pointed at the rest of the
    application's non-screen code and found the same fault in four more places
-   — see 3.1 below.
+   — see 3.1 below;
+7. **thirty-three more written** for the printed receipt, which was hardcoded
+   English and is the one document a citizen keeps — see 3.2.
 
 Only the last two invent anything, and it is the arrangement rather than the
 vocabulary: every word in them is already in the dictionary. They are the items
@@ -243,7 +246,7 @@ Ten strings existed only for that screen and went with it: `camAlign`,
 `camNoAccess`, `camSwitchFailed`, `camTryAgain` and `scanQr`. If you have
 already reviewed any of them, that work is not lost — it is in the dictionary's
 history — but they are out of the sheet, and the total fell from 2,985 to
-2,989. `camCancel` stays; seven live screens use it.
+3,022. `camCancel` stays; seven live screens use it.
 
 **One thing this turned up was a real gap, and it is now closed — with three
 strings that need your reading.** When the camera could not be opened on the
@@ -346,8 +349,49 @@ messages *first* would put `na?ura` on a government receipt. The printer needs a
 code page before it can be given a language. Nothing on this page is waiting on
 you for it.
 
+### 3.2 — The receipt itself, and whose language it is in
+
+The printed receipt was hardcoded English — every label, every heading, the
+footer. It is the **only document a citizen keeps**: a taxpayer holds no
+account here, so the paper and an SMS are the whole record as far as they are
+concerned.
+
+**The rule was already decided, and the receipt was the one place ignoring it.**
+Migration 047 gave `taxpayers` a `preferred_language`, set by the agent
+standing in front of them at registration, because "a receipt they cannot read
+is a receipt they cannot check". The message queue has honoured it since. The
+printed slip did not — and worse, two of its fields were being filled from the
+*agent's* dictionary, so a Hausa-reading agent printed a Hausa job title onto
+an English-reading citizen's receipt while every label around it stayed
+English. It was in nobody's language in particular. It now prints in the
+taxpayer's, English when the record does not say.
+
+**Thirty-three new strings**, in table B under the `rcp` prefix — the revenue
+receipt and the vehicle renewal clearance. Five existing keys were reused
+rather than duplicated: `receiptNumber`, `totalPaid`, `paymentMode`,
+`verificationCode` and `civicDutyThanks`. Three of those were on the list of
+keys nothing referenced; they existed for this receipt and had never been
+wired to it.
+
+**Two things there are worth your eye.**
+
+`TIN:` is deliberately left in English. It is the acronym in both languages,
+and the dictionary's long form — `Lambar Shaida ta Haraji (TIN)` — is thirty
+of a 58mm receipt's thirty-two columns, which would push every TIN onto a line
+of its own to say nothing more.
+
+And **the paper is thirty-two columns wide**, which makes some of this a
+question of length rather than of wording. Hausa runs longer: `Jimlar Kudin da
+Aka Biya` against `Total Paid`. A line past the width is cut by the printer
+silently, so a test now measures every line of both receipts in both languages
+— and it caught a real one on the way in, where reusing the screen's
+`civicDutyThanks` (41 characters in English, 53 in Hausa) for the footer would
+have been trimmed mid-sentence on paper. It became `rcpThanks`, sized for the
+roll. If any correction you make runs long, that test will say so rather than
+the receipt.
+
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 2,989 keys
+raised the obvious next question, so it was measured: **33 of the 3,022 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four

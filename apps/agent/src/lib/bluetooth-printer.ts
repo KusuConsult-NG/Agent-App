@@ -10,6 +10,7 @@ import {
   encodeVehicleRenewalEscpos,
   EscposBuilder,
   type PaperWidth,
+  type Language,
   type ReceiptPrintData,
   type VehicleRenewalPrintData,
 } from '@psirs/shared';
@@ -219,8 +220,8 @@ class BluetoothPrinterManager {
     }
   }
 
-  public async printReceipt(data: ReceiptPrintData): Promise<void> {
-    const bytes = encodeReceiptEscpos(data, this.paperWidth);
+  public async printReceipt(data: ReceiptPrintData, language: Language = 'en'): Promise<void> {
+    const bytes = encodeReceiptEscpos(data, this.paperWidth, language);
     await this.writeRawBytes(bytes);
   }
 

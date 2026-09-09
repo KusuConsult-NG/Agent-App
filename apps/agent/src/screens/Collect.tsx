@@ -20,7 +20,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatDateTimeIn, localName } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatDateTimeIn, localName, translations, type Language } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -472,6 +472,7 @@ interface TransactionStatus {
     last_name: string | null;
     business_name: string | null;
     tin: string | null;
+    preferred_language: string | null;
     payment_id: string | null;
     payment_status: string | null;
     payment_reference: string | null;
@@ -504,6 +505,18 @@ export function TransactionScreen({
 }) {
   const { lang, t } = useI18n();
   const [data, setData] = useState<TransactionStatus | null>(null);
+  /*
+   * The receipt is printed in the taxpayer's language, not the agent's.
+   *
+   * `lang` above is what this agent reads; `preferred_language` is what the
+   * person being handed the paper reads, recorded at registration. They are
+   * routinely different — a Hausa-reading agent collecting from an
+   * English-reading trader, or the reverse — and the paper belongs to the
+   * citizen. English when the record does not say, which is the same fallback
+   * the message queue uses.
+   */
+  const receiptLanguage: Language = data?.transaction.preferred_language === 'ha' ? 'ha' : 'en';
+  const receiptLabels = translations[receiptLanguage];
   const [error, setError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
@@ -690,11 +703,17 @@ export function TransactionScreen({
                   revenueItemName: transaction.revenue_item,
                   revenueCategoryName: transaction.revenue_category,
                   amountKobo: transaction.total_amount_kobo,
-                  paymentMethod: transaction.payment_status || 'POS / Online',
+                  paymentMethod: transaction.payment_status || receiptLabels.enumPos,
                   channel: 'FIELD_AGENT',
-                  lgaName: t.ofcDbPlateauState,
+                  lgaName: receiptLabels.ofcDbPlateauState,
                   wardName: null,
-                  agentName: t.collAuthorizedFieldOfficer,
+                  /*
+                   * These two were the agent's dictionary on the citizen's
+                   * receipt — a Hausa-reading agent printed a Hausa job title
+                   * onto an English-reading citizen's paper. They now come
+                   * from the same language as the rest of the document.
+                   */
+                  agentName: receiptLabels.collAuthorizedFieldOfficer,
                   agentCode: 'AGT',
                   issuedAt: new Date().toISOString(),
                   /*
@@ -705,7 +724,7 @@ export function TransactionScreen({
                    */
                   verificationUrl: verificationUrlFor(transaction.receipt_code) ?? undefined,
                   verificationCode: transaction.receipt_code ?? undefined,
-                });
+                }, receiptLanguage);
                 setNotice(t.colPrinted);
               } catch (err: any) {
                 setError({

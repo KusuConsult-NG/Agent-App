@@ -17,9 +17,9 @@ Paradigm: **ku** — polite plural (gender-neutral).
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `muku` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanku` | **confirm this one** |
 
-328 strings, 456 occurrences.
+330 strings, 458 occurrences.
 
-## The agent app — 175 strings
+## The agent app — 177 strings
 
 ### `agEnBandSoFar`
 
@@ -846,14 +846,26 @@ Paradigm: **ku** — polite plural (gender-neutral).
 ### `paymentAcknowledgedBody`
 
 - English: The payment system has confirmed this payment. Government has not yet received the money, so this is an acknowledgement and NOT a receipt. The receipt is issued automatically once the money reaches the government account. Do not ask the taxpayer to pay again.
-- Now: Naʻurar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya.
-- Would become: Naʻurar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ku ce wa mai biyan haraji ya sake biya.
+- Now: Na’urar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya.
+- Would become: Na’urar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ku ce wa mai biyan haraji ya sake biya.
 
 ### `paymentUnconfirmedBody`
 
 - English: This payment has NOT been marked as received. Do not ask the taxpayer to pay again — check again in a moment.
 - Now: BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake dubawa nan da dan lokaci.
 - Would become: BA A nuna an karbi wannan kudin ba. Kada ku ce wa mai biyan haraji ya sake biya — ku sake dubawa nan da dan lokaci.
+
+### `rcpCheckOffice`
+
+- English: Check this receipt at any
+- Now: Ka duba wannan rasit a
+- Would become: Ku duba wannan rasit a
+
+### `rcpVehCheck`
+
+- English: Check the code at PSIRS.
+- Now: Ka duba lambar a PSIRS.
+- Would become: Ku duba lambar a PSIRS.
 
 ### `receiptCodeShape`
 
