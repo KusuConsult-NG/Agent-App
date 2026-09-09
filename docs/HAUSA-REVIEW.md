@@ -86,7 +86,10 @@ you do not spend your attention repeating it:
 - The glossary below is applied consistently across all 2,989 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
-- No hooked letters; no `kuɗi`; apostrophes written one way throughout.
+- No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
+  last one was asserted here before anything checked it, and it was false by
+  one: `paymentAcknowledgedBody` had `Na\u02bburar` with a modifier letter
+  where the other 331 use `’`. It is corrected, and a test now holds it.
 - Example phone numbers and receipt codes survive translation intact.
 
 What no machine can check is whether a Hausa speaker takes the same
@@ -3087,7 +3090,7 @@ instructions — but they are what an agent reads all day.
 | `noTaxPayable` | No tax is payable | Babu harajin da za a biya | ☐ | |
 | `noTaxPayableBody` | This taxpayer owes nothing on the amount declared. Do not increase it to make a payment go through — there is nothing to collect. | Wannan mai biyan haraji ba shi da abin biya a kan adadin da aka shigar. Kada ka kara adadin domin a sami biyan kudi — babu abin karba. | ☐ | |
 | `paymentAcknowledged` | Payment confirmed — receipt to follow | An tabbatar da biyan kudin — rasit zai biyo baya | ☐ | |
-| `paymentAcknowledgedBody` | The payment system has confirmed this payment. Government has not yet received the money, so this is an acknowledgement and NOT a receipt. The receipt is issued automatically once the money reaches the government account. Do not ask the taxpayer to pay again. | Naʻurar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya. | ☐ | |
+| `paymentAcknowledgedBody` | The payment system has confirmed this payment. Government has not yet received the money, so this is an acknowledgement and NOT a receipt. The receipt is issued automatically once the money reaches the government account. Do not ask the taxpayer to pay again. | Na’urar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya. | ☐ | |
 | `acknowledgementLabel` | Acknowledgement | Shaidar karbar kudi | ☐ | |
 | `searchAnotherArea` | A name search covers your own Local Government Area. If they are registered elsewhere, search by their phone number, TIN, vehicle registration or a receipt number. | Binciken suna yana rufe Karamar Hukumar da kake aiki a ciki kadai. Idan an yi masa rajista a wata Karamar Hukuma, ka nemo shi da lambar wayarsa, TIN, lambar mota ko lambar rasit. | ☐ | |
 | `languageForMessages` | Language for their messages | Harshen sakonnin sa | ☐ | |

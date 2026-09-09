@@ -10,6 +10,81 @@ import { formatNaira, parseKobo, type Kobo } from './money';
 
 export type PaperWidth = '58mm' | '80mm';
 
+/**
+ * Everything this encoder can put on paper, and how it gets there.
+ *
+ * A thermal printer prints bytes, not text. Every byte above 127 means
+ * whatever the printer's currently selected code page says it means, and that
+ * page is a manufacturer's choice — the no-name Bluetooth units an agent buys
+ * in a market default to CP437, some to CP850, and several ignore the command
+ * that changes it. So this encoder sent ASCII and replaced everything else
+ * with `?`.
+ *
+ * WHAT THAT ACTUALLY DID, which is worse than the Hausa problem it was found
+ * under. A taxpayer called **Sa’idu Dan’azumi** was handed a receipt reading
+ * `Sa?idu Dan?azumi`. The apostrophe in a Nigerian name is ordinary — Sa’idu,
+ * Sa’adu, Dan’azumi, Bala’u — and the name on a receipt comes from the
+ * taxpayer record, so this has been corrupting citizens' own names on printed
+ * government receipts in English, with no Hausa involved at all.
+ *
+ * WHY THIS IS NOT A CODE PAGE. Reaching for `ESC t n` would be the obvious
+ * move and it is the wrong one. Measured against the dictionary, everything
+ * non-ASCII in it is *punctuation* — `’` 332 times, `—` 219, `…` 70, curly
+ * quotes 16, and the Naira sign — and not one letter. Hausa here is written
+ * without hooked letters by an explicit decision recorded in the review sheet,
+ * so `ka`, `na’ura` and `sana’a` need exactly one character ASCII lacks: an
+ * apostrophe, which ASCII has. CP437 does not contain `’` or `—` either, so
+ * selecting it would fix nothing while making the output depend on a command
+ * some printers drop.
+ *
+ * So: fold to the nearest ASCII, deterministically, on every printer.
+ *
+ *   1. Named punctuation goes to its ASCII equivalent.
+ *   2. Anything else decomposes (NFD) and loses its combining marks, so `é`
+ *      prints as `e` rather than `?`.
+ *   3. Whatever survives both is genuinely unrepresentable and still becomes
+ *      `?` — but it is now a narrow residue rather than every apostrophe.
+ *
+ * A fold is lossy and says so. `Sa'idu` is not spelled the way the record
+ * spells it. It is, however, the citizen's name, which `Sa?idu` is not.
+ */
+const PRINTABLE: [RegExp, string][] = [
+  // The Naira sign has no ASCII form; the currency's own abbreviation is the
+  // convention on Nigerian printed receipts.
+  [/₦/g, 'NGN '],
+  // Apostrophes. U+2019 is this dictionary's convention; U+2018 and U+02BB are
+  // here because a name arrives from a database rather than from the
+  // dictionary, and a phone keyboard produces all three.
+  [/[\u2018\u2019\u02BB\u02BC\u00B4`]/g, "'"],
+  [/[\u201C\u201D]/g, '"'],
+  // Dashes. An em dash between clauses reads correctly as a hyphen with the
+  // spaces the source already has around it.
+  [/[\u2013\u2014\u2212]/g, '-'],
+  [/\u2026/g, '...'],
+  [/\u00B7/g, '-'],
+  [/\u2190/g, '<-'],
+  [/\u2192/g, '->'],
+  // A non-breaking space is a space, and prints as a `?` if left alone.
+  [/[\u00A0\u2007\u202F]/g, ' '],
+];
+
+/**
+ * Fold text to what a thermal printer can be relied on to render.
+ *
+ * Exported because the property is worth asserting directly, and because a
+ * caller building a line width-aware needs the length the printer will see
+ * rather than the length the string has — `…` is one character and three
+ * columns.
+ */
+export function toPrintableAscii(str: string): string {
+  let out = str;
+  for (const [pattern, replacement] of PRINTABLE) out = out.replace(pattern, replacement);
+  // Strip combining marks so accented Latin letters fold to their base letter.
+  return out.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+
+
 export interface ReceiptPrintData {
   receiptNumber: string;
   paymentReference: string;
@@ -129,11 +204,10 @@ export class EscposBuilder {
   }
 
   public text(str: string): this {
-    // Convert string to ASCII/Latin-1 bytes (substituting Naira symbol ₦ with NGN for standard thermal character sets)
-    const sanitized = str.replace(/₦/g, 'NGN ');
+    const sanitized = toPrintableAscii(str);
     for (let i = 0; i < sanitized.length; i++) {
       const code = sanitized.charCodeAt(i);
-      this.buffer.push(code < 128 ? code : 0x3f); // replace non-ASCII with ?
+      this.buffer.push(code < 128 ? code : 0x3f);
     }
     return this;
   }

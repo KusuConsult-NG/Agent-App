@@ -107,25 +107,28 @@ const ALLOWED = new Set([
 ]);
 
 /**
- * The Bluetooth printer's English, which cannot be translated yet.
+ * The Bluetooth printer's English, and what is now actually stopping it.
  *
  * These are real — an agent connecting a printer reads them, and the test slip
- * carries four of them onto paper. They are listed rather than fixed because
- * translating them first would make things worse, and the reason is two lines
- * of `packages/shared/src/escpos.ts`:
+ * carries four of them onto paper.
  *
- *     const code = sanitized.charCodeAt(i);
- *     this.buffer.push(code < 128 ? code : 0x3f); // replace non-ASCII with ?
+ * **The reason they were listed here has been removed.** It used to be that
+ * `escpos.ts` replaced every byte above ASCII with a question mark, so a
+ * translated printer message would have reached the paper as `na?ura`. That
+ * was true, and it was also understating the problem: the same line was
+ * printing `Sa?idu Dan?azumi` for a taxpayer called Sa’idu Dan’azumi, in
+ * English, on receipts already being handed to citizens. The encoder now folds
+ * to the nearest ASCII and `what-reaches-the-paper.test.tsx` asserts that
+ * every string in the dictionary, both languages, survives it.
  *
- * Every byte above ASCII becomes a question mark. The Hausa in this dictionary
- * uses `’` throughout — `na’ura`, `sana’a` — so a translated printer message
- * would reach the paper as `na?ura`, on a government receipt. Fixing that is a
- * code-page decision (ESC/POS `ESC t`, or transliterating the apostrophe), not
- * a translation one, and it belongs to whoever owns the printer integration.
+ * So nothing technical is in the way any more. What is left is the translation
+ * itself — twelve strings here, and about twenty-five more in the receipt
+ * template in `escpos.ts`, which is entirely hardcoded English and is the
+ * document a citizen actually keeps. That is a piece of work with a reviewer
+ * at the end of it, not a blocker.
  *
- * This list is debt, not permission. It is the one place in this file where a
- * string is excused without being either data or code, it is expected to
- * shrink to nothing, and anything not already on it fails.
+ * This list is debt, not permission. It is expected to shrink to nothing, and
+ * anything not already on it fails.
  */
 const NOT_YET_THROUGH_THE_DICTIONARY = new Set([
   'No Bluetooth printer connected. Please connect a printer first.',
