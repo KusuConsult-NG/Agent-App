@@ -122,15 +122,58 @@ describe('the health of an integration is the shape of its real traffic', () => 
 
   it('keeps the last error after a recovery, with the timestamps that date it', async () => {
     await recordCall('vehicles', 'UNAVAILABLE', { error: 'authority returned 503' });
+
+    /*
+     * Read the failure's timestamp now, and compare the recovery against this
+     * copy rather than against whatever the row says afterwards.
+     *
+     * `integration_health` holds one row per integration for the whole
+     * process, and `recordCall` is not the test's alone -- every outbound call
+     * the API makes writes it, from `integrations/index.ts`. So any other test
+     * in this shard that reaches the vehicle authority moves
+     * `last_unavailable_at` forward, and re-reading it after the recovery
+     * compared this test's success against somebody else's later failure. It
+     * failed in CI exactly once that way, and passed on every local run,
+     * because whether it happens depends on which files the shard is running
+     * beside it.
+     *
+     * Against a captured value the claim is still the real one -- the success
+     * recorded here is later than the failure recorded here -- and a later
+     * failure from another test cannot make it false.
+     */
+    const failed = await queryOne<{ last_unavailable_at: string }>(
+      pool,
+      `SELECT last_unavailable_at FROM integration_health WHERE name = 'vehicles'`,
+    );
+
     await recordCall('vehicles', 'FOUND', { provider: 'authority' });
 
     const row = await queryOne<{
       last_error: string;
       last_succeeded_at: string;
-      last_unavailable_at: string;
     }>(pool, `SELECT * FROM integration_health WHERE name = 'vehicles'`);
     assert.match(row!.last_error, /503/, 'an incident review needs to know what it said');
-    assert.ok(row!.last_succeeded_at > row!.last_unavailable_at, 'and that it is no longer current');
+    /*
+     * Say whether the recovery was written before comparing when it was.
+     *
+     * `recordCall` never throws -- a taxpayer's registration must not fail
+     * because the table that remembers whether the TIN service answered could
+     * not be written -- so a failed write leaves only a `log.warn` and a NULL
+     * here. That is right for the platform and awkward for a test: the
+     * assertion below then reads "the recovery is older than the failure",
+     * which sounds like an ordering bug and is really a write that never
+     * happened. CI failed this way once, on this line, with `last_error`
+     * still intact, and it has not been reproduced since. Separated so the
+     * next occurrence names its own cause.
+     */
+    assert.ok(
+      row!.last_succeeded_at,
+      'the recovery was not recorded at all -- recordCall swallowed the write',
+    );
+    assert.ok(
+      row!.last_succeeded_at > failed!.last_unavailable_at,
+      'and that it is no longer current',
+    );
   });
 
   /*
