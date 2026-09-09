@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, type ApiError } from '../lib/api';
-import { grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
+import { StepUpUnavailable, grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
 import { Alert, ErrorAlert, Field, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 
@@ -70,7 +70,7 @@ export function StepUpPrompt({
       inputRef.current?.focus();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : t.stepUpCodeFailed);
+      else setFailure(caught instanceof StepUpUnavailable ? t.stepUpSignInAgain : t.stepUpCodeFailed);
     } finally {
       setSending(false);
     }
@@ -99,7 +99,7 @@ export function StepUpPrompt({
       await onAuthorised();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : t.stepUpAuthoriseFailed);
+      else setFailure(caught instanceof StepUpUnavailable ? t.stepUpSignInAgain : t.stepUpAuthoriseFailed);
       // The grant failed, so the code is spent or wrong either way. Clearing it
       // stops a second submit re-sending the same rejected digits.
       setCode('');

@@ -7,6 +7,8 @@
  * specific handset (Addendum §21).
  */
 
+import type { TranslationDictionary } from '@psirs/shared';
+
 const DEVICE_KEY = 'psirs.device.id';
 
 /**
@@ -158,20 +160,19 @@ export function watchConnection(onChange: (state: ConnectionState) => void): () 
   };
 }
 
-export const CONNECTION_COPY: Record<ConnectionState, { label: string; detail: string }> = {
-  ONLINE: {
-    label: 'Online',
-    detail: 'All services are available.',
-  },
-  LIMITED: {
-    label: 'Poor connection',
-    detail:
-      'Your connection is weak. Payments may take longer to confirm — do not start a payment twice.',
-  },
-  OFFLINE: {
-    label: 'Offline',
-    detail:
-      'You can register a taxpayer and write down a business, and both will be sent ' +
-      'when you are back online. Payments are not possible while offline.',
-  },
+/**
+ * What the header says about the connection, per state.
+ *
+ * Keys rather than sentences. It held the English, and the English is what an
+ * agent read — including the one that matters most, the warning not to start a
+ * payment twice on a weak connection. A module outside React cannot reach the
+ * dictionary, so it names the strings and `App.tsx` resolves them.
+ */
+export const CONNECTION_COPY: Record<
+  ConnectionState,
+  { label: keyof TranslationDictionary; detail: keyof TranslationDictionary }
+> = {
+  ONLINE: { label: 'connOnline', detail: 'connOnlineDetail' },
+  LIMITED: { label: 'connLimited', detail: 'connLimitedDetail' },
+  OFFLINE: { label: 'connOffline', detail: 'connOfflineDetail' },
 };

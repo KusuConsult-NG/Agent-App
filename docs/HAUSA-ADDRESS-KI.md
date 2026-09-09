@@ -17,9 +17,9 @@ Paradigm: **ki** — feminine singular.
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `miki` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanki` | **confirm this one** |
 
-323 strings, 447 occurrences.
+328 strings, 456 occurrences.
 
-## The agent app — 170 strings
+## The agent app — 175 strings
 
 ### `agEnBandSoFar`
 
@@ -417,6 +417,18 @@ Paradigm: **ki** — feminine singular.
 - Now: Wannan asusu na kwamishan ka ne kawai
 - Would become: Wannan asusu na kwamishan ki ne kawai
 
+### `connLimitedDetail`
+
+- English: Your connection is weak. Payments may take longer to confirm — do not start a payment twice.
+- Now: Hanyar sadarwarka tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ka fara biyan kudi sau biyu.
+- Would become: Hanyar sadarwarki tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ki fara biyan kudi sau biyu.
+
+### `connOfflineDetail`
+
+- English: You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline.
+- Now: Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa.
+- Would become: Za ki iya yin rajistar mai biyan haraji ki kuma rubuta sana’a, za a aika dukansu idan ki dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa.
+
 ### `deviceAfterApproval`
 
 - English: You can register a device once PSIRS has approved your application.
@@ -512,6 +524,18 @@ Paradigm: **ki** — feminine singular.
 - English: This version of the app is too old to collect with. Update it first.
 - Now: Wannan manhajar ta tsufa, ba za ka iya karba da ita ba. Ka sabunta ta tukuna.
 - Would become: Wannan manhajar ta tsufa, ba za ki iya karba da ita ba. Ki sabunta ta tukuna.
+
+### `errUploadFailed`
+
+- English: The document could not be sent. Try again.
+- Now: Ba a iya aika takardar ba. Ka sake gwadawa.
+- Would become: Ba a iya aika takardar ba. Ki sake gwadawa.
+
+### `errUploadOffline`
+
+- English: You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection.
+- Now: Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa.
+- Would become: Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ki sake daukar hoton idan ki samu hanyar sadarwa.
 
 ### `findTaxpayerFirst`
 
@@ -884,6 +908,12 @@ Paradigm: **ki** — feminine singular.
 - English: Ask for a new one to continue.
 - Now: Ka nemi sabuwa domin ci gaba.
 - Would become: Ki nemi sabuwa domin ci gaba.
+
+### `stepUpSignInAgain`
+
+- English: Sign in again to request a code.
+- Now: Ka sake shiga don neman lamba.
+- Would become: Ki sake shiga don neman lamba.
 
 ### `supBeforeYouSend`
 

@@ -2948,6 +2948,17 @@ export interface TranslationDictionary {
   allocRecorded: string;
   allocCodeUsed: string;
   scanCamera: string;
+  connOnline: string;
+  connOnlineDetail: string;
+  connLimited: string;
+  connLimitedDetail: string;
+  connOffline: string;
+  connOfflineDetail: string;
+  appRecordsWaiting: string;
+  stepUpSignInAgain: string;
+  morePushUnsupported: string;
+  errUploadFailed: string;
+  errUploadOffline: string;
   scanCameraDenied: string;
   scanCameraMissing: string;
   scanCameraUnsupported: string;
@@ -5994,6 +6005,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "Recorded",
     allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
     scanCamera: "Camera",
+    connOnline: "Online",
+    connOnlineDetail: "All services are available.",
+    connLimited: "Poor connection",
+    connLimitedDetail: "Your connection is weak. Payments may take longer to confirm — do not start a payment twice.",
+    connOffline: "Offline",
+    connOfflineDetail: "You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline.",
+    appRecordsWaiting: "saved records waiting to send",
+    stepUpSignInAgain: "Sign in again to request a code.",
+    morePushUnsupported: "Push notifications are not supported on this device or browser.",
+    errUploadFailed: "The document could not be sent. Try again.",
+    errUploadOffline: "You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection.",
     scanCameraDenied: "PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead.",
     scanCameraMissing: "No camera was found on this device. Type the code instead.",
     scanCameraUnsupported: "This browser cannot open the camera. Type the code instead.",
@@ -9009,6 +9031,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "An rubuta",
     allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
     scanCamera: "Kyamara",
+    connOnline: "Akwai hanyar sadarwa",
+    connOnlineDetail: "Duk ayyukan suna aiki.",
+    connLimited: "Hanyar sadarwa mai rauni",
+    connLimitedDetail: "Hanyar sadarwarka tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ka fara biyan kudi sau biyu.",
+    connOffline: "Babu hanyar sadarwa",
+    connOfflineDetail: "Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa.",
+    appRecordsWaiting: "bayanan da aka ajiye suna jiran aikawa",
+    stepUpSignInAgain: "Ka sake shiga don neman lamba.",
+    morePushUnsupported: "Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba.",
+    errUploadFailed: "Ba a iya aika takardar ba. Ka sake gwadawa.",
+    errUploadOffline: "Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa.",
     scanCameraDenied: "PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar.",
     scanCameraMissing: "Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar.",
     scanCameraUnsupported: "Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar.",

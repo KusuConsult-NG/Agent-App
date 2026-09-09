@@ -12,7 +12,7 @@ import {
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
 import { bluetoothPrinter } from '../lib/bluetooth-printer';
-import { pushManager } from '../lib/push';
+import { PushUnsupported, pushManager } from '../lib/push';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
@@ -649,8 +649,10 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         setPushStatus(ok ? 'granted' : 'denied');
         setPushMsg(ok ? t.morePushActive : t.morePushNotGranted);
       }
-    } catch (err: any) {
-      setPushMsg(err.message || t.morePushFailed);
+    } catch (err) {
+      // The dictionary decides, not the error. `err.message` used to win here,
+      // which is how an English sentence reached an agent reading Hausa.
+      setPushMsg(err instanceof PushUnsupported ? t.morePushUnsupported : t.morePushFailed);
     } finally {
       setPushBusy(false);
     }

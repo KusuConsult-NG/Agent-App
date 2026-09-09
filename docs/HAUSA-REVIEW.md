@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 2,978 strings; that one is two pages and links back
+> because it carries all 2,989 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **2,978 dictionary strings and 30 message
+It listed 78 strings. It now lists **2,989 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-2,978 strings is worse than no sheet, because it looks complete; this one cannot
+2,989 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 2,978 keys exist in both languages; nothing is missing and nothing is spare.
+- All 2,989 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 2,978 strings: where the
+- The glossary below is applied consistently across all 2,989 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout.
@@ -465,7 +465,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2912 strings, grouped by where an agent meets them. Lower stakes
+2923 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2542,6 +2542,7 @@ instructions — but they are what an agent reads all day.
 | `appOtherDevices` | Other devices | Sauran na’urori | ☐ | |
 | `appDeviceAfterApproval` | You can register a device once PSIRS has approved your application. | Za ka iya yin rajistar na’ura da zarar PSIRS ta amince da bukatarka. | ☐ | |
 | `appRefereeWhoIs` | A referee is someone who knows you and can confirm your identity to PSIRS. | Mai shaida shi ne wanda ya san ka kuma zai iya tabbatar da kai ga PSIRS. | ☐ | |
+| `appRecordsWaiting` | saved records waiting to send | bayanan da aka ajiye suna jiran aikawa | ☐ | |
 | `appSignOut` | Sign out | Fita | ☐ | |
 | `appSwitchLanguage` | Switch language | Canza harshe | ☐ | |
 | `appPageNotFound` | Page not found | Ba a sami shafin ba | ☐ | |
@@ -2830,6 +2831,7 @@ instructions — but they are what an agent reads all day.
 | `moreDisconnect` | Disconnect | Cire hadi | ☐ | |
 | `morePushTitle` | Instant Push Notifications | Sakonnin gargadi kai tsaye | ☐ | |
 | `moreContinue` | Continue | Ci gaba | ☐ | |
+| `morePushUnsupported` | Push notifications are not supported on this device or browser. | Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba. | ☐ | |
 | `moreDisablePushNotifications` | Disable Push Notifications | Kashe sanarwar turawa | ☐ | |
 | `moreSentToPsirsYour` | Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change. | An tura wa PSIRS. Kwamishan naka zai ci gaba da zuwa asusunka na yanzu har sai wani jami’i ya amince da canjin. | ☐ | |
 | `moreUnknownOwner` | Unknown owner | Ba a san mai shi ba | ☐ | |
@@ -2882,6 +2884,7 @@ instructions — but they are what an agent reads all day.
 | `stepUpCodeFailed` | Could not send a code. | Ba a iya tura lamba ba. | ☐ | |
 | `stepUpAuthoriseFailed` | Could not authorise this. | Ba a iya bada izinin wannan ba. | ☐ | |
 | `stepUpNoSms` | No real SMS is configured, so the code is shown here: | Ba a saita SMS na gaske ba, don haka an nuna lambar a nan: | ☐ | |
+| `stepUpSignInAgain` | Sign in again to request a code. | Ka sake shiga don neman lamba. | ☐ | |
 | `stepUpOneTimeCode` | One-time code | Lambar amfani sau daya | ☐ | |
 | `stepUpExpired` | That code has expired | Lambar ta kare | ☐ | |
 | `stepUpAskNew` | Ask for a new one to continue. | Ka nemi sabuwa domin ci gaba. | ☐ | |
@@ -2912,6 +2915,8 @@ instructions — but they are what an agent reads all day.
 |---|---|---|:---:|---|
 | `errRateLimited` | Too many attempts. Wait a moment and try again. | Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa. | ☐ | |
 | `errReference` | Reference | Lamba | ☐ | |
+| `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. | ☐ | |
+| `errUploadOffline` | You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection. | Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa. | ☐ | |
 
 #### Shared controls
 
@@ -3609,6 +3614,12 @@ instructions — but they are what an agent reads all day.
 | `agEnBandSoFarTitle` | Size from what you have written | Girma daga abin da ka rubuta | ☐ | |
 | `agEnBandSoFar` | This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice. | Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa. | ☐ | |
 | `scanCamera` | Camera | Kyamara | ☐ | |
+| `connOnline` | Online | Akwai hanyar sadarwa | ☐ | |
+| `connOnlineDetail` | All services are available. | Duk ayyukan suna aiki. | ☐ | |
+| `connLimited` | Poor connection | Hanyar sadarwa mai rauni | ☐ | |
+| `connLimitedDetail` | Your connection is weak. Payments may take longer to confirm — do not start a payment twice. | Hanyar sadarwarka tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ka fara biyan kudi sau biyu. | ☐ | |
+| `connOffline` | Offline | Babu hanyar sadarwa | ☐ | |
+| `connOfflineDetail` | You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline. | Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa. | ☐ | |
 | `scanCameraDenied` | PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead. | PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar. | ☐ | |
 | `scanCameraMissing` | No camera was found on this device. Type the code instead. | Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar. | ☐ | |
 | `scanCameraUnsupported` | This browser cannot open the camera. Type the code instead. | Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar. | ☐ | |

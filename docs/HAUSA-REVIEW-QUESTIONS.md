@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 2,978 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 2,989 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**323 strings address the reader as `ka`: masculine singular.** A woman
+**328 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,18 +31,18 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 170 |
+| The agent app | 175 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **323** of 2,978 |
+| **Total** | **328** of 2,989 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 170.
+more for the 42 than for the 175.
 
-The forms are `ka` (329 occurrences), the possessive `-nka` (56), `-rka` (43),
+The forms are `ka` (337 occurrences), the possessive `-nka` (56), `-rka` (44),
 `dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
 than one. Nothing currently uses `ku`.
 
@@ -55,8 +55,9 @@ wrong: the pattern was case-sensitive, and Hausa imperatives open sentences
 constantly. `Ka nemo…`, `Ka tabbatar…`, `Ka yi…` — **144 occurrences across 103
 further strings** were invisible. 321 was the number after both corrections;
 it moved to 320 when deleting the dead camera-scanner path took `camAlign`
-(“Ka daidaita QR code…”) with it, and to 323 when the three camera-refusal
-strings below were written in the same convention as everything around them.
+(“Ka daidaita QR code…”) with it, to 323 when the three camera-refusal
+strings below were written in the same convention as everything around them, and
+to 328 with the eleven strings the `lib/` lint pass brought in.
 
 ### What it would cost to change
 
@@ -68,7 +69,7 @@ node scripts/ka-address-preview.mjs            # the scale
 node scripts/ka-address-preview.mjs --write ku # the sheet to correct
 ```
 
-**317 of the 323 are a mechanical substitution. 6 need a human. None defeats
+**322 of the 328 are a mechanical substitution. 6 need a human. None defeats
 the rules.** So this is a scripted pass and a review, not a re-translation —
 which is worth knowing before the size of the number decides the answer.
 
@@ -154,12 +155,15 @@ buried:
 3. `scanHelp` deleted — no screen showed it and its English was false;
 4. the dead camera scanner deleted, taking ten strings only it used;
 5. **three new strings written** — `scanCameraDenied`, `scanCameraMissing`,
-   `scanCameraUnsupported`.
+   `scanCameraUnsupported`;
+6. **eleven more written**, after the same check was pointed at the rest of the
+   application's non-screen code and found the same fault in four more places
+   — see 3.1 below.
 
-Only the last invents anything, and it is the arrangement rather than the
-vocabulary: every word in it is already in the dictionary. It is the one item
-on this list that adds to your reading rather than subtracting from it, and it
-is set out in full below. Everything else on this page still waits.
+Only the last two invent anything, and it is the arrangement rather than the
+vocabulary: every word in them is already in the dictionary. They are the items
+on this list that add to your reading rather than subtracting from it, and both
+are set out in full below. Everything else on this page still waits.
 
 **The receipt-code one is done, and it was never really a Hausa error.**
 
@@ -239,7 +243,7 @@ Ten strings existed only for that screen and went with it: `camAlign`,
 `camNoAccess`, `camSwitchFailed`, `camTryAgain` and `scanQr`. If you have
 already reviewed any of them, that work is not lost — it is in the dictionary's
 history — but they are out of the sheet, and the total fell from 2,985 to
-2,978. `camCancel` stays; seven live screens use it.
+2,989. `camCancel` stays; seven live screens use it.
 
 **One thing this turned up was a real gap, and it is now closed — with three
 strings that need your reading.** When the camera could not be opened on the
@@ -281,8 +285,69 @@ with `ka`, like everything around them, which is why the count in question 1
 moved: if you choose `ku`, these change with the rest rather than needing a
 separate decision.
 
+### 3.1 — The same fault in four more places, and eleven more strings
+
+`scanHelp` and the camera messages were both found by reading. The obvious next
+question was whether the check that is supposed to catch this had simply never
+looked, and it had not: `nothing-new-in-english.test.tsx` read every screen and
+component and no other code. The camera messages lived in `lib/scanner.ts`,
+which is neither.
+
+Pointing it at `lib/` found the identical fault — an English sentence winning
+over a translated one sitting beside it — in four more places:
+
+| Where | What an agent read | What was there all along |
+|---|---|---|
+| `device.ts` | the connection banner, in English | nothing; it held the sentences itself |
+| `push.ts` | `err.message`, in English | `t.morePushFailed` |
+| `step-up.ts` | `caught.message`, in English | `t.stepUpCodeFailed` |
+| `api.ts` | a thrown English sentence | nothing |
+
+**The one worth your eye is the connection banner**, because of what it says.
+On a weak connection an agent was told, in English: *"Your connection is weak.
+Payments may take longer to confirm — do not start a payment twice."* That is
+an instruction about not taking somebody's money twice, and it was unreadable
+to an agent working in Hausa.
+
+The eleven new strings, all drafts nobody has read:
+
+| Key | English | Hausa |
+|---|---|---|
+| `connOnline` | Online | Akwai hanyar sadarwa |
+| `connOnlineDetail` | All services are available. | Duk ayyukan suna aiki. |
+| `connLimited` | Poor connection | Hanyar sadarwa mai rauni |
+| `connLimitedDetail` | Your connection is weak. Payments may take longer to confirm — do not start a payment twice. | Hanyar sadarwarka tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ka fara biyan kudi sau biyu. |
+| `connOffline` | Offline | Babu hanyar sadarwa |
+| `connOfflineDetail` | You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline. | Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa. |
+| `appRecordsWaiting` | saved records waiting to send | bayanan da aka ajiye suna jiran aikawa |
+| `stepUpSignInAgain` | Sign in again to request a code. | Ka sake shiga don neman lamba. |
+| `morePushUnsupported` | Push notifications are not supported on this device or browser. | Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba. |
+| `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. |
+| `errUploadOffline` | You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection. | Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa. |
+
+`connOnline` and `connOffline` are close to `statusOnline` and `statusOffline`,
+which already exist and are already on this page for a casing inconsistency.
+**They were not merged**, because the existing pair is upper case and reads as
+a badge, these read as a heading, and deciding they are one thing is your call
+rather than ours. If they are the same thing, say so and it becomes one pair.
+
+**One thing is knowingly left in English, and it is not a translation problem.**
+Twelve strings in `lib/bluetooth-printer.ts` — the messages an agent reads while
+connecting a printer, and four lines the test slip puts on paper. They are named
+in the check as debt rather than fixed, because `packages/shared/src/escpos.ts`
+replaces every non-ASCII byte with a question mark:
+
+```
+this.buffer.push(code < 128 ? code : 0x3f); // replace non-ASCII with ?
+```
+
+The Hausa here uses `’` throughout — `na’ura`, `sana’a` — so translating those
+messages *first* would put `na?ura` on a government receipt. The printer needs a
+code page before it can be given a language. Nothing on this page is waiting on
+you for it.
+
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 2,978 keys
+raised the obvious next question, so it was measured: **33 of the 2,989 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four

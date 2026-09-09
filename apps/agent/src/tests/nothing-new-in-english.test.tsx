@@ -40,6 +40,20 @@ const SURFACES: Record<string, string> = {
   ...(import.meta.glob('../components/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
   ...(import.meta.glob('../App.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
   ...(import.meta.glob('../ui.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
+  /*
+   * `lib/` is here because that is where the last one hid.
+   *
+   * The camera-failure messages were English sentences in `scanner.ts`, thrown
+   * as an Error and rendered by two screens in preference to the translated
+   * string sitting beside them. Every rule below would have caught them in a
+   * screen. None of them looked at `lib/`, so a module with no JSX in it
+   * became the one place an English sentence could reach an agent unopposed.
+   *
+   * Test files are excluded, and only test files: their fixtures are English
+   * on purpose — a taxpayer called Danladi Musa, a server that answered
+   * "Server problem" — and nobody reads them but us.
+   */
+  ...(import.meta.glob(['../lib/*.ts', '!../lib/*.test.ts'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
 };
 
 /**
@@ -80,6 +94,52 @@ const ALLOWED = new Set([
   // the words in front of them come from the dictionary.
   '(NIN)',
   '(BVN)',
+  /*
+   * A developer's line, and provably not a sentence anybody reads.
+   *
+   * `ApiError.message` is required, so the fallback error the upload path
+   * builds has to carry one. Nothing renders it: `UPLOAD_FAILED` is in
+   * `TRANSLATED_ERRORS`, and `ErrorAlert` prefers the dictionary whenever the
+   * code is in that map. Written in lower case so it cannot be mistaken for
+   * copy if the guarantee above ever changes.
+   */
+  'upload failed',
+]);
+
+/**
+ * The Bluetooth printer's English, which cannot be translated yet.
+ *
+ * These are real — an agent connecting a printer reads them, and the test slip
+ * carries four of them onto paper. They are listed rather than fixed because
+ * translating them first would make things worse, and the reason is two lines
+ * of `packages/shared/src/escpos.ts`:
+ *
+ *     const code = sanitized.charCodeAt(i);
+ *     this.buffer.push(code < 128 ? code : 0x3f); // replace non-ASCII with ?
+ *
+ * Every byte above ASCII becomes a question mark. The Hausa in this dictionary
+ * uses `’` throughout — `na’ura`, `sana’a` — so a translated printer message
+ * would reach the paper as `na?ura`, on a government receipt. Fixing that is a
+ * code-page decision (ESC/POS `ESC t`, or transliterating the apostrophe), not
+ * a translation one, and it belongs to whoever owns the printer integration.
+ *
+ * This list is debt, not permission. It is the one place in this file where a
+ * string is excused without being either data or code, it is expected to
+ * shrink to nothing, and anything not already on it fails.
+ */
+const NOT_YET_THROUGH_THE_DICTIONARY = new Set([
+  'No Bluetooth printer connected. Please connect a printer first.',
+  'No writable printer service found on this Bluetooth device.',
+  'Web Bluetooth is not supported on this browser or device.',
+  'Failed to connect to Bluetooth printer',
+  'Failed while transmitting data to printer',
+  'Printer disconnected.',
+  'Connected (BLE)',
+  'Digital Grassroots Platform',
+  'Mobile POS Terminal Ready',
+  'Date:',
+  'Status:',
+  'Width:',
 ]);
 
 /** Props whose value is rendered rather than used. */
@@ -106,6 +166,38 @@ const RENDERED_FIELDS =
 /** Messages the agent is shown when something goes wrong or completes. */
 const SHOWN_MESSAGES =
   /\b(?:message|setNotice|setError|setPrinterMsg|setPushMsg|setCameraError|setFailure)\s*[:(]\s*'([^']{6,})'/g;
+
+/**
+ * A sentence handed to an Error, which is a sentence somebody reads.
+ *
+ * This is the shape the camera bug had — `throw new CameraUnavailable('DENIED',
+ * 'PSIRS does not have permission…')` — and no rule above described it, because
+ * every one of them was written against a file of components, where errors are
+ * caught rather than thrown. Screens render `caught.message`, so a literal
+ * inside a `throw` is as visible as one inside a `<p>`.
+ */
+const THROWN_MESSAGES = /new\s+[A-Z]\w*\(\s*(?:'[A-Z_]+',\s*)?'([^']{6,})'/g;
+
+/**
+ * A discriminant is not a sentence, and neither is a developer's line.
+ *
+ * Two shapes are excluded, and the second is a convention this file enforces
+ * rather than merely tolerates:
+ *
+ *   throw new CameraUnavailable('DENIED')          a reason code
+ *   super('camera unavailable: DENIED')            a line for a stack trace
+ *
+ * The first has no space. The second opens in lower case, and **that is what
+ * makes it a developer's line**: every sentence an agent reads in this
+ * application starts with a capital, because it is a sentence. So a lower-case
+ * opening is a deliberate mark meaning "nobody renders this", and the reviewer
+ * of a diff can tell the two apart without reading the surrounding code.
+ *
+ * Getting it wrong in the safe direction costs nothing — a user-facing string
+ * written in lower case is caught by `capitalisedLiteralsIn` the moment
+ * somebody capitalises it, which is the first thing anybody would do.
+ */
+const isProse = (text: string) => /\s/.test(text) && /^[A-Z]/.test(text);
 
 /**
  * Fragments of TypeScript the text-run pattern picks up by accident.
@@ -147,7 +239,34 @@ function looksLikeCode(text: string): boolean {
     /^[a-z][A-Za-z0-9_]*$/.test(text) ||
     // `something.method(` — a call. No sentence contains one.
     /[A-Za-z_]\w*\.[A-Za-z_]\w*\(/.test(text) ||
-    /\b(?:const|let|var)\s|\buseState\(|\buseRef\(|\bRecord<|\bPromise<|\bapi\.[a-z]/.test(text)
+    /\b(?:const|let|var)\s|\buseState\(|\buseRef\(|\bRecord<|\bPromise<|\bapi\.[a-z]/.test(text) ||
+    looksLikeTypeScript(text)
+  );
+}
+
+/**
+ * Declaration syntax, which a file of components never showed this check.
+ *
+ * Every rule above was tuned against `.tsx`, where the text between two angle
+ * brackets is nearly always JSX. In a `.ts` module the angle brackets are
+ * generics and the runs between them are signatures — `public getState():
+ * PrinterDeviceState`, `(path: string, file: Blob): Promise`. They are not
+ * prose and never were; the check had simply never been pointed at a file
+ * that contains them.
+ *
+ * Matched on shape rather than on a list of names, for the reason the comment
+ * above gives: a bare word matches prose, and `class` or `return` in a
+ * sentence would excuse the sentence.
+ */
+function looksLikeTypeScript(text: string): boolean {
+  return (
+    /\b(?:public|private|protected|readonly|class|function|return|implements|extends)\s/.test(text) ||
+    // A return type or a typed parameter: `): Promise`, `(path: string`.
+    /\)\s*:\s*[A-Z]/.test(text) ||
+    /\(\s*\w+\s*:\s*[A-Z]/.test(text) ||
+    // `(path), post:` — an object literal of methods, caught mid-key.
+    /^\(\w+\)/.test(text) ||
+    /\|\s*null\b/.test(text)
   );
 }
 
@@ -243,10 +362,18 @@ function englishIn(source: string): string[] {
   for (const match of code.matchAll(BRACED_PROPS)) found.push(match[1].trim());
   for (const match of code.matchAll(RENDERED_FIELDS)) found.push(match[1].trim());
   for (const match of code.matchAll(SHOWN_MESSAGES)) found.push(match[1].trim());
+  for (const match of code.matchAll(THROWN_MESSAGES)) {
+    const text = match[1].trim();
+    if (isProse(text)) found.push(text);
+  }
 
   return found.filter(
     (text) =>
-      /[A-Za-z]{2}/.test(text) && !KEYS.has(text) && !ALLOWED.has(text) && !looksLikeCode(text),
+      /[A-Za-z]{2}/.test(text) &&
+      !KEYS.has(text) &&
+      !ALLOWED.has(text) &&
+      !NOT_YET_THROUGH_THE_DICTIONARY.has(text) &&
+      !looksLikeCode(text),
   );
 }
 
@@ -302,15 +429,81 @@ const ALLOWED_LITERALS = new Set([
   'Escape',
   'Bearer ',
   'Content-Type',
+  /*
+   * The browser and platform the handset reports, and the two words used when
+   * it reports nothing recognisable.
+   *
+   * These are not copy. `describeDevice` builds a `DeviceProfile` that is
+   * POSTed to `/agents/me/devices` and stored, and an officer reviewing a
+   * handset reads it back out of that record. Translating them would write
+   * Hausa into a device fingerprint and leave the same phone recorded under
+   * two different names depending on the language it was registered in. The
+   * label beside the value comes from the dictionary, which is the right
+   * arrangement — the same one a TIN gets.
+   */
+  'Chrome',
+  'Firefox',
+  'Safari',
+  'Edge',
+  'Opera',
+  'Android',
+  'Windows',
+  'Linux',
+  'Unknown',
+  'Unknown browser',
+  /*
+   * `'Notification' in window` — a feature test naming a DOM interface. The
+   * shape rule below covers the other identifiers; this one is a single
+   * capitalised word with no internal capital, which is indistinguishable
+   * from copy without knowing what it is.
+   */
+  'Notification',
+  /*
+   * The language switcher, which names each language in that language. `HA
+   * (Hausa)` translated into Hausa would leave somebody who cannot read the
+   * current setting no way back out of it.
+   */
+  'EN (English)',
+  'HA (Hausa)',
 ]);
+
+/**
+ * SVG path data, which the widened rule above reads as a capitalised sentence.
+ *
+ * `M12 5v14M5 12h14` opens with a capital, contains spaces and lower-case
+ * letters, and is a drawing. The icons in `ui.tsx` are full of them.
+ */
+const isPathData = (text: string) => /^[Mm][\s\d.-]/.test(text) && !/[A-Za-z]{3}/.test(text);
+
+/**
+ * A class, an error name, or a DOM interface — never a sentence.
+ *
+ * `AbortError`, `PushManager`, `CameraUnavailable`, `NotAllowedError`: names
+ * compared against `error.name` or used to test for a browser feature. Matched
+ * on shape — one word, no spaces, with a capital inside it — because that
+ * shape is not one anybody writes on a screen, and a list of names would go
+ * stale the first time somebody added an error class.
+ */
+function isIdentifier(text: string): boolean {
+  return /^[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(text);
+}
 
 function capitalisedLiteralsIn(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const found: string[] = [];
   for (const match of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"/g)) {
     const text = (match[1] ?? match[2] ?? '').trim();
-    if (!/^[A-Z][a-z]/.test(text)) continue;
-    if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
+    /*
+     * `^[A-Z][a-z]` was the original test, and it let every sentence opening
+     * with an acronym through — including "PSIRS does not have permission to
+     * use the camera.", the string this whole rule exists to have caught. A
+     * capital followed by a space and a lower-case word is prose whatever the
+     * first word is; one token with no space is an identifier, and
+     * `isIdentifier` below decides that case.
+     */
+    if (!/^[A-Z][a-z]/.test(text) && !/^[A-Z][^\s]*\s+\S*[a-z]/.test(text)) continue;
+    if (KEYS.has(text) || ALLOWED_LITERALS.has(text) || isIdentifier(text) || isPathData(text)) continue;
+    if (NOT_YET_THROUGH_THE_DICTIONARY.has(text)) continue;
     found.push(text);
   }
   return found;
@@ -350,6 +543,10 @@ describe('no screen picks its own locale', () => {
     const offenders: string[] = [];
     for (const [path, source] of Object.entries(SURFACES)) {
       const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      // The printer's test slip pins `en-GB`, and is on the same debt as its
+      // messages: a date through `formatDateIn` takes its month from the
+      // dictionary, and the encoder above would print that month as `????`.
+      if (path.endsWith('/bluetooth-printer.ts')) continue;
       for (const match of code.matchAll(
         /toLocale(?:Date|Time)String\(|toLocaleString\(\s*['"][^'"]+['"]/g,
       )) {

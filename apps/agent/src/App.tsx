@@ -289,16 +289,16 @@ export function App() {
         <div className={`connection connection--${connection}`} role="status" aria-live="polite">
           <span className="connection__dot" />
           <span>
-            {connectionCopy.label}
-            {pendingCount > 0 && ` · ${pendingCount} saved record(s) waiting to send`}
+            {t[connectionCopy.label]}
+            {pendingCount > 0 && ` · ${pendingCount} ${t.appRecordsWaiting}`}
           </span>
         </div>
       </header>
 
       <main className="app-main">
         {connection !== 'ONLINE' && (
-          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={connectionCopy.label}>
-            <p style={{ margin: 0 }}>{connectionCopy.detail}</p>
+          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={t[connectionCopy.label]}>
+            <p style={{ margin: 0 }}>{t[connectionCopy.detail]}</p>
           </Alert>
         )}
 

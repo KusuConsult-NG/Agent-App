@@ -18,6 +18,20 @@ export const APP_VERSION: string =
 
 const API_BASE = '/api/v1';
 
+/**
+ * An upload was attempted with no connection.
+ *
+ * No message: the screen renders `t.errUploadOffline`. The English sentence
+ * that used to be here was what an agent read, in an application that offers
+ * Hausa.
+ */
+export class UploadOffline extends Error {
+  constructor() {
+    super('upload attempted while offline');
+    this.name = 'UploadOffline';
+  }
+}
+
 export interface ApiError {
   code: string;
   message: string;
@@ -235,7 +249,11 @@ async function uploadRequest<T>(path: string, file: Blob, filename?: string): Pr
   if (!response.ok) {
     throw new ApiRequestError(response.status, (payload as { error: ApiError })?.error ?? {
       code: 'UPLOAD_FAILED',
-      message: 'The document could not be sent. Try again.',
+      // Never rendered: `UPLOAD_FAILED` is in `TRANSLATED_ERRORS`, so
+      // `ErrorAlert` shows `t.errUploadFailed` and ignores this. It exists
+      // because `ApiError.message` is required, and it is deliberately not a
+      // sentence anybody should see.
+      message: 'upload failed',
       moneyStatus: 'NOT_APPLICABLE',
     }, payload);
   }
@@ -368,10 +386,7 @@ export const api = {
    */
   upload: async <T>(path: string, file: Blob, filename?: string): Promise<T> => {
     if (!navigator.onLine) {
-      throw new Error(
-        'You are offline. An identity document is sent to PSIRS as it is captured and is not ' +
-          'stored on this device — take the photograph again when you have a connection.',
-      );
+      throw new UploadOffline();
     }
     return uploadRequest<T>(path, file, filename);
   },

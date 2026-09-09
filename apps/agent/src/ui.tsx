@@ -59,6 +59,7 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   RATE_LIMITED: 'errRateLimited',
   UPDATE_REQUIRED: 'errUpdateRequired',
   NETWORK: 'errNetwork',
+  UPLOAD_FAILED: 'errUploadFailed',
 };
 
 export function ErrorAlert({ error }: { error: ApiError | null }) {
