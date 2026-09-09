@@ -102,6 +102,23 @@ async function openATaxpayer(page: Page, name = 'Amina'): Promise<void> {
 
 test.use({ viewport: PHONE });
 
+/*
+ * Every test here is slow on purpose, and the slowness is the platform.
+ *
+ * All six sign in and search, and `openATaxpayer` waits the search rate limit
+ * out rather than turning it off — up to four attempts six seconds apart. With
+ * the sign-in and render settles that is around thirty-two seconds of honest
+ * waiting before a test body starts, against a default budget of forty-five.
+ *
+ * So the sixth test in the file passes on a quiet machine and fails on a busy
+ * one, which reads as flakiness and is really a spec whose waiting outgrew its
+ * clock. The comment on that retry loop already said this spec searches six
+ * times in a couple of minutes; nobody moved the number.
+ */
+test.beforeEach(() => {
+  test.slow();
+});
+
 test('the errand sits beside collecting, on the taxpayer an agent is standing in front of', async ({
   page,
 }) => {
