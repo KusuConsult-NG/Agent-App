@@ -104,29 +104,49 @@ or register, and they need fixing whatever is decided about wording.
 | `statusOffline` / `offlineMessage` | `BA HANYAR SADARWA` in one, `Babu hanyar sadarwa` in the other, for the same thing. |
 | `statusFailed` / `paymentFailed` | `BA TA YI BA` treats the subject as feminine; `bai yi nasara ba` treats it as masculine. Same subject, two agreements. |
 | `needDeclaration` / `enablePush` | `sanarwa` does duty for both the *declaration* a taxpayer accepts and a push *notification*. One word, two unrelated things. |
-| `receiptCodeShape` | Calls `T7C72-QTUDN` a `lambar rasit`, but that is already the receipt **number**. See below — it is wider than one string. |
+| ~~`receiptCodeShape`~~ | **Fixed.** It was five strings and English caused it — see below. One word left to confirm. |
 
 One further item in this group, `Mungode` → `Mun gode`, was a word-separation
-typo and has been corrected. It is the only change made without you.
+typo and has been corrected.
 
-**The receipt-code one is four strings, not one, and English is part of it.**
-Checking what the screen actually validates: `Verify.tsx` calls
-`verificationCodeFrom()`, so the thing being typed is the code printed under
-the QR square — not the `PSIRS/2026/000011` reference. English names it three
-ways for two objects, and Hausa has two words for the three:
+Two changes have now been made without you, and both are named here rather than
+buried: that typo, and the receipt-code terminology below. Neither invents
+Hausa — the typo split a word, and the other reuses `tantancewa`, which was
+already in the dictionary for this exact object. Everything else on this page
+still waits.
 
-| English | Hausa now | Key |
+**The receipt-code one is done, and it was never really a Hausa error.**
+
+`Verify.tsx` calls `verificationCodeFrom()`, the pattern it matches is
+`VERIFICATION_CODE`, the field label said "Verification Code" and the public
+portal said "verification code". The thing being typed was a **verification
+code** everywhere in the platform except three user-facing English strings that
+called it a "receipt code" — and `lambar rasit` is the receipt *number*, so the
+Hausa had faithfully translated a name that was wrong in English first.
+
+Two collisions, in opposite directions: three strings gave the code the receipt
+number's word, and the same object had two Hausa names — `Tabbatarwa` on the
+officer's transaction screen, `tantancewa` on the public one. Both are closed:
+
+| Names `T7C72-QTUDN` | English now | Hausa now |
 |---|---|---|
-| Receipt Number — `PSIRS/2026/000011` | `Lambar Rasit` | `receiptNumber` |
-| "the receipt code" — `T7C72-QTUDN` | `lambar rasit` ← collides | `verifyTypeCode` |
-| "a PSIRS receipt code" | `lambar rasit` ← collides | `verifyNotAReceiptCode` |
-| "A receipt code looks like…" | `Lambar rasit` ← collides | `receiptCodeShape` |
-| Verification Code | `Lambar Tabbatarwa` | `verificationCode` |
+| `verifyTypeCode` | Or type the **verification code** | `lambar tantancewa` |
+| `verifyNotAReceiptCode` | not a PSIRS **verification code** | `lambar tantancewa` |
+| `receiptCodeShape` | A **verification code** looks like… | `lambar tantancewa` |
+| `pubVerifyField` | Receipt number or verification code | `lambar tantancewa` |
+| `verificationCode` | Verification Code | `Lambar Tantancewa` |
 
-So changing the one string the sheet names would leave it disagreeing with the
-three around it. What is wanted is one Hausa term for `T7C72-QTUDN`, used in
-all four — and it is worth deciding whether English should stop calling it a
-"receipt code" at the same time, since that phrase is why the Hausa collided.
+The eight strings that still say `lambar rasit` are right to: they are the
+search boxes and the receipt number itself.
+
+**What is left for you is one word.** `tantancewa` was chosen over `tabbatarwa`
+because `tabbatar` already carries *confirm* across 139 strings — confirmed
+payments, attestations, step-up — and reusing it here would repeat the mistake
+this fixes. The corpus does not settle it, though: `verify` ("Verify Receipt")
+uses `Tabbatar` while `ofcOvVerifyChain` ("Verify chain integrity") uses
+`Tantance`, so both roots already translate *verify* somewhere. If `tabbatarwa`
+is the better word for a code somebody checks a receipt with, say so — it is
+now one decision in five places rather than a different word on each screen.
 
 > `HAUSA-REVIEW.md` § *Group 1 — content errors*
 

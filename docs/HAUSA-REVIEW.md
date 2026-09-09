@@ -402,7 +402,7 @@ quietly leave it.
 | `genuineReceipt` | Genuine receipt | Rasit na gaskiya | ☐ | |
 | `receiptNotValid` | Not a valid receipt | Rasit din ba na gaskiya ba ne | ☐ | |
 | `receiptNotValidBody` | No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS. | Babu takardar gwamnati da ta dace da wannan lamba ko code. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta fitar da shi ba. | ☐ | |
-| `receiptCodeShape` | A receipt code looks like T7C72-QTUDN. Check the code and try again. | Lambar rasit tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa. | ☐ | |
+| `receiptCodeShape` | A verification code looks like T7C72-QTUDN. Check the code and try again. | Lambar tantancewa tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa. | ☐ | |
 | `needFirstName` | Enter the taxpayer’s first name. | Ka rubuta sunan farko na mai biyan haraji. | ☐ | |
 | `needLastName` | Enter the taxpayer’s last name. | Ka rubuta sunan karshe na mai biyan haraji. | ☐ | |
 | `needPhone` | Enter the taxpayer’s phone number in full, for example 08012345678. | Ka rubuta cikakkiyar lambar wayar mai biyan haraji, misali 08012345678. | ☐ | |
@@ -440,7 +440,7 @@ quietly leave it.
 | `allocOfflineBody` | PSIRS could not be reached, so this collection has not been recorded. Do not hand anything over until it has been. | Ba a iya samun PSIRS ba, don haka ba a rubuta wannan karban ba. Kada ka mika komai sai an rubuta shi. | ☐ | |
 | `allocFailed` | The collection could not be recorded. Try again. | Ba a iya rubuta karban ba. Ka sake gwadawa. | ☐ | |
 | `verifyCouldNotReach` | PSIRS could not be reached, so this receipt could not be checked. | Ba a iya samun PSIRS ba, don haka ba a iya duba wannan rasit ba. | ☐ | |
-| `verifyNotAReceiptCode` | That QR code is not a PSIRS receipt code. Keep the receipt in frame. | Wannan QR code ba lambar rasit ta PSIRS ba ce. Ka rike rasit a cikin firam. | ☐ | |
+| `verifyNotAReceiptCode` | That QR code is not a PSIRS verification code. Keep the receipt in frame. | Wannan QR code ba lambar tantancewa ta PSIRS ba ce. Ka rike rasit a cikin firam. | ☐ | |
 | `verifyOfflineBody` | A receipt can only be checked against PSIRS, so this needs a connection. You can still scan the code and check it when you are back online. | Ba za a iya duba rasit ba sai ta PSIRS, don haka wannan yana bukatar hanyar sadarwa. Za ka iya duba lambar sannan ka tantance ta idan ka dawo kan layi. | ☐ | |
 | `grpNoAssessmentBody` | Registering a group records that it exists. Nobody is charged anything, and no member is added, until an officer has approved it. | Yin rajistar kungiya yana nuna cewa tana nan. Ba a caji kowa komai ba, kuma ba a kara wani mamba ba, sai jami’i ya amince da ita. | ☐ | |
 | `grpAskLeaderHint` | You are paid commission on what these members pay, so your word that somebody belongs is not enough on its own. The group’s own leader confirms the list. | Ana biyan ka kwamishan a kan abin da wadannan mambobin suka biya, don haka maganarka kadai cewa wani na cikinsu ba ta isa ba. Shugaban kungiyar da kansa ne ke tabbatar da jerin. | ☐ | |
@@ -2645,7 +2645,7 @@ instructions — but they are what an agent reads all day.
 | `verifyNotConfirmed` | Could not be confirmed | Ba a iya tabbatarwa ba | ☐ | |
 | `verifyCheckReceipt` | Check a receipt | Duba rasit | ☐ | |
 | `verifyScanQr` | Scan the QR code | Duba lambar QR | ☐ | |
-| `verifyTypeCode` | Or type the receipt code | Ko rubuta lambar rasit | ☐ | |
+| `verifyTypeCode` | Or type the verification code | Ko rubuta lambar tantancewa | ☐ | |
 | `verifyOffline` | You are offline | Ba ka da intanet | ☐ | |
 
 #### Reporting a problem
@@ -3079,7 +3079,7 @@ instructions — but they are what an agent reads all day.
 | `amount` | Amount | Kudin Haraji | ☐ | |
 | `totalPaid` | Total Paid | Jimlar Kudin da Aka Biya | ☐ | |
 | `receiptNumber` | Receipt Number | Lambar Rasit | ☐ | |
-| `verificationCode` | Verification Code | Lambar Tabbatarwa | ☐ | |
+| `verificationCode` | Verification Code | Lambar Tantancewa | ☐ | |
 | `paymentMode` | Payment Mode | Hanyar Biyan Kudi | ☐ | |
 | `noTaxPayable` | No tax is payable | Babu harajin da za a biya | ☐ | |
 | `noTaxPayableBody` | This taxpayer owes nothing on the amount declared. Do not increase it to make a payment go through — there is nothing to collect. | Wannan mai biyan haraji ba shi da abin biya a kan adadin da aka shigar. Kada ka kara adadin domin a sami biyan kudi — babu abin karba. | ☐ | |

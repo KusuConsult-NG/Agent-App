@@ -5597,7 +5597,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyScanHint: "Scan the square on the receipt, or type the code printed beneath it. PSIRS confirms whether the receipt was issued — reading the code only tells you what is on the paper.",
     verifyOfflineBody: "A receipt can only be checked against PSIRS, so this needs a connection. You can still scan the code and check it when you are back online.",
     verifyCouldNotReach: "PSIRS could not be reached, so this receipt could not be checked.",
-    verifyNotAReceiptCode: "That QR code is not a PSIRS receipt code. Keep the receipt in frame.",
+    verifyNotAReceiptCode: "That QR code is not a PSIRS verification code. Keep the receipt in frame.",
     verifyCameraFailed: "The camera could not be opened. Type the code printed under the QR square instead.",
     verifyChecking: "Checking with PSIRS…",
     verifyCheckThisCode: "Check this code",
@@ -6014,7 +6014,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanCamera: "Camera",
     verifyCheckReceipt: "Check a receipt",
     verifyScanQr: "Scan the QR code",
-    verifyTypeCode: "Or type the receipt code",
+    verifyTypeCode: "Or type the verification code",
     verifyOffline: "You are offline",
     stepUpOneTimeCode: "One-time code",
     stepUpExpired: "That code has expired",
@@ -6044,7 +6044,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     receiptNotValid: 'Not a valid receipt',
     receiptNotValidBody:
       'No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS.',
-    receiptCodeShape: 'A receipt code looks like T7C72-QTUDN. Check the code and try again.',
+    receiptCodeShape: 'A verification code looks like T7C72-QTUDN. Check the code and try again.',
 
     needFirstName: 'Enter the taxpayer\u2019s first name.',
     needLastName: 'Enter the taxpayer\u2019s last name.',
@@ -6406,7 +6406,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     amount: 'Kudin Haraji',
     totalPaid: 'Jimlar Kudin da Aka Biya',
     receiptNumber: 'Lambar Rasit',
-    verificationCode: 'Lambar Tabbatarwa',
+    verificationCode: 'Lambar Tantancewa',
     paymentMode: 'Hanyar Biyan Kudi',
     neverCollectCash: 'Kada ka karbi kudi a hannu',
     neverCollectCashBody:
@@ -8620,7 +8620,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyScanHint: "Ka duba murabba’in da ke kan rasit, ko ka rubuta lambar da ke kasansa. PSIRS na tabbatar ko an bayar da rasit — karanta lambar kawai yana gaya maka abin da ke kan takardar.",
     verifyOfflineBody: "Ba za a iya duba rasit ba sai ta PSIRS, don haka wannan yana bukatar hanyar sadarwa. Za ka iya duba lambar sannan ka tantance ta idan ka dawo kan layi.",
     verifyCouldNotReach: "Ba a iya samun PSIRS ba, don haka ba a iya duba wannan rasit ba.",
-    verifyNotAReceiptCode: "Wannan QR code ba lambar rasit ta PSIRS ba ce. Ka rike rasit a cikin firam.",
+    verifyNotAReceiptCode: "Wannan QR code ba lambar tantancewa ta PSIRS ba ce. Ka rike rasit a cikin firam.",
     verifyCameraFailed: "Ba a iya bude kyamara ba. Maimakon haka ka rubuta lambar da aka buga karkashin murabba’in QR.",
     verifyChecking: "Ana dubawa tare da PSIRS…",
     verifyCheckThisCode: "Duba wannan lambar",
@@ -9037,7 +9037,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanCamera: "Kyamara",
     verifyCheckReceipt: "Duba rasit",
     verifyScanQr: "Duba lambar QR",
-    verifyTypeCode: "Ko rubuta lambar rasit",
+    verifyTypeCode: "Ko rubuta lambar tantancewa",
     verifyOffline: "Ba ka da intanet",
     stepUpOneTimeCode: "Lambar amfani sau daya",
     stepUpExpired: "Lambar ta kare",
@@ -9067,7 +9067,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     receiptNotValid: 'Rasit din ba na gaskiya ba ne',
     receiptNotValidBody:
       'Babu takardar gwamnati da ta dace da wannan lamba ko code. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta fitar da shi ba.',
-    receiptCodeShape: 'Lambar rasit tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa.',
+    receiptCodeShape: 'Lambar tantancewa tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa.',
 
     needFirstName: 'Ka rubuta sunan farko na mai biyan haraji.',
     needLastName: 'Ka rubuta sunan karshe na mai biyan haraji.',
