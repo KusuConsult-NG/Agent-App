@@ -644,28 +644,19 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
   /*
    * THE OFFICER PORTAL
    *
-   * The job monitor is the one to take first. `describeState` composes six
-   * sentences in `apps/api` — "Failed 3 times in a row: …", "Started and
-   * never finished" — and the column header above them is translated while
-   * they are not. The state is already an enum on the wire and the error and
-   * the failure count come with it, so the screen has everything it needs to
-   * say this itself.
-   */
-  "../screens/Oversight.tsx:485 key: 'message'",
-
-  /*
-   * The chain verdict below it is done, and what is left is the last resort
-   * rather than the ordinary path.
+   * Nothing here is an ordinary path any more. Both are the last resort: a
+   * state or a verdict this build has never met, which is what a deployment
+   * looks like while the API is ahead of the portal. Somebody told a job is
+   * broken, or a log is, and given no reason at all is worse off than one
+   * given the reason in the wrong language.
    *
-   * `chainAnswer` renders one of four dictionary sentences; it falls back to
-   * the server's English only for a verdict this build has never heard of,
-   * which happens when the API is ahead of the portal during a deployment.
-   * An auditor told the log is broken and given no reason at all is worse off
-   * than one given the reason in the wrong language, so the fallback stays —
-   * and stays named here, because it is still the server's English on a
-   * screen that offers Hausa.
+   * The job monitor's six sentences are composed here now. Everything they
+   * needed was already on the wire — the state as an enum the column beside
+   * it renders as a translated badge, plus the consecutive failure count and
+   * the last error, which this screen received all along without declaring.
    */
-  '../screens/Oversight.tsx:513 answer.message',
+  '../screens/Oversight.tsx:458 row.message',
+  '../screens/Oversight.tsx:571 answer.message',
 
   /*
    * THE CITIZEN-FACING PORTAL

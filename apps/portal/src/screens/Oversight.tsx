@@ -411,17 +411,61 @@ interface JobReport {
   lastStartedAt: string | null;
   lastSucceededAt: string | null;
   lastDetail: string | null;
+  /**
+   * Why the last run failed.
+   *
+   * `jobHealth()` has always sent this; the interface here simply never
+   * declared it, so the one detail that makes a FAILING row actionable was
+   * arriving and being dropped on the floor.
+   */
+  lastError: string | null;
   consecutiveFailures: number;
   runsTotal: number;
   failuresTotal: number;
   message: string;
 }
 
+/**
+ * How the six states read to somebody deciding what to do about them.
+ *
+ * `describeState` composed these in `apps/api` and this column printed them,
+ * while the column beside it rendered the same `state` as a translated badge.
+ * Every value they are built from was already here: the enum, the count of
+ * consecutive failures, and the error from the last run.
+ *
+ * OVERDUE and STALLED are the pair worth keeping apart. A job that has not
+ * started means the schedule may have stopped; a job that started and never
+ * returned means an instance died holding it. Both show as "not working" and
+ * they are looked into differently.
+ */
+function jobState(row: JobReport, t: TranslationDictionary): string {
+  switch (row.state) {
+    case 'HEALTHY':
+      return t.ofcOvJobHealthy;
+    case 'RUNNING':
+      return t.ofcOvJobRunning;
+    case 'OVERDUE':
+      return t.ofcOvJobOverdue;
+    case 'STALLED':
+      return t.ofcOvJobStalled;
+    case 'FAILING':
+      return t.ofcOvJobFailing
+        .replace('{{count}}', String(row.consecutiveFailures))
+        .replace('{{error}}', row.lastError ?? t.ofcOvJobNoReason);
+    case 'NEVER_RUN':
+      return t.ofcOvJobNeverRun;
+    default:
+      return row.message;
+  }
+}
+
 /** Every-30-seconds and every-6-hours both have to read at a glance. */
-function readInterval(ms: number): string {
-  if (ms < 60_000) return `every ${Math.round(ms / 1000)}s`;
-  if (ms < 60 * 60_000) return `every ${Math.round(ms / 60_000)} min`;
-  return `every ${Math.round(ms / (60 * 60_000))} h`;
+function readInterval(ms: number, t: TranslationDictionary): string {
+  if (ms < 60_000)
+    return t.ofcOvEverySeconds.replace('{{n}}', String(Math.round(ms / 1000)));
+  if (ms < 60 * 60_000)
+    return t.ofcOvEveryMinutes.replace('{{n}}', String(Math.round(ms / 60_000)));
+  return t.ofcOvEveryHours.replace('{{n}}', String(Math.round(ms / (60 * 60_000))));
 }
 
 export function BackgroundWorkPanel() {
@@ -468,7 +512,11 @@ export function BackgroundWorkPanel() {
               </>
             ),
           },
-          { key: 'intervalMs', label: 'ofcOvRuns', render: (row: JobReport) => readInterval(row.intervalMs) },
+          {
+            key: 'intervalMs',
+            label: 'ofcOvRuns',
+            render: (row: JobReport) => readInterval(row.intervalMs, t),
+          },
           {
             key: 'state',
             label: 'ofcOsState',
@@ -482,7 +530,17 @@ export function BackgroundWorkPanel() {
             render: (row: JobReport) =>
               row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : t.ofcArNeverPaid,
           },
-          { key: 'message', label: 'ofcOvWhatThatMeans' },
+          {
+            /*
+             * Named for what the column shows, not for the field it used to
+             * print. `Table` reads `key` for data only when there is no
+             * `render`, so if this render is ever dropped the column shows a
+             * dash rather than quietly going back to the API's English.
+             */
+            key: 'whatThatMeans',
+            label: 'ofcOvWhatThatMeans',
+            render: (row: JobReport) => jobState(row, t),
+          },
         ]}
         rows={health.jobs}
         empty="ofcNoneBackgroundJobsDeclared"

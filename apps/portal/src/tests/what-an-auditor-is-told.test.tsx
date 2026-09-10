@@ -214,3 +214,115 @@ describe('every verdict can be said at all', () => {
     }
   });
 });
+
+/**
+ * The job monitor above the chain check, on the same screen.
+ *
+ * `describeState` composed six sentences in `apps/api` and this column
+ * printed them — while the column immediately beside it rendered the same
+ * `state` as a translated badge. Everything the sentences are built from was
+ * already here: the enum, the count of consecutive failures, and the error
+ * from the last run, which this screen had been receiving without ever
+ * declaring the field.
+ */
+describe('what the job monitor says about an unattended job', () => {
+  function jobs(rows: unknown[]) {
+    vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.includes('/government/workers'))
+        return Promise.resolve({
+          jobs: rows,
+          healthy: false,
+          needingAttention: rows.length,
+        } as never);
+      return Promise.resolve([] as never);
+    });
+  }
+
+  const base = {
+    name: 'reconcile-settlements',
+    purpose: 'Reconcile settlements',
+    intervalMs: 6 * 60 * 60_000,
+    lastStartedAt: null,
+    lastSucceededAt: null,
+    lastDetail: null,
+    lastError: null,
+    consecutiveFailures: 0,
+    runsTotal: 0,
+    failuresTotal: 0,
+    message: 'English from the API',
+  };
+
+  /*
+   * The pair that must not be confused. A job that has not started means the
+   * schedule may have stopped; a job that started and never returned means an
+   * instance died holding it. Both read as "not working" and are looked into
+   * differently.
+   */
+  it('keeps “never started” apart from “started and never came back”', async () => {
+    jobs([{ ...base, state: 'OVERDUE' }]);
+    render(<AuditScreen />);
+    await waitFor(() => expect(screen.getByText(ha.ofcOvJobOverdue)).toBeTruthy());
+    expect(screen.queryByText(ha.ofcOvJobStalled)).toBeNull();
+    expect(screen.queryByText('English from the API')).toBeNull();
+
+    cleanup();
+    jobs([{ ...base, state: 'STALLED' }]);
+    render(<AuditScreen />);
+    await waitFor(() => expect(screen.getByText(ha.ofcOvJobStalled)).toBeTruthy());
+  });
+
+  it('counts the failures in a row and names the last reason', async () => {
+    jobs([
+      {
+        ...base,
+        state: 'FAILING',
+        consecutiveFailures: 3,
+        lastError: 'connection refused',
+      },
+    ]);
+    render(<AuditScreen />);
+
+    const expected = ha.ofcOvJobFailing
+      .replace('{{count}}', '3')
+      .replace('{{error}}', 'connection refused');
+    await waitFor(() => expect(screen.getByText(expected)).toBeTruthy());
+  });
+
+  /* A failing job with nothing recorded still has to say so, not show a blank. */
+  it('says so when a failure recorded no reason', async () => {
+    jobs([{ ...base, state: 'FAILING', consecutiveFailures: 1, lastError: null }]);
+    render(<AuditScreen />);
+
+    const expected = ha.ofcOvJobFailing
+      .replace('{{count}}', '1')
+      .replace('{{error}}', ha.ofcOvJobNoReason);
+    await waitFor(() => expect(screen.getByText(expected)).toBeTruthy());
+  });
+
+  it('says how often a job runs in the reader’s language too', async () => {
+    jobs([{ ...base, state: 'HEALTHY', intervalMs: 30_000 }]);
+    render(<AuditScreen />);
+    await waitFor(() =>
+      expect(screen.getByText(ha.ofcOvEverySeconds.replace('{{n}}', '30'))).toBeTruthy(),
+    );
+  });
+
+  it('has both languages for all six states', () => {
+    const keys = [
+      'ofcOvJobHealthy',
+      'ofcOvJobRunning',
+      'ofcOvJobOverdue',
+      'ofcOvJobStalled',
+      'ofcOvJobFailing',
+      'ofcOvJobNeverRun',
+    ] as const;
+    for (const key of keys) {
+      const e = (en as unknown as Record<string, string>)[key];
+      const h = (ha as unknown as Record<string, string>)[key];
+      expect(typeof h, `${key} missing in ha`).toBe('string');
+      expect(e, `${key} identical in both languages`).not.toBe(h);
+    }
+    expect(en.ofcOvJobFailing).toContain('{{count}}');
+    expect(ha.ofcOvJobFailing).toContain('{{error}}');
+  });
+});

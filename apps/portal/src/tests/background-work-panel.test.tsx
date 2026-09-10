@@ -22,6 +22,7 @@ const job = (over: Partial<Record<string, unknown>> = {}) => ({
   lastStartedAt: '2026-08-26T06:00:00.000Z',
   lastSucceededAt: '2026-08-26T06:00:00.000Z',
   lastDetail: '4 reminder(s) sent',
+  lastError: null,
   consecutiveFailures: 0,
   runsTotal: 12,
   failuresTotal: 0,
@@ -38,7 +39,25 @@ describe('Unattended work', () => {
 
   it('says how many need attention rather than leaving it to be counted', async () => {
     serve({
-      jobs: [job(), job({ name: 'refund-retry', state: 'FAILING', message: 'Failed 3 times in a row: Gateway unreachable' })],
+      /*
+       * The failure carries its count and its reason as fields.
+       *
+       * This used to set only `message`, the sentence `apps/api` composed
+       * from them, and assert that the sentence reached the screen — which
+       * pinned the very thing that was wrong. The column now builds it from
+       * `consecutiveFailures` and `lastError`, which the response has always
+       * carried, so the fixture supplies what the screen actually reads.
+       */
+      jobs: [
+        job(),
+        job({
+          name: 'refund-retry',
+          state: 'FAILING',
+          consecutiveFailures: 3,
+          lastError: 'Gateway unreachable',
+          message: 'Failed 3 times in a row: Gateway unreachable',
+        }),
+      ],
       healthy: false,
       needingAttention: 1,
     });

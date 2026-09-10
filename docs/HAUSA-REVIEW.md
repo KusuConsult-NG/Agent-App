@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,208 strings; that one is two pages and links back
+> because it carries all 3,218 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,208 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,218 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,208 strings is worse than no sheet, because it looks complete; this one cannot
+3,218 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,208 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,218 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,208 strings: where the
+- The glossary below is applied consistently across all 3,218 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3129 strings, grouped by where an agent meets them. Lower stakes
+3139 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1247,6 +1247,16 @@ instructions — but they are what an agent reads all day.
 | `ofcOvChange` | What changed | Abin da ya canza | ☐ | |
 | `ofcOvSweepRaised` | Sweep complete. {{count}} flag(s) raised for review. | An kammala bincike. An daga tuta {{count}} domin dubawa. | ☐ | |
 | `ofcOvJobsNeedAttention` | {{count}} of {{total}} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows. | Ayyuka {{count}} daga cikin {{total}} da aka tsara suna bukatar kulawa. Aikin da ba ya gudana ba ya haifar da abin dubawa, don haka nan kadai yake bayyana. | ☐ | |
+| `ofcOvJobHealthy` | Running on schedule. | Yana gudana bisa tsarin lokaci. | ☐ | |
+| `ofcOvJobRunning` | Running now. | Yana gudana yanzu. | ☐ | |
+| `ofcOvJobOverdue` | Has not started when it should have. The schedule itself may have stopped. | Bai fara a lokacin da ya kamata ba. Wataran tsarin lokacin kansa ya tsaya. | ☐ | |
+| `ofcOvJobStalled` | Started and never finished. Whichever instance was running it did not come back. | Ya fara amma bai kammala ba. Wurin da yake gudana bai dawo ba. | ☐ | |
+| `ofcOvJobFailing` | Failed {{count}} times in a row: {{error}} | Ya gaza sau {{count}} a jere: {{error}} | ☐ | |
+| `ofcOvJobNeverRun` | Has not run once since this database was created. | Bai taba gudana ba tun lokacin da aka kirkiri wannan ma’ajiyar bayanai. | ☐ | |
+| `ofcOvJobNoReason` | no reason recorded | ba a rubuta dalili ba | ☐ | |
+| `ofcOvEverySeconds` | every {{n}}s | kowane dakika {{n}} | ☐ | |
+| `ofcOvEveryMinutes` | every {{n}} min | kowane minti {{n}} | ☐ | |
+| `ofcOvEveryHours` | every {{n}} h | kowane awa {{n}} | ☐ | |
 | `ofcOvEveryScheduledJobHas` | Every scheduled job has run recently and succeeded. | Kowane aikin da aka tsara ya gudana kwanan nan kuma ya yi nasara. | ☐ | |
 | `ofcOvId` | Id | Lamba | ☐ | |
 | `ofcOvLoading` | Loading… | Ana lodi… | ☐ | |

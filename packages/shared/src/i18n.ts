@@ -3331,6 +3331,25 @@ export interface TranslationDictionary {
   pubCitizenByName: string;
   pubCitizenTooMany: string;
   /*
+   * What the job monitor says about a job, and how often it runs.
+   *
+   * Both were English on a screen that offers Hausa, and both are composed
+   * from values already on the wire: `state` is an enum the adjacent column
+   * already renders as a translated badge, and the failure count and last
+   * error travel with it. `ofcOvJobFailing` carries {{count}} and {{error}};
+   * the three intervals carry {{n}}.
+   */
+  ofcOvJobHealthy: string;
+  ofcOvJobRunning: string;
+  ofcOvJobOverdue: string;
+  ofcOvJobStalled: string;
+  ofcOvJobFailing: string;
+  ofcOvJobNeverRun: string;
+  ofcOvJobNoReason: string;
+  ofcOvEverySeconds: string;
+  ofcOvEveryMinutes: string;
+  ofcOvEveryHours: string;
+  /*
    * Why a capture made on a phone would not go.
    *
    * Read standing in front of the person whose details were just taken, so
@@ -6619,6 +6638,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    ofcOvJobHealthy: 'Running on schedule.',
+    ofcOvJobRunning: 'Running now.',
+    ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
+    ofcOvJobStalled:
+      'Started and never finished. Whichever instance was running it did not come back.',
+    ofcOvJobFailing: 'Failed {{count}} times in a row: {{error}}',
+    ofcOvJobNeverRun: 'Has not run once since this database was created.',
+    ofcOvJobNoReason: 'no reason recorded',
+    ofcOvEverySeconds: 'every {{n}}s',
+    ofcOvEveryMinutes: 'every {{n}} min',
+    ofcOvEveryHours: 'every {{n}} h',
     errDraftInvalid:
       'PSIRS could not accept this capture: {{detail}}. It is still on your phone — correct it and send it again.',
     errDraftTypeUnsupported:
@@ -9882,6 +9912,18 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
+    ofcOvJobRunning: 'Yana gudana yanzu.',
+    ofcOvJobOverdue:
+      'Bai fara a lokacin da ya kamata ba. Wataran tsarin lokacin kansa ya tsaya.',
+    ofcOvJobStalled:
+      'Ya fara amma bai kammala ba. Wurin da yake gudana bai dawo ba.',
+    ofcOvJobFailing: 'Ya gaza sau {{count}} a jere: {{error}}',
+    ofcOvJobNeverRun: 'Bai taba gudana ba tun lokacin da aka kirkiri wannan ma’ajiyar bayanai.',
+    ofcOvJobNoReason: 'ba a rubuta dalili ba',
+    ofcOvEverySeconds: 'kowane dakika {{n}}',
+    ofcOvEveryMinutes: 'kowane minti {{n}}',
+    ofcOvEveryHours: 'kowane awa {{n}}',
     errDraftInvalid:
       'PSIRS ba ta iya karbar wannan shigarwa ba: {{detail}}. Tana nan a wayarka — ka gyara ta ka sake aikawa.',
     errDraftTypeUnsupported:
