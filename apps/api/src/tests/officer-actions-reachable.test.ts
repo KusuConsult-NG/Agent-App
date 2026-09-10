@@ -130,6 +130,25 @@ function portalSource(): string {
     .join('\n');
 }
 
+/**
+ * Both clients, for the read check only.
+ *
+ * A write is asked about one application at a time — an officer must not be
+ * able to initiate a payment, and that separation is the point of the check
+ * above. A read is different: `/taxpayers/sectors` and `/payments/lookup` are
+ * facts the agent application asks for and the portal never does, and neither
+ * is unreachable. Asking "does anybody fetch this" of one client alone
+ * reported twenty of them as orphaned.
+ */
+const AGENT = '../agent/src';
+
+function anyClientSource(): string {
+  return [
+    portalSource(),
+    ...[AGENT, join(AGENT, 'screens'), join(AGENT, 'lib'), join(AGENT, 'components')].map(readAll),
+  ].join('\n');
+}
+
 const PREFIX: Record<string, string> = {
   'government.ts': '/government',
   'agents.ts': '/agents',
@@ -175,7 +194,14 @@ function segments(path: string): string[] {
     .replace(/\$\{[^}]*\}/g, '*')
     .replace(/^\/+|\/+$/g, '')
     .split('/')
-    .map((segment) => (segment.startsWith(':') ? '*' : segment));
+    /*
+     * A segment is its literal part. `analytics${params}` blanks to
+     * `analytics*`, which is the same segment as `analytics` followed by a
+     * query string — the trailing wildcard is the interpolation, not part of
+     * the name, and leaving it on meant the segment never compared equal.
+     */
+    .map((segment) => (segment.startsWith(':') ? '*' : segment.replace(/\*+$/, '')))
+    .map((segment) => (segment === '' ? '*' : segment));
 }
 
 function samePath(a: string[], b: string[]): boolean {
@@ -196,7 +222,21 @@ function samePath(a: string[], b: string[]): boolean {
  * endpoint visible rather than absorbed.
  */
 function portalPaths(): { path: string[]; read: boolean }[] {
-  const source = portalSource();
+  /*
+   * Interpolations blanked before anything is matched.
+   *
+   * Both patterns below stop at whitespace, and a real path carries
+   * interpolations with spaces inside them —
+   * `/government/periods/figures?periodStart=${period.period_start.slice(0, 10)}`
+   * has a space in `slice(0, 10)`, so the match ended mid-expression and the
+   * closing quote never arrived. Every path built that way looked absent.
+   *
+   * That is why this file needed two hand-pinned settlement tests and a list
+   * of endpoints "without a screen": some of them had a screen, and this
+   * could not see it. `*` stands in for the value, which is what `segments`
+   * reduces an interpolation to anyway.
+   */
+  const source = portalSource().replace(/\$\{[^}]*\}/g, '*');
   const found: { path: string[]; read: boolean }[] = [];
   for (const match of source.matchAll(/api\.get(?:<[^>]*>)?\(\s*[`'"](\/[^`'"]*)/g)) {
     found.push({ path: segments(match[1]), read: true });
@@ -307,6 +347,171 @@ describe('recording and closing a settlement', () => {
     assert.ok(
       portal.includes('/government/settlements/${'),
       'a disputed settlement holds its collections back, so there has to be a way to close it',
+    );
+  });
+});
+
+/**
+ * And the reads, which this file did not look at until three were found.
+ *
+ * The check above matches `post|patch|put|delete`. That was a deliberate
+ * scope — a write nobody can make is a feature that does not exist — and it
+ * left the other half open: a *read* nobody can make is a fact nobody can
+ * learn, and three of those were found in one afternoon by rendering screens.
+ *
+ *   * `GET /government/audit/reports/:id` returns `checksumMatches`, which is
+ *     how an auditor learns a signed report's stored figures were altered.
+ *     The screen read the list instead, which repeats the checksum recorded
+ *     at generation — the one value tampering does not disturb.
+ *
+ *   * `GET /allocations/rounds/:id` adds collected against awarded, the
+ *     reconciliation its own comment calls "the one that matters".
+ *
+ *   * `GET /government/users/:id/sessions` is how an administrator sees
+ *     somebody else's machines. Without it the only laptop they could block
+ *     was the one they were sitting at.
+ *
+ * All three were built, permissioned, documented in `API.md`, and reachable
+ * by nobody. Nothing else was going to catch that: the API tests prove the
+ * endpoint works, and the type checker sees no dangling reference because
+ * there is no reference.
+ */
+function readEndpoints(): string[] {
+  const found: string[] = [];
+  for (const file of readdirSync(ROUTES).filter((f) => f.endsWith('.ts'))) {
+    const prefix = PREFIX[file];
+    if (prefix === undefined) continue;
+    const src = readFileSync(join(ROUTES, file), 'utf8');
+    for (const match of src.matchAll(/(\w*Router)\.get\(\s*\n?\s*'([^']+)'/g)) {
+      const mount =
+        file === 'groups.ts'
+          ? match[1] === 'allocationRouter'
+            ? '/allocations'
+            : '/groups'
+          : prefix;
+      found.push(mount + (match[2] === '/' ? '' : match[2]));
+    }
+  }
+  return [...new Set(found)];
+}
+
+/**
+ * Reads an officer never performs, each for a stated reason.
+ *
+ * Deliberately not pattern-matched. "Anything under /agents/me" would quietly
+ * absorb the next officer endpoint that happened to sit there, which is how
+ * the three above survived.
+ */
+const READ_WITHOUT_A_SCREEN = new Set([
+  // The agent application's own reads. An officer does not have an
+  // application, a training record, or a commission of their own.
+  '/agents/me',
+  '/agents/me/application',
+  '/agents/me/bank/change',
+  '/agents/me/commission',
+  '/agents/me/home',
+  '/agents/me/kyc/documents',
+  '/agents/me/kyc/documents/:id',
+  '/agents/me/training',
+  '/agents/me/transactions',
+  '/agents/performance',
+  // Answered to a citizen or a referee with no account at all, from the
+  // public screens rather than the officer portal.
+  '/citizen/status',
+  '/citizen/statement',
+  '/citizen/verify/:code',
+  // Read by the service worker and the agent shell, not by a person.
+  '/push/vapid-key',
+  '/auth/me',
+  // A file stream, reached by a link the browser follows rather than by
+  // `api.get` — the document itself, not a description of it.
+  '/government/cases/evidence/:id/file',
+  '/agents/kyc/documents/:id/file',
+  '/payments/:id/download',
+
+  /*
+   * ---------------------------------------------------------------------
+   * Reads with no caller today. Not excused — recorded.
+   * ---------------------------------------------------------------------
+   *
+   * Each was verified by hand against both clients. They are listed so this
+   * check can pass and the *next* unreachable read fails, rather than being
+   * absorbed into a backlog nothing names. Three others found the same way
+   * have already been given callers or their own task.
+   *
+   * The consequential ones, in the order I would fix them:
+   *
+   *   `/government/platform/integrations` — whether the gateway, the TIN
+   *     service and the vehicle authority are answering. Nobody can see it,
+   *     which is why an outage is discovered from a queue that stopped
+   *     moving rather than from a screen.
+   *
+   *   `/government/users/:id/activity` — what an officer did. The audit log
+   *     exists and is searchable; this is the per-officer view of it, and an
+   *     administrator investigating somebody has no way to open it.
+   *
+   *   `/government/audit/reports/:id` — the recomputed checksum. The list now
+   *     carries `checksumMatches` per row, so the fact reaches an auditor;
+   *     this endpoint additionally returns the payload and the recomputed
+   *     value, which is what a reviewer needs to see *what* changed.
+   *
+   *   `/taxpayers/:id/incentives` — what a citizen is entitled to. Programmes
+   *     grant entitlement and nothing shows a taxpayer their own.
+   *
+   * The rest are quieter: a support ticket's detail, an assessment or invoice
+   * by id, a payment lookup, the MDA list, a transfer history, commission by
+   * place, and a KYC access log the screen mentions only in a comment.
+   */
+  '/government/intelligence/taxpayers/:id/access-log',
+  '/government/commissions/by-place',
+  '/government/transfers',
+  '/government/platform/integrations',
+  '/government/audit/reports/:id',
+  '/government/users/:id/activity',
+  '/government/tickets/:id',
+  '/payments',
+  '/payments/lookup',
+  '/revenue/authorities',
+  '/revenue/assessments/:id',
+  '/revenue/invoices/:id',
+  '/revenue/taxpayers/:id/obligations',
+  '/taxpayers/:id/incentives',
+]);
+
+describe('the portal can read every fact the API will tell it', () => {
+  it('leaves no officer read without a caller', () => {
+    const source = anyClientSource().replace(/\$\{[^}]*\}/g, '*');
+    const paths: string[][] = [];
+    /*
+     * The literal prefix of every quoted path, without needing it to end.
+     *
+     * A path is nearly always followed by a query string or an interpolation,
+     * so requiring a closing quote finds only the handful that stop at a
+     * segment boundary. `segments` reduces `*` and `:param` to the same
+     * wildcard, so the prefix is all that has to line up.
+     */
+    for (const match of source.matchAll(/[`'"](\/[a-z][a-z0-9-]*(?:\/[a-z0-9\-*:_]+)*)/gi)) {
+      paths.push(segments(match[1]));
+    }
+    const orphans = readEndpoints()
+      .filter(
+        (path) =>
+          !AGENT_APPLICATION_ONLY.has(path) &&
+          !SCHEDULED_ONLY.has(path) &&
+          !OFFICER_WITHOUT_A_SCREEN.has(path) &&
+          !READ_WITHOUT_A_SCREEN.has(path),
+      )
+      .filter((path) => {
+        const want = segments(path);
+        return !paths.some((candidate) => samePath(want, candidate));
+      });
+
+    assert.deepEqual(
+      orphans,
+      [],
+      'these reads exist and no screen asks for them, so the fact they answer ' +
+        'reaches nobody — give them a caller, or record why an officer never ' +
+        'asks:\n  ' + orphans.join('\n  '),
     );
   });
 });
