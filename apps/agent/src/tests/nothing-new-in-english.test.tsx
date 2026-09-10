@@ -107,43 +107,22 @@ const ALLOWED = new Set([
 ]);
 
 /**
- * The Bluetooth printer's English, and what is now actually stopping it.
+ * Nothing is owed here any more.
  *
- * These are real — an agent connecting a printer reads them, and the test slip
- * carries four of them onto paper.
+ * This list held the twelve strings in `lib/bluetooth-printer.ts` — the
+ * messages an agent reads while connecting a printer, and the lines the test
+ * slip puts on paper. They were listed rather than fixed because `escpos.ts`
+ * replaced every byte above ASCII with a question mark, so translating them
+ * would have printed `na?ura`. The encoder folds now, the receipt and the slip
+ * both read from the dictionary, and the list is empty.
  *
- * **The reason they were listed here has been removed.** It used to be that
- * `escpos.ts` replaced every byte above ASCII with a question mark, so a
- * translated printer message would have reached the paper as `na?ura`. That
- * was true, and it was also understating the problem: the same line was
- * printing `Sa?idu Dan?azumi` for a taxpayer called Sa’idu Dan’azumi, in
- * English, on receipts already being handed to citizens. The encoder now folds
- * to the nearest ASCII and `what-reaches-the-paper.test.tsx` asserts that
- * every string in the dictionary, both languages, survives it.
- *
- * So nothing technical is in the way any more. What is left is the translation
- * itself — twelve strings here, and about twenty-five more in the receipt
- * template in `escpos.ts`, which is entirely hardcoded English and is the
- * document a citizen actually keeps. That is a piece of work with a reviewer
- * at the end of it, not a blocker.
- *
- * This list is debt, not permission. It is expected to shrink to nothing, and
- * anything not already on it fails.
+ * It is kept, empty, rather than deleted. A named place to record a string
+ * that genuinely cannot go through the dictionary yet is worth having, and an
+ * empty one says the honest thing: nothing currently qualifies. Anything added
+ * to it needs the reason written next to it, and the reason has to be better
+ * than "not yet".
  */
-const NOT_YET_THROUGH_THE_DICTIONARY = new Set([
-  'No Bluetooth printer connected. Please connect a printer first.',
-  'No writable printer service found on this Bluetooth device.',
-  'Web Bluetooth is not supported on this browser or device.',
-  'Failed to connect to Bluetooth printer',
-  'Failed while transmitting data to printer',
-  'Printer disconnected.',
-  'Connected (BLE)',
-  'Digital Grassroots Platform',
-  'Mobile POS Terminal Ready',
-  'Date:',
-  'Status:',
-  'Width:',
-]);
+const NOT_YET_THROUGH_THE_DICTIONARY = new Set<string>([]);
 
 /** Props whose value is rendered rather than used. */
 const RENDERED_PROPS =
@@ -546,10 +525,6 @@ describe('no screen picks its own locale', () => {
     const offenders: string[] = [];
     for (const [path, source] of Object.entries(SURFACES)) {
       const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-      // The printer's test slip pins `en-GB`, and is on the same debt as its
-      // messages: a date through `formatDateIn` takes its month from the
-      // dictionary, and the encoder above would print that month as `????`.
-      if (path.endsWith('/bluetooth-printer.ts')) continue;
       for (const match of code.matchAll(
         /toLocale(?:Date|Time)String\(|toLocaleString\(\s*['"][^'"]+['"]/g,
       )) {

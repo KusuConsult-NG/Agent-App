@@ -17,9 +17,9 @@ Paradigm: **ku** — polite plural (gender-neutral).
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `muku` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanku` | **confirm this one** |
 
-330 strings, 458 occurrences.
+332 strings, 460 occurrences.
 
-## The agent app — 177 strings
+## The agent app — 179 strings
 
 ### `agEnBandSoFar`
 
@@ -854,6 +854,18 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: This payment has NOT been marked as received. Do not ask the taxpayer to pay again — check again in a moment.
 - Now: BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya — ka sake dubawa nan da dan lokaci.
 - Would become: BA A nuna an karbi wannan kudin ba. Kada ku ce wa mai biyan haraji ya sake biya — ku sake dubawa nan da dan lokaci.
+
+### `prnNotConnected`
+
+- English: No printer is connected. Connect one first.
+- Now: Ba a hada da na’urar bugawa ba. Ka hada da daya tukuna.
+- Would become: Ba a hada da na’urar bugawa ba. Ku hada da daya tukuna.
+
+### `prnSendFailed`
+
+- English: The printer did not accept the data. Try again.
+- Now: Na’urar bugawa ba ta karbi bayanan ba. Ka sake gwadawa.
+- Would become: Na’urar bugawa ba ta karbi bayanan ba. Ku sake gwadawa.
 
 ### `rcpCheckOffice`
 

@@ -10,8 +10,11 @@ import {
   encodeVehicleRenewalEscpos,
   EscposBuilder,
   type PaperWidth,
+  formatDateTimeIn,
+  translations,
   type Language,
   type ReceiptPrintData,
+  type TranslationDictionary,
   type VehicleRenewalPrintData,
 } from '@psirs/shared';
 
@@ -31,7 +34,43 @@ export interface PrinterDeviceState {
   id: string;
   status: PrinterStatus;
   paperWidth: PaperWidth;
-  errorMessage?: string;
+  problem?: PrinterProblem;
+}
+
+/**
+ * What went wrong with the printer, as a reason rather than a sentence.
+ *
+ * The sixth place in this application where an English sentence was thrown and
+ * a screen rendered it in preference to the translated string beside it —
+ * `setPrinterMsg(err.message || t.morePrinterConnectFailed)`. The dictionary
+ * had the words the whole time and never got to say them.
+ */
+export type PrinterProblem =
+  | 'UNSUPPORTED'
+  | 'NO_WRITABLE_SERVICE'
+  | 'NOT_CONNECTED'
+  | 'CONNECT_FAILED'
+  | 'SEND_FAILED'
+  | 'DISCONNECTED';
+
+/** What to tell the agent, per problem. Exhaustive by construction. */
+export const PRINTER_PROBLEM_TEXT: Record<PrinterProblem, keyof TranslationDictionary> = {
+  UNSUPPORTED: 'moreNoWebBluetooth',
+  NO_WRITABLE_SERVICE: 'prnNoWritable',
+  NOT_CONNECTED: 'prnNotConnected',
+  CONNECT_FAILED: 'morePrinterConnectFailed',
+  SEND_FAILED: 'prnSendFailed',
+  DISCONNECTED: 'prnDisconnected',
+};
+
+export class PrinterUnavailable extends Error {
+  readonly problem: PrinterProblem;
+
+  constructor(problem: PrinterProblem) {
+    super(`printer unavailable: ${problem}`);
+    this.name = 'PrinterUnavailable';
+    this.problem = problem;
+  }
 }
 
 class BluetoothPrinterManager {
@@ -73,10 +112,10 @@ class BluetoothPrinterManager {
     };
   }
 
-  private notifyState(errorMessage?: string): void {
+  private notifyState(problem?: PrinterProblem): void {
     const state = {
       ...this.getState(),
-      errorMessage,
+      problem,
     };
     for (const listener of this.listeners) {
       try {
@@ -89,7 +128,7 @@ class BluetoothPrinterManager {
 
   public async connect(): Promise<boolean> {
     if (!this.isSupported()) {
-      throw new Error('Web Bluetooth is not supported on this browser or device.');
+      throw new PrinterUnavailable('UNSUPPORTED');
     }
 
     try {
@@ -107,7 +146,7 @@ class BluetoothPrinterManager {
         this.status = 'disconnected';
         this.server = null;
         this.characteristic = null;
-        this.notifyState('Printer disconnected.');
+        this.notifyState('DISCONNECTED');
       });
 
       this.server = await this.device.gatt.connect();
@@ -115,7 +154,7 @@ class BluetoothPrinterManager {
       // Find writable characteristic across common printer services
       this.characteristic = await this.findWriteCharacteristic(this.server);
       if (!this.characteristic) {
-        throw new Error('No writable printer service found on this Bluetooth device.');
+        throw new PrinterUnavailable('NO_WRITABLE_SERVICE');
       }
 
       this.status = 'connected';
@@ -123,8 +162,9 @@ class BluetoothPrinterManager {
       return true;
     } catch (error: any) {
       this.status = 'error';
-      const msg = error?.message || 'Failed to connect to Bluetooth printer';
-      this.notifyState(msg);
+      this.notifyState(
+        error instanceof PrinterUnavailable ? error.problem : 'CONNECT_FAILED',
+      );
       throw error;
     }
   }
@@ -190,7 +230,7 @@ class BluetoothPrinterManager {
       if (this.device) {
         await this.connect();
       } else {
-        throw new Error('No Bluetooth printer connected. Please connect a printer first.');
+        throw new PrinterUnavailable('NOT_CONNECTED');
       }
     }
 
@@ -214,8 +254,9 @@ class BluetoothPrinterManager {
       this.notifyState();
     } catch (error: any) {
       this.status = 'error';
-      const msg = error?.message || 'Failed while transmitting data to printer';
-      this.notifyState(msg);
+      this.notifyState(
+        error instanceof PrinterUnavailable ? error.problem : 'SEND_FAILED',
+      );
       throw error;
     }
   }
@@ -230,22 +271,35 @@ class BluetoothPrinterManager {
     await this.writeRawBytes(bytes);
   }
 
-  public async printTestSlip(): Promise<void> {
+  /**
+   * The slip an agent prints to see whether the printer works.
+   *
+   * In the *agent's* language, unlike the receipt. The receipt belongs to the
+   * citizen and follows their recorded preference; this is a diagnostic the
+   * agent prints for themselves and nobody else ever sees.
+   *
+   * The date went through `toLocaleString('en-GB')`, which put an English
+   * month on the paper whatever the rest of it said — and pinned a format that
+   * has nothing to do with where this is used. `formatDateTimeIn` takes its
+   * month from the dictionary.
+   */
+  public async printTestSlip(language: Language = 'en'): Promise<void> {
+    const t = translations[language] ?? translations.en;
     const builder = new EscposBuilder(this.paperWidth);
     builder
       .alignCenter()
       .setBold(true)
-      .textLine('PLATEAU STATE GOVERNMENT')
-      .textLine('INTERNAL REVENUE SERVICE')
+      .textLine(t.rcpGovernment)
+      .textLine(t.rcpBureau)
       .setBold(false)
-      .textLine('Digital Grassroots Platform')
+      .textLine(t.rcpPlatform)
       .doubleDivider()
-      .textLine('PRINTER TEST OK')
-      .keyValuePair('Width:', this.paperWidth)
-      .keyValuePair('Status:', 'Connected (BLE)')
-      .keyValuePair('Date:', new Date().toLocaleString('en-GB'))
+      .textLine(t.slipTestOk)
+      .keyValuePair(`${t.slipWidth}:`, this.paperWidth)
+      .keyValuePair(`${t.slipStatus}:`, t.slipConnected)
+      .keyValuePair(`${t.rcpDateTime}:`, formatDateTimeIn(new Date(), t))
       .divider()
-      .textLine('Mobile POS Terminal Ready')
+      .textLine(t.slipReady)
       .feed(2)
       .cut();
 

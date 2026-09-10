@@ -21,6 +21,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { EscposBuilder, toPrintableAscii, translations } from '@psirs/shared';
+import { PRINTER_PROBLEM_TEXT, type PrinterProblem } from '../lib/bluetooth-printer';
 
 /** What the printer receives, as text, with the leading `ESC @` init removed. */
 function onPaper(text: string): string {
@@ -96,5 +97,69 @@ describe('what reaches the paper', () => {
       }
     }
     expect(odd).toEqual([]);
+  });
+});
+
+describe('what the printer says when it cannot print', () => {
+  /**
+   * Six ways a printer refuses, and a sentence for each.
+   *
+   * These were English literals thrown from `bluetooth-printer.ts`, and
+   * `setPrinterMsg(err.message || t.morePrinterConnectFailed)` meant the
+   * English beat the translated fallback sitting right beside it — the sixth
+   * time that exact shape appeared in this application.
+   */
+  it('has real Hausa for every way the printer can refuse', () => {
+    const problems = Object.keys(PRINTER_PROBLEM_TEXT) as PrinterProblem[];
+    expect(problems.length).toBe(6);
+
+    for (const problem of problems) {
+      const key = PRINTER_PROBLEM_TEXT[problem];
+      expect(en[key], `${problem} has no English`).toBeTruthy();
+      expect(ha[key], `${problem} has no Hausa`).toBeTruthy();
+      expect(ha[key], `${problem} was never translated`).not.toBe(en[key]);
+    }
+  });
+
+  /**
+   * The test slip is the agent's, not the citizen's.
+   *
+   * The receipt follows the taxpayer's recorded language because they keep it.
+   * This one an agent prints to find out whether the printer works, so it
+   * follows theirs — and it still has to fit a 32-column roll in both.
+   */
+  it('fits the slip on the paper in either language', () => {
+    const lines = [
+      'rcpGovernment',
+      'rcpBureau',
+      'rcpPlatform',
+      'slipTestOk',
+      'slipReady',
+    ] as const;
+    const pairs = [
+      ['slipWidth', '58mm'],
+      ['slipStatus', 'slipConnected'],
+    ] as const;
+
+    const overflowing: string[] = [];
+    for (const [language, dictionary] of [
+      ['en', en],
+      ['ha', ha],
+    ] as const) {
+      for (const key of lines) {
+        const printed = toPrintableAscii(dictionary[key]);
+        if (printed.length > 32) overflowing.push(`${language}.${key}: ${printed.length}`);
+      }
+      for (const [labelKey, value] of pairs) {
+        const label = toPrintableAscii(dictionary[labelKey]) + ':';
+        const printedValue = toPrintableAscii(dictionary[value] ?? value);
+        // A pair too wide drops onto two lines rather than truncating; what
+        // must never happen is either half alone exceeding the paper.
+        if (label.length > 32 || printedValue.length > 32) {
+          overflowing.push(`${language}.${labelKey}: ${label.length}/${printedValue.length}`);
+        }
+      }
+    }
+    expect(overflowing).toEqual([]);
   });
 });

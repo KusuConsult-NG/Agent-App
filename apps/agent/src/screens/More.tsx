@@ -11,7 +11,11 @@ import {
 } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
-import { bluetoothPrinter } from '../lib/bluetooth-printer';
+import {
+  PRINTER_PROBLEM_TEXT,
+  PrinterUnavailable,
+  bluetoothPrinter,
+} from '../lib/bluetooth-printer';
 import { PushUnsupported, pushManager } from '../lib/push';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
@@ -594,7 +598,7 @@ export function CommissionScreen() {
 // ----------------------------------------------------------------- profile
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
   const [printerBusy, setPrinterBusy] = useState(false);
@@ -616,8 +620,14 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     try {
       await bluetoothPrinter.connect();
       setPrinterMsg(t.morePrinterConnected);
-    } catch (err: any) {
-      setPrinterMsg(err.message || t.morePrinterConnectFailed);
+    } catch (err) {
+      // The dictionary decides, not the error — the same correction made for
+      // the camera, push and step-up.
+      setPrinterMsg(
+        err instanceof PrinterUnavailable
+          ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+          : t.morePrinterConnectFailed,
+      );
     } finally {
       setPrinterBusy(false);
     }
@@ -627,7 +637,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     setPrinterBusy(true);
     setPrinterMsg(null);
     try {
-      await bluetoothPrinter.printTestSlip();
+      await bluetoothPrinter.printTestSlip(lang);
       setPrinterMsg(t.morePrinterTestSent);
     } catch (err: any) {
       setPrinterMsg(err.message || t.morePrinterPrintFailed);

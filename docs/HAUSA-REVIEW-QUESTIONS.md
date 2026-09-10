@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,022 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,031 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**330 strings address the reader as `ka`: masculine singular.** A woman
+**332 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,16 +31,16 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 177 |
+| The agent app | 179 |
 | The officer portal | 111 |
 | Citizens, referees and group leaders | 42 |
-| **Total** | **330** of 3,022 |
+| **Total** | **332** of 3,031 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 177.
+more for the 42 than for the 179.
 
 The forms are `ka` (337 occurrences), the possessive `-nka` (56), `-rka` (44),
 `dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
@@ -57,8 +57,8 @@ further strings** were invisible. 321 was the number after both corrections;
 it moved to 320 when deleting the dead camera-scanner path took `camAlign`
 (“Ka daidaita QR code…”) with it, to 323 when the three camera-refusal
 strings below were written in the same convention as everything around them, to
-328 with the eleven strings the `lib/` lint pass brought in, and to 330 with
-the receipt template.
+328 with the eleven strings the `lib/` lint pass brought in, to 330 with
+the receipt template, and to 332 with the printer's own messages.
 
 ### What it would cost to change
 
@@ -70,7 +70,7 @@ node scripts/ka-address-preview.mjs            # the scale
 node scripts/ka-address-preview.mjs --write ku # the sheet to correct
 ```
 
-**324 of the 330 are a mechanical substitution. 6 need a human. None defeats
+**326 of the 332 are a mechanical substitution. 6 need a human. None defeats
 the rules.** So this is a scripted pass and a review, not a re-translation —
 which is worth knowing before the size of the number decides the answer.
 
@@ -246,7 +246,7 @@ Ten strings existed only for that screen and went with it: `camAlign`,
 `camNoAccess`, `camSwitchFailed`, `camTryAgain` and `scanQr`. If you have
 already reviewed any of them, that work is not lost — it is in the dictionary's
 history — but they are out of the sheet, and the total fell from 2,985 to
-3,022. `camCancel` stays; seven live screens use it.
+3,031. `camCancel` stays; seven live screens use it.
 
 **One thing this turned up was a real gap, and it is now closed — with three
 strings that need your reading.** When the camera could not be opened on the
@@ -334,20 +334,23 @@ which already exist and are already on this page for a casing inconsistency.
 a badge, these read as a heading, and deciding they are one thing is your call
 rather than ours. If they are the same thing, say so and it becomes one pair.
 
-**One thing is knowingly left in English, and it is not a translation problem.**
-Twelve strings in `lib/bluetooth-printer.ts` — the messages an agent reads while
-connecting a printer, and four lines the test slip puts on paper. They are named
-in the check as debt rather than fixed, because `packages/shared/src/escpos.ts`
-replaces every non-ASCII byte with a question mark:
+**The printer's own messages are done too, and nothing is left in English.**
+The twelve strings in `lib/bluetooth-printer.ts` were listed as debt while
+`escpos.ts` replaced every non-ASCII byte with a question mark — translating
+them first would have printed `na?ura`. The encoder folds now, so they are
+translated: six ways a printer can refuse, and the test slip an agent prints to
+check it works. **Nine more new strings**, in table B under `prn` and `slip`.
 
-```
-this.buffer.push(code < 128 ? code : 0x3f); // replace non-ASCII with ?
-```
+Two of them reuse what was already here — `moreNoWebBluetooth` and
+`morePrinterConnectFailed`, which existed and were losing to English literals
+in exactly the way the camera strings were.
 
-The Hausa here uses `’` throughout — `na’ura`, `sana’a` — so translating those
-messages *first* would put `na?ura` on a government receipt. The printer needs a
-code page before it can be given a language. Nothing on this page is waiting on
-you for it.
+**The slip is in the agent's language, not the taxpayer's**, unlike the receipt
+above. It is a diagnostic somebody prints to find out whether their own printer
+works, and no citizen ever sees it. That distinction is the one thing here
+worth disagreeing with if you read it differently.
+
+The list of strings excused from the dictionary is now empty.
 
 ### 3.2 — The receipt itself, and whose language it is in
 
@@ -391,7 +394,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 3,022 keys
+raised the obvious next question, so it was measured: **33 of the 3,031 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four

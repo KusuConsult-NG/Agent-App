@@ -2949,6 +2949,15 @@ export interface TranslationDictionary {
   allocCodeUsed: string;
   scanCamera: string;
   rcpGovernment: string;
+  prnNoWritable: string;
+  prnNotConnected: string;
+  prnSendFailed: string;
+  prnDisconnected: string;
+  slipTestOk: string;
+  slipWidth: string;
+  slipStatus: string;
+  slipConnected: string;
+  slipReady: string;
   rcpThanks: string;
   rcpBureau: string;
   rcpPlatform: string;
@@ -6039,6 +6048,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
     scanCamera: "Camera",
     rcpGovernment: "PLATEAU STATE GOVERNMENT",
+    prnNoWritable: "No writable printer service was found on this device.",
+    prnNotConnected: "No printer is connected. Connect one first.",
+    prnSendFailed: "The printer did not accept the data. Try again.",
+    prnDisconnected: "The printer disconnected.",
+    slipTestOk: "PRINTER TEST OK",
+    slipWidth: "Width",
+    slipStatus: "Status",
+    slipConnected: "Connected (BLE)",
+    slipReady: "Mobile POS Terminal Ready",
     rcpThanks: "Thank you for your civic duty",
     rcpBureau: "INTERNAL REVENUE SERVICE",
     rcpPlatform: "Digital Grassroots Platform",
@@ -9098,6 +9116,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
     scanCamera: "Kyamara",
     rcpGovernment: "GWAMNATIN JIHAR FILATO",
+    prnNoWritable: "Ba a samu hanyar bugawa a wannan na’ura ba.",
+    prnNotConnected: "Ba a hada da na’urar bugawa ba. Ka hada da daya tukuna.",
+    prnSendFailed: "Na’urar bugawa ba ta karbi bayanan ba. Ka sake gwadawa.",
+    prnDisconnected: "Na’urar bugawa ta katse.",
+    slipTestOk: "GWAJIN NA’URAR BUGAWA YA YI",
+    slipWidth: "Fadi",
+    slipStatus: "Matsayi",
+    slipConnected: "An hada (BLE)",
+    slipReady: "Na’urar POS a shirye take",
     rcpThanks: "Mun gode da sauke nauyin ku",
     rcpBureau: "HUKUMAR KARBAR HARAJI",
     rcpPlatform: "Tsarin Karbar Haraji na Dijital",
