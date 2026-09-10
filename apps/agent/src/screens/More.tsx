@@ -535,10 +535,62 @@ export function CommissionScreen() {
         <p style={{ margin: 0 }}>{data.note}</p>
       </Alert>
 
+      {/*
+        * The three buckets the agent could not see.
+        *
+        * `getWallet` sums six mutually exclusive statuses — PENDING,
+        * ELIGIBLE, ON_HOLD, APPROVED, PAID, REVERSED — and this screen
+        * rendered three of them. Money in the other three was not shown as
+        * anything: not eligible, not pending, not paid, not owed back. An
+        * agent whose commission had been put on hold saw it nowhere at all.
+        *
+        * The transaction count above is the tell, and it is what an agent
+        * would notice. It counts every commission row, including the held
+        * and approved ones, so the count and the money did not reconcile and
+        * there was nothing on the screen that could explain the difference.
+        *
+        * Each line appears only when it has something to say, so an agent
+        * whose commission is moving normally sees the screen unchanged.
+        */}
+      {BigInt(data.wallet.onHoldKobo ?? '0') > 0n && (
+        <Alert kind="warning" title={t.moreSomeCommissionOnHold}>
+          <p style={{ margin: 0 }}>
+            <Money kobo={data.wallet.onHoldKobo} /> {t.moreOnHoldBody}
+          </p>
+        </Alert>
+      )}
+
+      {BigInt(data.wallet.approvedKobo ?? '0') > 0n && (
+        <Alert kind="info" title={t.moreCommissionApproved}>
+          <p style={{ margin: 0 }}>
+            <Money kobo={data.wallet.approvedKobo} /> {t.moreApprovedBody}
+          </p>
+        </Alert>
+      )}
+
       {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
         <Alert kind="warning" title={t.moreSomeCommissionOwedBack}>
           <p style={{ margin: 0 }}>
             <Money kobo={data.wallet.owedBackKobo} /> {t.moreOwedBackBody}
+          </p>
+        </Alert>
+      )}
+
+      {/*
+        * Reversed commission that was never paid, which `owedBackKobo` does
+        * not cover — that figure is only the part already paid out and not
+        * yet recovered. Without this line, commission on a collection later
+        * reversed simply vanished from the agent's screen.
+        */}
+      {BigInt(data.wallet.reversedKobo ?? '0') > BigInt(data.wallet.owedBackKobo ?? '0') && (
+        <Alert kind="info" title={t.moreSomeCommissionReversed}>
+          <p style={{ margin: 0 }}>
+            <Money
+              kobo={(
+                BigInt(data.wallet.reversedKobo ?? '0') - BigInt(data.wallet.owedBackKobo ?? '0')
+              ).toString()}
+            />{' '}
+            {t.moreReversedBody}
           </p>
         </Alert>
       )}

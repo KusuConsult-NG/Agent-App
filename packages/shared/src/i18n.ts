@@ -2885,6 +2885,12 @@ export interface TranslationDictionary {
   moreRequestPayout: string;
   moreRequestingPayout: string;
   moreSomeCommissionOwedBack: string;
+  moreSomeCommissionOnHold: string;
+  moreOnHoldBody: string;
+  moreCommissionApproved: string;
+  moreApprovedBody: string;
+  moreSomeCommissionReversed: string;
+  moreReversedBody: string;
   moreReceiptsFacilitated: string;
   moreNoReceipts: string;
   moreSavedRecords: string;
@@ -6137,6 +6143,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreRequestPayout: "Request payout",
     moreRequestingPayout: "You are requesting a payout of",
     moreSomeCommissionOwedBack: "Some commission is owed back",
+    moreSomeCommissionOnHold: "Some commission is on hold",
+    moreOnHoldBody: "is on hold and is not counted in any of the figures above. It is held while something about those collections is checked. Ask your supervisor what is outstanding.",
+    moreCommissionApproved: "Some commission is approved for payment",
+    moreApprovedBody: "has been approved and is waiting to be paid. It is no longer available to request, and it has not reached your account yet.",
+    moreSomeCommissionReversed: "Some commission was reversed",
+    moreReversedBody: "was earned on collections that were later reversed, and was never paid. You will not receive it. This is separate from anything owed back.",
     moreReceiptsFacilitated: "Receipts you facilitated",
     moreNoReceipts: "No receipts yet.",
     moreSavedRecords: "Saved records on this device",
@@ -9330,6 +9342,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreRequestPayout: "Nemi a biya ka",
     moreRequestingPayout: "Kana neman a biya ka",
     moreSomeCommissionOwedBack: "Ana bin ka wasu kwamishan",
+    moreSomeCommissionOnHold: "An dakatar da wasu kwamishan",
+    moreOnHoldBody: "an dakatar da shi kuma ba a kirga shi cikin ko daya daga cikin alkaluman da ke sama ba. Ana rike shi yayin da ake duba wani abu game da wadannan karbe-karben. Ka tambayi shugabanka abin da ya rage.",
+    moreCommissionApproved: "An amince a biya wasu kwamishan",
+    moreApprovedBody: "an amince da shi kuma yana jiran a biya. Ba za ka iya sake neman sa ba, kuma bai kai asusunka ba tukuna.",
+    moreSomeCommissionReversed: "An juyar da wasu kwamishan",
+    moreReversedBody: "an same shi a kan karbe-karben da aka juyar da su daga baya, kuma ba a taba biyan sa ba. Ba za ka karbe shi ba. Wannan ya bambanta da abin da ake bin ka.",
     moreReceiptsFacilitated: "Rasit da ka taimaka a bayar",
     moreNoReceipts: "Babu rasit tukuna.",
     moreSavedRecords: "Bayanan da aka ajiye a wannan na’ura",
