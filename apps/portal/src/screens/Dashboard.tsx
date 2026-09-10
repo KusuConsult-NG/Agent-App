@@ -646,15 +646,35 @@ export function IntelligenceScreen() {
  */
 function PlatformKpis() {
   const { t } = usePortalI18n();
-  const [kpis, setKpis] = useState<Record<string, string> | null>(null);
+  const [kpis, setKpis] = useState<Record<string, string> | 'unreadable' | null>(null);
 
   useEffect(() => {
     api
       .get<Record<string, string>>('/government/kpis')
       .then(setKpis)
-      .catch(() => setKpis(null));
+      .catch(() => setKpis('unreadable'));
   }, []);
 
+  /*
+   * A panel that failed says so, rather than not being there.
+   *
+   * `setKpis(null)` on failure and `if (!kpis) return null` made a request
+   * that was refused indistinguishable from one still in flight, and both
+   * indistinguishable from a page that simply does not have this section.
+   * Two stat grids and a card disappeared — among them the reconciliation
+   * rate and the count still awaiting it, which is the pair of numbers a
+   * reader of this dashboard is most likely to have come for.
+   *
+   * Nothing here is a claim in the way Performance's zeros were. It is the
+   * quieter version of the same fault: the page still looks complete.
+   */
+  if (kpis === 'unreadable') {
+    return (
+      <Alert kind="warning" title="ofcDbKpisUnreadable">
+        <p style={{ margin: 0 }}>{t.ofcDbKpisUnreadableBody}</p>
+      </Alert>
+    );
+  }
   if (!kpis) return null;
 
   const percent = (value: string | undefined) => `${Number(value ?? 0).toFixed(2)}%`;

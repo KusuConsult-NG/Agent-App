@@ -53,7 +53,21 @@ interface AgentRow {
 
 export function PerformanceScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = usePortalI18n();
-  const [rows, setRows] = useState<AgentRow[] | null>(null);
+  /*
+   * Three states, because a failed read is not an empty list.
+   *
+   * It used to be two: the catch set `rows` to `[]`, and everything below
+   * folded an unread page into four confident zeros — nought collected,
+   * nought onboarded, "0 of 0 agents worked", and nought open fraud flags,
+   * that last one styled as the good news it would be if anybody had
+   * actually looked. The error alert sat above them, and four large stat
+   * tiles are the more legible thing on a screen.
+   *
+   * A supervisor's whole use of this page is spotting the agent who needs
+   * attention. Manufacturing "no flags are open" out of a request that
+   * failed is the one answer that stops them looking.
+   */
+  const [rows, setRows] = useState<AgentRow[] | 'unreadable' | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   const load = useCallback(() => {
@@ -62,13 +76,15 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       .then(setRows)
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
-        setRows([]);
+        setRows('unreadable');
       });
   }, []);
 
   useEffect(load, [load]);
 
-  const totals = (rows ?? []).reduce(
+  const read = Array.isArray(rows) ? rows : null;
+
+  const totals = (read ?? []).reduce(
     (acc, row) => ({
       collected: acc.collected + BigInt(row.collected_kobo),
       onboarded: acc.onboarded + Number(row.taxpayers_onboarded),
@@ -78,11 +94,17 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
     { collected: 0n, onboarded: 0, flags: 0, working: 0 },
   );
 
-  const flagged = (rows ?? []).filter((row) => Number(row.open_fraud_flags) > 0);
+  const flagged = (read ?? []).filter((row) => Number(row.open_fraud_flags) > 0);
 
   return (
     <>
       <ErrorAlert error={error} />
+
+      {rows === 'unreadable' && (
+        <Alert kind="warning" title="ofcPfFiguresUnreadable">
+          <p style={{ margin: 0 }}>{t.ofcPfFiguresUnreadableBody}</p>
+        </Alert>
+      )}
 
       {flagged.length > 0 && (
         <Alert kind="warning" title={{ text: t.ofcPfAgentsWithFlag.replace('{{n}}', String(flagged.length)) }}>
@@ -93,16 +115,18 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
         </Alert>
       )}
 
-      <div className="stat-grid">
-        <Stat label="ofcPfCollectedByAgents" value={<Money kobo={totals.collected.toString()} />} />
-        <Stat label="ofcPfTaxpayersOnboarded" value={totals.onboarded.toLocaleString()} />
-        <Stat label="ofcPfAgentsWorked" value={t.ofcPfWorkedOf.replace('{{worked}}', String(totals.working)).replace('{{total}}', String(rows?.length ?? 0))} />
-        <Stat
-          label="ofcPfOpenFraudFlags"
-          value={String(totals.flags)}
-          variant={totals.flags > 0 ? 'alert' : undefined}
-        />
-      </div>
+      {read && (
+        <div className="stat-grid">
+          <Stat label="ofcPfCollectedByAgents" value={<Money kobo={totals.collected.toString()} />} />
+          <Stat label="ofcPfTaxpayersOnboarded" value={totals.onboarded.toLocaleString()} />
+          <Stat label="ofcPfAgentsWorked" value={t.ofcPfWorkedOf.replace('{{worked}}', String(totals.working)).replace('{{total}}', String(read.length))} />
+          <Stat
+            label="ofcPfOpenFraudFlags"
+            value={String(totals.flags)}
+            variant={totals.flags > 0 ? 'alert' : undefined}
+          />
+        </div>
+      )}
 
       <div className="card card--flush">
         <div className="card__pad">
@@ -110,16 +134,24 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
             <h2 className="card__title">{t.ofcNavPerformance}</h2>
             <p className="card__hint">{t.ofcPfIntro}</p>
           </div>
-          {rows && rows.length > 0 && (
+          {read && read.length > 0 && (
             <button
               type="button"
               className="small secondary"
-              onClick={() => downloadCsv('agent-performance.csv', toCsv(rows))}
+              onClick={() => downloadCsv('agent-performance.csv', toCsv(read))}
             >{t.ofcDownloadCsv}</button>
           )}
         </div>
 
-        {!rows ? (
+        {/*
+          * An unreadable list is not an empty table.
+          *
+          * `Table` renders its own empty state, and "no agents" is a
+          * statement about the agency. The warning above says what actually
+          * happened; repeating it here would be noise, but rendering the
+          * table would be a claim.
+          */}
+        {rows === 'unreadable' ? null : !read ? (
           <Loading />
         ) : (
           <Table
@@ -195,7 +227,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
               },
               { key: 'active_days', label: 'ofcPfDaysWorked', numeric: true },
             ]}
-            rows={rows}
+            rows={read}
             empty="ofcNoneAgentsCleared"
           />
         )}

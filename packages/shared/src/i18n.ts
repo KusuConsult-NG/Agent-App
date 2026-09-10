@@ -881,6 +881,8 @@ export interface TranslationDictionary {
   ofcDbDrill: string;
   ofcDbPlateauState: string;
   ofcDbPlatformKpis: string;
+  ofcDbKpisUnreadable: string;
+  ofcDbKpisUnreadableBody: string;
   ofcDbSinceBegan: string;
   ofcDbVerifiedOnly: string;
   ofcDbThisMonth: string;
@@ -1546,6 +1548,8 @@ export interface TranslationDictionary {
   ofcPfTaxpayersOnboarded: string;
   ofcPfAgentsWorked: string;
   ofcPfOpenFraudFlags: string;
+  ofcPfFiguresUnreadable: string;
+  ofcPfFiguresUnreadableBody: string;
   ofcPfCollected: string;
   ofcPfAverage: string;
   ofcPfOnboarded: string;
@@ -4239,6 +4243,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbDrill: "Drill from State to LGA to Ward to Community to see where revenue is and is not being collected.",
     ofcDbPlateauState: "Plateau State",
     ofcDbPlatformKpis: "Platform KPIs",
+    ofcDbKpisUnreadable: "The platform's own numbers could not be read",
+    ofcDbKpisUnreadableBody: "Payments verified, the reconciliation rate and the count still awaiting it are missing from this page rather than zero. Reload, and raise it if it does not clear.",
     ofcDbSinceBegan: "Since the platform began collecting.",
     ofcDbVerifiedOnly: "Verified revenue only",
     ofcDbThisMonth: "This month",
@@ -4880,6 +4886,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
     ofcPfAgentsWorked: "Agents who worked",
     ofcPfOpenFraudFlags: "Open fraud flags",
+    ofcPfFiguresUnreadable: "These figures could not be read",
+    ofcPfFiguresUnreadableBody: "The totals and the list below are missing, not zero. Nothing on this page is a count of anything — in particular, no claim is being made here about open fraud flags. Reload, and raise it if it does not clear.",
     ofcPfCollected: "Collected",
     ofcPfAverage: "Average",
     ofcPfOnboarded: "Onboarded",
@@ -7420,6 +7428,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbDrill: "Ka sauka daga Jiha zuwa Karamar Hukuma zuwa Unguwa zuwa Al’umma domin ganin inda ake karbar haraji da inda ba a karba ba.",
     ofcDbPlateauState: "Jihar Filato",
     ofcDbPlatformKpis: "Ma’aunan aikin dandali",
+    ofcDbKpisUnreadable: "Ba a iya karanta alkaluman dandalin kansa ba",
+    ofcDbKpisUnreadableBody: "Biyan da aka tabbatar, adadin daidaitawa, da adadin da ke jiran daidaitawa ba sa nan a wannan shafi — ba sifili ba ne. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcDbSinceBegan: "Tun lokacin da dandalin ya fara karba.",
     ofcDbVerifiedOnly: "Harajin da aka tabbatar kawai",
     ofcDbThisMonth: "Wannan watan",
@@ -8061,6 +8071,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
     ofcPfAgentsWorked: "Wakilan da suka yi aiki",
     ofcPfOpenFraudFlags: "Alamun zamba a bude",
+    ofcPfFiguresUnreadable: "Ba a iya karanta wadannan alkaluma ba",
+    ofcPfFiguresUnreadableBody: "Jimillar da jerin da ke kasa ba sa nan — ba sifili ba ne. Babu wata lamba a wannan shafi da ke nufin komai, musamman ba a ce komai game da alamun zamba da ke bude ba. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcPfCollected: "An karba",
     ofcPfAverage: "Matsakaici",
     ofcPfOnboarded: "An shigar",
