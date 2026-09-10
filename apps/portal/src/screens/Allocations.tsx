@@ -43,7 +43,9 @@ interface Round {
   closes_at: string | null;
   programme_name?: string;
   programme_name_ha?: string | null;
+  /** Both come back on every row of `listRounds`; both were being dropped. */
   awarded_count?: string;
+  awarded_quantity?: string;
 }
 
 interface Award {
@@ -391,7 +393,25 @@ export function AllocationsScreen() {
               key: 'quantity',
               label: 'ofcAlDistributing',
               render: (row: Round) =>
-                `${row.total_quantity} × ${enumLabel(row.unit, t)}, ${row.quantity_per_beneficiary} each`,
+                /*
+                 * What is being handed out, and how much of it has gone.
+                 *
+                 * `awarded_quantity` and `awarded_count` come back on every
+                 * row of this list and neither was rendered — `awarded_count`
+                 * was even declared on the type and then dropped. So the
+                 * screen showed what a round is for and not how far through
+                 * it is, which is the number an officer closes a round on.
+                 */
+                `${t.ofcAlRoundQuantity
+                  .replace('{{total}}', row.total_quantity)
+                  .replace('{{unit}}', enumLabel(row.unit, t))
+                  .replace('{{per}}', row.quantity_per_beneficiary)} · ` +
+                t.ofcAlAwardedLeft
+                  .replace('{{awarded}}', row.awarded_quantity ?? '0')
+                  .replace(
+                    '{{left}}',
+                    String(Number(row.total_quantity) - Number(row.awarded_quantity ?? 0)),
+                  ),
             },
             { key: 'collection_point', label: 'ofcAlCollectionPoint' },
             {

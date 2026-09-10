@@ -81,6 +81,8 @@ const PRINTABLE: [RegExp, string][] = [
   // spaces the source already has around it.
   [/[\u2013\u2014\u2212]/g, '-'],
   [/\u2026/g, '...'],
+  // A multiplication sign, which a quantity reaches for and ASCII spells `x`.
+  [/\u00D7/g, 'x'],
   [/\u00B7/g, '-'],
   [/\u2190/g, '<-'],
   [/\u2192/g, '->'],

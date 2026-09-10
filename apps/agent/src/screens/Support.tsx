@@ -107,7 +107,8 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                     <p className="list__title">{ticket.subject}</p>
                     <p className="list__meta">
                       {ticket.ticket_number} · {categoryLabel(ticket.category, t)}
-                      {ticket.message_count > 0 && ` · ${ticket.message_count} reply(s)`}
+                      {ticket.message_count > 0 &&
+                        ` · ${t.supRepliesCount.replace('{{n}}', String(ticket.message_count))}`}
                     </p>
                   </div>
                   <Badge status={ticket.status} />

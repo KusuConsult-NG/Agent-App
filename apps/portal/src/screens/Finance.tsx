@@ -164,7 +164,9 @@ export function ReconciliationScreen() {
         { receivedAmountKobo, bankReference: bankReference.trim(), note: note.trim() },
       );
       setMessage(
-        `${result.settlementReference} closed. ${result.transactionsSettled} collection(s) settled.`,
+        t.ofcFnSettlementClosed
+          .replace('{{reference}}', result.settlementReference)
+          .replace('{{n}}', String(result.transactionsSettled)),
       );
       load();
     } catch (caught) {

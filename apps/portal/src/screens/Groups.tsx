@@ -199,7 +199,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'SUSPEND',
                             reason,
                           });
-                          return `${row.name} suspended.`;
+                          return t.ofcGrGroupSuspended.replace('{{name}}', row.name);
                         })
                       }
                     >{t.ofcAgSuspend}</button>
@@ -231,7 +231,10 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               {
                 key: 'awarded_quantity',
                 label: 'ofcGpAwarded',
-                render: (row) => `${row.awarded_quantity} (${row.awarded_count} people)`,
+                render: (row) =>
+                  t.ofcGrQuantityPeople
+                    .replace('{{quantity}}', row.awarded_quantity)
+                    .replace('{{n}}', row.awarded_count),
               },
               { key: 'collected_count', label: 'ofcPfCollected' },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },

@@ -387,7 +387,7 @@ export function RoleHomeScreen({
                                 decision: 'APPROVE',
                                 note: 'ofcRhApprovedFromHome',
                               }),
-                            `${row.full_name} approved.`,
+                            t.ofcRhAgentApproved.replace('{{name}}', row.full_name),
                           )
                         }
                       >{t.ofcRhApprove}</button>{' '}

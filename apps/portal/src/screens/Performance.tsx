@@ -96,7 +96,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       <div className="stat-grid">
         <Stat label="ofcPfCollectedByAgents" value={<Money kobo={totals.collected.toString()} />} />
         <Stat label="ofcPfTaxpayersOnboarded" value={totals.onboarded.toLocaleString()} />
-        <Stat label="ofcPfAgentsWorked" value={`${totals.working} of ${rows?.length ?? 0}`} />
+        <Stat label="ofcPfAgentsWorked" value={t.ofcPfWorkedOf.replace('{{worked}}', String(totals.working)).replace('{{total}}', String(rows?.length ?? 0))} />
         <Stat
           label="ofcPfOpenFraudFlags"
           value={String(totals.flags)}

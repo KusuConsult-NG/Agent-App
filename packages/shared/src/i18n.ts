@@ -960,6 +960,14 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcRhAgentApproved: string;
+  ofcAlRoundQuantity: string;
+  ofcAlAwardedLeft: string;
+  ofcPfWorkedOf: string;
+  ofcFnSettlementClosed: string;
+  ofcGrGroupSuspended: string;
+  ofcGrQuantityPeople: string;
+  supRepliesCount: string;
   ofcOsQueueUnreadable: string;
   ofcOsQueueUnreadableBody: string;
   ofcUaCoversNothing: string;
@@ -4295,6 +4303,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcRhAgentApproved: "{{name}} approved.",
+    ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} each",
+    ofcAlAwardedLeft: "{{awarded}} awarded, {{left}} left",
+    ofcPfWorkedOf: "{{worked}} of {{total}}",
+    ofcFnSettlementClosed: "{{reference}} closed. {{n}} collection(s) settled.",
+    ofcGrGroupSuspended: "{{name}} suspended.",
+    ofcGrQuantityPeople: "{{quantity}} ({{n}} people)",
+    supRepliesCount: "{{n}} reply(s)",
     ofcOsQueueUnreadable: "A queue could not be read",
     ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
     ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
@@ -7458,6 +7474,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcRhAgentApproved: "An amince da {{name}}.",
+    ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} ga kowanne",
+    ofcAlAwardedLeft: "An bayar {{awarded}}, {{left}} ya rage",
+    ofcPfWorkedOf: "{{worked}} cikin {{total}}",
+    ofcFnSettlementClosed: "An rufe {{reference}}. An daidaita tarin kudi {{n}}.",
+    ofcGrGroupSuspended: "An dakatar da {{name}}.",
+    ofcGrQuantityPeople: "{{quantity}} (mutane {{n}})",
+    supRepliesCount: "amsa {{n}}",
     ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
     ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",

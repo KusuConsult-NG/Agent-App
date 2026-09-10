@@ -542,6 +542,57 @@ function staticChunks(literal: string): string[] {
 }
 
 /**
+ * A URL fragment is not prose, and most short chunks are URL fragments.
+ *
+ * The three-word threshold above exists because a two-word rule would flag
+ * `alert alert--`. It also let `each`, `closed.`, `approved.`, `suspended.`
+ * and `people)` through — seven real sentences' worth of English, each one a
+ * word or two hanging off an interpolated value.
+ *
+ * Measured before widening: dropping to one word adds 333 chunks, of which
+ * 310 are pieces of a path — `/agents/`, `/status`, `?limit=`. Excluding
+ * those first leaves 23, and 7 of them were the bug. A path has a shape that
+ * prose does not, so this tests the shape rather than keeping a list.
+ */
+function isUrlFragment(text: string): boolean {
+  return (
+    /^[/?&#]/.test(text) ||
+    text.includes('=') ||
+    text.includes('://') ||
+    (/^[\w\-./]+$/.test(text) && text.includes('/')) ||
+    // `${generatedId}-hint` — a DOM id built by suffixing, not a word.
+    /^[-_][\w-]*$/.test(text)
+  );
+}
+
+/**
+ * Units, acronyms and one CSS length.
+ *
+ * Kept short on purpose. A unit symbol reads the same in both languages and
+ * translating `MB` would be inventing a word; `TIN` is the acronym in both,
+ * and its long form is thirty of a receipt's thirty-two columns.
+ */
+const NOT_PROSE = new Set([
+  'TIN',
+  'KB',
+  'MB',
+  'min',
+  'txn',
+  '2px solid',
+  '· PSIRS',
+  'PSIRS',
+  /*
+   * `${browser} on ${operatingSystem}` — "Chrome on Android".
+   *
+   * Excused for the reason the browser and platform names themselves were
+   * when this check reached `lib/`: `describeDevice` POSTs the whole string
+   * to `/agents/me/devices`, and an officer reads it back out of that record.
+   * Translating the joining word would file one handset under two names.
+   */
+  'on',
+]);
+
+/**
  * The static text inside a template literal.
  *
  * The blind spot both of these files shared. Every rule above reads `'...'`
@@ -585,7 +636,13 @@ function templateTextIn(source: string): string[] {
       // hands its opening capital to the interpolation and leaves a chunk
       // starting with an apostrophe, so the capital test alone reads the
       // remainder of a sentence as though it were a class name.
-      if (!/^[A-Z][a-z]/.test(text) && wordsIn(text) < 3) continue;
+      if (isUrlFragment(text) || NOT_PROSE.has(text)) continue;
+      /*
+       * A capital opens a sentence; a word or two after an interpolation
+       * continues one. `${name} approved.` and `${qty} each` are both real
+       * messages, and both are one word once the value is taken out.
+       */
+      if (!/^[A-Z][a-z]/.test(text) && wordsIn(text) < 1) continue;
       found.push(text);
     }
   }
