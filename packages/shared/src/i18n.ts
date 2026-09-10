@@ -960,6 +960,9 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcUaTheirAccess: string;
+  ofcUaAccessFor: string;
+  ofcUaBackToMine: string;
   ofcRhAgentApproved: string;
   ofcAlRoundQuantity: string;
   ofcAlAwardedLeft: string;
@@ -4303,6 +4306,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcUaTheirAccess: "Where they are signed in",
+    ofcUaAccessFor: "Where {{name}} is signed in",
+    ofcUaBackToMine: "Back to my own access",
     ofcRhAgentApproved: "{{name}} approved.",
     ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} each",
     ofcAlAwardedLeft: "{{awarded}} awarded, {{left}} left",
@@ -7474,6 +7480,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcUaTheirAccess: "Inda ya shiga",
+    ofcUaAccessFor: "Inda {{name}} ya shiga",
+    ofcUaBackToMine: "Koma ga nawa",
     ofcRhAgentApproved: "An amince da {{name}}.",
     ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} ga kowanne",
     ofcAlAwardedLeft: "An bayar {{awarded}}, {{left}} ya rage",

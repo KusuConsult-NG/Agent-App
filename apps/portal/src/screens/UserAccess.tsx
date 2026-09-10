@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { PostingPanel } from './Organisation';
+import { MyAccessScreen } from './MyAccess';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName, type TranslationDictionary } from '@psirs/shared';
 
@@ -91,6 +92,8 @@ export function UserAccessScreen({ user }: { user: User }) {
   const [chosenTerritories, setChosenTerritories] = useState<string[]>([]);
   const [coverageReason, setCoverageReason] = useState('');
   const [closing, setClosing] = useState<PortalUser | null>(null);
+  // Whose sessions and devices are being looked at, if not the caller's.
+  const [viewingAccess, setViewingAccess] = useState<PortalUser | null>(null);
   const [chosenStatus, setChosenStatus] = useState<AccountStatus>('SUSPENDED');
   const [statusReason, setStatusReason] = useState('');
 
@@ -267,6 +270,26 @@ export function UserAccessScreen({ user }: { user: User }) {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+
+      {/*
+        * An administrator looking at somebody else's sessions and devices.
+        *
+        * `GET /government/users/:id/sessions` has been permissioned and
+        * documented since it was written, and nothing called it. Blocking a
+        * machine is the control that needs it — its own comment gives the case
+        * as "a laptop already in somebody else's hands" — and until this the
+        * only devices ever loaded were the administrator's own.
+        */}
+      {viewingAccess && (
+        <>
+          <div className="card">
+            <button type="button" className="small secondary" onClick={() => setViewingAccess(null)}>
+              {t.ofcUaBackToMine}
+            </button>
+          </div>
+          <MyAccessScreen user={user} officer={viewingAccess} />
+        </>
+      )}
 
       {editing && (
         <div className="card">
@@ -531,6 +554,14 @@ export function UserAccessScreen({ user }: { user: User }) {
                         setMessage(null);
                       }}
                     >{t.ofcUaChangeAccess}</button>{' '}
+                    <button
+                      type="button"
+                      className="small secondary"
+                      onClick={() => {
+                        setViewingAccess(row as PortalUser);
+                        setMessage(null);
+                      }}
+                    >{t.ofcUaTheirAccess}</button>{' '}
                     {TERRITORY_SCOPED_ROLES.includes(row.role) && (
                       <button
                         type="button"

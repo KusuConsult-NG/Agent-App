@@ -22,6 +22,14 @@
  * database rather than here, because the case it exists for is a laptop
  * already in somebody else's hands.
  *
+ * That paragraph was false for as long as it had been written. This screen
+ * fetched `/sessions/mine` and nothing else, so the only devices an
+ * administrator could ever see were their own — and the only laptop they
+ * could block was the one they were sitting at. `GET
+ * /government/users/:id/sessions` existed, was permissioned on `user:manage`
+ * and was listed in `API.md` the whole time, and no screen called it. It is
+ * reached now from the officer list on `UserAccess`.
+ *
  * Ended sessions stay listed and marked rather than disappearing. "I ended
  * that one on Tuesday" is what somebody checking their account needs to see,
  * and an administrator investigating needs it more.
@@ -59,7 +67,28 @@ interface DeviceRow {
   live_sessions: number;
 }
 
-export function MyAccessScreen({ user }: { user: User }) {
+export function MyAccessScreen({
+  user,
+  officer,
+}: {
+  user: User;
+  /**
+   * Somebody else's access, for an administrator looking at it.
+   *
+   * `GET /government/users/:id/sessions` has existed, been permissioned on
+   * `user:manage` and been documented in `API.md` since this screen was
+   * written, and no screen ever called it. This screen's own opening
+   * paragraph says an administrator sees "the same screen, for somebody
+   * else" — and it only ever fetched `/sessions/mine`.
+   *
+   * The consequence is not cosmetic. Blocking a machine is the one control
+   * gated on `user:manage` here, and the case its own comment gives for it is
+   * "a laptop already in somebody else's hands". With only the caller's own
+   * devices ever loaded, the only machine an administrator could block was
+   * their own.
+   */
+  officer?: { id: string; full_name: string } | null;
+}) {
   const { t } = usePortalI18n();
   const [sessions, setSessions] = useState<SessionRow[] | null>(null);
   const [devices, setDevices] = useState<DeviceRow[] | null>(null);
@@ -69,7 +98,7 @@ export function MyAccessScreen({ user }: { user: User }) {
   const load = useCallback(async () => {
     try {
       const result = await api.get<{ sessions: SessionRow[]; devices: DeviceRow[] }>(
-        '/government/sessions/mine',
+        officer ? `/government/users/${officer.id}/sessions` : '/government/sessions/mine',
       );
       setSessions(result.sessions);
       setDevices(result.devices);
@@ -78,7 +107,7 @@ export function MyAccessScreen({ user }: { user: User }) {
       setSessions([]);
       setDevices([]);
     }
-  }, []);
+  }, [officer]);
 
   useEffect(() => {
     void load();
@@ -109,7 +138,11 @@ export function MyAccessScreen({ user }: { user: User }) {
       <div className="card card--flush">
         <div style={{ padding: '18px 18px 0' }}>
           <div className="card__header">
-            <h2 className="card__title">{t.ofcAcSessions}</h2>
+            <h2 className="card__title">
+              {officer
+                ? t.ofcUaAccessFor.replace('{{name}}', officer.full_name)
+                : t.ofcAcSessions}
+            </h2>
             <p className="card__hint">{t.ofcAcSessionsHint}</p>
           </div>
         </div>
