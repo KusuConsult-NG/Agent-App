@@ -60,24 +60,34 @@ export function CollectionScreen() {
       setCollected(result);
       setCode('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (isConnectivityFailure(caught)) {
-        /*
-         * Not queued for later, deliberately.
-         *
-         * Everything else this app captures offline is a record of something
-         * the agent witnessed and can vouch for. A collection is a claim on a
-         * finite store, and the platform is the only thing that knows whether
-         * this code has already been used — recording it optimistically is how
-         * the same bag of fertiliser gets handed out twice.
-         */
+      /*
+       * The lost signal is tested FIRST, and the order is the whole point.
+       *
+       * Not queued for later, deliberately. Everything else this app captures
+       * offline is a record of something the agent witnessed and can vouch
+       * for. A collection is a claim on a finite store, and the platform is
+       * the only thing that knows whether this code has already been used —
+       * recording it optimistically is how the same bag of fertiliser gets
+       * handed out twice. So the agent is the only control, and this sentence
+       * is the only thing directing them.
+       *
+       * `instanceof ApiRequestError` used to be tested first. That was
+       * harmless until `request()` began wrapping a lost signal as
+       * `ApiRequestError(0, { code: 'NETWORK' })` so it could carry a
+       * translated sentence — after which the first branch swallowed every
+       * connectivity failure and this one could not run at all. An agent
+       * standing at a store with a queue in front of them read "Could not
+       * reach PSIRS. Try again." instead of being told to hold the goods.
+       */
+      if (isConnectivityFailure(caught)) {
         setError({
           code: 'OFFLINE',
           message:
             t.allocOfflineBody,
           moneyStatus: 'NOT_APPLICABLE',
         });
-      } else {
+      } else if (caught instanceof ApiRequestError) setError(caught.error);
+      else {
         setError({
           code: 'COLLECTION_FAILED',
           message: t.allocFailed,
