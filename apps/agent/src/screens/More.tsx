@@ -1005,15 +1005,32 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
   const [authorising, setAuthorising] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Whether a change is already waiting is a thing this screen has to KNOW,
+   * not guess.
+   *
+   * `pending` is undefined while it is being read, `null` when PSIRS says
+   * there is none, and a change when there is one — and the catch used to
+   * write `null`, which is the answer "there is none". The screen then offers
+   * the form to ask for a change, and an agent fills in five fields, does a
+   * step-up, and is refused with BANK_CHANGE_ALREADY_PENDING — which reads
+   * like their request was turned down rather than never sent.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ change: BankChange | null }>('/agents/me/bank/change')
-      .then((data) => setPending(data.change))
+      .then((data) => {
+        setPending(data.change);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        setPending(null);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -1068,7 +1085,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
     }
   }
 
-  if (pending === undefined) return <Loading rows={3} />;
+  if (pending === undefined && !loadError) return <Loading rows={3} />;
 
   if (authorising) {
     return (
@@ -1105,7 +1122,17 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {pending ? (
+      {loadError ? (
+        /*
+          Not the form. Asking for a change when we do not know whether one is
+          already waiting is how an agent spends a step-up on a request the
+          server was always going to refuse.
+        */
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      ) : pending ? (
         <>
           <div className="card">
             <h2 className="card__title">{t.moreChangeWaiting}</h2>

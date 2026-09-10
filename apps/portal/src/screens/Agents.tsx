@@ -892,16 +892,32 @@ export function BankChangesCard() {
   const { t } = usePortalI18n();
   const [changes, setChanges] = useState<PendingBankChange[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * A queue that could not be read, kept apart from a decision that was
+   * refused.
+   *
+   * The catch used to write `[]` here, and an empty queue prints "No bank
+   * account changes are waiting." So an officer whose request failed was told
+   * there was nothing to review — about the one queue where nothing being
+   * reviewed means an agent's commission keeps going to the account they are
+   * asking to move it off.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ changes: PendingBankChange[] }>('/agents/bank-changes')
-      .then((data) => setChanges(data.changes))
+      .then((data) => {
+        setChanges(data.changes);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        setChanges([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -962,7 +978,7 @@ export function BankChangesCard() {
     });
   }
 
-  if (!changes) return <Loading rows={2} />;
+  if (!changes && !loadError) return <Loading rows={2} />;
 
   return (
     <div className="card">
@@ -974,11 +990,16 @@ export function BankChangesCard() {
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {changes.length === 0 ? (
+      {loadError ? (
+        <>
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </>
+      ) : (changes ?? []).length === 0 ? (
         <p className="empty">{t.ofcAgNoBankChanges}</p>
       ) : (
         <ul className="list">
-          {changes.map((change) => {
+          {(changes ?? []).map((change) => {
             const confirmed = change.verificationStatus === 'VERIFIED';
             const nameDiffers =
               confirmed &&

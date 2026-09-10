@@ -2700,6 +2700,7 @@ export interface TranslationDictionary {
   tpDupCouldNotList: string;
   tpDupCouldNotListBody: string;
   tpDupTryAgain: string;
+  actionTryAgain: string;
   tpCheckSamePerson: string;
   tpNoneOfThese: string;
   tpHasTin: string;
@@ -6147,6 +6148,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpDupCouldNotList: "The matching records could not be shown",
     tpDupCouldNotListBody: "PSIRS has flagged this as a possible duplicate, but the records it matched could not be loaded, so you cannot check them here. Try again. If it will not load, look the person up by phone number before you register them again.",
     tpDupTryAgain: "Try showing them again",
+    actionTryAgain: "Try again",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
     tpNoneOfThese: "None of these — register as a new taxpayer",
     tpHasTin: "Does the taxpayer already have a TIN?",
@@ -9453,6 +9455,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpDupCouldNotList: "Ba a iya nuna bayanan da suka yi daidai ba",
     tpDupCouldNotListBody: "PSIRS ta ce watakila wannan kwafi ne, amma ba a iya lodin bayanan da ta samu ba, don haka ba za ka iya duba su a nan ba. Ka sake gwadawa. Idan bai lodi ba, ka nemi mutumin da lambar waya kafin ka sake yi masa rajista.",
     tpDupTryAgain: "Sake gwada nuna su",
+    actionTryAgain: "Sake gwadawa",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",
     tpNoneOfThese: "Babu daya daga cikinsu — yi rajistar sabon mai biyan haraji",
     tpHasTin: "Mai biyan haraji yana da TIN kuwa?",
