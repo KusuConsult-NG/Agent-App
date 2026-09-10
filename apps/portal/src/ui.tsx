@@ -192,6 +192,8 @@ function fieldLabel(field: string): string {
  */
 const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UNKNOWN: 'errRequestFailed',
+  // Raised by the api client, not the server: a request that never arrived.
+  NETWORK: 'ofcLgCouldNotReachThe',
   UPLOAD_FAILED: 'errUploadFailed',
   DOCUMENT_FAILED: 'errUploadFailed',
   STEP_UP_ABANDONED: 'stepUpCodeRequired',

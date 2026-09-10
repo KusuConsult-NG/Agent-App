@@ -11,6 +11,7 @@
  *     money-status wording of PRD §60 rather than inventing their own.
  */
 
+import { translations } from '@psirs/shared';
 import { getDeviceIdentifier } from './device';
 
 export const APP_VERSION: string =
@@ -80,7 +81,21 @@ export class ApiRequestError extends Error {
  */
 export function isConnectivityFailure(error: unknown): boolean {
   if (error instanceof ApiRequestError) {
-    return error.status === 503 && error.error.code === 'OFFLINE';
+    /*
+     * Two shapes, and both must be recognised.
+     *
+     * OFFLINE with a 503 is the service worker answering for a network it
+     * knows is not there. NETWORK with no status is `request` wrapping a fetch
+     * that never got an answer — it wraps them so that a screen testing only
+     * for `ApiRequestError` has something to show instead of a blank page, and
+     * the whole offline capture path hangs off this function returning true
+     * for exactly those. Miss the second and an agent in a market with no
+     * signal is shown an error where their work should have been queued.
+     */
+    return (
+      (error.status === 503 && error.error.code === 'OFFLINE') ||
+      (error.status === 0 && error.error.code === 'NETWORK')
+    );
   }
   // A request that never reached the network at all.
   return error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError');
@@ -347,10 +362,57 @@ function refreshOnce(): Promise<void> {
  * gone, and looping would lock a field agent out of the error message telling
  * them to sign in again.
  */
+/**
+ * A request that never got an answer, given the shape every caller handles.
+ *
+ * `ApiRequestError` used to mean only "the server said no", so every handler
+ * that reasonably tested for it dropped everything else on the floor. Eighty-two
+ * of them did, across both applications, and the worst was the confirm on a
+ * payment: an agent standing in front of somebody who has just handed over
+ * money, the connection drops mid-request, and the screen says nothing at all.
+ * Nothing at all is the one answer that makes them press the button again.
+ *
+ * The money status is the honest part. A read that never arrived moves no
+ * money whether it arrived or not. A write under `/payments` that never got an
+ * answer is a write whose effect is unknown — which is exactly what
+ * UNCONFIRMED means, and it is why the agent is told not to collect again
+ * rather than told nothing. Every other write says NOT_APPLICABLE, because
+ * telling an agent their taxpayer may have been debited by a failed support
+ * ticket is its own kind of wrong.
+ */
+function couldNotReach(path: string, method: string): ApiRequestError {
+  const write = method.toUpperCase() !== 'GET';
+  return new ApiRequestError(
+    0,
+    {
+      code: 'NETWORK',
+      // Never rendered: `NETWORK` is in `ErrorAlert`'s translated set, so the
+      // agent reads it in their own language. Present for anything that logs.
+      message: translations.en.errNetwork,
+      moneyStatus: write && path.startsWith('/payments') ? 'UNCONFIRMED' : 'NOT_APPLICABLE',
+    },
+    null,
+  );
+}
+
+/**
+ * Did the request fail without reaching PSIRS at all?
+ *
+ * `fetch` rejects with a TypeError for that. An `AbortError` is deliberately
+ * not included: a request the application itself cancelled — a superseded
+ * search, a screen left before it loaded — is not a failure anybody needs to
+ * be told about, and surfacing one would put an alert on the screen every
+ * time an agent types.
+ */
+function neverReachedPsirs(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   try {
     return await rawRequest<T>(path, options);
   } catch (error) {
+    if (neverReachedPsirs(error)) throw couldNotReach(path, options.method ?? 'GET');
     const isExpired =
       error instanceof ApiRequestError &&
       error.status === 401 &&

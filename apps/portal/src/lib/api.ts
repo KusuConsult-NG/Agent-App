@@ -192,6 +192,43 @@ async function raw<T>(
   return payload as T;
 }
 
+/**
+ * A request that never got an answer, given the shape every caller handles.
+ *
+ * `ApiRequestError` used to mean only "the server said no", so every handler
+ * that reasonably tested for it dropped everything else on the floor —
+ * eighty-two of them across both applications. On a screen that renders its
+ * data or nothing, that is a blank page with no message and no way back: the
+ * officer is left to guess whether the queue is empty or the platform is
+ * unreachable, which are not the same thing and must never look the same.
+ *
+ * `NETWORK` rather than `UNKNOWN`, so `ErrorAlert` can say it in Hausa. The
+ * money status stays NOT_APPLICABLE: nothing an officer does from this portal
+ * debits a taxpayer, so claiming otherwise would be a false alarm.
+ */
+function couldNotReach(): ApiRequestError {
+  return new ApiRequestError(
+    0,
+    {
+      code: 'NETWORK',
+      // Never rendered: `NETWORK` is in `TRANSLATED_ERRORS`. Present for logs.
+      message: getTranslation('en').ofcLgCouldNotReachThe,
+      moneyStatus: 'NOT_APPLICABLE',
+    },
+    null,
+  );
+}
+
+/**
+ * Did the request fail without reaching the platform at all?
+ *
+ * `fetch` rejects with a TypeError for that, and only for that. A request the
+ * application itself cancelled is not a failure anybody needs to be told about.
+ */
+function neverReachedThePlatform(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
 async function request<T>(
   path: string,
   options: { method?: string; body?: unknown; authenticated?: boolean } = {},
@@ -199,6 +236,7 @@ async function request<T>(
   try {
     return await raw<T>(path, options);
   } catch (error) {
+    if (neverReachedThePlatform(error)) throw couldNotReach();
     const expired =
       error instanceof ApiRequestError &&
       error.status === 401 &&
