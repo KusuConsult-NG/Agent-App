@@ -204,6 +204,8 @@ describe('changing it', () => {
     );
     assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
     assert.ok(revoked.body.sessionsEnded >= 1, 'the officer was signed out');
+    // Exactly, not at least: see the test below for why the difference matters.
+    assert.equal(revoked.body.sessionsEnded, 1);
 
     const afterwards = await get('/government/dashboard', finance());
     assert.equal(afterwards.status, 401, 'and their token no longer works');
@@ -221,6 +223,92 @@ describe('changing it', () => {
     assert.ok(
       !(me.body.permissions as string[]).includes('report:financial'),
       'the withdrawn permission is not in the new session',
+    );
+  });
+
+  /*
+   * The number an administrator is shown is the number they signed out.
+   *
+   * `sessionsEnded` used to be counted by a second query asking how many
+   * sessions for the role had been revoked "in the last five seconds", which
+   * is wrong in both directions and was covered by an assertion — `>= 1` —
+   * too weak to notice either.
+   *
+   * It over-counted: an officer closing their browser, or a second
+   * administrator withdrawing a different permission from the same role, both
+   * land inside that window and are attributed to this revocation.
+   *
+   * And it under-counted to zero, which is the damaging one. `now()` is
+   * transaction *start* time, so the window was measured from before the
+   * revoking transaction did any work; a slow commit puts its own sessions
+   * outside it. The portal announces the sign-out only when the number is
+   * non-zero, so an administrator who had just signed out every officer in a
+   * role would be told "Saved" and nothing more.
+   *
+   * Four officers, four sessions, one revocation. The count is now taken from
+   * the rows the UPDATE returned, so it is neither a clock nor an estimate.
+   */
+  it('reports the sessions it ended, not the sessions that happened to end', async () => {
+    const phones = ['+2348077000010', '+2348077000011', '+2348077000012'];
+    for (const [index, phone] of phones.entries()) {
+      await createGovernmentUser({
+        fullName: `Rbac Finance ${index}`,
+        phone,
+        role: 'finance_officer',
+      });
+      await loginAs(phone);
+    }
+
+    /*
+     * A sign-out this revocation had nothing to do with — in the same role.
+     *
+     * The first version of this test used a *revenue* officer here and passed
+     * against the very bug it was written for, because the five-second window
+     * filtered by role and was never going to count them. The over-count needs
+     * somebody in the role being revoked whose session ended for a different
+     * reason: an officer who signed out, moments before, of their own accord.
+     *
+     * Under the window they are indistinguishable from the four this
+     * revocation signs out. Counting the rows the UPDATE returned separates
+     * them, because their session was already revoked and `revoked_at IS NULL`
+     * does not match it.
+     */
+    await createGovernmentUser({
+      fullName: 'Rbac Finance Left',
+      phone: '+2348077000013',
+      role: 'finance_officer',
+    });
+    await loginAs('+2348077000013');
+    await query(
+      pool,
+      `UPDATE sessions s SET revoked_at = now(), revoked_reason = 'signed out'
+         FROM users u WHERE u.id = s.user_id AND u.phone = $1`,
+      ['+2348077000013'],
+    );
+
+    const open = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text FROM sessions s JOIN users u ON u.id = s.user_id
+        WHERE u.role = 'finance_officer' AND s.revoked_at IS NULL`,
+    );
+    // The three above plus the finance officer signed in by `beforeEach`.
+    assert.equal(Number(open?.count), 4, 'the fixture did not open four sessions');
+
+    await grantStepUp(adminToken, ADMIN_PHONE, 'user.role.change');
+    const revoked = await post(
+      '/government/roles/finance_officer/revoke',
+      {
+        permission: 'report:financial',
+        reason: 'Financial reporting moved to the audit department.',
+      },
+      admin(),
+    );
+
+    assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
+    assert.equal(
+      revoked.body.sessionsEnded,
+      4,
+      'the count is not the number of sessions this revocation ended',
     );
   });
 

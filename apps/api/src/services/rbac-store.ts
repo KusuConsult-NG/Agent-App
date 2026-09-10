@@ -378,13 +378,31 @@ export async function revoke(
       throw notFound(`${role.label}'s ${input.permission} grant`);
     }
 
-    const sessions = await queryOne<{ count: string }>(
+    /*
+     * Counted from what this statement revoked, not from a clock.
+     *
+     * `RETURNING 1` through `queryOne` reads the first row and discards the
+     * rest, so the count had to come from somewhere; it came from a second
+     * query asking how many sessions for this role were revoked in the last
+     * five seconds. That is wrong in both directions. It counts sign-outs
+     * this revocation had nothing to do with — an officer closing their
+     * browser, a second administrator withdrawing a different permission —
+     * and, because `now()` is transaction *start* time, the window is
+     * measured from before this transaction did any work: a slow commit puts
+     * its own sessions outside the window and the count reads zero.
+     *
+     * Zero is the damaging one. The screen announces the sign-out only when
+     * the number is non-zero, so an administrator who has just signed out
+     * forty officers would be told "Saved" and nothing else. A number that
+     * can silently read zero is worse than no number.
+     */
+    const sessions = await query<{ id: string }>(
       client,
       `UPDATE sessions s
           SET revoked_at = now(), revoked_reason = $2
          FROM users u
         WHERE u.id = s.user_id AND u.role = $1 AND s.revoked_at IS NULL
-        RETURNING 1`,
+        RETURNING s.id`,
       [input.role, `${input.permission} withdrawn from ${input.role}`],
     );
 
@@ -398,25 +416,12 @@ export async function revoke(
       reason: input.reason.trim(),
     });
 
-    return sessions ? 1 : 0;
+    return sessions.length;
   });
 
   forget();
 
-  /*
-   * Counted separately, because the UPDATE above returns one row per session
-   * and `queryOne` reads the first. The count is for the officer's benefit
-   * rather than for any control, so a second read is cheaper than restructuring
-   * the write.
-   */
-  const counted = await queryOne<{ count: string }>(
-    pool,
-    `SELECT count(*)::text FROM sessions s
-       JOIN users u ON u.id = s.user_id
-      WHERE u.role = $1 AND s.revoked_at > now() - interval '5 seconds'`,
-    [input.role],
-  );
-  return { sessionsEnded: Number(counted?.count ?? ended) };
+  return { sessionsEnded: ended };
 }
 
 export async function createRole(
