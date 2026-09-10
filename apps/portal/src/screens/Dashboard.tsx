@@ -135,7 +135,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
               .replace('{{exceptions}}', String(data.exceptions.reconciliation_exceptions))
               .replace('{{flags}}', String(data.exceptions.open_fraud_flags))}{' '}
             <button type="button" className="link" onClick={() => navigate('/reconciliation')}>{t.ofcDbReviewReconciliation}</button>{' '}
-            or{' '}
+            {t.ofcDbOr}{' '}
             <button type="button" className="link" onClick={() => navigate('/fraud')}>{t.ofcDbReviewFlags}</button>
             .
           </p>
@@ -268,7 +268,9 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
           }))}
         />
         <p style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)', margin: '8px 0 0' }}>
-          {data.dailyTrend[0]?.day} to {data.dailyTrend[data.dailyTrend.length - 1]?.day}
+          {t.ofcDbDayRange
+            .replace('{{from}}', data.dailyTrend[0]?.day ?? '')
+            .replace('{{to}}', data.dailyTrend[data.dailyTrend.length - 1]?.day ?? '')}
         </p>
       </div>
 

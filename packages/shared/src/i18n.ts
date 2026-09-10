@@ -914,8 +914,18 @@ export interface TranslationDictionary {
   ofcDbMda: string;
   ofcRvGroupedByAssessment: string;
   ofcRvWhoseRevenue: string;
+  /*
+   * One sentence, in one key, in both languages.
+   *
+   * It used to be two: this one ending mid-clause, and `ofcRvMdaNoItem`
+   * BEGINNING with a full stop, with the word "for" rendered between them in
+   * an <em> to italicise it. That made the sentence untranslatable rather
+   * than merely untranslated — Hausa does not strand a preposition at the end
+   * of a clause, so no translation of the first half could end where the
+   * English did, and the reviewer of the second half was shown a fragment
+   * opening with punctuation. The italics were not worth that.
+   */
   ofcRvWhoseRevenueBody: string;
-  ofcRvMdaNoItem: string;
   ofcRvOwedToCouncils: string;
   ofcRvCouncilsBody: string;
   ofcRvWhereGenerated: string;
@@ -3331,6 +3341,25 @@ export interface TranslationDictionary {
   pubCitizenByName: string;
   pubCitizenTooMany: string;
   /*
+   * Seven words the check could not see.
+   *
+   * `looksLikeCode` excused any single lowercase token, because that is what
+   * an identifier looks like — and also what most short English words look
+   * like. Most of these need the whole phrase rather than the word, because
+   * Hausa does not put the number, the noun and the preposition where English
+   * does, and a conjunction cannot be placed correctly by concatenation.
+   */
+  ofcDbOr: string;
+  /** Carries {{from}} and {{to}}. */
+  ofcDbDayRange: string;
+  /** Carries {{count}}. */
+  ofcGpBeneficiaryCount: string;
+  /** Carries {{collected}}, {{awarded}} and {{rate}}. */
+  ofcGpCollectedOfAwarded: string;
+  /** Carries {{quantity}} and {{unit}}. */
+  ofcGpEachBeneficiaryGets: string;
+  ofcOvIdentifiers: string;
+  /*
    * The half of an error that says what to do about it.
    *
    * `ApiError.nextStep` sits directly under a message both applications
@@ -4418,8 +4447,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbMda: "MDA",
     ofcRvGroupedByAssessment: "Every figure below is grouped by the LGA and ward on the assessment, which is reliable. The map coordinates are separate and are captured by the agent application at the moment of collection — none has arrived yet, which usually means no version carrying that has been deployed, or agents have not granted location permission on their handsets.",
     ofcRvWhoseRevenue: "Whose revenue this is",
-    ofcRvWhoseRevenueBody: "PSIRS collects the state’s revenue; this is the arm of government each naira is collected",
-    ofcRvMdaNoItem: ". An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence.",
+    ofcRvWhoseRevenueBody: "PSIRS collects the state’s revenue; this is the arm of government each naira is collected for. An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence.",
     ofcRvOwedToCouncils: "Owed to the Local Government Councils",
     ofcRvCouncilsBody: "PSIRS collects this on the Councils’ behalf, so it is theirs rather than the State’s. Only items whose rate a Council sets are counted — a State levy collected in a Council’s area is the State’s. Every Council is listed, including those that collected nothing, because a remittance run has to account for all seventeen.",
     ofcRvWhereGenerated: "Where the revenue is generated",
@@ -6663,6 +6691,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    ofcDbOr: 'or',
+    ofcDbDayRange: '{{from}} to {{to}}',
+    ofcGpBeneficiaryCount: '{{count}} beneficiaries',
+    ofcGpCollectedOfAwarded: '{{collected}} of {{awarded}} ({{rate}}%)',
+    ofcGpEachBeneficiaryGets: '{{quantity}} {{unit}} each',
+    ofcOvIdentifiers: 'identifiers',
     nsStepUpRequired: 'Confirm this with the one-time code, then try again.',
     nsDeviceNotRegistered:
       'Open Profile, then "View my application and clearance", to register it.',
@@ -7709,8 +7743,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbMda: "Ma’aikata",
     ofcRvGroupedByAssessment: "An hada kowane adadi a kasa bisa ga Karamar Hukuma da unguwar da ke kan kimar, wanda abin dogaro ne. Wurin taswira daban ne kuma manhajar wakilai ce ke daukar sa a lokacin karba — babu wanda ya iso tukuna, wanda yawanci yana nufin ba a tura sigar da ke dauke da shi ba, ko wakilai ba su ba da izinin wuri a wayoyinsu ba.",
     ofcRvWhoseRevenue: "Harajin wa ne wannan",
-    ofcRvWhoseRevenueBody: "PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira",
-    ofcRvMdaNoItem: ". Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba.",
+    ofcRvWhoseRevenueBody: "PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira dominsa. Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba.",
     ofcRvOwedToCouncils: "Ana bin Kananan Hukumomi",
     ofcRvCouncilsBody: "PSIRS na karbar wannan a madadin Kananan Hukumomi, don haka nasu ne ba na Jiha ba. Nau’ikan da Karamar Hukuma ke sanya kudinsu kawai ake kirgawa — harajin Jiha da aka karba a yankin Karamar Hukuma na Jiha ne. Ana jera kowace Karamar Hukuma, hade da wadanda ba su karbi komai ba, saboda turawar kudi dole ta yi lissafin dukkan goma sha bakwai.",
     ofcRvWhereGenerated: "Inda ake samar da harajin",
@@ -9954,6 +9987,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    ofcDbOr: 'ko',
+    ofcDbDayRange: 'daga {{from}} zuwa {{to}}',
+    ofcGpBeneficiaryCount: 'masu cin gajiya {{count}}',
+    ofcGpCollectedOfAwarded: '{{collected}} daga cikin {{awarded}} ({{rate}}%)',
+    ofcGpEachBeneficiaryGets: '{{quantity}} {{unit}} kowanne',
+    ofcOvIdentifiers: 'Lambobin ganewa',
     nsStepUpRequired: 'Ka tabbatar da wannan da lambar amfani sau daya, sannan ka sake gwadawa.',
     nsDeviceNotRegistered:
       'Ka bude Bayanan Kaina, sannan "Duba nemana da izinina", domin ka yi rajistarta.',

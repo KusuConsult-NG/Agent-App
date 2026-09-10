@@ -188,7 +188,7 @@ export function RevenueScreen() {
         */}
       <div className="card card--flush">
         <h2 className="card__title card__pad--tight">{t.ofcRvWhoseRevenue}</h2>
-        <p className="card__hint card__pad--sides">{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
+        <p className="card__hint card__pad--sides">{t.ofcRvWhoseRevenueBody}</p>
         <Table
           columns={[
             { key: 'mda', label: 'ofcRvMinistryDepartment', render: (row: MdaRow) => localName(lang, row.mda, row.mda_ha) },

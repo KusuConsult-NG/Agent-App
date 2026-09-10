@@ -540,13 +540,23 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div className="stat">
           <p className="stat__label">{t.ofcGpAwarded}</p>
           <p className="stat__value">{round.awardedQuantity}</p>
-          <p className="stat__hint">{round.awardedCount} beneficiaries</p>
+          <p className="stat__hint">
+            {t.ofcGpBeneficiaryCount.replace('{{count}}', String(round.awardedCount))}
+          </p>
         </div>
         <div className="stat">
           <p className="stat__label">{t.ofcPfCollected}</p>
           <p className="stat__value">{round.collectedQuantity}</p>
+          {/*
+            * The whole phrase, not three fragments round two numbers.
+            * "{{collected}} of {{awarded}}" cannot be built by concatenation
+            * in a language that does not order those parts as English does.
+            */}
           <p className="stat__hint">
-            {round.collectedCount} of {round.awardedCount} ({collectionRate}%)
+            {t.ofcGpCollectedOfAwarded
+              .replace('{{collected}}', String(round.collectedCount))
+              .replace('{{awarded}}', String(round.awardedCount))
+              .replace('{{rate}}', String(collectionRate))}
           </p>
         </div>
         <div className="stat">
@@ -573,7 +583,9 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div className="card__pad">
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
-            {round.quantity_per_beneficiary} {enumLabel(round.unit, t)} each
+            {t.ofcGpEachBeneficiaryGets
+              .replace('{{quantity}}', round.quantity_per_beneficiary)
+              .replace('{{unit}}', enumLabel(round.unit, t))}
             {round.collection_point
               ? t.ofcGrCollectedAt.replace('{{place}}', round.collection_point)
               : ''}{' '}

@@ -42,7 +42,7 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
       ))}
       {readable.length > 0 && identifiers.length > 0 && (
         <details className="signal-detail__ids">
-          <summary>identifiers</summary>
+          <summary>{t.ofcOvIdentifiers}</summary>
           {identifiers.map(([key, value]) => (
             <div key={key} className="mono">
               {humanise(key, t)} {formatValue(value)}

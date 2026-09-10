@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,230 strings; that one is two pages and links back
+> because it carries all 3,235 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,230 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,235 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,230 strings is worse than no sheet, because it looks complete; this one cannot
+3,235 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,230 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,235 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,230 strings: where the
+- The glossary below is applied consistently across all 3,235 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3151 strings, grouped by where an agent meets them. Lower stakes
+3156 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1046,6 +1046,8 @@ instructions — but they are what an agent reads all day.
 | `ofcDbNoneDeclining` | Nothing is collecting less than it did last month. | Babu abin da ke tarawa kasa da watan jiya. | ☐ | |
 | `ofcDbChange` | Change | Canji | ☐ | |
 | `ofcDbShareOfMonth` | Share of the month | Kason watan | ☐ | |
+| `ofcDbOr` | or | ko | ☐ | |
+| `ofcDbDayRange` | {{from}} to {{to}} | daga {{from}} zuwa {{to}} | ☐ | |
 | `ofcDbAverageTimeToConfirm` | Average time to confirm a payment | Matsakaicin lokacin tabbatar da biya | ☐ | |
 | `ofcDbDuplicateRegistrationsOverridden` | Duplicate registrations overridden | Rijistar da aka maimaita da aka wuce | ☐ | |
 | `ofcDbNewTaxpayersThisMonth` | New taxpayers this month | Sabbin masu biyan haraji a wannan wata | ☐ | |
@@ -1060,8 +1062,7 @@ instructions — but they are what an agent reads all day.
 | `ofcRvArea` | Area | Yanki | ☐ | |
 | `ofcRvGroupedByAssessment` | Every figure below is grouped by the LGA and ward on the assessment, which is reliable. The map coordinates are separate and are captured by the agent application at the moment of collection — none has arrived yet, which usually means no version carrying that has been deployed, or agents have not granted location permission on their handsets. | An hada kowane adadi a kasa bisa ga Karamar Hukuma da unguwar da ke kan kimar, wanda abin dogaro ne. Wurin taswira daban ne kuma manhajar wakilai ce ke daukar sa a lokacin karba — babu wanda ya iso tukuna, wanda yawanci yana nufin ba a tura sigar da ke dauke da shi ba, ko wakilai ba su ba da izinin wuri a wayoyinsu ba. | ☐ | |
 | `ofcRvWhoseRevenue` | Whose revenue this is | Harajin wa ne wannan | ☐ | |
-| `ofcRvWhoseRevenueBody` | PSIRS collects the state’s revenue; this is the arm of government each naira is collected | PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira | ☐ | |
-| `ofcRvMdaNoItem` | . An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence. | . Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba. | ☐ | |
+| `ofcRvWhoseRevenueBody` | PSIRS collects the state’s revenue; this is the arm of government each naira is collected for. An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence. | PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira dominsa. Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba. | ☐ | |
 | `ofcRvOwedToCouncils` | Owed to the Local Government Councils | Ana bin Kananan Hukumomi | ☐ | |
 | `ofcRvCouncilsBody` | PSIRS collects this on the Councils’ behalf, so it is theirs rather than the State’s. Only items whose rate a Council sets are counted — a State levy collected in a Council’s area is the State’s. Every Council is listed, including those that collected nothing, because a remittance run has to account for all seventeen. | PSIRS na karbar wannan a madadin Kananan Hukumomi, don haka nasu ne ba na Jiha ba. Nau’ikan da Karamar Hukuma ke sanya kudinsu kawai ake kirgawa — harajin Jiha da aka karba a yankin Karamar Hukuma na Jiha ne. Ana jera kowace Karamar Hukuma, hade da wadanda ba su karbi komai ba, saboda turawar kudi dole ta yi lissafin dukkan goma sha bakwai. | ☐ | |
 | `ofcRvWhereGenerated` | Where the revenue is generated | Inda ake samar da harajin | ☐ | |
@@ -1247,6 +1248,7 @@ instructions — but they are what an agent reads all day.
 | `ofcOvChange` | What changed | Abin da ya canza | ☐ | |
 | `ofcOvSweepRaised` | Sweep complete. {{count}} flag(s) raised for review. | An kammala bincike. An daga tuta {{count}} domin dubawa. | ☐ | |
 | `ofcOvJobsNeedAttention` | {{count}} of {{total}} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows. | Ayyuka {{count}} daga cikin {{total}} da aka tsara suna bukatar kulawa. Aikin da ba ya gudana ba ya haifar da abin dubawa, don haka nan kadai yake bayyana. | ☐ | |
+| `ofcOvIdentifiers` | identifiers | Lambobin ganewa | ☐ | |
 | `ofcOvJobHealthy` | Running on schedule. | Yana gudana bisa tsarin lokaci. | ☐ | |
 | `ofcOvJobRunning` | Running now. | Yana gudana yanzu. | ☐ | |
 | `ofcOvJobOverdue` | Has not started when it should have. The schedule itself may have stopped. | Bai fara a lokacin da ya kamata ba. Wataran tsarin lokacin kansa ya tsaya. | ☐ | |
@@ -1581,6 +1583,9 @@ instructions — but they are what an agent reads all day.
 | `ofcGpSector` | Sector | Bangare | ☐ | |
 | `ofcGpConfirmedMembers` | Confirmed members | Mambobin da aka tabbatar | ☐ | |
 | `ofcGpScoreAtAward` | Score at award | Maki a lokacin bayarwa | ☐ | |
+| `ofcGpBeneficiaryCount` | {{count}} beneficiaries | masu cin gajiya {{count}} | ☐ | |
+| `ofcGpCollectedOfAwarded` | {{collected}} of {{awarded}} ({{rate}}%) | {{collected}} daga cikin {{awarded}} ({{rate}}%) | ☐ | |
+| `ofcGpEachBeneficiaryGets` | {{quantity}} {{unit}} each | {{quantity}} {{unit}} kowanne | ☐ | |
 | `ofcGpMemberLeft` | {{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations. | An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba. | ☐ | |
 | `ofcGpConfirmationLinkCreated` | Confirmation link created. | An kirkiri hanyar tabbatarwa. | ☐ | |
 

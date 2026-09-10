@@ -218,7 +218,6 @@ function looksLikeCode(text: string): boolean {
     // the pattern walked into, never a sentence somebody wrote.
     /^[;,]/.test(text) ||
     text.endsWith('(') ||
-    /^[a-z][A-Za-z0-9_]*$/.test(text) ||
     // `something.method(` — a call. No sentence contains one.
     /[A-Za-z_]\w*\.[A-Za-z_]\w*\(/.test(text) ||
     /\b(?:const|let|var)\s|\buseState\(|\buseRef\(|\bRecord<|\bPromise<|\bapi\.[a-z]/.test(text) ||
@@ -306,7 +305,7 @@ function isSurroundingCode(text: string): boolean {
     // the object literal that follows it.
     /^\(\w+,/.test(text) ||
     /\.[A-Za-z_]\w*\(/.test(text) ||
-    /\b(?:import|export|interface|type|function|catch|async|await|if|else|typeof|instanceof|new|extends|null|undefined|void)\b/.test(
+    /\b(?:import|export|interface|type|function|try|catch|finally|async|await|if|else|typeof|instanceof|new|extends|null|undefined|void)\b/.test(
       text,
     )
   );
