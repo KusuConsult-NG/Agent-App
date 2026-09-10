@@ -7,6 +7,7 @@
 
 import type { AgentBlocker } from './agent-lifecycle';
 import type { DuplicateReason } from './identity';
+import type { VerificationReason } from './verification';
 
 export type Language = 'en' | 'ha';
 
@@ -2649,6 +2650,19 @@ export interface TranslationDictionary {
   agEnBandSoFarTitle: string;
   agEnBandSoFar: string;
   tpViewProfile: string;
+  verifyReceiptFingerprintMismatch: string;
+  verifyReceiptReversed: string;
+  verifyReceiptVoided: string;
+  verifyReceiptGenuine: string;
+  verifyReceiptGenuineUnchecked: string;
+  verifyNotFound: string;
+  verifyPaymentReversed: string;
+  verifyDocumentRevoked: string;
+  verifyDocumentFingerprintMismatch: string;
+  verifyAcknowledgementNotReceipt: string;
+  verifyDocumentExpired: string;
+  verifyDocumentGenuine: string;
+  verifyDocumentGenuineUnchecked: string;
   tpPossibleExisting: string;
   tpDupIdentityNumber: string;
   tpDupPhoneAndName: string;
@@ -5942,6 +5956,19 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnBandSoFarTitle: "Size from what you have written",
     agEnBandSoFar: "This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice.",
     tpViewProfile: "View profile",
+    verifyReceiptFingerprintMismatch: "A receipt with this number exists, but the stored document does not match its original fingerprint. Treat the document you were given as unverified and report it to PSIRS.",
+    verifyReceiptReversed: "This receipt was issued but the payment has since been reversed or refunded. It is no longer valid evidence of payment.",
+    verifyReceiptVoided: "This receipt has been voided and is not valid.",
+    verifyReceiptGenuine: "This is a genuine government receipt issued by PSIRS.",
+    verifyReceiptGenuineUnchecked: "This is a genuine government receipt issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt.",
+    verifyNotFound: "No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS.",
+    verifyPaymentReversed: "This payment was reversed and the money is being returned to the payer, so no government receipt was issued for it. The document is no longer valid evidence of payment. If you have not received the money, contact PSIRS with this number.",
+    verifyDocumentRevoked: "This document has been revoked and is no longer valid.",
+    verifyDocumentFingerprintMismatch: "The stored document does not match its original fingerprint. Report this to PSIRS.",
+    verifyAcknowledgementNotReceipt: "This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt. The payment system has confirmed the payment; the money has not yet reached the government account. A receipt is issued automatically once it does, and can be checked here in the same way.",
+    verifyDocumentExpired: "This document expired on {{date}}.",
+    verifyDocumentGenuine: "This is a genuine government document issued by PSIRS.",
+    verifyDocumentGenuineUnchecked: "This is a genuine government document issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt.",
     tpPossibleExisting: "Possible existing taxpayer",
     tpDupIdentityNumber: "The same identification number is already registered",
     tpDupPhoneAndName: "Same phone number and same name",
@@ -9141,6 +9168,19 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnBandSoFarTitle: "Girma daga abin da ka rubuta",
     agEnBandSoFar: "Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa.",
     tpViewProfile: "Duba bayanai",
+    verifyReceiptFingerprintMismatch: "Akwai rasit mai wannan lamba, amma takardar da aka adana ba ta yi daidai da asalin sa ba. Ka dauki takardar da aka ba ka a matsayin wadda ba a tabbatar ba, kuma ka sanar da PSIRS.",
+    verifyReceiptReversed: "An bayar da wannan rasit amma an juyar da biyan kudin ko an mayar da shi tun daga nan. Ba ya kara zama shaidar biya.",
+    verifyReceiptVoided: "An soke wannan rasit kuma ba ya aiki.",
+    verifyReceiptGenuine: "Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar.",
+    verifyReceiptGenuineUnchecked: "Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba.",
+    verifyNotFound: "Babu takardar gwamnati da ta yi daidai da wannan lamba ko lambar tabbatarwa. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta bayar da shi ba.",
+    verifyPaymentReversed: "An juyar da wannan biyan kudin kuma ana mayar da kudin ga wanda ya biya, don haka ba a bayar da rasitin gwamnati a kansa ba. Takardar ba ta kara zama shaidar biya. Idan ba ka karbi kudin ba, ka tuntubi PSIRS da wannan lamba.",
+    verifyDocumentRevoked: "An soke wannan takardar kuma ba ta kara aiki.",
+    verifyDocumentFingerprintMismatch: "Takardar da aka adana ba ta yi daidai da asalin sa ba. Ka sanar da PSIRS.",
+    verifyAcknowledgementNotReceipt: "Wannan tabbacin karbar kudi ne na gaskiya daga PSIRS, kuma BA rasitin gwamnati ba ne. Tsarin biyan kudi ya tabbatar da biyan; kudin bai kai asusun gwamnati ba tukuna. Ana bayar da rasit ta atomatik da zarar ya kai, kuma ana iya duba shi a nan haka nan.",
+    verifyDocumentExpired: "Wannan takardar ta kare a {{date}}.",
+    verifyDocumentGenuine: "Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar.",
+    verifyDocumentGenuineUnchecked: "Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba.",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
     tpDupIdentityNumber: "An riga an yi rajistar wannan lambar shaida",
     tpDupPhoneAndName: "Lambar waya daya da suna daya",
@@ -9962,6 +10002,30 @@ export const DUPLICATE_REASON_TEXT: Record<DuplicateReason, keyof TranslationDic
   PHONE: 'tpDupPhone',
   BUSINESS_NAME_IN_LGA: 'tpDupBusinessNameInLga',
   NAME_IN_LGA: 'tpDupNameInLga',
+};
+
+/**
+ * The eleven verification answers, as dictionary keys.
+ *
+ * The third such table, after `BLOCKER_TEXT` and `DUPLICATE_REASON_TEXT`, and
+ * the one where being wrong costs the most: these sentences tell somebody
+ * whether the State has their money. Typed against `VerificationReason`, so a
+ * new answer without a string fails the build.
+ */
+export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDictionary> = {
+  RECEIPT_FINGERPRINT_MISMATCH: 'verifyReceiptFingerprintMismatch',
+  RECEIPT_REVERSED: 'verifyReceiptReversed',
+  RECEIPT_VOIDED: 'verifyReceiptVoided',
+  RECEIPT_GENUINE: 'verifyReceiptGenuine',
+  RECEIPT_GENUINE_UNCHECKED: 'verifyReceiptGenuineUnchecked',
+  NOT_FOUND: 'verifyNotFound',
+  PAYMENT_REVERSED: 'verifyPaymentReversed',
+  DOCUMENT_REVOKED: 'verifyDocumentRevoked',
+  DOCUMENT_FINGERPRINT_MISMATCH: 'verifyDocumentFingerprintMismatch',
+  ACKNOWLEDGEMENT_NOT_RECEIPT: 'verifyAcknowledgementNotReceipt',
+  DOCUMENT_EXPIRED: 'verifyDocumentExpired',
+  DOCUMENT_GENUINE: 'verifyDocumentGenuine',
+  DOCUMENT_GENUINE_UNCHECKED: 'verifyDocumentGenuineUnchecked',
 };
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {

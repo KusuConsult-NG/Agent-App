@@ -13,7 +13,14 @@ import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
-import { enumLabel, formatNaira, type TranslationDictionary } from '@psirs/shared';
+import {
+  VERIFICATION_TEXT,
+  enumLabel,
+  formatDateIn,
+  formatNaira,
+  type TranslationDictionary,
+  type VerificationReason,
+} from '@psirs/shared';
 
 interface VerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
@@ -25,6 +32,9 @@ interface VerificationResult {
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /** Which of the thirteen answers, so a citizen can read it in Hausa. */
+  reason: VerificationReason;
+  expiresAt?: string;
   message: string;
 }
 
@@ -131,7 +141,24 @@ export function VerifyScreen({ code }: { code?: string }) {
               </p>
             </div>
 
-            <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
+            {/*
+              * The answer, in the language the citizen chose.
+              *
+              * This page exists to answer one question — is the paper in my
+              * hand real, and does the State have my money — and it answered
+              * in the API's English on a portal that offers Hausa. The
+              * distinction that matters most is the one between a receipt and
+              * an acknowledgement, and it is carried entirely by this
+              * sentence.
+              */}
+            <p style={{ fontSize: '0.87rem' }}>
+              {result.expiresAt
+                ? t[VERIFICATION_TEXT[result.reason]].replace(
+                    '{{date}}',
+                    formatDateIn(result.expiresAt, t),
+                  )
+                : t[VERIFICATION_TEXT[result.reason]]}
+            </p>
 
             {(result.receiptNumber || result.documentNumber) && (
               <KeyValue

@@ -25,7 +25,7 @@ import {
 import { Alert, ErrorAlert, Field, KeyValue, Money, Spinner } from '../ui';
 import type { ConnectionState } from '../lib/device';
 import { useI18n } from '../lib/i18n';
-import { formatDateIn } from '@psirs/shared';
+import { VERIFICATION_TEXT, formatDateIn, type VerificationReason } from '@psirs/shared';
 
 /** Exactly the shape `GET /verify/:code` returns. */
 interface VerificationResult {
@@ -39,6 +39,9 @@ interface VerificationResult {
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /** Which of the thirteen answers, so it can be read in Hausa. */
+  reason: VerificationReason;
+  expiresAt?: string;
 }
 
 export function VerifyScreen({ connection }: { connection: ConnectionState }) {
@@ -206,7 +209,24 @@ function VerificationOutcome({ result }: { result: VerificationResult }) {
     <div className="card">
       <h2 className="card__title">{genuine ? t.genuineReceipt : t.receiptNotValid}</h2>
       <Alert kind={genuine ? 'success' : 'error'}>
-        <p style={{ margin: 0 }}>{result.message}</p>
+        {/*
+          * The answer, in the language the agent reads it out in.
+          *
+          * This is the sentence an agent says to the person holding the
+          * paper, and it was the API's English. The difference between "a
+          * genuine receipt" and "a genuine acknowledgement, and NOT a
+          * receipt — the money has not reached the government account" is
+          * the entire point of the exchange, and it cannot be made in a
+          * language the reader does not have.
+          */}
+        <p style={{ margin: 0 }}>
+          {result.expiresAt
+            ? t[VERIFICATION_TEXT[result.reason]].replace(
+                '{{date}}',
+                formatDateIn(result.expiresAt, t),
+              )
+            : t[VERIFICATION_TEXT[result.reason]]}
+        </p>
       </Alert>
 
       {genuine && (

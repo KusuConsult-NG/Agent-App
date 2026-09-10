@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,162 strings; that one is two pages and links back
+> because it carries all 3,175 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,162 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,175 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,162 strings is worse than no sheet, because it looks complete; this one cannot
+3,175 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,162 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,175 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,162 strings: where the
+- The glossary below is applied consistently across all 3,175 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -465,6 +465,19 @@ quietly leave it.
 | `pubVerdictReversed` | REVERSED | AN JUYAR DA SHI | ☐ | |
 | `pubVerdictNotFound` | NOT FOUND | BA A SAMU BA | ☐ | |
 | `pubVerdictInvalid` | INVALID | BA INGANTACCE BA | ☐ | |
+| `verifyReceiptFingerprintMismatch` | A receipt with this number exists, but the stored document does not match its original fingerprint. Treat the document you were given as unverified and report it to PSIRS. | Akwai rasit mai wannan lamba, amma takardar da aka adana ba ta yi daidai da asalin sa ba. Ka dauki takardar da aka ba ka a matsayin wadda ba a tabbatar ba, kuma ka sanar da PSIRS. | ☐ | |
+| `verifyReceiptReversed` | This receipt was issued but the payment has since been reversed or refunded. It is no longer valid evidence of payment. | An bayar da wannan rasit amma an juyar da biyan kudin ko an mayar da shi tun daga nan. Ba ya kara zama shaidar biya. | ☐ | |
+| `verifyReceiptVoided` | This receipt has been voided and is not valid. | An soke wannan rasit kuma ba ya aiki. | ☐ | |
+| `verifyReceiptGenuine` | This is a genuine government receipt issued by PSIRS. | Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar. | ☐ | |
+| `verifyReceiptGenuineUnchecked` | This is a genuine government receipt issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt. | Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba. | ☐ | |
+| `verifyNotFound` | No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS. | Babu takardar gwamnati da ta yi daidai da wannan lamba ko lambar tabbatarwa. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta bayar da shi ba. | ☐ | |
+| `verifyPaymentReversed` | This payment was reversed and the money is being returned to the payer, so no government receipt was issued for it. The document is no longer valid evidence of payment. If you have not received the money, contact PSIRS with this number. | An juyar da wannan biyan kudin kuma ana mayar da kudin ga wanda ya biya, don haka ba a bayar da rasitin gwamnati a kansa ba. Takardar ba ta kara zama shaidar biya. Idan ba ka karbi kudin ba, ka tuntubi PSIRS da wannan lamba. | ☐ | |
+| `verifyDocumentRevoked` | This document has been revoked and is no longer valid. | An soke wannan takardar kuma ba ta kara aiki. | ☐ | |
+| `verifyDocumentFingerprintMismatch` | The stored document does not match its original fingerprint. Report this to PSIRS. | Takardar da aka adana ba ta yi daidai da asalin sa ba. Ka sanar da PSIRS. | ☐ | |
+| `verifyAcknowledgementNotReceipt` | This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt. The payment system has confirmed the payment; the money has not yet reached the government account. A receipt is issued automatically once it does, and can be checked here in the same way. | Wannan tabbacin karbar kudi ne na gaskiya daga PSIRS, kuma BA rasitin gwamnati ba ne. Tsarin biyan kudi ya tabbatar da biyan; kudin bai kai asusun gwamnati ba tukuna. Ana bayar da rasit ta atomatik da zarar ya kai, kuma ana iya duba shi a nan haka nan. | ☐ | |
+| `verifyDocumentExpired` | This document expired on {{date}}. | Wannan takardar ta kare a {{date}}. | ☐ | |
+| `verifyDocumentGenuine` | This is a genuine government document issued by PSIRS. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. | ☐ | |
+| `verifyDocumentGenuineUnchecked` | This is a genuine government document issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt. | Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba. | ☐ | |
 
 ### B · The rest of the dictionary, by screen
 

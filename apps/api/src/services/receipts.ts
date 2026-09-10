@@ -18,6 +18,7 @@
  */
 
 import type { PoolClient } from 'pg';
+import { verificationSentence, type VerificationReason } from '@psirs/shared';
 import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { queryOne, query } from '../db/pool';
@@ -330,6 +331,16 @@ export interface PublicVerificationResult {
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /**
+   * Which of the eleven answers this is.
+   *
+   * `message` is the same answer in English. Both travel: a browser reads the
+   * code and says it in the reader's language, and anything else still gets a
+   * sentence. See `packages/shared/src/verification.ts`.
+   */
+  reason: VerificationReason;
+  /** Present only on DOCUMENT_EXPIRED, so the client can format the date. */
+  expiresAt?: string;
   message: string;
 }
 
@@ -404,10 +415,15 @@ export async function verifyPublicly(
         amountKobo: receipt.amount_kobo,
         issuedAt: receipt.issued_at.toISOString(),
         lga: receipt.lga_name,
-        message:
+        reason:
           receipt.status === 'REVERSED' || receipt.status === 'REFUNDED'
-            ? 'This receipt was issued but the payment has since been reversed or refunded. It is no longer valid evidence of payment.'
-            : 'This receipt has been voided and is not valid.',
+            ? 'RECEIPT_REVERSED'
+            : 'RECEIPT_VOIDED',
+        message: verificationSentence(
+          receipt.status === 'REVERSED' || receipt.status === 'REFUNDED'
+            ? 'RECEIPT_REVERSED'
+            : 'RECEIPT_VOIDED',
+        ),
       };
     }
 
@@ -416,9 +432,8 @@ export async function verifyPublicly(
         status: 'INVALID',
         receiptNumber: receipt.receipt_number,
         integrityConfirmed: false,
-        message:
-          'A receipt with this number exists, but the stored document does not match its original ' +
-          'fingerprint. Treat the document you were given as unverified and report it to PSIRS.',
+        reason: 'RECEIPT_FINGERPRINT_MISMATCH',
+        message: verificationSentence('RECEIPT_FINGERPRINT_MISMATCH'),
       };
     }
 
@@ -433,11 +448,10 @@ export async function verifyPublicly(
       issuedAt: receipt.issued_at.toISOString(),
       lga: receipt.lga_name,
       integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
-      message:
-        integrity === 'MATCHED'
-          ? 'This is a genuine government receipt issued by PSIRS.'
-          : 'This is a genuine government receipt issued by PSIRS. The stored copy could not be ' +
-            'checked just now, so its fingerprint has not been confirmed on this attempt.',
+      reason: integrity === 'MATCHED' ? 'RECEIPT_GENUINE' : 'RECEIPT_GENUINE_UNCHECKED',
+      message: verificationSentence(
+        integrity === 'MATCHED' ? 'RECEIPT_GENUINE' : 'RECEIPT_GENUINE_UNCHECKED',
+      ),
     };
   }
 
@@ -475,9 +489,8 @@ export async function verifyPublicly(
   if (!document) {
     return {
       status: 'NOT_FOUND',
-      message:
-        'No government document matches that number or code. If you were given a receipt bearing ' +
-        'this number, it was not issued by PSIRS.',
+      reason: 'NOT_FOUND',
+      message: verificationSentence('NOT_FOUND'),
     };
   }
 
@@ -494,11 +507,8 @@ export async function verifyPublicly(
       documentNumber: document.document_number,
       documentType: document.document_type,
       issuedAt: document.issued_at.toISOString(),
-      message: returned
-        ? 'This payment was reversed and the money is being returned to the payer, so no ' +
-          'government receipt was issued for it. The document is no longer valid evidence of ' +
-          'payment. If you have not received the money, contact PSIRS with this number.'
-        : 'This document has been revoked and is no longer valid.',
+      reason: returned ? 'PAYMENT_REVERSED' : 'DOCUMENT_REVOKED',
+      message: verificationSentence(returned ? 'PAYMENT_REVERSED' : 'DOCUMENT_REVOKED'),
     };
   }
 
@@ -511,7 +521,8 @@ export async function verifyPublicly(
       documentType: document.document_type,
       issuedAt: document.issued_at.toISOString(),
       integrityConfirmed: false,
-      message: 'The stored document does not match its original fingerprint. Report this to PSIRS.',
+      reason: 'DOCUMENT_FINGERPRINT_MISMATCH',
+      message: verificationSentence('DOCUMENT_FINGERPRINT_MISMATCH'),
     };
   }
 
@@ -530,11 +541,8 @@ export async function verifyPublicly(
       documentType: document.document_type,
       issuedAt: document.issued_at.toISOString(),
       integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
-      message:
-        'This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt. ' +
-        'The payment system has confirmed the payment; the money has not yet reached the ' +
-        'government account. A receipt is issued automatically once it does, and can be checked ' +
-        'here in the same way.',
+      reason: 'ACKNOWLEDGEMENT_NOT_RECEIPT',
+      message: verificationSentence('ACKNOWLEDGEMENT_NOT_RECEIPT'),
     };
   }
 
@@ -544,12 +552,16 @@ export async function verifyPublicly(
     documentType: document.document_type,
     issuedAt: document.issued_at.toISOString(),
     integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
-    message: expired
-      ? `This document expired on ${document.expires_at!.toISOString().slice(0, 10)}.`
+    reason: expired
+      ? 'DOCUMENT_EXPIRED'
       : integrity === 'MATCHED'
-        ? 'This is a genuine government document issued by PSIRS.'
-        : 'This is a genuine government document issued by PSIRS. The stored copy could not be ' +
-          'checked just now, so its fingerprint has not been confirmed on this attempt.',
+        ? 'DOCUMENT_GENUINE'
+        : 'DOCUMENT_GENUINE_UNCHECKED',
+    /** The client formats this in the reader's locale; the sentence is a fallback. */
+    expiresAt: expired ? document.expires_at!.toISOString() : undefined,
+    message: expired
+      ? verificationSentence('DOCUMENT_EXPIRED', document.expires_at!.toISOString())
+      : verificationSentence(integrity === 'MATCHED' ? 'DOCUMENT_GENUINE' : 'DOCUMENT_GENUINE_UNCHECKED'),
   };
 }
 
