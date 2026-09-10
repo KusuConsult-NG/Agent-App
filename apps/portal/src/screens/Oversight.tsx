@@ -121,7 +121,12 @@ export function FraudScreen() {
     api
       .get<any[]>(`/government/fraud/flags?${params.toString()}`)
       .then(setFlags)
-      .catch(() => setFlags([]));
+      // A fraud queue that could not be read is not a queue with no flags in
+      // it, and "no flags" is the reading an officer will take from an empty
+      // table. The refusal reaches the screen instead.
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+      });
   }, [statusFilter]);
 
   useEffect(() => {

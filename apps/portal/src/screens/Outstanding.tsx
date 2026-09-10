@@ -136,24 +136,44 @@ export function OutstandingScreen() {
   const readsVehicles = can('vehicle:authority_sync');
   const readsTaxpayers = can('taxpayer:read:all');
 
+  /*
+   * Which queues could not be read, as opposed to which are empty.
+   *
+   * Every fetch on this screen answered a failure with `setX([])`, and an
+   * empty array is what an emptied queue looks like. With all four failing —
+   * an expired session, the API down — `waiting` came to zero, `loaded` came
+   * to true, and this screen showed a green success alert reading "Nothing is
+   * outstanding. Every refund has been made."
+   *
+   * The screen's own opening paragraph says why that must not happen: "A
+   * queue nobody can look at is indistinguishable from an empty one, which is
+   * the wrong thing for a refund to be indistinguishable from." It was the
+   * one thing this screen exists to prevent, and it was doing it.
+   */
+  const [unreadable, setUnreadable] = useState<Set<string>>(new Set());
+
   const load = useCallback(() => {
+    setUnreadable(new Set());
+    const failed = (queue: string) => () =>
+      setUnreadable((current) => new Set(current).add(queue));
+
     if (readsRefunds) {
       api
         .get<{ refunds: Refund[] }>('/government/refunds/outstanding')
         .then((data) => setRefunds(data.refunds))
-        .catch(() => setRefunds([]));
+        .catch(failed('refunds'));
     }
     if (readsTins) {
       api
         .get<{ taxpayers: AwaitingTin[] }>('/taxpayers/tin-outstanding')
         .then((data) => setTins(data.taxpayers))
-        .catch(() => setTins([]));
+        .catch(failed('tins'));
     }
     if (readsTaxpayers) {
       api
         .get<{ taxpayers: EndedWithArrears[] }>('/taxpayers/ended-with-arrears')
         .then((data) => setEnded(data.taxpayers))
-        .catch(() => setEnded([]));
+        .catch(failed('ended'));
     }
     if (readsVehicles) {
       api
@@ -164,10 +184,7 @@ export function OutstandingScreen() {
           setRenewals(data.renewals);
           setVehicles(data.vehiclesAwaitingAuthority);
         })
-        .catch(() => {
-          setRenewals([]);
-          setVehicles([]);
-        });
+        .catch(failed('vehicles'));
     }
   }, [readsRefunds, readsTins, readsVehicles, readsTaxpayers]);
 
@@ -225,7 +242,22 @@ export function OutstandingScreen() {
 
   return (
     <>
-      {waiting === 0 && loaded ? (
+      {unreadable.size > 0 && (
+        <Alert kind="warning" title="ofcOsQueueUnreadable">
+          <p style={{ margin: 0 }}>
+            {t.ofcOsQueueUnreadableBody.replace('{{n}}', String(unreadable.size))}
+          </p>
+        </Alert>
+      )}
+      {/*
+        * "Nothing is outstanding" is a claim, and it needs every queue read.
+        *
+        * A queue that failed leaves its list null rather than empty, so
+        * `loaded` is already false while one is outstanding — but a queue that
+        * failed *and* was retried could settle at empty, so the success is
+        * gated on having read them all as well.
+        */}
+      {waiting === 0 && loaded && unreadable.size === 0 ? (
         <Alert kind="success" title="ofcOsNothingOutstanding">
           <p style={{ margin: 0 }}>
             {readsRefunds && readsTins && readsVehicles

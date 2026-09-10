@@ -960,6 +960,8 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcOsQueueUnreadable: string;
+  ofcOsQueueUnreadableBody: string;
   ofcUaCoversNothing: string;
   ofcUaCoversTerritories: string;
   ofcFaMinimumNow: string;
@@ -4293,6 +4295,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcOsQueueUnreadable: "A queue could not be read",
+    ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
     ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
     ofcUaCoversTerritories: "{{name}} now covers {{n}} territory(ies).",
     ofcFaMinimumNow: "Minimum version is now {{version}}.",
@@ -7454,6 +7458,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
+    ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
     ofcUaCoversTerritories: "{{name}} yanzu yana rufe yankuna {{n}}.",
     ofcFaMinimumNow: "Mafi karancin sigar yanzu {{version}} ce.",

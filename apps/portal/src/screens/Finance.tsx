@@ -60,14 +60,27 @@ export function ReconciliationScreen() {
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setLoadError(caught.error);
       });
+    /*
+     * A list that could not be read is not a list with nothing in it.
+     *
+     * Both of these answered a failure with an empty array, and an empty
+     * exceptions table reads as "reconciliation is clean" — which is the one
+     * conclusion an officer must not draw from a request that failed. The
+     * summary fetch above already reports its failure; these now do too, so a
+     * scoped refusal on one endpoint is visible rather than reassuring.
+     */
     api
       .get<any[]>('/government/reconciliation/exceptions')
       .then(setExceptions)
-      .catch(() => setExceptions([]));
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      });
     api
       .get<any[]>('/government/reconciliation/awaiting-settlement')
       .then(setInTransit)
-      .catch(() => setInTransit([]));
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      });
   }, []);
 
   useEffect(() => {
