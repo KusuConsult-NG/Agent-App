@@ -255,7 +255,7 @@ describe('the portal stays translated', () => {
       if (!path.endsWith('.tsx')) continue;
       for (const text of englishIn(source)) offenders.push(`${path}: ${text}`);
     }
-    expect(offenders).toEqual([]);
+    expect(offenders.join('\n')).toBe('');
   });
 });
 
@@ -535,7 +535,7 @@ describe('no screen has English of its own', () => {
       for (const text of capitalisedLiteralsIn(source)) offenders.push(`${path}: ${text}`);
       for (const text of templateTextIn(source)) offenders.push(`${path}: ${text}`);
     }
-    expect(offenders).toEqual([]);
+    expect(offenders.join('\n')).toBe('');
   });
 });
 
@@ -569,7 +569,7 @@ describe('no screen picks its own locale', () => {
         offenders.push(`${path}: ${match[0].slice(0, 40)}`);
       }
     }
-    expect(offenders).toEqual([]);
+    expect(offenders.join('\n')).toBe('');
   });
 });
 
@@ -595,22 +595,115 @@ describe('no screen picks its own locale', () => {
  * thing — it goes through `ErrorAlert`, which prefers `TRANSLATED_ERRORS`
  * — so only a message read off a *success* payload is named here.
  */
-const RENDERS_A_SERVER_SENTENCE =
-  /\b(?:setMessage|setNotice|setSuccess|setPrinterMsg|setPushMsg|setSweepResult)\(\s*(?:result|body|data|reply|answer|outcome)(?:\?)?\.message\b/g;
+/*
+ * REWRITTEN, BECAUSE THE FIRST VERSION CERTIFIED NOTHING
+ *
+ * It matched six setter names against six variable names — the shape of the
+ * nine instances found the day it was written, not the shape of the defect.
+ * Once those nine were fixed it matched zero sites and passed trivially,
+ * while twenty-one more sat in spellings it did not look at: `{result.message}`
+ * straight into JSX, `return result.message` feeding a setter one frame up,
+ * `onDone(result.message)`, and a table column bound as `key: 'message'`,
+ * which no `.message` pattern can see at all.
+ *
+ * A rule fitted to its examples is a rule that reports on its examples. This
+ * one is written to the shape: any identifier's `.message`, wherever it goes.
+ *
+ * The error paths are excluded BY NAME rather than by not being thought of.
+ * `ApiError.message` is a different thing — it goes through `ErrorAlert`,
+ * which prefers `TRANSLATED_ERRORS` — so the names those errors are bound to
+ * are listed, and anything not on that list is a success payload until
+ * somebody says otherwise. `syncProblem` is deliberately absent: it holds an
+ * `ApiError` and renders it raw, bypassing the very component that would
+ * have translated it.
+ */
+const ERROR_BINDINGS = new Set([
+  'error',
+  'caught',
+  'err',
+  'loadError',
+  'apiError',
+  'e',
+  'problem',
+  'failure',
+  'refusal',
+  'refreshError',
+]);
 
-/** Sites still to be moved off the server's wording, each with its reason. */
-const STILL_RENDERING_THE_SERVER = new Set<string>([]);
+const A_MESSAGE_OFF_A_PAYLOAD = /\b(\w+)(?:\?)?\.message\b/g;
+/** A table column bound to the field, which the pattern above cannot see. */
+const A_COLUMN_OF_MESSAGES = /key:\s*['"]message['"]/g;
+
+/**
+ * Sites still to be moved off the server's wording, each with its reason.
+ *
+ * Named here rather than left to a backlog, so this check passes today and
+ * fails on the twenty-second.
+ */
+const STILL_RENDERING_THE_SERVER = new Set<string>([
+  /*
+   * THE OFFICER PORTAL
+   *
+   * The job monitor is the one to take first. `describeState` composes six
+   * sentences in `apps/api` — "Failed 3 times in a row: …", "Started and
+   * never finished" — and the column header above them is translated while
+   * they are not. The state is already an enum on the wire and the error and
+   * the failure count come with it, so the screen has everything it needs to
+   * say this itself.
+   */
+  "../screens/Oversight.tsx:485 key: 'message'",
+  '../screens/Oversight.tsx:581 verification.message',
+
+  /*
+   * The citizen-facing portal, which is the larger worry: six sentences a
+   * member of the public reads about their own compliance and their own
+   * referee invitation, on the one part of this platform built for people
+   * who do not work here.
+   */
+  '../screens/Public.tsx:290 result.message',
+  '../screens/Public.tsx:305 result.message',
+  '../screens/Public.tsx:656 result.message',
+  '../screens/Public.tsx:1271 result.message',
+  '../screens/Public.tsx:1297 result.message',
+  '../screens/Public.tsx:1338 result.message',
+
+  /* Officer-facing confirmations: a rate changed, a group acted on. */
+  '../screens/Configuration.tsx:520 result.message',
+  '../screens/Groups.tsx:335 result.message',
+]);
 
 describe('no screen speaks the API’s English', () => {
   it('composes its own sentences from the dictionary', () => {
     const offenders: string[] = [];
     for (const [path, source] of Object.entries(ALL_SOURCES)) {
       const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-      for (const match of code.matchAll(RENDERS_A_SERVER_SENTENCE)) {
-        const site = `${path}: ${match[0]}`;
-        if (!STILL_RENDERING_THE_SERVER.has(site)) offenders.push(site);
+      /*
+       * Each site is named by its line, because six identical
+       * `result.message` in one file cannot otherwise be given six reasons.
+       *
+       * The line is found in the original source rather than in the
+       * comment-stripped copy: stripping shifts the numbering, and a list
+       * that sends a reader to the wrong line is worse than one with no
+       * numbers at all. Repeats are counted, so the second `result.message`
+       * in a file resolves to the second occurrence.
+       */
+      const seen = new Map<string, number>();
+      const lineOf = (text: string) => {
+        const nth = (seen.get(text) ?? 0) + 1;
+        seen.set(text, nth);
+        let from = -1;
+        for (let i = 0; i < nth; i += 1) from = source.indexOf(text, from + 1);
+        return from < 0 ? 0 : source.slice(0, from).split('\n').length;
+      };
+      for (const rule of [A_MESSAGE_OFF_A_PAYLOAD, A_COLUMN_OF_MESSAGES]) {
+        rule.lastIndex = 0;
+        for (const match of code.matchAll(rule)) {
+          if (rule === A_MESSAGE_OFF_A_PAYLOAD && ERROR_BINDINGS.has(match[1]!)) continue;
+          const site = `${path}:${lineOf(match[0])} ${match[0]}`;
+          if (!STILL_RENDERING_THE_SERVER.has(site)) offenders.push(site);
+        }
       }
     }
-    expect(offenders).toEqual([]);
+    expect(offenders.join('\n')).toBe('');
   });
 });
