@@ -1,0 +1,216 @@
+/**
+ * The one control government has for checking the log itself.
+ *
+ * PRD §7.7 exposes chain verification to auditors precisely so integrity is
+ * something they can establish rather than take on trust. The heading over
+ * the answer was already translated — "An taba rajistar bincike" — and the
+ * sentence underneath it, the one that says what was actually done to the
+ * log, arrived as the API's English and was rendered exactly as it came.
+ *
+ * That sentence is the entire answer. "The audit trail has been tampered
+ * with" is not something an auditor can act on; which of the three breaks it
+ * is decides what they do next:
+ *
+ *   - the head of the log was cut off, so entries that existed are gone;
+ *   - an entry is missing from the middle, or was inserted out of order;
+ *   - a row's content was edited after it was written.
+ *
+ * These render the real screen off real answers and check that each of the
+ * four reaches the reader in the language the heading above it is in.
+ */
+
+import React from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { CHAIN_TEXT, CHAIN_VERDICTS, chainSentence, translations } from '@psirs/shared';
+import { AuditScreen } from '../screens/Oversight';
+import { api } from '../lib/api';
+import { setPortalLanguage } from '../lib/i18n';
+
+const ha = translations.ha;
+const en = translations.en;
+
+/**
+ * The screen loads its entry list on mount and verifies on demand. Only the
+ * verify call matters here; everything else answers with an empty list so the
+ * screen renders rather than failing for an unrelated reason.
+ */
+function answering(verify: unknown) {
+  vi.spyOn(api, 'get').mockImplementation((path: string) => {
+    if (path.includes('/audit/verify')) return Promise.resolve(verify as never);
+    // The job panel shares this screen and reads an object, not a list.
+    if (path.includes('/government/workers'))
+      return Promise.resolve({ jobs: [], healthy: true, needingAttention: 0 } as never);
+    return Promise.resolve([] as never);
+  });
+}
+
+async function pressVerify() {
+  const button = await screen.findByRole('button', { name: ha.ofcOvVerifyChain });
+  fireEvent.click(button);
+}
+
+beforeEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  setPortalLanguage('ha');
+});
+
+afterEach(() => {
+  cleanup();
+  setPortalLanguage('en');
+});
+
+describe('what an auditor is told about the chain', () => {
+  it('names a row edited after it was written, in Hausa, with its entry number', async () => {
+    answering({
+      valid: false,
+      entriesChecked: 4120,
+      brokenAtSequence: 8891,
+      verdict: 'CONTENT_MODIFIED',
+      message: 'Audit chain broken at entry 8891: the entry’s content does not match.',
+    });
+
+    render(<AuditScreen />);
+    await pressVerify();
+
+    const expected = ha.ofcOvChainContentModified.replace('{{sequence}}', '8891');
+    await waitFor(() => expect(screen.getByText(expected)).toBeTruthy());
+    // And not the sentence the server composed.
+    expect(screen.queryByText(/does not match\./)).toBeNull();
+  });
+
+  /*
+   * The break the replay cannot see on its own. Cut entries 1..N off the front
+   * and the remainder links to itself perfectly, so this is checked separately
+   * in the service — and it is a different event from a gap in the middle,
+   * which is why it gets its own sentence rather than sharing one.
+   */
+  it('distinguishes a log whose beginning was removed from a gap in the middle', async () => {
+    answering({
+      valid: false,
+      entriesChecked: 0,
+      brokenAtSequence: 41,
+      verdict: 'GENESIS_REMOVED',
+      message: 'Audit chain broken at entry 41.',
+    });
+
+    render(<AuditScreen />);
+    await pressVerify();
+
+    const removed = ha.ofcOvChainGenesisRemoved.replace('{{sequence}}', '41');
+    await waitFor(() => expect(screen.getByText(removed)).toBeTruthy());
+    expect(screen.queryByText(ha.ofcOvChainLinkMismatch.replace('{{sequence}}', '41'))).toBeNull();
+  });
+
+  it('reports a clean replay with the number of entries it covered', async () => {
+    answering({
+      valid: true,
+      entriesChecked: 12045,
+      verdict: 'INTACT',
+      message: 'Audit chain verified over 12045 entries. No tampering detected.',
+    });
+
+    render(<AuditScreen />);
+    await pressVerify();
+
+    await waitFor(() =>
+      expect(screen.getByText(ha.ofcOvChainIntact.replace('{{count}}', '12045'))).toBeTruthy(),
+    );
+    // The heading says intact, not tampered.
+    expect(screen.getByText(ha.ofcOvIntact)).toBeTruthy();
+  });
+
+  /*
+   * A verdict this build has never heard of, which is what a deployment looks
+   * like while the API is ahead of the portal. An auditor told the log is
+   * broken and given no reason at all is worse off than one given the reason
+   * in the wrong language, so the server's sentence is the last resort.
+   */
+  it('keeps the server’s sentence for an outcome it does not know', async () => {
+    answering({
+      valid: false,
+      entriesChecked: 9,
+      brokenAtSequence: 3,
+      verdict: 'SOMETHING_THE_PORTAL_HAS_NOT_MET',
+      message: 'Audit chain broken at entry 3: a check added after this portal shipped.',
+    });
+
+    render(<AuditScreen />);
+    await pressVerify();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('Audit chain broken at entry 3: a check added after this portal shipped.'),
+      ).toBeTruthy(),
+    );
+  });
+
+  it('says it in English for an officer working in English', async () => {
+    setPortalLanguage('en');
+    answering({
+      valid: false,
+      entriesChecked: 100,
+      brokenAtSequence: 77,
+      verdict: 'LINK_MISMATCH',
+      message: 'Audit chain broken at entry 77.',
+    });
+
+    render(<AuditScreen />);
+    fireEvent.click(await screen.findByRole('button', { name: en.ofcOvVerifyChain }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(en.ofcOvChainLinkMismatch.replace('{{sequence}}', '77')),
+      ).toBeTruthy(),
+    );
+  });
+});
+
+describe('every verdict can be said at all', () => {
+  /*
+   * The map is typed against the verdict union, so a fifth outcome without a
+   * key fails the build. What the compiler cannot see is an entry pointing at
+   * a key that was never added to the dictionary, or added to one language
+   * and not the other — which renders `undefined` at the one place government
+   * checks the log for itself.
+   */
+  it('has a sentence in both languages for all four', () => {
+    expect(CHAIN_VERDICTS.length).toBe(4);
+    for (const verdict of CHAIN_VERDICTS) {
+      const key = CHAIN_TEXT[verdict];
+      expect(key, `${verdict} has no dictionary key`).toBeTruthy();
+      for (const lang of ['en', 'ha'] as const) {
+        const text = (translations[lang] as unknown as Record<string, string>)[key];
+        expect(typeof text, `${verdict} has no ${lang} string`).toBe('string');
+        expect(text.trim().length, `${verdict} is empty in ${lang}`).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  /*
+   * Each break names its entry, and the clean answer names its count. A
+   * sentence that dropped its number would still be a sentence, and would
+   * still pass every render test above, while telling an auditor a row was
+   * changed without saying which one.
+   */
+  it('fills in the number each verdict carries', () => {
+    expect(chainSentence('INTACT', { count: 4120 })).toContain('4120');
+    for (const verdict of ['GENESIS_REMOVED', 'LINK_MISMATCH', 'CONTENT_MODIFIED'] as const) {
+      expect(chainSentence(verdict, { sequence: 8891 }), verdict).toContain('8891');
+      expect(chainSentence(verdict, { sequence: 8891 }), verdict).not.toContain('{{');
+    }
+    expect(chainSentence('INTACT', { count: 0 })).not.toContain('{{');
+  });
+
+  /* The dictionary strings carry the same placeholders the sentences do. */
+  it('leaves no placeholder unfilled on the screen’s own strings', () => {
+    expect(en.ofcOvChainIntact).toContain('{{count}}');
+    expect(ha.ofcOvChainIntact).toContain('{{count}}');
+    for (const verdict of ['GENESIS_REMOVED', 'LINK_MISMATCH', 'CONTENT_MODIFIED'] as const) {
+      const key = CHAIN_TEXT[verdict];
+      expect((en as unknown as Record<string, string>)[key], verdict).toContain('{{sequence}}');
+      expect((ha as unknown as Record<string, string>)[key], verdict).toContain('{{sequence}}');
+    }
+  });
+});

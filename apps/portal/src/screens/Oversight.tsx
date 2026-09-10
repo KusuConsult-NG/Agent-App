@@ -6,8 +6,8 @@ import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, S
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
-import { enumLabel, localName } from '@psirs/shared';
-import type { TranslationDictionary } from '@psirs/shared';
+import { CHAIN_TEXT, enumLabel, localName } from '@psirs/shared';
+import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -491,11 +491,36 @@ export function BackgroundWorkPanel() {
   );
 }
 
+/** Exactly what `GET /government/audit/verify` answers with. */
+interface ChainAnswer {
+  valid: boolean;
+  entriesChecked: number;
+  brokenAtSequence?: number;
+  verdict: ChainVerdict;
+  /** The server's English, kept for a build that meets an outcome it does not know. */
+  message: string;
+}
+
+/**
+ * The verdict as a sentence, with its number filled in.
+ *
+ * A verdict this build has never met keeps the server's English rather than
+ * showing nothing: an auditor told the chain is broken and given no reason is
+ * worse off than one given a reason in the wrong language.
+ */
+function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
+  const key = CHAIN_TEXT[answer.verdict];
+  if (!key) return answer.message;
+  return (t[key] as string)
+    .replace('{{count}}', String(answer.entriesChecked))
+    .replace('{{sequence}}', String(answer.brokenAtSequence ?? 0));
+}
+
 export function AuditScreen() {
   const { t } = usePortalI18n();
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
+  const [verification, setVerification] = useState<ChainAnswer | null>(null);
   const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
   /*
@@ -555,11 +580,7 @@ export function AuditScreen() {
               setError(null);
               setVerification(null);
               try {
-                setVerification(
-                  await api.get<{ valid: boolean; message: string; entriesChecked: number }>(
-                    '/government/audit/verify',
-                  ),
-                );
+                setVerification(await api.get<ChainAnswer>('/government/audit/verify'));
               } catch (caught) {
                 if (caught instanceof ApiRequestError) setError(caught.error);
                 else
@@ -578,7 +599,19 @@ export function AuditScreen() {
             kind={verification.valid ? 'success' : 'error'}
             title={verification.valid ? 'ofcOvIntact' : 'ofcOvTampered'}
           >
-            <p style={{ margin: 0 }}>{verification.message}</p>
+            {/*
+              * Which of the four, in the language the heading above is in.
+              *
+              * The heading was already translated and the sentence under it
+              * was the API's English, so an officer reading Hausa was told
+              * "An taba rajistar bincike" and then, in English, what had
+              * actually been done to it. That sentence is the whole answer:
+              * a log whose head was cut off, an entry missing from the
+              * middle, and a row edited after the fact are three different
+              * events, and which one it is decides what the auditor does
+              * next.
+              */}
+            <p style={{ margin: 0 }}>{chainAnswer(verification, t)}</p>
           </Alert>
         )}
       </div>

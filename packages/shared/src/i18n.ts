@@ -8,6 +8,7 @@
 import type { AgentBlocker } from './agent-lifecycle';
 import type { DuplicateReason } from './identity';
 import type { VerificationReason } from './verification';
+import type { ChainVerdict } from './audit-chain';
 
 export type Language = 'en' | 'ha';
 
@@ -805,6 +806,17 @@ export interface TranslationDictionary {
   ofcOvTransactionCount: string;
   ofcOvSettlementsOutstanding: string;
   ofcOvIntact: string;
+  /*
+   * The four answers chain verification can give, each carrying its number.
+   *
+   * `ofcOvChainIntact` takes {{count}}; the three breaks take {{sequence}}.
+   * They are distinct sentences rather than one "tampered with" because what
+   * an auditor does next depends on which of the three it is.
+   */
+  ofcOvChainIntact: string;
+  ofcOvChainGenesisRemoved: string;
+  ofcOvChainLinkMismatch: string;
+  ofcOvChainContentModified: string;
   ofcOvSystem: string;
   ofcOvNoRows: string;
 
@@ -4204,6 +4216,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "{{n}} transaction(s)",
     ofcOvSettlementsOutstanding: "{{n}} settlement(s) outstanding",
     ofcOvIntact: "Audit trail intact",
+    ofcOvChainIntact: "Verified over {{count}} entries. No tampering detected.",
+    ofcOvChainGenesisRemoved:
+      "Broken at entry {{sequence}}: the oldest entry names a predecessor that is not there, so the beginning of the log has been removed.",
+    ofcOvChainLinkMismatch:
+      "Broken at entry {{sequence}}: an entry is missing, or was inserted out of order.",
+    ofcOvChainContentModified:
+      "Broken at entry {{sequence}}: the entry's content does not match its recorded hash, so the row was changed after it was written.",
     ofcOvSystem: "System",
     ofcOvNoRows: "No rows",
     ofcOvLeakageTitle: "Revenue leakage monitoring",
@@ -7417,6 +7436,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "Ma’amaloli {{n}}",
     ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
     ofcOvIntact: "Rajistar bincike ba ta lalace ba",
+    ofcOvChainIntact: "An tantance shigarwa {{count}}. Ba a sami wata alamar taba ba.",
+    ofcOvChainGenesisRemoved:
+      "An karye a shigarwa {{sequence}}: shigarwa mafi tsufa tana nuni da wanda ya gabace ta amma ba ya nan, don haka an cire farkon rajistar.",
+    ofcOvChainLinkMismatch:
+      "An karye a shigarwa {{sequence}}: akwai shigarwa da ta bata, ko kuma an sanya ta ba bisa tsari ba.",
+    ofcOvChainContentModified:
+      "An karye a shigarwa {{sequence}}: abin da ke cikin shigarwar bai yi daidai da hash da aka ajiye ba, don haka an canza layin bayan an rubuta shi.",
     ofcOvSystem: "Tsarin",
     ofcOvNoRows: "Babu layuka",
     ofcOvLeakageTitle: "Sa ido kan yoyon haraji",
@@ -10029,6 +10055,20 @@ export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDict
   DOCUMENT_EXPIRED: 'verifyDocumentExpired',
   DOCUMENT_GENUINE: 'verifyDocumentGenuine',
   DOCUMENT_GENUINE_UNCHECKED: 'verifyDocumentGenuineUnchecked',
+};
+
+/**
+ * Which dictionary key says each chain verdict.
+ *
+ * Typed against the verdict union, so a fifth outcome added to
+ * `audit-chain.ts` without a sentence here fails the build rather than
+ * rendering `undefined` at the one place government checks the log.
+ */
+export const CHAIN_TEXT: Record<ChainVerdict, keyof TranslationDictionary> = {
+  INTACT: 'ofcOvChainIntact',
+  GENESIS_REMOVED: 'ofcOvChainGenesisRemoved',
+  LINK_MISMATCH: 'ofcOvChainLinkMismatch',
+  CONTENT_MODIFIED: 'ofcOvChainContentModified',
 };
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {

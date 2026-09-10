@@ -6,7 +6,7 @@
 import express, { Router } from 'express';
 import type { Response } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTOR_CODES, parseKobo, type Permission } from '@psirs/shared';
+import { ECONOMIC_SECTOR_CODES, chainSentence, parseKobo, type Permission } from '@psirs/shared';
 import { LOCK_NAMESPACE, pool, query, queryOne, withJobLock, withTransaction } from '../db/pool';
 import {
   authenticate,
@@ -2171,11 +2171,22 @@ governmentRouter.get(
         fromSequence: data.fromSequence,
         limit: data.limit,
       });
+      /*
+       * The code travels, and the English comes from one place.
+       *
+       * The sentence used to be assembled here, which made this route the
+       * only definition of what each outcome means and left the portal
+       * rendering it verbatim to an officer reading Hausa. `message` is kept
+       * for anything that is not a browser — the verification is itself an
+       * auditable act, read back long afterwards — and `verdict` is what the
+       * portal composes from.
+       */
       res.json({
         ...result,
-        message: result.valid
-          ? `Audit chain verified over ${result.entriesChecked} entries. No tampering detected.`
-          : `Audit chain broken at entry ${result.brokenAtSequence}: ${result.detail}`,
+        message: chainSentence(result.verdict, {
+          count: result.entriesChecked,
+          sequence: result.brokenAtSequence,
+        }),
       });
     },
   ),

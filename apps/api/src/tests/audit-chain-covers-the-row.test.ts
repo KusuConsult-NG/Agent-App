@@ -121,13 +121,14 @@ describe('The chain notices the row being rewritten', () => {
     const result = await verifyAuditChain(pool);
     assert.equal(result.valid, true, JSON.stringify(result));
     assert.ok(result.entriesChecked > 0);
+    assert.equal(result.verdict, 'INTACT');
   });
 
   it('still catches the fields it always covered', async () => {
     await tamper('action', 'payment.approved');
     const result = await verifyAuditChain(pool);
     assert.equal(result.valid, false);
-    assert.match(String(result.detail), /does not match its recorded hash/i);
+    assert.equal(result.verdict, 'CONTENT_MODIFIED');
   });
 
   it('still catches a row removed from the middle', async () => {
@@ -148,6 +149,16 @@ describe('The chain notices the row being rewritten', () => {
 
     const result = await verifyAuditChain(pool);
     assert.equal(result.valid, false, 'a removed entry must break the chain');
+    /*
+     * And which check caught it, not merely that something did.
+     *
+     * Entry 1 is the genesis row, so what is left is a chain whose oldest
+     * entry names a predecessor that is not there — the one break the replay
+     * cannot see on its own, because the remainder links to itself perfectly.
+     * Pinning the verdict is what distinguishes the separate genesis check
+     * doing its job from the loop coincidentally tripping over the same row.
+     */
+    assert.equal(result.verdict, 'GENESIS_REMOVED');
   });
 
   it('verifies a chain that spans the change of algorithm', async () => {

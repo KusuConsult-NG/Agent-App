@@ -652,7 +652,20 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
    * say this itself.
    */
   "../screens/Oversight.tsx:485 key: 'message'",
-  '../screens/Oversight.tsx:581 verification.message',
+
+  /*
+   * The chain verdict below it is done, and what is left is the last resort
+   * rather than the ordinary path.
+   *
+   * `chainAnswer` renders one of four dictionary sentences; it falls back to
+   * the server's English only for a verdict this build has never heard of,
+   * which happens when the API is ahead of the portal during a deployment.
+   * An auditor told the log is broken and given no reason at all is worse off
+   * than one given the reason in the wrong language, so the fallback stays —
+   * and stays named here, because it is still the server's English on a
+   * screen that offers Hausa.
+   */
+  '../screens/Oversight.tsx:513 answer.message',
 
   /*
    * The citizen-facing portal, which is the larger worry: six sentences a

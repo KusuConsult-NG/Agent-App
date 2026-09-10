@@ -32,6 +32,7 @@
 
 import { pool, closePool, withTransaction, queryOne } from '../src/db/pool';
 import { recordAudit, verifyAuditChain } from '../src/services/audit';
+import { chainSentence } from '@psirs/shared';
 
 function arg(name: string, fallback: number): number {
   const i = process.argv.indexOf(`--${name}`);
@@ -253,7 +254,10 @@ async function main(): Promise<void> {
   console.log(
     verification.valid
       ? `valid, ${checked} entries replayed`
-      : `BROKEN at sequence ${verification.brokenAtSequence}: ${verification.detail}`,
+      : `BROKEN at sequence ${verification.brokenAtSequence}: ${chainSentence(
+          verification.verdict,
+          { sequence: verification.brokenAtSequence },
+        )}`,
   );
 
   const verdict: string[] = [];

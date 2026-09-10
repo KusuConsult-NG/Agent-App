@@ -291,7 +291,7 @@ describe('many payments, confirmed at once', () => {
     assert.equal(
       verification.valid,
       true,
-      `chain broken at ${verification.brokenAtSequence}: ${verification.detail}`,
+      `chain broken at ${verification.brokenAtSequence}: ${verification.verdict}`,
     );
     assert.ok(verification.entriesChecked > 0, 'the chain was actually replayed, not skipped');
   });
