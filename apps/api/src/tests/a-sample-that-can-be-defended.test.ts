@@ -474,6 +474,49 @@ describe('a report is a moment, not a query', () => {
     assert.equal((read.body as { checksumMatches: boolean }).checksumMatches, false);
   });
 
+  /*
+   * And the list has to say so too, which for a long time it did not.
+   *
+   * The test above proved the detection worked, and it was the only caller:
+   * the officer portal reads the list and only the list, and the list returned
+   * the checksum recorded at generation -- the one value an edit to the rows
+   * does not disturb. So the altered report displayed its original hash under
+   * a column headed "Checksum", beside a signature, and the detection this
+   * suite proved reached nobody.
+   *
+   * A property held at one endpoint and not at the one people use is not held.
+   */
+  it('marks the altered report in the list, not only when asked for it by id', async () => {
+    await populate(3);
+    const clean = (await generate()).body as { id: string };
+    const tampered = (await generate()).body as { id: string };
+
+    await query(pool, 'ALTER TABLE audit_reports DISABLE TRIGGER audit_reports_do_not_move');
+    try {
+      await query(
+        pool,
+        `UPDATE audit_reports SET payload = '{"rows":[{"reference":"invented"}]}'::jsonb WHERE id = $1`,
+        [tampered.id],
+      );
+    } finally {
+      await query(pool, 'ALTER TABLE audit_reports ENABLE TRIGGER audit_reports_do_not_move');
+    }
+
+    const listed = await get('/government/audit/reports', auth('auditor'));
+    const rows = (listed.body as { reports: { id: string; checksumMatches: boolean }[] }).reports;
+
+    const altered = rows.find((row) => row.id === tampered.id);
+    const untouched = rows.find((row) => row.id === clean.id);
+    assert.equal(altered?.checksumMatches, false, 'the altered report reads as intact in the list');
+    assert.equal(untouched?.checksumMatches, true, 'an untouched report must not be marked altered');
+
+    // The payload is hashed on the server and must not come back with the list.
+    assert.ok(
+      !Object.prototype.hasOwnProperty.call(altered ?? {}, 'payload'),
+      'the list ships every report payload to the browser',
+    );
+  });
+
   it('hashes the parameters as well as the rows', async () => {
     const rows = [{ reference: 'TXN-1', amount: '100' }];
     assert.notEqual(

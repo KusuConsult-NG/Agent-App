@@ -1978,6 +1978,9 @@ export interface TranslationDictionary {
   ofcWbGeneratedAt: string;
   ofcWbSignedBy: string;
   ofcWbChecksum: string;
+  ofcWbAltered: string;
+  ofcWbAlteredTitle: string;
+  ofcWbAlteredBody: string;
   ofcWbNoReports: string;
   ofcWbGenerate: string;
   ofcWbGenerateHint: string;
@@ -5223,6 +5226,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGeneratedAt: "Generated on",
     ofcWbSignedBy: "Signed by",
     ofcWbChecksum: "Checksum",
+    ofcWbAltered: "Altered",
+    ofcWbAlteredTitle: "A report on this page no longer matches its checksum",
+    ofcWbAlteredBody: "{{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it.",
     ofcWbNoReports: "No report has been generated yet.",
     ofcWbGenerate: "Generate a report",
     ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
@@ -8350,6 +8356,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGeneratedAt: "An samar a",
     ofcWbSignedBy: "Wanda ya sa hannu",
     ofcWbChecksum: "Lambar tantancewa",
+    ofcWbAltered: "An sauya",
+    ofcWbAlteredTitle: "Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba",
+    ofcWbAlteredBody: "Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara.",
     ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
     ofcWbGenerate: "Samar da rahoto",
     ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",

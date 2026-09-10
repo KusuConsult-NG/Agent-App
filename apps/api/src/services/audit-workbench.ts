@@ -665,13 +665,36 @@ export async function withdrawReport(
   });
 }
 
+/**
+ * The list, with every checksum rechecked rather than repeated.
+ *
+ * `getReport` has recomputed the checksum since the column was added, and an
+ * API test proves it goes false when a stored payload is edited. Nothing ever
+ * called it: the screen reads this list and only this list, and this list
+ * returned `r.checksum` — the value recorded at generation, which is precisely
+ * the value that does not change when somebody edits the rows underneath it.
+ *
+ * So a tampered report displayed its original checksum, in a column headed
+ * "Checksum", beside a signature. A reader takes a checksum on a screen for a
+ * checked one; there is no other reason to print a hash at a person. The
+ * detection existed and reached nobody, which is the same as not having it,
+ * except that it reads in code review as though the problem were solved.
+ *
+ * The payload is loaded to hash and then dropped — it is never returned, so
+ * the list costs one hash per row on the server and nothing on the wire. That
+ * is real work, bounded by `limit` and paid on an auditor's screen rather than
+ * a hot path. Verifying on demand instead was the cheaper design and the wrong
+ * one: nobody clicks "verify" on the report they have no reason to suspect,
+ * which leaves the tampered one exactly as invisible as it was before.
+ */
 export async function listReports(db: Db, filters: { reportType?: string | null; limit?: number }) {
   const limit = Math.min(Math.max(filters.limit ?? 50, 1), 200);
-  return query(
+  const rows = await query<StoredReport>(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
             r.period_start, r.period_end, r.row_count, r.checksum, r.status,
             r.generated_at, r.signed_at, r.signature_note, r.withdrawn_reason,
+            r.payload,
             g.full_name AS generated_by_name,
             s.full_name AS signed_by_name
        FROM audit_reports r
@@ -682,6 +705,11 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
       LIMIT $2`,
     [filters.reportType ?? null, limit],
   );
+
+  return rows.map(({ payload, ...row }) => ({
+    ...row,
+    checksumMatches: reportChecksum(row.parameters, payload) === row.checksum,
+  }));
 }
 
 /**

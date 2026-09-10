@@ -24,6 +24,16 @@
  * list shows a report's checksum state so a reader is told when stored figures
  * no longer match what was signed instead of being shown them regardless.
  *
+ * That last clause was false for as long as it had been written. The list
+ * showed the checksum recorded at generation — the one value an edit to the
+ * stored rows leaves untouched — so an altered report printed its original
+ * hash beside a signature, and a reader takes a checksum on a screen for a
+ * checked one. The recomputation existed in `getReport`, with an API test
+ * proving it caught a tampered payload, and nothing on any screen ever called
+ * it. `listReports` now recomputes per row, and an altered report is marked
+ * where it sits and named again above the table, because a marker in a cell
+ * is scrolled past by the reader who most needs it.
+ *
  * WHAT THIS SCREEN DOES NOT DO
  *
  * It does not score anything. No pass mark, no risk rating on a sample, no
@@ -99,6 +109,13 @@ interface ReportRow {
   generated_by_name: string | null;
   signed_by_name: string | null;
   withdrawn_reason: string | null;
+  /**
+   * Whether the stored rows still hash to the checksum beside them.
+   *
+   * Optional only so an older API answering this screen degrades to the
+   * behaviour it had before rather than marking every report altered.
+   */
+  checksumMatches?: boolean;
 }
 
 const REPORT_TYPES = [
@@ -154,6 +171,8 @@ export function WorkbenchScreen({ user }: { user: User }) {
   }, []);
 
   const maySign = can('audit:sign');
+  // Reports on this page whose stored rows no longer hash to their checksum.
+  const altered = (reports ?? []).filter((row) => row.checksumMatches === false);
 
   return (
     <>
@@ -276,6 +295,23 @@ export function WorkbenchScreen({ user }: { user: User }) {
             <p className="card__hint">{t.ofcWbReportsHint}</p>
           </div>
         </div>
+        {/*
+          * Said once at the top, as well as marked in the row.
+          *
+          * A marker in a table cell is scrolled past, and this is the one thing
+          * on the screen a reader must not miss: a signed government report
+          * whose figures have been changed underneath the signature. If it is
+          * only in the cell, the reader who most needs it is the one skimming.
+          */}
+        {altered.length > 0 && (
+          <div style={{ padding: '0 18px 12px' }}>
+            <Alert kind="error" title="ofcWbAlteredTitle">
+              <p style={{ margin: 0 }}>
+                {t.ofcWbAlteredBody.replace('{{n}}', String(altered.length))}
+              </p>
+            </Alert>
+          </div>
+        )}
         {!reports ? (
           <Loading />
         ) : (
@@ -318,7 +354,14 @@ export function WorkbenchScreen({ user }: { user: User }) {
                  */
                 key: 'checksum',
                 label: 'ofcWbChecksum',
-                render: (row: ReportRow) => <code>{row.checksum.slice(0, 12)}</code>,
+                render: (row: ReportRow) =>
+                  row.checksumMatches === false ? (
+                    <span className="badge badge--danger">
+                      <code>{row.checksum.slice(0, 12)}</code> {t.ofcWbAltered}
+                    </span>
+                  ) : (
+                    <code>{row.checksum.slice(0, 12)}</code>
+                  ),
               },
               {
                 key: 'actions',
