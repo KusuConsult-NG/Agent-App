@@ -127,6 +127,19 @@ export function CollectScreen({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * A charge that exists when the payment does not.
+   *
+   * `createAndPay` is two requests and only the second can fail on its own.
+   * When it does, the assessment has already been raised — an invoice, a
+   * reference, a debt the taxpayer owes — and this screen used to show the
+   * payment error above a live "Confirm and proceed to payment" button.
+   * Pressing it again raises a SECOND assessment for the same obligation, and
+   * several invoices against one taxpayer and one item is a legitimate shape
+   * here (the arrears worklist is built on it), so nothing downstream will
+   * ever question the duplicate.
+   */
+  const [raised, setRaised] = useState<{ reference: string } | null>(null);
 
   useEffect(() => {
     if (!initialTaxpayerId) return;
@@ -188,6 +201,9 @@ export function CollectScreen({
     if (!taxpayer || !selectedItem) return;
     setBusy(true);
     setError(null);
+    // Held outside the try so the catch can tell the two failures apart: one
+    // where the taxpayer now owes something, and one where nothing happened.
+    let reference: string | null = null;
     try {
       const inputs: Record<string, string> = {};
       if (needsBaseAmount) {
@@ -216,6 +232,8 @@ export function CollectScreen({
         newIdempotencyKey('assessment'),
       );
 
+      reference = assessment.transactionReference;
+
       await api.post<{ authorisationUrl: string }>(
         '/payments/initiate',
         { transactionId: assessment.transactionId },
@@ -228,6 +246,10 @@ export function CollectScreen({
       flow.current?.complete('payment-initiated');
       navigate(`/transactions/${assessment.transactionReference}`);
     } catch (caught) {
+      // Whatever went wrong: if the assessment got through, the taxpayer owes
+      // this and the agent has to be told before they reach for the button
+      // again.
+      if (reference !== null) setRaised({ reference });
       if (caught instanceof ApiRequestError) {
         setError(caught.error);
         // A nil liability is not a failed collection — it is the correct
@@ -458,15 +480,44 @@ export function CollectScreen({
                 <p style={{ margin: 0 }}>{t.cashChannelReminder}</p>
               </Alert>
 
-              <div className="button-row">
-                <button type="button" className="secondary" onClick={() => setQuote(null)}>
-                  {t.colChangeChoice}
-                </button>
-                <button type="button" disabled={busy} onClick={createAndPay}>
-                  {busy ? <Spinner /> : null}
-                  {t.colConfirmProceed}
-                </button>
-              </div>
+              {raised ? (
+                /*
+                  The charge is raised and the payment is not.
+
+                  Both of the buttons this replaces lead back to a second
+                  assessment — one by recalculating, one by confirming again —
+                  and the taxpayer would owe both. What is left is the
+                  transaction itself, which is a real place to go: it renders
+                  the invoice they can pay at a bank, and it is where the
+                  payment can be started again.
+                */
+                <>
+                  <Alert kind="error" title={t.colChargeRaisedTitle}>
+                    <p style={{ margin: 0 }}>
+                      {t.colChargeRaisedBody.replace('{{reference}}', raised.reference)}
+                    </p>
+                  </Alert>
+
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/transactions/${raised.reference}`)}
+                    >
+                      {t.colOpenCharge}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="button-row">
+                  <button type="button" className="secondary" onClick={() => setQuote(null)}>
+                    {t.colChangeChoice}
+                  </button>
+                  <button type="button" disabled={busy} onClick={createAndPay}>
+                    {busy ? <Spinner /> : null}
+                    {t.colConfirmProceed}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </>
@@ -583,6 +634,40 @@ export function TransactionScreen({
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
       setInvoicing(false);
+    }
+  }
+
+  /**
+   * Hand this transaction to the payment gateway.
+   *
+   * Reachable whenever the assessment was raised and the payment was not —
+   * which is exactly the state an agent is sent here in. Until now the only
+   * control on that screen called `confirmPayment`, which returns immediately
+   * when there is no `payment_id`: a button that did nothing at all, silently,
+   * on the one screen that exists to recover from a failed handoff. The hint
+   * beside the invoice already told the agent to start the payment first,
+   * because a bank reference is only issued then; this is the control that
+   * instruction was describing.
+   *
+   * A second press cannot open a second payment: the server answers with the
+   * one already in flight rather than initiating again.
+   */
+  async function startPayment() {
+    if (!data) return;
+    setConfirming(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.post<{ authorisationUrl: string }>(
+        '/payments/initiate',
+        { transactionId: data.transaction.id },
+        newIdempotencyKey('payment'),
+      );
+      await load();
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setError(caught.error);
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -839,10 +924,18 @@ export function TransactionScreen({
               : t.colInvoiceNoReference}
           </p>
 
-          <button type="button" disabled={confirming} onClick={confirmPayment}>
-            {confirming ? <Spinner /> : null}
-            {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
-          </button>
+          {/* Nothing to check until there is a payment to check on. */}
+          {transaction.payment_id ? (
+            <button type="button" disabled={confirming} onClick={confirmPayment}>
+              {confirming ? <Spinner /> : null}
+              {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
+            </button>
+          ) : (
+            <button type="button" disabled={confirming} onClick={startPayment}>
+              {confirming ? <Spinner /> : null}
+              {confirming ? t.colStartingPayment : t.colStartPayment}
+            </button>
+          )}
 
           {/* Development only. The API refuses simulation outside the mock
               gateway, but the control should not be visible to a field agent

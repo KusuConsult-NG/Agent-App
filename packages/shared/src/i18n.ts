@@ -2504,6 +2504,11 @@ export interface TranslationDictionary {
   colInvoiceNoReference: string;
   colCheckingPayment: string;
   colCheckPaymentStatus: string;
+  colStartingPayment: string;
+  colStartPayment: string;
+  colChargeRaisedTitle: string;
+  colChargeRaisedBody: string;
+  colOpenCharge: string;
   colDevGateway: string;
   colDevGatewayHint: string;
   colSimulateSuccess: string;
@@ -5953,6 +5958,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     colInvoiceNoReference: "Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it.",
     colCheckingPayment: "Checking with the payment system…",
     colCheckPaymentStatus: "Check payment status",
+    colStartingPayment: "Starting the payment…",
+    colStartPayment: "Start the payment",
+    colChargeRaisedTitle: "The charge was raised. The payment was not.",
+    colChargeRaisedBody:
+      "Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again.",
+    colOpenCharge: "Open this transaction",
     colDevGateway: "Development gateway",
     colDevGatewayHint: "This platform is running against a test payment gateway. Use these controls to simulate what a real gateway would report.",
     colSimulateSuccess: "Simulate success",
@@ -9249,6 +9260,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     colInvoiceNoReference: "Ka fara biyan kudin idan suna son biya a banki: lambar da banki ke nema ana bayar da ita a lokacin, kuma takardar biya ba ta dauke da ita ba.",
     colCheckingPayment: "Ana dubawa tare da tsarin biyan kudi…",
     colCheckPaymentStatus: "Duba matsayin biyan kudi",
+    colStartingPayment: "Ana fara biyan kudi…",
+    colStartPayment: "Fara biyan kudi",
+    colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",
+    colChargeRaisedBody:
+      "Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin.",
+    colOpenCharge: "Bude wannan ma’amala",
     colDevGateway: "Tashar gwaji",
     colDevGatewayHint: "Wannan dandalin yana aiki da tashar biyan kudi ta gwaji. Ka yi amfani da wadannan don kwaikwayon abin da tashar gaske za ta bayar.",
     colSimulateSuccess: "Kwaikwayon nasara",
