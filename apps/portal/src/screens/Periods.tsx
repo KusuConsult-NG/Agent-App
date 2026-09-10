@@ -172,15 +172,45 @@ export function PeriodsScreen({ user }: { user: User }) {
               {
                 key: 'closed_by_name',
                 label: 'ofcPeClosedBy',
+                /*
+                 * The whole sentence, not a quarter of it.
+                 *
+                 * `reopenPeriod` says what this is for: "'March was reopened
+                 * on the 9th of June by Bala, because the Kanam settlement
+                 * was misposted' is a sentence the platform can produce."
+                 * The query selects `closed_at`, `closing_note`,
+                 * `reopened_at` and `reopen_reason` and this column rendered
+                 * two names and dropped all four — so the sentence the
+                 * service was built to produce could not be read by anybody,
+                 * and an officer wanting to know why a closed month had been
+                 * reopened had to go to the audit log to find out.
+                 *
+                 * The note and the reason are prose an officer typed for
+                 * other officers, so they are shown as written.
+                 */
                 render: (row: Period) => (
                   <>
                     {row.closed_by_name ?? '—'}
+                    {row.closed_at && (
+                      <span className="muted"> · {formatDate(row.closed_at)}</span>
+                    )}
+                    {row.closing_note && (
+                      <p className="table__sub" style={{ margin: '2px 0 0' }}>
+                        {t.ofcPeClosingNote}: {row.closing_note}
+                      </p>
+                    )}
                     {row.reopened_by_name && (
                       <>
                         <br />
                         <span className="muted">
                           {t.ofcPeReopenedBy}: {row.reopened_by_name}
+                          {row.reopened_at && ` · ${formatDate(row.reopened_at)}`}
                         </span>
+                        {row.reopen_reason && (
+                          <p className="table__sub" style={{ margin: '2px 0 0' }}>
+                            {t.ofcPeReopenReason}: {row.reopen_reason}
+                          </p>
+                        )}
                       </>
                     )}
                   </>
