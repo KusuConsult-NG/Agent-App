@@ -127,11 +127,32 @@ export function UserAccessScreen({ user }: { user: User }) {
       // into any level of access at all, so it needs a fresh code and not
       // merely a live session.
       await stepUp('user.role.change', user.phone);
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ newRole: string; sessionsEnded: number }>(
         `/government/users/${editing.id}/role`,
         { role: chosenRole, reason: reason.trim() },
       );
-      setMessage(result.message);
+      /*
+       * Composed here, from what the endpoint returns.
+       *
+       * The server sends a `message` and this screen rendered it: an English
+       * sentence, on a screen offering Hausa, naming the new role as
+       * `finance officer` — the code with its underscores swapped for spaces.
+       * This screen's own premise is that "an access decision made from a
+       * label alone is a guess", and then its confirmation showed something
+       * that is not even the label.
+       *
+       * `enumLabel` is what the rest of the screen already uses for a role,
+       * so the sentence an administrator reads afterwards names it the same
+       * way the control they just used did.
+       */
+      setMessage(
+        `${t.ofcUaNowRole
+          .replace('{{name}}', editing.full_name)
+          .replace('{{role}}', enumLabel(result.newRole, t))} ` +
+          (result.sessionsEnded > 0
+            ? t.ofcUaSessionsEnded.replace('{{n}}', String(result.sessionsEnded))
+            : t.ofcUaNoOpenSessions),
+      );
       setEditing(null);
       setChosenRole('');
       setReason('');
@@ -161,11 +182,22 @@ export function UserAccessScreen({ user }: { user: User }) {
     setMessage(null);
     try {
       await stepUp('user.role.change', user.phone);
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ status: AccountStatus; sessionsEnded: number }>(
         `/government/users/${closing.id}/status`,
         { status: chosenStatus, reason: statusReason.trim() },
       );
-      setMessage(result.message);
+      // Same correction as the role change above; the status was arriving as
+      // `suspended`, the enum lowercased, rather than as its label.
+      setMessage(
+        result.status === 'ACTIVE'
+          ? t.ofcUaCanSignInAgain.replace('{{name}}', closing.full_name)
+          : `${t.ofcUaAccountIsNow
+              .replace('{{name}}', closing.full_name)
+              .replace('{{status}}', enumLabel(result.status, t))} ` +
+            (result.sessionsEnded > 0
+              ? t.ofcUaSessionsEndedNow.replace('{{n}}', String(result.sessionsEnded))
+              : t.ofcUaNoOpenSessions),
+      );
       setClosing(null);
       setStatusReason('');
       load();

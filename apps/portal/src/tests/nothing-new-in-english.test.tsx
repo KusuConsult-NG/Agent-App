@@ -396,6 +396,45 @@ function wordsIn(text: string): number {
 }
 
 /**
+ * The static runs of a template literal, split on its interpolations.
+ *
+ * `split(/\$\{[^}]*\}/)` is the obvious way and is wrong on exactly the code
+ * this project writes. `[^}]*` stops at the first `}`, so
+ *
+ *     `${t.ofcUaNowRole.replace('{{name}}', officer.fullName)} `
+ *
+ * is cut at the `}` inside `{{name}}`, and everything after it — a chain of
+ * method calls — is handed to the prose test as though it were a sentence.
+ * `{{name}}` is this dictionary's own interpolation convention, so the rule
+ * reported a violation on every correctly composed message while finding
+ * none of the literals it exists for.
+ *
+ * Depth-counted instead, which is what a `${...}` containing braces needs.
+ */
+function staticChunks(literal: string): string[] {
+  const chunks: string[] = [];
+  let current = '';
+  for (let index = 0; index < literal.length; index += 1) {
+    if (literal[index] === '$' && literal[index + 1] === '{') {
+      chunks.push(current);
+      current = '';
+      let depth = 1;
+      index += 2;
+      while (index < literal.length && depth > 0) {
+        if (literal[index] === '{') depth += 1;
+        else if (literal[index] === '}') depth -= 1;
+        index += 1;
+      }
+      index -= 1;
+      continue;
+    }
+    current += literal[index];
+  }
+  chunks.push(current);
+  return chunks;
+}
+
+/**
  * The static text inside a template literal.
  *
  * The blind spot both of these files shared. Every rule above reads `'...'`
@@ -416,7 +455,7 @@ function templateTextIn(source: string): string[] {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
   const found: string[] = [];
   for (const literal of code.matchAll(/`((?:[^`\\]|\\.)*)`/g)) {
-    const chunks = literal[1].split(/\$\{[^}]*\}/);
+    const chunks = staticChunks(literal[1]);
     /*
      * A template that opens in lower case is a developer's line, whole.
      *

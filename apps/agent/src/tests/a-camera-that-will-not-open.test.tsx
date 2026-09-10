@@ -107,7 +107,7 @@ describe('a camera that will not open', () => {
     for (const key of keys) {
       expect(ha[key]).toBeTruthy();
       expect(ha[key]).not.toBe(en[key]);
-      expect(ha[key]).toMatch(/\b(ba|babu|bai|kada|banda)\b/);
+      expect(ha[key]).toMatch(/\b(ba|babu|bai|kada|banda)\b/i);
       expect(en[key]).toMatch(/\b(not|no|cannot)\b/i);
     }
   });

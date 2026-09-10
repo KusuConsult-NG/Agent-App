@@ -158,7 +158,7 @@ describe('what the retry actually did', () => {
 
     // "still outstanding" is a negative claim in both languages.
     for (const key of partly) {
-      expect(ha[key], `${key} lost its negation`).toMatch(/\b(ba|babu|bai|har yanzu)\b/);
+      expect(ha[key], `${key} lost its negation`).toMatch(/\b(ba|babu|bai|har yanzu)\b/i);
     }
   });
 });

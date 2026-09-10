@@ -187,6 +187,12 @@ export interface TranslationDictionary {
   ofcUaChooseRoleFirst: string;
   ofcUaAlreadyHolds: string;
   ofcUaSayWhy: string;
+  ofcUaNowRole: string;
+  ofcUaSessionsEnded: string;
+  ofcUaNoOpenSessions: string;
+  ofcUaCanSignInAgain: string;
+  ofcUaAccountIsNow: string;
+  ofcUaSessionsEndedNow: string;
 
   /**
    * The instruction under a risk flag an officer is deciding on. It sat as a
@@ -3582,6 +3588,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUaChooseRoleFirst: "Choose the role this officer should hold.",
     ofcUaAlreadyHolds: "{{name}} already holds the {{role}} role.",
     ofcUaSayWhy: "Say why this access is changing, in at least 10 characters. It is the only record of why.",
+    ofcUaNowRole: "{{name}} is now {{role}}.",
+    ofcUaSessionsEnded: "{{n}} open session(s) ended, so they must sign in again.",
+    ofcUaNoOpenSessions: "They had no open sessions.",
+    ofcUaCanSignInAgain: "{{name}} can sign in again.",
+    ofcUaAccountIsNow: "{{name}}’s account is {{status}}.",
+    ofcUaSessionsEndedNow: "{{n}} open session(s) ended immediately.",
     ofcAgRecordWhatYouFound: "Record what you found: it is the only record of why this flag was left open, upheld or set aside.",
     enumDeviceVelocity: "One handset, too many collections",
     enumSharedPhoneNumber: "One phone number on several taxpayers",
@@ -6716,6 +6728,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUaChooseRoleFirst: "Ka zabi matsayin da wannan jami’in zai rike.",
     ofcUaAlreadyHolds: "{{name}} ya riga ya rike matsayin {{role}}.",
     ofcUaSayWhy: "Ka fada dalilin canja wannan izini, da akalla haruffa 10. Shi ne kadai bayanin dalilin.",
+    ofcUaNowRole: "{{name}} yanzu {{role}} ne.",
+    ofcUaSessionsEnded: "An kawo karshen zaman da aka bude {{n}}, don haka sai sun sake shiga.",
+    ofcUaNoOpenSessions: "Ba su da wani zaman a bude.",
+    ofcUaCanSignInAgain: "{{name}} na iya sake shiga.",
+    ofcUaAccountIsNow: "Asusun {{name}} yanzu {{status}} ne.",
+    ofcUaSessionsEndedNow: "An kawo karshen zaman da aka bude {{n}} nan take.",
     ofcAgRecordWhatYouFound: "Ka rubuta abin da ka gano: shi ne kadai bayanin dalilin da ya sa aka bar wannan alamar a bude, aka tabbatar da ita, ko aka yi watsi da ita.",
     enumDeviceVelocity: "Na’ura daya, karbar kudi da yawa",
     enumSharedPhoneNumber: "Lambar waya daya a kan masu biyan haraji da yawa",
