@@ -48,6 +48,12 @@ interface Round {
   awarded_quantity?: string;
 }
 
+interface Programme {
+  id: string;
+  name: string;
+  name_ha: string | null;
+}
+
 interface Award {
   id: string;
   status: string;
@@ -68,8 +74,28 @@ const UNITS = ['BAG_50KG', 'BAG_25KG', 'LITRE', 'KILOGRAM', 'TRACTOR_DAY', 'SEED
 export function AllocationsScreen() {
   const { lang, t } = usePortalI18n();
   const [rounds, setRounds] = useState<Round[] | null>(null);
-  const [programmes, setProgrammes] = useState<{ id: string; name: string; name_ha: string | null }[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Three lists, three failures, kept rather than flattened into an empty
+   * array.
+   *
+   * Every read on this screen used to answer a refusal by writing `[]` into
+   * the state the screen renders from, and each of the three then stated as
+   * fact something it did not know. The worst was the programme list: with
+   * nothing in it the create form says "No programme exists yet. One has to
+   * be created under Social incentives before a round can distribute under
+   * it." — so an officer whose request was refused was sent to create a
+   * programme that may well already exist, and blocked from the round they
+   * came to make. The awards drawer said nobody had been awarded, and the
+   * rounds table said no round had been created.
+   *
+   * `null` is "not known yet", `[]` is "read, and empty", and an error is
+   * "asked, and refused". They are three different things to tell somebody.
+   */
+  const [roundsError, setRoundsError] = useState<ApiError | null>(null);
+  const [programmesError, setProgrammesError] = useState<ApiError | null>(null);
+  const [awardsError, setAwardsError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -90,15 +116,28 @@ export function AllocationsScreen() {
   const load = useCallback(() => {
     api
       .get<{ rounds: Round[] }>('/allocations/rounds?limit=100')
-      .then((data) => setRounds(data.rounds))
+      .then((data) => {
+        setRounds(data.rounds);
+        setRoundsError(null);
+      })
       .catch((caught) => {
-        setRounds([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setRoundsError(caught.error);
+        else if (caught instanceof Error) {
+          setRoundsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
     api
       .get<any[]>('/government/programmes')
-      .then((data) => setProgrammes(data.map((p) => ({ id: p.id, name: p.name, name_ha: p.name_ha ?? null }))))
-      .catch(() => setProgrammes([]));
+      .then((data) => {
+        setProgrammes(data.map((p) => ({ id: p.id, name: p.name, name_ha: p.name_ha ?? null })));
+        setProgrammesError(null);
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setProgrammesError(caught.error);
+        else if (caught instanceof Error) {
+          setProgrammesError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, []);
 
   useEffect(load, [load]);
@@ -121,12 +160,17 @@ export function AllocationsScreen() {
   async function openAwards(round: Round) {
     setAwardsFor(round);
     setAwards(null);
+    setAwardsError(null);
     try {
       const data = await api.get<{ awards: Award[] }>(`/allocations/rounds/${round.id}/awards`);
       setAwards(data.awards);
     } catch (caught) {
-      setAwards([]);
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      // In the drawer rather than at the top of the screen: that is where the
+      // question was asked and where the answer is being looked for.
+      if (caught instanceof ApiRequestError) setAwardsError(caught.error);
+      else if (caught instanceof Error) {
+        setAwardsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
     }
   }
 
@@ -180,7 +224,12 @@ export function AllocationsScreen() {
       ? Math.floor(Number(form.totalQuantity) / Number(form.quantityPerBeneficiary))
       : null;
 
-  if (!rounds) return <Loading rows={5} />;
+  /*
+   * Only while it is genuinely in flight. A refused list is answered below,
+   * beside the table, so that the create form stays reachable — making a
+   * round does not depend on being able to list them.
+   */
+  if (!rounds && !roundsError) return <Loading rows={5} />;
 
   return (
     <>
@@ -207,15 +256,17 @@ export function AllocationsScreen() {
               onChange={(e) => setForm({ ...form, programmeId: e.target.value })}
             >
               <option value="">{t.ofcAlSelectProgramme}</option>
-              {programmes.map((p) => (
+              {(programmes ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {localName(lang, p.name, p.name_ha)}
                 </option>
               ))}
             </select>
-            {programmes.length === 0 && (
+            {programmesError ? (
+              <ErrorAlert error={programmesError} />
+            ) : programmes !== null && programmes.length === 0 ? (
               <p className="field__hint">{t.ofcAlNoProgramme}</p>
-            )}
+            ) : null}
           </div>
 
           <div className="field">
@@ -344,7 +395,11 @@ export function AllocationsScreen() {
             {t.ofcAlAwardsIntro}{' '}
             <button type="button" className="link" onClick={() => setAwardsFor(null)}>{t.ofcKycClose}</button>
           </p>
-          {!awards ? (
+          {awardsError ? (
+            <div style={{ padding: 18 }}>
+              <ErrorAlert error={awardsError} />
+            </div>
+          ) : !awards ? (
             <div style={{ padding: 18 }}>
               <Loading rows={3} />
             </div>
@@ -384,6 +439,18 @@ export function AllocationsScreen() {
         </div>
       )}
 
+      {/*
+        A list that could not be read, said as that rather than as "no
+        distribution round has been created" — which is what the table's own
+        empty text says, and is a different and untrue thing.
+      */}
+      {roundsError && (
+        <div className="card">
+          <ErrorAlert error={roundsError} />
+        </div>
+      )}
+
+      {!roundsError && (
       <div className="card card--flush">
         <Table
           columns={[
@@ -459,10 +526,11 @@ export function AllocationsScreen() {
               ),
             },
           ]}
-          rows={rounds}
+          rows={rounds ?? []}
           empty="ofcNoneDistributionRoundCreated"
         />
       </div>
+      )}
     </>
   );
 }
