@@ -17,6 +17,16 @@
  * minutes hides exactly the shape we are looking for. Verifies the chain at the
  * end: sustained concurrent appending must not produce a fork.
  *
+ * IT ALSO WATCHES A READ, AND THE BLOAT. Appending alone answers "can the
+ * platform still write", and that is not the question an officer asks at hour
+ * six — they ask why the screen is slow. A read held beside the writes catches
+ * the case where appends stay flat while everything querying past them
+ * degrades, which is the shape index and table bloat actually takes. Dead
+ * tuples are sampled from `pg_stat_user_tables` for the same reason: a query
+ * that was 0.02ms on a fresh table is not necessarily 0.02ms on a bloated one,
+ * and the count says whether that is what is happening rather than leaving it
+ * to be guessed from the latency.
+ *
  *   npx tsx apps/api/scripts/soak.ts [--windows N] [--seconds N] [--concurrency N]
  */
 
@@ -47,6 +57,9 @@ interface Window {
   poolTotal: number;
   poolIdle: number;
   poolWaiting: number;
+  readP50: number;
+  readP95: number;
+  deadTuples: number;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -78,6 +91,38 @@ async function append(worker: number, sequence: number): Promise<number | null> 
   }
 }
 
+/**
+ * A read, timed, against the tables the writes are growing.
+ *
+ * Deliberately a lookup that misses: a TIN drawn from a range the seed does
+ * not use. A hit would be answered from cache after the first window and would
+ * measure nothing; a miss walks the index every time, which is what degrades
+ * when the index bloats.
+ */
+async function probeRead(): Promise<number | null> {
+  const started = process.hrtime.bigint();
+  try {
+    await pool.query('SELECT id FROM taxpayers WHERE tin = $1', [
+      `PL${String(10_000_000 + Math.floor(Math.random() * 9_000)).padStart(8, '0')}`,
+    ]);
+    return Number(process.hrtime.bigint() - started) / 1_000_000;
+  } catch (error) {
+    if (errors.length < 5) errors.push(String((error as Error).message).slice(0, 200));
+    return null;
+  }
+}
+
+/** Dead tuples across the tables that only grow. Bloat, if it is happening. */
+async function deadTuples(): Promise<number> {
+  const row = await queryOne<{ n: string }>(
+    pool,
+    `SELECT COALESCE(SUM(n_dead_tup), 0)::text AS n
+       FROM pg_stat_user_tables
+      WHERE relname IN ('audit_logs','transactions','payments','receipts','taxpayers')`,
+  );
+  return Number(row?.n ?? 0);
+}
+
 const errors: string[] = [];
 
 async function main(): Promise<void> {
@@ -90,7 +135,7 @@ async function main(): Promise<void> {
       `chain starts at ${before?.count ?? '0'} entries\n`,
   );
   console.log(
-    'window   appends   rate/s     p50      p95      p99      max    heapMB  rssMB  pool(t/i/w)  errors',
+    'window   appends   rate/s     p50      p95      p99      max   rd_p50   rd_p95   heapMB  rssMB  pool(t/i/w)   dead  errors',
   );
 
   const results: Window[] = [];
@@ -98,6 +143,7 @@ async function main(): Promise<void> {
 
   for (let w = 1; w <= WINDOWS; w++) {
     const latencies: number[] = [];
+    const reads: number[] = [];
     let errorCount = 0;
     let counter = 0;
     const deadline = Date.now() + WINDOW_SECONDS * 1000;
@@ -107,13 +153,21 @@ async function main(): Promise<void> {
         const ms = await append(id, counter++);
         if (ms === null) errorCount++;
         else latencies.push(ms);
+
+        // One read per append, so the read is measured under exactly the write
+        // load the same window is reporting rather than beside an idle one.
+        const read = await probeRead();
+        if (read === null) errorCount++;
+        else reads.push(read);
       }
     };
 
     await Promise.all(Array.from({ length: CONCURRENCY }, (_, i) => worker(i)));
 
     latencies.sort((a, b) => a - b);
+    reads.sort((a, b) => a - b);
     const memory = process.memoryUsage();
+    const dead = await deadTuples();
     const row: Window = {
       index: w,
       appends: latencies.length,
@@ -127,6 +181,9 @@ async function main(): Promise<void> {
       poolTotal: pool.totalCount,
       poolIdle: pool.idleCount,
       poolWaiting: pool.waitingCount,
+      readP50: round(percentile(reads, 50)),
+      readP95: round(percentile(reads, 95)),
+      deadTuples: dead,
     };
     results.push(row);
 
@@ -135,9 +192,10 @@ async function main(): Promise<void> {
         `${String(round(row.appends / WINDOW_SECONDS)).padStart(7)}  ` +
         `${String(row.p50).padStart(7)}  ${String(row.p95).padStart(7)}  ` +
         `${String(row.p99).padStart(7)}  ${String(row.max).padStart(7)}  ` +
+        `${String(row.readP50).padStart(7)}  ${String(row.readP95).padStart(7)}  ` +
         `${String(row.heapMb).padStart(7)}  ${String(row.rssMb).padStart(6)}  ` +
         `${String(`${row.poolTotal}/${row.poolIdle}/${row.poolWaiting}`).padStart(11)}  ` +
-        `${String(row.errors).padStart(6)}`,
+        `${String(row.deadTuples).padStart(6)}  ${String(row.errors).padStart(6)}`,
     );
   }
 
@@ -152,11 +210,14 @@ async function main(): Promise<void> {
   const p50Drift = mean(tail, (r) => r.p50) / mean(head, (r) => r.p50);
   const rateDrift = mean(tail, (r) => r.appends) / mean(head, (r) => r.appends);
   const heapGrowth = mean(tail, (r) => r.heapMb) - mean(head, (r) => r.heapMb);
+  const readDrift = mean(tail, (r) => r.readP50) / (mean(head, (r) => r.readP50) || 1);
 
   console.log(`\nfirst ${third} window(s) vs last ${third}:`);
   console.log(`  p50 latency   ${round(mean(head, (r) => r.p50))}ms -> ${round(mean(tail, (r) => r.p50))}ms  (x${round(p50Drift)})`);
   console.log(`  throughput    ${round(mean(head, (r) => r.appends) / WINDOW_SECONDS)}/s -> ${round(mean(tail, (r) => r.appends) / WINDOW_SECONDS)}/s  (x${round(rateDrift)})`);
   console.log(`  heap          ${round(mean(head, (r) => r.heapMb))}MB -> ${round(mean(tail, (r) => r.heapMb))}MB  (${heapGrowth >= 0 ? '+' : ''}${round(heapGrowth)}MB)`);
+  console.log(`  read latency  ${round(mean(head, (r) => r.readP50))}ms -> ${round(mean(tail, (r) => r.readP50))}ms  (x${round(readDrift)})`);
+  console.log(`  dead tuples   ${results[0]?.deadTuples ?? 0} -> ${results[results.length - 1]?.deadTuples ?? 0}`);
 
   const totalAppends = results.reduce((sum, r) => sum + r.appends, 0);
   const totalErrors = results.reduce((sum, r) => sum + r.errors, 0);
@@ -200,6 +261,9 @@ async function main(): Promise<void> {
   if (p50Drift > 1.5) verdict.push(`latency drifted x${round(p50Drift)}`);
   if (rateDrift < 0.7) verdict.push(`throughput fell to x${round(rateDrift)}`);
   if (heapGrowth > 50) verdict.push(`heap grew ${round(heapGrowth)}MB`);
+  // A read that has doubled while appends stayed flat is the bloat case, and
+  // is invisible to every other line above.
+  if (readDrift > 1.5) verdict.push(`read latency drifted x${round(readDrift)}`);
   if (!verification.valid) verdict.push('chain broken');
   console.log(verdict.length ? `\nSOAK FINDINGS: ${verdict.join('; ')}` : '\nSOAK CLEAN: no drift, no errors, chain intact');
 
