@@ -30,6 +30,16 @@ import * as apiModule from '../lib/api';
 
 const en = getTranslation('en');
 
+const user = (role: Role) =>
+  ({
+    id: 'u1',
+    phone: '+2348000000001',
+    fullName: 'Finance Bala',
+    email: null,
+    role,
+    permissions: permissionsForRole(role),
+  }) as never;
+
 function signInAs(role: Role) {
   apiModule.setSession(null);
   sessionStorage.setItem(
@@ -73,7 +83,7 @@ describe('a month that was closed and reopened', () => {
     signInAs('admin');
     vi.spyOn(api, 'get').mockResolvedValue([MARCH] as never);
 
-    render(<PeriodsScreen />);
+    render(<PeriodsScreen user={user('admin')} />);
 
     await waitFor(() => expect(screen.getByText(/March 2026/)).toBeTruthy());
     expect(screen.getByText(/Finance Bala/)).toBeTruthy();
@@ -91,7 +101,7 @@ describe('a month that was closed and reopened', () => {
     signInAs('admin');
     vi.spyOn(api, 'get').mockResolvedValue([MARCH] as never);
 
-    render(<PeriodsScreen />);
+    render(<PeriodsScreen user={user('admin')} />);
 
     await waitFor(() => expect(screen.getByText(/Admin Dung/)).toBeTruthy());
     expect(screen.getByText(/The Kanam settlement was misposted/)).toBeTruthy();
@@ -116,7 +126,7 @@ describe('a month that was closed and reopened', () => {
       },
     ] as never);
 
-    render(<PeriodsScreen />);
+    render(<PeriodsScreen user={user('admin')} />);
 
     await waitFor(() => expect(screen.getByText(/March 2026/)).toBeTruthy());
     expect(screen.queryByText(new RegExp(en.ofcPeReopenReason))).toBeNull();
