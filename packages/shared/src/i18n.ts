@@ -954,6 +954,12 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcOsRefundsReturned: string;
+  ofcOsRefundsPartly: string;
+  ofcOsTinsAssigned: string;
+  ofcOsTinsPartly: string;
+  ofcOsRenewalsAcked: string;
+  ofcOsRenewalsPartly: string;
   ofcUsTitle: string;
   ofcUsReportsCollections: string;
   ofcUsIntro: string;
@@ -3381,7 +3387,6 @@ export interface TranslationDictionary {
   ofcOsEveryQueueYouCan: string;
   ofcOsEveryRefundHasBeen: string;
   ofcOsNotAttemptedYet: string;
-  ofcOsRetryComplete: string;
   ofcOsSendToTheAuthority: string;
   ofcOsSendingToTheAuthority: string;
   ofcOvEveryScheduledJobHas: string;
@@ -4248,6 +4253,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcOsRefundsReturned: "{{n}} refund(s) returned to taxpayers.",
+    ofcOsRefundsPartly: "{{done}} returned; {{left}} still owed. Those taxpayers have not had their money back yet.",
+    ofcOsTinsAssigned: "{{n}} TIN(s) assigned.",
+    ofcOsTinsPartly: "{{done}} assigned; {{left}} still outstanding. Those taxpayers remain registered and can still be assessed and pay.",
+    ofcOsRenewalsAcked: "{{n}} renewal(s) acknowledged by the vehicle authority.",
+    ofcOsRenewalsPartly: "{{done}} acknowledged; {{left}} still could not be sent. The renewals themselves remain valid — retry again later.",
     ofcUsTitle: "Product usage — last 30 days",
     ofcUsReportsCollections: ", which reports collections.",
     ofcUsIntro: "Usage is reported by the agent application and this portal as they are used. An empty page here means no version carrying the reporting has been deployed yet, or nobody has opened one since it was.",
@@ -6509,7 +6520,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsEveryQueueYouCan: 'Every queue you can see is empty. Others are guarded by permissions your role does not hold.',
     ofcOsEveryRefundHasBeen: 'Every refund has been returned, every taxpayer has their TIN, and the vehicle authority has acknowledged every renewal.',
     ofcOsNotAttemptedYet: 'Not attempted yet',
-    ofcOsRetryComplete: 'Retry complete.',
     ofcOsSendToTheAuthority: 'Send to the authority again',
     ofcOsSendingToTheAuthority: 'Sending to the authority…',
     ofcOvEveryScheduledJobHas: 'Every scheduled job has run recently and succeeded.',
@@ -7370,6 +7380,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcOsRefundsReturned: "An mayar da kudi {{n}} ga masu biyan haraji.",
+    ofcOsRefundsPartly: "An mayar {{done}}; {{left}} har yanzu ana bin su. Wadannan masu biyan haraji ba su samu kudinsu ba tukuna.",
+    ofcOsTinsAssigned: "An ba da TIN {{n}}.",
+    ofcOsTinsPartly: "An ba da {{done}}; {{left}} har yanzu ya rage. Wadannan masu biyan haraji na kan rajista kuma za a iya yi musu kima kuma za su iya biya.",
+    ofcOsRenewalsAcked: "Hukumar motoci ta amince da sabuntawa {{n}}.",
+    ofcOsRenewalsPartly: "An amince da {{done}}; {{left}} har yanzu ba a iya aikawa ba. Sabuntawar da kansu suna da inganci — ka sake gwadawa daga baya.",
     ofcUsTitle: "Amfani da manhaja — kwanaki 30 na karshe",
     ofcUsReportsCollections: ", wanda ke bayar da rahoton karba.",
     ofcUsIntro: "Manhajar wakilai da wannan shafin suna bayar da rahoton amfani yayin da ake amfani da su. Shafi mara komai a nan yana nufin ba a tura sigar da ke dauke da rahoton ba tukuna, ko babu wanda ya bude daya tun lokacin.",
@@ -9631,7 +9647,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsEveryQueueYouCan: 'Duk jerin da za ka iya gani babu komai a ciki. Sauran suna karkashin izinin da matsayinka bai kunsa ba.',
     ofcOsEveryRefundHasBeen: 'An mayar da kowane kudi, kowane mai biyan haraji yana da TIN dinsa, kuma hukumar ababen hawa ta amsa kowane sabuntawa.',
     ofcOsNotAttemptedYet: 'Ba a gwada ba tukuna',
-    ofcOsRetryComplete: 'An kammala sake gwadawa.',
     ofcOsSendToTheAuthority: 'Sake turawa hukumar',
     ofcOsSendingToTheAuthority: 'Ana turawa hukumar…',
     ofcOvEveryScheduledJobHas: 'Kowane aikin da aka tsara ya gudana kwanan nan kuma ya yi nasara.',

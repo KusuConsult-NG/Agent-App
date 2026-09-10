@@ -15,7 +15,11 @@ import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
 import { verificationUrlFor } from '../lib/verification-url';
-import { bluetoothPrinter } from '../lib/bluetooth-printer';
+import {
+  PRINTER_PROBLEM_TEXT,
+  PrinterUnavailable,
+  bluetoothPrinter,
+} from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
@@ -726,13 +730,23 @@ export function TransactionScreen({
                   verificationCode: transaction.receipt_code ?? undefined,
                 }, receiptLanguage);
                 setNotice(t.colPrinted);
-              } catch (err: any) {
+              } catch (err) {
                 setError({
                   code: 'PRINT_FAILED',
-                  message: t.colPrintFailed.replace(
-                    '{{reason}}',
-                    err.message || t.colCheckPrinter,
-                  ),
+                  /*
+                   * The specific refusal, not the wrapper around it.
+                   *
+                   * `err.message` used to fill `{{reason}}`, which put an
+                   * English sentence inside a Hausa one. Every printer
+                   * failure now names itself — `prnNotConnected` says what
+                   * to do about it, which the generic wording never did —
+                   * and only a failure from somewhere else falls back to
+                   * the wrapper.
+                   */
+                  message:
+                    err instanceof PrinterUnavailable
+                      ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+                      : t.colPrintFailed.replace('{{reason}}', t.colCheckPrinter),
                   moneyStatus: 'NOT_APPLICABLE',
                 });
               }

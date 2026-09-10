@@ -661,8 +661,13 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     try {
       await bluetoothPrinter.printTestSlip(lang);
       setPrinterMsg(t.morePrinterTestSent);
-    } catch (err: any) {
-      setPrinterMsg(err.message || t.morePrinterPrintFailed);
+    } catch (err) {
+      // The dictionary decides, not the error — same as connecting, above.
+      setPrinterMsg(
+        err instanceof PrinterUnavailable
+          ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+          : t.morePrinterPrintFailed,
+      );
     } finally {
       setPrinterBusy(false);
     }
@@ -717,7 +722,19 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
           ]}
         />
         {printerMsg && (
-          <p style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}>
+          /*
+           * Named, because it was anonymous and that hid a hole in its test.
+           *
+           * A test asserting the refusal reached the agent searched the whole
+           * document, and `moreNoWebBluetooth` is also printed as a static
+           * hint further down — jsdom has no Web Bluetooth, so that hint is
+           * always on the page. The assertion passed on the hint while this
+           * paragraph said something else entirely.
+           */
+          <p
+            id="printer-message"
+            style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}
+          >
             {printerMsg}
           </p>
         )}

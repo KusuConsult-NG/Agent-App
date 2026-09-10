@@ -100,6 +100,26 @@ function NotYours({ what, permission }: { what: keyof TranslationDictionary; per
   );
 }
 
+/**
+ * What a retry did, said by this screen rather than by the server.
+ *
+ * Each of the three endpoints composes an English sentence and returns it as
+ * `message`, and this screen rendered it in preference to the dictionary
+ * string sitting behind the `??` — six English sentences about money that has
+ * not been returned, reaching an officer reading Hausa. The ninth time this
+ * exact shape has been found in this application.
+ *
+ * The counts come back in the payload either way, so the wording belongs
+ * here, where there is a dictionary. The server keeps its `message`: it is
+ * what the scheduled-job log and any non-browser client read, and neither of
+ * those has a language.
+ */
+const PHRASING: Record<string, { done: keyof TranslationDictionary; partly: keyof TranslationDictionary }> = {
+  refunds: { done: 'ofcOsRefundsReturned', partly: 'ofcOsRefundsPartly' },
+  tins: { done: 'ofcOsTinsAssigned', partly: 'ofcOsTinsPartly' },
+  renewals: { done: 'ofcOsRenewalsAcked', partly: 'ofcOsRenewalsPartly' },
+};
+
 export function OutstandingScreen() {
   const { t } = usePortalI18n();
   const [refunds, setRefunds] = useState<Refund[] | null>(null);
@@ -160,15 +180,28 @@ export function OutstandingScreen() {
     try {
       const result = await api.post<{
         message?: string;
+        completed?: number;
+        assigned?: number;
+        accepted?: number;
         stillOutstanding?: number;
         stillFailing?: number;
       }>(path, {});
-      // The three queues report what is left under different names. Anything
+      // The three queues report what happened under different names. Anything
       // left means the retry did not resolve it, and saying so in green under
       // the word "complete" would be the cheerful reading of a citizen still
       // waiting for their money.
       const left = result.stillOutstanding ?? result.stillFailing ?? 0;
-      setMessage({ text: result.message ?? t.ofcOsRetryComplete, resolved: left === 0 });
+      const done = result.completed ?? result.assigned ?? result.accepted ?? 0;
+      const words = PHRASING[key]!;
+      setMessage({
+        text:
+          left === 0
+            ? t[words.done].replace('{{n}}', String(done))
+            : t[words.partly]
+                .replace('{{done}}', String(done))
+                .replace('{{left}}', String(left)),
+        resolved: left === 0,
+      });
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
