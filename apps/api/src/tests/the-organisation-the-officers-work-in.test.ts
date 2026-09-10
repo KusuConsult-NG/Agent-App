@@ -251,6 +251,89 @@ describe('the line an officer reports along', () => {
   });
 
   /*
+   * A part not named is a part not moved.
+   *
+   * `repost` guards every column with `CASE WHEN $n::boolean`, so an absent
+   * field leaves it alone and an explicit null clears it. Nothing asserted
+   * that, and the officer portal was quietly defeating it: the posting form
+   * starts empty, is never filled from the officer's current posting, and
+   * sent every key on every submit as `value || null`. Moving somebody to a
+   * new supervisor therefore also cleared their department, their revenue
+   * office, their job title and their staff number — writing a dated transfer
+   * for each removal — and reported "Saved".
+   *
+   * The two halves of the contract, so the next client to send a whole form
+   * fails here rather than on somebody's record.
+   */
+  it('leaves the parts a posting does not name exactly as they were', async () => {
+    const first = await department({});
+    await post(
+      `/government/users/${ids.finance}/posting`,
+      {
+        departmentId: first,
+        supervisorId: ids.admin,
+        jobTitle: 'Principal Finance Officer',
+        staffNumber: 'PSIRS/0041',
+        reason: 'Posted to Finance on promotion.',
+      },
+      auth('admin'),
+    );
+
+    // Only the job title is named this time.
+    const retitled = await post(
+      `/government/users/${ids.finance}/posting`,
+      { jobTitle: 'Chief Finance Officer', reason: 'Confirmed in the substantive post.' },
+      auth('admin'),
+    );
+    assert.equal(retitled.status, 200, JSON.stringify(retitled.body));
+    assert.equal(retitled.body.transfers, 1, 'only the title moved');
+
+    const after = await queryOne<{
+      department_id: string | null;
+      supervisor_id: string | null;
+      job_title: string | null;
+      staff_number: string | null;
+    }>(
+      pool,
+      'SELECT department_id, supervisor_id, job_title, staff_number FROM users WHERE id = $1',
+      [ids.finance],
+    );
+    assert.equal(after!.job_title, 'Chief Finance Officer');
+    assert.equal(after!.department_id, first, 'the department was cleared by a title change');
+    assert.equal(after!.supervisor_id, ids.admin, 'the reporting line was cleared');
+    assert.equal(after!.staff_number, 'PSIRS/0041', 'the staff number was cleared');
+  });
+
+  /*
+   * And a part named as null is a part cleared, which is the other half.
+   *
+   * Without this the fix above could be "ignore nulls", which would make an
+   * officer's department impossible to remove once set.
+   */
+  it('clears a part that is named as null', async () => {
+    const id = await department({});
+    await post(
+      `/government/users/${ids.finance}/posting`,
+      { departmentId: id, reason: 'Posted to the new department.' },
+      auth('admin'),
+    );
+
+    const cleared = await post(
+      `/government/users/${ids.finance}/posting`,
+      { departmentId: null, reason: 'Left the department pending reassignment.' },
+      auth('admin'),
+    );
+    assert.equal(cleared.status, 200, JSON.stringify(cleared.body));
+
+    const after = await queryOne<{ department_id: string | null }>(
+      pool,
+      'SELECT department_id FROM users WHERE id = $1',
+      [ids.finance],
+    );
+    assert.equal(after!.department_id, null);
+  });
+
+  /*
    * A posting history that can be edited afterwards is not evidence.
    *
    * Same standard as the case history and the audit chain, and for the same

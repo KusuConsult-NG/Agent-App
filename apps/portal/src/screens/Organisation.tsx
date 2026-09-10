@@ -715,12 +715,35 @@ export function PostingPanel({
           setBusy(true);
           setError(null);
           try {
+            /*
+             * Only the parts the administrator actually named.
+             *
+             * `repost` distinguishes an absent field from a null one, with a
+             * `CASE WHEN $n::boolean` guard per column: absent leaves the
+             * column alone, null clears it. This form starts empty — it is
+             * never populated from the officer's current posting — and it
+             * sent every key on every submit as `value || null`.
+             *
+             * So an administrator moving somebody to a new supervisor also
+             * sent `departmentId: null`, `revenueOfficeId: null`,
+             * `jobTitle: null` and `staffNumber: null`. Every one of those
+             * fired its CASE and cleared the column. Changing one thing wiped
+             * the other four, wrote a dated transfer for each of them
+             * recording the officer being removed from their department, and
+             * said "Saved".
+             *
+             * Absent now means unchanged, which is what an empty control on a
+             * blank form means to the person looking at it. Clearing a
+             * posting deliberately has no control on this screen and never
+             * did — it only ever happened by accident, as a side effect of
+             * changing something else.
+             */
             await api.post(`/government/users/${officerId}/posting`, {
-              departmentId: form.departmentId || null,
-              revenueOfficeId: form.revenueOfficeId || null,
-              supervisorId: form.supervisorId || null,
-              jobTitle: form.jobTitle.trim() || null,
-              staffNumber: form.staffNumber.trim() || null,
+              ...(form.departmentId ? { departmentId: form.departmentId } : {}),
+              ...(form.revenueOfficeId ? { revenueOfficeId: form.revenueOfficeId } : {}),
+              ...(form.supervisorId ? { supervisorId: form.supervisorId } : {}),
+              ...(form.jobTitle.trim() ? { jobTitle: form.jobTitle.trim() } : {}),
+              ...(form.staffNumber.trim() ? { staffNumber: form.staffNumber.trim() } : {}),
               reason: form.reason.trim(),
             });
             setNotice(t.ofcCwSaved);
