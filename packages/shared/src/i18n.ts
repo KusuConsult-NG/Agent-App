@@ -3331,6 +3331,31 @@ export interface TranslationDictionary {
   pubCitizenByName: string;
   pubCitizenTooMany: string;
   /*
+   * The half of an error that says what to do about it.
+   *
+   * `ApiError.nextStep` sits directly under a message both applications
+   * already translate, and both printed it raw — so a Hausa reader got the
+   * heading in Hausa, the explanation in Hausa, and the instruction in
+   * English. It is the actionable half.
+   *
+   * Keyed by the error's own code, which has always travelled with it.
+   * Only codes specific enough to imply one next step are listed: a
+   * `VALIDATION_FAILED` or a caller-supplied `forbidden()` means something
+   * different every time it is raised, and keeps the server's words.
+   */
+  nsStepUpRequired: string;
+  nsDeviceNotRegistered: string;
+  nsDeviceRevoked: string;
+  nsDeviceSuspended: string;
+  nsUpdateRequired: string;
+  nsUpdateRequiredToEnumerate: string;
+  nsTinServiceUnavailable: string;
+  nsTinNotFound: string;
+  nsKycProviderUnavailable: string;
+  nsPaymentUnconfirmed: string;
+  nsPaymentFailed: string;
+  nsAgentNotCleared: string;
+  /*
    * What the job monitor says about a job, and how often it runs.
    *
    * Both were English on a screen that offers Hausa, and both are composed
@@ -6638,6 +6663,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    nsStepUpRequired: 'Confirm this with the one-time code, then try again.',
+    nsDeviceNotRegistered:
+      'Open Profile, then "View my application and clearance", to register it.',
+    nsDeviceRevoked:
+      'A revoked handset cannot be registered again. Register the replacement handset and ask your supervisor to approve it.',
+    nsDeviceSuspended: 'Your supervisor can tell you why, and restore it.',
+    nsUpdateRequired: 'Close and reopen the app to install the latest version.',
+    nsUpdateRequiredToEnumerate:
+      'Close and reopen the app to install the latest version. Anything already saved on this phone will still be sent.',
+    nsTinServiceUnavailable:
+      'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one.',
+    nsTinNotFound:
+      'Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them.',
+    nsKycProviderUnavailable: 'Try again in a few minutes. Your application is unchanged.',
+    nsPaymentUnconfirmed: 'Open the transaction from your history to see its current status.',
+    nsPaymentFailed: 'Start the payment again, or choose a different payment method.',
+    nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
     ofcOvJobHealthy: 'Running on schedule.',
     ofcOvJobRunning: 'Running now.',
     ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
@@ -9912,6 +9954,23 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    nsStepUpRequired: 'Ka tabbatar da wannan da lambar amfani sau daya, sannan ka sake gwadawa.',
+    nsDeviceNotRegistered:
+      'Ka bude Bayanan Kaina, sannan "Duba nemana da izinina", domin ka yi rajistarta.',
+    nsDeviceRevoked:
+      'Ba za a iya sake yin rajistar na’urar da aka soke ba. Ka yi rajistar na’ura ta maye gurbi ka nemi shugabanka ya amince da ita.',
+    nsDeviceSuspended: 'Shugabanka na iya gaya maka dalili, kuma ya mayar da ita.',
+    nsUpdateRequired: 'Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga.',
+    nsUpdateRequiredToEnumerate:
+      'Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga. Duk abin da aka riga aka ajiye a wannan waya za a aika shi.',
+    nsTinServiceUnavailable:
+      'Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya.',
+    nsTinNotFound:
+      'Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN.',
+    nsKycProviderUnavailable: 'Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba.',
+    nsPaymentUnconfirmed: 'Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu.',
+    nsPaymentFailed: 'Ka sake fara biyan, ko ka zabi wata hanyar biya.',
+    nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
     ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
     ofcOvJobRunning: 'Yana gudana yanzu.',
     ofcOvJobOverdue:

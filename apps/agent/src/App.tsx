@@ -32,7 +32,7 @@ import {
 import { pendingDrafts, requestBackgroundSync, syncDrafts } from './lib/drafts';
 import { useI18n } from './lib/i18n';
 import { matchRoute, useRoute } from './router';
-import { Alert, Icons, errorText } from './ui';
+import { Alert, Icons, errorText, nextStepText } from './ui';
 import { ApplyScreen, LoginScreen } from './screens/Auth';
 import { ApplicationScreen } from './screens/Application';
 import { HomeScreen } from './screens/Home';
@@ -334,8 +334,15 @@ export function App() {
         {syncProblem && (
           <Alert kind="error" title={t.appRecordsNotSent}>
             <p style={{ margin: 0 }}>{errorText(syncProblem, t)}</p>
-            {syncProblem.nextStep && (
-              <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>
+            {/*
+              * And what to do about it, which this banner was still printing
+              * in English after the sentence above it was translated. Found
+              * by widening the guard to look at `nextStep` at all — the
+              * earlier fix moved the explanation into the dictionary and
+              * left the instruction under it exactly as the API wrote it.
+              */}
+            {nextStepText(syncProblem, t) && (
+              <p style={{ margin: '0.5rem 0 0' }}>{nextStepText(syncProblem, t)}</p>
             )}
             <p style={{ margin: '0.5rem 0 0' }}>
               {t.shellNothingLost}

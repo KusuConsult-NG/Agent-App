@@ -92,6 +92,46 @@ export function errorText(
   return translated ? (t[translated] as string) : error.message;
 }
 
+/**
+ * What to do about an error, in the reader's language.
+ *
+ * `nextStep` is the actionable half — it names the screen to open or the
+ * thing to check — and it sat directly under a message this very component
+ * had just translated, printed exactly as the API composed it. A Hausa
+ * reader got the heading in Hausa, the explanation in Hausa, and the
+ * instruction in English.
+ *
+ * Keyed by the error's own code, which has always travelled beside it, so
+ * nothing new is sent. Only codes specific enough to imply one next step are
+ * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
+ * `conflict()`, means something different every time it is raised and keeps
+ * the server's words.
+ */
+const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
+  STEP_UP_REQUIRED: 'nsStepUpRequired',
+  DEVICE_NOT_REGISTERED: 'nsDeviceNotRegistered',
+  DEVICE_REVOKED: 'nsDeviceRevoked',
+  DEVICE_SUSPENDED: 'nsDeviceSuspended',
+  UPDATE_REQUIRED: 'nsUpdateRequired',
+  UPDATE_REQUIRED_TO_ENUMERATE: 'nsUpdateRequiredToEnumerate',
+  TIN_SERVICE_UNAVAILABLE: 'nsTinServiceUnavailable',
+  TIN_NOT_FOUND: 'nsTinNotFound',
+  KYC_PROVIDER_UNAVAILABLE: 'nsKycProviderUnavailable',
+  PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
+  PAYMENT_FAILED: 'nsPaymentFailed',
+  AGENT_NOT_CLEARED: 'nsAgentNotCleared',
+};
+
+/** The next step for an error, or the server's own words when it has none. */
+export function nextStepText(
+  error: { code: string; nextStep?: string },
+  t: TranslationDictionary,
+): string | null {
+  const translated = TRANSLATED_NEXT_STEPS[error.code];
+  if (translated) return t[translated] as string;
+  return error.nextStep ?? null;
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = useI18n();
   if (!error) return null;
@@ -119,7 +159,9 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
     <div className={`alert alert--${error.moneyStatus === 'UNCONFIRMED' ? 'warning' : 'error'}`} role="alert">
       <strong>{message}</strong>
       {moneyLine && <p style={{ margin: '6px 0 0', fontWeight: 600 }}>{moneyLine}</p>}
-      {error.nextStep && <p style={{ margin: '6px 0 0' }}>{error.nextStep}</p>}
+      {nextStepText(error, t) && (
+        <p style={{ margin: '6px 0 0' }}>{nextStepText(error, t)}</p>
+      )}
       {error.details && error.details.length > 0 && (
         <ul>
           {error.details.map((detail, index) => (

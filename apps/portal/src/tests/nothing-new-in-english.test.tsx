@@ -635,12 +635,38 @@ const A_MESSAGE_OFF_A_PAYLOAD = /\b(\w+)(?:\?)?\.message\b/g;
 const A_COLUMN_OF_MESSAGES = /key:\s*['"]message['"]/g;
 
 /**
+ * The other half of an error, which this check could not see at all.
+ *
+ * `nextStep` names the screen to open or the thing to check — the actionable
+ * half — and it sat under a message `ErrorAlert` had just translated, printed
+ * exactly as the API composed it. Fifteen sentences in `apps/api`, reaching
+ * both applications, and no `.message` rule was ever going to find one of
+ * them.
+ *
+ * Deliberately NOT subject to `ERROR_BINDINGS`. That exclusion exists because
+ * an `ApiError`'s message goes through a translating component; `nextStep`
+ * had no such component until now, so the error bindings are exactly where
+ * the offenders live. Every reference must go through `nextStepText`.
+ */
+const A_NEXT_STEP = /\b(\w+)(?:\?)?\.nextStep\b/g;
+
+/**
  * Sites still to be moved off the server's wording, each with its reason.
  *
  * Named here rather than left to a backlog, so this check passes today and
  * fails on the twenty-second.
  */
 const STILL_RENDERING_THE_SERVER = new Set<string>([
+  /*
+   * The fallback inside `nextStepText` itself.
+   *
+   * Only codes specific enough to imply one next step are translated. A
+   * `VALIDATION_FAILED`, or anything a caller passed to `forbidden()` or
+   * `conflict()`, means something different every time it is raised, so it
+   * keeps the server's words rather than being given a sentence that would
+   * be wrong somewhere else.
+   */
+  '../ui.tsx:239 error.nextStep',
   /*
    * THE OFFICER PORTAL
    *
@@ -713,7 +739,7 @@ describe('no screen speaks the API’s English', () => {
         for (let i = 0; i < nth; i += 1) from = source.indexOf(text, from + 1);
         return from < 0 ? 0 : source.slice(0, from).split('\n').length;
       };
-      for (const rule of [A_MESSAGE_OFF_A_PAYLOAD, A_COLUMN_OF_MESSAGES]) {
+      for (const rule of [A_MESSAGE_OFF_A_PAYLOAD, A_COLUMN_OF_MESSAGES, A_NEXT_STEP]) {
         rule.lastIndex = 0;
         for (const match of code.matchAll(rule)) {
           if (rule === A_MESSAGE_OFF_A_PAYLOAD && ERROR_BINDINGS.has(match[1]!)) continue;

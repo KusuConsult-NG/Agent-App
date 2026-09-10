@@ -352,7 +352,17 @@ export async function registerTaxpayer(params: {
        */
       throw new AppError({
         statusCode: 400,
-        code: 'INVALID_REQUEST',
+        /*
+         * Its own code, not the catch-all.
+         *
+         * `INVALID_REQUEST` is what `badRequest()` raises for anything a
+         * schema refused, so a client could not tell this from a malformed
+         * field — and the next step below is advice about a specific
+         * decision, not about a malformed request. It is also the reason the
+         * advice could not be translated: a code that means something
+         * different every time it is raised cannot carry one instruction.
+         */
+        code: 'TIN_NOT_FOUND',
         message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
         nextStep:
           'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
