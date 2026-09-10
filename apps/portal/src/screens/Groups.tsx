@@ -497,6 +497,21 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
   const [round, setRound] = useState<RoundSummary | null>(null);
   const [awards, setAwards] = useState<AwardRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The awards list keeps its own failure, apart from the round's.
+   *
+   * It used to keep none: `.catch(() => undefined)` left `awards` at null,
+   * and null renders the skeleton. An officer whose request was refused, or
+   * whose connection dropped, watched three grey bars for as long as they
+   * cared to wait. The round summary above managed the same trick differently
+   * — its catch stored the server's sentence, and the `if (!round)` guard
+   * returned the skeleton before the `ErrorAlert` that would have shown it.
+   *
+   * Two lists, two reasons, so two states: which one failed is the difference
+   * between "this round could not be read" and "who was awarded could not be
+   * read", and an officer chasing an undistributed round needs to know which.
+   */
+  const [awardsError, setAwardsError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -509,13 +524,22 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       });
     api
       .get<{ awards: AwardRow[] }>(`/allocations/rounds/${roundId}/awards`)
-      .then((result) => setAwards(result.awards))
-      .catch(() => undefined);
+      .then((result) => {
+        setAwards(result.awards);
+        setAwardsError(null);
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setAwardsError(caught.error);
+        else if (caught instanceof Error) {
+          setAwardsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, [roundId]);
 
   useEffect(load, [load]);
 
-  if (!round) return <Loading rows={5} />;
+  // The reason, when there is one, rather than a skeleton that never resolves.
+  if (!round) return error ? <ErrorAlert error={error} /> : <Loading rows={5} />;
 
   const collectionRate =
     round.awardedCount > 0 ? Math.round((round.collectedCount / round.awardedCount) * 100) : 0;
@@ -593,7 +617,11 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
           </p>
         </div>
 
-        {awards === null ? (
+        {awardsError ? (
+          <div className="card__pad">
+            <ErrorAlert error={awardsError} />
+          </div>
+        ) : awards === null ? (
           <Loading rows={3} />
         ) : awards.length === 0 ? (
           <Empty>{t.ofcNoneNobodyAwardedRound}</Empty>
