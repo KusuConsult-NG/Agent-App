@@ -283,7 +283,21 @@ function CloseOrReopen({
   onCancel: () => void;
 }) {
   const { t } = usePortalI18n();
-  const [figures, setFigures] = useState<Figures | null>(null);
+  /**
+   * Three states, because two of them were being read as a third.
+   *
+   * `null` meant both "not fetched yet" and "the fetch failed", and
+   * `outstanding` turned both into zero — so a month whose unresolved
+   * exceptions could not be counted looked exactly like a month that had
+   * none. The warning vanished, the override field was never rendered, and
+   * the Close button enabled itself on a note alone.
+   *
+   * The server recomputes the figures inside the closing transaction and
+   * refuses without an override reason, so no wrong month was ever closed.
+   * What happened instead is a dead end: the officer is refused, and the
+   * field the refusal is asking them to fill is not on the screen.
+   */
+  const [figures, setFigures] = useState<Figures | 'unavailable' | null>(null);
   const [note, setNote] = useState('');
   const [override, setOverride] = useState('');
   const [reopenReason, setReopenReason] = useState('');
@@ -300,13 +314,24 @@ function CloseOrReopen({
           `&periodEnd=${period.period_end.slice(0, 10)}`,
       )
       .then(setFigures)
-      .catch(() => setFigures(null));
+      .catch(() => setFigures('unavailable'));
   }, [period, reopening]);
 
-  const outstanding =
-    figures === null
-      ? 0
+  /** How many unresolved items the month holds, or that nobody can say. */
+  const outstanding: number | 'unknown' =
+    figures === null || figures === 'unavailable'
+      ? 'unknown'
       : Number(figures.unreconciled) + Number(figures.pending_payments);
+
+  /*
+   * A reason is needed whenever the server might ask for one.
+   *
+   * It asks when the month holds unresolved items. Not knowing whether it
+   * does is not the same as knowing it does not, and the safe reading of an
+   * unknown is the one that keeps the officer able to act: show the field, so
+   * a close that the server refuses can be completed rather than looped on.
+   */
+  const needsReason = outstanding !== 0;
 
   async function run(action: () => Promise<void>) {
     setBusy(true);
@@ -364,8 +389,20 @@ function CloseOrReopen({
       ) : (
         <>
           <h4>{t.ofcPeFiguresNow}</h4>
-          {!figures ? (
+          {figures === null ? (
             <Loading rows={2} />
+          ) : figures === 'unavailable' ? (
+            /*
+             * Said, rather than shown as an empty month.
+             *
+             * This branch used to fall through to `outstanding === 0`, which
+             * rendered the screen as though the month were settled and clean.
+             * An officer deciding whether to freeze a reported figure was
+             * being shown a confident answer the platform did not have.
+             */
+            <Alert kind="warning" title="ofcPeFiguresUnknown">
+              <p style={{ margin: 0 }}>{t.ofcPeFiguresUnknownBody}</p>
+            </Alert>
           ) : (
             <>
               <div className="stat-grid">
@@ -375,7 +412,7 @@ function CloseOrReopen({
                 <Stat label="ofcPeTransactions" value={figures.transaction_count} />
               </div>
 
-              {outstanding > 0 && (
+              {outstanding !== 'unknown' && outstanding > 0 && (
                 <Alert kind="warning" title="ofcPeNotReady">
                   <p>{t.ofcPeNotReadyBody}</p>
                   <p>
@@ -392,7 +429,7 @@ function CloseOrReopen({
             <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
           </label>
 
-          {outstanding > 0 && (
+          {needsReason && (
             <label>
               {t.ofcPeOverride}
               <textarea
@@ -423,7 +460,7 @@ function CloseOrReopen({
               disabled={
                 busy ||
                 note.trim().length < 10 ||
-                (outstanding > 0 && override.trim().length < 10)
+                (needsReason && override.trim().length < 10)
               }
               onClick={() =>
                 run(async () => {

@@ -2010,6 +2010,8 @@ export interface TranslationDictionary {
   ofcPeNotReady: string;
   ofcPeNotReadyBody: string;
   ofcPeOverride: string;
+  ofcPeFiguresUnknown: string;
+  ofcPeFiguresUnknownBody: string;
   ofcPeUnreconciled: string;
   ofcPePendingPayments: string;
   ofcPeFiguresNow: string;
@@ -5260,6 +5262,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeNotReady: "Not ready to close",
     ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
     ofcPeOverride: "Why you are closing over them",
+    ofcPeFiguresUnknown: "What this month still holds could not be read",
+    ofcPeFiguresUnknownBody: "The platform could not count this month's unresolved exceptions or pending payments, so it cannot tell you whether the figure is settled. It may be. Closing is still possible, and it needs a reason in writing, because a month closed without knowing is a month closed over whatever was there.",
     ofcPeUnreconciled: "Unresolved exceptions",
     ofcPePendingPayments: "Payments still pending",
     ofcPeFiguresNow: "What the month holds now",
@@ -8392,6 +8396,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPeNotReady: "Bai shirya rufewa ba",
     ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
     ofcPeOverride: "Dalilin rufewa duk da haka",
+    ofcPeFiguresUnknown: "Ba a iya karanta abin da wannan wata ke rike da shi ba",
+    ofcPeFiguresUnknownBody: "Dandalin bai iya kirga sauran matsalolin da ba a warware ba ko biyan da ke jira na wannan wata ba, don haka ba zai iya gaya maka ko lambar ta tabbata ba. Watakila ta tabbata. Har yanzu ana iya rufewa, kuma yana bukatar dalili a rubuce, domin wata da aka rufe ba tare da sani ba, an rufe shi ne a kan duk abin da ke ciki.",
     ofcPeUnreconciled: "Bambancin da ba a warware ba",
     ofcPePendingPayments: "Biyan da ke jira",
     ofcPeFiguresNow: "Abin da watan ke da shi yanzu",

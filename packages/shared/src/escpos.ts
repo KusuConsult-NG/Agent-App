@@ -86,6 +86,34 @@ const PRINTABLE: [RegExp, string][] = [
   [/\u2192/g, '->'],
   // A non-breaking space is a space, and prints as a `?` if left alone.
   [/[\u00A0\u2007\u202F]/g, ' '],
+  /*
+   * The hooked consonants, which are how a great many Nigerian names are
+   * spelled.
+   *
+   * The apostrophe rule above says why this belongs here — "a name arrives
+   * from a database rather than from the dictionary, and a phone keyboard
+   * produces all three" — and then stopped at apostrophes. A Hausa keyboard
+   * produces these too, and an agent registering somebody types the name they
+   * are given: Ɗanjuma, Ɓello, Ƙasimu, Ƴaro.
+   *
+   * The dictionary's decision to write Hausa without hooked letters is a
+   * decision about interface text. It has never been a decision about
+   * somebody's name, and reading it as one is what left `Ɗanjuma Ɓello`
+   * printing as `?anjuma ?ello` — the same defect as `Sa?idu Dan?azumi`, on
+   * the same receipt, for the characters most likely to appear in a name.
+   *
+   * They are precomposed letters rather than a base plus a combining mark, so
+   * the NFD pass below does not touch them. The dotted letters of Yoruba and
+   * Igbo — ẹ, ọ, ụ, ṣ, ṅ — do decompose, and are already handled there.
+   */
+  [/[\u0181]/g, 'B'],
+  [/[\u0253]/g, 'b'],
+  [/[\u018A]/g, 'D'],
+  [/[\u0257]/g, 'd'],
+  [/[\u0198]/g, 'K'],
+  [/[\u0199]/g, 'k'],
+  [/[\u01B3]/g, 'Y'],
+  [/[\u01B4]/g, 'y'],
 ];
 
 /**

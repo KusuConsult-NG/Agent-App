@@ -49,6 +49,59 @@ describe('what reaches the paper', () => {
     expect(onPaper('José')).toBe('Jose');
   });
 
+  /**
+   * The names on the receipts, which are not in the dictionary.
+   *
+   * The property below covers every string the dictionary holds, and a
+   * taxpayer's name is in none of them: it is typed by an agent on a phone
+   * keyboard and stored in the database. So the test that proved the encoder
+   * safe proved it over exactly the text that was never the risk.
+   *
+   * The apostrophe rule already said why — "a name arrives from a database
+   * rather than from the dictionary, and a phone keyboard produces all three"
+   * — and then stopped at apostrophes. A Hausa keyboard produces the hooked
+   * consonants too, and they are precomposed letters rather than a base plus
+   * a combining mark, so the NFD pass that folds `é` never touched them.
+   * `Ɗanjuma Ɓello` printed as `?anjuma ?ello`.
+   *
+   * The dictionary's decision to write Hausa without hooked letters is a
+   * decision about interface text. It was never a decision about somebody's
+   * name.
+   */
+  it('prints a Nigerian name as that name, in any of the three languages', () => {
+    // Hausa: the hooked consonants.
+    expect(onPaper('Ɗanjuma Ɓello')).toBe('Danjuma Bello');
+    expect(onPaper('Ƙasimu Ƴaro')).toBe('Kasimu Yaro');
+    // Yoruba and Igbo: dotted vowels, which decompose and always folded.
+    expect(onPaper('Adeyẹmi Ọlaṣubomi')).toBe('Adeyemi Olasubomi');
+    expect(onPaper('Chinụa Achebe')).toBe('Chinua Achebe');
+    // And the case this all started from, still holding.
+    expect(onPaper('Sa’idu Dan’azumi')).toBe("Sa'idu Dan'azumi");
+  });
+
+  /**
+   * Every letter a Nigerian name can be spelled with, rather than a list.
+   *
+   * A list of examples is a list of the names somebody thought of. This walks
+   * the alphabets actually in use across the three languages and asserts none
+   * of them reaches the paper as a `?` — which is the only honest form of the
+   * claim "the receipt carries the citizen's name".
+   */
+  it('loses no letter of any alphabet these receipts carry', () => {
+    const alphabets =
+      'abcdefghijklmnopqrstuvwxyz' +
+      'ɓɗƙƴ' + // Hausa
+      'ẹọṣṅ' + // Yoruba
+      'ịọụṅ' + // Igbo
+      'àáèéìíòóùú'; // tone marks, which appear in all three
+    const lost: string[] = [];
+    for (const letter of alphabets + alphabets.toUpperCase()) {
+      const printed = onPaper(letter);
+      if (printed.includes('?')) lost.push(letter);
+    }
+    expect(lost).toEqual([]);
+  });
+
   it('leaves text that was already printable alone', () => {
     const plain = 'Ka tabbatar ba a biya sau biyu ba';
     expect(onPaper(plain)).toBe(plain);
