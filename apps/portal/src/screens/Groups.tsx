@@ -476,7 +476,6 @@ interface AwardRow {
   id: string;
   status: string;
   quantity: string;
-  collection_code: string;
   compliance_score: number | null;
   awarded_at: string;
   collected_at: string | null;
