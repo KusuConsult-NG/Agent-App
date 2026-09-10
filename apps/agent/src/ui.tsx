@@ -63,6 +63,24 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UNKNOWN: 'errRequestFailed',
 };
 
+/**
+ * What an error says, in the reader's language.
+ *
+ * Lifted out of `ErrorAlert` so a screen that renders a refusal in its own
+ * frame can still get the translation. `App.tsx` was the case: the sync
+ * banner destructured `message` and `nextStep` off the `ApiError` and printed
+ * them raw, walking past this map entirely — the Hausa existed and the screen
+ * simply did not go through the component that applies it.
+ *
+ * Everything absent from the map falls back to the server's sentence, for the
+ * reason given above it: a guessed translation of a message nobody has seen
+ * is worse than the English, because the reader cannot tell the two apart.
+ */
+export function errorText(error: ApiError, t: TranslationDictionary): string {
+  const translated = TRANSLATED_ERRORS[error.code];
+  return translated ? (t[translated] as string) : error.message;
+}
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = useI18n();
   if (!error) return null;
@@ -84,8 +102,7 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
           ? t.moneyReceived
           : null;
 
-  const translated = TRANSLATED_ERRORS[error.code];
-  const message = translated ? t[translated] : error.message;
+  const message = errorText(error, t);
 
   return (
     <div className={`alert alert--${error.moneyStatus === 'UNCONFIRMED' ? 'warning' : 'error'}`} role="alert">

@@ -290,6 +290,13 @@ const BESIDE_AN_EXPRESSION = [
  * the original pattern and would be lost if that pattern started excluding
  * them. Applied only to the brace-adjacent runs, it costs nothing: a sentence
  * long enough to need a semicolon is not a fragment beside an interpolation.
+ *
+ * `instanceof` joined the keywords when narrowing a caught error inside a
+ * ternary — `caught instanceof ApiRequestError ? caught.error : { … }` — put
+ * an object literal's `{` after a block's `}` and the whole expression
+ * between them read as prose. It sits with `typeof`, `new` and `extends` for
+ * the same reason all three are there: no sentence an agent reads has ever
+ * contained the word.
  */
 function isSurroundingCode(text: string): boolean {
   return (
@@ -299,7 +306,7 @@ function isSurroundingCode(text: string): boolean {
     // the object literal that follows it.
     /^\(\w+,/.test(text) ||
     /\.[A-Za-z_]\w*\(/.test(text) ||
-    /\b(?:import|export|interface|type|function|catch|async|await|if|else|typeof|new|extends|null|undefined|void)\b/.test(
+    /\b(?:import|export|interface|type|function|catch|async|await|if|else|typeof|instanceof|new|extends|null|undefined|void)\b/.test(
       text,
     )
   );
@@ -734,9 +741,14 @@ describe('no screen picks its own locale', () => {
  * `ApiError.message` is a different thing — it goes through `ErrorAlert`,
  * which prefers `TRANSLATED_ERRORS` — so the names those errors are bound to
  * are listed, and anything not on that list is a success payload until
- * somebody says otherwise. `syncProblem` is deliberately absent: it holds an
- * `ApiError` and renders it raw, bypassing the very component that would
- * have translated it.
+ * somebody says otherwise.
+ *
+ * `syncProblem` stays off the list even though it holds an `ApiError`, and
+ * that is deliberate. It renders in its own banner rather than through
+ * `ErrorAlert`, so nothing structural stops it drifting back to printing the
+ * server's sentence; it reaches the dictionary only because it calls
+ * `errorText` by hand. Excluding the name would make this check agree with
+ * either version. Left out, the call is the only spelling that passes.
  */
 const ERROR_BINDINGS = new Set([
   'error',
@@ -765,15 +777,8 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
   /*
    * THE AGENT PWA
    *
-   * `syncProblem` first, and it is not the same fault as the rest. It holds
-   * an `ApiError` and renders it raw, bypassing `ErrorAlert` and the
-   * `TRANSLATED_ERRORS` map that would already have said it in Hausa. It is
-   * what an agent reads when work captured on their phone was refused by
-   * PSIRS, which is the moment they most need to understand what happened.
+   * Where a refusal is stored on the draft, and where it is shown.
    */
-  '../App.tsx:323 syncProblem.message',
-
-  /* Where that refusal is stored on the draft, and where it is shown. */
   '../lib/drafts.ts:221 result.message',
   '../lib/drafts.ts:223 result.message',
   '../screens/More.tsx:902 draft.message',

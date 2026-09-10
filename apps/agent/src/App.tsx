@@ -20,6 +20,7 @@ import {
   isConnectivityFailure,
   logout,
   restoreSession,
+  type ApiError,
   type Session,
 } from './lib/api';
 import {
@@ -31,7 +32,7 @@ import {
 import { pendingDrafts, requestBackgroundSync, syncDrafts } from './lib/drafts';
 import { useI18n } from './lib/i18n';
 import { matchRoute, useRoute } from './router';
-import { Alert, Icons } from './ui';
+import { Alert, Icons, errorText } from './ui';
 import { ApplyScreen, LoginScreen } from './screens/Auth';
 import { ApplicationScreen } from './screens/Application';
 import { HomeScreen } from './screens/Home';
@@ -110,7 +111,7 @@ export function App() {
    * queue would otherwise sit at "waiting to send" for ever with the reason
    * known to the server and to nobody else.
    */
-  const [syncProblem, setSyncProblem] = useState<{ message: string; nextStep?: string } | null>(
+  const [syncProblem, setSyncProblem] = useState<ApiError | null>(
     null,
   );
 
@@ -159,13 +160,25 @@ export function App() {
       // The server refused the captures. Retrying will not register a handset
       // or restore a clearance, so the agent is told now, while the records are
       // still on the phone and can still be sent from somewhere that works.
-      if (caught instanceof ApiRequestError) {
-        setSyncProblem({ message: caught.error.message, nextStep: caught.error.nextStep });
-      } else {
-        setSyncProblem({
-          message: t.shellSyncFailed,
-        });
-      }
+      /*
+       * The error itself, not two strings pulled out of it.
+       *
+       * This took `message` and `nextStep` off the `ApiError` and rendered
+       * them raw, which walked straight past `ErrorAlert` and the
+       * `TRANSLATED_ERRORS` map that would already have said it in Hausa. The
+       * translation existed; the screen just did not go through the component
+       * that applies it.
+       *
+       * This is what an agent reads when work captured on their phone was
+       * refused by PSIRS — not when the signal went, which is handled above
+       * and stays silent. The records are still on the device and they need
+       * to know why they will not go.
+       */
+      setSyncProblem(
+        caught instanceof ApiRequestError
+          ? caught.error
+          : { code: 'SYNC_FAILED', message: t.shellSyncFailed, moneyStatus: 'NOT_APPLICABLE' },
+      );
     }
   }, [session, connection, refreshPending]);
 
@@ -320,8 +333,10 @@ export function App() {
 
         {syncProblem && (
           <Alert kind="error" title={t.appRecordsNotSent}>
-            <p style={{ margin: 0 }}>{syncProblem.message}</p>
-            {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
+            <p style={{ margin: 0 }}>{errorText(syncProblem, t)}</p>
+            {syncProblem.nextStep && (
+              <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>
+            )}
             <p style={{ margin: '0.5rem 0 0' }}>
               {t.shellNothingLost}
             </p>
