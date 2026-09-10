@@ -254,9 +254,10 @@ function DocumentViewer({
     try {
       await api.post(`/agents/kyc/documents/${doc.id}/review`, { decision, reason });
       onReviewed(
-        decision === 'ACCEPT'
-          ? `${enumLabel(doc.document_type, t)} accepted.`
-          : `${enumLabel(doc.document_type, t)} rejected. The applicant can see the reason and submit a replacement.`,
+        (decision === 'ACCEPT' ? t.ofcKycAccepted : t.ofcKycRejectedNotice).replace(
+          '{{document}}',
+          enumLabel(doc.document_type, t),
+        ),
       );
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -281,7 +282,14 @@ function DocumentViewer({
         <Loading rows={2} />
       ) : url ? (
         isImage ? (
-          <img className="document-viewer__image" src={url} alt={`${enumLabel(doc.document_type, t)} submitted by the applicant`} />
+          <img
+            className="document-viewer__image"
+            src={url}
+            alt={t.ofcKycSubmittedByApplicant.replace(
+              '{{document}}',
+              enumLabel(doc.document_type, t),
+            )}
+          />
         ) : (
           <p className="card__hint">
             {t.ofcKycFileType.replace('{{type}}', doc.content_type)}{' '}
@@ -303,7 +311,7 @@ function DocumentViewer({
         <Alert kind="info" title={{ text: t.ofcKycAlready.replace('{{status}}', enumLabel(doc.verification_status, t)) }}>
           <p style={{ margin: 0 }}>
             {doc.rejection_reason
-              ? `Reason given: ${doc.rejection_reason}`
+              ? t.ofcKycReasonGiven.replace('{{reason}}', doc.rejection_reason)
               : `${t.ofcKyReviewedOn} ${formatDateTime(doc.reviewed_at)}`}
           </p>
         </Alert>

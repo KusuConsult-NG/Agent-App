@@ -50,8 +50,11 @@ const FINANCIAL_KEYS = [
 export class FinancialDraftRefused extends Error {
   constructor(key: string) {
     super(
-      `Refusing to queue a draft containing "${key}". Offline mode must never ` +
-        'authorise a government revenue payment (Addendum §23).',
+      // Lower case throughout, which is this application's mark for a line
+      // nobody reads: it is thrown at a programming mistake, caught by no
+      // screen, and exists to name the field in a stack trace.
+      `refusing to queue a draft containing "${key}": offline mode must never ` +
+        'authorise a government revenue payment (Addendum §23)',
     );
     this.name = 'FinancialDraftRefused';
   }

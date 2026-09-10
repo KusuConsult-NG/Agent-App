@@ -290,7 +290,10 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   if (!response.ok) {
     const error = (payload as { error?: ApiError })?.error ?? {
       code: 'UNKNOWN',
-      message: `The request failed (${response.status}). Try again, or contact support.`,
+      // Never rendered: `UNKNOWN` is in `TRANSLATED_ERRORS`, so `ErrorAlert`
+      // shows `t.errRequestFailed` and ignores this. Lower case, by the
+      // convention that marks a line nobody reads.
+      message: `request failed with status ${response.status}`,
       moneyStatus: 'NOT_APPLICABLE' as const,
     };
     throw new ApiRequestError(response.status, error, payload);

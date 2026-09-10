@@ -3004,6 +3004,60 @@ export interface TranslationDictionary {
   scanCameraDenied: string;
   scanCameraMissing: string;
   scanCameraUnsupported: string;
+  colInvoiceReady: string;
+  morePayoutRequested: string;
+  morePayoutClawback: string;
+  agStepCodeSentTo: string;
+  appDraftsSynced: string;
+  appDraftsSyncedRejected: string;
+  errRequestFailed: string;
+  ofcAgConfirmHowPrompt: string;
+  ofcAgRefuseWhyPrompt: string;
+  ofcAgAccountChanged: string;
+  ofcAgChangeRefused: string;
+  ofcAgNotConfirmed: string;
+  ofcAgNotConfirmedBecause: string;
+  ofcAgAnOfficer: string;
+  ofcAgUnknownRole: string;
+  ofcAgBankStillNotConfirmed: string;
+  ofcAlForfeitWhy: string;
+  ofcAlThisBeneficiary: string;
+  ofcAlRoundOpened: string;
+  ofcAlRoundClosed: string;
+  ofcAlRoundCannotCloseBeforeOpen: string;
+  ofcCfItemAdded: string;
+  ofcCfNotAnAmount: string;
+  ofcCfNotAPercentage: string;
+  ofcCfRateRecorded: string;
+  ofcCfProgrammeStatus: string;
+  ofcCfRateCannotBeNegative: string;
+  ofcCfPercentageCannotExceed100: string;
+  ofcFaMinimumAboveRecommended: string;
+  ofcFaNoHandsetBelow: string;
+  ofcFaHandsetWouldStop: string;
+  ofcFaHandsetsWouldStop: string;
+  ofcFnSettlementRecorded: string;
+  ofcFnSettlementDisputed: string;
+  ofcFnTotalCreditedPrompt: string;
+  ofcFnReconciliationAborted: string;
+  ofcFnStatementUnavailable: string;
+  ofcFnReconciliationComplete: string;
+  ofcFnReconciliationUnchecked: string;
+  ofcFnTotalsAgree: string;
+  ofcFnTotalsDisagree: string;
+  ofcFnRecoverChecked: string;
+  ofcFnReversalExecuted: string;
+  ofcGrApproved: string;
+  ofcGrCollectedAt: string;
+  ofcKycAccepted: string;
+  ofcKycRejectedNotice: string;
+  ofcKycSubmittedByApplicant: string;
+  ofcKycReasonGiven: string;
+  ofcOvSweepRaised: string;
+  ofcOvJobsNeedAttention: string;
+  ofcRhInvoiceDocumentReady: string;
+  ofcRhPayoutApproved: string;
+  ofcSpTicketMoved: string;
   verifyCheckReceipt: string;
   verifyScanQr: string;
   verifyTypeCode: string;
@@ -6103,6 +6157,60 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanCameraDenied: "PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead.",
     scanCameraMissing: "No camera was found on this device. Type the code instead.",
     scanCameraUnsupported: "This browser cannot open the camera. Type the code instead.",
+    colInvoiceReady: "Invoice {{number}} is ready to print or send.",
+    morePayoutRequested: "Payout requested. It will be paid after finance approval. Reference {{reference}}.",
+    morePayoutClawback: "Payout requested for {{amount}}. {{gross}} of commission was eligible and {{clawback}} was deducted for transactions that were reversed after their commission had been paid. It will be paid after finance approval. Reference {{reference}}.",
+    agStepCodeSentTo: "We sent a code to {{phone}}. It is only for this one action.",
+    appDraftsSynced: "{{count}} saved record(s) sent to PSIRS.",
+    appDraftsSyncedRejected: "{{count}} saved record(s) sent to PSIRS, {{rejected}} need correction.",
+    errRequestFailed: "The request failed. Try again, or contact support.",
+    ofcAgConfirmHowPrompt: "Say how you confirmed this change with {{name}} (at least 10 characters):",
+    ofcAgRefuseWhyPrompt: "Say why this change is being refused (at least 10 characters):",
+    ofcAgAccountChanged: "{{name}}’s commission account has been changed.",
+    ofcAgChangeRefused: "The change for {{name}} was refused. Their existing account is unchanged.",
+    ofcAgNotConfirmed: "Not confirmed",
+    ofcAgNotConfirmedBecause: "Not confirmed: {{reason}}",
+    ofcAgAnOfficer: "An officer ({{role}})",
+    ofcAgUnknownRole: "unknown role",
+    ofcAgBankStillNotConfirmed: "The bank still did not confirm it ({{outcome}}).",
+    ofcAlForfeitWhy: "Why is {{name}}’s {{quantity}} forfeited?",
+    ofcAlThisBeneficiary: "this beneficiary",
+    ofcAlRoundOpened: "{{name}} is open. Awards can now be made.",
+    ofcAlRoundClosed: "{{name}} is closed. No further awards.",
+    ofcAlRoundCannotCloseBeforeOpen: "A round cannot close before it opens.",
+    ofcCfItemAdded: "{{name}} has been added to the catalogue. It has no rate yet, so it cannot be assessed until you set one.",
+    ofcCfNotAnAmount: "“{{amount}}” is not an amount in naira. Enter it as 15000 or 15000.00.",
+    ofcCfNotAPercentage: "“{{value}}” is not a percentage. Enter it as 5 or 5.00.",
+    ofcCfRateRecorded: "A new rate version for “{{name}}” has been recorded, effective {{date}}. ",
+    ofcCfProgrammeStatus: "Programme “{{name}}” is now {{status}}.",
+    ofcCfRateCannotBeNegative: "A rate cannot be negative.",
+    ofcCfPercentageCannotExceed100: "A percentage rate cannot be more than 100%.",
+    ofcFaMinimumAboveRecommended: "A minimum of {{minimum}} is above the recommended {{recommended}}, so even a handset on the newest build would be refused.",
+    ofcFaNoHandsetBelow: "No active handset is below {{version}}.",
+    ofcFaHandsetWouldStop: "{{count}} of {{total}} active handset would stop collecting until it is updated.",
+    ofcFaHandsetsWouldStop: "{{count}} of {{total}} active handsets would stop collecting until they update.",
+    ofcFnSettlementRecorded: "{{reference}} recorded. {{count}} collection(s) settled.",
+    ofcFnSettlementDisputed: "{{reference}} recorded and disputed: the credit does not match the collections it covers, so none of them have been settled. Close the dispute once the rest of the money is accounted for.",
+    ofcFnTotalCreditedPrompt: "Total now credited against {{reference}}, in naira. ",
+    ofcFnReconciliationAborted: "Reconciliation did not run: {{reason}} ",
+    ofcFnStatementUnavailable: "the gateway statement could not be retrieved.",
+    ofcFnReconciliationComplete: "Reconciliation complete: {{matched}} matched, {{exceptions}} exception(s)",
+    ofcFnReconciliationUnchecked: ", {{count}} reference(s) the gateway could not be asked about",
+    ofcFnTotalsAgree: ". Platform total and gateway total agree.",
+    ofcFnTotalsDisagree: ". Platform total and gateway total DO NOT agree.",
+    ofcFnRecoverChecked: "Checked {{attempted}} unconfirmed payment(s) against the gateway; {{verified}} were confirmed and have now been receipted.",
+    ofcFnReversalExecuted: "Reversal executed as {{reference}}. {{count}} commission record(s) reversed.",
+    ofcGrApproved: "{{name}} approved. Members can now be recorded.",
+    ofcGrCollectedAt: " · collected at {{place}}",
+    ofcKycAccepted: "{{document}} accepted.",
+    ofcKycRejectedNotice: "{{document}} rejected. The applicant can see the reason and submit a replacement.",
+    ofcKycSubmittedByApplicant: "{{document}} submitted by the applicant",
+    ofcKycReasonGiven: "Reason given: {{reason}}",
+    ofcOvSweepRaised: "Sweep complete. {{count}} flag(s) raised for review.",
+    ofcOvJobsNeedAttention: "{{count}} of {{total}} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.",
+    ofcRhInvoiceDocumentReady: "Invoice document ready for {{number}}.",
+    ofcRhPayoutApproved: "Payout {{reference}} approved.",
+    ofcSpTicketMoved: "Ticket moved to {{status}}.",
     verifyCheckReceipt: "Check a receipt",
     verifyScanQr: "Scan the QR code",
     verifyTypeCode: "Or type the verification code",
@@ -9171,6 +9279,60 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanCameraDenied: "PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar.",
     scanCameraMissing: "Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar.",
     scanCameraUnsupported: "Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar.",
+    colInvoiceReady: "Takardar biyan kudi {{number}} tana shirye don bugawa ko aikawa.",
+    morePayoutRequested: "An nemi biyan kudi. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}.",
+    morePayoutClawback: "An nemi biyan {{amount}}. {{gross}} na kwamishan ya cancanta, an kuma cire {{clawback}} saboda ma’amalolin da aka juyar bayan an biya kwamishansu. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}.",
+    agStepCodeSentTo: "Mun aika lamba zuwa {{phone}}. Don wannan aiki daya kadai ne.",
+    appDraftsSynced: "An aika bayanai {{count}} da aka ajiye zuwa PSIRS.",
+    appDraftsSyncedRejected: "An aika bayanai {{count}} da aka ajiye zuwa PSIRS, {{rejected}} na bukatar gyara.",
+    errRequestFailed: "Bukatar ba ta yi nasara ba. Ka sake gwadawa, ko ka tuntubi tallafi.",
+    ofcAgConfirmHowPrompt: "Ka bayyana yadda ka tabbatar da wannan canji tare da {{name}} (akalla haruffa 10):",
+    ofcAgRefuseWhyPrompt: "Ka bayyana dalilin da ya sa ake ki wannan canji (akalla haruffa 10):",
+    ofcAgAccountChanged: "An canza asusun kwamishan na {{name}}.",
+    ofcAgChangeRefused: "An ki canjin {{name}}. Asusunsu na yanzu bai canza ba.",
+    ofcAgNotConfirmed: "Ba a tabbatar ba",
+    ofcAgNotConfirmedBecause: "Ba a tabbatar ba: {{reason}}",
+    ofcAgAnOfficer: "Wani jami’i ({{role}})",
+    ofcAgUnknownRole: "matsayin da ba a sani ba",
+    ofcAgBankStillNotConfirmed: "Banki bai tabbatar da shi ba har yanzu ({{outcome}}).",
+    ofcAlForfeitWhy: "Me ya sa aka kwace {{quantity}} na {{name}}?",
+    ofcAlThisBeneficiary: "wannan mai amfana",
+    ofcAlRoundOpened: "{{name}} a bude yake. Yanzu za a iya yin rabo.",
+    ofcAlRoundClosed: "An rufe {{name}}. Babu sauran rabo.",
+    ofcAlRoundCannotCloseBeforeOpen: "Zagaye ba zai iya rufewa kafin ya bude ba.",
+    ofcCfItemAdded: "An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ka saita daya.",
+    ofcCfNotAnAmount: "“{{amount}}” ba adadi ne a naira ba. Ka shigar da shi kamar 15000 ko 15000.00.",
+    ofcCfNotAPercentage: "“{{value}}” ba kaso ne ba. Ka shigar da shi kamar 5 ko 5.00.",
+    ofcCfRateRecorded: "An yi rijistar sabon adadin kudi na “{{name}}”, mai aiki daga {{date}}. ",
+    ofcCfProgrammeStatus: "Shirin “{{name}}” yanzu {{status}}.",
+    ofcCfRateCannotBeNegative: "Adadin kudi ba zai iya zama kasa da sifili ba.",
+    ofcCfPercentageCannotExceed100: "Kaso ba zai iya wuce 100% ba.",
+    ofcFaMinimumAboveRecommended: "Mafi karancin {{minimum}} ya wuce {{recommended}} da aka ba da shawara, don haka za a ki ko na’urar da ke da sabon salo.",
+    ofcFaNoHandsetBelow: "Babu na’urar da ke aiki da ke kasa da {{version}}.",
+    ofcFaHandsetWouldStop: "Na’ura {{count}} daga cikin {{total}} da ke aiki za ta daina karbar kudi har sai an sabunta ta.",
+    ofcFaHandsetsWouldStop: "Na’urori {{count}} daga cikin {{total}} da ke aiki za su daina karbar kudi har sai an sabunta su.",
+    ofcFnSettlementRecorded: "An yi rijistar {{reference}}. An daidaita tarin kudi {{count}}.",
+    ofcFnSettlementDisputed: "An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ka rufe takaddamar idan an gano sauran kudin.",
+    ofcFnTotalCreditedPrompt: "Jimlar kudin da aka shigar kan {{reference}}, a naira. ",
+    ofcFnReconciliationAborted: "Ba a gudanar da daidaitawa ba: {{reason}} ",
+    ofcFnStatementUnavailable: "ba a iya samun bayanin kudi na kofar biyan kudi ba.",
+    ofcFnReconciliationComplete: "An kammala daidaitawa: {{matched}} sun yi daidai, {{exceptions}} ba su yi daidai ba",
+    ofcFnReconciliationUnchecked: ", lambobi {{count}} da ba a iya tambayar kofar biyan kudi a kansu ba",
+    ofcFnTotalsAgree: ". Jimlar dandali da jimlar kofar biyan kudi sun yi daidai.",
+    ofcFnTotalsDisagree: ". Jimlar dandali da jimlar kofar biyan kudi BA SU YI daidai BA.",
+    ofcFnRecoverChecked: "An duba biyan kudi {{attempted}} da ba a tabbatar ba a kofar biyan kudi; an tabbatar da {{verified}} kuma an ba su rasit yanzu.",
+    ofcFnReversalExecuted: "An zartar da juyawa a matsayin {{reference}}. An juyar da bayanan kwamishan {{count}}.",
+    ofcGrApproved: "An amince da {{name}}. Yanzu za a iya rubuta mambobi.",
+    ofcGrCollectedAt: " · ana karba a {{place}}",
+    ofcKycAccepted: "An karbi {{document}}.",
+    ofcKycRejectedNotice: "An ki {{document}}. Mai nema zai iya ganin dalili ya kuma sake tura wata.",
+    ofcKycSubmittedByApplicant: "{{document}} da mai nema ya tura",
+    ofcKycReasonGiven: "Dalilin da aka bayar: {{reason}}",
+    ofcOvSweepRaised: "An kammala bincike. An daga tuta {{count}} domin dubawa.",
+    ofcOvJobsNeedAttention: "Ayyuka {{count}} daga cikin {{total}} da aka tsara suna bukatar kulawa. Aikin da ba ya gudana ba ya haifar da abin dubawa, don haka nan kadai yake bayyana.",
+    ofcRhInvoiceDocumentReady: "Takardar biyan kudi {{number}} tana shirye.",
+    ofcRhPayoutApproved: "An amince da biyan {{reference}}.",
+    ofcSpTicketMoved: "An mayar da takardar zuwa {{status}}.",
     verifyCheckReceipt: "Duba rasit",
     verifyScanQr: "Duba lambar QR",
     verifyTypeCode: "Ko rubuta lambar tantancewa",

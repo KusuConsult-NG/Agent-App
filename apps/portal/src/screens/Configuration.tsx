@@ -344,10 +344,7 @@ function NewItemForm({
               commissionEligible: form.commissionEligible,
               applicableTaxpayerTypes: form.applicableTaxpayerTypes,
             });
-            onDone(
-              `${form.name.trim()} has been added to the catalogue. It has no rate yet, so it ` +
-                'cannot be assessed until you set one.',
-            );
+            onDone(t.ofcCfItemAdded.replace('{{name}}', form.name.trim()));
           } catch (caught) {
             if (caught instanceof ApiRequestError) setError(caught.error);
             else if (caught instanceof Error) {
@@ -606,9 +603,9 @@ function RateChangeForm({
       if (!amount.trim()) return t.ofcCfEnterTheNewAmount;
       try {
         const kobo = nairaToKobo(amount);
-        if (kobo < 0n) return 'A rate cannot be negative.';
+        if (kobo < 0n) return t.ofcCfRateCannotBeNegative;
       } catch {
-        return `\u201c${amount.trim()}\u201d is not an amount in naira. Enter it as 15000 or 15000.00.`;
+        return t.ofcCfNotAnAmount.replace('{{amount}}', amount.trim());
       }
       return null;
     }
@@ -617,9 +614,9 @@ function RateChangeForm({
       if (!typed) return t.ofcCfEnterTheNewRate;
       // Deliberately stricter than parseFloat: the whole box must be a number.
       if (!/^\d+(?:\.\d{1,2})?$/.test(typed)) {
-        return `\u201c${typed}\u201d is not a percentage. Enter it as 5 or 5.00.`;
+        return t.ofcCfNotAPercentage.replace('{{value}}', typed);
       }
-      if (Number.parseFloat(typed) > 100) return 'A percentage rate cannot be more than 100%.';
+      if (Number.parseFloat(typed) > 100) return t.ofcCfPercentageCannotExceed100;
       return null;
     }
     return null;
@@ -649,8 +646,9 @@ function RateChangeForm({
       });
 
       onDone(
-        `A new rate version for "${localName(lang, item.name, item.name_ha)}" has been recorded, effective ${effectiveFrom}. ` +
-          t.ofcCfExistingAssessmentsAreUnaffected,
+        t.ofcCfRateRecorded
+          .replace('{{name}}', localName(lang, item.name, item.name_ha))
+          .replace('{{date}}', effectiveFrom) + t.ofcCfExistingAssessmentsAreUnaffected,
       );
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -858,7 +856,11 @@ export function ProgrammesScreen() {
                               await api.post(`/government/programmes/${row.id}/status`, {
                                 status: next,
                               });
-                              setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
+                              setMessage(
+                                t.ofcCfProgrammeStatus
+                                  .replace('{{name}}', row.name)
+                                  .replace('{{status}}', enumLabel(next, t)),
+                              );
                               load();
                             } catch (caught) {
                               if (caught instanceof ApiRequestError) setError(caught.error);

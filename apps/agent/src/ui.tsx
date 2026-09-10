@@ -60,6 +60,7 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   UPDATE_REQUIRED: 'errUpdateRequired',
   NETWORK: 'errNetwork',
   UPLOAD_FAILED: 'errUploadFailed',
+  UNKNOWN: 'errRequestFailed',
 };
 
 export function ErrorAlert({ error }: { error: ApiError | null }) {

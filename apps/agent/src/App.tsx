@@ -141,9 +141,10 @@ export function App() {
       const outcome = await syncDrafts((drafts) => api.post('/drafts/sync', { drafts }));
       if (outcome.synced > 0 || outcome.rejected > 0) {
         setSyncMessage(
-          `${outcome.synced} saved record(s) sent to PSIRS` +
-            (outcome.rejected > 0 ? `, ${outcome.rejected} need correction` : '') +
-            '.',
+          (outcome.rejected > 0
+            ? t.appDraftsSyncedRejected.replace('{{rejected}}', String(outcome.rejected))
+            : t.appDraftsSynced
+          ).replace('{{count}}', String(outcome.synced)),
         );
       }
       setSyncProblem(null);

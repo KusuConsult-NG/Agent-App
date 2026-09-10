@@ -185,7 +185,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'APPROVE',
                             reason,
                           });
-                          return `${row.name} approved. Members can now be recorded.`;
+                          return t.ofcGrApproved.replace('{{name}}', row.name);
                         })
                       }
                     >{t.ofcRhApprove}</button>
@@ -563,7 +563,10 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
             {round.quantity_per_beneficiary} {enumLabel(round.unit, t)} each
-            {round.collection_point ? ` · collected at ${round.collection_point}` : ''} ·{' '}
+            {round.collection_point
+              ? t.ofcGrCollectedAt.replace('{{place}}', round.collection_point)
+              : ''}{' '}
+            ·{' '}
             <Badge status={round.status} />
           </p>
         </div>

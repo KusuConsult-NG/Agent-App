@@ -556,7 +556,7 @@ export function RoleHomeScreen({
                         action.act(
                           `doc-${row.id}`,
                           () => api.post(`/revenue/invoices/${row.id}/document`, {}),
-                          `Invoice document ready for ${row.invoice_number}.`,
+                          t.ofcRhInvoiceDocumentReady.replace('{{number}}', row.invoice_number),
                         )
                       }
                     >
@@ -690,7 +690,7 @@ export function RoleHomeScreen({
                             await stepUp('commission.payout.approve', user.phone);
                             await api.post(`/government/commissions/payouts/${row.id}/approve`, {});
                           },
-                          `Payout ${row.payout_reference} approved.`,
+                          t.ofcRhPayoutApproved.replace('{{reference}}', row.payout_reference),
                         )
                       }
                     >{t.ofcRhApprove}</button>

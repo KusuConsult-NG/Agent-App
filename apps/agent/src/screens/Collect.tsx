@@ -553,7 +553,7 @@ export function TransactionScreen({
         `/revenue/invoices/${transaction.invoice_id}/document`,
       );
       window.open(document.downloadUrl, '_blank', 'noopener');
-      setNotice(`Invoice ${document.documentNumber} is ready to print or send.`);
+      setNotice(t.colInvoiceReady.replace('{{number}}', document.documentNumber));
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {

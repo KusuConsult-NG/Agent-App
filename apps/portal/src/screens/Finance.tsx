@@ -114,10 +114,10 @@ export function ReconciliationScreen() {
       });
       setMessage(
         result.status === 'RECONCILED'
-          ? `${result.settlementReference} recorded. ${result.transactionsSettled} collection(s) settled.`
-          : `${result.settlementReference} recorded and disputed: the credit does not match the ` +
-            'collections it covers, so none of them have been settled. Close the dispute once the ' +
-            'rest of the money is accounted for.',
+          ? t.ofcFnSettlementRecorded
+              .replace('{{reference}}', result.settlementReference)
+              .replace('{{count}}', String(result.transactionsSettled))
+          : t.ofcFnSettlementDisputed.replace('{{reference}}', result.settlementReference),
       );
       setEntry({ ...entry, gatewayReferences: '', receivedNaira: '', bankReference: '' });
       load();
@@ -131,7 +131,7 @@ export function ReconciliationScreen() {
   async function closeDispute(row: any) {
     const receivedAmountKobo = toKobo(
       window.prompt(
-        `Total now credited against ${row.settlement_reference}, in naira. ` +
+        t.ofcFnTotalCreditedPrompt.replace('{{reference}}', row.settlement_reference) +
           t.ofcFnItHasToAccount,
         '',
       ) ?? '',
@@ -190,21 +190,25 @@ export function ReconciliationScreen() {
           moneyStatus: 'UNCONFIRMED',
           nextStep: t.ofcFnReRunThisPeriod,
           message:
-            `Reconciliation did not run: ${result.abortReason ?? 'the gateway statement could not be retrieved.'} ` +
-            t.ofcFnNothingWasComparedFor,
+            t.ofcFnReconciliationAborted.replace(
+              '{{reason}}',
+              result.abortReason ?? t.ofcFnStatementUnavailable,
+            ) + t.ofcFnNothingWasComparedFor,
         });
         load();
         return;
       }
 
       setMessage(
-        `Reconciliation complete: ${result.matched} matched, ${result.exceptions} exception(s)` +
+        t.ofcFnReconciliationComplete
+          .replace('{{matched}}', String(result.matched))
+          .replace('{{exceptions}}', String(result.exceptions)) +
           (result.unchecked > 0
-            ? `, ${result.unchecked} reference(s) the gateway could not be asked about`
+            ? t.ofcFnReconciliationUnchecked.replace('{{count}}', String(result.unchecked))
             : '') +
-          `. Platform total and gateway total ${
-            result.totalPlatformKobo === result.totalGatewayKobo ? 'agree' : 'DO NOT agree'
-          }.`,
+          (result.totalPlatformKobo === result.totalGatewayKobo
+            ? t.ofcFnTotalsAgree
+            : t.ofcFnTotalsDisagree),
       );
       load();
     } catch (caught) {
@@ -227,8 +231,9 @@ export function ReconciliationScreen() {
         },
       );
       setMessage(
-        `Checked ${result.attempted} unconfirmed payment(s) against the gateway; ` +
-          `${result.verified} were confirmed and have now been receipted.`,
+        t.ofcFnRecoverChecked
+          .replace('{{attempted}}', String(result.attempted))
+          .replace('{{verified}}', String(result.verified)),
       );
       load();
     } catch (caught) {
@@ -748,8 +753,9 @@ export function ApprovalsScreen({ user }: { user: User }) {
         `/government/approvals/${id}/execute-reversal`,
       );
       setMessage(
-        `Reversal executed as ${result.refundReference}. ` +
-          `${result.commissionReversed} commission record(s) reversed.`,
+        t.ofcFnReversalExecuted
+          .replace('{{reference}}', result.refundReference)
+          .replace('{{count}}', String(result.commissionReversed)),
       );
       load();
     } catch (caught) {

@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,031 strings; that one is two pages and links back
+> because it carries all 3,085 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,031 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,085 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,031 strings is worse than no sheet, because it looks complete; this one cannot
+3,085 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,031 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,085 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,031 strings: where the
+- The glossary below is applied consistently across all 3,085 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -468,7 +468,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-2965 strings, grouped by where an agent meets them. Lower stakes
+3019 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -679,6 +679,8 @@ instructions — but they are what an agent reads all day.
 | `ofcRhReadOnlyBody` | Read-only, by role and by design. Nothing on this screen changes a record — every figure is a starting point for a query, and the audit log itself is hash-chained and append-only. | Karatu kawai, ta matsayi kuma da gangan. Babu abin da ke kan wannan shafin da ke canza rikodi — kowane adadi mafarin bincike ne, kuma rajistar bincike da kanta an sarkafa ta kuma ba a share komai a cikinta. | ☐ | |
 | `ofcRhAdminBody` | An agent without clearance or an approved device cannot collect, and a supervisor with no territory sees no figures at all. | Wakilin da babu izini ko na’urar da aka amince da ita ba zai iya karba ba, kuma mai kula da babu yanki ba ya ganin komai. | ☐ | |
 | `ofcRhAdminIntro` | What is waiting on an administrator. Collections and revenue analysis are on the dashboard and the revenue summary; this screen is the platform itself. | Abin da ke jiran mai gudanarwa. Karban kudi da nazarin haraji suna kan allon aiki da takaitaccen haraji; wannan shafin dandalin da kansa ne. | ☐ | |
+| `ofcRhInvoiceDocumentReady` | Invoice document ready for {{number}}. | Takardar biyan kudi {{number}} tana shirye. | ☐ | |
+| `ofcRhPayoutApproved` | Payout {{reference}} approved. | An amince da biyan {{reference}}. | ☐ | |
 | `ofcRhAskTheRegisterAgain` | Ask the register again | Sake tambayar rijistar | ☐ | |
 | `ofcRhAsking` | Asking… | Ana tambaya… | ☐ | |
 | `ofcRhDeviceApproved` | Device approved. | An amince da na’urar. | ☐ | |
@@ -780,6 +782,15 @@ instructions — but they are what an agent reads all day.
 | `ofcAgDetail` | Detail | Bayani | ☐ | |
 | `ofcAgSampleKycNote` | Identity verified against NIN; referee confirmed by district head; records in order. | An tabbatar da shaida da NIN; hakimin unguwa ya tabbatar da mai shaida; rikodin sun daidaita. | ☐ | |
 | `ofcAgSampleRefereeNote` | Called all six applicants; four have never met him. | An kira dukkan masu nema shida; hudu ba su taba haduwa da shi ba. | ☐ | |
+| `ofcAgConfirmHowPrompt` | Say how you confirmed this change with {{name}} (at least 10 characters): | Ka bayyana yadda ka tabbatar da wannan canji tare da {{name}} (akalla haruffa 10): | ☐ | |
+| `ofcAgRefuseWhyPrompt` | Say why this change is being refused (at least 10 characters): | Ka bayyana dalilin da ya sa ake ki wannan canji (akalla haruffa 10): | ☐ | |
+| `ofcAgAccountChanged` | {{name}}’s commission account has been changed. | An canza asusun kwamishan na {{name}}. | ☐ | |
+| `ofcAgChangeRefused` | The change for {{name}} was refused. Their existing account is unchanged. | An ki canjin {{name}}. Asusunsu na yanzu bai canza ba. | ☐ | |
+| `ofcAgNotConfirmed` | Not confirmed | Ba a tabbatar ba | ☐ | |
+| `ofcAgNotConfirmedBecause` | Not confirmed: {{reason}} | Ba a tabbatar ba: {{reason}} | ☐ | |
+| `ofcAgAnOfficer` | An officer ({{role}}) | Wani jami’i ({{role}}) | ☐ | |
+| `ofcAgUnknownRole` | unknown role | matsayin da ba a sani ba | ☐ | |
+| `ofcAgBankStillNotConfirmed` | The bank still did not confirm it ({{outcome}}). | Banki bai tabbatar da shi ba har yanzu ({{outcome}}). | ☐ | |
 | `ofcAgAgentActivated` | Agent activated. | An kunna wakilin. | ☐ | |
 | `ofcAgAgentAgreementAccepted` | Agent agreement accepted | An amince da yarjejeniyar wakili | ☐ | |
 | `ofcAgAgentSuspendedTheirSessions` | Agent suspended. Their sessions and devices have been disabled. | An dakatar da wakilin. An kashe zamansa da na’urorinsa. | ☐ | |
@@ -844,6 +855,10 @@ instructions — but they are what an agent reads all day.
 | `ofcKycReviewed` | Reviewed | An duba | ☐ | |
 | `ofcKycWho` | Who | Wa | ☐ | |
 | `ofcKycWhat` | What | Me | ☐ | |
+| `ofcKycAccepted` | {{document}} accepted. | An karbi {{document}}. | ☐ | |
+| `ofcKycRejectedNotice` | {{document}} rejected. The applicant can see the reason and submit a replacement. | An ki {{document}}. Mai nema zai iya ganin dalili ya kuma sake tura wata. | ☐ | |
+| `ofcKycSubmittedByApplicant` | {{document}} submitted by the applicant | {{document}} da mai nema ya tura | ☐ | |
+| `ofcKycReasonGiven` | Reason given: {{reason}} | Dalilin da aka bayar: {{reason}} | ☐ | |
 
 #### The officer portal — the minimum app version
 
@@ -874,6 +889,10 @@ instructions — but they are what an agent reads all day.
 | `ofcFaMinimum` | Minimum | Mafi karanci | ☐ | |
 | `ofcFaPublishedBy` | Published by | Wanda ya buga | ☐ | |
 | `ofcFaWhy` | Why | Dalili | ☐ | |
+| `ofcFaMinimumAboveRecommended` | A minimum of {{minimum}} is above the recommended {{recommended}}, so even a handset on the newest build would be refused. | Mafi karancin {{minimum}} ya wuce {{recommended}} da aka ba da shawara, don haka za a ki ko na’urar da ke da sabon salo. | ☐ | |
+| `ofcFaNoHandsetBelow` | No active handset is below {{version}}. | Babu na’urar da ke aiki da ke kasa da {{version}}. | ☐ | |
+| `ofcFaHandsetWouldStop` | {{count}} of {{total}} active handset would stop collecting until it is updated. | Na’ura {{count}} daga cikin {{total}} da ke aiki za ta daina karbar kudi har sai an sabunta ta. | ☐ | |
+| `ofcFaHandsetsWouldStop` | {{count}} of {{total}} active handsets would stop collecting until they update. | Na’urori {{count}} daga cikin {{total}} da ke aiki za su daina karbar kudi har sai an sabunta su. | ☐ | |
 | `ofcFaEnterTheMinimumVersion` | Enter the minimum version as digits and dots, like 1.4.0. | Ka shigar da mafi karancin salo da lambobi da digo, kamar 1.4.0. | ☐ | |
 | `ofcFaEnterTheRecommendedVersion` | Enter the recommended version as digits and dots, like 1.4.0. | Ka shigar da salon da ake ba da shawara da lambobi da digo, kamar 1.4.0. | ☐ | |
 | `ofcFaNeverReportedAVersion` | Never reported a version | Bai taba bayar da rahoton salo ba | ☐ | |
@@ -1103,6 +1122,17 @@ instructions — but they are what an agent reads all day.
 | `ofcFnEntries` | Entries | Shigarwa | ☐ | |
 | `ofcFnBankAccount` | Bank account | Asusun banki | ☐ | |
 | `ofcFnRequestedBy` | Requested by | Wanda ya nema | ☐ | |
+| `ofcFnSettlementRecorded` | {{reference}} recorded. {{count}} collection(s) settled. | An yi rijistar {{reference}}. An daidaita tarin kudi {{count}}. | ☐ | |
+| `ofcFnSettlementDisputed` | {{reference}} recorded and disputed: the credit does not match the collections it covers, so none of them have been settled. Close the dispute once the rest of the money is accounted for. | An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ka rufe takaddamar idan an gano sauran kudin. | ☐ | |
+| `ofcFnTotalCreditedPrompt` | Total now credited against {{reference}}, in naira.  | Jimlar kudin da aka shigar kan {{reference}}, a naira.  | ☐ | |
+| `ofcFnReconciliationAborted` | Reconciliation did not run: {{reason}}  | Ba a gudanar da daidaitawa ba: {{reason}}  | ☐ | |
+| `ofcFnStatementUnavailable` | the gateway statement could not be retrieved. | ba a iya samun bayanin kudi na kofar biyan kudi ba. | ☐ | |
+| `ofcFnReconciliationComplete` | Reconciliation complete: {{matched}} matched, {{exceptions}} exception(s) | An kammala daidaitawa: {{matched}} sun yi daidai, {{exceptions}} ba su yi daidai ba | ☐ | |
+| `ofcFnReconciliationUnchecked` | , {{count}} reference(s) the gateway could not be asked about | , lambobi {{count}} da ba a iya tambayar kofar biyan kudi a kansu ba | ☐ | |
+| `ofcFnTotalsAgree` | . Platform total and gateway total agree. | . Jimlar dandali da jimlar kofar biyan kudi sun yi daidai. | ☐ | |
+| `ofcFnTotalsDisagree` | . Platform total and gateway total DO NOT agree. | . Jimlar dandali da jimlar kofar biyan kudi BA SU YI daidai BA. | ☐ | |
+| `ofcFnRecoverChecked` | Checked {{attempted}} unconfirmed payment(s) against the gateway; {{verified}} were confirmed and have now been receipted. | An duba biyan kudi {{attempted}} da ba a tabbatar ba a kofar biyan kudi; an tabbatar da {{verified}} kuma an ba su rasit yanzu. | ☐ | |
+| `ofcFnReversalExecuted` | Reversal executed as {{reference}}. {{count}} commission record(s) reversed. | An zartar da juyawa a matsayin {{reference}}. An juyar da bayanan kwamishan {{count}}. | ☐ | |
 | `ofcFnBankReferenceForThe` | Bank reference for the credit that settles it | Lambar banki na kudin da ya kammala shi | ☐ | |
 | `ofcFnBankTransferReferenceAt` | Bank transfer reference (at least 3 characters): | Lambar tura kudi ta banki (akalla haruffa 3): | ☐ | |
 | `ofcFnEnterTheCreditedAmount` | Enter the credited amount in naira, for example 1250000.00. | Ka shigar da adadin da aka shigar a naira, misali 1250000.00. | ☐ | |
@@ -1179,6 +1209,8 @@ instructions — but they are what an agent reads all day.
 | `ofcOvHash` | Hash | Sa hannu | ☐ | |
 | `ofcOvTampered` | Audit trail has been tampered with | An taba rajistar bincike | ☐ | |
 | `ofcOvChange` | What changed | Abin da ya canza | ☐ | |
+| `ofcOvSweepRaised` | Sweep complete. {{count}} flag(s) raised for review. | An kammala bincike. An daga tuta {{count}} domin dubawa. | ☐ | |
+| `ofcOvJobsNeedAttention` | {{count}} of {{total}} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows. | Ayyuka {{count}} daga cikin {{total}} da aka tsara suna bukatar kulawa. Aikin da ba ya gudana ba ya haifar da abin dubawa, don haka nan kadai yake bayyana. | ☐ | |
 | `ofcOvEveryScheduledJobHas` | Every scheduled job has run recently and succeeded. | Kowane aikin da aka tsara ya gudana kwanan nan kuma ya yi nasara. | ☐ | |
 | `ofcOvId` | Id | Lamba | ☐ | |
 | `ofcOvLoading` | Loading… | Ana lodi… | ☐ | |
@@ -1245,6 +1277,13 @@ instructions — but they are what an agent reads all day.
 | `ofcCfRequiresNoArrears` | Requires no arrears | Yana bukatar babu bashi | ☐ | |
 | `ofcCfEligible` | Eligible | Ya cancanta | ☐ | |
 | `ofcCfEvaluated` | Evaluated | An duba | ☐ | |
+| `ofcCfItemAdded` | {{name}} has been added to the catalogue. It has no rate yet, so it cannot be assessed until you set one. | An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ka saita daya. | ☐ | |
+| `ofcCfNotAnAmount` | “{{amount}}” is not an amount in naira. Enter it as 15000 or 15000.00. | “{{amount}}” ba adadi ne a naira ba. Ka shigar da shi kamar 15000 ko 15000.00. | ☐ | |
+| `ofcCfNotAPercentage` | “{{value}}” is not a percentage. Enter it as 5 or 5.00. | “{{value}}” ba kaso ne ba. Ka shigar da shi kamar 5 ko 5.00. | ☐ | |
+| `ofcCfRateRecorded` | A new rate version for “{{name}}” has been recorded, effective {{date}}.  | An yi rijistar sabon adadin kudi na “{{name}}”, mai aiki daga {{date}}.  | ☐ | |
+| `ofcCfProgrammeStatus` | Programme “{{name}}” is now {{status}}. | Shirin “{{name}}” yanzu {{status}}. | ☐ | |
+| `ofcCfRateCannotBeNegative` | A rate cannot be negative. | Adadin kudi ba zai iya zama kasa da sifili ba. | ☐ | |
+| `ofcCfPercentageCannotExceed100` | A percentage rate cannot be more than 100%. | Kaso ba zai iya wuce 100% ba. | ☐ | |
 | `ofcCfActivate` | Activate | Kunna | ☐ | |
 | `ofcCfAddToTheCatalogue` | Add to the catalogue | Kara a cikin kundin | ☐ | |
 | `ofcCfAdding` | Adding… | Ana karawa… | ☐ | |
@@ -1432,6 +1471,7 @@ instructions — but they are what an agent reads all day.
 | `ofcSpPriority` | Priority | Muhimmanci | ☐ | |
 | `ofcSpReportedBy` | Reported by | Wanda ya kai rahoto | ☐ | |
 | `ofcSpReplies` | Replies | Amsoshi | ☐ | |
+| `ofcSpTicketMoved` | Ticket moved to {{status}}. | An mayar da takardar zuwa {{status}}. | ☐ | |
 | `ofcSpAddAnInternalNote` | Add an internal note | Kara bayanin cikin gida | ☐ | |
 | `ofcSpAssignedTo` | Assigned to | An ba wa | ☐ | |
 | `ofcSpContact` | Contact | Hanyar tuntuba | ☐ | |
@@ -1771,6 +1811,11 @@ instructions — but they are what an agent reads all day.
 | `ofcAlQuantity` | Quantity | Yawa | ☐ | |
 | `ofcAlRound` | Round | Zagaye | ☐ | |
 | `ofcAlDistributing` | Distributing | Ana rabawa | ☐ | |
+| `ofcAlForfeitWhy` | Why is {{name}}’s {{quantity}} forfeited? | Me ya sa aka kwace {{quantity}} na {{name}}? | ☐ | |
+| `ofcAlThisBeneficiary` | this beneficiary | wannan mai amfana | ☐ | |
+| `ofcAlRoundOpened` | {{name}} is open. Awards can now be made. | {{name}} a bude yake. Yanzu za a iya yin rabo. | ☐ | |
+| `ofcAlRoundClosed` | {{name}} is closed. No further awards. | An rufe {{name}}. Babu sauran rabo. | ☐ | |
+| `ofcAlRoundCannotCloseBeforeOpen` | A round cannot close before it opens. | Zagaye ba zai iya rufewa kafin ya bude ba. | ☐ | |
 | `ofcAlChooseTheProgrammeThis` | Choose the programme this round distributes under. | Ka zabi shirin da wannan zagaye zai rarraba a karkashinsa. | ☐ | |
 | `ofcAlCreateARound` | Create a round | Kirkiri zagaye | ☐ | |
 | `ofcAlCreateRound` | Create round | Kirkiri zagaye | ☐ | |
@@ -2268,6 +2313,8 @@ instructions — but they are what an agent reads all day.
 | `ofcReadOnly` | read-only | karatu kawai | ☐ | |
 | `ofcDailyTrend` | Daily collection trend | Yanayin karban kudi na kullum | ☐ | |
 | `ofcNoDataForPeriod` | No data for this period. | Babu bayanai na wannan lokacin. | ☐ | |
+| `ofcGrApproved` | {{name}} approved. Members can now be recorded. | An amince da {{name}}. Yanzu za a iya rubuta mambobi. | ☐ | |
+| `ofcGrCollectedAt` |  · collected at {{place}} |  · ana karba a {{place}} | ☐ | |
 | `ofcKyOpenAndReview` | Open and review | Bude ka duba | ☐ | |
 | `ofcKyReviewedOn` | Reviewed on | An duba a ranar | ☐ | |
 | `ofcKyTheAccessLogCould` | The access log could not be read. | Ba a iya karanta rikodin shiga ba. | ☐ | |
@@ -2367,6 +2414,7 @@ instructions — but they are what an agent reads all day.
 | `colBackHome` | Back to home | Koma shafin farko | ☐ | |
 | `colOfflineTitle` | You are offline | Ba ka da intanet | ☐ | |
 | `colOfflineBody` | Revenue cannot be collected without a connection. Government payments must be confirmed by the payment system before a receipt exists. | Ba za a iya karbar haraji ba tare da intanet ba. Dole tsarin biyan kudi ya tabbatar da kudin gwamnati kafin a sami rasit. | ☐ | |
+| `colInvoiceReady` | Invoice {{number}} is ready to print or send. | Takardar biyan kudi {{number}} tana shirye don bugawa ko aikawa. | ☐ | |
 
 #### The taxpayer register
 
@@ -2546,6 +2594,8 @@ instructions — but they are what an agent reads all day.
 | `appDeviceAfterApproval` | You can register a device once PSIRS has approved your application. | Za ka iya yin rajistar na’ura da zarar PSIRS ta amince da bukatarka. | ☐ | |
 | `appRefereeWhoIs` | A referee is someone who knows you and can confirm your identity to PSIRS. | Mai shaida shi ne wanda ya san ka kuma zai iya tabbatar da kai ga PSIRS. | ☐ | |
 | `appRecordsWaiting` | saved records waiting to send | bayanan da aka ajiye suna jiran aikawa | ☐ | |
+| `appDraftsSynced` | {{count}} saved record(s) sent to PSIRS. | An aika bayanai {{count}} da aka ajiye zuwa PSIRS. | ☐ | |
+| `appDraftsSyncedRejected` | {{count}} saved record(s) sent to PSIRS, {{rejected}} need correction. | An aika bayanai {{count}} da aka ajiye zuwa PSIRS, {{rejected}} na bukatar gyara. | ☐ | |
 | `appSignOut` | Sign out | Fita | ☐ | |
 | `appSwitchLanguage` | Switch language | Canza harshe | ☐ | |
 | `appPageNotFound` | Page not found | Ba a sami shafin ba | ☐ | |
@@ -2835,6 +2885,8 @@ instructions — but they are what an agent reads all day.
 | `morePushTitle` | Instant Push Notifications | Sakonnin gargadi kai tsaye | ☐ | |
 | `moreContinue` | Continue | Ci gaba | ☐ | |
 | `morePushUnsupported` | Push notifications are not supported on this device or browser. | Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba. | ☐ | |
+| `morePayoutRequested` | Payout requested. It will be paid after finance approval. Reference {{reference}}. | An nemi biyan kudi. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}. | ☐ | |
+| `morePayoutClawback` | Payout requested for {{amount}}. {{gross}} of commission was eligible and {{clawback}} was deducted for transactions that were reversed after their commission had been paid. It will be paid after finance approval. Reference {{reference}}. | An nemi biyan {{amount}}. {{gross}} na kwamishan ya cancanta, an kuma cire {{clawback}} saboda ma’amalolin da aka juyar bayan an biya kwamishansu. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}. | ☐ | |
 | `moreDisablePushNotifications` | Disable Push Notifications | Kashe sanarwar turawa | ☐ | |
 | `moreSentToPsirsYour` | Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change. | An tura wa PSIRS. Kwamishan naka zai ci gaba da zuwa asusunka na yanzu har sai wani jami’i ya amince da canjin. | ☐ | |
 | `moreUnknownOwner` | Unknown owner | Ba a san mai shi ba | ☐ | |
@@ -2920,6 +2972,7 @@ instructions — but they are what an agent reads all day.
 | `errReference` | Reference | Lamba | ☐ | |
 | `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. | ☐ | |
 | `errUploadOffline` | You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection. | Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa. | ☐ | |
+| `errRequestFailed` | The request failed. Try again, or contact support. | Bukatar ba ta yi nasara ba. Ka sake gwadawa, ko ka tuntubi tallafi. | ☐ | |
 
 #### Shared controls
 
@@ -3668,6 +3721,7 @@ instructions — but they are what an agent reads all day.
 | `scanCameraDenied` | PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead. | PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar. | ☐ | |
 | `scanCameraMissing` | No camera was found on this device. Type the code instead. | Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar. | ☐ | |
 | `scanCameraUnsupported` | This browser cannot open the camera. Type the code instead. | Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar. | ☐ | |
+| `agStepCodeSentTo` | We sent a code to {{phone}}. It is only for this one action. | Mun aika lamba zuwa {{phone}}. Don wannan aiki daya kadai ne. | ☐ | |
 | `statusPaid` | PAID / VERIFIED | AN BIYA / AN TABBATAR | ☐ | |
 | `statusPending` | PENDING | ANA JIRA | ☐ | |
 | `statusFailed` | FAILED | BA TA YI BA | ☐ | |

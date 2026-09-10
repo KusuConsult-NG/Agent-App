@@ -139,7 +139,9 @@ export function AllocationsScreen() {
    */
   async function release(round: Round, awardRow: Award) {
     await withJustification({
-      question: `Why is ${awardRow.taxpayer_name ?? 'this beneficiary'}'s ${awardRow.quantity} forfeited?`,
+      question: t.ofcAlForfeitWhy
+        .replace('{{name}}', awardRow.taxpayer_name ?? t.ofcAlThisBeneficiary)
+        .replace('{{quantity}}', String(awardRow.quantity)),
       minimum: 10,
       tooShort: t.ofcAlForfeitTooShort,
       run: async (reason) => {
@@ -166,7 +168,7 @@ export function AllocationsScreen() {
     if (each > total) return t.ofcAlOneBeneficiaryCannotReceive;
     if (!form.opensAt) return t.ofcAlWhenDoesCollectionOpen;
     if (form.closesAt && form.closesAt <= form.opensAt) {
-      return 'A round cannot close before it opens.';
+      return t.ofcAlRoundCannotCloseBeforeOpen;
     }
     return null;
   })();
@@ -412,7 +414,7 @@ export function AllocationsScreen() {
                         act(
                           row.id,
                           () => api.post(`/allocations/rounds/${row.id}/status`, { status: 'OPEN' }),
-                          `${row.name} is open. Awards can now be made.`,
+                          t.ofcAlRoundOpened.replace('{{name}}', row.name),
                         )
                       }
                     >{t.ofcRhOpen}</button>
@@ -427,7 +429,7 @@ export function AllocationsScreen() {
                           row.id,
                           () =>
                             api.post(`/allocations/rounds/${row.id}/status`, { status: 'CLOSED' }),
-                          `${row.name} is closed. No further awards.`,
+                          t.ofcAlRoundClosed.replace('{{name}}', row.name),
                         )
                       }
                     >{t.ofcKycClose}</button>

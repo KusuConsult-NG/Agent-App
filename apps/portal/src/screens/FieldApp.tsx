@@ -79,7 +79,9 @@ export function FieldAppScreen() {
     if (!VERSION.test(minimum.trim())) return t.ofcFaEnterTheMinimumVersion;
     if (!VERSION.test(recommended.trim())) return t.ofcFaEnterTheRecommendedVersion;
     if (compareVersions(minimum.trim(), recommended.trim()) > 0) {
-      return `A minimum of ${minimum.trim()} is above the recommended ${recommended.trim()}, so even a handset on the newest build would be refused.`;
+      return t.ofcFaMinimumAboveRecommended
+        .replace('{{minimum}}', minimum.trim())
+        .replace('{{recommended}}', recommended.trim());
     }
     if (notes.trim().length < 10) {
       return t.ofcFaSayWhyTheMinimum;
@@ -185,10 +187,13 @@ export function FieldAppScreen() {
           {stopping !== null && (
             <p className="field__hint">
               {stopping === 0
-                ? `No active handset is below ${minimum.trim()}.`
-                : `${stopping} of ${history.activeDevices} active handset${
-                    history.activeDevices === 1 ? '' : 's'
-                  } would stop collecting until they update.`}
+                ? t.ofcFaNoHandsetBelow.replace('{{version}}', minimum.trim())
+                : (history.activeDevices === 1
+                    ? t.ofcFaHandsetWouldStop
+                    : t.ofcFaHandsetsWouldStop
+                  )
+                    .replace('{{count}}', String(stopping))
+                    .replace('{{total}}', String(history.activeDevices))}
             </p>
           )}
         </div>

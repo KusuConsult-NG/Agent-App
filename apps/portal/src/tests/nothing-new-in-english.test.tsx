@@ -305,11 +305,79 @@ function capitalisedLiteralsIn(source: string): string[] {
   const found: string[] = [];
   for (const match of code.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"/g)) {
     const text = (match[1] ?? match[2] ?? '').trim();
-    // A capitalised word followed by a lowercase one is how prose starts, and
-    // is not how an enum value, a route or a CSS length is written.
-    if (!/^[A-Z][a-z]/.test(text)) continue;
+    /*
+     * A capitalised word followed by a lowercase one is how prose starts, and
+     * is not how an enum value, a route or a CSS length is written — except
+     * when the first word is a single letter. `A rate cannot be negative.`
+     * fails that test on its second character, and three real refusals were
+     * sitting behind it: two in `Configuration`, one in `Allocations`, each
+     * telling an officer why the platform will not accept what they typed.
+     * So a capital followed by a second word counts too.
+     */
+    if (!/^[A-Z][a-z]/.test(text) && !(/^[A-Z]/.test(text) && wordsIn(text) >= 2)) continue;
     if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
     found.push(text);
+  }
+  return found;
+}
+
+/**
+ * Words, for the purpose of telling prose from a class name.
+ *
+ * Counted as runs of two or more letters, so `flag(s)` and `10` do not pad a
+ * fragment up to the threshold and a `card card--tight` never reaches it.
+ */
+function wordsIn(text: string): number {
+  return text.split(/\s+/).filter((word) => /[A-Za-z]{2}/.test(word)).length;
+}
+
+/**
+ * The static text inside a template literal.
+ *
+ * The blind spot both of these files shared. Every rule above reads `'...'`
+ * and `"..."`; none of them read a backtick, and `withoutLiterals` blanks
+ * template literals before the JSX scan so they were invisible twice over.
+ * A backtick is exactly what somebody reaches for the moment a message has a
+ * value in it — which is most messages worth reading:
+ *
+ *     setMessage(`Reversal executed as ${result.refundReference}.`)
+ *
+ * Nineteen of those were reaching officers in the portal and three in the
+ * agent app, past a check that had been green the whole time.
+ *
+ * The interpolations are the split points, so each static run is tested on its
+ * own: `${API}/auth/login` yields no capitalised run, and a real sentence does.
+ */
+function templateTextIn(source: string): string[] {
+  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  const found: string[] = [];
+  for (const literal of code.matchAll(/`((?:[^`\\]|\\.)*)`/g)) {
+    const chunks = literal[1].split(/\$\{[^}]*\}/);
+    /*
+     * A template that opens in lower case is a developer's line, whole.
+     *
+     * The same convention the thrown-message rule uses, applied to the
+     * literal rather than to each piece of it — because the pieces after an
+     * interpolation are mid-sentence and carry no capital to judge them by.
+     * `request failed with status ${status}` is exempt; so is a class name
+     * like `alert alert--${kind}`. A literal that opens with its value, and
+     * so has an empty first chunk, is not exempt: that is exactly the shape
+     * this rule exists to catch.
+     */
+    if (/^[a-z]/.test(chunks[0])) continue;
+    for (const chunk of chunks) {
+      const text = chunk.trim();
+      if (!/[A-Za-z]{2}/.test(text)) continue;
+      if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
+      // A capital opens a sentence; three words in a row continue one. The
+      // second half is not a refinement — it is most of the rule. A message
+      // that begins with its value, `${name}'s account has been changed.`,
+      // hands its opening capital to the interpolation and leaves a chunk
+      // starting with an apostrophe, so the capital test alone reads the
+      // remainder of a sentence as though it were a class name.
+      if (!/^[A-Z][a-z]/.test(text) && wordsIn(text) < 3) continue;
+      found.push(text);
+    }
   }
   return found;
 }
@@ -324,6 +392,7 @@ describe('no screen has English of its own', () => {
     const offenders: string[] = [];
     for (const [path, source] of Object.entries(ALL_SOURCES)) {
       for (const text of capitalisedLiteralsIn(source)) offenders.push(`${path}: ${text}`);
+      for (const text of templateTextIn(source)) offenders.push(`${path}: ${text}`);
     }
     expect(offenders).toEqual([]);
   });

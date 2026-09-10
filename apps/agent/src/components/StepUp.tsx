@@ -121,7 +121,7 @@ export function StepUpPrompt({
         {sending
           ? t.agStepSendingACode
           : destination
-            ? `We sent a code to ${maskPhone(destination)}. It is only for this one action.`
+            ? t.agStepCodeSentTo.replace('{{phone}}', maskPhone(destination))
             : t.agStepCodeSentToNumber}
       </p>
 

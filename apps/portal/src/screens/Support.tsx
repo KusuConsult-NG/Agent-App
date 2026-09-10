@@ -211,7 +211,7 @@ export function TicketDetailScreen({
         ...(status === 'RESOLVED' ? { resolution } : {}),
       });
       setResolution('');
-      setMessage(`Ticket moved to ${enumLabel(status, t)}.`);
+      setMessage(t.ofcSpTicketMoved.replace('{{status}}', enumLabel(status, t)));
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);

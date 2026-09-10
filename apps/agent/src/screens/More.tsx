@@ -9,6 +9,7 @@ import {
   newIdempotencyKey,
   type ApiError,
 } from '../lib/api';
+import { formatNaira, parseKobo } from '@psirs/shared';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
 import {
@@ -465,11 +466,32 @@ export function CommissionScreen() {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ payoutReference: string; message: string }>(
-        '/agents/me/commission/payout',
-      );
+      const result = await api.post<{
+        payoutReference: string;
+        amountKobo: string;
+        grossKobo: string;
+        clawbackAppliedKobo: string;
+      }>('/agents/me/commission/payout');
       setAuthorising(false);
-      setMessage(`${result.message} Reference ${result.payoutReference}.`);
+      /*
+       * Composed here rather than rendered from `result.message`.
+       *
+       * The API writes that sentence in English — and when a clawback applies
+       * it is not a courtesy line but the explanation of why an agent is being
+       * paid less than they expected, with three figures in it. An agent
+       * reading Hausa was getting it in English. The server still returns the
+       * message for anything else that calls the endpoint; the amounts are
+       * what this screen reads.
+       */
+      setMessage(
+        result.clawbackAppliedKobo && parseKobo(result.clawbackAppliedKobo) > 0n
+          ? t.morePayoutClawback
+              .replace('{{amount}}', formatNaira(result.amountKobo))
+              .replace('{{gross}}', formatNaira(result.grossKobo))
+              .replace('{{clawback}}', formatNaira(result.clawbackAppliedKobo))
+              .replace('{{reference}}', result.payoutReference)
+          : t.morePayoutRequested.replace('{{reference}}', result.payoutReference),
+      );
       await load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);

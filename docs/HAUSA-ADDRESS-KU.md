@@ -17,9 +17,9 @@ Paradigm: **ku** — polite plural (gender-neutral).
 | `(^\|[^\p{L}’'])[Mm]aka(?![\p{L}])` | `muku` | **confirm this one** |
 | `(^\|[^\p{L}’'])[Kk]anka(?![\p{L}])` | `kanku` | **confirm this one** |
 
-332 strings, 460 occurrences.
+339 strings, 469 occurrences.
 
-## The agent app — 179 strings
+## The agent app — 180 strings
 
 ### `agEnBandSoFar`
 
@@ -518,6 +518,12 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: Too many attempts. Wait a moment and try again.
 - Now: Yunkuri sun yi yawa. Ka dan jira sannan ka sake gwadawa.
 - Would become: Yunkuri sun yi yawa. Ku dan jira sannan ku sake gwadawa.
+
+### `errRequestFailed`
+
+- English: The request failed. Try again, or contact support.
+- Now: Bukatar ba ta yi nasara ba. Ka sake gwadawa, ko ka tuntubi tallafi.
+- Would become: Bukatar ba ta yi nasara ba. Ku sake gwadawa, ko ku tuntubi tallafi.
 
 ### `errUpdateRequired`
 
@@ -1095,7 +1101,7 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - Now: Ka duba murabba’in da ke kan rasit, ko ka rubuta lambar da ke kasansa. PSIRS na tabbatar ko an bayar da rasit — karanta lambar kawai yana gaya maka abin da ke kan takardar.
 - Would become: Ku duba murabba’in da ke kan rasit, ko ku rubuta lambar da ke kasansa. PSIRS na tabbatar ko an bayar da rasit — karanta lambar kawai yana gaya muku abin da ke kan takardar.
 
-## The officer portal — 111 strings
+## The officer portal — 117 strings
 
 ### `ofcAcEndThisOne`
 
@@ -1108,6 +1114,12 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: Every browser this account is signed in on. End any you do not recognise, then change your password.
 - Now: Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.
 - Would become: Kowane burauza da wannan asusun ya shiga a ciki. Ku kawo karshen duk wanda ba ku gane ba, sannan ku canza kalmar sirri.
+
+### `ofcAgConfirmHowPrompt`
+
+- English: Say how you confirmed this change with {{name}} (at least 10 characters):
+- Now: Ka bayyana yadda ka tabbatar da wannan canji tare da {{name}} (akalla haruffa 10):
+- Would become: Ku bayyana yadda ku tabbatar da wannan canji tare da {{name}} (akalla haruffa 10):
 
 ### `ofcAgDecisionRecorded`
 
@@ -1132,6 +1144,12 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: Patterns that suggest a referee relationship is not genuine. Nothing is blocked while a flag is merely open — but a flag you uphold stops that referee being cleared until somebody dismisses it with their findings.
 - Now: Alamun da ke nuna dangantakar mai shaida ba ta gaskiya ba ce. Ba a hana komai yayin da alama take a bude kawai — amma alamar da ka tabbatar tana hana a ba wa mai shaidan izini har sai wani ya soke ta da abin da ya gano.
 - Would become: Alamun da ke nuna dangantakar mai shaida ba ta gaskiya ba ce. Ba a hana komai yayin da alama take a bude kawai — amma alamar da ku tabbatar tana hana a ba wa mai shaidan izini har sai wani ya soke ta da abin da ya gano.
+
+### `ofcAgRefuseWhyPrompt`
+
+- English: Say why this change is being refused (at least 10 characters):
+- Now: Ka bayyana dalilin da ya sa ake ki wannan canji (akalla haruffa 10):
+- Would become: Ku bayyana dalilin da ya sa ake ki wannan canji (akalla haruffa 10):
 
 ### `ofcAgTheBankVerificationService`
 
@@ -1205,11 +1223,29 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - Now: Ka bayar da dalilin canjin farashin, a cikin akalla haruffa 10.
 - Would become: Ku bayar da dalilin canjin farashin, a cikin akalla haruffa 10.
 
+### `ofcCfItemAdded`
+
+- English: {{name}} has been added to the catalogue. It has no rate yet, so it cannot be assessed until you set one.
+- Now: An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ka saita daya.
+- Would become: An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ku saita daya.
+
 ### `ofcCfNoEligibleYet`
 
 - English: No eligible taxpayers yet. Run "Evaluate all" to assess the active taxpayer population.
 - Now: Babu masu biyan haraji da suka cancanta tukuna. Ka gudanar da “Duba duka” domin auna masu biyan harajin da ke aiki.
 - Would become: Babu masu biyan haraji da suka cancanta tukuna. Ku gudanar da “Duba duka” domin auna masu biyan harajin da ke aiki.
+
+### `ofcCfNotAPercentage`
+
+- English: “{{value}}” is not a percentage. Enter it as 5 or 5.00.
+- Now: “{{value}}” ba kaso ne ba. Ka shigar da shi kamar 5 ko 5.00.
+- Would become: “{{value}}” ba kaso ne ba. Ku shigar da shi kamar 5 ko 5.00.
+
+### `ofcCfNotAnAmount`
+
+- English: “{{amount}}” is not an amount in naira. Enter it as 15000 or 15000.00.
+- Now: “{{amount}}” ba adadi ne a naira ba. Ka shigar da shi kamar 15000 ko 15000.00.
+- Would become: “{{amount}}” ba adadi ne a naira ba. Ku shigar da shi kamar 15000 ko 15000.00.
 
 ### `ofcCwNotYours`
 
@@ -1372,6 +1408,12 @@ Paradigm: **ku** — polite plural (gender-neutral).
 - English: Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed.
 - Now: Ka fada yadda aka warware matsalar, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan bambancin.
 - Would become: Ku fada yadda aka warware matsalar, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan bambancin.
+
+### `ofcFnSettlementDisputed`
+
+- English: {{reference}} recorded and disputed: the credit does not match the collections it covers, so none of them have been settled. Close the dispute once the rest of the money is accounted for.
+- Now: An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ka rufe takaddamar idan an gano sauran kudin.
+- Would become: An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ku rufe takaddamar idan an gano sauran kudin.
 
 ### `ofcFnTransferReferenceTooShort`
 

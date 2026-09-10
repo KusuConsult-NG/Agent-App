@@ -927,8 +927,8 @@ export function BankChangesCard() {
   function decide(change: PendingBankChange, decision: 'APPROVE' | 'REJECT') {
     const reason = window.prompt(
       decision === 'APPROVE'
-        ? `Say how you confirmed this change with ${change.agentName} (at least 10 characters):`
-        : `Say why this change is being refused (at least 10 characters):`,
+        ? t.ofcAgConfirmHowPrompt.replace('{{name}}', change.agentName)
+        : t.ofcAgRefuseWhyPrompt,
     );
     if (reason === null) return;
     if (reason.trim().length < 10) {
@@ -945,12 +945,20 @@ export function BankChangesCard() {
         `/government/approvals/${change.approvalId}/decide`,
         { decision, reason: reason.trim() },
       );
-      return (
-        result.message ??
-        (decision === 'APPROVE'
-          ? `${change.agentName}'s commission account has been changed.`
-          : `The change for ${change.agentName} was refused. Their existing account is unchanged.`)
-      );
+      /*
+       * The officer's screen decides what the officer reads.
+       *
+       * This was `result.message ?? …`, so the API's English sentence was
+       * preferred to the two translated ones sitting right behind it — the
+       * same shape as `err.message || t.fallback`, which this application has
+       * now been found carrying nine times. The server still returns the
+       * message for anything else that calls the endpoint; the portal no
+       * longer renders it.
+       */
+      void result;
+      return decision === 'APPROVE'
+        ? t.ofcAgAccountChanged.replace('{{name}}', change.agentName)
+        : t.ofcAgChangeRefused.replace('{{name}}', change.agentName);
     });
   }
 
@@ -998,14 +1006,22 @@ export function BankChangesCard() {
                         ? (change.verificationResolvedName ?? t.ofcAgConfirmedNoNameReturned)
                         : change.verificationStatus === 'PENDING'
                           ? t.ofcAgTheBankCouldNot
-                          : `Not confirmed${change.verificationReason ? `: ${change.verificationReason}` : ''}`,
+                          : change.verificationReason
+                            ? t.ofcAgNotConfirmedBecause.replace(
+                                '{{reason}}',
+                                change.verificationReason,
+                              )
+                            : t.ofcAgNotConfirmed,
                     ],
                     [t.ofcAgReasonGiven, change.requestedReason],
                     [
                       t.ofcAgAskedForBy,
                       change.requestedByRole === 'agent'
                         ? t.ofcAgTheAgent
-                        : `An officer (${change.requestedByRole ?? 'unknown role'})`,
+                        : t.ofcAgAnOfficer.replace(
+                            '{{role}}',
+                            change.requestedByRole ?? t.ofcAgUnknownRole,
+                          ),
                     ],
                     [t.ofcRhRequested, formatDateTime(change.requestedAt)],
                   ]}
@@ -1045,7 +1061,10 @@ export function BankChangesCard() {
                           );
                           return result.verified
                             ? t.ofcAgTheBankConfirmedThe
-                            : `The bank still did not confirm it (${result.outcome.toLowerCase()}).`;
+                            : t.ofcAgBankStillNotConfirmed.replace(
+                                '{{outcome}}',
+                                result.outcome.toLowerCase(),
+                              );
                         })
                       }
                     >{t.ofcAgAskBankAgain}</button>

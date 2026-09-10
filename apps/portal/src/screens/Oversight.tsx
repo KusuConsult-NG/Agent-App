@@ -171,7 +171,7 @@ export function FraudScreen() {
                     setSweepResult(
                       raised === 0
                         ? t.ofcOvSweepCompleteNothingNew
-                        : `Sweep complete. ${raised} flag(s) raised for review.`,
+                        : t.ofcOvSweepRaised.replace('{{count}}', String(raised)),
                     );
                     load();
                   } catch (caught) {
@@ -446,7 +446,9 @@ export function BackgroundWorkPanel() {
       <p className="card__hint">
         {health.healthy
           ? t.ofcOvEveryScheduledJobHas
-          : `${health.needingAttention} of ${health.jobs.length} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.`}
+          : t.ofcOvJobsNeedAttention
+              .replace('{{count}}', String(health.needingAttention))
+              .replace('{{total}}', String(health.jobs.length))}
       </p>
       <Table
         columns={[
