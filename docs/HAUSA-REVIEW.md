@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,180 strings; that one is two pages and links back
+> because it carries all 3,191 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,180 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,191 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,180 strings is worse than no sheet, because it looks complete; this one cannot
+3,191 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,180 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,191 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,180 strings: where the
+- The glossary below is applied consistently across all 3,191 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3101 strings, grouped by where an agent meets them. Lower stakes
+3112 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3162,6 +3162,17 @@ instructions — but they are what an agent reads all day.
 | `pubCitizenByPhone` | Registered phone number | Lambar wayar da aka yi rijista | ☐ | |
 | `pubCitizenByName` | Full name or business name | Cikakken suna ko sunan kasuwanci | ☐ | |
 | `pubCitizenTooMany` | Use your TIN or exact phone number for a precise result. | Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici. | ☐ | |
+| `pubRefereeThankYouCleared` | Thank you. Your verification has been completed and recorded. | Na gode. An kammala tantancewarka kuma an rubuta ta. | ☐ | |
+| `pubRefereeCouldNotVerify` | Your identity could not be verified. PSIRS may contact you for more information. | Ba a iya tantance wanene kai ba. PSIRS na iya tuntubarka domin karin bayani. | ☐ | |
+| `pubRefereeUnderReview` | Thank you. Your response has been recorded and is now being reviewed by PSIRS. | Na gode. An rubuta amsarka kuma yanzu PSIRS na duba ta. | ☐ | |
+| `pubRefereeDeclineRecorded` | Your decision has been recorded. The applicant will be told they need a different referee. | An rubuta shawararka. Za a gaya wa mai nema cewa yana bukatar wani mai shaida. | ☐ | |
+| `pubGroupAllConfirmed` | Thank you. You confirmed {{confirmed}} membership(s). | Na gode. Ka tabbatar da mambobi {{confirmed}}. | ☐ | |
+| `pubGroupSomeConfirmed` | Thank you. You confirmed {{confirmed}} membership(s) and did not confirm {{rejected}}. | Na gode. Ka tabbatar da mambobi {{confirmed}} kuma ba ka tabbatar da {{rejected}} ba. | ☐ | |
+| `pubCitizenNoTinMatch` | No taxpayer record found for that TIN. | Ba a sami rajistar mai biyan haraji da wannan TIN ba. | ☐ | |
+| `pubCitizenNoPhoneMatch` | No taxpayer record found for that phone number. | Ba a sami rajistar mai biyan haraji da wannan lambar waya ba. | ☐ | |
+| `pubCitizenNoNameMatch` | No record found with that name. | Ba a sami rajista da wannan suna ba. | ☐ | |
+| `pubCitizenOneMatch` | One matching record found. | An sami rajista guda daya da ta yi daidai. | ☐ | |
+| `pubCitizenManyMatches` | {{count}} records found with a similar name. | An sami rajista {{count}} masu kama da wannan suna. | ☐ | |
 | `pubCitizenStatusHeading` | Tax compliance status | Matsayin bin ka’idar haraji | ☐ | |
 | `pubCitizenCompliant` | Compliant | Ya bi ka’ida | ☐ | |
 | `pubCitizenArrears` | Has arrears | Yana da bashin haraji | ☐ | |

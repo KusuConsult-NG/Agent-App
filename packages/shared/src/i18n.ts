@@ -3330,6 +3330,30 @@ export interface TranslationDictionary {
   pubCitizenByPhone: string;
   pubCitizenByName: string;
   pubCitizenTooMany: string;
+  /*
+   * What a referee, a group leader and a citizen are told after they act.
+   *
+   * Each of these replaced a sentence the API composed and this portal
+   * rendered as it arrived. In every case the value the sentence is built
+   * from — the referee's resulting status, the confirmed and rejected
+   * counts, the number of name matches — was already on the wire beside it,
+   * so nothing new had to be sent; the screen was reaching past the data for
+   * the prose.
+   */
+  pubRefereeThankYouCleared: string;
+  pubRefereeCouldNotVerify: string;
+  pubRefereeUnderReview: string;
+  pubRefereeDeclineRecorded: string;
+  /** Carries {{confirmed}}. */
+  pubGroupAllConfirmed: string;
+  /** Carries {{confirmed}} and {{rejected}}. */
+  pubGroupSomeConfirmed: string;
+  pubCitizenNoTinMatch: string;
+  pubCitizenNoPhoneMatch: string;
+  pubCitizenNoNameMatch: string;
+  pubCitizenOneMatch: string;
+  /** Carries {{count}}. */
+  pubCitizenManyMatches: string;
   pubCitizenStatusHeading: string;
   pubCitizenCompliant: string;
   pubCitizenArrears: string;
@@ -6556,6 +6580,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    pubRefereeThankYouCleared: 'Thank you. Your verification has been completed and recorded.',
+    pubRefereeCouldNotVerify:
+      'Your identity could not be verified. PSIRS may contact you for more information.',
+    pubRefereeUnderReview:
+      'Thank you. Your response has been recorded and is now being reviewed by PSIRS.',
+    pubRefereeDeclineRecorded:
+      'Your decision has been recorded. The applicant will be told they need a different referee.',
+    pubGroupAllConfirmed: 'Thank you. You confirmed {{confirmed}} membership(s).',
+    pubGroupSomeConfirmed:
+      'Thank you. You confirmed {{confirmed}} membership(s) and did not confirm {{rejected}}.',
+    pubCitizenNoTinMatch: 'No taxpayer record found for that TIN.',
+    pubCitizenNoPhoneMatch: 'No taxpayer record found for that phone number.',
+    pubCitizenNoNameMatch: 'No record found with that name.',
+    pubCitizenOneMatch: 'One matching record found.',
+    pubCitizenManyMatches: '{{count}} records found with a similar name.',
     pubCitizenStatusHeading: 'Tax compliance status',
     pubCitizenCompliant: 'Compliant',
     pubCitizenArrears: 'Has arrears',
@@ -9776,6 +9815,21 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    pubRefereeThankYouCleared: 'Na gode. An kammala tantancewarka kuma an rubuta ta.',
+    pubRefereeCouldNotVerify:
+      'Ba a iya tantance wanene kai ba. PSIRS na iya tuntubarka domin karin bayani.',
+    pubRefereeUnderReview:
+      'Na gode. An rubuta amsarka kuma yanzu PSIRS na duba ta.',
+    pubRefereeDeclineRecorded:
+      'An rubuta shawararka. Za a gaya wa mai nema cewa yana bukatar wani mai shaida.',
+    pubGroupAllConfirmed: 'Na gode. Ka tabbatar da mambobi {{confirmed}}.',
+    pubGroupSomeConfirmed:
+      'Na gode. Ka tabbatar da mambobi {{confirmed}} kuma ba ka tabbatar da {{rejected}} ba.',
+    pubCitizenNoTinMatch: 'Ba a sami rajistar mai biyan haraji da wannan TIN ba.',
+    pubCitizenNoPhoneMatch: 'Ba a sami rajistar mai biyan haraji da wannan lambar waya ba.',
+    pubCitizenNoNameMatch: 'Ba a sami rajista da wannan suna ba.',
+    pubCitizenOneMatch: 'An sami rajista guda daya da ta yi daidai.',
+    pubCitizenManyMatches: 'An sami rajista {{count}} masu kama da wannan suna.',
     pubCitizenStatusHeading: 'Matsayin bin ka’idar haraji',
     pubCitizenCompliant: 'Ya bi ka’ida',
     pubCitizenArrears: 'Yana da bashin haraji',

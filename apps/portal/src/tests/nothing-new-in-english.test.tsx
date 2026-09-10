@@ -668,17 +668,24 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
   '../screens/Oversight.tsx:513 answer.message',
 
   /*
-   * The citizen-facing portal, which is the larger worry: six sentences a
-   * member of the public reads about their own compliance and their own
-   * referee invitation, on the one part of this platform built for people
-   * who do not work here.
+   * THE CITIZEN-FACING PORTAL
+   *
+   * What is left here is the last resort, not the ordinary path.
+   *
+   * The six sentences a member of the public read — the referee outcome, the
+   * decline, the attestation counts, the two empty searches and the name
+   * matches — are composed from the dictionary now. None of them needed
+   * anything new from the server: the status, the two counts and the number
+   * of matches were already on the wire beside the prose, and the screen was
+   * reaching past them for it.
+   *
+   * These two remain because both helpers answer `null` for a value this
+   * build has not met, which is what a deployment looks like while the API
+   * is ahead of the portal. A citizen given no answer at all is worse off
+   * than one given the answer in the wrong language.
    */
-  '../screens/Public.tsx:290 result.message',
-  '../screens/Public.tsx:305 result.message',
-  '../screens/Public.tsx:656 result.message',
-  '../screens/Public.tsx:1271 result.message',
-  '../screens/Public.tsx:1297 result.message',
-  '../screens/Public.tsx:1338 result.message',
+  '../screens/Public.tsx:302 result.message',
+  '../screens/Public.tsx:1414 result.message',
 
   /* Officer-facing confirmations: a rate changed, a group acted on. */
   '../screens/Configuration.tsx:520 result.message',

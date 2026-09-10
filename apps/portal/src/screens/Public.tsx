@@ -278,16 +278,28 @@ export function RefereePortalScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(`/referee/${token}/respond`, {
-        confirmsKnowsApplicant: declarations[0],
-        confirmsInformationAccurate: declarations[1],
-        willingToActAsReferee: declarations[2],
-        understandsConsequences: declarations[3],
-        identityType: identityNumber ? identityType : undefined,
-        identityNumber: identityNumber || undefined,
-        occupation: occupation || undefined,
-      });
-      setOutcome(result.message);
+      const result = await api.publicPost<{ status: string; message: string }>(
+        `/referee/${token}/respond`,
+        {
+          confirmsKnowsApplicant: declarations[0],
+          confirmsInformationAccurate: declarations[1],
+          willingToActAsReferee: declarations[2],
+          understandsConsequences: declarations[3],
+          identityType: identityNumber ? identityType : undefined,
+          identityNumber: identityNumber || undefined,
+          occupation: occupation || undefined,
+        },
+      );
+      /*
+       * The status was already on the wire beside the sentence.
+       *
+       * A referee is not a taxpayer and not staff — they are somebody doing
+       * an applicant a favour, with no other dealings with PSIRS. Being told
+       * in English that their identity could not be verified, having chosen
+       * Hausa on the page they are standing on, is the worst sentence here
+       * to get wrong, and the screen had everything it needed to say it.
+       */
+      setOutcome(refereeOutcome(result.status, t) ?? result.message);
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -299,10 +311,11 @@ export function RefereePortalScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(`/referee/${token}/decline`, {
+      await api.publicPost<{ message: string }>(`/referee/${token}/decline`, {
         reason: declineReason.trim() || undefined,
       });
-      setOutcome(result.message);
+      // One outcome, so one sentence: the decision is recorded either way.
+      setOutcome(t.pubRefereeDeclineRecorded);
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -646,14 +659,26 @@ export function GroupAttestationScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(
-        `/group-attestation/${token}/confirm`,
-        {
-          confirmedMemberIds: pending.filter((m) => answers[m.id] === 'YES').map((m) => m.id),
-          rejectedMemberIds: pending.filter((m) => answers[m.id] === 'NO').map((m) => m.id),
-        },
+      const result = await api.publicPost<{
+        attested: number;
+        rejected: number;
+        message: string;
+      }>(`/group-attestation/${token}/confirm`, {
+        confirmedMemberIds: pending.filter((m) => answers[m.id] === 'YES').map((m) => m.id),
+        rejectedMemberIds: pending.filter((m) => answers[m.id] === 'NO').map((m) => m.id),
+      });
+      /*
+       * Both counts came back with the sentence built from them. A group
+       * leader confirming a membership list is deciding who gets counted in
+       * an allocation, so the two numbers are the part worth reading.
+       */
+      setOutcome(
+        result.rejected > 0
+          ? t.pubGroupSomeConfirmed
+              .replace('{{confirmed}}', String(result.attested))
+              .replace('{{rejected}}', String(result.rejected))
+          : t.pubGroupAllConfirmed.replace('{{confirmed}}', String(result.attested)),
       );
-      setOutcome(result.message);
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
     } finally {
@@ -1163,6 +1188,39 @@ function levyName(row: { revenueItem: string; revenueItemHa: string | null }, la
  * to the API and not here is a gap that shows up as English, which is visible;
  * rendering an empty paragraph would not be.
  */
+/**
+ * Which search came back empty, which the screen knows because it ran it.
+ *
+ * The API composed this sentence and the portal printed it. Nothing had to
+ * be sent for the screen to say it itself: `mode` is the button the person
+ * pressed.
+ */
+function noMatch(mode: SearchMode, t: TranslationDictionary): string {
+  if (mode === 'tin') return t.pubCitizenNoTinMatch;
+  if (mode === 'phone') return t.pubCitizenNoPhoneMatch;
+  return t.pubCitizenNoNameMatch;
+}
+
+/**
+ * What a referee is told, from the status the response already carries.
+ *
+ * `null` for a status this build has not met, so the caller can fall back to
+ * the server's sentence rather than show a blank where the answer belongs.
+ */
+function refereeOutcome(status: string | undefined, t: TranslationDictionary): string | null {
+  switch (status) {
+    case 'CLEARED':
+      return t.pubRefereeThankYouCleared;
+    case 'FAILED':
+      return t.pubRefereeCouldNotVerify;
+    case 'UNDER_REVIEW':
+    case 'PENDING':
+      return t.pubRefereeUnderReview;
+    default:
+      return null;
+  }
+}
+
 function statusMessage(status: string | undefined, t: TranslationDictionary): string | null {
   switch (status) {
     case 'COMPLIANT':
@@ -1268,12 +1326,18 @@ export function CitizenPortalScreen() {
               <p className="verdict__mark">×</p>
               <p className="verdict__label">{t.pubVerdictNotFound}</p>
             </div>
-            <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
-            {result.count !== undefined && result.count > 1 && (
-              <p style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                {t.pubCitizenTooMany}
-              </p>
-            )}
+            {/*
+              * The sentence names the search that came back empty, and the
+              * screen is what knows which one that was.
+              *
+              * The "use your TIN or exact phone number" hint used to sit
+              * here, behind `count > 1`. It could not run: the API answers a
+              * name search with `found: count > 0`, so more than one match
+              * means `found` is true and this whole block is skipped. The
+              * hint is now in the branch that actually renders when several
+              * people share a name, which is the only time anybody needs it.
+              */}
+            <p style={{ fontSize: '0.87rem' }}>{noMatch(mode, t)}</p>
           </div>
         )}
 
@@ -1294,7 +1358,19 @@ export function CitizenPortalScreen() {
           */}
         {result?.found && result.complianceStatus === undefined && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: '0.87rem', margin: 0 }}>{result.message}</p>
+            <p style={{ fontSize: '0.87rem', margin: 0 }}>
+              {result.count === 1
+                ? t.pubCitizenOneMatch
+                : t.pubCitizenManyMatches.replace('{{count}}', String(result.count ?? 0))}
+            </p>
+            {/*
+              * And how to get to a specific record, which is the point of
+              * telling somebody their name matched at all. This is where the
+              * hint belongs — it is unreachable in the not-found block above.
+              */}
+            <p style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: '4px 0 0' }}>
+              {t.pubCitizenTooMany}
+            </p>
           </div>
         )}
 
