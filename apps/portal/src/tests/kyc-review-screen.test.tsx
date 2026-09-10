@@ -415,3 +415,71 @@ describe('who has looked at somebody’s identity papers', () => {
     await waitFor(() => expect(screen.getByText(/could not be read|could not be loaded/i)).toBeTruthy());
   });
 });
+
+/**
+ * The list itself, which had the fault its own access log was fixed for.
+ *
+ * The access log above already distinguishes "asked and refused" from "asked
+ * and there is nothing" — its comment says why: "evidence that reports a
+ * failure as a finding is worse than evidence that is missing". The list of
+ * documents, twenty lines up in the same file, did not. `setDocuments([])` in
+ * the catch printed "This applicant has not submitted any documents."
+ *
+ * What happens next on this screen is a decision about whether somebody
+ * becomes a government revenue agent. The screen's own warning — "approving
+ * this applicant without opening them means the identity check rests on the
+ * provider's automated answer alone" — describes exactly the position an
+ * officer is put in by being told there is nothing to open.
+ */
+describe('a document list that could not be read', () => {
+  it('does not report it as an applicant who submitted nothing', async () => {
+    vi.spyOn(api, 'get').mockRejectedValue(
+      new ApiRequestError(503, {
+        code: 'STORAGE_UNAVAILABLE',
+        message: 'The document store could not be reached.',
+        moneyStatus: 'NOT_APPLICABLE',
+      }),
+    );
+
+    render(<KycDocumentsCard agentId={AGENT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/document store could not be reached/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/has not submitted any documents/i)).toBeNull();
+  });
+
+  it('offers to ask again', async () => {
+    const get = vi
+      .spyOn(api, 'get')
+      .mockRejectedValueOnce(
+        new ApiRequestError(503, {
+          code: 'STORAGE_UNAVAILABLE',
+          message: 'The document store could not be reached.',
+          moneyStatus: 'NOT_APPLICABLE',
+        }),
+      )
+      .mockResolvedValueOnce({ documents: [doc()] } as never);
+
+    render(<KycDocumentsCard agentId={AGENT_ID} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Try again/i }));
+
+    await waitFor(() => expect(screen.getByText(/IDENTITY|Identity/)).toBeTruthy());
+    expect(get).toHaveBeenCalledTimes(2);
+  });
+
+  /*
+   * The control. An applicant who really has uploaded nothing is a thing the
+   * officer needs told plainly — it is the commonest reason a clearance is
+   * sitting still.
+   */
+  it('still says so when the applicant really has submitted nothing', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ documents: [] } as never);
+
+    render(<KycDocumentsCard agentId={AGENT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/has not submitted any documents/i)).toBeTruthy(),
+    );
+  });
+});

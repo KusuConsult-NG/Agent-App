@@ -80,16 +80,33 @@ export function KycDocumentsCard({
   const { t } = usePortalI18n();
   const [documents, setDocuments] = useState<KycDocument[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The same distinction the access log below already makes, on the list
+   * itself.
+   *
+   * `setDocuments([])` on a failure printed "This applicant has not submitted
+   * any documents." — and the next thing that happens on this screen is a
+   * decision about whether somebody becomes a government revenue agent. The
+   * warning two lines down exists because approving without opening the
+   * documents rests the identity check on an automated answer alone; being
+   * told there are none to open is the same thing, arrived at by accident.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<KycDocument | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ documents: KycDocument[] }>(`/agents/${agentId}/kyc/documents`)
-      .then((data) => setDocuments(data.documents))
+      .then((data) => {
+        setDocuments(data.documents);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setDocuments([]);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [agentId]);
 
@@ -111,7 +128,12 @@ export function KycDocumentsCard({
         </Alert>
       )}
 
-      {!documents ? (
+      {loadError ? (
+        <>
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </>
+      ) : !documents ? (
         <Loading />
       ) : documents.length === 0 ? (
         <Empty>{t.ofcKycNoDocuments}</Empty>

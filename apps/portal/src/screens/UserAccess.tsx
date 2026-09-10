@@ -78,6 +78,7 @@ const TERRITORY_SCOPED_ROLES = ['supervisor'];
 export function UserAccessScreen({ user }: { user: User }) {
   const { lang, t } = usePortalI18n();
   const [users, setUsers] = useState<PortalUser[] | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<PortalUser | null>(null);
@@ -100,10 +101,23 @@ export function UserAccessScreen({ user }: { user: User }) {
   const load = useCallback(() => {
     api
       .get<{ users: PortalUser[] }>('/government/users')
-      .then((data) => setUsers(data.users))
+      .then((data) => {
+        setUsers(data.users);
+        setLoadError(null);
+      })
+      /*
+       * A register that could not be read, kept apart from an action that was
+       * refused. The catch used to write `[]`, and an empty table prints "No
+       * officers are recorded." — on the screen that answers who can sign in
+       * to this platform at all. An administrator checking whether a departed
+       * colleague still has access was one failed request away from being
+       * told nobody does.
+       */
       .catch((caught) => {
-        setUsers([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -259,7 +273,7 @@ export function UserAccessScreen({ user }: { user: User }) {
     }
   }
 
-  if (!users) return <Loading rows={5} />;
+  if (!users && !loadError) return <Loading rows={5} />;
 
   return (
     <>
@@ -512,6 +526,14 @@ export function UserAccessScreen({ user }: { user: User }) {
         />
       )}
 
+      {loadError && (
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
+      {!loadError && (
       <div className="card card--flush">
         <Table
           columns={[
@@ -585,10 +607,11 @@ export function UserAccessScreen({ user }: { user: User }) {
                 ),
             },
           ]}
-          rows={users}
+          rows={users ?? []}
           empty="ofcNoneOfficersRecorded"
         />
       </div>
+      )}
     </>
   );
 }
