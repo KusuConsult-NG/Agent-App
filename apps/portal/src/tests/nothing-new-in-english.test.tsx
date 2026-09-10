@@ -25,6 +25,21 @@ const SOURCES: Record<string, string> = {
   ...(import.meta.glob('../screens/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
   ...(import.meta.glob('../App.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
   ...(import.meta.glob('../ui.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
+  /*
+   * And `lib/`, which was outside this check until an untested screen led
+   * back into it.
+   *
+   * The agent's copy of this file was extended to its own `lib/` earlier
+   * today, after six English sentences were found being thrown from modules
+   * and rendered in preference to the translation beside them. This one was
+   * not, and `stepUp` — the guard on every consequential money decision an
+   * officer makes — asked for its one-time code in an English `window.prompt`
+   * and threw an English sentence when it did not get one.
+   *
+   * A screen cannot be trusted to be clean while the module it calls on its
+   * most guarded path is not read at all.
+   */
+  ...(import.meta.glob(['../lib/*.ts', '!../lib/*.test.ts'], { query: '?raw', import: 'default', eager: true }) as Record<string, string>),
 };
 
 /**
@@ -233,6 +248,11 @@ describe('the portal stays translated', () => {
      */
     const offenders: string[] = [];
     for (const [path, source] of Object.entries(SOURCES)) {
+      // The rules above read JSX — props, children, rendered object fields.
+      // A `.ts` module has none, and pointing them at one makes them read
+      // type annotations as prose: `( path: string, options:` is a signature.
+      // The literal rules below cover those files, and cover them better.
+      if (!path.endsWith('.tsx')) continue;
       for (const text of englishIn(source)) offenders.push(`${path}: ${text}`);
     }
     expect(offenders).toEqual([]);
@@ -263,6 +283,45 @@ describe('the portal stays translated', () => {
  * sees everything the other one cannot.
  */
 const ALL_SOURCES = SOURCES;
+
+/**
+ * Declaration syntax, which a file of components never showed this check.
+ *
+ * Every rule above was tuned against `.tsx`, where the text between two angle
+ * brackets is nearly always JSX. In a `.ts` module the angle brackets are
+ * generics and the runs between them are signatures — `public getState():
+ * PrinterDeviceState`, `(path: string, file: Blob): Promise`. They are not
+ * prose and never were; the check had simply never been pointed at a file
+ * that contains them.
+ *
+ * Matched on shape rather than on a list of names, for the reason the comment
+ * above gives: a bare word matches prose, and `class` or `return` in a
+ * sentence would excuse the sentence.
+ */
+function looksLikeTypeScript(text: string): boolean {
+  return (
+    /\b(?:public|private|protected|readonly|class|function|return|implements|extends)\s/.test(text) ||
+    // A return type or a typed parameter: `): Promise`, `(path: string`.
+    /\)\s*:\s*[A-Z]/.test(text) ||
+    /\(\s*\w+\s*:\s*[A-Z]/.test(text) ||
+    // `(path), post:` — an object literal of methods, caught mid-key.
+    /^\(\w+\)/.test(text) ||
+    /\|\s*null\b/.test(text)
+  );
+}
+
+/**
+ * A class, an error name, or a DOM interface — never a sentence.
+ *
+ * `AbortError`, `PushManager`, `CameraUnavailable`, `NotAllowedError`: names
+ * compared against `error.name` or used to test for a browser feature. Matched
+ * on shape — one word, no spaces, with a capital inside it — because that
+ * shape is not one anybody writes on a screen, and a list of names would go
+ * stale the first time somebody added an error class.
+ */
+function isIdentifier(text: string): boolean {
+  return /^[A-Z][A-Za-z0-9]*[A-Z][A-Za-z0-9]*$/.test(text);
+}
 
 /**
  * Literals that are right as they stand, each for a stated reason.
@@ -297,6 +356,8 @@ const ALLOWED_LITERALS = new Set([
   'Ended by the officer',
   // Wire values and identifiers that happen to be capitalised.
   'Bearer ',
+  // The same value as a template chunk, which arrives trimmed.
+  'Bearer',
   'Content-Type',
 ]);
 
@@ -316,6 +377,9 @@ function capitalisedLiteralsIn(source: string): string[] {
      */
     if (!/^[A-Z][a-z]/.test(text) && !(/^[A-Z]/.test(text) && wordsIn(text) >= 2)) continue;
     if (KEYS.has(text) || ALLOWED_LITERALS.has(text)) continue;
+    // `ApiRequestError` is a class and `Promise<Response>` a signature.
+    // Neither is prose, and both open with a capital and a lower-case letter.
+    if (isIdentifier(text) || looksLikeTypeScript(text)) continue;
     found.push(text);
   }
   return found;
@@ -376,6 +440,7 @@ function templateTextIn(source: string): string[] {
       // starting with an apostrophe, so the capital test alone reads the
       // remainder of a sentence as though it were a class name.
       if (!/^[A-Z][a-z]/.test(text) && wordsIn(text) < 3) continue;
+      if (isIdentifier(text) || looksLikeTypeScript(text)) continue;
       found.push(text);
     }
   }

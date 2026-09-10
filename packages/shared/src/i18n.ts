@@ -3007,6 +3007,8 @@ export interface TranslationDictionary {
   connOfflineDetail: string;
   appRecordsWaiting: string;
   stepUpSignInAgain: string;
+  stepUpEnterCode: string;
+  stepUpCodeRequired: string;
   morePushUnsupported: string;
   errUploadFailed: string;
   errUploadOffline: string;
@@ -6168,6 +6170,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     connOfflineDetail: "You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline.",
     appRecordsWaiting: "saved records waiting to send",
     stepUpSignInAgain: "Sign in again to request a code.",
+    stepUpEnterCode: "Enter the one-time code sent to your phone to authorise this action:",
+    stepUpCodeRequired: "A one-time code is required to continue.",
     morePushUnsupported: "Push notifications are not supported on this device or browser.",
     errUploadFailed: "The document could not be sent. Try again.",
     errUploadOffline: "You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection.",
@@ -9298,6 +9302,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     connOfflineDetail: "Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa.",
     appRecordsWaiting: "bayanan da aka ajiye suna jiran aikawa",
     stepUpSignInAgain: "Ka sake shiga don neman lamba.",
+    stepUpEnterCode: "Ka shigar da lambar sirri da aka aika zuwa wayarka domin amincewa da wannan aikin:",
+    stepUpCodeRequired: "Ana bukatar lambar sirri kafin a ci gaba.",
     morePushUnsupported: "Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba.",
     errUploadFailed: "Ba a iya aika takardar ba. Ka sake gwadawa.",
     errUploadOffline: "Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa.",

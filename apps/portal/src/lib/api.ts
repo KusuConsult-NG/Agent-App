@@ -7,6 +7,9 @@
  * (PRD §62, §54).
  */
 
+import { getTranslation } from '@psirs/shared';
+import { getPortalLanguage } from './i18n';
+
 const API_BASE = '/api/v1';
 
 export interface ApiError {
@@ -125,8 +128,11 @@ export async function fetchFile(path: string): Promise<Blob> {
     // The file endpoints answer JSON on failure, so the reviewer is told why
     // rather than being handed a broken image.
     let error: ApiError = {
-      code: 'UNKNOWN',
-      message: `The document could not be loaded (${response.status}).`,
+      code: 'DOCUMENT_FAILED',
+      // Never rendered: `DOCUMENT_FAILED` is in `TRANSLATED_ERRORS`, so
+      // `ErrorAlert` shows the dictionary and ignores this. Lower case, this
+      // codebase's mark for a line nobody reads.
+      message: `document could not be loaded, status ${response.status}`,
       moneyStatus: 'NOT_APPLICABLE',
     };
     try {
@@ -176,7 +182,8 @@ async function raw<T>(
   if (!response.ok) {
     const error = (payload as { error?: ApiError })?.error ?? {
       code: 'UNKNOWN',
-      message: `The request failed (${response.status}).`,
+      // Never rendered: see `DOCUMENT_FAILED` above.
+      message: `request failed with status ${response.status}`,
       moneyStatus: 'NOT_APPLICABLE',
     };
     throw new ApiRequestError(response.status, error, payload);
@@ -277,11 +284,42 @@ export async function stepUp(action: string, phone: string): Promise<void> {
     purpose: 'STEP_UP',
   });
 
-  const code =
-    otp.developmentCode ??
-    window.prompt('Enter the one-time code sent to your phone to authorise this action:');
+  /*
+   * Asked, and refused, in the officer's own language.
+   *
+   * Step-up guards every consequential money decision in this portal — signing
+   * an audit report, approving a payout, reversing a payment — and both of
+   * these sentences were English literals in a module the English-literal
+   * check did not read. The officer portal has offered Hausa since it was
+   * translated; this was the one prompt that never was.
+   *
+   * Resolved through `getTranslation` rather than a hook because this is not a
+   * component: it is called from inside the handler, after the officer has
+   * already pressed the button.
+   */
+  const t = getTranslation(getPortalLanguage());
+  const code = otp.developmentCode ?? window.prompt(t.stepUpEnterCode);
 
-  if (!code) throw new Error('A one-time code is required to continue.');
+  /*
+   * Thrown as an `ApiRequestError`, deliberately, though no request failed.
+   *
+   * Thirty-three handlers across this portal write
+   * `caught instanceof ApiRequestError ? caught.error : null` — so anything
+   * else lands as `null` and the officer is shown nothing at all. Pressing
+   * "sign the report", dismissing the code prompt, and watching the button
+   * stop spinning with no explanation was the whole of the feedback.
+   *
+   * Giving it the shape those handlers already read is the change that reaches
+   * every one of them. That the shape is named for requests is a fair
+   * complaint about the name; it is not a reason to leave an officer guessing.
+   */
+  if (!code) {
+    throw new ApiRequestError(0, {
+      code: 'STEP_UP_ABANDONED',
+      message: t.stepUpCodeRequired,
+      moneyStatus: 'NOT_APPLICABLE',
+    });
+  }
   await api.post('/auth/step-up', { action, destination: phone, code });
 }
 
@@ -331,7 +369,8 @@ export async function uploadFile(path: string, file: File): Promise<unknown> {
       response.status,
       (payload as { error?: ApiError } | null)?.error ?? {
         code: 'UPLOAD_FAILED',
-        message: `The file could not be uploaded (${response.status}).`,
+        // Never rendered: see `DOCUMENT_FAILED` above.
+        message: `upload failed with status ${response.status}`,
         moneyStatus: 'NOT_APPLICABLE',
       },
       payload,

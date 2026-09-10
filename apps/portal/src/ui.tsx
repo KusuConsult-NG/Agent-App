@@ -172,11 +172,37 @@ function fieldLabel(field: string): string {
   return readable.charAt(0).toUpperCase() + readable.slice(1).toLowerCase();
 }
 
+/**
+ * The refusals this portal writes itself, and only those.
+ *
+ * The agent app has carried this map since it was translated; the portal had
+ * none, so `ErrorAlert` rendered `error.message` exactly as it arrived. For a
+ * message the server composed that is the honest answer — a validation
+ * refusal names a field and is generated from the schema, and a Hausa
+ * sentence guessed for one nobody has seen would be worse than the English,
+ * because an officer cannot tell a guess from a translation.
+ *
+ * For the four codes below it was not, because the portal composes those
+ * itself, in `lib/api.ts`, where until now they were English literals in a
+ * module this check did not read. Every one of them is a sentence the officer
+ * sees when something has gone wrong on their own screen.
+ *
+ * That the *server's* codes are still rendered in English is a real gap and a
+ * larger one. It is recorded rather than guessed at here.
+ */
+const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+  UNKNOWN: 'errRequestFailed',
+  UPLOAD_FAILED: 'errUploadFailed',
+  DOCUMENT_FAILED: 'errUploadFailed',
+  STEP_UP_ABANDONED: 'stepUpCodeRequired',
+};
+
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = usePortalI18n();
   if (!error) return null;
+  const translated = TRANSLATED_ERRORS[error.code];
   return (
-    <Alert kind="error" title={{ text: error.message }}>
+    <Alert kind="error" title={{ text: translated ? t[translated] : error.message }}>
       {error.nextStep && <p style={{ margin: '4px 0 0' }}>{error.nextStep}</p>}
       {error.details && error.details.length > 0 && (
         <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
