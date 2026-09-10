@@ -51,6 +51,14 @@ function fieldLabel(field: string): string {
  * English one — the agent cannot tell a guess from a translation.
  */
 const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+  /*
+   * A capture PSIRS refused. These reach here rather than through `ApiError`
+   * because they arrive one-per-draft inside a batch response, but they are
+   * the same thing — a code and a sentence — and they want the same map.
+   */
+  DRAFT_INVALID: 'errDraftInvalid',
+  DRAFT_TYPE_UNSUPPORTED: 'errDraftTypeUnsupported',
+  DRAFT_NOT_PROCESSED: 'errDraftNotProcessed',
   PAYMENT_UNCONFIRMED: 'errPaymentUnconfirmed',
   PAYMENT_PENDING_RECONCILIATION: 'errPaymentPendingReconciliation',
   PAYMENT_FAILED: 'errPaymentFailed',
@@ -76,7 +84,10 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
  * reason given above it: a guessed translation of a message nobody has seen
  * is worse than the English, because the reader cannot tell the two apart.
  */
-export function errorText(error: ApiError, t: TranslationDictionary): string {
+export function errorText(
+  error: { code: string; message: string },
+  t: TranslationDictionary,
+): string {
   const translated = TRANSLATED_ERRORS[error.code];
   return translated ? (t[translated] as string) : error.message;
 }

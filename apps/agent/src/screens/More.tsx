@@ -18,7 +18,7 @@ import {
   bluetoothPrinter,
 } from '../lib/bluetooth-printer';
 import { PushUnsupported, pushManager } from '../lib/push';
-import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner, errorText } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { useI18n } from '../lib/i18n';
@@ -37,6 +37,29 @@ interface VehicleLookup {
   vehicle: Record<string, string | null> | null;
   authorityConfirmed: boolean;
   message: string;
+}
+
+/**
+ * Why a capture was refused, in the language its holder reads.
+ *
+ * This is the sentence somebody reads standing in a market, holding money,
+ * with the person whose details they took still in front of them. It was the
+ * API's English.
+ *
+ * The code goes through the same map `ErrorAlert` uses, which is what makes
+ * the refusals PSIRS composes deliberately — an already-registered taxpayer,
+ * a lapsed clearance — translate without anything being invented for them:
+ * they arrive as their own `AppError` code, and that map already knows them.
+ *
+ * Falls back to the stored English when there is no code, which is how a
+ * refusal recorded before this existed comes back, and how the one path that
+ * replays a reason stored earlier answers.
+ */
+function refusalText(draft: Draft, t: TranslationDictionary): string {
+  const recorded = draft.message ?? '';
+  if (!draft.code) return recorded;
+  const said = errorText({ code: draft.code, message: recorded }, t);
+  return draft.detail ? said.replace('{{detail}}', draft.detail) : said;
 }
 
 /**
@@ -928,7 +951,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
                       '{{when}}',
                       formatDateTimeIn(draft.capturedAt, t),
                     )}
-                    {draft.message ? ` · ${draft.message}` : ''}
+                    {refusalText(draft, t) ? ` · ${refusalText(draft, t)}` : ''}
                   </p>
                 </div>
                 <Badge status={draft.status} />

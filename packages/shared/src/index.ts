@@ -14,3 +14,4 @@ export * from './usage';
 export * from './versions';
 export * from './verification';
 export * from './audit-chain';
+export * from './drafts';

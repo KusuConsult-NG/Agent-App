@@ -74,6 +74,18 @@ export interface Draft {
   payload: Record<string, unknown>;
   capturedAt: string;
   status: 'PENDING_SYNC' | 'SYNCED' | 'REJECTED';
+  /**
+   * Why PSIRS refused it, as a code, so the phone can say it in Hausa.
+   *
+   * Absent when the refusal came back before this field existed, or from the
+   * one path that answers with a reason stored earlier — whose code cannot be
+   * recovered from the sentence it was written as. `message` is the fallback
+   * in both cases.
+   */
+  code?: string;
+  /** The failing fields, when validation was what refused it. */
+  detail?: string;
+  /** The server's English, kept as what it always was: the record. */
   message?: string;
   serverEntityId?: string;
 }
@@ -155,8 +167,15 @@ export interface SyncOutcome {
   synced: number;
   rejected: number;
   duplicates: number;
-  messages: string[];
 }
+
+/*
+ * `messages: string[]` used to be here, collecting every sentence the server
+ * returned for every draft in the batch. Nothing read it — not a screen, not
+ * a test — and with the refusals now carrying codes it would have been a list
+ * of English nobody could translate anyway. The per-draft reason is kept
+ * where it is used, on the draft itself.
+ */
 
 /**
  * How many drafts may travel in one request.
@@ -186,12 +205,14 @@ export async function syncDrafts(
       clientReference: string;
       status: string;
       entityId?: string;
+      code?: string;
+      detail?: string;
       message: string;
     }[];
   }>,
 ): Promise<SyncOutcome> {
   const queued = await pendingDrafts();
-  const outcome: SyncOutcome = { synced: 0, rejected: 0, duplicates: 0, messages: [] };
+  const outcome: SyncOutcome = { synced: 0, rejected: 0, duplicates: 0 };
   if (queued.length === 0) return outcome;
 
   for (let start = 0; start < queued.length; start += SYNC_BATCH) {
@@ -218,9 +239,14 @@ export async function syncDrafts(
         await removeDraft(draft.clientReference);
       } else if (result.status === 'REJECTED') {
         outcome.rejected += 1;
-        await updateDraft({ ...draft, status: 'REJECTED', message: result.message });
+        await updateDraft({
+          ...draft,
+          status: 'REJECTED',
+          code: result.code,
+          detail: result.detail,
+          message: result.message,
+        });
       }
-      outcome.messages.push(result.message);
     }
   }
 

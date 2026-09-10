@@ -2,7 +2,7 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTORS, roleHasPermission } from '@psirs/shared';
+import { ECONOMIC_SECTORS, draftRefusalSentence, roleHasPermission } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
 import {
   authenticate,
@@ -768,6 +768,10 @@ draftRouter.post(
         status: string;
         entityType?: string;
         entityId?: string;
+        /** Present on a refusal, so the phone can say why in its own language. */
+        code?: string;
+        /** The failing fields, when it was validation that refused it. */
+        detail?: string;
         message: string;
       }[] = [];
 
@@ -789,7 +793,17 @@ draftRouter.post(
          */
         let storedId: string | null = null;
 
-        const reject = async (message: string) => {
+        /*
+         * The code travels; the English is the record.
+         *
+         * `rejection_reason` is read back long afterwards by support and by
+         * anybody reconciling what an agent says they collected against what
+         * PSIRS holds, so it stays one language. The code is what lets the
+         * phone say the same thing in the language its holder reads — which
+         * matters here more than anywhere, because this is what somebody
+         * standing in a market is told about work they have already done.
+         */
+        const reject = async (code: string, message: string, detail?: string) => {
           // A draft that failed before it could be stored has no row to mark;
           // the agent is still told, by name, that this one was refused.
           if (storedId) {
@@ -798,7 +812,19 @@ draftRouter.post(
               [storedId, message],
             );
           }
-          results.push({ clientReference: draft.clientReference, status: 'REJECTED', message });
+          results.push({
+            clientReference: draft.clientReference,
+            status: 'REJECTED',
+            code,
+            /*
+             * The failing fields, sent apart from the sentence they were
+             * baked into. The phone knows its own draft type and reference
+             * and can fill those in itself; this is the one part of a refusal
+             * it cannot work out.
+             */
+            ...(detail ? { detail } : {}),
+            message,
+          });
         };
 
         const accept = async (entityType: string, entityId: string, message: string) => {
@@ -901,10 +927,11 @@ draftRouter.post(
           if (draft.draftType === 'TAXPAYER_REGISTRATION') {
             const parsed = taxpayerInputSchema.safeParse(draft.payload);
             if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
               await reject(
-                `Draft could not be accepted: ${parsed.error.issues
-                  .map((issue) => issue.message)
-                  .join('; ')}`,
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
               );
               continue;
             }
@@ -951,10 +978,11 @@ draftRouter.post(
           if (draft.draftType === 'VEHICLE_CAPTURE') {
             const parsed = vehicleCaptureSchema.safeParse(draft.payload);
             if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
               await reject(
-                `Draft could not be accepted: ${parsed.error.issues
-                  .map((issue) => issue.message)
-                  .join('; ')}`,
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
               );
               continue;
             }
@@ -975,10 +1003,11 @@ draftRouter.post(
           if (draft.draftType === 'BUSINESS_OBSERVATION') {
             const parsed = observationCaptureSchema.safeParse(draft.payload);
             if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
               await reject(
-                `Draft could not be accepted: ${parsed.error.issues
-                  .map((issue) => issue.message)
-                  .join('; ')}`,
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
               );
               continue;
             }
@@ -1016,8 +1045,8 @@ draftRouter.post(
           // type is ever added without a handler, this rejects it loudly instead
           // of storing it where nothing will ever look.
           await reject(
-            `This version of the platform cannot process a "${draft.draftType}" capture. ` +
-              'It has not been discarded — quote this reference to support.',
+            'DRAFT_TYPE_UNSUPPORTED',
+            draftRefusalSentence('DRAFT_TYPE_UNSUPPORTED', { type: draft.draftType }),
           );
         } catch (error) {
           /*
@@ -1031,7 +1060,16 @@ draftRouter.post(
            * over their shoulder the names of our tables.
            */
           if (error instanceof AppError) {
-            await reject(error.message);
+            /*
+             * Its own code, not one of ours.
+             *
+             * `AppError` already carries a code, and the agent application
+             * already translates the ones it knows through `TRANSLATED_ERRORS`
+             * — so passing it through translates this whole class (an already
+             * registered taxpayer, a lapsed clearance) without inventing
+             * anything. Taking only `message`, as this did, threw that away.
+             */
+            await reject(error.code, error.message);
           } else {
             log.error('offline draft could not be processed', {
               component: 'drafts',
@@ -1040,8 +1078,10 @@ draftRouter.post(
               error,
             });
             await reject(
-              'This capture could not be processed. It is still on your phone — quote ' +
-                `reference ${draft.clientReference} to support.`,
+              'DRAFT_NOT_PROCESSED',
+              draftRefusalSentence('DRAFT_NOT_PROCESSED', {
+                reference: draft.clientReference,
+              }),
             );
           }
         }

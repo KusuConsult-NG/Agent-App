@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,205 strings; that one is two pages and links back
+> because it carries all 3,208 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,205 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,208 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,205 strings is worse than no sheet, because it looks complete; this one cannot
+3,208 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,205 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,208 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,205 strings: where the
+- The glossary below is applied consistently across all 3,208 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3126 strings, grouped by where an agent meets them. Lower stakes
+3129 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -3072,6 +3072,9 @@ instructions — but they are what an agent reads all day.
 | `errUploadFailed` | The document could not be sent. Try again. | Ba a iya aika takardar ba. Ka sake gwadawa. | ☐ | |
 | `errUploadOffline` | You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection. | Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa. | ☐ | |
 | `errRequestFailed` | The request failed. Try again, or contact support. | Bukatar ba ta yi nasara ba. Ka sake gwadawa, ko ka tuntubi tallafi. | ☐ | |
+| `errDraftInvalid` | PSIRS could not accept this capture: {{detail}}. It is still on your phone — correct it and send it again. | PSIRS ba ta iya karbar wannan shigarwa ba: {{detail}}. Tana nan a wayarka — ka gyara ta ka sake aikawa. | ☐ | |
+| `errDraftTypeUnsupported` | This version of the app made a "{{type}}" capture that PSIRS cannot process yet. It has not been lost — update the app, or quote this reference to support. | Wannan sigar manhajar ta yi shigarwa irin "{{type}}" wadda PSIRS ba ta iya sarrafawa tukuna. Ba a rasa ta ba — ka sabunta manhajar, ko ka ba da wannan lamba ga tallafi. | ☐ | |
+| `errDraftNotProcessed` | PSIRS could not process this capture. It is still on your phone — quote reference {{reference}} to support. | PSIRS ba ta iya sarrafa wannan shigarwa ba. Tana nan a wayarka — ka ba da lamba {{reference}} ga tallafi. | ☐ | |
 
 #### Shared controls
 

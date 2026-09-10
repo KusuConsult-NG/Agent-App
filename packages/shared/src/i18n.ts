@@ -3331,6 +3331,19 @@ export interface TranslationDictionary {
   pubCitizenByName: string;
   pubCitizenTooMany: string;
   /*
+   * Why a capture made on a phone would not go.
+   *
+   * Read standing in front of the person whose details were just taken, so
+   * the wording has to be enough to decide what to do there and then.
+   * `errDraftInvalid` carries {{detail}} — the failing fields, as
+   * identifiers; `errDraftTypeUnsupported` carries {{type}} and
+   * `errDraftNotProcessed` {{reference}}, both of which the phone already
+   * knows about its own draft.
+   */
+  errDraftInvalid: string;
+  errDraftTypeUnsupported: string;
+  errDraftNotProcessed: string;
+  /*
    * What an agent and an officer are told after an action succeeds.
    *
    * The last of the server-composed sentences, and like the public portal's
@@ -6606,6 +6619,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    errDraftInvalid:
+      'PSIRS could not accept this capture: {{detail}}. It is still on your phone — correct it and send it again.',
+    errDraftTypeUnsupported:
+      'This version of the app made a "{{type}}" capture that PSIRS cannot process yet. It has not been lost — update the app, or quote this reference to support.',
+    errDraftNotProcessed:
+      'PSIRS could not process this capture. It is still on your phone — quote reference {{reference}} to support.',
     agVehFoundConfirmed: 'Vehicle found and confirmed against the vehicle authority record.',
     agVehFoundUnconfirmed:
       'Vehicle found on the platform. It has not been confirmed against the vehicle authority.',
@@ -9863,6 +9882,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    errDraftInvalid:
+      'PSIRS ba ta iya karbar wannan shigarwa ba: {{detail}}. Tana nan a wayarka — ka gyara ta ka sake aikawa.',
+    errDraftTypeUnsupported:
+      'Wannan sigar manhajar ta yi shigarwa irin "{{type}}" wadda PSIRS ba ta iya sarrafawa tukuna. Ba a rasa ta ba — ka sabunta manhajar, ko ka ba da wannan lamba ga tallafi.',
+    errDraftNotProcessed:
+      'PSIRS ba ta iya sarrafa wannan shigarwa ba. Tana nan a wayarka — ka ba da lamba {{reference}} ga tallafi.',
     agVehFoundConfirmed: 'An sami motar kuma an tabbatar da ita a rajistar hukumar motoci.',
     agVehFoundUnconfirmed:
       'An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna.',

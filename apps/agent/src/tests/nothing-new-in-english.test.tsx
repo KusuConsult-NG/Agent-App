@@ -775,35 +775,27 @@ const A_COLUMN_OF_MESSAGES = /key:\s*['"]message['"]/g;
  */
 const STILL_RENDERING_THE_SERVER = new Set<string>([
   /*
-   * THE AGENT PWA — WHAT A REFUSED CAPTURE SAYS
+   * THE AGENT PWA
    *
-   * The last of these that is real work, and the one that matters most: an
-   * agent standing in a market holding somebody's money, told in English why
-   * PSIRS would not take the record they just made.
+   * Nothing here is an ordinary path any more. All three are the last
+   * resort, and each is the server's English being kept deliberately rather
+   * than rendered for want of anything better.
    *
-   * It is not the confirmations' shape. `reject()` in `routes/taxpayers.ts`
-   * both returns the sentence and persists it to
-   * `offline_drafts.rejection_reason`, so it needs a code carried beside the
-   * English rather than a dictionary lookup on data already sent. Six call
-   * sites and four shapes, one of which — `reject(error.message)` — throws
-   * away an `AppError` code the agent app already knows how to translate.
+   * `drafts.ts` is not even a rendering: it stores the sentence on the draft,
+   * which is what `offline_drafts.rejection_reason` is for. The record of why
+   * a capture was refused is read back long afterwards by support and by
+   * anybody reconciling what an agent says they collected against what PSIRS
+   * holds, so it stays in one language on purpose. The code travels beside
+   * it, and `refusalText` is what an agent actually reads.
+   *
+   * The other two fall back when a code or a source is one this build has
+   * never met — which is what a deployment looks like while the API is ahead
+   * of the app, and is better than a blank where the answer belongs.
    */
-  '../lib/drafts.ts:221 result.message',
-  '../lib/drafts.ts:223 result.message',
-  '../screens/More.tsx:931 draft.message',
-
-  /*
-   * And two last resorts, not ordinary paths.
-   *
-   * The confirmations are composed from the dictionary now — the referee
-   * invitation, the handset, the group member, the vehicle lookup's five
-   * answers — none of which needed anything new from the server. These two
-   * remain because both fall back to the server's words for a value this
-   * build has not met, which is what a deployment looks like while the API
-   * is ahead of the app.
-   */
+  '../lib/drafts.ts:247 result.message',
+  '../screens/More.tsx:59 draft.message',
+  '../screens/More.tsx:80 lookup.message',
   '../screens/Application.tsx:803 result.message',
-  '../screens/More.tsx:57 lookup.message',
 ]);
 
 describe('no screen speaks the API’s English', () => {
