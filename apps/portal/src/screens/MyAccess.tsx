@@ -257,28 +257,52 @@ export function MyAccessScreen({
               {
                 key: 'actions',
                 label: 'ofcWbActions',
-                render: (row: DeviceRow) =>
-                  mayManage ? (
-                    <BlockControl
-                      device={row}
-                      user={user}
-                      onDone={async () => {
-                        setNotice(t.ofcCwSaved);
-                        await load();
-                      }}
-                    />
-                  ) : (
-                    /*
-                     * An officer sees the block state on their own machines and
-                     * cannot set it. Blocking ends sessions and stops sign-in,
-                     * which is a supervisory act — and an officer who could
-                     * block their own device could lock themselves out of the
-                     * only machine in the office.
-                     */
-                    <span className="muted">
-                      {row.status === 'BLOCKED' ? row.block_reason : ''}
-                    </span>
-                  ),
+                /*
+                 * The control and the record, not one or the other.
+                 *
+                 * This was a ternary: an officer who could manage saw the
+                 * button, and everybody else saw the reason. So the
+                 * administrator with the authority to unblock a machine was
+                 * the one person shown nothing about why it had been blocked —
+                 * and neither of them ever saw who did it or when, though
+                 * `blocked_at` and `blocked_by_name` are on the wire and
+                 * declared on the row.
+                 *
+                 * Blocking ends every session and stops sign-in, which this
+                 * screen's own comment calls a supervisory act. Reversing one
+                 * is a decision, and a decision taken without the record is a
+                 * guess.
+                 *
+                 * An officer still cannot set it on their own machines: that
+                 * would let them lock themselves out of the only machine in
+                 * the office.
+                 */
+                render: (row: DeviceRow) => (
+                  <>
+                    {mayManage && (
+                      <BlockControl
+                        device={row}
+                        user={user}
+                        onDone={async () => {
+                          setNotice(t.ofcCwSaved);
+                          await load();
+                        }}
+                      />
+                    )}
+                    {row.status === 'BLOCKED' && (
+                      <p className="table__sub" style={{ margin: '4px 0 0' }}>
+                        {row.block_reason}
+                        {row.blocked_by_name && (
+                          <>
+                            {' · '}
+                            {t.ofcAcBlockedBy}: {row.blocked_by_name}
+                          </>
+                        )}
+                        {row.blocked_at && <> · {formatDateTime(row.blocked_at)}</>}
+                      </p>
+                    )}
+                  </>
+                ),
               },
             ]}
             rows={devices}

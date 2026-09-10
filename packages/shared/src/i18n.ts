@@ -1532,6 +1532,7 @@ export interface TranslationDictionary {
   ofcAcEnded: string;
   ofcAcBlock: string;
   ofcAcUnblock: string;
+  ofcAcBlockedBy: string;
   ofcAcNoSessions: string;
   ofcAcNoDevices: string;
   ofcCwUploadEvidence: string;
@@ -4897,6 +4898,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAcEnded: "Ended",
     ofcAcBlock: "Block",
     ofcAcUnblock: "Unblock",
+    ofcAcBlockedBy: "Blocked by",
     ofcAcNoSessions: "This account has never been signed in.",
     ofcAcNoDevices: "No machine has been recorded yet.",
     ofcCwUploadEvidence: "Upload evidence",
@@ -8109,6 +8111,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAcEnded: "An kawo karshe",
     ofcAcBlock: "Toshe",
     ofcAcUnblock: "Cire toshewa",
+    ofcAcBlockedBy: "Wanda ya toshe",
     ofcAcNoSessions: "Wannan asusun bai taba shiga ba.",
     ofcAcNoDevices: "Ba a rubuta wata na\u2019ura ba tukuna.",
     ofcCwUploadEvidence: "Loda shaida",
