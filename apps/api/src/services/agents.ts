@@ -18,6 +18,7 @@
 import type { PoolClient } from 'pg';
 import {
   activationBlockers,
+  blockerSentence,
   compareVersions,
   deriveAccessStage,
   deriveApplicationState,
@@ -1441,7 +1442,7 @@ export async function activate(params: {
       if (!params.overrideApprovalId) {
         throw conflict(
           'ACTIVATION_BLOCKED',
-          `This agent cannot be activated yet: ${blockers.join('; ')}.`,
+          `This agent cannot be activated yet: ${blockers.map(blockerSentence).join('; ')}.`,
           'Complete the outstanding clearance requirements, or raise a government override request.',
         );
       }
@@ -1469,7 +1470,11 @@ export async function activate(params: {
             SET override_approval_id = $2,
                 override_reason = $3
           WHERE agent_id = $1`,
-        [params.agentId, params.overrideApprovalId, `Activated with outstanding: ${blockers.join('; ')}`],
+        [
+          params.agentId,
+          params.overrideApprovalId,
+          `Activated with outstanding: ${blockers.map(blockerSentence).join('; ')}`,
+        ],
       );
       await client.query(`UPDATE approvals SET status = 'EXECUTED', executed_at = now() WHERE id = $1`, [
         params.overrideApprovalId,

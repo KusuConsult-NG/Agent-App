@@ -13,6 +13,10 @@ import {
   deriveAccessStage,
   deriveApplicationState,
   activationBlockers,
+  AGENT_BLOCKERS,
+  BLOCKER_TEXT,
+  blockerSentence,
+  getTranslation,
   formatNaira,
   IllegalTransitionError,
   koboToNaira,
@@ -356,14 +360,34 @@ describe('agent lifecycle derivation', () => {
 
   it('lists every outstanding requirement before activation', () => {
     const blockers = activationBlockers(axes().flags);
-    assert.equal(blockers.length, 7);
-    assert.ok(blockers.some((b) => b.includes('KYC')));
-    assert.ok(blockers.some((b) => b.includes('referee')));
-    assert.ok(blockers.some((b) => b.includes('training')));
-    assert.ok(blockers.some((b) => b.includes('bank account')));
-    assert.ok(blockers.some((b) => b.includes('agreement')));
-    assert.ok(blockers.some((b) => b.includes('device')));
-    assert.ok(blockers.some((b) => b.includes('Government review')));
+    assert.deepEqual(
+      [...blockers].sort(),
+      [...AGENT_BLOCKERS].sort(),
+      'nothing is cleared, so every gate should be named',
+    );
+  });
+
+  /*
+   * A gate nobody can read is a gate that stops somebody without telling them.
+   *
+   * The blockers used to be English sentences and the applicant's screen
+   * printed them; they are codes now precisely so they can be said in Hausa.
+   * That only holds while every code has a string in both languages, and the
+   * failure if one does not is `undefined` on the screen of an applicant
+   * wondering why they cannot start work.
+   */
+  it('has both languages for every gate an applicant can be held at', () => {
+    for (const code of AGENT_BLOCKERS) {
+      const key = BLOCKER_TEXT[code];
+      assert.ok(key, `${code} has no dictionary key`);
+      for (const lang of ['en', 'ha'] as const) {
+        const text = getTranslation(lang)[key];
+        assert.equal(typeof text, 'string', `${code} has no ${lang} string`);
+        assert.ok(text.trim().length > 0, `${code} is empty in ${lang}`);
+      }
+    }
+    // And the English kept for the audit record is not the applicant's copy.
+    assert.equal(blockerSentence('KYC'), 'KYC clearance is not complete');
   });
 
   it('grants progressive access in the Addendum §26 stages', () => {

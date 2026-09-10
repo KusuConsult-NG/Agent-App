@@ -2,8 +2,8 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
-import type { TranslationDictionary } from '@psirs/shared';
+import { BLOCKER_TEXT, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
+import type { AgentBlocker, TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { useI18n } from './lib/i18n';
 
@@ -97,7 +97,19 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
           {error.details.map((detail, index) => (
             <li key={index}>
               {detail.field ? `${fieldLabel(detail.field)}: ` : ''}
-              {detail.issue}
+              {/*
+                * The code first, where the server sent one.
+                *
+                * `issue` is a sentence the API composed, so it is a sentence in
+                * English. The clearance blockers are the case that matters:
+                * an applicant refused at the counter was shown a translated
+                * headline and then seven English lines saying what to do about
+                * it. Anything without a code, or with one this build does not
+                * know, still shows what the server said rather than nothing.
+                */}
+              {detail.code && detail.code in BLOCKER_TEXT
+                ? t[BLOCKER_TEXT[detail.code as AgentBlocker]]
+                : detail.issue}
             </li>
           ))}
         </ul>

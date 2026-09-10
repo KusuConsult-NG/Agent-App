@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, APP_VERSION, api, type ApiError } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
-import type { TranslationDictionary } from '@psirs/shared';
+import { BLOCKER_TEXT, type AgentBlocker, type TranslationDictionary } from '@psirs/shared';
 import { useI18n } from '../lib/i18n';
 
 interface ApplicationStatus {
@@ -20,7 +20,7 @@ interface ApplicationStatus {
   accessStage: string;
   statuses: Record<string, string>;
   checklist: Record<string, boolean>;
-  outstanding: string[];
+  outstanding: AgentBlocker[];
   canCollectRevenue: boolean;
   kyc: { identity_number_masked: string; verification_status: string; failure_reason: string | null } | null;
   referees: {
@@ -144,9 +144,9 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
         <div className="card">
           <h2 className="card__title">{t.appStillOutstanding}</h2>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.88rem' }}>
-            {status.outstanding.map((item) => (
-              <li key={item} style={{ marginBottom: 4 }}>
-                {item}
+            {status.outstanding.map((code) => (
+              <li key={code} style={{ marginBottom: 4 }}>
+                {t[BLOCKER_TEXT[code]]}
               </li>
             ))}
           </ul>

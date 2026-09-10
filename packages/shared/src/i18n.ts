@@ -5,6 +5,8 @@
  * across Plateau State's 17 LGAs.
  */
 
+import type { AgentBlocker } from './agent-lifecycle';
+
 export type Language = 'en' | 'ha';
 
 export interface TranslationDictionary {
@@ -2781,6 +2783,13 @@ export interface TranslationDictionary {
   appAllRequirementsMet: string;
   appCannotCollectUntil: string;
   appStillOutstanding: string;
+  appBlockerKyc: string;
+  appBlockerReferee: string;
+  appBlockerGovernmentApproval: string;
+  appBlockerTraining: string;
+  appBlockerBank: string;
+  appBlockerAgreement: string;
+  appBlockerDevice: string;
   appComplete: string;
   appGoToDashboard: string;
   appIdentityVerification: string;
@@ -6025,6 +6034,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     appAllRequirementsMet: "All clearance requirements have been met.",
     appCannotCollectUntil: "You cannot collect revenue until every requirement below is complete.",
     appStillOutstanding: "Still outstanding",
+    appBlockerKyc: "Your identity has not been checked yet",
+    appBlockerReferee: "No referee has confirmed you yet",
+    appBlockerGovernmentApproval: "PSIRS has not approved your application yet",
+    appBlockerTraining: "You have not finished the required training",
+    appBlockerBank: "Your commission bank account has not been verified",
+    appBlockerAgreement: "You have not accepted the agent agreement",
+    appBlockerDevice: "No device has been registered to you",
     appComplete: "Complete",
     appGoToDashboard: "Go to my dashboard",
     appIdentityVerification: "Identity verification",
@@ -9199,6 +9215,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     appAllRequirementsMet: "An cika dukkan sharudan izinin.",
     appCannotCollectUntil: "Ba za ka iya karbar haraji ba sai an kammala dukkan sharudan da ke kasa.",
     appStillOutstanding: "Sauran da ba a kammala ba",
+    appBlockerKyc: "Ba a duba shaidarka ba tukuna",
+    appBlockerReferee: "Babu mai shaida da ya tabbatar da kai tukuna",
+    appBlockerGovernmentApproval: "PSIRS ba ta amince da bukatarka ba tukuna",
+    appBlockerTraining: "Ba ka kammala horon da ake bukata ba",
+    appBlockerBank: "Ba a tabbatar da asusun bankin kwamishan dinka ba",
+    appBlockerAgreement: "Ba ka amince da yarjejeniyar wakili ba",
+    appBlockerDevice: "Ba a yi rajistar wata na’ura da sunanka ba",
     appComplete: "An kammala",
     appGoToDashboard: "Je shafin aikina",
     appIdentityVerification: "Tabbatar da shaida",
@@ -9848,6 +9871,27 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUsRegisteringATaxpayer: 'Yin rijistar mai biyan haraji',
     ofcUsTakingACollection: 'Karbar kudi',
   },
+};
+
+/**
+ * The seven clearance blockers, as dictionary keys.
+ *
+ * `activationBlockers` returns codes so that the applicant's own screen — and
+ * the 403 they get if they try to collect anyway — can be read in the language
+ * they chose. This table is the join between the two, and it lives here rather
+ * than in either client because both of them need it and neither owns it.
+ *
+ * Typed against `AgentBlocker`, so adding a gate to the lifecycle without
+ * writing the sentence somebody has to read fails the build.
+ */
+export const BLOCKER_TEXT: Record<AgentBlocker, keyof TranslationDictionary> = {
+  KYC: 'appBlockerKyc',
+  REFEREE: 'appBlockerReferee',
+  GOVERNMENT_APPROVAL: 'appBlockerGovernmentApproval',
+  TRAINING: 'appBlockerTraining',
+  BANK: 'appBlockerBank',
+  AGREEMENT: 'appBlockerAgreement',
+  DEVICE: 'appBlockerDevice',
 };
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {

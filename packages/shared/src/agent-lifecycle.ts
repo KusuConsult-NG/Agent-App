@@ -161,6 +161,49 @@ export function deriveAccessStage(axes: AgentStatusAxes): AccessStage {
 }
 
 /**
+ * The seven gates, as codes.
+ *
+ * They used to be English sentences, and the applicant's own screen printed
+ * them straight onto the page — so the one list telling somebody what stands
+ * between them and their first day's earnings was in English, in an
+ * application that has offered Hausa since it was built. A sentence composed
+ * here cannot be translated at the point it is read, because by then it is
+ * prose. A code can.
+ */
+export const AGENT_BLOCKERS = [
+  'KYC',
+  'REFEREE',
+  'GOVERNMENT_APPROVAL',
+  'TRAINING',
+  'BANK',
+  'AGREEMENT',
+  'DEVICE',
+] as const;
+
+export type AgentBlocker = (typeof AGENT_BLOCKERS)[number];
+
+/**
+ * The same seven in English, for the two places a code cannot go.
+ *
+ * `override_reason` is an audit record — it is written once, read years later
+ * by whoever asks why this agent was activated early, and must not depend on
+ * what a dictionary says at the time it is read. The officer-facing conflict
+ * message is the other: it names the unmet items inside a sentence, and the
+ * portal has no way to reassemble that from codes.
+ *
+ * Nothing an applicant reads should come from here. They get the codes.
+ */
+export const BLOCKER_SENTENCES: Record<AgentBlocker, string> = {
+  KYC: 'KYC clearance is not complete',
+  REFEREE: 'No referee has been cleared for this applicant',
+  GOVERNMENT_APPROVAL: 'Government review has not approved this application',
+  TRAINING: 'Mandatory training is not complete',
+  BANK: 'Commission bank account has not been verified',
+  AGREEMENT: 'The agent agreement has not been accepted',
+  DEVICE: 'No active device has been registered',
+};
+
+/**
  * §14 / §50 — the activation gate, enforced in the backend.
  *
  * Returns the list of unmet requirements. An empty list is the only thing
@@ -169,16 +212,21 @@ export function deriveAccessStage(axes: AgentStatusAxes): AccessStage {
  * function — it records an approved exception alongside the unmet items, so
  * the reason an agent was activated early stays visible forever.
  */
-export function activationBlockers(flags: AgentClearanceFlags): string[] {
-  const blockers: string[] = [];
-  if (!flags.kycCleared) blockers.push('KYC clearance is not complete');
-  if (!flags.refereeCleared) blockers.push('No referee has been cleared for this applicant');
-  if (!flags.governmentApproved) blockers.push('Government review has not approved this application');
-  if (!flags.trainingCompleted) blockers.push('Mandatory training is not complete');
-  if (!flags.bankVerified) blockers.push('Commission bank account has not been verified');
-  if (!flags.agreementAccepted) blockers.push('The agent agreement has not been accepted');
-  if (!flags.deviceRegistered) blockers.push('No active device has been registered');
+export function activationBlockers(flags: AgentClearanceFlags): AgentBlocker[] {
+  const blockers: AgentBlocker[] = [];
+  if (!flags.kycCleared) blockers.push('KYC');
+  if (!flags.refereeCleared) blockers.push('REFEREE');
+  if (!flags.governmentApproved) blockers.push('GOVERNMENT_APPROVAL');
+  if (!flags.trainingCompleted) blockers.push('TRAINING');
+  if (!flags.bankVerified) blockers.push('BANK');
+  if (!flags.agreementAccepted) blockers.push('AGREEMENT');
+  if (!flags.deviceRegistered) blockers.push('DEVICE');
   return blockers;
+}
+
+/** The English for a blocker, for an audit record or an officer's sentence. */
+export function blockerSentence(code: AgentBlocker): string {
+  return BLOCKER_SENTENCES[code];
 }
 
 export function canActivate(flags: AgentClearanceFlags): boolean {

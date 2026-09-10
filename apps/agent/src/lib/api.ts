@@ -38,7 +38,7 @@ export interface ApiError {
   moneyStatus: 'NOT_DEBITED' | 'UNCONFIRMED' | 'RECEIVED' | 'NOT_APPLICABLE';
   reference?: string;
   nextStep?: string;
-  details?: { field?: string; issue: string }[];
+  details?: { field?: string; issue: string; code?: string }[];
 }
 
 export class ApiRequestError extends Error {
