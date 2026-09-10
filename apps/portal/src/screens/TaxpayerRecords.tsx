@@ -120,8 +120,15 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
       await stepUp('taxpayer.identity.change', user.phone);
       const body: Record<string, string> = { reason: form.reason.trim() };
       for (const [key, value] of touched) body[key] = value.trim();
-      const result = await api.post<{ message: string }>(`/taxpayers/${chosen.id}/identity`, body);
-      setMessage(result.message);
+      const result = await api.post<{ changed: string[] }>(
+        `/taxpayers/${chosen.id}/identity`,
+        body,
+      );
+      setMessage(
+        result.changed.length === 1
+          ? t.ofcTrOneDetailCorrected
+          : t.ofcTrDetailsCorrected.replace('{{n}}', String(result.changed.length)),
+      );
       setForm({
         firstName: '',
         middleName: '',
@@ -509,11 +516,15 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       const remaining = rows
         .filter((r) => r.status === 'ACTIVE' && r.revenueItemId !== row.revenueItemId)
         .map((r) => r.revenueItemId);
-      const result = await api.put<{ message: string }>(
+      const result = await api.put<{ added: number; waived: number }>(
         `/taxpayers/${taxpayerId}/obligations`,
         { itemIds: remaining, source: 'OFFICER_REVIEW' },
       );
-      setMessage(result.message);
+      setMessage(
+        t.ofcTrObligationsUpdated
+          .replace('{{added}}', String(result.added))
+          .replace('{{waived}}', String(result.waived)),
+      );
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
@@ -612,11 +623,20 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(`/vehicles/${vehicle.id}/status`, {
-        status,
-        reason,
-      });
-      setMessage(result.message);
+      const result = await api.post<{ registrationNumber: string; to: string }>(
+        `/vehicles/${vehicle.id}/status`,
+        {
+          status,
+          reason,
+        },
+      );
+      setMessage(
+        result.to === 'ACTIVE'
+          ? t.ofcTrVehicleBackInService.replace('{{plate}}', result.registrationNumber)
+          : result.to === 'SUSPENDED'
+            ? t.ofcTrVehicleSuspended.replace('{{plate}}', result.registrationNumber)
+            : t.ofcTrVehicleArchived.replace('{{plate}}', result.registrationNumber),
+      );
       setReason('');
       load();
     } catch (caught) {
@@ -739,11 +759,30 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(`/taxpayers/${taxpayerId}/status`, {
+      const result = await api.post<{
+        status: string;
+        outstandingKobo: string;
+      }>(`/taxpayers/${taxpayerId}/status`, {
         status,
         reason: reason.trim(),
       });
-      setMessage(result.message);
+      /*
+       * Composed here, because the sentence changes what an officer does next.
+       *
+       * "No new assessment can be raised and reminders stop" is the operative
+       * half, and "what is already owed remains owed" is the half a citizen
+       * will ring about. Both arrived as the server's English.
+       */
+      setMessage(
+        result.status === 'ACTIVE'
+          ? t.ofcTrOnRegisterAgain.replace('{{name}}', name)
+          : `${t.ofcTrRecordEnded
+              .replace('{{name}}', name)
+              .replace('{{status}}', enumLabel(result.status, t))} ` +
+            (BigInt(result.outstandingKobo) > 0n
+              ? t.ofcTrStillOwedAfterEnding
+              : t.ofcTrNothingWasOutstanding),
+      );
       setReason('');
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);

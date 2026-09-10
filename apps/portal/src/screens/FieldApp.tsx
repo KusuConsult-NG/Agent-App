@@ -101,13 +101,24 @@ export function FieldAppScreen() {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>('/agents/app-version', {
+      const result = await api.post<{
+        minimumVersion: string;
+        devicesLockedOut: number;
+        activeDevices: number;
+      }>('/agents/app-version', {
         minimumVersion: minimum.trim(),
         recommendedVersion: recommended.trim(),
         notes: notes.trim(),
         ...(effectiveFrom ? { effectiveFrom: new Date(effectiveFrom).toISOString() } : {}),
       });
-      setMessage(result.message);
+      setMessage(
+        `${t.ofcFaMinimumNow.replace('{{version}}', result.minimumVersion)} ` +
+          (result.devicesLockedOut === 0
+            ? t.ofcFaNoneBelowIt
+            : t.ofcFaCannotCollect
+                .replace('{{locked}}', String(result.devicesLockedOut))
+                .replace('{{total}}', String(result.activeDevices))),
+      );
       setMinimum('');
       setRecommended('');
       setNotes('');

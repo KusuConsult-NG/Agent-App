@@ -1148,11 +1148,20 @@ export async function setOfficerTerritories(params: {
       reason: params.reason,
     });
 
+    /*
+     * The count as well as the sentence.
+     *
+     * The sentence was all this returned, so the officer portal had nothing to
+     * build its own from and rendered the English. `covers` is what the
+     * sentence was counting anyway.
+     */
+    const covers = new Set(params.territoryIds).size;
     return {
+      covers,
       message:
-        params.territoryIds.length === 0
+        covers === 0
           ? `${target.full_name} now covers no territory and will see no revenue figures.`
-          : `${target.full_name} now covers ${new Set(params.territoryIds).size} territory(ies).`,
+          : `${target.full_name} now covers ${covers} territory(ies).`,
     };
   });
 }

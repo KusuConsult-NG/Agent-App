@@ -636,3 +636,45 @@ describe('no screen picks its own locale', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * A sentence the API composed is not a sentence this screen may render.
+ *
+ * The rules above read literals in this repository's own source. This one
+ * reads a habit: `setMessage(result.message)`, where `result` is whatever an
+ * endpoint just returned. The words are then English by construction — they
+ * were written in `apps/api`, which has no dictionary and no language — and
+ * no literal rule can see them, because there is no literal.
+ *
+ * Ten of these were reaching officers and agents. Two were found by reading
+ * the screens they sit on, which is not a method that scales to the other
+ * eight.
+ *
+ * The fix is always the same and is what `Outstanding`, `UserAccess` and
+ * `Agents` now do: the endpoint returns the counts and the enum values, the
+ * screen composes the sentence from the dictionary, and the server keeps its
+ * `message` for the scheduled-job log and any client without a language.
+ *
+ * This does not forbid every `.message`. `ApiError.message` is a different
+ * thing — it goes through `ErrorAlert`, which prefers `TRANSLATED_ERRORS`
+ * — so only a message read off a *success* payload is named here.
+ */
+const RENDERS_A_SERVER_SENTENCE =
+  /\b(?:setMessage|setNotice|setSuccess|setPrinterMsg|setPushMsg|setSweepResult)\(\s*(?:result|body|data|reply|answer|outcome)(?:\?)?\.message\b/g;
+
+/** Sites still to be moved off the server's wording, each with its reason. */
+const STILL_RENDERING_THE_SERVER = new Set<string>([]);
+
+describe('no screen speaks the API’s English', () => {
+  it('composes its own sentences from the dictionary', () => {
+    const offenders: string[] = [];
+    for (const [path, source] of Object.entries(SURFACES)) {
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      for (const match of code.matchAll(RENDERS_A_SERVER_SENTENCE)) {
+        const site = `${path}: ${match[0]}`;
+        if (!STILL_RENDERING_THE_SERVER.has(site)) offenders.push(site);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});

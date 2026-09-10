@@ -960,6 +960,27 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcUaCoversNothing: string;
+  ofcUaCoversTerritories: string;
+  ofcFaMinimumNow: string;
+  ofcFaNoneBelowIt: string;
+  ofcFaCannotCollect: string;
+  ofcTrVehicleBackInService: string;
+  ofcTrVehicleSuspended: string;
+  ofcTrVehicleArchived: string;
+  colPayReceipted: string;
+  colPayAwaitingSettlement: string;
+  colPayStillPending: string;
+  colPayFailed: string;
+  ofcFnPromotedForPayout: string;
+  ofcCfEvaluatedCount: string;
+  ofcTrObligationsUpdated: string;
+  ofcTrOneDetailCorrected: string;
+  ofcTrDetailsCorrected: string;
+  ofcTrOnRegisterAgain: string;
+  ofcTrRecordEnded: string;
+  ofcTrStillOwedAfterEnding: string;
+  ofcTrNothingWasOutstanding: string;
   ofcOsRefundsReturned: string;
   ofcOsRefundsPartly: string;
   ofcOsTinsAssigned: string;
@@ -4272,6 +4293,27 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
+    ofcUaCoversTerritories: "{{name}} now covers {{n}} territory(ies).",
+    ofcFaMinimumNow: "Minimum version is now {{version}}.",
+    ofcFaNoneBelowIt: "No active handset is below it.",
+    ofcFaCannotCollect: "{{locked}} of {{total}} active handset(s) cannot collect until they update.",
+    ofcTrVehicleBackInService: "{{plate}} is back in service and its particulars can be renewed.",
+    ofcTrVehicleSuspended: "{{plate}} is suspended. Renewals are refused until it is lifted.",
+    ofcTrVehicleArchived: "{{plate}} has been taken off the register. Renewals are refused.",
+    colPayReceipted: "Payment confirmed. Receipt {{number}} has been issued.",
+    colPayAwaitingSettlement: "The gateway has confirmed this payment. The government receipt is issued once the money reaches a government account.",
+    colPayStillPending: "The gateway has not answered yet. Do not take this payment again — check back shortly.",
+    colPayFailed: "The payment did not succeed. No money has been received and no receipt has been issued.",
+    ofcFnPromotedForPayout: "{{n}} commission record(s) became eligible for payout.",
+    ofcCfEvaluatedCount: "{{n}} citizen(s) evaluated against this programme.",
+    ofcTrObligationsUpdated: "{{added}} obligation(s) added, {{waived}} waived.",
+    ofcTrOneDetailCorrected: "One detail on this taxpayer record has been corrected. The change is on the audit trail.",
+    ofcTrDetailsCorrected: "{{n}} details on this taxpayer record have been corrected. The change is on the audit trail.",
+    ofcTrOnRegisterAgain: "{{name}} is on the register again and can be assessed.",
+    ofcTrRecordEnded: "{{name}} is {{status}}. No new assessment can be raised and reminders stop.",
+    ofcTrStillOwedAfterEnding: "What is already owed remains owed, and this record now appears in the queue of ended records with arrears.",
+    ofcTrNothingWasOutstanding: "Nothing was outstanding.",
     ofcOsRefundsReturned: "{{n}} refund(s) returned to taxpayers.",
     ofcOsRefundsPartly: "{{done}} returned; {{left}} still owed. Those taxpayers have not had their money back yet.",
     ofcOsTinsAssigned: "{{n}} TIN(s) assigned.",
@@ -7412,6 +7454,27 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
+    ofcUaCoversTerritories: "{{name}} yanzu yana rufe yankuna {{n}}.",
+    ofcFaMinimumNow: "Mafi karancin sigar yanzu {{version}} ce.",
+    ofcFaNoneBelowIt: "Babu wata na’ura mai aiki da ke kasa da ita.",
+    ofcFaCannotCollect: "Na’urori {{locked}} cikin {{total}} masu aiki ba za su iya karbar kudi ba sai sun sabunta.",
+    ofcTrVehicleBackInService: "An maido da {{plate}} aiki kuma za a iya sabunta takardunta.",
+    ofcTrVehicleSuspended: "An dakatar da {{plate}}. Ba za a karbi sabuntawa ba sai an dage dakatarwar.",
+    ofcTrVehicleArchived: "An cire {{plate}} daga rajista. Ba za a karbi sabuntawa ba.",
+    colPayReceipted: "An tabbatar da biyan kudi. An fitar da rasit {{number}}.",
+    colPayAwaitingSettlement: "Tashar ta tabbatar da wannan biyan kudi. Za a fitar da rasit na gwamnati sai kudin ya isa asusun gwamnati.",
+    colPayStillPending: "Tashar ba ta ba da amsa ba tukuna. Kada ka sake karbar wannan kudin — ka sake dubawa nan ba da jimawa ba.",
+    colPayFailed: "Biyan kudin bai yi nasara ba. Ba a karbi kudi ba kuma ba a fitar da rasit ba.",
+    ofcFnPromotedForPayout: "Rikodin kwamishan {{n}} sun cancanci a biya su.",
+    ofcCfEvaluatedCount: "An auna ’yan kasa {{n}} bisa wannan shirin.",
+    ofcTrObligationsUpdated: "An kara wajibai {{added}}, an yafe {{waived}}.",
+    ofcTrOneDetailCorrected: "An gyara bayani daya a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike.",
+    ofcTrDetailsCorrected: "An gyara bayanai {{n}} a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike.",
+    ofcTrOnRegisterAgain: "{{name}} ya koma kan rajista kuma za a iya yi masa kima.",
+    ofcTrRecordEnded: "{{name}} yanzu {{status}} ne. Ba za a iya yin sabuwar kima ba kuma tunatarwa za ta tsaya.",
+    ofcTrStillOwedAfterEnding: "Abin da ake bin sa yana nan, kuma wannan rikodin yanzu yana cikin jerin rikodin da aka rufe da ake bin su.",
+    ofcTrNothingWasOutstanding: "Babu abin da ya rage.",
     ofcOsRefundsReturned: "An mayar da kudi {{n}} ga masu biyan haraji.",
     ofcOsRefundsPartly: "An mayar {{done}}; {{left}} har yanzu ana bin su. Wadannan masu biyan haraji ba su samu kudinsu ba tukuna.",
     ofcOsTinsAssigned: "An ba da TIN {{n}}.",

@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatDateTimeIn, localName, translations, type Language } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -62,6 +62,27 @@ interface TaxpayerSummary {
 
 function taxpayerName(taxpayer: TaxpayerSummary): string {
   return taxpayer.business_name ?? `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim();
+}
+
+/**
+ * What a confirmation attempt means, in the agent's language.
+ *
+ * Exported so a test can assert the real branch rather than a copy of it. A
+ * test that re-implements this decides nothing about the screen: the screen
+ * could stop calling it and the test would stay green, which is the shape
+ * this application has been found carrying several times already.
+ */
+export function paymentOutcomeText(
+  t: TranslationDictionary,
+  result: { status: string; receiptNumber?: string },
+): string {
+  return result.status === 'FAILED'
+    ? t.colPayFailed
+    : result.status === 'PENDING'
+      ? t.colPayStillPending
+      : result.receiptNumber
+        ? t.colPayReceipted.replace('{{number}}', result.receiptNumber)
+        : t.colPayAwaitingSettlement;
 }
 
 export function CollectScreen({
@@ -571,10 +592,23 @@ export function TransactionScreen({
     setError(null);
     setNotice(null);
     try {
-      const result = await api.post<{ status: string; message: string; receiptNumber?: string }>(
-        `/payments/${data.transaction.payment_id}/confirm`,
-      );
-      setNotice(result.message);
+      const result = await api.post<{
+        status: 'VERIFIED' | 'PENDING' | 'FAILED';
+        receiptNumber?: string;
+      }>(`/payments/${data.transaction.payment_id}/confirm`);
+      /*
+       * Said here, in the agent's language, rather than taken from the server.
+       *
+       * This is the sentence an agent reads standing in front of somebody who
+       * has just handed over money, and it was the API's English — including
+       * "The payment did not succeed. No money has been received and no
+       * receipt has been issued." An agent who cannot read that sentence
+       * cannot tell the person in front of them what happened to their money.
+       *
+       * The status and the receipt number are on the response, and they are
+       * what actually distinguish the four outcomes.
+       */
+      setNotice(paymentOutcomeText(t, result));
       await load();
     } catch (caught) {
       // A pending gateway answer arrives here as PAYMENT_UNCONFIRMED, and the

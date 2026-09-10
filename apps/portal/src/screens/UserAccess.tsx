@@ -235,11 +235,17 @@ export function UserAccessScreen({ user }: { user: User }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ covers: number }>(
         `/government/users/${coverage.id}/territories`,
         { territoryIds: chosenTerritories, reason: coverageReason.trim() },
       );
-      setMessage(result.message);
+      setMessage(
+        result.covers === 0
+          ? t.ofcUaCoversNothing.replace('{{name}}', coverage.full_name)
+          : t.ofcUaCoversTerritories
+              .replace('{{name}}', coverage.full_name)
+              .replace('{{n}}', String(result.covers)),
+      );
       setCoverage(null);
       setTerritories(null);
       setCoverageReason('');

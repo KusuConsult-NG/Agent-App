@@ -774,11 +774,11 @@ export function ProgrammesScreen() {
   async function evaluateAll(programme: any) {
     setEvaluating(programme.id);
     try {
-      const result = await api.post<{ evaluated: number; message: string }>(
+      const result = await api.post<{ evaluated: number }>(
         `/government/programmes/${programme.id}/evaluate-all`,
         {},
       );
-      setMessage(result.message);
+      setMessage(t.ofcCfEvaluatedCount.replace('{{n}}', String(result.evaluated)));
       load();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);

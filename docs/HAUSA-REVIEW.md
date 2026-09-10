@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,103 strings; that one is two pages and links back
+> because it carries all 3,124 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,103 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,124 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,103 strings is worse than no sheet, because it looks complete; this one cannot
+3,124 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,103 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,124 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,103 strings: where the
+- The glossary below is applied consistently across all 3,124 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -468,7 +468,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3037 strings, grouped by where an agent meets them. Lower stakes
+3058 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -864,6 +864,9 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcFaMinimumNow` | Minimum version is now {{version}}. | Mafi karancin sigar yanzu {{version}} ce. | ☐ | |
+| `ofcFaNoneBelowIt` | No active handset is below it. | Babu wata na’ura mai aiki da ke kasa da ita. | ☐ | |
+| `ofcFaCannotCollect` | {{locked}} of {{total}} active handset(s) cannot collect until they update. | Na’urori {{locked}} cikin {{total}} masu aiki ba za su iya karbar kudi ba sai sun sabunta. | ☐ | |
 | `ofcFaEveryHandsetCan` | Every handset can collect. | Kowace waya na iya karba. | ☐ | |
 | `ofcFaSomeCannotCollect` | These agents cannot collect until they update. | Wadannan wakilai ba za su iya karba ba sai sun sabunta. | ☐ | |
 | `ofcFaIntro` | A handset below the minimum version cannot start a payment or renew a vehicle. It is refused before any money moves, and the agent is told to update. Raise the minimum when a release is getting something wrong in the field; every agent still on that build stops collecting the moment it is published. | Wayar da ke kasa da mafi karancin siga ba za ta iya fara biyan kudi ko sabunta mota ba. Ana ki ta kafin kudi ya motsa, kuma ana gaya wa wakilin ya sabunta. Ka daga mafi karanci idan wani saki yana kuskure a filin aiki; duk wakilin da ke kan wannan sigar zai daina karba nan take idan aka buga shi. | ☐ | |
@@ -926,6 +929,8 @@ instructions — but they are what an agent reads all day.
 | `ofcUaRoleRevenueOfficer` | Registers and corrects taxpayer records, and reviews approvals. | Yana yin rajista da gyara bayanan mai biyan haraji, kuma yana duba amincewa. | ☐ | |
 | `ofcUaRoleFinanceOfficer` | Reconciles settlements and authorises commission payouts. | Yana daidaita biyan kudi kuma yana ba da izinin fitar da kwamishan. | ☐ | |
 | `ofcUaRoleAuditor` | Reads everything and changes nothing. | Yana karanta komai kuma ba ya canja komai. | ☐ | |
+| `ofcUaCoversNothing` | {{name}} now covers no territory and will see no revenue figures. | {{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba. | ☐ | |
+| `ofcUaCoversTerritories` | {{name}} now covers {{n}} territory(ies). | {{name}} yanzu yana rufe yankuna {{n}}. | ☐ | |
 | `ofcUaRoleChangeIntro` | Changing a role signs the officer out of every device immediately, because their current access travels in the session they are holding. They sign in again with the new role. Agents are not listed: their access follows the clearance pipeline, not a role. | Canza matsayi yana fitar da jami’i daga kowace na’ura nan take, saboda izininsa na yanzu yana tafiya cikin zaman da yake rike da shi. Zai sake shiga da sabon matsayin. Ba a jera wakilai: izininsu yana bin tsarin izini, ba matsayi ba. | ☐ | |
 | `ofcUaNewRole` | New role | Sabon matsayi | ☐ | |
 | `ofcUaSelectRole` | Select a role | Zabi matsayi | ☐ | |
@@ -1128,6 +1133,7 @@ instructions — but they are what an agent reads all day.
 | `ofcFnEntries` | Entries | Shigarwa | ☐ | |
 | `ofcFnBankAccount` | Bank account | Asusun banki | ☐ | |
 | `ofcFnRequestedBy` | Requested by | Wanda ya nema | ☐ | |
+| `ofcFnPromotedForPayout` | {{n}} commission record(s) became eligible for payout. | Rikodin kwamishan {{n}} sun cancanci a biya su. | ☐ | |
 | `ofcFnSettlementRecorded` | {{reference}} recorded. {{count}} collection(s) settled. | An yi rijistar {{reference}}. An daidaita tarin kudi {{count}}. | ☐ | |
 | `ofcFnSettlementDisputed` | {{reference}} recorded and disputed: the credit does not match the collections it covers, so none of them have been settled. Close the dispute once the rest of the money is accounted for. | An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ka rufe takaddamar idan an gano sauran kudin. | ☐ | |
 | `ofcFnTotalCreditedPrompt` | Total now credited against {{reference}}, in naira.  | Jimlar kudin da aka shigar kan {{reference}}, a naira.  | ☐ | |
@@ -1283,6 +1289,7 @@ instructions — but they are what an agent reads all day.
 | `ofcCfRequiresNoArrears` | Requires no arrears | Yana bukatar babu bashi | ☐ | |
 | `ofcCfEligible` | Eligible | Ya cancanta | ☐ | |
 | `ofcCfEvaluated` | Evaluated | An duba | ☐ | |
+| `ofcCfEvaluatedCount` | {{n}} citizen(s) evaluated against this programme. | An auna ’yan kasa {{n}} bisa wannan shirin. | ☐ | |
 | `ofcCfItemAdded` | {{name}} has been added to the catalogue. It has no rate yet, so it cannot be assessed until you set one. | An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ka saita daya. | ☐ | |
 | `ofcCfNotAnAmount` | “{{amount}}” is not an amount in naira. Enter it as 15000 or 15000.00. | “{{amount}}” ba adadi ne a naira ba. Ka shigar da shi kamar 15000 ko 15000.00. | ☐ | |
 | `ofcCfNotAPercentage` | “{{value}}” is not a percentage. Enter it as 5 or 5.00. | “{{value}}” ba kaso ne ba. Ka shigar da shi kamar 5 ko 5.00. | ☐ | |
@@ -1351,6 +1358,16 @@ instructions — but they are what an agent reads all day.
 | `ofcTrSampleVehicle` | Sold out of state and re-registered in Kaduna. | An sayar da ita a wajen jihar kuma an sake yi mata rajista a Kaduna. | ☐ | |
 | `ofcTrSampleClosure` | Premises visited on 12 August: the shop has been empty since the market fire in March. | An ziyarci wurin a 12 ga Agusta: shagon babu kowa tun gobarar kasuwa a watan Maris. | ☐ | |
 | `ofcTrRecordedBy` | Recorded by | Wanda ya rubuta | ☐ | |
+| `ofcTrVehicleBackInService` | {{plate}} is back in service and its particulars can be renewed. | An maido da {{plate}} aiki kuma za a iya sabunta takardunta. | ☐ | |
+| `ofcTrVehicleSuspended` | {{plate}} is suspended. Renewals are refused until it is lifted. | An dakatar da {{plate}}. Ba za a karbi sabuntawa ba sai an dage dakatarwar. | ☐ | |
+| `ofcTrVehicleArchived` | {{plate}} has been taken off the register. Renewals are refused. | An cire {{plate}} daga rajista. Ba za a karbi sabuntawa ba. | ☐ | |
+| `ofcTrObligationsUpdated` | {{added}} obligation(s) added, {{waived}} waived. | An kara wajibai {{added}}, an yafe {{waived}}. | ☐ | |
+| `ofcTrOneDetailCorrected` | One detail on this taxpayer record has been corrected. The change is on the audit trail. | An gyara bayani daya a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike. | ☐ | |
+| `ofcTrDetailsCorrected` | {{n}} details on this taxpayer record have been corrected. The change is on the audit trail. | An gyara bayanai {{n}} a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike. | ☐ | |
+| `ofcTrOnRegisterAgain` | {{name}} is on the register again and can be assessed. | {{name}} ya koma kan rajista kuma za a iya yi masa kima. | ☐ | |
+| `ofcTrRecordEnded` | {{name}} is {{status}}. No new assessment can be raised and reminders stop. | {{name}} yanzu {{status}} ne. Ba za a iya yin sabuwar kima ba kuma tunatarwa za ta tsaya. | ☐ | |
+| `ofcTrStillOwedAfterEnding` | What is already owed remains owed, and this record now appears in the queue of ended records with arrears. | Abin da ake bin sa yana nan, kuma wannan rikodin yanzu yana cikin jerin rikodin da aka rufe da ake bin su. | ☐ | |
+| `ofcTrNothingWasOutstanding` | Nothing was outstanding. | Babu abin da ya rage. | ☐ | |
 | `ofcTrCorrecting` | Correcting… | Ana gyarawa… | ☐ | |
 | `ofcTrEnterTheCorrectedValue` | Enter the corrected value in whichever field is wrong. | Ka shigar da darajar da aka gyara a duk filin da ba daidai ba ne. | ☐ | |
 | `ofcTrNameTheTypeOf` | Name the type of identification when changing the number. | Ka fadi nau’in shaidar mutum idan kana canza lambar. | ☐ | |
@@ -2380,6 +2397,10 @@ instructions — but they are what an agent reads all day.
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
 | `colReceiptNumbered` | Receipt {{number}} | Rasit {{number}} | ☐ | |
+| `colPayReceipted` | Payment confirmed. Receipt {{number}} has been issued. | An tabbatar da biyan kudi. An fitar da rasit {{number}}. | ☐ | |
+| `colPayAwaitingSettlement` | The gateway has confirmed this payment. The government receipt is issued once the money reaches a government account. | Tashar ta tabbatar da wannan biyan kudi. Za a fitar da rasit na gwamnati sai kudin ya isa asusun gwamnati. | ☐ | |
+| `colPayStillPending` | The gateway has not answered yet. Do not take this payment again — check back shortly. | Tashar ba ta ba da amsa ba tukuna. Kada ka sake karbar wannan kudin — ka sake dubawa nan ba da jimawa ba. | ☐ | |
+| `colPayFailed` | The payment did not succeed. No money has been received and no receipt has been issued. | Biyan kudin bai yi nasara ba. Ba a karbi kudi ba kuma ba a fitar da rasit ba. | ☐ | |
 | `colShareTitle` | PSIRS receipt | Rasit na PSIRS | ☐ | |
 | `colShareBody` | PSIRS receipt {{number}} for {{name}}. Verify with code {{code}}. | Rasit na PSIRS {{number}} na {{name}}. Ka tantance da lambar {{code}}. | ☐ | |
 | `colChangeChoice` | Change | Canza | ☐ | |

@@ -571,10 +571,10 @@ export function CommissionsScreen() {
             type="button"
             className="secondary"
             onClick={async () => {
-              const result = await api.post<{ promoted: number; message: string }>(
+              const result = await api.post<{ promoted: number }>(
                 '/government/commissions/promote',
               );
-              setMessage(result.message);
+              setMessage(t.ofcFnPromotedForPayout.replace('{{n}}', String(result.promoted)));
               load();
             }}
           >{t.ofcFnPromoteEligible}</button>
