@@ -45,6 +45,24 @@ function answering(verify: unknown) {
   });
 }
 
+/**
+ * Render, and wait until nothing is still in flight.
+ *
+ * `AuditScreen` fires several requests on mount. A test that asserts on one
+ * of them and returns leaves the others settling, and their `.then(setState)`
+ * reaches an unmounted tree — React schedules the work, and if the file's
+ * environment has gone by then the scheduler wakes to `ReferenceError: window
+ * is not defined`. It fails no assertion, is reported against whichever file
+ * happened to be running, and makes `vitest run` exit 1 about one run in six.
+ *
+ * `BackgroundWorkPanel` renders a spinner until its own fetch resolves, so
+ * its title appearing is proof that the slowest of them has landed.
+ */
+async function renderSettled(lang: typeof ha | typeof en = ha) {
+  render(<AuditScreen />);
+  await screen.findByText(lang.ofcOvUnattendedWork);
+}
+
 async function pressVerify() {
   const button = await screen.findByRole('button', { name: ha.ofcOvVerifyChain });
   fireEvent.click(button);
@@ -56,7 +74,7 @@ beforeEach(() => {
   setPortalLanguage('ha');
 });
 
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   setPortalLanguage('en');
 });
@@ -71,7 +89,7 @@ describe('what an auditor is told about the chain', () => {
       message: 'Audit chain broken at entry 8891: the entry’s content does not match.',
     });
 
-    render(<AuditScreen />);
+    await renderSettled();
     await pressVerify();
 
     const expected = ha.ofcOvChainContentModified.replace('{{sequence}}', '8891');
@@ -95,7 +113,7 @@ describe('what an auditor is told about the chain', () => {
       message: 'Audit chain broken at entry 41.',
     });
 
-    render(<AuditScreen />);
+    await renderSettled();
     await pressVerify();
 
     const removed = ha.ofcOvChainGenesisRemoved.replace('{{sequence}}', '41');
@@ -111,7 +129,7 @@ describe('what an auditor is told about the chain', () => {
       message: 'Audit chain verified over 12045 entries. No tampering detected.',
     });
 
-    render(<AuditScreen />);
+    await renderSettled();
     await pressVerify();
 
     await waitFor(() =>
@@ -136,7 +154,7 @@ describe('what an auditor is told about the chain', () => {
       message: 'Audit chain broken at entry 3: a check added after this portal shipped.',
     });
 
-    render(<AuditScreen />);
+    await renderSettled();
     await pressVerify();
 
     await waitFor(() =>
@@ -156,7 +174,7 @@ describe('what an auditor is told about the chain', () => {
       message: 'Audit chain broken at entry 77.',
     });
 
-    render(<AuditScreen />);
+    await renderSettled(en);
     fireEvent.click(await screen.findByRole('button', { name: en.ofcOvVerifyChain }));
 
     await waitFor(() =>
@@ -258,17 +276,39 @@ describe('what the job monitor says about an unattended job', () => {
    * instance died holding it. Both read as "not working" and are looked into
    * differently.
    */
-  it('keeps “never started” apart from “started and never came back”', async () => {
+  /*
+   * Two tests, not one with a `cleanup()` in the middle.
+   *
+   * Tearing the tree down mid-test unmounts `AuditScreen` while the other
+   * requests it fires on mount are still in flight; their `.then(setState)`
+   * then lands on a dead tree and React schedules work that can outlive the
+   * file's environment entirely. That surfaced as an intermittent
+   * `ReferenceError: window is not defined` attributed to whichever test file
+   * happened to be running — never this one — and it failed no assertion
+   * while making `vitest run` exit 1 about a quarter of the time.
+   *
+   * Letting the framework's own per-test cleanup do the teardown costs
+   * nothing and removes the race.
+   */
+  it('says a job has not started when it should have', async () => {
     jobs([{ ...base, state: 'OVERDUE' }]);
-    render(<AuditScreen />);
+    await renderSettled();
     await waitFor(() => expect(screen.getByText(ha.ofcOvJobOverdue)).toBeTruthy());
     expect(screen.queryByText(ha.ofcOvJobStalled)).toBeNull();
     expect(screen.queryByText('English from the API')).toBeNull();
+  });
 
-    cleanup();
+  /*
+   * The other half of the pair. A job that has not started means the schedule
+   * may have stopped; one that started and never returned means an instance
+   * died holding it. Both read as "not working" and are looked into
+   * differently.
+   */
+  it('says a job started and never came back', async () => {
     jobs([{ ...base, state: 'STALLED' }]);
-    render(<AuditScreen />);
+    await renderSettled();
     await waitFor(() => expect(screen.getByText(ha.ofcOvJobStalled)).toBeTruthy());
+    expect(screen.queryByText(ha.ofcOvJobOverdue)).toBeNull();
   });
 
   it('counts the failures in a row and names the last reason', async () => {
@@ -280,7 +320,7 @@ describe('what the job monitor says about an unattended job', () => {
         lastError: 'connection refused',
       },
     ]);
-    render(<AuditScreen />);
+    await renderSettled();
 
     const expected = ha.ofcOvJobFailing
       .replace('{{count}}', '3')
@@ -291,7 +331,7 @@ describe('what the job monitor says about an unattended job', () => {
   /* A failing job with nothing recorded still has to say so, not show a blank. */
   it('says so when a failure recorded no reason', async () => {
     jobs([{ ...base, state: 'FAILING', consecutiveFailures: 1, lastError: null }]);
-    render(<AuditScreen />);
+    await renderSettled();
 
     const expected = ha.ofcOvJobFailing
       .replace('{{count}}', '1')
@@ -301,7 +341,7 @@ describe('what the job monitor says about an unattended job', () => {
 
   it('says how often a job runs in the reader’s language too', async () => {
     jobs([{ ...base, state: 'HEALTHY', intervalMs: 30_000 }]);
-    render(<AuditScreen />);
+    await renderSettled();
     await waitFor(() =>
       expect(screen.getByText(ha.ofcOvEverySeconds.replace('{{n}}', '30'))).toBeTruthy(),
     );

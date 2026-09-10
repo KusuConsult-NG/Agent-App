@@ -98,7 +98,14 @@ describe('a vehicle the platform already holds', () => {
    * Both of these are `source: 'PLATFORM'`. Only `authorityConfirmed` tells
    * them apart, which is why four sentences would have been one too few.
    */
-  it('distinguishes one the authority has confirmed from one it has not', async () => {
+  /*
+   * Two tests rather than one with a `cleanup()` between the halves. Tearing
+   * the tree down mid-test unmounts the screen while its other requests are
+   * in flight, and React can then schedule work that outlives the file's
+   * environment — an unhandled `window is not defined` that fails no
+   * assertion and still makes the run exit 1.
+   */
+  it('says a vehicle the authority has confirmed', async () => {
     registryAnswers({
       source: 'PLATFORM',
       vehicle: { registration_number: 'JOS123AB' },
@@ -108,8 +115,10 @@ describe('a vehicle the platform already holds', () => {
     render(<VehiclesScreen navigate={() => {}} />);
     await lookUp();
     await waitFor(() => expect(screen.getByText(ha.agVehFoundConfirmed)).toBeTruthy());
+    expect(screen.queryByText(ha.agVehFoundUnconfirmed)).toBeNull();
+  });
 
-    cleanup();
+  it('says a vehicle the authority has never confirmed', async () => {
     registryAnswers({
       source: 'PLATFORM',
       vehicle: { registration_number: 'JOS123AB' },
@@ -119,6 +128,7 @@ describe('a vehicle the platform already holds', () => {
     render(<VehiclesScreen navigate={() => {}} />);
     await lookUp();
     await waitFor(() => expect(screen.getByText(ha.agVehFoundUnconfirmed)).toBeTruthy());
+    expect(screen.queryByText(ha.agVehFoundConfirmed)).toBeNull();
   });
 
   it('says it in English for an agent working in English', async () => {
