@@ -43,6 +43,7 @@ export function TransactionsScreen() {
   const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  const [rowsError, setRowsError] = useState<ApiError | null>(null);
   const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
   /*
    * Kept in the URL and in this session, not in component state.
@@ -77,11 +78,20 @@ export function TransactionsScreen() {
 
   useEffect(() => {
     setRows(null);
+    setRowsError(null);
     api
       .get<TransactionRow[]>(`/government/transactions?${buildQuery().toString()}`)
       .then(setRows)
+      /*
+       * Its own state, because `rows` stays null on a failure and null renders
+       * the skeleton. The officer was shown the refusal at the top of the
+       * screen and a list still loading underneath it, for ever.
+       */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setRowsError(caught.error);
+        else if (caught instanceof Error) {
+          setRowsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [buildQuery]);
 
@@ -152,7 +162,11 @@ export function TransactionsScreen() {
       <ErrorAlert error={error} />
 
       <div className="card card--flush">
-        {!rows ? (
+        {rowsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={rowsError} />
+          </div>
+        ) : !rows ? (
           <div style={{ padding: 18 }}>
             <Loading rows={6} />
           </div>

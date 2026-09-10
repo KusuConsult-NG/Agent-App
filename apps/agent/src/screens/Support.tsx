@@ -65,14 +65,22 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
   const { t } = useI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * "You have not reported anything yet." is what an empty list says, and
+   * `setTickets([])` said it from a failed request — to an agent checking
+   * whether the problem they reported is being dealt with.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     api
       .get<TicketSummary[]>('/support/tickets')
       .then(setTickets)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -90,7 +98,9 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 
       <div className="card">
         <h2 className="card__title">{t.supMyReports}</h2>
-        {!tickets ? (
+        {loadError ? (
+          <ErrorAlert error={loadError} />
+        ) : !tickets ? (
           <Loading />
         ) : tickets.length === 0 ? (
           <Empty>{t.supNothingReported}</Empty>

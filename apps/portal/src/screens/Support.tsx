@@ -65,15 +65,26 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(() => {
     setTickets(null);
+    setLoadError(null);
     api
       .get<TicketSummary[]>(`/support/tickets${status ? `?status=${status}` : ''}`)
       .then(setTickets)
+      /*
+       * `setTickets([])` printed "No tickets match this filter." from a request
+       * that failed — and took the conduct banner with it, which is the part
+       * that matters. Complaints about how revenue staff treated somebody are
+       * counted out of this same list, so a refused read did not merely show
+       * an empty queue: it said there were no open complaints.
+       */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [status]);
 
@@ -111,7 +122,12 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
           </label>
         </div>
 
-        {!tickets ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !tickets ? (
           <Loading />
         ) : (
           <Table
