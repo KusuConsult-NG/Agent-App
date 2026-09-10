@@ -457,3 +457,76 @@ describe('what has been recorded', () => {
     expect(within(row).queryByRole('button', { name: /Record an objection/i })).toBeNull();
   });
 });
+
+/**
+ * The three queues, when one of them could not be read.
+ *
+ * Each list's empty text is a statement — "Nothing is in dispute.", "No
+ * estimate is under objection.", "Nothing has been recorded yet." — and all
+ * three catches used to answer a refusal with `[]`. Two of the three said
+ * nothing at all about the failure, so a refused read of the objections queue
+ * looked exactly like a morning with no objections in it.
+ *
+ * An objection is a citizen contesting what the state says they owe, and this
+ * screen is where somebody decides it. Of the three false sentences that is
+ * the expensive one: a queue that reports itself empty is not a queue anybody
+ * comes back to, and the person waiting is on the other side of a bill.
+ *
+ * They are separate states because the three cards are three different jobs.
+ * Being told the objections could not be read while the disagreements are
+ * listed is the accurate thing to show, and it is also the useful one.
+ */
+describe('a queue that could not be read', () => {
+  const refuse = (which: string) => {
+    vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
+      if (path.includes(which)) {
+        throw new apiModule.ApiRequestError(503, {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: `The ${which} queue could not be read.`,
+          moneyStatus: 'NOT_APPLICABLE',
+        });
+      }
+      if (path.includes('/disagreements')) return DISAGREEMENTS as never;
+      if (path.includes('/objections')) return OBJECTIONS as never;
+      return RECORDED as never;
+    });
+  };
+
+  it('does not report the objections queue as empty', async () => {
+    refuse('objections');
+    render(<EnumerationScreen />);
+
+    await waitFor(() => expect(screen.getByText(/objections queue could not be read/i)).toBeTruthy());
+    expect(screen.queryByText(/No estimate is under objection/i)).toBeNull();
+  });
+
+  it('leaves the other two queues readable', async () => {
+    // One failed request must not cost an officer the work they can still do.
+    refuse('objections');
+    render(<EnumerationScreen />);
+
+    await waitFor(() => expect(screen.getByText('Amina Danladi')).toBeTruthy());
+    expect(screen.getByText('Hauwa Yakubu')).toBeTruthy();
+  });
+
+  it('does not report nothing as being in dispute', async () => {
+    refuse('disagreements');
+    render(<EnumerationScreen />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/disagreements queue could not be read/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/Nothing is in dispute/i)).toBeNull();
+  });
+
+  /*
+   * The control. An empty queue is the ordinary state of a well-run week, and
+   * saying so plainly is how an officer knows they are done.
+   */
+  it('still says a queue is empty when it is', async () => {
+    objections = [];
+    render(<EnumerationScreen />);
+
+    await waitFor(() => expect(screen.getByText(/No estimate is under objection/i)).toBeTruthy());
+  });
+});

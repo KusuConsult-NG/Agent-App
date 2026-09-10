@@ -283,3 +283,62 @@ describe('when the officer may not file', () => {
     ).toBeNull();
   });
 });
+
+/**
+ * The filing history, when it could not be read.
+ *
+ * An empty history prints "This employer has never filed a return." — a
+ * statement about a named employer, on the screen where an officer decides
+ * whether to chase them. `.catch(() => setHistory([]))` produced that sentence
+ * from a failed request, silently, about somebody who may have filed every
+ * month for a year.
+ *
+ * It is also the sentence that decides what the officer types next: a first
+ * return and a correction to an existing one are different conversations with
+ * the employer.
+ */
+describe('an employer whose history could not be read', () => {
+  const refuseHistory = () => {
+    vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
+      if (path.includes('/returns')) {
+        throw new apiModule.ApiRequestError(503, {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'The filing history could not be read.',
+          moneyStatus: 'NOT_APPLICABLE',
+        });
+      }
+      if (path.startsWith('/reference/lgas')) return [{ id: 'lga-1', name: 'Jos North' }] as never;
+      return LEADS as never;
+    });
+  };
+
+  it('is not reported as never having filed', async () => {
+    refuseHistory();
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/filing history could not be read/i)).toBeTruthy());
+    expect(screen.queryByText(/has never filed a return/i)).toBeNull();
+  });
+
+  it('can still be filed for', async () => {
+    // The history is context, not a precondition. Losing it must not stop an
+    // officer recording a return the employer is standing there to file.
+    refuseHistory();
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/filing history could not be read/i)).toBeTruthy());
+    expect(screen.getByText(/File a return/i)).toBeTruthy();
+  });
+
+  /*
+   * The control. An employer who really has never filed is the whole point of
+   * the leads list, and saying so is what tells the officer which
+   * conversation they are about to have.
+   */
+  it('still says so when they really never have', async () => {
+    history = [];
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/has never filed a return/i)).toBeTruthy());
+  });
+});

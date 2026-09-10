@@ -93,24 +93,59 @@ export function EnumerationScreen() {
   const [objectionGround, setObjectionGround] = useState('FACTS_WRONG');
   const [objectionStatement, setObjectionStatement] = useState('');
   const [busy, setBusy] = useState(false);
+  const [disagreementsError, setDisagreementsError] = useState<ApiError | null>(null);
+  const [objectionsError, setObjectionsError] = useState<ApiError | null>(null);
+  const [recordedError, setRecordedError] = useState<ApiError | null>(null);
+
+  /*
+   * Three queues, three answers to "could you read it".
+   *
+   * All three catches used to write `[]`, and each list's empty text is a
+   * statement: "Nothing is in dispute.", "No estimate is under objection.",
+   * "Nothing has been recorded yet." Two of the three said nothing at all
+   * about the failure, so a refused read of the objections queue looked
+   * exactly like a morning with no objections in it.
+   *
+   * An objection is a citizen contesting what the state says they owe, and
+   * this screen is where somebody decides it. A queue that reports itself
+   * empty is not a queue anybody comes back to, which makes the false version
+   * of that sentence the most expensive one on the screen.
+   *
+   * Separately, because which queue went missing is what an officer needs to
+   * know: the three cards are three different jobs.
+   */
+  const readingFailed =
+    (set: (error: ApiError | null) => void) =>
+    (caught: unknown): void => {
+      if (caught instanceof ApiRequestError) set(caught.error);
+      else if (caught instanceof Error) {
+        set({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+    };
 
   const load = useCallback(() => {
     setError(null);
     api
       .get<Disagreement[]>('/government/enumeration/disagreements')
-      .then(setDisagreements)
-      .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setDisagreements([]);
-      });
+      .then((rows) => {
+        setDisagreements(rows);
+        setDisagreementsError(null);
+      })
+      .catch(readingFailed(setDisagreementsError));
     api
       .get<Objection[]>('/government/enumeration/objections')
-      .then(setObjections)
-      .catch(() => setObjections([]));
+      .then((rows) => {
+        setObjections(rows);
+        setObjectionsError(null);
+      })
+      .catch(readingFailed(setObjectionsError));
     api
       .get<Recorded[]>('/government/enumeration/observations')
-      .then(setRecorded)
-      .catch(() => setRecorded([]));
+      .then((rows) => {
+        setRecorded(rows);
+        setRecordedError(null);
+      })
+      .catch(readingFailed(setRecordedError));
   }, []);
 
   useEffect(() => {
@@ -168,7 +203,12 @@ export function EnumerationScreen() {
         <p className="card__hint">
           {t.ofcEnRecordedIntro}
         </p>
-        {recorded === null ? (
+        {recordedError ? (
+          <>
+            <ErrorAlert error={recordedError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </>
+        ) : recorded === null ? (
           <Loading rows={2} />
         ) : (
           <Table
@@ -323,7 +363,12 @@ export function EnumerationScreen() {
         <p className="card__hint">
           {t.ofcEnDisagreementsIntro}
         </p>
-        {disagreements === null ? (
+        {disagreementsError ? (
+          <>
+            <ErrorAlert error={disagreementsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </>
+        ) : disagreements === null ? (
           <Loading rows={2} />
         ) : (
           <Table
@@ -389,7 +434,12 @@ export function EnumerationScreen() {
 
       <div className="card">
         <h2 className="card__title">{t.ofcEnObjections}</h2>
-        {objections === null ? (
+        {objectionsError ? (
+          <>
+            <ErrorAlert error={objectionsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </>
+        ) : objections === null ? (
           <Loading rows={2} />
         ) : (
           <>

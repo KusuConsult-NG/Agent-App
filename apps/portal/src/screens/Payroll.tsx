@@ -98,6 +98,13 @@ export function PayrollScreen() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [openName, setOpenName] = useState<string>('');
   const [history, setHistory] = useState<Return_[] | null>(null);
+  /*
+   * "This employer has never filed a return." is what an empty history prints,
+   * and it is a statement about a named employer that an officer acts on. The
+   * catch used to write `[]` and say nothing, so a refused read produced that
+   * sentence about somebody who may have filed every month.
+   */
+  const [historyError, setHistoryError] = useState<ApiError | null>(null);
   const [period, setPeriod] = useState(lastCompleteMonth());
   const [rows, setRows] = useState<EmployeeRow[]>([blankRow()]);
   const [filed, setFiled] = useState<Filed | null>(null);
@@ -145,10 +152,16 @@ export function PayrollScreen() {
     setFilingError(null);
     setRows([blankRow()]);
     setHistory(null);
+    setHistoryError(null);
     api
       .get<Return_[]>(`/government/paye/employers/${lead.taxpayerId}/returns`)
       .then(setHistory)
-      .catch(() => setHistory([]));
+      .catch((caught: unknown) => {
+        if (caught instanceof ApiRequestError) setHistoryError(caught.error);
+        else if (caught instanceof Error) {
+          setHistoryError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   };
 
   const usable = rows.filter((row) => row.employeeName.trim() && row.grossNaira.trim());
@@ -297,7 +310,9 @@ export function PayrollScreen() {
         <div className="card">
           <h2 className="card__title">{openName}</h2>
 
-          {history === null ? (
+          {historyError ? (
+            <ErrorAlert error={historyError} />
+          ) : history === null ? (
             <Loading rows={2} />
           ) : (
             <>
