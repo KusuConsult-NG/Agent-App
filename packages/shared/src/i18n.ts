@@ -6,6 +6,7 @@
  */
 
 import type { AgentBlocker } from './agent-lifecycle';
+import type { DuplicateReason } from './identity';
 
 export type Language = 'en' | 'ha';
 
@@ -2649,6 +2650,14 @@ export interface TranslationDictionary {
   agEnBandSoFar: string;
   tpViewProfile: string;
   tpPossibleExisting: string;
+  tpDupIdentityNumber: string;
+  tpDupPhoneAndName: string;
+  tpDupPhone: string;
+  tpDupBusinessNameInLga: string;
+  tpDupNameInLga: string;
+  tpDupCouldNotList: string;
+  tpDupCouldNotListBody: string;
+  tpDupTryAgain: string;
   tpCheckSamePerson: string;
   tpNoneOfThese: string;
   tpHasTin: string;
@@ -5928,6 +5937,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnBandSoFar: "This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice.",
     tpViewProfile: "View profile",
     tpPossibleExisting: "Possible existing taxpayer",
+    tpDupIdentityNumber: "The same identification number is already registered",
+    tpDupPhoneAndName: "Same phone number and same name",
+    tpDupPhone: "This phone number is already registered to another taxpayer",
+    tpDupBusinessNameInLga: "A business with this name is already registered in this LGA",
+    tpDupNameInLga: "A taxpayer with this name is already registered in this LGA",
+    tpDupCouldNotList: "The matching records could not be shown",
+    tpDupCouldNotListBody: "PSIRS has flagged this as a possible duplicate, but the records it matched could not be loaded, so you cannot check them here. Try again. If it will not load, look the person up by phone number before you register them again.",
+    tpDupTryAgain: "Try showing them again",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
     tpNoneOfThese: "None of these — register as a new taxpayer",
     tpHasTin: "Does the taxpayer already have a TIN?",
@@ -9113,6 +9130,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     agEnBandSoFar: "Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa.",
     tpViewProfile: "Duba bayanai",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
+    tpDupIdentityNumber: "An riga an yi rajistar wannan lambar shaida",
+    tpDupPhoneAndName: "Lambar waya daya da suna daya",
+    tpDupPhone: "An riga an yi rajistar wannan lambar waya ga wani mai biyan haraji",
+    tpDupBusinessNameInLga: "An riga an yi rajistar wani kasuwanci mai wannan suna a wannan karamar hukuma",
+    tpDupNameInLga: "An riga an yi rajistar wani mai biyan haraji mai wannan suna a wannan karamar hukuma",
+    tpDupCouldNotList: "Ba a iya nuna bayanan da suka yi daidai ba",
+    tpDupCouldNotListBody: "PSIRS ta ce watakila wannan kwafi ne, amma ba a iya lodin bayanan da ta samu ba, don haka ba za ka iya duba su a nan ba. Ka sake gwadawa. Idan bai lodi ba, ka nemi mutumin da lambar waya kafin ka sake yi masa rajista.",
+    tpDupTryAgain: "Sake gwada nuna su",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",
     tpNoneOfThese: "Babu daya daga cikinsu — yi rajistar sabon mai biyan haraji",
     tpHasTin: "Mai biyan haraji yana da TIN kuwa?",
@@ -9904,6 +9929,21 @@ export const BLOCKER_TEXT: Record<AgentBlocker, keyof TranslationDictionary> = {
   BANK: 'appBlockerBank',
   AGREEMENT: 'appBlockerAgreement',
   DEVICE: 'appBlockerDevice',
+};
+
+/**
+ * The five duplicate-match reasons, as dictionary keys.
+ *
+ * Same join as `BLOCKER_TEXT`, for the same reason: the sentence is composed
+ * on the server and read by somebody who may not read English. Typed against
+ * `DuplicateReason`, so a new reason without a string fails the build.
+ */
+export const DUPLICATE_REASON_TEXT: Record<DuplicateReason, keyof TranslationDictionary> = {
+  IDENTITY_NUMBER: 'tpDupIdentityNumber',
+  PHONE_AND_NAME: 'tpDupPhoneAndName',
+  PHONE: 'tpDupPhone',
+  BUSINESS_NAME_IN_LGA: 'tpDupBusinessNameInLga',
+  NAME_IN_LGA: 'tpDupNameInLga',
 };
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {

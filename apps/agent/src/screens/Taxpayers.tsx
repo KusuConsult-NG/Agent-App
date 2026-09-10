@@ -11,7 +11,14 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { birthDateMessage, birthDateProblem, localName, type TranslationDictionary } from '@psirs/shared';
+import {
+  DUPLICATE_REASON_TEXT,
+  birthDateMessage,
+  birthDateProblem,
+  localName,
+  type DuplicateReason,
+  type TranslationDictionary,
+} from '@psirs/shared';
 import {
   ApiRequestError,
   api,
@@ -160,7 +167,8 @@ interface DuplicateMatch {
   tin: string | null;
   phone: string;
   score: number;
-  reasons: string[];
+  /** Codes, not prose — see `DUPLICATE_REASON_TEXT` in the shared package. */
+  reasons: DuplicateReason[];
 }
 
 /*
@@ -190,7 +198,22 @@ export function RegisterTaxpayerScreen({
   const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
+  /*
+   * Three states, because an empty list hid the only way forward.
+   *
+   * The panel below renders on `duplicates.length > 0`, and the "None of
+   * these" button — the override that actually registers the taxpayer — sits
+   * inside it. So when this follow-up fetch failed, `setDuplicates([])` took
+   * the panel away and the override with it: the agent was told PSIRS thinks
+   * this is a duplicate, shown nothing it matched, and left with no button to
+   * press. A citizen is standing in front of them and the registration is
+   * simply dead.
+   *
+   * The mirror image of the report screens that answered a failed read with a
+   * confident zero. Same cause — `[]` meaning two different things — and here
+   * it makes a false dead end rather than a false all-clear.
+   */
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | 'unreadable' | null>(null);
   const [result, setResult] = useState<{ taxpayerId: string; tin: string | null } | null>(null);
   const [savedOffline, setSavedOffline] = useState(false);
 
@@ -406,7 +429,7 @@ export function RegisterTaxpayerScreen({
             );
             setDuplicates(check.possibleDuplicates);
           } catch {
-            setDuplicates([]);
+            setDuplicates('unreadable');
           }
         }
       }
@@ -547,29 +570,62 @@ export function RegisterTaxpayerScreen({
 
       <ErrorAlert error={error} />
 
-      {duplicates && duplicates.length > 0 && (
+      {duplicates !== null && (Array.isArray(duplicates) ? duplicates.length > 0 : true) && (
         <div className="card">
           <h2 className="card__title">{t.tpPossibleExisting}</h2>
-          <p className="card__hint">{t.tpCheckSamePerson}</p>
-          <ul className="list">
-            {duplicates.map((match) => (
-              <li key={match.taxpayerId}>
-                <button
-                  type="button"
-                  className="list__item"
-                  onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
-                >
-                  <div className="list__body">
-                    <p className="list__title">{match.displayName}</p>
-                    <p className="list__meta">
-                      {match.tin ? `TIN ${match.tin} · ` : ''}
-                      {match.reasons.join('; ')}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+
+          {duplicates === 'unreadable' ? (
+            /*
+             * The warning stands even though the list did not arrive.
+             *
+             * The server has already refused this registration as a possible
+             * duplicate; only the follow-up that says *which* records matched
+             * failed. So the agent still needs the panel — to be told the
+             * comparison is not available to them, and to keep the override
+             * the server itself is willing to accept. Registering blind is a
+             * poor outcome; being unable to register at all, with no
+             * explanation, is a worse one, and the override is recorded for
+             * review either way.
+             */
+            <>
+              <Alert kind="warning" title={t.tpDupCouldNotList}>
+                <p style={{ margin: 0 }}>{t.tpDupCouldNotListBody}</p>
+              </Alert>
+              <button
+                type="button"
+                className="secondary"
+                style={{ marginTop: 12 }}
+                disabled={busy}
+                onClick={() => void submit()}
+              >
+                {t.tpDupTryAgain}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="card__hint">{t.tpCheckSamePerson}</p>
+              <ul className="list">
+                {duplicates.map((match) => (
+                  <li key={match.taxpayerId}>
+                    <button
+                      type="button"
+                      className="list__item"
+                      onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
+                    >
+                      <div className="list__body">
+                        <p className="list__title">{match.displayName}</p>
+                        <p className="list__meta">
+                          {match.tin ? `TIN ${match.tin} · ` : ''}
+                          {match.reasons.map((code) => t[DUPLICATE_REASON_TEXT[code]]).join('; ')}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
           <button
             type="button"
             className="secondary"
