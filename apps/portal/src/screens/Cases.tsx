@@ -492,6 +492,7 @@ interface CaseEvent {
 
 interface CaseDetailBody extends CaseRow {
   description: string;
+  assignee_id: string | null;
   department_id: string | null;
   resolution: string | null;
   resolved_by_name: string | null;
@@ -727,7 +728,18 @@ function CaseControls({
   const [evidence, setEvidence] = useState('');
   const [evidenceNote, setEvidenceNote] = useState('');
   const [resolution, setResolution] = useState('');
-  const [assignee, setAssignee] = useState(detail.assignee_name ? '' : '');
+  /*
+   * Seeded from who holds the case, not from nobody.
+   *
+   * `/cases/:id/assign` writes `assignee_id` unconditionally — the service
+   * only treats `undefined` as "leave alone" for the two department fields,
+   * and the route schema makes `assigneeId` required. So whatever this picker
+   * holds when Move case is pressed becomes the assignee. Starting it empty
+   * meant an officer who opened the panel to route a case to another
+   * department took the officer working it off the case on the way past, with
+   * nothing on screen saying so.
+   */
+  const [assignee, setAssignee] = useState(detail.assignee_id ?? '');
   const [department, setDepartment] = useState(detail.department ?? '');
   const [departmentId, setDepartmentId] = useState(detail.department_id ?? '');
   const [escalateReason, setEscalateReason] = useState('');

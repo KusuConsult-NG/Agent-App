@@ -317,6 +317,24 @@ describe('who may work a case', () => {
     assert.equal(routed.length, 1);
   });
 
+  /*
+   * The id, not just the name, because the portal has to send it back.
+   *
+   * `/cases/:id/assign` writes `assignee_id` from the body every time — the
+   * "leave it alone" reading of a missing field is only offered for the two
+   * department columns. So the panel that routes a case has to re-send whoever
+   * currently holds it, and it can only do that if the detail body says who
+   * that is by id. It did once — through `c.*` — which is exactly the kind of
+   * dependency that disappears the day somebody writes the column list out.
+   */
+  it('says who holds a case by id, not only by name', async () => {
+    const opened = await openCase('revenue', { assigneeId: ids.auditor });
+
+    const detail = await get(`/government/cases/${opened.id}`, auth('admin'));
+    assert.equal(detail.body.assignee_id, ids.auditor);
+    assert.equal(detail.body.assignee_name, OFFICERS.auditor.fullName);
+  });
+
   it('will not assign a case to a field agent', async () => {
     const agentUser = await createGovernmentUser({
       fullName: 'Field Danjuma',
