@@ -516,7 +516,8 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
                 },
               );
               setLink(response.invitationUrl);
-              return response.message;
+              // The screen typed the name in; it does not need it read back.
+              return t.agRefereeRequestSent.replace('{{name}}', form.fullName);
             });
           }}
           style={{ marginTop: 12 }}
@@ -783,8 +784,23 @@ function DeviceSection({ status, onDone }: { status: ApplicationStatus; onDone: 
           disabled={busy || !status.checklist.governmentApproved}
           onClick={() =>
             void run(async () => {
-              const result = await api.post<{ message: string }>('/agents/me/devices', profile);
-              return result.message;
+              const result = await api.post<{ status?: string; message: string }>(
+                '/agents/me/devices',
+                profile,
+              );
+              /*
+               * Registering a handset PSIRS already holds returns the row it
+               * has, whatever state that is in — so the three answers are not
+               * interchangeable. "Registered and active" told to somebody
+               * whose handset is suspended is the one thing it is not.
+               */
+              return result.status === 'PENDING'
+                ? t.agDevicePendingApproval
+                : result.status === 'SUSPENDED'
+                  ? t.agDeviceSuspended
+                  : result.status
+                    ? t.agDeviceActive
+                    : result.message;
             })
           }
         >

@@ -371,7 +371,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
         { taxpayerId: chosen.id },
         newIdempotencyKey('group.member'),
       );
-      setAdded(result.message);
+      setAdded(t.agGroupMemberRecorded);
       setChosen(null);
       await load();
     } catch (caught) {

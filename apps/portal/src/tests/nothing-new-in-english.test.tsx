@@ -687,9 +687,16 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
   '../screens/Public.tsx:302 result.message',
   '../screens/Public.tsx:1414 result.message',
 
-  /* Officer-facing confirmations: a rate changed, a group acted on. */
-  '../screens/Configuration.tsx:520 result.message',
-  '../screens/Groups.tsx:335 result.message',
+  /*
+   * The last officer-facing confirmation, and it is the fallback again.
+   *
+   * A revenue item's three outcomes are composed here now — the differences
+   * are money, since suspending stops new assessments while leaving issued
+   * invoices payable, and retiring is that and irreversible. The group
+   * departure needs nothing from the server at all: both names are already
+   * on the screen the officer is looking at.
+   */
+  '../screens/Configuration.tsx:537 result.message',
 ]);
 
 describe('no screen speaks the API’s English', () => {

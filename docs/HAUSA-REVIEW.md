@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,191 strings; that one is two pages and links back
+> because it carries all 3,205 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,191 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,205 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,191 strings is worse than no sheet, because it looks complete; this one cannot
+3,205 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,191 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,205 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,191 strings: where the
+- The glossary below is applied consistently across all 3,205 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3112 strings, grouped by where an agent meets them. Lower stakes
+3126 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1571,6 +1571,7 @@ instructions — but they are what an agent reads all day.
 | `ofcGpSector` | Sector | Bangare | ☐ | |
 | `ofcGpConfirmedMembers` | Confirmed members | Mambobin da aka tabbatar | ☐ | |
 | `ofcGpScoreAtAward` | Score at award | Maki a lokacin bayarwa | ☐ | |
+| `ofcGpMemberLeft` | {{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations. | An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba. | ☐ | |
 | `ofcGpConfirmationLinkCreated` | Confirmation link created. | An kirkiri hanyar tabbatarwa. | ☐ | |
 
 #### The officer portal — levies
@@ -2382,6 +2383,9 @@ instructions — but they are what an agent reads all day.
 | `ofcNoDataForPeriod` | No data for this period. | Babu bayanai na wannan lokacin. | ☐ | |
 | `ofcGrApproved` | {{name}} approved. Members can now be recorded. | An amince da {{name}}. Yanzu za a iya rubuta mambobi. | ☐ | |
 | `ofcGrCollectedAt` |  · collected at {{place}} |  · ana karba a {{place}} | ☐ | |
+| `ofcItemBackInCatalogue` | {{name}} is back in the catalogue and can be assessed again. | {{name}} ya dawo cikin lissafin kuma ana iya kimanta shi kuma. | ☐ | |
+| `ofcItemSuspended` | {{name}} is suspended. No new assessment can be raised against it; invoices already issued stay payable. | An dakatar da {{name}}. Ba za a iya kada wani sabon kimantawa a kansa ba; takardun biya da aka riga aka fitar sun ci gaba da zama abin biya. | ☐ | |
+| `ofcItemRetired` | {{name}} has been retired. Invoices already issued stay payable, and the item cannot be brought back. | An yi ritayar {{name}}. Takardun biya da aka riga aka fitar sun ci gaba da zama abin biya, kuma ba za a iya mayar da abun ba. | ☐ | |
 | `ofcKyOpenAndReview` | Open and review | Bude ka duba | ☐ | |
 | `ofcKyReviewedOn` | Reviewed on | An duba a ranar | ☐ | |
 | `ofcKyTheAccessLogCould` | The access log could not be read. | Ba a iya karanta rikodin shiga ba. | ☐ | |
@@ -3837,6 +3841,16 @@ instructions — but they are what an agent reads all day.
 | `offlineNotice` | Captured offline. No money has been marked as received until confirmed. | An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar. | ☐ | |
 | `civicDutyThanks` | Thank you for fulfilling your civic duty. | Mun gode da kuka sauke nauyin da ya rataya a wuyanku. | ☐ | |
 | `paymentSuccess` | Payment Successful | An Biyar da Kudi Cikin Nasara | ☐ | |
+| `agVehFoundConfirmed` | Vehicle found and confirmed against the vehicle authority record. | An sami motar kuma an tabbatar da ita a rajistar hukumar motoci. | ☐ | |
+| `agVehFoundUnconfirmed` | Vehicle found on the platform. It has not been confirmed against the vehicle authority. | An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna. | ☐ | |
+| `agVehRegistryUnavailable` | The vehicle authority could not be reached, so we cannot say whether this vehicle is registered. Try again shortly. If the renewal cannot wait, capture the details manually — the record will be flagged for checking once the authority is back. | Ba a iya tuntubar hukumar motoci ba, don haka ba za mu iya cewa an yi rajistar wannan mota ba. Ka sake gwadawa nan ba da dadewa ba. Idan sabuntawar ba za ta iya jira ba, ka shigar da bayanan da hannu — za a yi wa rajistar alama domin a duba ta idan hukumar ta dawo. | ☐ | |
+| `agVehNotFound` | No record of this vehicle was found on the platform or at the vehicle authority. Capture the vehicle details manually — the record will be marked as unverified. | Ba a sami rajistar wannan mota a dandalin ko a hukumar motoci ba. Ka shigar da bayanan motar da hannu — za a yi wa rajistar alama a matsayin wadda ba a tabbatar da ita ba. | ☐ | |
+| `agVehFoundAtAuthority` | Vehicle found at the vehicle authority. Confirm the owner before proceeding. | An sami motar a hukumar motoci. Ka tabbatar da mai ita kafin ka ci gaba. | ☐ | |
+| `agRefereeRequestSent` | A verification request has been sent to {{name}}. | An aika bukatar tantancewa zuwa ga {{name}}. | ☐ | |
+| `agDevicePendingApproval` | Device registered and awaiting approval by your supervisor. | An yi rajistar na’urar kuma tana jiran amincewar shugabanka. | ☐ | |
+| `agDeviceSuspended` | This device is registered but suspended. Your supervisor can restore it. | An yi rajistar wannan na’ura amma an dakatar da ita. Shugabanka na iya mayar da ita. | ☐ | |
+| `agDeviceActive` | Device registered and active. | An yi rajistar na’urar kuma tana aiki. | ☐ | |
+| `agGroupMemberRecorded` | Recorded. The membership counts only once the group leader has confirmed it. | An rubuta. Mambancin zai kirgu ne kawai bayan shugaban kungiyar ya tabbatar da shi. | ☐ | |
 | `agSupYou` | You | Kai | ☐ | |
 | `collAuthorizedFieldOfficer` | Authorized Field Officer | Jami’in fili mai izini | ☐ | |
 | `agStepSendingACode` | Sending a one-time code… | Ana aika lamba ta lokaci daya… | ☐ | |

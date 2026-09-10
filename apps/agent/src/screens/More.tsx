@@ -9,7 +9,7 @@ import {
   newIdempotencyKey,
   type ApiError,
 } from '../lib/api';
-import { formatNaira, parseKobo } from '@psirs/shared';
+import { formatNaira, parseKobo, type TranslationDictionary } from '@psirs/shared';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
 import {
@@ -37,6 +37,24 @@ interface VehicleLookup {
   vehicle: Record<string, string | null> | null;
   authorityConfirmed: boolean;
   message: string;
+}
+
+/**
+ * The lookup's answer as a sentence, from the fields it already carries.
+ *
+ * Five outcomes, not four: a vehicle found on the platform reads differently
+ * depending on whether the authority has ever confirmed it, and
+ * `authorityConfirmed` is on the response for exactly that reason.
+ *
+ * Falls back to the server's own words for a source this build has not met.
+ */
+function vehicleAnswer(lookup: VehicleLookup, t: TranslationDictionary): string {
+  if (lookup.source === 'REGISTRY_UNAVAILABLE') return t.agVehRegistryUnavailable;
+  if (lookup.source === 'NOT_FOUND') return t.agVehNotFound;
+  if (lookup.source === 'AUTHORITY') return t.agVehFoundAtAuthority;
+  if (lookup.source === 'PLATFORM')
+    return lookup.authorityConfirmed ? t.agVehFoundConfirmed : t.agVehFoundUnconfirmed;
+  return lookup.message;
 }
 
 export function VehiclesScreen({ navigate }: { navigate: (path: string) => void }) {
@@ -246,7 +264,18 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                     : 'info'
             }
           >
-            {lookup.message}
+            {/*
+              * Which of the five, in the language the agent is working in.
+              *
+              * The screen was already reading `source` twice in the lines
+              * above — once to colour this alert, once to decide whether to
+              * offer the retry — and then printed the API's sentence anyway.
+              * The distinction it carries is the one that matters on a
+              * roadside: "we could not reach the authority" and "no such
+              * vehicle" lead to different actions, and only one of them
+              * leaves a record marked for checking.
+              */}
+            {vehicleAnswer(lookup, t)}
           </Alert>
 
           {lookup.source === 'REGISTRY_UNAVAILABLE' && (

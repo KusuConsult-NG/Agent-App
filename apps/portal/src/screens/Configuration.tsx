@@ -513,11 +513,29 @@ function WithdrawItemForm({
           setBusy(true);
           setError(null);
           try {
-            const result = await api.post<{ message: string }>(
+            const result = await api.post<{ name?: string; message: string }>(
               `/revenue/items/${item.id}/status`,
               { status, reason },
             );
-            onDone(result.message);
+            /*
+             * Three answers, and the differences are money.
+             *
+             * Suspending stops new assessments while leaving issued invoices
+             * payable; retiring does the same and cannot be undone. An
+             * officer working in Hausa was told which of the three had just
+             * happened in English. The status is the one this screen chose,
+             * and the name comes back with the response.
+             */
+            const named = result.name ?? item.name;
+            onDone(
+              status === 'ACTIVE'
+                ? t.ofcItemBackInCatalogue.replace('{{name}}', named)
+                : status === 'SUSPENDED'
+                  ? t.ofcItemSuspended.replace('{{name}}', named)
+                  : status === 'RETIRED'
+                    ? t.ofcItemRetired.replace('{{name}}', named)
+                    : result.message,
+            );
           } catch (caught) {
             if (caught instanceof ApiRequestError) setError(caught.error);
             else if (caught instanceof Error) {

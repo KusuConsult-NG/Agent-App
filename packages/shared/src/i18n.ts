@@ -3331,6 +3331,32 @@ export interface TranslationDictionary {
   pubCitizenByName: string;
   pubCitizenTooMany: string;
   /*
+   * What an agent and an officer are told after an action succeeds.
+   *
+   * The last of the server-composed sentences, and like the public portal's
+   * six, none of them needed anything new sent: the vehicle lookup's
+   * `source` and `authorityConfirmed`, the device's `status`, the revenue
+   * item's name and the status the screen itself chose were all already
+   * beside the prose that was built from them.
+   */
+  agVehFoundConfirmed: string;
+  agVehFoundUnconfirmed: string;
+  agVehRegistryUnavailable: string;
+  agVehNotFound: string;
+  agVehFoundAtAuthority: string;
+  /** Carries {{name}}. */
+  agRefereeRequestSent: string;
+  agDevicePendingApproval: string;
+  agDeviceSuspended: string;
+  agDeviceActive: string;
+  agGroupMemberRecorded: string;
+  /** Each carries {{name}}. */
+  ofcItemBackInCatalogue: string;
+  ofcItemSuspended: string;
+  ofcItemRetired: string;
+  /** Carries {{member}} and {{group}}. */
+  ofcGpMemberLeft: string;
+  /*
    * What a referee, a group leader and a citizen are told after they act.
    *
    * Each of these replaced a sentence the API composed and this portal
@@ -6580,6 +6606,28 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    agVehFoundConfirmed: 'Vehicle found and confirmed against the vehicle authority record.',
+    agVehFoundUnconfirmed:
+      'Vehicle found on the platform. It has not been confirmed against the vehicle authority.',
+    agVehRegistryUnavailable:
+      'The vehicle authority could not be reached, so we cannot say whether this vehicle is registered. Try again shortly. If the renewal cannot wait, capture the details manually — the record will be flagged for checking once the authority is back.',
+    agVehNotFound:
+      'No record of this vehicle was found on the platform or at the vehicle authority. Capture the vehicle details manually — the record will be marked as unverified.',
+    agVehFoundAtAuthority:
+      'Vehicle found at the vehicle authority. Confirm the owner before proceeding.',
+    agRefereeRequestSent: 'A verification request has been sent to {{name}}.',
+    agDevicePendingApproval: 'Device registered and awaiting approval by your supervisor.',
+    agDeviceSuspended: 'This device is registered but suspended. Your supervisor can restore it.',
+    agDeviceActive: 'Device registered and active.',
+    agGroupMemberRecorded:
+      'Recorded. The membership counts only once the group leader has confirmed it.',
+    ofcItemBackInCatalogue: '{{name}} is back in the catalogue and can be assessed again.',
+    ofcItemSuspended:
+      '{{name}} is suspended. No new assessment can be raised against it; invoices already issued stay payable.',
+    ofcItemRetired:
+      '{{name}} has been retired. Invoices already issued stay payable, and the item cannot be brought back.',
+    ofcGpMemberLeft:
+      '{{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations.',
     pubRefereeThankYouCleared: 'Thank you. Your verification has been completed and recorded.',
     pubRefereeCouldNotVerify:
       'Your identity could not be verified. PSIRS may contact you for more information.',
@@ -9815,6 +9863,28 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    agVehFoundConfirmed: 'An sami motar kuma an tabbatar da ita a rajistar hukumar motoci.',
+    agVehFoundUnconfirmed:
+      'An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna.',
+    agVehRegistryUnavailable:
+      'Ba a iya tuntubar hukumar motoci ba, don haka ba za mu iya cewa an yi rajistar wannan mota ba. Ka sake gwadawa nan ba da dadewa ba. Idan sabuntawar ba za ta iya jira ba, ka shigar da bayanan da hannu — za a yi wa rajistar alama domin a duba ta idan hukumar ta dawo.',
+    agVehNotFound:
+      'Ba a sami rajistar wannan mota a dandalin ko a hukumar motoci ba. Ka shigar da bayanan motar da hannu — za a yi wa rajistar alama a matsayin wadda ba a tabbatar da ita ba.',
+    agVehFoundAtAuthority:
+      'An sami motar a hukumar motoci. Ka tabbatar da mai ita kafin ka ci gaba.',
+    agRefereeRequestSent: 'An aika bukatar tantancewa zuwa ga {{name}}.',
+    agDevicePendingApproval: 'An yi rajistar na’urar kuma tana jiran amincewar shugabanka.',
+    agDeviceSuspended: 'An yi rajistar wannan na’ura amma an dakatar da ita. Shugabanka na iya mayar da ita.',
+    agDeviceActive: 'An yi rajistar na’urar kuma tana aiki.',
+    agGroupMemberRecorded:
+      'An rubuta. Mambancin zai kirgu ne kawai bayan shugaban kungiyar ya tabbatar da shi.',
+    ofcItemBackInCatalogue: '{{name}} ya dawo cikin lissafin kuma ana iya kimanta shi kuma.',
+    ofcItemSuspended:
+      'An dakatar da {{name}}. Ba za a iya kada wani sabon kimantawa a kansa ba; takardun biya da aka riga aka fitar sun ci gaba da zama abin biya.',
+    ofcItemRetired:
+      'An yi ritayar {{name}}. Takardun biya da aka riga aka fitar sun ci gaba da zama abin biya, kuma ba za a iya mayar da abun ba.',
+    ofcGpMemberLeft:
+      'An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba.',
     pubRefereeThankYouCleared: 'Na gode. An kammala tantancewarka kuma an rubuta ta.',
     pubRefereeCouldNotVerify:
       'Ba a iya tantance wanene kai ba. PSIRS na iya tuntubarka domin karin bayani.',

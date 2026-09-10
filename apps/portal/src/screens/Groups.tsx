@@ -323,7 +323,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                       disabled={busy || departureReason.trim().length < 5}
                       onClick={() =>
                         act(async () => {
-                          const result = await api.post<{ message: string }>(
+                          await api.post<{ message: string }>(
                             `/groups/${members.group.id}/members/${row.id}/departure`,
                             { reason: departureReason },
                           );
@@ -332,7 +332,15 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           );
                           setMembers({ group: members.group, rows: refreshed });
                           setDepartureReason('');
-                          return result.message;
+                          /*
+                           * Both names are already on this screen — it is the
+                           * row the officer just acted on, in the group they
+                           * opened — so nothing has to be read back to say
+                           * what happened.
+                           */
+                          return t.ofcGpMemberLeft
+                            .replace('{{member}}', row.member_name ?? '')
+                            .replace('{{group}}', members.group.name);
                         })
                       }
                     >
