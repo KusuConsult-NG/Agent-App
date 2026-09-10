@@ -3603,6 +3603,8 @@ export interface TranslationDictionary {
   ofcFnBankReferenceForThe: string;
   ofcFnBankTransferReferenceAt: string;
   ofcFnEnterTheCreditedAmount: string;
+  ofcFnBankReferenceRequired: string;
+  ofcFnDisputeNoteTooShort: string;
   ofcFnItHasToAccount: string;
   ofcFnListTheGatewayReferences: string;
   ofcFnNothingWasComparedFor: string;
@@ -6911,6 +6913,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnBankReferenceForThe: 'Bank reference for the credit that settles it',
     ofcFnBankTransferReferenceAt: 'Bank transfer reference (at least 3 characters):',
     ofcFnEnterTheCreditedAmount: 'Enter the credited amount in naira, for example 1250000.00.',
+    ofcFnBankReferenceRequired:
+      'Enter the bank reference for the credit that settles this. It is what ties the settlement to the money that actually arrived.',
+    ofcFnDisputeNoteTooShort:
+      'Say what the variance turned out to be, in at least 10 characters. It is the only record of why this settlement was closed.',
     ofcFnItHasToAccount: 'It has to account for the collections in the batch in full.',
     ofcFnListTheGatewayReferences: 'List the gateway references this credit covers.',
     ofcFnNothingWasComparedFor: 'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
@@ -10214,6 +10220,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnBankReferenceForThe: 'Lambar banki na kudin da ya kammala shi',
     ofcFnBankTransferReferenceAt: 'Lambar tura kudi ta banki (akalla haruffa 3):',
     ofcFnEnterTheCreditedAmount: 'Ka shigar da adadin da aka shigar a naira, misali 1250000.00.',
+    ofcFnBankReferenceRequired:
+      'Ka shigar da lambar banki na kudin da ya kammala wannan. Ita ce ke hada turawar da kudin da suka iso da gaske.',
+    ofcFnDisputeNoteTooShort:
+      'Ka fada abin da bambancin ya zamo, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan turawa.',
     ofcFnItHasToAccount: 'Dole ne ya biya karbar da ke cikin rukunin gaba daya.',
     ofcFnListTheGatewayReferences: 'Ka jera lambobin shigarwar da wannan kudi ya kunsa.',
     ofcFnNothingWasComparedFor: 'Ba a kwatanta komai a wannan lokaci ba, don haka ba a tabbatar da komai game da shi ba. Ka sake gwadawa idan an samu shigarwar.',

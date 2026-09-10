@@ -141,19 +141,47 @@ export function ReconciliationScreen() {
     }
   }
 
-  async function closeDispute(row: any) {
-    const receivedAmountKobo = toKobo(
-      window.prompt(
-        t.ofcFnTotalCreditedPrompt.replace('{{reference}}', row.settlement_reference) +
-          t.ofcFnItHasToAccount,
-        '',
-      ) ?? '',
+  /**
+   * Close a settlement whose credit did not match what it covers.
+   *
+   * Three answers rather than one, which is why this does not go through
+   * `withJustification` — but it has to hold the same line the helper was
+   * written to hold. Every one of these checks used to be `?? ''` followed by
+   * a bare `return`: an amount that did not parse, an empty bank reference, or
+   * a note a character short all abandoned the action without a word, on the
+   * screen directly above one that says the credited amount in so many words
+   * when `record()` cannot read it. The officer had answered three questions
+   * about money that has not arrived and was told nothing at all.
+   *
+   * `null` is the one quiet case, in each of the three: it means Cancel, and
+   * somebody who changed their mind knows they did.
+   */
+  async function closeDispute(row: { id: string; settlement_reference: string }) {
+    const typedAmount = window.prompt(
+      t.ofcFnTotalCreditedPrompt.replace('{{reference}}', row.settlement_reference) +
+        t.ofcFnItHasToAccount,
+      '',
     );
-    if (!receivedAmountKobo) return;
-    const bankReference = window.prompt(t.ofcFnBankReferenceForThe, '') ?? '';
-    if (!bankReference.trim()) return;
-    const note = window.prompt(t.ofcFnWhatTheVarianceTurned, '') ?? '';
-    if (note.trim().length < 10) return;
+    if (typedAmount === null) return;
+    const receivedAmountKobo = toKobo(typedAmount);
+    if (!receivedAmountKobo) {
+      setError({ code: 'INVALID_AMOUNT', message: t.ofcFnEnterTheCreditedAmount } as ApiError);
+      return;
+    }
+
+    const bankReference = window.prompt(t.ofcFnBankReferenceForThe, '');
+    if (bankReference === null) return;
+    if (!bankReference.trim()) {
+      setError({ code: 'MISSING_REFERENCE', message: t.ofcFnBankReferenceRequired } as ApiError);
+      return;
+    }
+
+    const note = window.prompt(t.ofcFnWhatTheVarianceTurned, '');
+    if (note === null) return;
+    if (note.trim().length < 10) {
+      setError({ code: 'NOTE_TOO_SHORT', message: t.ofcFnDisputeNoteTooShort } as ApiError);
+      return;
+    }
 
     setBusy(true);
     setError(null);
