@@ -117,10 +117,40 @@ const OFFICER_WITHOUT_A_SCREEN = new Set([
 /** Run by a scheduler rather than by a person. */
 const SCHEDULED_ONLY = new Set(['/usage/expire']);
 
+/**
+ * Comments out, before anything is matched for a path.
+ *
+ * This check decides a read has a caller by finding its path quoted in the
+ * client source. Backticks are in that character class and whole files were
+ * being scanned, so a path named in a screen's HEADER COMMENT satisfied it
+ * exactly as well as a call did — and every screen here documents the
+ * endpoint it reads in its header, by house style.
+ *
+ * Proved by pointing a screen's fetch at a path that does not exist: the
+ * check still passed, on the strength of the comment three lines above it.
+ * The claim being made was "this path is mentioned somewhere", not "this
+ * path has a caller", which is not the claim this file is for — it is the
+ * one thing standing between the codebase and another endpoint finished,
+ * seeded, tested and never called.
+ *
+ * Measured before changing it: with comments stripped AND the recorded list
+ * switched off entirely, every read that came back was already on that list.
+ * Nothing was reachable only through a comment, so this tightens the check
+ * without moving a single endpoint into it.
+ *
+ * `(^|[^:])` keeps `https://` out of the line-comment rule, so a URL in a
+ * string is not truncated at the slashes.
+ */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
 function readAll(dir: string): string {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
-    .map((f) => readFileSync(join(dir, f), 'utf8'))
+    .map((f) => stripComments(readFileSync(join(dir, f), 'utf8')))
     .join('\n');
 }
 
