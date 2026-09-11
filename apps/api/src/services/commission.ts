@@ -885,18 +885,61 @@ export async function completePayout(params: {
   actorRole: string;
 }): Promise<void> {
   await withTransaction(async (client) => {
-    const payout = await queryOne<{ id: string; status: string; approval_id: string | null }>(
+    const payout = await queryOne<{
+      id: string;
+      status: string;
+      approval_id: string | null;
+      bank_reference: string | null;
+    }>(
       client,
-      'SELECT id, status, approval_id FROM commission_payouts WHERE id = $1 FOR UPDATE',
+      `SELECT id, status, approval_id, bank_reference
+         FROM commission_payouts WHERE id = $1 FOR UPDATE`,
       [params.payoutId],
     );
     if (!payout) throw notFound('That payout');
 
+    /*
+     * Already paid is not "not yet approved", and this said the second.
+     *
+     * One sentence covered all five refusable states: "This payout is
+     * ${status} and cannot be marked as paid. It must be approved first."
+     * A payout only reaches APPROVED from REQUESTED — `approvePayout`
+     * refuses anything else — so that instruction is true for exactly one
+     * of the five, and for PAID it reads:
+     *
+     *   "This payout is paid and cannot be marked as paid. It must be
+     *    approved first."
+     *
+     * The first clause contradicts itself and the second sends an officer to
+     * do something impossible. The reading it invites is the dangerous one:
+     * that the payment did not register. An officer who believes that raises
+     * the payout again, and an agent is paid their commission twice.
+     *
+     * Which is not a remote case. It is what a double-click does, and what a
+     * lost reply on a slow connection does — the two moments this sentence
+     * exists for. The other three transitions in this file already say it
+     * properly ("This payout is already X and cannot be refused"); only this
+     * one welded on a next step that does not hold.
+     *
+     * The bank reference goes with it, because the officer's actual question
+     * is "did my payment register?" and the recorded reference answers it.
+     */
+    if (payout.status === 'PAID') {
+      throw conflict(
+        'PAYOUT_ALREADY_PAID',
+        payout.bank_reference
+          ? `This payout was already marked as paid, against bank reference ${payout.bank_reference}.`
+          : 'This payout was already marked as paid.',
+        'Nothing further is needed. Do not raise it again.',
+      );
+    }
+
     if (payout.status !== 'APPROVED') {
       throw conflict(
         'PAYOUT_NOT_APPROVED',
-        `This payout is ${payout.status.toLowerCase()} and cannot be marked as paid. ` +
-          'It must be approved first.',
+        `This payout is ${payout.status.toLowerCase()} and cannot be marked as paid.`,
+        // Only from REQUESTED, which is the one state approval accepts.
+        payout.status === 'REQUESTED' ? 'It must be approved first.' : undefined,
       );
     }
 
