@@ -152,8 +152,19 @@ export function WorkbenchScreen({ user }: { user: User }) {
   const [open, setOpen] = useState<SampleDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * "No sample has been drawn yet." "No report has been generated yet."
+   *
+   * Both were printed from a failed read, on the auditor's own workbench. An
+   * auditor who is told no sample exists draws another one, and an auditor who
+   * is told no report exists concludes the work was never done — which is the
+   * opposite of what this screen is for. A drawn sample and a signed report
+   * are the record that somebody checked.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const [drawn, generated] = await Promise.all([
         api.get<{ samples: SampleRow[] }>('/government/audit/samples'),
@@ -162,9 +173,14 @@ export function WorkbenchScreen({ user }: { user: User }) {
       setSamples(drawn.samples);
       setReports(generated.reports);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      setSamples([]);
-      setReports([]);
+      if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      else if (caught instanceof Error) {
+        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      // Unknown, not empty. One `Promise.all`, so a single refusal leaves
+      // both unknown — which is honest: neither was read.
+      setSamples(null);
+      setReports(null);
     }
   }, []);
 
@@ -224,7 +240,14 @@ export function WorkbenchScreen({ user }: { user: User }) {
             <p className="card__hint">{t.ofcWbSamplesHint}</p>
           </div>
         </div>
-        {!samples ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={() => void load()}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !samples ? (
           <Loading />
         ) : (
           <Table
@@ -323,7 +346,11 @@ export function WorkbenchScreen({ user }: { user: User }) {
             </Alert>
           </div>
         )}
-        {!reports ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+          </div>
+        ) : !reports ? (
           <Loading />
         ) : (
           <Table

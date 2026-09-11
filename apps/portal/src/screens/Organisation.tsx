@@ -611,11 +611,26 @@ export function PostingPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const mayManage = can('user:manage');
 
+  /*
+   * "No posting has been recorded for this officer."
+   *
+   * This catch wrote that sentence from a failed read and set no error at
+   * all, so the screen was silent AND wrong: an administrator checking where
+   * somebody has served was told there is no record of them serving
+   * anywhere. A posting history is what a transfer is checked against.
+   */
+  const [historyError, setHistoryError] = useState<ApiError | null>(null);
+
   const loadHistory = useCallback(async () => {
+    setHistoryError(null);
     try {
       setHistory(await api.get<Transfer[]>(`/government/users/${officerId}/transfers`));
-    } catch {
-      setHistory([]);
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setHistoryError(caught.error);
+      else if (caught instanceof Error) {
+        setHistoryError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      setHistory(null);
     }
   }, [officerId]);
 
@@ -766,7 +781,14 @@ export function PostingPanel({
 
       <h3>{t.ofcOrHistory}</h3>
       <p className="muted">{t.ofcOrHistoryBody}</p>
-      {!history ? (
+      {historyError ? (
+        <div>
+          <ErrorAlert error={historyError} />
+          <button type="button" className="secondary" onClick={() => void loadHistory()}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !history ? (
         <Loading rows={2} />
       ) : (
         <Table

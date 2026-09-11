@@ -81,6 +81,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const { lang, t } = usePortalI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
+  const [roundsError, setRoundsError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [status, setStatus] = useState('');
@@ -97,11 +98,28 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
       });
+    /*
+     * An empty rounds list has two causes and only one is silent.
+     *
+     * Without `allocation:read:all` the list is never fetched and the section
+     * is not drawn — correct, and why the else branch below sets `[]`. With
+     * the permission and a failed read it used to set `[]` too, and the
+     * section printed "No distributions have been set up yet." An officer
+     * told that sets one up, and a second distribution round against the same
+     * programme is not a duplicate row: it is fertiliser awarded twice.
+     */
     if (can('allocation:read:all')) {
+      setRoundsError(null);
       api
         .get<{ rounds: RoundRow[] }>('/allocations/rounds')
         .then((result) => setRounds(result.rounds))
-        .catch(() => setRounds([]));
+        .catch((caught) => {
+          if (caught instanceof ApiRequestError) setRoundsError(caught.error);
+          else if (caught instanceof Error) {
+            setRoundsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+          }
+          setRounds([]);
+        });
     } else {
       setRounds([]);
     }
@@ -228,6 +246,14 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             <h2 className="card__title">{t.ofcGpDistributions}</h2>
             <p className="card__hint">{t.ofcGpDistributionsIntro}</p>
           </div>
+          {roundsError ? (
+            <div className="card__pad">
+              <ErrorAlert error={roundsError} />
+              <button type="button" className="secondary" onClick={load}>
+                {t.actionTryAgain}
+              </button>
+            </div>
+          ) : (
           <Table
             columns={[
               { key: 'name', label: 'ofcAlRound' },
@@ -262,6 +288,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             rows={rounds}
             empty="ofcNoneDistributionsSetUp"
           />
+          )}
         </div>
       )}
 
