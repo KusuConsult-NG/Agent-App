@@ -2111,6 +2111,7 @@ export interface TranslationDictionary {
   ofcOrPostingBody: string;
   ofcOrMoveOfficer: string;
   ofcOrDepartment: string;
+  ofcListCouldNotLoad: string;
   ofcOrOffice: string;
   ofcOrSupervisor: string;
   ofcOrJobTitle: string;
@@ -5587,6 +5588,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOrPostingBody: "Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers.",
     ofcOrMoveOfficer: "Move this officer",
     ofcOrDepartment: "Department",
+    ofcListCouldNotLoad: "This list could not be loaded.",
     ofcOrOffice: "Office",
     ofcOrSupervisor: "Reports to",
     ofcOrJobTitle: "Job title",
@@ -8899,6 +8901,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOrPostingBody: "Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban.",
     ofcOrMoveOfficer: "Matsar da wannan jami’i",
     ofcOrDepartment: "Sashe",
+    ofcListCouldNotLoad: "Ba a iya loda wannan jerin ba.",
     ofcOrOffice: "Ofishi",
     ofcOrSupervisor: "Yana bayar da rahoto ga",
     ofcOrJobTitle: "Mukami",

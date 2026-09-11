@@ -538,6 +538,23 @@ function CaseDetail({
   const [departments, setDepartments] = useState<
     { id: string; name: string; status: string }[]
   >([]);
+  /*
+   * Why a failure flag rather than reading the emptiness.
+   *
+   * Both pickers below are drawn on `length > 0`, which was three states
+   * collapsed into one. An empty officer list means "you do not hold
+   * user:manage, so this was never fetched" — correct, and the picker should
+   * be hidden. It also means "the read failed", and then hiding the picker
+   * tells an administrator who CAN assign this case that there is nobody to
+   * assign it to, with nothing on the screen saying otherwise.
+   *
+   * A case that cannot be given to a named officer gets routed by role
+   * instead, which is the coarser mechanism departments exist to replace:
+   * "routing by role could not tell Finance North from Finance South". So the
+   * cost of the conflation is a case landing on the wrong desk, or on none.
+   */
+  const [officersFailed, setOfficersFailed] = useState(false);
+  const [departmentsFailed, setDepartmentsFailed] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -559,13 +576,22 @@ function CaseDetail({
    * names already on the case. That is a real limitation and it is better than
    * publishing the staff list to every role to make a dropdown nicer.
    */
-  useEffect(() => {
+  const loadOfficers = useCallback(() => {
     if (!can('user:manage')) return;
+    setOfficersFailed(false);
     api
       .get<{ id: string; full_name: string; role: string }[]>('/government/users')
-      .then(setOfficers)
-      .catch(() => setOfficers([]));
+      .then((rows) => {
+        setOfficers(rows);
+        setOfficersFailed(false);
+      })
+      .catch(() => {
+        setOfficers([]);
+        setOfficersFailed(true);
+      });
   }, []);
+
+  useEffect(loadOfficers, [loadOfficers]);
 
   /*
    * The department list, which every portal role may read.
@@ -573,12 +599,21 @@ function CaseDetail({
    * Unlike the officer list: routing a case to Finance requires seeing that
    * Finance exists, and that is not the same permission as enumerating staff.
    */
-  useEffect(() => {
+  const loadDepartments = useCallback(() => {
+    setDepartmentsFailed(false);
     api
       .get<{ id: string; name: string; status: string }[]>('/government/departments')
-      .then((rows) => setDepartments(rows.filter((row) => row.status === 'ACTIVE')))
-      .catch(() => setDepartments([]));
+      .then((rows) => {
+        setDepartments(rows.filter((row) => row.status === 'ACTIVE'));
+        setDepartmentsFailed(false);
+      })
+      .catch(() => {
+        setDepartments([]);
+        setDepartmentsFailed(true);
+      });
   }, []);
+
+  useEffect(loadDepartments, [loadDepartments]);
 
   if (error) return <div className="card"><ErrorAlert error={error} /></div>;
   if (!detail) return <div className="card"><Loading /></div>;
@@ -700,6 +735,10 @@ function CaseDetail({
           detail={detail}
           officers={officers}
           departments={departments}
+          officersFailed={officersFailed}
+          departmentsFailed={departmentsFailed}
+          reloadOfficers={loadOfficers}
+          reloadDepartments={loadDepartments}
           onDone={async (message) => {
             setNotice(message);
             await load();
@@ -723,11 +762,23 @@ function CaseControls({
   detail,
   officers,
   departments,
+  /*
+   * Passed down beside the lists rather than inferred from them, because an
+   * empty list here has two causes and only one of them should be silent.
+   */
+  officersFailed,
+  departmentsFailed,
+  reloadOfficers,
+  reloadDepartments,
   onDone,
 }: {
   detail: CaseDetailBody;
   officers: { id: string; full_name: string; role: string }[];
   departments: { id: string; name: string; status: string }[];
+  officersFailed: boolean;
+  departmentsFailed: boolean;
+  reloadOfficers: () => void;
+  reloadDepartments: () => void;
   onDone: (message: string) => Promise<void>;
 }) {
   const { t } = usePortalI18n();
@@ -971,6 +1022,14 @@ function CaseControls({
                 </select>
               </label>
             )}
+            {officersFailed && (
+              <p className="field__hint" role="status">
+                {t.ofcListCouldNotLoad}{' '}
+                <button type="button" className="link" onClick={reloadOfficers}>
+                  {t.actionTryAgain}
+                </button>
+              </p>
+            )}
             {/*
               * A department, where one exists, and a role otherwise.
               *
@@ -996,6 +1055,14 @@ function CaseControls({
                   ))}
                 </select>
               </label>
+            )}
+            {departmentsFailed && (
+              <p className="field__hint" role="status">
+                {t.ofcListCouldNotLoad}{' '}
+                <button type="button" className="link" onClick={reloadDepartments}>
+                  {t.actionTryAgain}
+                </button>
+              </p>
             )}
             <label>
               {t.ofcCwDepartment}

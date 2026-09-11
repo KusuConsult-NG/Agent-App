@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,248 strings; that one is two pages and links back
+> because it carries all 3,249 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,248 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,249 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,248 strings is worse than no sheet, because it looks complete; this one cannot
+3,249 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,248 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,249 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,248 strings: where the
+- The glossary below is applied consistently across all 3,249 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3169 strings, grouped by where an agent meets them. Lower stakes
+3170 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2246,6 +2246,7 @@ instructions — but they are what an agent reads all day.
 | `ofcOrPostingBody` | Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers. | Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban. | ☐ | |
 | `ofcOrMoveOfficer` | Move this officer | Matsar da wannan jami’i | ☐ | |
 | `ofcOrDepartment` | Department | Sashe | ☐ | |
+| `ofcListCouldNotLoad` | This list could not be loaded. | Ba a iya loda wannan jerin ba. | ☐ | |
 | `ofcOrOffice` | Office | Ofishi | ☐ | |
 | `ofcOrSupervisor` | Reports to | Yana bayar da rahoto ga | ☐ | |
 | `ofcOrJobTitle` | Job title | Mukami | ☐ | |
