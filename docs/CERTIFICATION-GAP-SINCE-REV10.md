@@ -83,8 +83,43 @@ mechanism that has since changed.
    revenue targets or the officer command centre. Searching the document for
    "payroll", "presumptive", "command centre" and "revenue target" returns
    nothing at all.
-2. **"189 of 189 declared routes exercised."** There are now 281 declared route
-   handlers across 13 route modules.
+2. **"189 of 189 declared routes exercised."** The repository's own
+   `route-coverage.mjs` now reports **267 of 281**. The fourteen it names are
+   listed below; they are the most actionable item in this document, because
+   one of them was hiding a money defect.
+
+   ```
+   GET  /government/intelligence/leads
+   POST /government/intelligence/connections/:id/decision
+   POST /government/intelligence/rebuild
+   GET  /government/paye/not-filing
+   GET  /government/consumption-tax/not-paying
+   POST /government/paye/returns/:id/cancel          (fixed; now covered)
+   POST /government/presumptive/band
+   POST /government/presumptive/lga-classes
+   POST /government/presumptive/nano-policy
+   POST /government/enumeration/observations/:id/attest
+   GET  /government/enumeration/objections
+   POST /government/enumeration/assessments/:id/object
+   GET  /government/periods/figures
+   POST /government/cases/:id/evidence/upload
+   ```
+
+   `POST /paye/returns/:id/cancel` withdrew a PAYE return without withdrawing
+   the bill it had raised, so an officer following the filing path's own
+   instruction to "cancel and replace" left the employer owing both figures.
+   Nothing had ever called it. That is the argument for the list above:
+   the defect was not found by reading the service, which had already been
+   read and passed as sound.
+
+   The other thirteen were examined after it and their *semantics* hold up —
+   `lga_classes` and `nano_exemption_policies` each carry an `EXCLUDE USING
+   gist` overlap constraint, immutability and no-delete triggers; a
+   presumptive assessment snapshots the policy it was made under; and the
+   arrears worklist already declines to chase a debt under objection, because
+   "somebody who wrote in and then got a call demanding payment has learnt
+   that the objection process is decorative". Being unexercised is not
+   evidence that they are wrong. It is evidence that nothing would say so.
 3. **"233 triggers across 77 tables, 194 CHECK constraints."** Now 332, 103
    and 300.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
