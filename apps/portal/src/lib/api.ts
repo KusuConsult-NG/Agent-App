@@ -270,10 +270,30 @@ export const api = {
    * so had no caller.
    */
   put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
-  /** Unauthenticated calls, for the public verification and referee portals. */
-  publicGet: <T>(path: string) => raw<T>(path, { authenticated: false }),
+  /**
+   * Unauthenticated calls, for the public verification and referee portals.
+   *
+   * Through `request` rather than `raw`, and that is the whole of it. `raw`
+   * lets a dropped connection out as the bare `TypeError` fetch rejects with;
+   * `request` is where `couldNotReach()` turns that into the
+   * `ApiRequestError` every caller already tests for. These two went straight
+   * to `raw`, so the fix described above -- the one written to reach eighty-two
+   * handlers across both applications -- never reached the public screens at
+   * all.
+   *
+   * Which is backwards. The people on these screens have no account and no
+   * app: a cooperative chairman confirming a membership list from an SMS
+   * link, a referee vouching for an agent, a citizen checking whether a
+   * receipt is real. They are on the worst connections of anybody who uses
+   * this platform, and they were the only ones getting a blank screen and no
+   * sentence when the connection went.
+   *
+   * `authenticated: false` short-circuits the token refresh inside `request`,
+   * so nothing else about these calls changes.
+   */
+  publicGet: <T>(path: string) => request<T>(path, { authenticated: false }),
   publicPost: <T>(path: string, body?: unknown) =>
-    raw<T>(path, { method: 'POST', body, authenticated: false }),
+    request<T>(path, { method: 'POST', body, authenticated: false }),
 };
 
 export async function login(phone: string, password: string) {
