@@ -34,6 +34,20 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
   const [dashboard, setDashboard] = useState<KycDashboard | null>(null);
   const [agents, setAgents] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The list of agents, kept apart from the dashboard above it.
+   *
+   * `.catch(() => setAgents([]))` printed "No agents match this filter." — on
+   * the screen an officer opens to find a particular agent and suspend them,
+   * or to see who is waiting to be cleared. A refused read said there is
+   * nobody, which is the one answer that ends a search.
+   *
+   * And the dashboard's failure used to take the whole screen with it: `if
+   * (error) return <ErrorAlert />` threw away the agent list even when the
+   * list itself had arrived. One failed request, and an officer loses the
+   * work they could still have done.
+   */
+  const [agentsError, setAgentsError] = useState<ApiError | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
 
   const load = useCallback(() => {
@@ -48,21 +62,41 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
     if (statusFilter) params.set('status', statusFilter);
     api
       .get<any[]>(`/agents?${params.toString()}`)
-      .then(setAgents)
-      .catch(() => setAgents([]));
+      .then((loaded) => {
+        setAgents(loaded);
+        setAgentsError(null);
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setAgentsError(caught.error);
+        else if (caught instanceof Error) {
+          setAgentsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, [statusFilter]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  if (error) return <ErrorAlert error={error} />;
-  if (!dashboard) return <Loading rows={6} />;
+  if (!dashboard && !error) return <Loading rows={6} />;
 
-  const counts = dashboard.counts;
+  const counts = dashboard?.counts;
 
   return (
     <>
+      {/*
+        The dashboard's own failure, in the dashboard's place. It used to
+        replace the entire screen, agent list and all.
+      */}
+      {error && (
+        <div className="card">
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
+      {counts && (
+      <>
       <div className="stat-grid">
         <Stat label="ofcAgApplicationsReceived" value={counts.applications_received} />
         <Stat
@@ -91,9 +125,16 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         <Stat label="ofcAgRefereePending" value={counts.referee_pending} />
         <Stat label="ofcAgRefereeFailed" value={counts.referee_failed} />
       </div>
+      </>
+      )}
 
       <BankChangesCard />
 
+      {/*
+        Also the dashboard's: "No applications are waiting for review" is a
+        statement about a queue, and a read that failed does not know.
+      */}
+      {dashboard && (
       <div className="card card--flush">
         <div className="card__pad">
           <h2 className="card__title">{t.ofcAgAwaitingGovernmentReview}</h2>
@@ -122,6 +163,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
           empty="ofcNoneApplicationsWaitingReview"
         />
       </div>
+      )}
 
       <div className="card card--flush">
         <div className="card__pad">
@@ -145,7 +187,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
             </div>
           </div>
         </div>
-        {!agents ? (
+        {agentsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={agentsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !agents ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
