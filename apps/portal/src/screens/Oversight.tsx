@@ -97,6 +97,22 @@ export function FraudScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('OPEN');
+  /*
+   * Two reads, two failures, both kept away from the action error.
+   *
+   * The flags catch was already fixed once, for the half of this that
+   * mattered most: it leaves `flags` at null rather than writing `[]`, so an
+   * unread queue cannot read as a queue with nothing in it. But `!flags`
+   * renders the skeleton, so what an officer actually saw was a refusal at the
+   * top of the screen and four grey bars where the queue belongs — and the
+   * leakage figures, on the same shared `error`, simply were not drawn at all.
+   *
+   * Separately, because they answer different questions: the figures say how
+   * much money is unaccounted for, the queue says who is suspected of taking
+   * it, and an officer needs to know which of the two they are missing.
+   */
+  const [flagsError, setFlagsError] = useState<ApiError | null>(null);
+  const [leakageError, setLeakageError] = useState<ApiError | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepResult, setSweepResult] = useState<string | null>(null);
 
@@ -111,21 +127,34 @@ export function FraudScreen() {
   const load = useCallback(() => {
     api
       .get('/government/leakage')
-      .then(setLeakage)
+      .then((loaded) => {
+        setLeakage(loaded);
+        setLeakageError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLeakageError(caught.error);
+        else if (caught instanceof Error) {
+          setLeakageError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
 
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
       .get<any[]>(`/government/fraud/flags?${params.toString()}`)
-      .then(setFlags)
+      .then((loaded) => {
+        setFlags(loaded);
+        setFlagsError(null);
+      })
       // A fraud queue that could not be read is not a queue with no flags in
       // it, and "no flags" is the reading an officer will take from an empty
-      // table. The refusal reaches the screen instead.
+      // table. The refusal reaches the screen instead — in the queue's own
+      // place, rather than above a skeleton that never resolves.
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setFlagsError(caught.error);
+        else if (caught instanceof Error) {
+          setFlagsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [statusFilter]);
 
@@ -193,6 +222,18 @@ export function FraudScreen() {
           </>
         )}
       </div>
+
+      {/*
+        Where the figures would have been. Without this the grid is simply
+        absent, and a screen that is missing a section looks like a screen
+        that has nothing to report.
+      */}
+      {leakageError && (
+        <div className="card">
+          <ErrorAlert error={leakageError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
 
       {leakage && (
         <div className="stat-grid">
@@ -272,7 +313,12 @@ export function FraudScreen() {
             </div>
           </div>
         </div>
-        {!flags ? (
+        {flagsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={flagsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !flags ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
