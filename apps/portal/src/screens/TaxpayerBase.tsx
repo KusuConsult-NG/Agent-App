@@ -103,7 +103,14 @@ export function TaxpayerBaseScreen() {
         <ErrorAlert error={error} />
       </div>
 
-      {!data ? (
+      {/*
+        A skeleton means "still working", and a read that has already failed
+        is not still working. The reason is in the card above; without this
+        the rest of the screen sat under six grey bars that never resolve, and
+        an officer waiting for a taxpayer register has no way to tell a slow
+        answer from no answer at all.
+      */}
+      {!data && error ? null : !data ? (
         <div className="card">
           <Loading rows={6} />
         </div>

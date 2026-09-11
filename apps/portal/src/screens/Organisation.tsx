@@ -180,7 +180,12 @@ export function OrganisationScreen({ user }: { user: User }) {
         <div style={{ padding: '18px 18px 0' }}>
           <h3 className="card__title">{t.ofcOrDepartments}</h3>
         </div>
-        {!departments ? (
+        {/*
+          Both lists come from one `Promise.all`, so one refusal leaves both
+          at null — and null draws a skeleton. The reason is reported above;
+          these two used to sit under it spinning for ever.
+        */}
+        {!departments && error ? null : !departments ? (
           <div style={{ padding: '0 18px 18px' }}>
             <Loading />
           </div>
@@ -251,7 +256,7 @@ export function OrganisationScreen({ user }: { user: User }) {
           <h3 className="card__title">{t.ofcOrOffices}</h3>
           <p className="card__hint">{t.ofcOrOfficesBody}</p>
         </div>
-        {!offices ? (
+        {!offices && error ? null : !offices ? (
           <div style={{ padding: '0 18px 18px' }}>
             <Loading />
           </div>
