@@ -105,6 +105,13 @@ interface SampleDetail extends SampleRow {
   items: SampleItem[];
 }
 
+interface ReportDetail extends ReportRow {
+  parameters: Record<string, unknown> | null;
+  payload: Record<string, unknown>[] | null;
+  signature_note: string | null;
+  recomputedChecksum: string;
+}
+
 interface ReportRow {
   id: string;
   report_number: string;
@@ -187,6 +194,35 @@ export function WorkbenchScreen({ user }: { user: User }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /*
+   * Opening one report, which is what `checksumMatches` could not do on its
+   * own.
+   *
+   * The list already says whether the stored rows still hash to the checksum
+   * recorded with them. That is the fact; it is not the evidence. A reviewer
+   * looking at a report marked altered needs the rows themselves and the
+   * value recomputed beside the value stored, because "something changed" is
+   * not a finding anybody can act on — WHAT changed is.
+   *
+   * `/government/audit/reports/:id` has returned all three since it was
+   * written and nothing had ever asked for them.
+   */
+  const [openReport, setOpenReport] = useState<ReportDetail | null>(null);
+  const [reportError, setReportError] = useState<ApiError | null>(null);
+
+  const showReport = useCallback(async (id: string) => {
+    setReportError(null);
+    try {
+      setOpenReport(await api.get<ReportDetail>(`/government/audit/reports/${id}`));
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setReportError(caught.error);
+      else if (caught instanceof Error) {
+        setReportError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      setOpenReport(null);
+    }
+  }, []);
 
   const openSample = useCallback(async (id: string) => {
     setError(null);
@@ -303,6 +339,83 @@ export function WorkbenchScreen({ user }: { user: User }) {
         )}
       </div>
 
+      {reportError && (
+        <div className="card">
+          <ErrorAlert error={reportError} />
+        </div>
+      )}
+
+      {openReport && (
+        <div className="card">
+          <div className="card__header">
+            <h2 className="card__title">
+              {openReport.report_number} · {openReport.title}
+            </h2>
+            <button
+              type="button"
+              className="small secondary"
+              onClick={() => setOpenReport(null)}
+            >
+              {t.ofcKycClose}
+            </button>
+          </div>
+          <p className="card__hint">{t.ofcWbViewIsRecorded}</p>
+
+          {/*
+            * The two values side by side, and the verdict said in words.
+            *
+            * A reviewer comparing a printed copy needs the whole checksum
+            * rather than the twelve characters the list shows, and needs to
+            * see that the recomputed one is genuinely a different number
+            * rather than take "altered" on trust.
+            */}
+          <Alert
+            kind={openReport.checksumMatches ? 'info' : 'error'}
+            title={openReport.checksumMatches ? 'ofcWbChecksum' : 'ofcWbAltered'}
+          >
+            <p style={{ margin: 0 }}>
+              {openReport.checksumMatches ? t.ofcWbChecksumAgrees : t.ofcWbChecksumDiffers}
+            </p>
+            <dl className="kv" style={{ marginTop: 10 }}>
+              <div className="kv">
+                <dt>{t.ofcWbStored}</dt>
+                <dd><code style={{ wordBreak: 'break-all' }}>{openReport.checksum}</code></dd>
+              </div>
+              <div className="kv">
+                <dt>{t.ofcWbRecomputed}</dt>
+                <dd><code style={{ wordBreak: 'break-all' }}>{openReport.recomputedChecksum}</code></dd>
+              </div>
+            </dl>
+          </Alert>
+
+          <h3>{t.ofcWbPayloadRows}</h3>
+          {!openReport.payload || openReport.payload.length === 0 ? (
+            <p className="empty">{t.ofcWbNoPayload}</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    {Object.keys(openReport.payload[0]!).map((column) => (
+                      <th key={column}>{column}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {openReport.payload.map((row, index) => (
+                    <tr key={index}>
+                      {Object.keys(openReport.payload![0]!).map((column) => (
+                        <td key={column}>{String(row[column] ?? '')}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {open && (
         <SampleDetailPanel
           sample={open}
@@ -400,6 +513,19 @@ export function WorkbenchScreen({ user }: { user: User }) {
                   ) : (
                     <code>{row.checksum.slice(0, 12)}</code>
                   ),
+              },
+              {
+                key: 'open',
+                label: { text: '' },
+                render: (row: ReportRow) => (
+                  <button
+                    type="button"
+                    className="small secondary"
+                    onClick={() => void showReport(row.id)}
+                  >
+                    {t.ofcWbOpenReport}
+                  </button>
+                ),
               },
               {
                 key: 'actions',

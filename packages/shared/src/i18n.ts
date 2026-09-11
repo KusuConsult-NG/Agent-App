@@ -2080,6 +2080,15 @@ export interface TranslationDictionary {
   ofcWbGeneratedAt: string;
   ofcWbSignedBy: string;
   ofcWbChecksum: string;
+  ofcWbOpenReport: string;
+  ofcWbWhatWasFrozen: string;
+  ofcWbRecomputed: string;
+  ofcWbStored: string;
+  ofcWbChecksumAgrees: string;
+  ofcWbChecksumDiffers: string;
+  ofcWbPayloadRows: string;
+  ofcWbViewIsRecorded: string;
+  ofcWbNoPayload: string;
   ofcWbAltered: string;
   ofcWbAlteredTitle: string;
   ofcWbAlteredBody: string;
@@ -5588,6 +5597,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGeneratedAt: "Generated on",
     ofcWbSignedBy: "Signed by",
     ofcWbChecksum: "Checksum",
+    ofcWbOpenReport: "Open",
+    ofcWbWhatWasFrozen: "What was frozen",
+    ofcWbRecomputed: "Recomputed now",
+    ofcWbStored: "Stored when signed",
+    ofcWbChecksumAgrees: "The stored rows still hash to the checksum recorded with them.",
+    ofcWbChecksumDiffers: "The stored rows no longer hash to the checksum recorded with them. Read the rows below against a printed copy before relying on either.",
+    ofcWbPayloadRows: "Rows as they were frozen",
+    ofcWbViewIsRecorded: "Opening a signed report is itself recorded against your name.",
+    ofcWbNoPayload: "This report was frozen with no rows in it.",
     ofcWbAltered: "Altered",
     ofcWbAlteredTitle: "A report on this page no longer matches its checksum",
     ofcWbAlteredBody: "{{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it.",
@@ -8932,6 +8950,15 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGeneratedAt: "An samar a",
     ofcWbSignedBy: "Wanda ya sa hannu",
     ofcWbChecksum: "Lambar tantancewa",
+    ofcWbOpenReport: "Bude",
+    ofcWbWhatWasFrozen: "Abin da aka daskarar",
+    ofcWbRecomputed: "An sake lissafawa yanzu",
+    ofcWbStored: "An ajiye lokacin sa hannu",
+    ofcWbChecksumAgrees: "Layukan da aka ajiye har yanzu suna bayar da lambar tantancewar da aka rubuta tare da su.",
+    ofcWbChecksumDiffers: "Layukan da aka ajiye ba sa kara bayar da lambar tantancewar da aka rubuta tare da su. Ka karanta layukan da ke kasa tare da kwafin da aka buga kafin ka dogara da ko wanne.",
+    ofcWbPayloadRows: "Layuka kamar yadda aka daskarar da su",
+    ofcWbViewIsRecorded: "Budewar rahoton da aka sa wa hannu ana rubuta ta a kan sunanka.",
+    ofcWbNoPayload: "An daskarar da wannan rahoton ba tare da wani layi a ciki ba.",
     ofcWbAltered: "An sauya",
     ofcWbAlteredTitle: "Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba",
     ofcWbAlteredBody: "Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara.",

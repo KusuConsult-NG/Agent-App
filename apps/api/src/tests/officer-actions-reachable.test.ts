@@ -501,12 +501,13 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * here: the entry point an auditor would want is the audit log's own actor
    * column, which is a change to a different screen.
    *
-   * The consequential ones remaining, in the order I would fix them:
+   * `/government/audit/reports/:id` now opens from the workbench's own
+   * reports table. The list already carried `checksumMatches`, which is the
+   * fact; this is the evidence — the rows as they were frozen, and the value
+   * recomputed beside the value stored. "Something changed" is not a finding
+   * anybody can act on.
    *
-   *   `/government/audit/reports/:id` — the recomputed checksum. The list now
-   *     carries `checksumMatches` per row, so the fact reaches an auditor;
-   *     this endpoint additionally returns the payload and the recomputed
-   *     value, which is what a reviewer needs to see *what* changed.
+   * The consequential ones remaining, in the order I would fix them:
    *
    *   `/taxpayers/:id/incentives` — what a citizen is entitled to. Programmes
    *     grant entitlement and nothing shows a taxpayer their own.
@@ -518,7 +519,6 @@ const READ_WITHOUT_A_SCREEN = new Set([
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
   '/government/transfers',
-  '/government/audit/reports/:id',
   '/government/tickets/:id',
   '/payments',
   '/payments/lookup',
