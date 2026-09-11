@@ -334,9 +334,9 @@ export async function cancelPayeSchedule(
   }
 
   await withTransaction(async (client) => {
-    const schedule = await queryOne<{ id: string; status: string }>(
+    const schedule = await queryOne<{ id: string; status: string; assessment_id: string | null }>(
       client,
-      'SELECT id, status FROM paye_schedules WHERE id = $1 FOR UPDATE',
+      'SELECT id, status, assessment_id FROM paye_schedules WHERE id = $1 FOR UPDATE',
       [params.scheduleId],
     );
     if (!schedule) throw notFound('That PAYE return');
@@ -350,6 +350,33 @@ export async function cancelPayeSchedule(
         WHERE id = $1`,
       [params.scheduleId, params.reason.trim(), params.actorId],
     );
+
+    /*
+     * And the bill goes with it.
+     *
+     * Filing raised an assessment, which raised an invoice, which is what the
+     * employer owes. Withdrawing the return without withdrawing that left them
+     * billed for a return PSIRS had taken back — and the filing path's own
+     * refusal is what makes it worse than an oversight. It turns a second
+     * filing away with "Cancel it first if it was wrong — a second filing
+     * would double what they appear to owe", and tells the officer to "cancel
+     * and replace". An officer who followed that instruction left the employer
+     * owing both figures, which is exactly the doubling the sentence promised
+     * cancelling would prevent.
+     *
+     * The remedy is the one `enumeration.ts` already uses when an objection is
+     * upheld, including its guard. A bill that has been paid is not withdrawn
+     * here: money that has reached a government account comes back through a
+     * refund, with the accountability a refund carries, not by an UPDATE that
+     * makes the demand disappear.
+     */
+    if (schedule.assessment_id) {
+      await client.query(
+        `UPDATE invoices SET status = 'CANCELLED'
+          WHERE assessment_id = $1 AND status IN ('UNPAID', 'PARTIALLY_PAID')`,
+        [schedule.assessment_id],
+      );
+    }
 
     await recordAudit(client, {
       actorId: params.actorId,
