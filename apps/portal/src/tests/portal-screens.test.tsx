@@ -79,6 +79,7 @@ describe('2. Public Receipt & Particulars Verification Portal', () => {
       issuedAt: '2026-08-18T12:00:00.000Z',
       lga: 'Jos North',
       integrityConfirmed: true,
+      reason: 'RECEIPT_GENUINE',
       message: 'This is a genuine government receipt issued by PSIRS.',
     });
 
@@ -104,13 +105,17 @@ describe('2. Public Receipt & Particulars Verification Portal', () => {
       documentType: 'PAYMENT_ACKNOWLEDGEMENT',
       issuedAt: '2026-08-27T10:00:36.396Z',
       integrityConfirmed: true,
+      reason: 'ACKNOWLEDGEMENT_NOT_RECEIPT',
       message:
         'This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt.',
     });
 
     render(<VerifyScreen code="NA76E-2DC3F" />);
 
-    expect(await screen.findByText(/NOT a government receipt/i)).toBeTruthy();
+    // The dictionary's wording, not the server's: the screen composes this
+    // now, and a test pinned to the API's sentence would pass while the
+    // page rendered `undefined`.
+    expect(await screen.findByText(new RegExp('NOT a government receipt', 'i'))).toBeTruthy();
     const verdict = document.querySelector('.verdict__label');
     expect(verdict, 'the verdict must be rendered').toBeTruthy();
     expect(
@@ -125,6 +130,7 @@ describe('2. Public Receipt & Particulars Verification Portal', () => {
       receiptNumber: 'PSIRS/2026/000002',
       revenueType: 'Signage Levy',
       amountKobo: '500000',
+      reason: 'RECEIPT_REVERSED',
       message: 'This receipt was issued but the payment has since been reversed or refunded.',
     });
 

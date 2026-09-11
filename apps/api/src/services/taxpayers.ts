@@ -10,7 +10,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import type { TaxpayerType } from '@psirs/shared';
+import { duplicateReasonSentence, type DuplicateReason, type TaxpayerType } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
@@ -61,7 +61,7 @@ export interface DuplicateMatch {
   tin: string | null;
   phone: string;
   score: number;
-  reasons: string[];
+  reasons: DuplicateReason[];
 }
 
 /**
@@ -119,12 +119,12 @@ export async function findPotentialDuplicates(
   const matches: DuplicateMatch[] = [];
 
   for (const row of rows) {
-    const reasons: string[] = [];
+    const reasons: DuplicateReason[] = [];
     let score = 0;
 
     if (identityHash && row.identity_hash === identityHash) {
       score = Math.max(score, 100);
-      reasons.push('The same identification number is already registered');
+      reasons.push('IDENTITY_NUMBER');
     }
 
     const namesMatch =
@@ -138,18 +138,18 @@ export async function findPotentialDuplicates(
 
     if (row.phone === input.phone && (namesMatch || businessMatch)) {
       score = Math.max(score, 85);
-      reasons.push('Same phone number and same name');
+      reasons.push('PHONE_AND_NAME');
     } else if (row.phone === input.phone) {
       score = Math.max(score, 60);
-      reasons.push('This phone number is already registered to another taxpayer');
+      reasons.push('PHONE');
     }
 
     if (businessMatch && row.lga_id === input.lgaId) {
       score = Math.max(score, 70);
-      reasons.push('A business with this name is already registered in this LGA');
+      reasons.push('BUSINESS_NAME_IN_LGA');
     } else if (namesMatch && row.lga_id === input.lgaId) {
       score = Math.max(score, 55);
-      reasons.push('A taxpayer with this name is already registered in this LGA');
+      reasons.push('NAME_IN_LGA');
     }
 
     if (score > 0) {
@@ -352,7 +352,17 @@ export async function registerTaxpayer(params: {
        */
       throw new AppError({
         statusCode: 400,
-        code: 'INVALID_REQUEST',
+        /*
+         * Its own code, not the catch-all.
+         *
+         * `INVALID_REQUEST` is what `badRequest()` raises for anything a
+         * schema refused, so a client could not tell this from a malformed
+         * field — and the next step below is advice about a specific
+         * decision, not about a malformed request. It is also the reason the
+         * advice could not be translated: a code that means something
+         * different every time it is raised cannot carry one instruction.
+         */
+        code: 'TIN_NOT_FOUND',
         message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
         nextStep:
           'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
@@ -535,7 +545,8 @@ async function recordDuplicateCheck(
       }),
       top?.taxpayerId ?? null,
       top?.score ?? 0,
-      params.duplicates.flatMap((match) => match.reasons),
+      // The record keeps the sentence; only the screen gets the code.
+      params.duplicates.flatMap((match) => match.reasons.map(duplicateReasonSentence)),
       params.decision,
       params.createdTaxpayerId,
       params.actorId,

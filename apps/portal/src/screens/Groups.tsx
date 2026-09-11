@@ -9,8 +9,17 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -38,6 +47,22 @@ interface GroupRow {
   leader_name: string;
   leader_phone: string;
   attested_members: string;
+  tax_role: string;
+}
+
+/**
+ * The one place a value needs different words from the enum dictionary.
+ *
+ * That dictionary is keyed by value, not by column, on the reasoning that the
+ * same word means the same thing wherever it appears — and it says that where
+ * a value ever needs two readings, the exception should be written down where
+ * it is visible. This is that exception. NONE is a premises on an enumeration
+ * observation ("No fixed premises") and a part in enumeration on a group, and
+ * a group with no part in enumeration has no premises to speak of.
+ */
+function taxRoleLabel(taxRole: string, t: ReturnType<typeof usePortalI18n>['t']): string {
+  if (taxRole === 'NONE') return t.ofcGpTaxRoleNone;
+  return enumLabel(taxRole, t);
 }
 
 interface MemberRow {
@@ -56,6 +81,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const { lang, t } = usePortalI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
+  const [roundsError, setRoundsError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [status, setStatus] = useState('');
@@ -70,13 +96,27 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       .get<{ groups: GroupRow[] }>(`/groups${status ? `?status=${status}` : ''}`)
       .then((result) => setGroups(result.groups))
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
+    /*
+     * An empty rounds list has two causes and only one is silent.
+     *
+     * Without `allocation:read:all` the list is never fetched and the section
+     * is not drawn — correct, and why the else branch below sets `[]`. With
+     * the permission and a failed read it used to set `[]` too, and the
+     * section printed "No distributions have been set up yet." An officer
+     * told that sets one up, and a second distribution round against the same
+     * programme is not a duplicate row: it is fertiliser awarded twice.
+     */
     if (can('allocation:read:all')) {
+      setRoundsError(null);
       api
         .get<{ rounds: RoundRow[] }>('/allocations/rounds')
         .then((result) => setRounds(result.rounds))
-        .catch(() => setRounds([]));
+        .catch((caught) => {
+          setRoundsError(asApiError(caught));
+          setRounds([]);
+        });
     } else {
       setRounds([]);
     }
@@ -94,7 +134,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       if (note) setMessage(note);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -120,7 +160,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             style={{
               display: 'block',
               wordBreak: 'break-all',
-              fontSize: '0.78rem',
+              fontSize: 'var(--text-sm)',
               background: 'var(--surface-2, #f3f4f6)',
               padding: '8px 10px',
               borderRadius: 8,
@@ -169,7 +209,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'APPROVE',
                             reason,
                           });
-                          return `${row.name} approved. Members can now be recorded.`;
+                          return t.ofcGrApproved.replace('{{name}}', row.name);
                         })
                       }
                     >{t.ofcRhApprove}</button>
@@ -183,7 +223,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'SUSPEND',
                             reason,
                           });
-                          return `${row.name} suspended.`;
+                          return t.ofcGrGroupSuspended.replace('{{name}}', row.name);
                         })
                       }
                     >{t.ofcAgSuspend}</button>
@@ -199,10 +239,18 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {can('allocation:read:all') && rounds !== null && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcGpDistributions}</h2>
             <p className="card__hint">{t.ofcGpDistributionsIntro}</p>
           </div>
+          {roundsError ? (
+            <div className="card__pad">
+              <ErrorAlert error={roundsError} />
+              <button type="button" className="secondary" onClick={load}>
+                {t.actionTryAgain}
+              </button>
+            </div>
+          ) : (
           <Table
             columns={[
               { key: 'name', label: 'ofcAlRound' },
@@ -215,7 +263,10 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
               {
                 key: 'awarded_quantity',
                 label: 'ofcGpAwarded',
-                render: (row) => `${row.awarded_quantity} (${row.awarded_count} people)`,
+                render: (row) =>
+                  t.ofcGrQuantityPeople
+                    .replace('{{quantity}}', row.awarded_quantity)
+                    .replace('{{n}}', row.awarded_count),
               },
               { key: 'collected_count', label: 'ofcPfCollected' },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
@@ -234,11 +285,12 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
             rows={rounds}
             empty="ofcNoneDistributionsSetUp"
           />
+          )}
         </div>
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcGpRegisteredGroups}</h2>
           <p className="card__hint">{t.ofcGpGroupsIntro}</p>
           <div className="field" style={{ maxWidth: 260 }}>
@@ -258,7 +310,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {members && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <div>
                 <h2 className="card__title">
@@ -279,6 +331,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                   onChange={(event) => setDepartureReason(event.target.value)}
                   placeholder={t.ofcGpSampleEnded}
                 />
+                <ReasonRule value={departureReason} minimum={5} />
               </div>
             )}
           </div>
@@ -304,7 +357,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                       disabled={busy || departureReason.trim().length < 5}
                       onClick={() =>
                         act(async () => {
-                          const result = await api.post<{ message: string }>(
+                          await api.post<{ message: string }>(
                             `/groups/${members.group.id}/members/${row.id}/departure`,
                             { reason: departureReason },
                           );
@@ -313,7 +366,15 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           );
                           setMembers({ group: members.group, rows: refreshed });
                           setDepartureReason('');
-                          return result.message;
+                          /*
+                           * Both names are already on this screen — it is the
+                           * row the officer just acted on, in the group they
+                           * opened — so nothing has to be read back to say
+                           * what happened.
+                           */
+                          return t.ofcGpMemberLeft
+                            .replace('{{member}}', row.member_name ?? '')
+                            .replace('{{group}}', members.group.name);
                         })
                       }
                     >
@@ -356,6 +417,48 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                 ) : null,
             },
             {
+              /*
+               * What part this group plays in enumeration, and the control to
+               * change it.
+               *
+               * Shown as a column rather than buried in a detail screen
+               * because it is the answer to a question an officer asks about
+               * the list — which of these associations can contradict an
+               * agent's count — and a list that shows every group identically
+               * cannot answer it.
+               */
+              key: 'tax_role',
+              label: 'ofcGpTaxRole',
+              render: (row) =>
+                row.status === 'ACTIVE' && can('group:manage') ? (
+                  <select
+                    aria-label={`${t.ofcGpTaxRole} — ${row.name}`}
+                    value={row.tax_role}
+                    disabled={busy || reason.trim().length < 10}
+                    title={reason.trim().length < 10 ? t.ofcGpTaxRoleNeedsReason : undefined}
+                    onChange={(event) => {
+                      const taxRole = event.target.value;
+                      void act(async () => {
+                        await api.post(`/groups/${row.id}/tax-role`, { taxRole, reason });
+                        setGroups(
+                          (current) =>
+                            current?.map((g) =>
+                              g.id === row.id ? { ...g, tax_role: taxRole } : g,
+                            ) ?? current,
+                        );
+                        return `${row.name}: ${taxRoleLabel(taxRole, t)}`;
+                      });
+                    }}
+                  >
+                    <option value="NONE">{t.ofcGpTaxRoleNone}</option>
+                    <option value="ATTESTATION">{t.enumAttestation}</option>
+                    <option value="ENUMERATION">{t.enumEnumeration}</option>
+                  </select>
+                ) : (
+                  <span>{taxRoleLabel(row.tax_role, t)}</span>
+                ),
+            },
+            {
               key: 'attest',
               label: { text: '' },
               render: (row) =>
@@ -370,7 +473,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           `/groups/${row.id}/attestation-request`,
                         );
                         setAttestationLink({ name: row.name, url: result.invitationUrl });
-                        return 'Confirmation link created.';
+                        return t.ofcGpConfirmationLinkCreated;
                       })
                     }
                   >{t.ofcGpAskLeader}</button>
@@ -407,7 +510,6 @@ interface AwardRow {
   id: string;
   status: string;
   quantity: string;
-  collection_code: string;
   compliance_score: number | null;
   awarded_at: string;
   collected_at: string | null;
@@ -429,6 +531,21 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
   const [round, setRound] = useState<RoundSummary | null>(null);
   const [awards, setAwards] = useState<AwardRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The awards list keeps its own failure, apart from the round's.
+   *
+   * It used to keep none: `.catch(() => undefined)` left `awards` at null,
+   * and null renders the skeleton. An officer whose request was refused, or
+   * whose connection dropped, watched three grey bars for as long as they
+   * cared to wait. The round summary above managed the same trick differently
+   * — its catch stored the server's sentence, and the `if (!round)` guard
+   * returned the skeleton before the `ErrorAlert` that would have shown it.
+   *
+   * Two lists, two reasons, so two states: which one failed is the difference
+   * between "this round could not be read" and "who was awarded could not be
+   * read", and an officer chasing an undistributed round needs to know which.
+   */
+  const [awardsError, setAwardsError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -437,17 +554,23 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       .get<RoundSummary>(`/allocations/rounds/${roundId}`)
       .then(setRound)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
     api
       .get<{ awards: AwardRow[] }>(`/allocations/rounds/${roundId}/awards`)
-      .then((result) => setAwards(result.awards))
-      .catch(() => undefined);
+      .then((result) => {
+        setAwards(result.awards);
+        setAwardsError(null);
+      })
+      .catch((caught) => {
+        setAwardsError(asApiError(caught));
+      });
   }, [roundId]);
 
   useEffect(load, [load]);
 
-  if (!round) return <Loading rows={5} />;
+  // The reason, when there is one, rather than a skeleton that never resolves.
+  if (!round) return error ? <ErrorAlert error={error} /> : <Loading rows={5} />;
 
   const collectionRate =
     round.awardedCount > 0 ? Math.round((round.collectedCount / round.awardedCount) * 100) : 0;
@@ -471,13 +594,23 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         <div className="stat">
           <p className="stat__label">{t.ofcGpAwarded}</p>
           <p className="stat__value">{round.awardedQuantity}</p>
-          <p className="stat__hint">{round.awardedCount} beneficiaries</p>
+          <p className="stat__hint">
+            {t.ofcGpBeneficiaryCount.replace('{{count}}', String(round.awardedCount))}
+          </p>
         </div>
         <div className="stat">
           <p className="stat__label">{t.ofcPfCollected}</p>
           <p className="stat__value">{round.collectedQuantity}</p>
+          {/*
+            * The whole phrase, not three fragments round two numbers.
+            * "{{collected}} of {{awarded}}" cannot be built by concatenation
+            * in a language that does not order those parts as English does.
+            */}
           <p className="stat__hint">
-            {round.collectedCount} of {round.awardedCount} ({collectionRate}%)
+            {t.ofcGpCollectedOfAwarded
+              .replace('{{collected}}', String(round.collectedCount))
+              .replace('{{awarded}}', String(round.awardedCount))
+              .replace('{{rate}}', String(collectionRate))}
           </p>
         </div>
         <div className="stat">
@@ -501,16 +634,25 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
-            {round.quantity_per_beneficiary} {enumLabel(round.unit, t)} each
-            {round.collection_point ? ` · collected at ${round.collection_point}` : ''} ·{' '}
+            {t.ofcGpEachBeneficiaryGets
+              .replace('{{quantity}}', round.quantity_per_beneficiary)
+              .replace('{{unit}}', enumLabel(round.unit, t))}
+            {round.collection_point
+              ? t.ofcGrCollectedAt.replace('{{place}}', round.collection_point)
+              : ''}{' '}
+            ·{' '}
             <Badge status={round.status} />
           </p>
         </div>
 
-        {awards === null ? (
+        {awardsError ? (
+          <div className="card__pad">
+            <ErrorAlert error={awardsError} />
+          </div>
+        ) : awards === null ? (
           <Loading rows={3} />
         ) : awards.length === 0 ? (
           <Empty>{t.ofcNoneNobodyAwardedRound}</Empty>

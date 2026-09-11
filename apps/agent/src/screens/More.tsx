@@ -1,23 +1,21 @@
 /** Vehicles, receipts, commission wallet and profile. */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiRequestError,
-  APP_VERSION,
-  api,
-  isConnectivityFailure,
-  newIdempotencyKey,
-  type ApiError,
-} from '../lib/api';
+import { APP_VERSION, ApiRequestError, api, asApiError, isConnectivityFailure, newIdempotencyKey, type ApiError } from '../lib/api';
+import { formatNaira, parseKobo, type TranslationDictionary } from '@psirs/shared';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
-import { bluetoothPrinter } from '../lib/bluetooth-printer';
-import { pushManager } from '../lib/push';
-import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
+import {
+  PRINTER_PROBLEM_TEXT,
+  PrinterUnavailable,
+  bluetoothPrinter,
+} from '../lib/bluetooth-printer';
+import { PushUnsupported, pushManager } from '../lib/push';
+import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner, errorText } from '../ui';
 import { StepUpPrompt } from '../components/StepUp';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { useI18n } from '../lib/i18n';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, formatDateTimeIn, localName } from '@psirs/shared';
 
 // ---------------------------------------------------------------- vehicles
 
@@ -32,6 +30,47 @@ interface VehicleLookup {
   vehicle: Record<string, string | null> | null;
   authorityConfirmed: boolean;
   message: string;
+}
+
+/**
+ * Why a capture was refused, in the language its holder reads.
+ *
+ * This is the sentence somebody reads standing in a market, holding money,
+ * with the person whose details they took still in front of them. It was the
+ * API's English.
+ *
+ * The code goes through the same map `ErrorAlert` uses, which is what makes
+ * the refusals PSIRS composes deliberately — an already-registered taxpayer,
+ * a lapsed clearance — translate without anything being invented for them:
+ * they arrive as their own `AppError` code, and that map already knows them.
+ *
+ * Falls back to the stored English when there is no code, which is how a
+ * refusal recorded before this existed comes back, and how the one path that
+ * replays a reason stored earlier answers.
+ */
+function refusalText(draft: Draft, t: TranslationDictionary): string {
+  const recorded = draft.message ?? '';
+  if (!draft.code) return recorded;
+  const said = errorText({ code: draft.code, message: recorded }, t);
+  return draft.detail ? said.replace('{{detail}}', draft.detail) : said;
+}
+
+/**
+ * The lookup's answer as a sentence, from the fields it already carries.
+ *
+ * Five outcomes, not four: a vehicle found on the platform reads differently
+ * depending on whether the authority has ever confirmed it, and
+ * `authorityConfirmed` is on the response for exactly that reason.
+ *
+ * Falls back to the server's own words for a source this build has not met.
+ */
+function vehicleAnswer(lookup: VehicleLookup, t: TranslationDictionary): string {
+  if (lookup.source === 'REGISTRY_UNAVAILABLE') return t.agVehRegistryUnavailable;
+  if (lookup.source === 'NOT_FOUND') return t.agVehNotFound;
+  if (lookup.source === 'AUTHORITY') return t.agVehFoundAtAuthority;
+  if (lookup.source === 'PLATFORM')
+    return lookup.authorityConfirmed ? t.agVehFoundConfirmed : t.agVehFoundUnconfirmed;
+  return lookup.message;
 }
 
 export function VehiclesScreen({ navigate }: { navigate: (path: string) => void }) {
@@ -65,7 +104,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
         await api.get<VehicleLookup>(`/vehicles/lookup/${encodeURIComponent(registration.trim())}`),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
       // Offline, the lookup cannot happen at all — the authority is only
       // reachable from the server. The agent captures what they can see on the
       // vehicle instead, and the authority is consulted when the draft syncs.
@@ -103,7 +142,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       setCapturedOffline(true);
       if (outcome.sent) setOfflineCapture(false);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -128,7 +167,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
             vehicleType: lookup.vehicle.vehicleType ?? 'PRIVATE',
             vehicleClass: lookup.vehicle.vehicleClass ?? undefined,
             colour: lookup.vehicle.colour ?? undefined,
-            ownerName: lookup.vehicle.ownerName ?? 'Unknown owner',
+            ownerName: lookup.vehicle.ownerName ?? t.moreUnknownOwner,
             taxpayerId,
           })
         ).vehicleId;
@@ -142,7 +181,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       await api.post('/payments/initiate', { transactionId: renewal.transactionId }, newIdempotencyKey('payment'));
       navigate(`/transactions/${renewal.transactionReference}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -241,7 +280,18 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
                     : 'info'
             }
           >
-            {lookup.message}
+            {/*
+              * Which of the five, in the language the agent is working in.
+              *
+              * The screen was already reading `source` twice in the lines
+              * above — once to colour this alert, once to decide whether to
+              * offer the retry — and then printed the API's sentence anyway.
+              * The distinction it carries is the one that matters on a
+              * roadside: "we could not reach the authority" and "no such
+              * vehicle" lead to different actions, and only one of them
+              * leaves a record marked for checking.
+              */}
+            {vehicleAnswer(lookup, t)}
           </Alert>
 
           {lookup.source === 'REGISTRY_UNAVAILABLE' && (
@@ -349,15 +399,20 @@ export function ReceiptsScreen() {
       .get<ReceiptRow[]>('/receipts')
       .then(setReceipts)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
-  if (!receipts) return <Loading rows={4} />;
+  if (!receipts && !error) return <Loading rows={4} />;
 
   return (
     <>
+      {/*
+        Above the list rather than instead of it. A receipt that would not
+        open is not a reason to take away the ones that would.
+      */}
+      <ErrorAlert error={error} />
+
       <div className="card">
         <h2 className="card__title">{t.moreReceiptsFacilitated}</h2>
         <p className="card__hint">
@@ -366,7 +421,7 @@ export function ReceiptsScreen() {
       </div>
 
       <div className="card card--flush">
-        {receipts.length === 0 ? (
+        {!receipts ? null : receipts.length === 0 ? (
           <p className="empty">{t.moreNoReceipts}</p>
         ) : (
           <ul className="list">
@@ -375,15 +430,41 @@ export function ReceiptsScreen() {
                 <button
                   type="button"
                   className="list__item"
+                  /*
+                    Tapping a receipt used to be able to do nothing at all.
+                    The request sat in an async handler with no catch, so a
+                    lost signal or an expired session produced no error, no
+                    spinner and no change — on the screen an agent opens with
+                    a taxpayer standing in front of them asking for their
+                    receipt. They tap again, and again.
+                  */
                   onClick={async () => {
-                    const detail = await api.get<{ downloadUrl: string }>(`/receipts/${receipt.id}`);
-                    window.open(detail.downloadUrl, '_blank', 'noopener');
+                    setError(null);
+                    try {
+                      const detail = await api.get<{ downloadUrl: string }>(
+                        `/receipts/${receipt.id}`,
+                      );
+                      window.open(detail.downloadUrl, '_blank', 'noopener');
+                    } catch (caught) {
+                      setError(asApiError(caught));
+                    }
                   }}
                 >
                   <div className="list__body">
                     <p className="list__title">{receipt.receipt_number}</p>
                     <p className="list__meta">
                       {receipt.taxpayer_name} · {localName(lang, receipt.revenue_item, receipt.revenue_item_ha)}
+                      {/*
+                        * When it was issued, which is how an agent finds one.
+                        *
+                        * "The receipt I gave that man this morning" is the
+                        * question this list answers, and it showed the number,
+                        * the name and the amount — so two collections from the
+                        * same taxpayer for the same item were one row repeated,
+                        * with nothing to tell them apart.
+                        */}
+                      {' · '}
+                      {formatDateTimeIn(receipt.issued_at, t)}
                     </p>
                   </div>
                   <span className="list__amount">
@@ -440,7 +521,7 @@ export function CommissionScreen() {
       .get<Wallet>('/agents/me/commission')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
   useEffect(() => {
@@ -461,14 +542,35 @@ export function CommissionScreen() {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ payoutReference: string; message: string }>(
-        '/agents/me/commission/payout',
-      );
+      const result = await api.post<{
+        payoutReference: string;
+        amountKobo: string;
+        grossKobo: string;
+        clawbackAppliedKobo: string;
+      }>('/agents/me/commission/payout');
       setAuthorising(false);
-      setMessage(`${result.message} Reference ${result.payoutReference}.`);
+      /*
+       * Composed here rather than rendered from `result.message`.
+       *
+       * The API writes that sentence in English — and when a clawback applies
+       * it is not a courtesy line but the explanation of why an agent is being
+       * paid less than they expected, with three figures in it. An agent
+       * reading Hausa was getting it in English. The server still returns the
+       * message for anything else that calls the endpoint; the amounts are
+       * what this screen reads.
+       */
+      setMessage(
+        result.clawbackAppliedKobo && parseKobo(result.clawbackAppliedKobo) > 0n
+          ? t.morePayoutClawback
+              .replace('{{amount}}', formatNaira(result.amountKobo))
+              .replace('{{gross}}', formatNaira(result.grossKobo))
+              .replace('{{clawback}}', formatNaira(result.clawbackAppliedKobo))
+              .replace('{{reference}}', result.payoutReference)
+          : t.morePayoutRequested.replace('{{reference}}', result.payoutReference),
+      );
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
       setAuthorising(false);
     } finally {
       setBusy(false);
@@ -509,10 +611,62 @@ export function CommissionScreen() {
         <p style={{ margin: 0 }}>{data.note}</p>
       </Alert>
 
+      {/*
+        * The three buckets the agent could not see.
+        *
+        * `getWallet` sums six mutually exclusive statuses — PENDING,
+        * ELIGIBLE, ON_HOLD, APPROVED, PAID, REVERSED — and this screen
+        * rendered three of them. Money in the other three was not shown as
+        * anything: not eligible, not pending, not paid, not owed back. An
+        * agent whose commission had been put on hold saw it nowhere at all.
+        *
+        * The transaction count above is the tell, and it is what an agent
+        * would notice. It counts every commission row, including the held
+        * and approved ones, so the count and the money did not reconcile and
+        * there was nothing on the screen that could explain the difference.
+        *
+        * Each line appears only when it has something to say, so an agent
+        * whose commission is moving normally sees the screen unchanged.
+        */}
+      {BigInt(data.wallet.onHoldKobo ?? '0') > 0n && (
+        <Alert kind="warning" title={t.moreSomeCommissionOnHold}>
+          <p style={{ margin: 0 }}>
+            <Money kobo={data.wallet.onHoldKobo} /> {t.moreOnHoldBody}
+          </p>
+        </Alert>
+      )}
+
+      {BigInt(data.wallet.approvedKobo ?? '0') > 0n && (
+        <Alert kind="info" title={t.moreCommissionApproved}>
+          <p style={{ margin: 0 }}>
+            <Money kobo={data.wallet.approvedKobo} /> {t.moreApprovedBody}
+          </p>
+        </Alert>
+      )}
+
       {BigInt(data.wallet.owedBackKobo ?? '0') > 0n && (
         <Alert kind="warning" title={t.moreSomeCommissionOwedBack}>
           <p style={{ margin: 0 }}>
             <Money kobo={data.wallet.owedBackKobo} /> {t.moreOwedBackBody}
+          </p>
+        </Alert>
+      )}
+
+      {/*
+        * Reversed commission that was never paid, which `owedBackKobo` does
+        * not cover — that figure is only the part already paid out and not
+        * yet recovered. Without this line, commission on a collection later
+        * reversed simply vanished from the agent's screen.
+        */}
+      {BigInt(data.wallet.reversedKobo ?? '0') > BigInt(data.wallet.owedBackKobo ?? '0') && (
+        <Alert kind="info" title={t.moreSomeCommissionReversed}>
+          <p style={{ margin: 0 }}>
+            <Money
+              kobo={(
+                BigInt(data.wallet.reversedKobo ?? '0') - BigInt(data.wallet.owedBackKobo ?? '0')
+              ).toString()}
+            />{' '}
+            {t.moreReversedBody}
           </p>
         </Alert>
       )}
@@ -594,7 +748,7 @@ export function CommissionScreen() {
 // ----------------------------------------------------------------- profile
 
 export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [printerState, setPrinterState] = useState(bluetoothPrinter.getState());
   const [printerBusy, setPrinterBusy] = useState(false);
@@ -616,8 +770,14 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     try {
       await bluetoothPrinter.connect();
       setPrinterMsg(t.morePrinterConnected);
-    } catch (err: any) {
-      setPrinterMsg(err.message || t.morePrinterConnectFailed);
+    } catch (err) {
+      // The dictionary decides, not the error — the same correction made for
+      // the camera, push and step-up.
+      setPrinterMsg(
+        err instanceof PrinterUnavailable
+          ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+          : t.morePrinterConnectFailed,
+      );
     } finally {
       setPrinterBusy(false);
     }
@@ -627,10 +787,15 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
     setPrinterBusy(true);
     setPrinterMsg(null);
     try {
-      await bluetoothPrinter.printTestSlip();
+      await bluetoothPrinter.printTestSlip(lang);
       setPrinterMsg(t.morePrinterTestSent);
-    } catch (err: any) {
-      setPrinterMsg(err.message || t.morePrinterPrintFailed);
+    } catch (err) {
+      // The dictionary decides, not the error — same as connecting, above.
+      setPrinterMsg(
+        err instanceof PrinterUnavailable
+          ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+          : t.morePrinterPrintFailed,
+      );
     } finally {
       setPrinterBusy(false);
     }
@@ -649,8 +814,10 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
         setPushStatus(ok ? 'granted' : 'denied');
         setPushMsg(ok ? t.morePushActive : t.morePushNotGranted);
       }
-    } catch (err: any) {
-      setPushMsg(err.message || t.morePushFailed);
+    } catch (err) {
+      // The dictionary decides, not the error. `err.message` used to win here,
+      // which is how an English sentence reached an agent reading Hausa.
+      setPushMsg(err instanceof PushUnsupported ? t.morePushUnsupported : t.morePushFailed);
     } finally {
       setPushBusy(false);
     }
@@ -683,7 +850,19 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
           ]}
         />
         {printerMsg && (
-          <p style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}>
+          /*
+           * Named, because it was anonymous and that hid a hole in its test.
+           *
+           * A test asserting the refusal reached the agent searched the whole
+           * document, and `moreNoWebBluetooth` is also printed as a static
+           * hint further down — jsdom has no Web Bluetooth, so that hint is
+           * always on the page. The assertion passed on the hint while this
+           * paragraph said something else entirely.
+           */
+          <p
+            id="printer-message"
+            style={{ fontSize: '0.82rem', margin: '8px 0', color: 'var(--green-700)' }}
+          >
             {printerMsg}
           </p>
         )}
@@ -757,7 +936,7 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
             disabled={pushBusy || !pushManager.isSupported()}
             onClick={togglePush}
           >
-            {pushBusy ? <Spinner /> : pushStatus === 'granted' ? 'Disable Push Notifications' : 'Enable Push Notifications'}
+            {pushBusy ? <Spinner /> : pushStatus === 'granted' ? t.moreDisablePushNotifications : t.enablePush}
           </button>
         </div>
       </div>
@@ -794,9 +973,9 @@ export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
                   <p className="list__meta">
                     {t.moreDraftCaptured.replace(
                       '{{when}}',
-                      new Date(draft.capturedAt).toLocaleString('en-NG'),
+                      formatDateTimeIn(draft.capturedAt, t),
                     )}
-                    {draft.message ? ` · ${draft.message}` : ''}
+                    {refusalText(draft, t) ? ` · ${refusalText(draft, t)}` : ''}
                   </p>
                 </div>
                 <Badge status={draft.status} />
@@ -850,15 +1029,29 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
   const [authorising, setAuthorising] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Whether a change is already waiting is a thing this screen has to KNOW,
+   * not guess.
+   *
+   * `pending` is undefined while it is being read, `null` when PSIRS says
+   * there is none, and a change when there is one — and the catch used to
+   * write `null`, which is the answer "there is none". The screen then offers
+   * the form to ask for a change, and an agent fills in five fields, does a
+   * step-up, and is refused with BANK_CHANGE_ALREADY_PENDING — which reads
+   * like their request was turned down rather than never sent.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ change: BankChange | null }>('/agents/me/bank/change')
-      .then((data) => setPending(data.change))
+      .then((data) => {
+        setPending(data.change);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        setPending(null);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -898,22 +1091,19 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
         reason: form.reason.trim(),
       });
       setMessage(
-        'Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change.',
+        t.moreSentToPsirsYour,
       );
       setForm({ bankName: '', bankCode: '', accountName: '', accountNumber: '', reason: '' });
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
       setAuthorising(false);
     }
   }
 
-  if (pending === undefined) return <Loading rows={3} />;
+  if (pending === undefined && !loadError) return <Loading rows={3} />;
 
   if (authorising) {
     return (
@@ -950,7 +1140,17 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {pending ? (
+      {loadError ? (
+        /*
+          Not the form. Asking for a change when we do not know whether one is
+          already waiting is how an agent spends a step-up on a request the
+          server was always going to refuse.
+        */
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      ) : pending ? (
         <>
           <div className="card">
             <h2 className="card__title">{t.moreChangeWaiting}</h2>

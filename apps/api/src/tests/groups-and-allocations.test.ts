@@ -322,6 +322,29 @@ describe('a fertiliser programme, and the bags behind it', () => {
     assert.equal(awarded.status, 201, JSON.stringify(awarded.body));
     assert.match(awarded.body.collectionCode, /^[A-Z0-9]{5}-[A-Z0-9]{5}$/);
 
+    /*
+     * Once, here, and never again in a list.
+     *
+     * The code is the credential — `recordCollection` matches on it alone —
+     * so the officer is given it at the moment they award the allocation and
+     * have to pass it to the beneficiary. The awards list used to carry it
+     * too, up to 500 at a time, to every holder of `allocation:read:all`.
+     * Nothing rendered it, which meant the only way to read one was the
+     * network tab, and the only use for reading one is to collect somebody
+     * else's allocation without them present.
+     */
+    const listed = await get(`/allocations/rounds/${roundId}/awards`, { token: officerToken });
+    assert.equal(listed.status, 200, JSON.stringify(listed.body));
+    assert.ok(listed.body.awards.length > 0, 'the award should be listed at all');
+    for (const award of listed.body.awards) {
+      assert.equal(
+        award.collection_code,
+        undefined,
+        `a collection code reached the awards list: ${JSON.stringify(award)}`,
+      );
+      assert.equal(award.collectionCode, undefined);
+    }
+
     // Recorded by the agent, never confirmed by the chairman.
     const unvouched = await farmer('Seven', '+2348100000007');
     await post(

@@ -23,6 +23,7 @@ import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
 import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agents';
 import { UserAccessScreen } from './screens/UserAccess';
 import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
+import { AssessmentScreen, InvoiceScreen } from './screens/Charge';
 import { PerformanceScreen } from './screens/Performance';
 import { RevenueScreen } from './screens/Revenue';
 import { AllocationsScreen } from './screens/Allocations';
@@ -35,13 +36,30 @@ import { SupportScreen, TicketDetailScreen } from './screens/Support';
 import { OutstandingScreen } from './screens/Outstanding';
 import { CatalogueScreen, ProgrammesScreen } from './screens/Configuration';
 import { LeviesScreen } from './screens/Levies';
+import { ArrearsScreen } from './screens/Arrears';
+import { ConnectionsScreen } from './screens/Connections';
+import { PayrollScreen } from './screens/Payroll';
+import { PresumptiveScreen } from './screens/Presumptive';
+import { EnumerationScreen } from './screens/Enumeration';
 import { FieldAppScreen } from './screens/FieldApp';
 import { CitizenPortalScreen, RefereePortalScreen, GroupAttestationScreen, VerifyScreen } from './screens/Public';
 import { AllocationRoundScreen, GroupsScreen } from './screens/Groups';
+import { CasesScreen, MyWorkScreen } from './screens/Cases';
+import { TransactionScreen } from './screens/Transaction';
+import { TargetsScreen } from './screens/Targets';
+import { TaxpayerBaseScreen } from './screens/TaxpayerBase';
+import { OrganisationScreen } from './screens/Organisation';
+import { PeriodsScreen } from './screens/Periods';
+import { WorkbenchScreen } from './screens/Workbench';
+import { MyAccessScreen } from './screens/MyAccess';
+import { InboxScreen } from './screens/Inbox';
+import { PlatformScreen } from './screens/Platform';
+import { RolesScreen } from './screens/Roles';
+import { GlobalSearch } from './screens/Search';
 import { LanguageToggle } from './ui';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatLongDateIn } from '@psirs/shared';
 
 export function App() {
   const { t } = usePortalI18n();
@@ -189,8 +207,16 @@ export function App() {
       <div className="main">
         <header className="topbar">
           <h1>{t[activeLabel]}</h1>
+          {/*
+            * The search box lives in the shell, not on a screen.
+            *
+            * A search an officer has to navigate to is a search they use once.
+            * It grants nothing on its own — every kind of result is gated on
+            * the API against the permission that kind's own screen requires.
+            */}
+          <GlobalSearch navigate={navigate} />
           <div className="topbar__meta">
-            <div>{new Date().toLocaleDateString('en-NG', { dateStyle: 'full' })}</div>
+            <div>{formatLongDateIn(new Date(), t)}</div>
             <div>{t.authPsirsFull}</div>
           </div>
         </header>
@@ -206,6 +232,11 @@ export function App() {
 /** Headings for screens reached from a list rather than from the menu. */
 const SECTION_LABELS: Record<string, keyof TranslationDictionary> = {
   '/allocations': 'ofcDistributionRound',
+  '/transaction': 'ofcT3Title',
+  '/invoice': 'ofcT3Invoice',
+  '/assessment': 'ofcT3Assessment',
+  '/cases': 'ofcNavCases',
+  '/my-work': 'ofcNavMyWork',
 };
 
 function Routes({
@@ -219,7 +250,25 @@ function Routes({
 }) {
   const { t } = usePortalI18n();
   const agentMatch = matchRoute(route, '/agents/:id');
+  /*
+   * `:key` is a transaction id or a transaction reference.
+   *
+   * The search box hands over an id; a link pasted from a citizen's message or
+   * a reconciliation row carries the reference. The endpoint takes either, so
+   * neither the officer nor the caller has to know which they are holding.
+   */
+  const transactionMatch = matchRoute(route, '/transaction/:key');
   const ticketMatch = matchRoute(route, '/support/:id');
+  /*
+   * One invoice and one assessment, each by its own id.
+   *
+   * Both are where the global search now sends a hit. It used to send both to
+   * `/transaction/:id` when a transaction existed and to the outstanding
+   * worklist when one did not — so the invoice nobody had paid, which is the
+   * one an officer is holding a number for, landed on a list of everybody's.
+   */
+  const invoiceMatch = matchRoute(route, '/invoice/:id');
+  const assessmentMatch = matchRoute(route, '/assessment/:id');
   const roundMatch = matchRoute(route, '/allocations/:id');
 
   if (matchRoute(route, '/')) {
@@ -240,6 +289,24 @@ function Routes({
       <RoleHomeScreen user={user} navigate={navigate} />
     );
   }
+  if (matchRoute(route, '/my-work')) return <MyWorkScreen user={user} />;
+  if (route === '/cases' || route.startsWith('/cases?')) {
+    return <CasesScreen user={user} route={route} navigate={navigate} />;
+  }
+  if (transactionMatch) {
+    return <TransactionScreen transactionKey={transactionMatch.key!} navigate={navigate} />;
+  }
+  if (invoiceMatch) return <InvoiceScreen id={invoiceMatch.id!} navigate={navigate} />;
+  if (assessmentMatch) return <AssessmentScreen id={assessmentMatch.id!} />;
+  if (matchRoute(route, '/targets')) return <TargetsScreen user={user} />;
+  if (matchRoute(route, '/taxpayer-base')) return <TaxpayerBaseScreen />;
+  if (matchRoute(route, '/platform')) return <PlatformScreen />;
+  if (matchRoute(route, '/organisation')) return <OrganisationScreen user={user} />;
+  if (matchRoute(route, '/periods')) return <PeriodsScreen user={user} />;
+  if (matchRoute(route, '/workbench')) return <WorkbenchScreen user={user} />;
+  if (matchRoute(route, '/my-access')) return <MyAccessScreen user={user} />;
+  if (matchRoute(route, '/inbox')) return <InboxScreen navigate={navigate} />;
+  if (matchRoute(route, '/roles')) return <RolesScreen user={user} />;
   if (matchRoute(route, '/dashboard')) return <DashboardScreen navigate={navigate} />;
   if (matchRoute(route, '/intelligence')) return <IntelligenceScreen />;
   if (matchRoute(route, '/transactions')) return <TransactionsScreen />;
@@ -249,6 +316,11 @@ function Routes({
   if (matchRoute(route, '/performance')) return <PerformanceScreen navigate={navigate} />;
   if (matchRoute(route, '/revenue')) return <RevenueScreen />;
   if (matchRoute(route, '/levies')) return <LeviesScreen />;
+  if (matchRoute(route, '/arrears')) return <ArrearsScreen />;
+  if (matchRoute(route, '/connections')) return <ConnectionsScreen />;
+  if (matchRoute(route, '/payroll')) return <PayrollScreen />;
+  if (matchRoute(route, '/presumptive')) return <PresumptiveScreen />;
+  if (matchRoute(route, '/enumeration')) return <EnumerationScreen />;
   if (matchRoute(route, '/allocations')) return <AllocationsScreen />;
   if (matchRoute(route, '/usage')) return <UsageScreen />;
   if (matchRoute(route, '/reconciliation')) return <ReconciliationScreen />;

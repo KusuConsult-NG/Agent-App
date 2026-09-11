@@ -27,7 +27,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -91,10 +91,7 @@ function useAction(reload: () => void) {
         setDone(said);
         reload();
       } catch (caught) {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       } finally {
         setBusy(null);
       }
@@ -287,7 +284,7 @@ function QueueTable({
               <span
                 style={{
                   fontWeight: 600,
-                  fontSize: '1.15rem',
+                  fontSize: 'var(--text-lg)',
                   color: needsAttention ? 'var(--warning, #b45309)' : 'inherit',
                 }}
               >
@@ -327,7 +324,7 @@ export function RoleHomeScreen({
       .get<Home>('/government/home')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -362,8 +359,8 @@ export function RoleHomeScreen({
 
         {(work.agents ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhAgentsWaiting}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhClearanceBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhAgentsWaiting}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhClearanceBody}</p>
             <Table
               columns={[
                 { key: 'agent_code', label: 'ofcRhAgent' },
@@ -387,7 +384,7 @@ export function RoleHomeScreen({
                                 decision: 'APPROVE',
                                 note: 'ofcRhApprovedFromHome',
                               }),
-                            `${row.full_name} approved.`,
+                            t.ofcRhAgentApproved.replace('{{name}}', row.full_name),
                           )
                         }
                       >{t.ofcRhApprove}</button>{' '}
@@ -408,8 +405,8 @@ export function RoleHomeScreen({
 
         {(work.devices ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhHandsetsWaiting}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhHandsetsBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhHandsetsWaiting}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhHandsetsBody}</p>
             <Table
               columns={[
                 { key: 'agent_code', label: 'ofcRhAgent' },
@@ -428,7 +425,7 @@ export function RoleHomeScreen({
                         action.act(
                           row.id!,
                           () => api.post(`/agents/devices/${row.id}/approve`, {}),
-                          'Device approved.',
+                          t.ofcRhDeviceApproved,
                         )
                       }
                     >{t.ofcRhApprove}</button>
@@ -443,8 +440,8 @@ export function RoleHomeScreen({
 
         {(work.supervisors ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhSupervisorsNothing}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhSupervisorsBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhSupervisorsNothing}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhSupervisorsBody}</p>
             <Table
               columns={[
                 { key: 'full_name', label: 'ofcRhOfficer' },
@@ -501,8 +498,8 @@ export function RoleHomeScreen({
 
         {(work.failedTins ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhTinRefused}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhTinsBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhTinRefused}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhTinsBody}</p>
             <Table
               columns={[
                 { key: 'name', label: 'colTaxpayerLabel' },
@@ -512,7 +509,7 @@ export function RoleHomeScreen({
               rows={work.failedTins!}
               empty={{ text: '' }}
             />
-            <div style={{ padding: '0 18px 16px' }}>
+            <div className="card__pad--foot">
               <button
                 type="button"
                 disabled={action.busy !== null}
@@ -520,11 +517,11 @@ export function RoleHomeScreen({
                   action.act(
                     'tin-retry',
                     () => api.post('/taxpayers/tin-retry', {}),
-                    'Re-asked the TIN register for everyone still waiting.',
+                    t.ofcRhReAskedTheTin,
                   )
                 }
               >
-                {action.busy === 'tin-retry' ? 'Asking…' : 'Ask the register again'}
+                {action.busy === 'tin-retry' ? t.ofcRhAsking : t.ofcRhAskTheRegisterAgain}
               </button>
             </div>
           </div>
@@ -532,8 +529,8 @@ export function RoleHomeScreen({
 
         {(work.expiring ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhInvoicesExpiring}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhInvoicesBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhInvoicesExpiring}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhInvoicesBody}</p>
             <Table
               columns={[
                 { key: 'invoice_number', label: 'colInvoiceLabel' },
@@ -556,11 +553,11 @@ export function RoleHomeScreen({
                         action.act(
                           `doc-${row.id}`,
                           () => api.post(`/revenue/invoices/${row.id}/document`, {}),
-                          `Invoice document ready for ${row.invoice_number}.`,
+                          t.ofcRhInvoiceDocumentReady.replace('{{number}}', row.invoice_number),
                         )
                       }
                     >
-                      {action.busy === `doc-${row.id}` ? 'Preparing…' : 'Invoice document'}
+                      {action.busy === `doc-${row.id}` ? t.ofcRhPreparing : t.ofcRhInvoiceDocument}
                     </button>
                   ),
                 },
@@ -568,7 +565,7 @@ export function RoleHomeScreen({
               rows={work.expiring!}
               empty={{ text: '' }}
             />
-            <div style={{ padding: '0 18px 16px' }}>
+            <div className="card__pad--foot">
               <button
                 type="button"
                 disabled={action.busy !== null}
@@ -576,11 +573,11 @@ export function RoleHomeScreen({
                   action.act(
                     'remind',
                     () => api.post('/government/reminders/send-due', {}),
-                    'Reminders sent to taxpayers with something due.',
+                    t.ofcRhRemindersSentToTaxpayers,
                   )
                 }
               >
-                {action.busy === 'remind' ? 'Sending…' : 'Send payment reminders'}
+                {action.busy === 'remind' ? t.pubStmtSending : t.ofcRhSendPaymentReminders}
               </button>
             </div>
           </div>
@@ -633,8 +630,8 @@ export function RoleHomeScreen({
 
         {(work.exceptions ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhBankDisagree}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhExceptionQueueBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhBankDisagree}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhExceptionQueueBody}</p>
             <Table
               columns={[
                 { key: 'status', label: 'ofcRhKind' },
@@ -654,7 +651,7 @@ export function RoleHomeScreen({
               rows={work.exceptions!}
               empty={{ text: '' }}
             />
-            <div style={{ padding: '0 18px 16px' }}>
+            <div className="card__pad--foot">
               <button type="button" className="secondary" onClick={() => navigate('/reconciliation')}>{t.ofcRhWorkExceptionQueue}</button>
             </div>
           </div>
@@ -662,8 +659,8 @@ export function RoleHomeScreen({
 
         {(work.payouts ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhCommissionPayouts}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhAgentsWaitingBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhCommissionPayouts}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhAgentsWaitingBody}</p>
             <Table
               columns={[
                 { key: 'agent', label: 'ofcRhAgent' },
@@ -690,7 +687,7 @@ export function RoleHomeScreen({
                             await stepUp('commission.payout.approve', user.phone);
                             await api.post(`/government/commissions/payouts/${row.id}/approve`, {});
                           },
-                          `Payout ${row.payout_reference} approved.`,
+                          t.ofcRhPayoutApproved.replace('{{reference}}', row.payout_reference),
                         )
                       }
                     >{t.ofcRhApprove}</button>
@@ -726,8 +723,8 @@ export function RoleHomeScreen({
         </div>
         {(work.refusals ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhRefusedActions}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhRefusedBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhRefusedActions}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhRefusedBody}</p>
             <Table
               columns={[
                 { key: 'at', label: 'ofcRhWhen' },
@@ -743,8 +740,8 @@ export function RoleHomeScreen({
 
         {(work.reversals ?? []).length > 0 && (
           <div className="card card--flush">
-            <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRhMoneyBackOut}</h2>
-            <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRhReversedBody}</p>
+            <h2 className="card__title card__pad--tight">{t.ofcRhMoneyBackOut}</h2>
+            <p className="card__hint card__pad--sides">{t.ofcRhReversedBody}</p>
             <Table
               columns={[
                 { key: 'at', label: 'ofcRhWhen' },

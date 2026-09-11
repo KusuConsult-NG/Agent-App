@@ -122,6 +122,8 @@ describe('Documents can print the currency they are denominated in', () => {
       agentCode: 'AGT-00001',
       mdaName: 'Plateau State Internal Revenue Service',
       periodLabel: null,
+  periodStart: null,
+  periodEnd: null,
     });
 
     assert.ok(pdf.length > 1000, 'a receipt was produced');

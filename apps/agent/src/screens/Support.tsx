@@ -15,11 +15,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
-import { enumLabel } from '@psirs/shared';
+import { enumLabel, formatDateTimeIn } from '@psirs/shared';
 
 /** The categories the API accepts, in the words an agent would use. */
 const CATEGORIES: {
@@ -65,14 +65,19 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
   const { t } = useI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * "You have not reported anything yet." is what an empty list says, and
+   * `setTickets([])` said it from a failed request — to an agent checking
+   * whether the problem they reported is being dealt with.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     api
       .get<TicketSummary[]>('/support/tickets')
       .then(setTickets)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -90,7 +95,9 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 
       <div className="card">
         <h2 className="card__title">{t.supMyReports}</h2>
-        {!tickets ? (
+        {loadError ? (
+          <ErrorAlert error={loadError} />
+        ) : !tickets ? (
           <Loading />
         ) : tickets.length === 0 ? (
           <Empty>{t.supNothingReported}</Empty>
@@ -107,7 +114,30 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                     <p className="list__title">{ticket.subject}</p>
                     <p className="list__meta">
                       {ticket.ticket_number} · {categoryLabel(ticket.category, t)}
-                      {ticket.message_count > 0 && ` · ${ticket.message_count} reply(s)`}
+                      {ticket.message_count > 0 &&
+                        ` · ${t.supRepliesCount.replace('{{n}}', String(ticket.message_count))}`}
+                      {/*
+                        * When anything last happened on it.
+                        *
+                        * The reply count above includes the agent's OWN
+                        * messages, so "2 replies" may be two things they wrote
+                        * and nothing back. It cannot answer the only question
+                        * somebody has about their own complaint — has this
+                        * moved — and `last_message_at`, which was declared
+                        * here and drawn by nothing, is what does.
+                        *
+                        * Worded as the last message rather than the last
+                        * reply, because the field says when the newest message
+                        * was posted and not who posted it. Claiming PSIRS had
+                        * answered would be reading more into it than it holds.
+                        */}
+                      {' · '}
+                      {ticket.last_message_at
+                        ? t.supLastMessage.replace(
+                            '{{when}}',
+                            formatDateTimeIn(ticket.last_message_at, t),
+                          )
+                        : t.supNoMessagesYet}
                     </p>
                   </div>
                   <Badge status={ticket.status} />
@@ -152,7 +182,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       });
       navigate(`/support/${created.id}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -268,7 +298,9 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -288,7 +320,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       if (result.reopened) setNotice(t.supReopenedNotice);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -320,7 +352,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
                   React.ReactNode,
                 ][])
               : []),
-            [t.supReported, new Date(ticket.created_at).toLocaleString('en-NG')],
+            [t.supReported, formatDateTimeIn(ticket.created_at, t)],
           ]}
         />
       </div>
@@ -330,7 +362,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         <ol className="thread">
           <li className="thread__item thread__item--mine">
             <p className="thread__meta">
-              {t.supYouAt.replace('{{when}}', new Date(ticket.created_at).toLocaleString('en-NG'))}
+              {t.supYouAt.replace('{{when}}', formatDateTimeIn(ticket.created_at, t))}
             </p>
             <p className="thread__body">{ticket.description}</p>
           </li>
@@ -340,8 +372,8 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
               className={`thread__item${message.mine ? ' thread__item--mine' : ''}`}
             >
               <p className="thread__meta">
-                {message.mine ? 'You' : `${message.author_name} · PSIRS`} ·{' '}
-                {new Date(message.created_at).toLocaleString('en-NG')}
+                {message.mine ? t.agSupYou : `${message.author_name} · PSIRS`} ·{' '}
+                {formatDateTimeIn(message.created_at, t)}
               </p>
               <p className="thread__body">{message.body}</p>
             </li>

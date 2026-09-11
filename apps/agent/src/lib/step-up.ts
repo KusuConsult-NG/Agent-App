@@ -43,9 +43,23 @@ export function stepUpDestination(): string | null {
   return getUser()?.phone ?? null;
 }
 
+/**
+ * Step-up cannot start, because there is nobody to send a code to.
+ *
+ * Carries no message: `StepUp.tsx` renders `t.stepUpSignInAgain`. It used to
+ * throw an English sentence, and the screen preferred that sentence to the
+ * translated fallback beside it.
+ */
+export class StepUpUnavailable extends Error {
+  constructor() {
+    super('step-up unavailable: no destination');
+    this.name = 'StepUpUnavailable';
+  }
+}
+
 export async function requestStepUpCode(): Promise<CodeRequest> {
   const destination = stepUpDestination();
-  if (!destination) throw new Error('Sign in again to request a code.');
+  if (!destination) throw new StepUpUnavailable();
 
   const result = await api.post<{
     expiresInSeconds: number;
@@ -70,7 +84,7 @@ export async function requestStepUpCode(): Promise<CodeRequest> {
  */
 export async function grantStepUp(action: string, code: string): Promise<void> {
   const destination = stepUpDestination();
-  if (!destination) throw new Error('Sign in again to request a code.');
+  if (!destination) throw new StepUpUnavailable();
 
   await api.post('/auth/step-up', { action, destination, code });
 }

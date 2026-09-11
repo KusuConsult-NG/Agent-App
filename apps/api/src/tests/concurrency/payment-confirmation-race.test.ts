@@ -39,6 +39,7 @@ import assert from 'node:assert/strict';
 import { createGovernmentUser, firstLgaId, pool, resetDatabase, settleCollection } from '../helpers';
 import { queryOne, query } from '../../db/pool';
 import { seedReferenceData } from '../../db/seed';
+import { runMigrations } from '../../db/migrate';
 import { createAssessment } from '../../services/revenue';
 import { confirmPayment, initiatePayment } from '../../services/payments';
 import { registerTaxpayer } from '../../services/taxpayers';
@@ -137,6 +138,17 @@ async function settlePayments(paymentIds: string[]): Promise<void> {
 }
 
 before(async () => {
+  /*
+   * Migrate first.
+   *
+   * This suite does not start the test server — it drives the services
+   * directly — and `startTestServer` is what runs migrations everywhere else.
+   * So it was relying on its database having been migrated by some earlier
+   * run, which held right up until a migration added a table `resetDatabase`
+   * truncates: the reset then failed on a relation that did not exist yet, in
+   * a suite whose own code was fine.
+   */
+  await runMigrations({ silent: true });
   await resetDatabase();
   await seedReferenceData();
   officerId = await createGovernmentUser({
@@ -279,7 +291,7 @@ describe('many payments, confirmed at once', () => {
     assert.equal(
       verification.valid,
       true,
-      `chain broken at ${verification.brokenAtSequence}: ${verification.detail}`,
+      `chain broken at ${verification.brokenAtSequence}: ${verification.verdict}`,
     );
     assert.ok(verification.entriesChecked > 0, 'the chain was actually replayed, not skipped');
   });

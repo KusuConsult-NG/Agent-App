@@ -205,9 +205,36 @@ export interface ReceiptPdfData {
   paidAt: Date;
   issuedAt: Date;
   periodLabel: string | null;
+  periodStart: Date | string | null;
+  periodEnd: Date | string | null;
   agentCode: string | null;
   lgaName: string;
   verificationCode: string;
+}
+
+/**
+ * The assessment period as a receipt should state it.
+ *
+ * Dates when the assessment carries them, because that is the period; the
+ * label when it only has a name for one, such as a tax year. "Not period-based"
+ * stays for the levies that genuinely are not — a market trader paying for a
+ * day is not paying for a period, and saying so is the honest answer.
+ *
+ * A vehicle renewal used to reach this as the words "12 month vehicle renewal".
+ * It records real dates now, so a receipt says which twelve months, which is
+ * what the motorist holding the paper needs when they are stopped.
+ */
+function assessmentPeriod(data: {
+  periodLabel: string | null;
+  periodStart?: Date | string | null;
+  periodEnd?: Date | string | null;
+}): string {
+  if (data.periodStart && data.periodEnd) {
+    const day = (value: Date | string) =>
+      (value instanceof Date ? value : new Date(value)).toISOString().slice(0, 10);
+    return `${day(data.periodStart)} to ${day(data.periodEnd)}`;
+  }
+  return data.periodLabel ?? 'Not period-based';
 }
 
 /** PRD §19 — the official government receipt. */
@@ -231,7 +258,7 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
       ['Revenue category', data.revenueCategory],
       ['Revenue item', data.revenueItem],
       ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
-      ['Assessment period', data.periodLabel ?? 'Not period-based'],
+      ['Assessment period', assessmentPeriod(data)],
       ['Local Government Area', data.lgaName],
     ]);
 
@@ -526,7 +553,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       ['Revenue category', data.revenueCategory],
       ['Revenue item', data.revenueItem],
       ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
-      ['Period', data.periodLabel ?? 'Not period-based'],
+      ['Period', assessmentPeriod(data)],
       ['Local Government Area', data.lgaName],
       ['Issued', data.issuedAt.toISOString().slice(0, 10)],
       ['Valid until', data.expiresAt ? data.expiresAt.toISOString().slice(0, 10) : 'No expiry'],

@@ -9,11 +9,18 @@
  */
 
 import React, { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
-import { enumLabel } from '@psirs/shared';
+import {
+  VERIFICATION_TEXT,
+  enumLabel,
+  formatDateIn,
+  formatNaira,
+  type TranslationDictionary,
+  type VerificationReason,
+} from '@psirs/shared';
 
 interface VerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
@@ -25,6 +32,9 @@ interface VerificationResult {
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /** Which of the thirteen answers, so a citizen can read it in Hausa. */
+  reason: VerificationReason;
+  expiresAt?: string;
   message: string;
 }
 
@@ -57,6 +67,18 @@ export function VerifyScreen({ code }: { code?: string }) {
         } else {
           setError(caught.error);
         }
+      } else {
+        /*
+         * The branch that was missing, on the one surface whose reader has
+         * nobody to ask.
+         *
+         * A citizen checking a receipt at a counter, on a connection that
+         * dropped, got no verdict and no error: the page sat exactly as it
+         * had before they pressed. They cannot tell that from the platform
+         * having no record of their receipt, and there is no officer beside
+         * them to explain the difference.
+         */
+        setError(asApiError(caught));
       }
     } finally {
       setBusy(false);
@@ -131,18 +153,35 @@ export function VerifyScreen({ code }: { code?: string }) {
               </p>
             </div>
 
-            <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
+            {/*
+              * The answer, in the language the citizen chose.
+              *
+              * This page exists to answer one question — is the paper in my
+              * hand real, and does the State have my money — and it answered
+              * in the API's English on a portal that offers Hausa. The
+              * distinction that matters most is the one between a receipt and
+              * an acknowledgement, and it is carried entirely by this
+              * sentence.
+              */}
+            <p style={{ fontSize: '0.87rem' }}>
+              {result.expiresAt
+                ? t[VERIFICATION_TEXT[result.reason]].replace(
+                    '{{date}}',
+                    formatDateIn(result.expiresAt, t),
+                  )
+                : t[VERIFICATION_TEXT[result.reason]]}
+            </p>
 
             {(result.receiptNumber || result.documentNumber) && (
               <KeyValue
                 items={[
                   [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
                   [t.pubVerifyRevenueType, result.revenueType ?? result.documentType ?? '—'],
-                  ['Amount', result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
+                  [t.pubVerifyAmount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
                   [t.pubVerifyIssued, formatDate(result.issuedAt)],
                   [t.pubVerifyLga, result.lga ?? '—'],
                   [
-                    'Document fingerprint',
+                    t.pubVerifyFingerprint,
                     result.integrityConfirmed === undefined
                       ? '—'
                       : result.integrityConfirmed
@@ -242,7 +281,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       .publicGet<Invitation>(`/referee/${token}`)
       .then(setInvitation)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -251,18 +290,30 @@ export function RefereePortalScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(`/referee/${token}/respond`, {
-        confirmsKnowsApplicant: declarations[0],
-        confirmsInformationAccurate: declarations[1],
-        willingToActAsReferee: declarations[2],
-        understandsConsequences: declarations[3],
-        identityType: identityNumber ? identityType : undefined,
-        identityNumber: identityNumber || undefined,
-        occupation: occupation || undefined,
-      });
-      setOutcome(result.message);
+      const result = await api.publicPost<{ status: string; message: string }>(
+        `/referee/${token}/respond`,
+        {
+          confirmsKnowsApplicant: declarations[0],
+          confirmsInformationAccurate: declarations[1],
+          willingToActAsReferee: declarations[2],
+          understandsConsequences: declarations[3],
+          identityType: identityNumber ? identityType : undefined,
+          identityNumber: identityNumber || undefined,
+          occupation: occupation || undefined,
+        },
+      );
+      /*
+       * The status was already on the wire beside the sentence.
+       *
+       * A referee is not a taxpayer and not staff — they are somebody doing
+       * an applicant a favour, with no other dealings with PSIRS. Being told
+       * in English that their identity could not be verified, having chosen
+       * Hausa on the page they are standing on, is the worst sentence here
+       * to get wrong, and the screen had everything it needed to say it.
+       */
+      setOutcome(refereeOutcome(result.status, t) ?? result.message);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -272,12 +323,13 @@ export function RefereePortalScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(`/referee/${token}/decline`, {
+      await api.publicPost<{ message: string }>(`/referee/${token}/decline`, {
         reason: declineReason.trim() || undefined,
       });
-      setOutcome(result.message);
+      // One outcome, so one sentence: the decision is recorded either way.
+      setOutcome(t.pubRefereeDeclineRecorded);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -481,7 +533,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
 
         <div className="button-row" style={{ marginTop: 8 }}>
           <button type="button" disabled={busy || !allConfirmed} onClick={respond}>
-            {busy ? 'Submitting…' : 'Confirm and submit'}
+            {busy ? t.pubRefereeSubmitting : t.pubRefereeSubmit}
           </button>
           <button
             type="button"
@@ -515,6 +567,33 @@ export function RefereePortalScreen({ token }: { token: string }) {
  * returned to an anonymous caller, so there is nothing here to render them
  * from.
  */
+interface CitizenStatement {
+  from: string;
+  to: string;
+  summary: {
+    payments: number;
+    totalKobo: string;
+    returnedKobo: string;
+    byItem: { revenueItem: string; revenueItemHa: string | null; payments: number; totalKobo: string }[];
+  };
+  /*
+   * No receipt number here, and none from the API. A receipt number is
+   * verification material — the public verification page confirms a payment
+   * against one — so a statement carrying the set would let whoever passed the
+   * code check verify payments as though they held the receipts.
+   */
+  rows: {
+    paidAt: string | null;
+    revenueItem: string;
+    revenueItemHa: string | null;
+    periodLabel: string | null;
+    periodStart: string | null;
+    periodEnd: string | null;
+    amountKobo: string;
+    returned: boolean;
+  }[];
+}
+
 interface CitizenStatusResult {
   found: boolean;
   count?: number;
@@ -578,7 +657,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
       .publicGet<AttestationView>(`/group-attestation/${token}`)
       .then(setView)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -592,16 +671,28 @@ export function GroupAttestationScreen({ token }: { token: string }) {
     setBusy(true);
     setError(null);
     try {
-      const result = await api.publicPost<{ message: string }>(
-        `/group-attestation/${token}/confirm`,
-        {
-          confirmedMemberIds: pending.filter((m) => answers[m.id] === 'YES').map((m) => m.id),
-          rejectedMemberIds: pending.filter((m) => answers[m.id] === 'NO').map((m) => m.id),
-        },
+      const result = await api.publicPost<{
+        attested: number;
+        rejected: number;
+        message: string;
+      }>(`/group-attestation/${token}/confirm`, {
+        confirmedMemberIds: pending.filter((m) => answers[m.id] === 'YES').map((m) => m.id),
+        rejectedMemberIds: pending.filter((m) => answers[m.id] === 'NO').map((m) => m.id),
+      });
+      /*
+       * Both counts came back with the sentence built from them. A group
+       * leader confirming a membership list is deciding who gets counted in
+       * an allocation, so the two numbers are the part worth reading.
+       */
+      setOutcome(
+        result.rejected > 0
+          ? t.pubGroupSomeConfirmed
+              .replace('{{confirmed}}', String(result.attested))
+              .replace('{{rejected}}', String(result.rejected))
+          : t.pubGroupAllConfirmed.replace('{{confirmed}}', String(result.attested)),
       );
-      setOutcome(result.message);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -765,6 +856,398 @@ export function GroupAttestationScreen({ token }: { token: string }) {
   );
 }
 
+/**
+ * "What have I already paid?" — the question a taxpayer asks most.
+ *
+ * Offered only after a TIN or phone lookup has found a specific record, which
+ * is not a UI nicety: a name search deliberately answers with a count and
+ * never a person, so there is nobody to show a statement for. The same
+ * distinction the API draws, drawn once more where the button lives.
+ *
+ * WHY A CODE, WHEN THEY HAVE ALREADY BEEN FOUND.
+ *
+ * Because being found is not being identified. This page cannot tell the
+ * taxpayer from anybody else who knows their phone number — a lender, a former
+ * partner, a rival trader — and a year of payments describes somebody's trade,
+ * their takings and their movements. The code goes to the number on the
+ * record, so the only thing a stranger achieves by asking is that the taxpayer
+ * finds out somebody asked.
+ */
+function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identifier: string }) {
+  const { t, lang } = usePublicI18n();
+  const [stage, setStage] = useState<'idle' | 'sent' | 'shown'>('idle');
+  const [code, setCode] = useState('');
+  const [statement, setStatement] = useState<CitizenStatement | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  /*
+   * The period is chosen before the code is asked for, not after.
+   *
+   * A one-time code is consumed by the statement it opens, so a citizen who
+   * picked the window afterwards would burn a code discovering they could not
+   * change it. Choosing first costs nothing and means the code opens the
+   * statement they actually wanted.
+   *
+   * Twelve months to today by default, because "what have I paid this past
+   * year" is the question people arrive with. Somebody reconciling a tax year
+   * or checking a levy they think they paid twice sets their own.
+   */
+  const today = new Date();
+  const yearAgo = new Date(today);
+  yearAgo.setFullYear(today.getFullYear() - 1);
+  const asDate = (value: Date) => value.toISOString().slice(0, 10);
+  const [from, setFrom] = useState(asDate(yearAgo));
+  const [to, setTo] = useState(asDate(today));
+  const backwards = from > to;
+
+  const body = mode === 'tin' ? { tin: identifier } : { phone: identifier };
+
+  async function requestCode() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.publicPost('/citizen-status/statement/request', body);
+      setStage('sent');
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function show(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.publicPost<CitizenStatement>('/citizen-status/statement', {
+        ...body,
+        code: code.trim(),
+        from,
+        to,
+      });
+      setStatement(data);
+      setStage('shown');
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 18, borderTop: '1px solid var(--border, #e0e0e0)', paddingTop: 16 }}>
+      <p style={{ fontWeight: 600, fontSize: '0.9rem', margin: '0 0 4px' }}>
+        {t.pubStmtTitle}
+      </p>
+      <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 12px' }}>
+        {t.pubStmtIntro}
+      </p>
+
+      <ErrorAlert error={error} />
+
+      {stage === 'idle' && (
+        <>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="stmt-from">{t.pubStmtFrom}</label>
+              <input
+                id="stmt-from"
+                type="date"
+                value={from}
+                max={to}
+                onChange={(e) => setFrom(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ flex: 1 }}>
+              <label htmlFor="stmt-to">{t.pubStmtTo}</label>
+              <input
+                id="stmt-to"
+                type="date"
+                value={to}
+                min={from}
+                onChange={(e) => setTo(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/*
+            * Said here rather than refused by the server after a code has been
+            * spent. `max` and `min` above stop most of it; a keyboard-entered
+            * date gets past them, and the citizen should not learn that from a
+            * 400 that also cost them their code.
+            */}
+          {backwards && (
+            <p style={{ fontSize: '0.78rem', color: 'var(--danger, #b00)', margin: '0 0 10px' }}>
+              {t.pubStmtBackwards}
+            </p>
+          )}
+
+          <button
+            type="button"
+            disabled={busy || backwards}
+            style={{ width: '100%', justifyContent: 'center' }}
+            onClick={() => void requestCode()}
+          >
+            {busy ? t.pubStmtSending : t.pubStmtSendCode}
+          </button>
+        </>
+      )}
+
+      {stage !== 'idle' && !statement && (
+        <form onSubmit={(e) => void show(e)}>
+          <p style={{ fontSize: '0.8rem', margin: '0 0 10px' }}>{t.pubStmtCodeSent}</p>
+          <div className="field">
+            <label htmlFor="stmt-code">{t.pubStmtCode}</label>
+            <input
+              id="stmt-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={busy || code.trim().length < 4}
+            style={{ width: '100%', justifyContent: 'center' }}
+          >
+            {busy ? t.pubStmtChecking : t.pubStmtShow}
+          </button>
+        </form>
+      )}
+
+      {statement && (
+        <div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 10px' }}>
+            {t.pubStmtPeriod
+              .replace('{{from}}', statement.from)
+              .replace('{{to}}', statement.to)}
+          </p>
+
+          <KeyValue
+            items={[
+              [t.pubStmtTotal, formatNaira(statement.summary.totalKobo)],
+              [t.pubStmtCount, String(statement.summary.payments)],
+              /*
+               * Only when there is some. A "returned ₦0.00" line on every
+               * statement makes a reversal look like a normal part of paying.
+               */
+              ...(statement.summary.returnedKobo !== '0'
+                ? ([[t.pubStmtReturned, formatNaira(statement.summary.returnedKobo)]] as [
+                    string,
+                    string,
+                  ][])
+                : []),
+            ]}
+          />
+
+          {statement.summary.byItem.length > 0 && (
+            <>
+              <p style={{ fontWeight: 600, fontSize: '0.82rem', margin: '14px 0 6px' }}>
+                {t.pubStmtForWhat}
+              </p>
+              {statement.summary.byItem.map((row) => (
+                <div
+                  key={row.revenueItem}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    gap: 10,
+                    fontSize: '0.82rem',
+                    padding: '5px 0',
+                    borderBottom: '1px solid var(--border, #eee)',
+                  }}
+                >
+                  <span>
+                    {levyName(row, lang)}
+                    <span style={{ color: 'var(--muted)' }}> × {row.payments}</span>
+                  </span>
+                  <strong>{formatNaira(row.totalKobo)}</strong>
+                </div>
+              ))}
+            </>
+          )}
+
+          <p style={{ fontWeight: 600, fontSize: '0.82rem', margin: '14px 0 6px' }}>
+            {t.pubStmtEach}
+          </p>
+          {statement.rows.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>{t.pubStmtNothing}</p>
+          ) : (
+            statement.rows.map((row, index) => (
+              <div
+                key={`${row.paidAt}-${index}`}
+                style={{
+                  fontSize: '0.8rem',
+                  padding: '6px 0',
+                  borderBottom: '1px solid var(--border, #eee)',
+                  opacity: row.returned ? 0.7 : 1,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+                  <span>{levyName(row, lang)}</span>
+                  <strong>{formatNaira(row.amountKobo)}</strong>
+                </div>
+                <div style={{ color: 'var(--muted)', fontSize: '0.74rem' }}>
+                  {formatDate(row.paidAt)}
+                  {periodOf(row) ? ` · ${periodOf(row)}` : ''}
+                  {/*
+                    * A reversal says so. Shown rather than hidden, because
+                    * money that came back is part of what happened and a
+                    * statement that dropped it would look wrong to anybody
+                    * holding the paper.
+                    */}
+                  {row.returned ? ` · ${t.pubStmtReturnedRow}` : ''}
+                </div>
+              </div>
+            ))
+          )}
+
+          {/*
+            * Another period means another code, and the button says so.
+            *
+            * The code that opened this statement was consumed by it. Offering
+            * a silent date change here would look like it should just work and
+            * fail with an expired-code message that explains nothing.
+            */}
+          <button
+            type="button"
+            className="secondary"
+            /*
+              * Allowed to wrap. Buttons are `white-space: nowrap` everywhere
+              * else in the portal, which is right for the short labels they
+              * carry; this label has to say that a new code is sent, and at
+              * phone width it ran outside its own border — longer still in
+              * Hausa. Shortening it would drop the part worth saying.
+              */
+            style={{
+              width: '100%',
+              justifyContent: 'center',
+              marginTop: 14,
+              whiteSpace: 'normal',
+              textAlign: 'center',
+            }}
+            onClick={() => {
+              setStatement(null);
+              setCode('');
+              setError(null);
+              setStage('idle');
+            }}
+          >
+            {t.pubStmtAnotherPeriod}
+          </button>
+
+          <p style={{ fontSize: '0.72rem', color: 'var(--muted)', marginTop: 14 }}>
+            {t.pubStmtFooter}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * What a payment covered, in the reader's language.
+ *
+ * Dates first, because a period is dates and they need no translating. The
+ * label is the fallback for an assessment that only has a name for its period
+ * — a tax year, a month — and those are written `2026` and `2026-07`, which
+ * read the same in both languages. The one label that was English prose was
+ * the vehicle renewal's, and it now records real dates instead.
+ */
+function periodOf(
+  row: { periodLabel: string | null; periodStart: string | null; periodEnd: string | null },
+): string | null {
+  if (row.periodStart && row.periodEnd) {
+    /*
+     * Written as the dates themselves rather than through `formatDate`.
+     *
+     * `formatDate` is fixed to `en-NG`, so it renders "08 Sept 2026" whatever
+     * language the reader chose — English inside a Hausa sentence, which is
+     * the thing this whole change is about. `2026-09-08` reads the same in
+     * both, and it is already how this screen prints the statement's own
+     * window two lines above.
+     *
+     * Whether the portal should have Hausa month names at all is a question
+     * for the reviewer, not a decision to smuggle in here; it is written up in
+     * HAUSA-REVIEW.md.
+     */
+    return `${row.periodStart} – ${row.periodEnd}`;
+  }
+  return row.periodLabel;
+}
+
+/**
+ * A levy's name in the language the reader chose.
+ *
+ * The catalogue carries `name_ha` alongside `name` and the statement endpoint
+ * sends both, so the only thing missing was a screen that used it. A levy with
+ * no Hausa name falls back to the English one: an untranslated name is a
+ * catalogue entry somebody has not got to yet, and showing the English is how
+ * a citizen can still tell which levy it was.
+ */
+function levyName(row: { revenueItem: string; revenueItemHa: string | null }, lang: string): string {
+  return (lang === 'ha' && row.revenueItemHa) || row.revenueItem;
+}
+
+/**
+ * The sentence for a compliance status, in the reader's language.
+ *
+ * `null` for a status this screen has no sentence for, so the caller can fall
+ * back to whatever the server said rather than render nothing. A status added
+ * to the API and not here is a gap that shows up as English, which is visible;
+ * rendering an empty paragraph would not be.
+ */
+/**
+ * Which search came back empty, which the screen knows because it ran it.
+ *
+ * The API composed this sentence and the portal printed it. Nothing had to
+ * be sent for the screen to say it itself: `mode` is the button the person
+ * pressed.
+ */
+function noMatch(mode: SearchMode, t: TranslationDictionary): string {
+  if (mode === 'tin') return t.pubCitizenNoTinMatch;
+  if (mode === 'phone') return t.pubCitizenNoPhoneMatch;
+  return t.pubCitizenNoNameMatch;
+}
+
+/**
+ * What a referee is told, from the status the response already carries.
+ *
+ * `null` for a status this build has not met, so the caller can fall back to
+ * the server's sentence rather than show a blank where the answer belongs.
+ */
+function refereeOutcome(status: string | undefined, t: TranslationDictionary): string | null {
+  switch (status) {
+    case 'CLEARED':
+      return t.pubRefereeThankYouCleared;
+    case 'FAILED':
+      return t.pubRefereeCouldNotVerify;
+    case 'UNDER_REVIEW':
+    case 'PENDING':
+      return t.pubRefereeUnderReview;
+    default:
+      return null;
+  }
+}
+
+function statusMessage(status: string | undefined, t: TranslationDictionary): string | null {
+  switch (status) {
+    case 'COMPLIANT':
+      return t.pubCitizenMsgCompliant;
+    case 'HAS_ARREARS':
+      return t.pubCitizenMsgArrears;
+    case 'NEEDS_ATTENTION':
+      return t.pubCitizenMsgAttention;
+    case 'NOT_ASSESSED':
+      return t.pubCitizenMsgNotAssessed;
+    default:
+      return null;
+  }
+}
+
 export function CitizenPortalScreen() {
   const { t } = usePublicI18n();
   const [mode, setMode] = useState<SearchMode>('tin');
@@ -786,16 +1269,16 @@ export function CitizenPortalScreen() {
       );
       setResult(data);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
   }
 
   const placeholders: Record<SearchMode, string> = {
-    tin: 'e.g. PL-000001234',
-    phone: 'e.g. 08012345678',
-    name: 'e.g. Aminu Ibrahim',
+    tin: t.pubCitizenExampleTin,
+    phone: t.pubCitizenExamplePhone,
+    name: t.pubCitizenExampleName,
   };
 
   return (
@@ -822,7 +1305,7 @@ export function CitizenPortalScreen() {
               style={{ flex: 1, justifyContent: 'center', fontSize: '0.82rem', padding: '8px 4px' }}
               onClick={() => { setMode(m); setInput(''); setResult(null); setError(null); }}
             >
-              {m === 'tin' ? 'By TIN' : m === 'phone' ? 'By phone' : 'By name'}
+              {m === 'tin' ? t.pubCitizenModeTin : m === 'phone' ? t.pubCitizenModePhone : t.pubCitizenModeName}
             </button>
           ))}
         </div>
@@ -843,7 +1326,7 @@ export function CitizenPortalScreen() {
             />
           </div>
           <button type="submit" disabled={busy} style={{ width: '100%', justifyContent: 'center' }}>
-            {busy ? 'Searching…' : 'Check status'}
+            {busy ? t.pubCitizenSearching : t.pubCitizenCheck}
           </button>
         </form>
 
@@ -855,12 +1338,18 @@ export function CitizenPortalScreen() {
               <p className="verdict__mark">×</p>
               <p className="verdict__label">{t.pubVerdictNotFound}</p>
             </div>
-            <p style={{ fontSize: '0.87rem' }}>{result.message}</p>
-            {result.count !== undefined && result.count > 1 && (
-              <p style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
-                {t.pubCitizenTooMany}
-              </p>
-            )}
+            {/*
+              * The sentence names the search that came back empty, and the
+              * screen is what knows which one that was.
+              *
+              * The "use your TIN or exact phone number" hint used to sit
+              * here, behind `count > 1`. It could not run: the API answers a
+              * name search with `found: count > 0`, so more than one match
+              * means `found` is true and this whole block is skipped. The
+              * hint is now in the branch that actually renders when several
+              * people share a name, which is the only time anybody needs it.
+              */}
+            <p style={{ fontSize: '0.87rem' }}>{noMatch(mode, t)}</p>
           </div>
         )}
 
@@ -881,7 +1370,19 @@ export function CitizenPortalScreen() {
           */}
         {result?.found && result.complianceStatus === undefined && (
           <div style={{ marginTop: 16 }}>
-            <p style={{ fontSize: '0.87rem', margin: 0 }}>{result.message}</p>
+            <p style={{ fontSize: '0.87rem', margin: 0 }}>
+              {result.count === 1
+                ? t.pubCitizenOneMatch
+                : t.pubCitizenManyMatches.replace('{{count}}', String(result.count ?? 0))}
+            </p>
+            {/*
+              * And how to get to a specific record, which is the point of
+              * telling somebody their name matched at all. This is where the
+              * hint belongs — it is unreachable in the not-found block above.
+              */}
+            <p style={{ fontSize: '0.82rem', color: 'var(--muted)', margin: '4px 0 0' }}>
+              {t.pubCitizenTooMany}
+            </p>
           </div>
         )}
 
@@ -910,11 +1411,27 @@ export function CitizenPortalScreen() {
               </p>
             </div>
 
-            <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>{result.message}</p>
+            {/*
+              * Read out of the status, not out of the server's sentence.
+              *
+              * `/citizen-status` is public and unauthenticated, so it has no
+              * person to resolve a language from and answers in English. On
+              * every other channel the platform picks the language off the
+              * recipient's record; here there is no recipient. So the screen,
+              * which does know what the reader chose, says it — and falls back
+              * to the server's words only for a status it has no sentence for,
+              * which is better than a blank where the answer belongs.
+              */}
+            <p style={{ fontSize: '0.87rem', marginBottom: 14 }}>
+              {statusMessage(result.complianceStatus, t) ?? result.message}
+            </p>
 
             <KeyValue
               items={[
-                [t.pubCitizenTinStatus, result.tinStatus ?? '—'],
+                [
+                  t.pubCitizenTinStatus,
+                  enumLabel(result.tinStatus, t, 'taxpayers.tin_status') || '—',
+                ],
                 [
                 t.pubCitizenOutstanding,
                 result.hasOutstanding ? t.pubCitizenOutstandingYes : t.pubCitizenNone,
@@ -922,10 +1439,25 @@ export function CitizenPortalScreen() {
               ]}
             />
 
+            {/*
+              * The same trade, and the reason `detail` is not simply rendered:
+              * it is one fixed English sentence the endpoint always sends, so
+              * preferring the translation loses nothing and gains a Hausa
+              * reader the paragraph that explains why their score is not here.
+              */}
             <p style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 16 }}>
-              {result.detail ??
-                t.pubCitizenFooter}
+              {result.detail ? t.pubCitizenDetail : t.pubCitizenFooter}
             </p>
+
+            {/*
+              * Only for a lookup that found one specific person. A name search
+              * answers with a count and never a record, so there is nobody to
+              * show a statement for — the same line the API draws, drawn again
+              * where the control lives.
+              */}
+            {mode !== 'name' && (
+              <PaymentStatement mode={mode} identifier={input.trim()} />
+            )}
           </div>
         )}
 

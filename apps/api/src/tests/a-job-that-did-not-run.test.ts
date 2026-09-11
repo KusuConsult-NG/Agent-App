@@ -163,6 +163,67 @@ describe('A job leaves a record that it ran', () => {
     assert.equal(row!.failures_total, '1');
   });
 
+  it('keeps what the failure said after a success wipes the failure count', async () => {
+    /*
+     * The consequence of the line above, which the row did not used to make
+     * available. `state` is FAILING only while `consecutive_failures > 0`, so
+     * one success and the job reads HEALTHY on the board — and `last_error`
+     * cleared on success, so the only surviving evidence was a number.
+     *
+     * "Something went wrong at some point" is not something anybody can act
+     * on. The error and the time it happened are kept together, so a job
+     * failing every other tick can be shown for what it is.
+     */
+    await assert.rejects(() => runJob('fraud-sweep', async () => {
+      throw new Error('Remita returned 503 for the statement.');
+    }));
+    await runJob('fraud-sweep', async () => null);
+
+    const row = await rowFor('fraud-sweep');
+    assert.equal(row!.consecutive_failures, 0);
+    assert.match(String(row!.last_error), /Remita returned 503/);
+    assert.ok(row!.last_failed_at, 'when it threw is kept');
+    assert.ok(row!.last_succeeded_at, 'and so is the success after it');
+    assert.ok(
+      row!.last_succeeded_at! > row!.last_failed_at!,
+      'the success is the more recent of the two, which is why state says HEALTHY',
+    );
+  });
+
+  it('puts both on the board, so a flapping job is not reported as well', async () => {
+    await assert.rejects(() => runJob('fraud-sweep', async () => {
+      throw new Error('Remita returned 503 for the statement.');
+    }));
+    await runJob('fraud-sweep', async () => null);
+
+    const { jobs } = await jobHealth();
+    const sweep = jobs.find((job) => job.name === 'fraud-sweep')!;
+
+    /*
+     * What the board says today, which is not wrong so much as incomplete.
+     *
+     * HEALTHY is also what keeps it out of `needingAttention`, which is the
+     * number the panel's heading counts — so on a board where everything else
+     * is fine, a job failing every other tick contributes nothing to it and
+     * the heading reads "every scheduled job has run on schedule".
+     *
+     * The board-wide `healthy` flag is not asserted here: in a fresh test
+     * database every other job is NEVER_RUN, so it is false for reasons that
+     * have nothing to do with this one.
+     */
+    assert.equal(sweep.state, 'HEALTHY');
+    assert.ok(
+      !['FAILING', 'OVERDUE', 'STALLED', 'NEVER_RUN'].includes(sweep.state),
+      'and so counts as nothing needing attention',
+    );
+
+    // And what it now has to say otherwise.
+    assert.equal(sweep.runsTotal, 2);
+    assert.equal(sweep.failuresTotal, 1);
+    assert.ok(sweep.lastFailedAt, 'the timestamp the screen reads to say so');
+    assert.match(String(sweep.lastError), /Remita returned 503/);
+  });
+
   it('counts a run that started and never came back', async () => {
     /*
      * A pod evicted mid-sweep leaves the row at RUNNING and nothing else ever

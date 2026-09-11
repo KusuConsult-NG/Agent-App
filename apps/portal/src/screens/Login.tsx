@@ -48,7 +48,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           ? caught.error
           : {
               code: 'NETWORK',
-              message: 'Could not reach the revenue platform. Check your connection.',
+              message: t.ofcLgCouldNotReachThe,
               moneyStatus: 'NOT_APPLICABLE',
             },
       );
@@ -68,8 +68,8 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
         <LanguageToggle />
         <div style={{ textAlign: 'center', marginBottom: 22 }}>
           <img src="/icon.svg" alt="" width={54} height={54} />
-          <h1 style={{ fontSize: '1.05rem', margin: '10px 0 2px' }}>{t.ofcLoginTitle}</h1>
-          <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--muted)' }}>
+          <h1 style={{ fontSize: 'var(--text-lg)', margin: '10px 0 2px' }}>{t.ofcLoginTitle}</h1>
+          <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--muted)' }}>
             {t.authPsirsFull}
           </p>
         </div>
@@ -116,10 +116,10 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
               type="button"
               className="password__toggle"
               aria-pressed={shown}
-              aria-label={shown ? 'Hide password' : 'Show password'}
+              aria-label={shown ? t.uiHidePassword : t.uiShowPassword}
               onClick={() => setShown((current) => !current)}
             >
-              {shown ? 'Hide' : 'Show'}
+              {shown ? t.uiHide : t.uiShow}
             </button>
           </div>
         </div>
@@ -128,7 +128,7 @@ export function LoginScreen({ onSignedIn }: { onSignedIn: (user: User) => void }
           {busy ? t.authSigningIn : t.authSignIn}
         </button>
 
-        <p style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: 16, textAlign: 'center' }}>
+        <p style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)', marginTop: 16, textAlign: 'center' }}>
           {t.ofcLoginMonitored}
         </p>
       </form>

@@ -17,15 +17,15 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import {
   activationBlockers,
-  permissionsForRole,
-  roleHasPermission,
   type AgentClearanceFlags,
   type Permission,
   type Role,
   type StepUpAction,
   compareVersions,
+  BAND_RULE_SINCE,
 } from '@psirs/shared';
 import { config } from '../config';
+import * as rbacStore from '../services/rbac-store';
 import { pool, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
@@ -100,7 +100,17 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       userId: payload.sub,
       role,
       sessionId: payload.sid,
-      permissions: permissionsForRole(role),
+      /*
+       * Read from the database, not from the compiled map.
+       *
+       * The role-to-permission table moved out of `rbac.ts` and into
+       * `role_permissions` so PSIRS can change their own delegation of
+       * authority without a deployment. `rbacStore` caches it for thirty
+       * seconds, so this stays one map lookup per request rather than a query
+       * — see the note in that file on why a revocation does not wait for the
+       * cache to expire.
+       */
+      permissions: await rbacStore.permissionsFor(role),
       agentId: payload.agentId,
       deviceId: payload.deviceId,
     };
@@ -118,7 +128,16 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
 export function requirePermission(...permissions: Permission[]) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) return next(unauthorised());
-    const granted = permissions.some((permission) => roleHasPermission(req.auth!.role, permission));
+    /*
+     * Asked of the store rather than of the compiled map, for the same reason.
+     *
+     * `req.auth.permissions` was already resolved above and could be read from
+     * there — but this is the enforcement point, and having it consult the same
+     * source directly means a future change to how `req.auth` is populated
+     * cannot quietly widen what is allowed.
+     */
+    const held = await rbacStore.permissionsFor(req.auth.role);
+    const granted = permissions.some((permission) => held.includes(permission));
     if (!granted) {
       /*
        * A refusal is a thing that happened.
@@ -444,6 +463,65 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
       next(error);
     }
   };
+}
+
+/**
+ * Refuse an enumeration from a handset running an out-of-date band rule.
+ *
+ * The phone works out a size at the stall and shows it, so a trader gets an
+ * answer with no signal. That is only safe while the phone's arithmetic is the
+ * platform's arithmetic. A build older than `BAND_RULE_SINCE` is running a
+ * different rule and will tell somebody a size the notice contradicts — a
+ * promise made on the State's behalf that the State then breaks, which is
+ * worse than the agent having said nothing.
+ *
+ * SEPARATE FROM THE GLOBAL GATE, AND DELIBERATELY NARROWER.
+ *
+ * `requireSupportedAppVersion` stops an outdated handset taking money, and
+ * raising that floor for a band-rule change would stop the same handset
+ * collecting revenue as well. An agent who cannot collect is an agent not
+ * working, which is a large price for a display that is wrong in one part of
+ * the platform. This blocks the one act that depends on the rule.
+ *
+ * NOT ON `/drafts/sync`, ON PURPose.
+ *
+ * A capture already sitting in the queue was taken before anybody could stop
+ * it, and its facts — premises, equipment, people — are as good as any. What
+ * is stale is the size the agent was shown, and the platform reaches its own
+ * band from those facts anyway and records the disagreement. Blocking the sync
+ * would strand real field work on a phone to punish a display, so the gate
+ * sits at capture and the queue drains regardless.
+ */
+export async function requireCurrentBandRule(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    // Officers enumerate from the portal, which is served with the API and
+    // cannot be a stale build in somebody's pocket.
+    if (req.auth?.role !== 'agent') return next();
+
+    const current = req.appVersion;
+    if (!current || compareVersions(current, BAND_RULE_SINCE) < 0) {
+      throw new AppError({
+        statusCode: 426,
+        code: 'UPDATE_REQUIRED_TO_ENUMERATE',
+        message:
+          'This version of the app works out business sizes by an old rule, so it would ' +
+          'tell the trader something the office does not agree with. Update before ' +
+          'writing down any more businesses.',
+        moneyStatus: 'NOT_APPLICABLE',
+        nextStep:
+          'Close and reopen the app to install the latest version. Anything already ' +
+          'saved on this phone will still be sent.',
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
 /**

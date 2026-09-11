@@ -8,6 +8,7 @@
  */
 import { pool, closePool, queryOne } from '../src/db/pool';
 import { verifyAuditChain } from '../src/services/audit';
+import { chainSentence } from '@psirs/shared';
 
 const PAGE = 10_000;
 
@@ -23,7 +24,11 @@ async function main(): Promise<void> {
   for (;;) {
     const page = await verifyAuditChain(pool, { fromSequence: from, limit: PAGE });
     if (!page.valid) {
-      console.log(`BROKEN at sequence ${page.brokenAtSequence}: ${page.detail}`);
+      console.log(
+        `BROKEN at sequence ${page.brokenAtSequence}: ${chainSentence(page.verdict, {
+          sequence: page.brokenAtSequence,
+        })}`,
+      );
       await closePool();
       process.exit(1);
     }

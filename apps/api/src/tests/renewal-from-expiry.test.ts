@@ -220,3 +220,59 @@ describe('an early renewal carries the unexpired time forward', () => {
     assert.equal(daysBetween(expected, row.expiry_date), 0);
   });
 });
+
+describe('the assessment records the period it charged for', () => {
+  it('carries the same dates as the renewal, and no English sentence', async () => {
+    /*
+     * The renewal row has always recorded this period. The assessment beside
+     * it recorded none — it carried the words "12 month vehicle renewal"
+     * instead, composed in the service, which is English on the receipt of a
+     * motorist reading Hausa and tells them which *length* rather than which
+     * twelve months.
+     *
+     * It cost more than a wrong language. The compliance score counts distinct
+     * period labels, and every renewal wrote the same words, so a motorist's
+     * 2025 and 2026 renewals counted as one period against the minimum that
+     * gates programme eligibility.
+     *
+     * Both facts follow from the same assertion: the assessment holds the
+     * renewal's two dates and no prose.
+     */
+    const inThirtyDays = new Date();
+    inThirtyDays.setDate(inThirtyDays.getDate() + 30);
+
+    const { vehicleId, taxpayerId } = await vehicleExpiring(inThirtyDays);
+    const response = await renew(vehicleId, taxpayerId, 12);
+    assert.equal(response.status, 201, JSON.stringify(response.body));
+
+    const renewal = await expiryOf(vehicleId);
+    const assessment = await pool.query<{
+      period_label: string | null;
+      period_start: Date | null;
+      period_end: Date | null;
+    }>(
+      `SELECT a.period_label, a.period_start, a.period_end
+         FROM assessments a
+         JOIN transactions t ON t.assessment_id = a.id
+         JOIN vehicle_renewals r ON r.transaction_id = t.id
+        WHERE r.vehicle_id = $1
+        ORDER BY a.created_at DESC LIMIT 1`,
+      [vehicleId],
+    );
+    const row = assessment.rows[0];
+    assert.ok(row, 'the renewal should have raised an assessment');
+
+    assert.equal(row.period_label, null, 'a period is dates, not a sentence composed in English');
+    assert.ok(row.period_start && row.period_end, 'and the assessment must record those dates');
+    assert.equal(
+      daysBetween(renewal.period_start, row.period_start!),
+      0,
+      'the assessment and the renewal must agree on when the period starts',
+    );
+    assert.equal(
+      daysBetween(renewal.expiry_date, row.period_end!),
+      0,
+      'and on when it ends',
+    );
+  });
+});

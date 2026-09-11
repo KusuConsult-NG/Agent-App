@@ -18,6 +18,7 @@ import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, notFound } from '../lib/errors';
+import { endOfDay } from '../lib/calendar-day';
 import { recordAudit } from './audit';
 
 export interface ComplianceBreakdown {
@@ -485,7 +486,22 @@ export async function evaluateEligibility(
       eligible = false;
       reasons.push('The programme has not opened yet');
     }
-    if (programme.end_date && programme.end_date < now) {
+    /*
+     * Through the end of the closing day, not the start of it.
+     *
+     * `end_date` is a DATE, so `pg` returns midnight at the start of the day
+     * the programme closes. Compared raw against `now`, an amnesty ran out at
+     * 00:00 on its final date and told every applicant for the whole of that
+     * day that it had closed — the day the radio announcements and the SMS
+     * reminders all name, and the day people therefore turn up. The schema's
+     * own `end_date >= start_date` check permits a one-day programme, which
+     * under that comparison was never open at all.
+     *
+     * The opening end needed no such treatment: `start_date > now` is false
+     * from midnight, so the first day was already included. The window was
+     * inclusive at one end and exclusive at the other.
+     */
+    if (programme.end_date && endOfDay(programme.end_date) < now) {
       eligible = false;
       reasons.push('The programme has closed');
     }

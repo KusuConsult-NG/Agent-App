@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import type { Db } from '../db/pool';
 import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '../db/pool';
+import type { ChainVerdict } from '@psirs/shared';
 
 export interface AuditEntry {
   actorId?: string | null;
@@ -40,8 +41,13 @@ export interface AuditEntry {
  * time and again after a round trip through JSONB would therefore produce two
  * different digests for identical data, and every verification would report
  * tampering that had not happened.
+ *
+ * Exported because an audit report's checksum has exactly the same problem for
+ * exactly the same reason: its payload is JSONB, and a second implementation
+ * that sorted keys slightly differently would make every report look tampered
+ * with the first time somebody checked one.
  */
-function canonicalJson(value: unknown): unknown {
+export function canonicalJson(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map(canonicalJson);
   return Object.keys(value as Record<string, unknown>)
@@ -217,7 +223,14 @@ export interface ChainVerification {
   valid: boolean;
   entriesChecked: number;
   brokenAtSequence?: number;
-  detail?: string;
+  /**
+   * Which of the four answers, so an auditor can read it in their language.
+   *
+   * Required rather than optional: every return below settles it, and the one
+   * place government checks the log for itself is the last place that should
+   * be able to answer with nothing.
+   */
+  verdict: ChainVerdict;
 }
 
 /**
@@ -291,9 +304,7 @@ export async function verifyAuditChain(
       valid: false,
       entriesChecked: 0,
       brokenAtSequence: Number.parseInt(genesis.sequence_no, 10),
-      detail:
-        'The oldest entry in the log names a predecessor that is not there: ' +
-        'the beginning of the chain has been removed.',
+      verdict: 'GENESIS_REMOVED',
     };
   }
 
@@ -306,7 +317,7 @@ export async function verifyAuditChain(
         valid: false,
         entriesChecked: checked,
         brokenAtSequence: Number.parseInt(row.sequence_no, 10),
-        detail: 'Chain link mismatch: an entry is missing or was inserted out of order.',
+        verdict: 'LINK_MISMATCH',
       };
     }
 
@@ -338,7 +349,7 @@ export async function verifyAuditChain(
         valid: false,
         entriesChecked: checked,
         brokenAtSequence: Number.parseInt(row.sequence_no, 10),
-        detail: 'Entry content does not match its recorded hash: the row was modified.',
+        verdict: 'CONTENT_MODIFIED',
       };
     }
 
@@ -346,5 +357,5 @@ export async function verifyAuditChain(
     checked += 1;
   }
 
-  return { valid: true, entriesChecked: checked };
+  return { valid: true, entriesChecked: checked, verdict: 'INTACT' };
 }

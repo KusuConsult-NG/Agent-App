@@ -1167,6 +1167,13 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
             ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
             rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
+            /*
+             * The language the receipt is printed in. Set at registration by
+             * the agent standing in front of the taxpayer, and honoured by the
+             * message queue since migration 047 — the printed receipt was the
+             * one copy that ignored it.
+             */
+            tp.preferred_language,
             p.id AS payment_id, p.payment_reference, p.gateway_reference, p.status AS payment_status,
             p.paid_at, p.verified_at AS payment_verified_at, p.failure_reason,
             r.id AS receipt_id, r.receipt_number, r.verification_code AS receipt_code,

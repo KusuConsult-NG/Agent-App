@@ -129,6 +129,31 @@ async function settleThroughApi(gatewayReference: string): Promise<void> {
   const payment = list.find((row) => row.gateway_reference === gatewayReference);
   expect(payment, `the API does not know gateway reference ${gatewayReference}`).toBeTruthy();
 
+  /*
+   * Import the gateway's statement first, because a settlement is refused
+   * without one.
+   *
+   * This step did not exist when the spec was written, and the spec went red
+   * when the corroboration guard was added: a settlement will not issue
+   * receipts for a reference the gateway's own statement does not confirm.
+   * That guard is the point — money nobody outside the platform has confirmed
+   * should not become a receipt — so the harness catches up with it rather
+   * than routing around it. In the field a finance officer does exactly this:
+   * import the statement covering the date, then record the batch.
+   *
+   * The window is narrow and ends in the future. The mock gateway selects on
+   * `created_at` in `mock_gateway_transactions`, and the collection this test
+   * just made is seconds old; a `to` of "now" races the clock on a slow box.
+   */
+  const importedFrom = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const importedTo = new Date(Date.now() + 60 * 1000).toISOString();
+  const swept = await fetch(`${API}/government/reconciliation/run`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ from: importedFrom, to: importedTo }),
+  });
+  expect(swept.status, `statement import failed: ${await swept.clone().text()}`).toBe(200);
+
   const response = await fetch(`${API}/government/settlements`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
@@ -152,7 +177,22 @@ async function signInToPortal(page: Page, who: keyof typeof OFFICERS): Promise<v
   // phone in sunlight.
   await page.locator('#password').fill(officer.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.locator('.sidebar')).toBeVisible({ timeout: 20_000 });
+  /*
+   * The officers share the agent's `/auth` budget -- see the note on
+   * `signInToAgentApp`. Five roles walking every screen is a lot of sign-ins.
+   */
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await expect(page.locator('.sidebar')).toBeVisible({ timeout: 10_000 });
+      return;
+    } catch {
+      if (attempt === 3) {
+        throw new Error(`${who} was refused four sign-in attempts a minute apart.`);
+      }
+      await page.waitForTimeout(20_000);
+      await page.getByRole('button', { name: 'Sign in' }).click();
+    }
+  }
 }
 
 /**
@@ -165,11 +205,43 @@ async function signInToPortal(page: Page, who: keyof typeof OFFICERS): Promise<v
  * "show password" toggle beside it, a control that exists because agents type
  * on a phone in sunlight.
  */
+/*
+ * Sign-in is retried, because `/auth` is capped at ten requests a minute per
+ * caller and this whole sweep is one caller.
+ *
+ * Five full sweeps each failed one or two different agent-app tests, always
+ * with the app still sitting on the sign-in screen, and the page snapshot said
+ * why: "Too many attempts. Wait a moment and try again." Whichever test
+ * happened to be the eleventh sign-in inside a minute was refused, which is
+ * why the failure moved around and why every one of them passed alone. It read
+ * as flakiness and was the platform working.
+ *
+ * The cap is not raised for tests, for the same reason the search cap is not:
+ * an account that can be signed into as fast as you like is an account that
+ * can be guessed into. The suite waits instead -- the window is sixty seconds,
+ * so four attempts twenty seconds apart cross it.
+ */
 async function signInToAgentApp(page: Page): Promise<void> {
-  await page.goto(AGENT);
-  await page.locator('input[type="tel"]').first().fill(AGENT_LOGIN.phone);
-  await page.locator('input[type="password"]').first().fill(AGENT_LOGIN.password);
-  await page.getByRole('button', { name: /^sign in$/i }).click();
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await page.goto(AGENT);
+    await page.locator('input[type="tel"]').first().fill(AGENT_LOGIN.phone);
+    await page.locator('input[type="password"]').first().fill(AGENT_LOGIN.password);
+    await page.getByRole('button', { name: /^sign in$|^shiga$/i }).click();
+    try {
+      // The form goes when the sign-in takes; it stays, with the refusal
+      // above it, when the limiter answers.
+      await page
+        .locator('input[type="password"]')
+        .first()
+        .waitFor({ state: 'hidden', timeout: 10_000 });
+      break;
+    } catch {
+      if (attempt === 3) {
+        throw new Error('The agent app refused four sign-in attempts a minute apart.');
+      }
+      await page.waitForTimeout(20_000);
+    }
+  }
   // The first screen after sign-in fetches the money bar and the day's
   // collections, so it is not ready the instant the button is pressed.
   await page.waitForTimeout(3500);
@@ -208,7 +280,17 @@ async function walkEveryScreen(page: Page, who: keyof typeof OFFICERS): Promise<
   const visited: string[] = [];
   for (const [index, link] of links.entries()) {
     await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
-    await page.waitForTimeout(1200);
+    /*
+     * Wait for the screen's own requests, then a short settle for the render.
+     *
+     * This was a flat 1,200ms per screen. An administrator is now offered
+     * twenty-six of them, so a third of the test's budget went on sleeping
+     * whether or not anything was still loading — and the screens that
+     * genuinely take longer than 1,200ms were photographed half-drawn anyway.
+     * Waiting on the network answers both.
+     */
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(350);
 
     const body = (await page.locator('.content').innerText().catch(() => '')).toLowerCase();
     expect(body, `${who} → ${link.label} is not refused by the API`).not.toContain('not permitted');
@@ -636,10 +718,107 @@ test.describe('A collection, end to end in the app', () => {
 test.describe('The officer portal, role by role', () => {
   for (const who of ['admin', 'revenue', 'finance', 'auditor', 'supervisor'] as const) {
     test(`${OFFICERS[who].label}: every screen they are offered opens`, async ({ page }) => {
+      /*
+       * Slow on purpose: this opens and photographs every screen a role is
+       * offered, and an administrator is offered twenty-six.
+       *
+       * It was on the default budget and passed when the portal was smaller.
+       * Levies, the presumptive schedule, enumeration, connections and
+       * allocations were added since, and nobody moved the number — so it
+       * began failing on a loaded machine and passing on a quiet one, which
+       * reads as flakiness and is really a walk that outgrew its clock.
+       */
+      test.slow();
       const visited = await walkEveryScreen(page, who);
       console.log(`  ${OFFICERS[who].label} walked ${visited.length} screens: ${visited.join(', ')}`);
     });
   }
+});
+
+// ===========================================================================
+/**
+ * The auditor holds no permission that changes anything. Prove it on every
+ * screen, not on the first one.
+ *
+ * `role-home.test.tsx` already asserts this for the auditor's home: it renders
+ * that screen and requires every button on it to be blank or "Open". That is
+ * the right check in the wrong place — the home screen is the one screen
+ * nobody was ever going to put an approval button on. The auditor is offered
+ * around thirty screens, and the read-only guarantee is only real if it holds
+ * on the fraud queue, the reconciliation view and the support desk too.
+ *
+ * A control here that led to a mutating call would be a screen promising
+ * something the API refuses. The role walk above catches the opposite mistake
+ * — a menu offering a screen that 403s — but a screen that opens fine and then
+ * shows a button nobody may press is invisible to it.
+ */
+test.describe('The auditor changes nothing', () => {
+  test.use({ viewport: DESKTOP });
+
+  /*
+   * Verbs, not nouns. Matching "approve" catches the button; matching
+   * "approval" would catch "Approvals", a heading and a screen name, and the
+   * auditor is entitled to read both. Anchored at the start of the label so
+   * "Export the audit log" is not read as an act on the audit log.
+   */
+  const CHANGES_SOMETHING =
+    /^(approve|reject|execute|reverse|suspend|revoke|activate|deactivate|create|add|assign|clear|resolve|issue|send|configure|save|update|delete|remove|block|unblock|close|reopen|file|record)\b/i;
+
+  /** Labels that read as verbs but only touch the form in front of you. */
+  const FORM_CONTROLS = new Set([translations.en.appClearFilters]);
+
+  test('is offered no control that changes anything, on any screen they can open', async ({
+    page,
+  }) => {
+    test.slow();
+    const console_ = watchConsole(page);
+    await signInToPortal(page, 'auditor');
+
+    const links = await menu(page);
+    expect(links.length, 'the auditor is offered screens').toBeGreaterThan(10);
+
+    const offenders: string[] = [];
+    for (const link of links) {
+      await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await page.waitForTimeout(350);
+
+      const buttons = await page
+        .locator('.content button')
+        .evaluateAll((nodes) =>
+          nodes.map((node) => ({
+            label: (node.textContent ?? '').trim(),
+            disabled: (node as HTMLButtonElement).disabled,
+          })),
+        );
+      for (const button of buttons) {
+        if (!CHANGES_SOMETHING.test(button.label)) continue;
+        /*
+         * "Clear", alone, empties a filter row -- form state, nothing sent.
+         * "Clear this agent" is a decision about a person, so the exemption is
+         * the exact label and not the verb.
+         *
+         * This is how the shared-key defect surfaced: the Levies filter reset
+         * was borrowing `ofcAgClear`, whose Hausa is "Ba da izini" -- grant
+         * permission -- and the two acts now have a key each.
+         */
+        if (FORM_CONTROLS.has(button.label)) continue;
+        /*
+         * Disabled is recorded rather than forgiven. A control the auditor can
+         * see but not press still tells them the platform expects them to be
+         * able to do this, and the reason it is greyed out today may be data
+         * rather than permission.
+         */
+        offenders.push(`${link.label}: "${button.label}"${button.disabled ? ' (disabled)' : ''}`);
+      }
+    }
+
+    expect(
+      offenders,
+      `the auditor was offered controls that change state: ${offenders.join(', ')}`,
+    ).toEqual([]);
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
 });
 
 // ===========================================================================
@@ -703,6 +882,125 @@ test.describe('What a citizen sees without an account', () => {
     await page.waitForTimeout(1800);
     await shot(page, 'public-02-citizen');
     expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+
+  /**
+   * A TIN that belongs to nobody, typed into the box a citizen actually uses.
+   *
+   * The receipt page above is checked against an unknown code; this screen was
+   * only ever checked for rendering, and rendering is not the interesting
+   * half. The failure this catches is a blank card — the citizen presses the
+   * button, nothing visible changes, and they cannot tell whether they
+   * mistyped their TIN or the service is down. One of those is worth
+   * retyping and the other is worth walking to an office about.
+   */
+  test('an unknown TIN is told so, rather than answered with a blank card', async ({ page }) => {
+    const console_ = watchConsole(page);
+    await page.goto(`${PORTAL}/#/citizen`);
+    await expect(page.locator('#citizen-input')).toBeVisible({ timeout: 15_000 });
+
+    await page.locator('#citizen-input').fill('PL00000000');
+    await page.getByRole('button', { name: translations.en.pubCitizenCheck }).click();
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(500);
+
+    const card = await page.locator('.public__card').innerText();
+    expect(card, `the citizen screen said: ${card.slice(0, 300)}`).toContain(
+      translations.en.pubVerdictNotFound,
+    );
+    /*
+     * The verdict alone is two words. A citizen who has just been told NOT
+     * FOUND needs the sentence after it that says what to do, so the answer is
+     * required to be longer than the stamp on it.
+     */
+    expect(
+      card.length,
+      'NOT FOUND arrived with nothing after it to tell the citizen what to do',
+    ).toBeGreaterThan(translations.en.pubVerdictNotFound.length + 40);
+    expect(console_.errors, `console errors: ${console_.errors.join(' | ')}`).toEqual([]);
+  });
+});
+
+// ===========================================================================
+/**
+ * Signing out everywhere, as the officer experiences it.
+ *
+ * `auth-session-revocation.test.ts` proves the tokens die — that the
+ * revocation takes effect on the very next request, that it reaches other
+ * devices, that it cannot be replayed against somebody else. All of that is
+ * about the token. None of it is about the person sitting in front of the
+ * screen, and those are different claims: "the request is refused" and "the
+ * officer is not left reading data they no longer have any right to" can come
+ * apart, and only the second one protects anybody.
+ *
+ * What actually happens is worth stating precisely, because it is not the
+ * obvious thing. The shell stays on screen until the next reload — the menu is
+ * drawn from the cached user — but every request behind it is refused, so the
+ * content area cannot still be showing rows. That is the property under test.
+ */
+test.describe('A revoked session reaches the screen', () => {
+  test.use({ viewport: DESKTOP });
+
+  test('shows no data once the account is signed out everywhere', async ({ page }) => {
+    await signInToPortal(page, 'revenue');
+    await page.goto(`${PORTAL}/#/transactions`);
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(500);
+
+    const before = await page.locator('.content').innerText();
+    expect(
+      before,
+      'the transactions screen showed no references before revocation, so the test could not tell afterwards whether the revocation was what emptied it',
+    ).toMatch(/\b(TXN|RCT|PSIRS)[-/]/);
+
+    /*
+     * Signed out from outside this browser, which is the case the control
+     * exists for: an officer on another device, having realised their account
+     * is in somebody else's hands.
+     *
+     * Only sessions that already exist are revoked, so every later test in
+     * this file still signs in normally.
+     */
+    const token = await officerToken('revenue');
+    const revoked = await fetch(`${API}/auth/logout-all`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(revoked.status, `logout-all failed: ${await revoked.clone().text()}`).toBe(200);
+
+    /*
+     * Away and back, rather than to the same address twice.
+     *
+     * The router is a hash router, so navigating to the URL already in the bar
+     * is a no-op: React never unmounts, never re-fetches, and the rows from
+     * before the revocation stay on screen. The first draft of this test read
+     * that stale render and reported the platform as serving a revoked
+     * session, which it does not — the API answers 401 on the very next
+     * request, and `auth-session-revocation.test.ts` proves it. What is under
+     * test here is the screen, so the screen has to actually ask again.
+     */
+    await page.goto(`${PORTAL}/#/`);
+    await page.waitForTimeout(300);
+    await page.goto(`${PORTAL}/#/transactions`);
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await page.waitForTimeout(1500);
+
+    const after = await page.locator('.content').innerText();
+    expect(
+      after,
+      `a revoked session was still served transaction records; screen said: ${after.slice(0, 400)}`,
+    ).not.toMatch(/\b(TXN|RCT|PSIRS)[-/]/);
+    expect(
+      after.trim().length,
+      'the screen went blank rather than saying anything, which is the failure where an officer cannot tell a revoked session from an empty week',
+    ).toBeGreaterThan(0);
+
+    await page.reload();
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await expect(
+      page.locator('#phone'),
+      'reloading a revoked session did not return the officer to sign-in',
+    ).toBeVisible({ timeout: 20_000 });
   });
 });
 
@@ -973,7 +1271,10 @@ test.describe('A trader from the next Local Government Area', () => {
    */
   const searchCollectFor = async (page: Page, typed: string) => {
     await page.goto(`${AGENT}/#/collect`);
-    await page.waitForTimeout(1500);
+    await expect(
+      page.locator('input[type="search"]').first(),
+      'the collection flow never drew a search box',
+    ).toBeVisible({ timeout: 20_000 });
     await page.locator('input[type="search"]').first().fill(typed);
     await page.getByRole('button', { name: /^search$/i }).click();
     await page.waitForTimeout(2500);
@@ -1007,7 +1308,19 @@ test.describe('A trader from the next Local Government Area', () => {
     const console_ = watchConsole(page);
     await signInToAgentApp(page);
     await page.goto(`${AGENT}/#/taxpayers`);
-    await page.waitForTimeout(1500);
+    /*
+     * Wait for the box, not for a second and a half.
+     *
+     * The register draws its search field after its first fetch resolves, so
+     * a flat sleep is a bet on how fast that is. It came up short once in a
+     * full sweep and the failure read as "input[type=search] not found",
+     * which sounds like a missing control rather than a screen that had not
+     * finished arriving. Waiting on the field itself says which it was.
+     */
+    await expect(
+      page.locator('input[type="search"]').first(),
+      'the register never drew a search box',
+    ).toBeVisible({ timeout: 20_000 });
     await page.locator('input[type="search"]').first().fill('08031000099');
     await page.getByRole('button', { name: /^search$/i }).click();
     await page.waitForTimeout(2500);
@@ -1036,6 +1349,15 @@ test.describe('The agent PWA in Hausa', () => {
      * is the one being tested here.
      */
     await languageButton(page, 'HA (Hausa)').click();
+    /*
+     * Let the home screen finish arriving before reading what language it is
+     * in. The money bar is drawn from a fetch, so until that returns there is
+     * no bar to be in any language at all -- and the assertion below then
+     * fails with "element not found", which reads as a missing translation
+     * rather than a screen that had not loaded. It failed that way in two
+     * sweeps out of four and passed alone every time.
+     */
+    await page.waitForLoadState('networkidle').catch(() => undefined);
     await page.waitForTimeout(1500);
 
     /*
@@ -1093,6 +1415,19 @@ test.describe('The officer portal in Hausa', () => {
   test.use({ viewport: DESKTOP });
 
   test('an administrator can work every screen in Hausa', async ({ page }) => {
+    /*
+     * The same clock the English walk needed, for the same reason.
+     *
+     * This walks every screen an administrator is offered, and the merge with
+     * main added eight more of them -- the command centre, exports, the inbox,
+     * departments, postings, targets, periods and the taxpayer base. The
+     * English walk was given a longer budget when the menu reached twenty-six
+     * screens; this one was not, and it is the same menu. A walk that grows
+     * with the platform has to be told it is allowed to take longer, or every
+     * screen anybody adds brings it closer to failing for having more to
+     * check.
+     */
+    test.slow();
     const console_ = watchConsole(page);
     await signInToPortal(page, 'admin');
 
@@ -1119,8 +1454,26 @@ test.describe('The officer portal in Hausa', () => {
     const offenders: string[] = [];
     for (const [index, link] of links.entries()) {
       await page.goto(`${PORTAL}/${link.href.replace(/^#?\/?/, '#/')}`);
-      await page.waitForTimeout(1200);
+      /*
+       * Wait on the screen's own requests rather than a flat 1,200ms, as the
+       * English walk does. Sleeping past a screen that had already finished
+       * cost this test a third of its budget; sleeping short of one that had
+       * not meant reading a half-drawn page for English, which is how a
+       * missing translation goes unnoticed.
+       */
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await page.waitForTimeout(350);
       const text = await page.locator('.content').innerText().catch(() => '');
+      /*
+       * Say the screen rendered before searching it for English.
+       *
+       * The read falls back to an empty string, and an empty string contains
+       * no English -- so a screen that never drew would have been reported as
+       * translated. The English walk has always asserted this; this one was
+       * looking for the absence of something in a page it had not established
+       * was there.
+       */
+      expect(text, `${link.label} renders something in Hausa`).not.toHaveLength(0);
       for (const key of englishStillShowing(text)) offenders.push(`${link.label}: ${key}`);
       if (index < 6) {
         await shot(page, `portal-ha-${String(index + 2).padStart(2, '0')}-${slug(link.label)}`);

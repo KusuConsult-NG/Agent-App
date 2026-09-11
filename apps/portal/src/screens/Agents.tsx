@@ -9,9 +9,20 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { KycDocumentsCard } from './KycDocuments';
-import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
+import {
+  Alert,
+  Badge,
+  Checklist,
+  ErrorAlert,
+  KeyValue,
+  Loading,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -34,6 +45,20 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
   const [dashboard, setDashboard] = useState<KycDashboard | null>(null);
   const [agents, setAgents] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The list of agents, kept apart from the dashboard above it.
+   *
+   * `.catch(() => setAgents([]))` printed "No agents match this filter." — on
+   * the screen an officer opens to find a particular agent and suspend them,
+   * or to see who is waiting to be cleared. A refused read said there is
+   * nobody, which is the one answer that ends a search.
+   *
+   * And the dashboard's failure used to take the whole screen with it: `if
+   * (error) return <ErrorAlert />` threw away the agent list even when the
+   * list itself had arrived. One failed request, and an officer loses the
+   * work they could still have done.
+   */
+  const [agentsError, setAgentsError] = useState<ApiError | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
 
   const load = useCallback(() => {
@@ -41,28 +66,47 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
       .get<KycDashboard>('/agents/kyc-dashboard')
       .then(setDashboard)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
       .get<any[]>(`/agents?${params.toString()}`)
-      .then(setAgents)
-      .catch(() => setAgents([]));
+      .then((loaded) => {
+        setAgents(loaded);
+        setAgentsError(null);
+      })
+      .catch((caught) => {
+        setAgentsError(asApiError(caught));
+      });
   }, [statusFilter]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  if (error) return <ErrorAlert error={error} />;
-  if (!dashboard) return <Loading rows={6} />;
+  if (!dashboard && !error) return <Loading rows={6} />;
 
-  const counts = dashboard.counts;
+  const counts = dashboard?.counts;
 
   return (
     <>
+      {/*
+        The dashboard's own failure, in the dashboard's place. It used to
+        replace the entire screen, agent list and all.
+      */}
+      {error && (
+        <div className="card">
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
+      {counts && (
+      <>
       <div className="stat-grid">
         <Stat label="ofcAgApplicationsReceived" value={counts.applications_received} />
         <Stat
@@ -91,11 +135,18 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         <Stat label="ofcAgRefereePending" value={counts.referee_pending} />
         <Stat label="ofcAgRefereeFailed" value={counts.referee_failed} />
       </div>
+      </>
+      )}
 
       <BankChangesCard />
 
+      {/*
+        Also the dashboard's: "No applications are waiting for review" is a
+        statement about a queue, and a read that failed does not know.
+      */}
+      {dashboard && (
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgAwaitingGovernmentReview}</h2>
           <p className="card__hint">{t.ofcAgApplicantsCompleted}</p>
         </div>
@@ -122,9 +173,10 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
           empty="ofcNoneApplicationsWaitingReview"
         />
       </div>
+      )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <div>
               <h2 className="card__title">{t.ofcAgAllAgents}</h2>
@@ -145,7 +197,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
             </div>
           </div>
         </div>
-        {!agents ? (
+        {agentsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={agentsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !agents ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
@@ -231,17 +288,39 @@ export function AgentDetailScreen({
       .get<AgentDetail>(`/agents/${agentId}`)
       .then(setDetail)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [agentId]);
 
-  useEffect(() => {
-    load();
+  /*
+   * An empty territory list is not a state with no territories in it.
+   *
+   * This caught into `setTerritories([])`, and both selects below are
+   * required: the activate button and the reassign button are each disabled
+   * until one is chosen. So a refused read left an officer looking at a
+   * dropdown holding only "Select a territory" and a button that would not
+   * move, with nothing saying why — an approved agent who cannot be put to
+   * work, and no way to find out that the platform simply failed to ask.
+   */
+  const [territoriesFailed, setTerritoriesFailed] = useState(false);
+
+  const loadTerritories = useCallback(() => {
+    setTerritoriesFailed(false);
     api
       .get<{ id: string; name: string; name_ha: string | null; lga_name: string }[]>('/government/reference/territories')
       .then(setTerritories)
-      .catch(() => setTerritories([]));
-  }, [load]);
+      .catch(() => {
+        setTerritories([]);
+        setTerritoriesFailed(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+    loadTerritories();
+  }, [load, loadTerritories]);
 
   async function act(fn: () => Promise<string>) {
     setBusy(true);
@@ -251,10 +330,7 @@ export function AgentDetailScreen({
       setMessage(await fn());
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -274,7 +350,7 @@ export function AgentDetailScreen({
         <Stat label="ofcAgAccessStage" value={<Badge status={detail.accessStage} />} />
         <Stat
           label="ofcAgMayCollectRevenue"
-          value={detail.canCollectRevenue ? 'Yes' : 'No'}
+          value={detail.canCollectRevenue ? t.tpYes : t.tpNo}
           variant={detail.canCollectRevenue ? 'accent' : 'alert'}
         />
       </div>
@@ -288,13 +364,13 @@ export function AgentDetailScreen({
           <p className="card__hint">{t.ofcAgEveryItemSatisfied}</p>
           <Checklist
             items={[
-              ['Identity verified (KYC)', checklist.kycCleared],
-              ['Referee cleared', checklist.refereeCleared],
-              ['Government approved', checklist.governmentApproved],
-              ['Mandatory training completed', checklist.trainingCompleted],
-              ['Commission bank account verified', checklist.bankVerified],
-              ['Agent agreement accepted', checklist.agreementAccepted],
-              ['Device registered', checklist.deviceRegistered],
+              [t.ofcAgIdentityVerifiedKyc, checklist.kycCleared],
+              [t.enumRefereeCleared, checklist.refereeCleared],
+              [t.ofcAgGovernmentApproved, checklist.governmentApproved],
+              [t.ofcAgMandatoryTrainingCompleted, checklist.trainingCompleted],
+              [t.ofcAgCommissionBankAccountVerified, checklist.bankVerified],
+              [t.ofcAgAgentAgreementAccepted, checklist.agreementAccepted],
+              [t.appStageDevice, checklist.deviceRegistered],
             ]}
           />
           {detail.outstanding.length > 0 && (
@@ -313,13 +389,13 @@ export function AgentDetailScreen({
           {detail.kyc ? (
             <KeyValue
               items={[
-                ['Document type', detail.kyc.identity_type],
-                ['Number on file', detail.kyc.identity_number_masked],
-                ['Status', <Badge key="s" status={detail.kyc.verification_status} />],
-                ['Liveness check', detail.kyc.liveness_result ?? 'Not performed'],
-                ['Submitted', formatDateTime(detail.kyc.submitted_at)],
-                ['Verified', formatDateTime(detail.kyc.verified_at)],
-                ['Failure reason', detail.kyc.failure_reason ?? '—'],
+                [t.ofcAgDocumentType, detail.kyc.identity_type],
+                [t.ofcAgNumberOnFile, detail.kyc.identity_number_masked],
+                [t.appStatus, <Badge key="s" status={detail.kyc.verification_status} />],
+                [t.ofcAgLivenessCheck, detail.kyc.liveness_result ?? t.enumNotPerformed],
+                [t.ofcAgSubmitted, formatDateTime(detail.kyc.submitted_at)],
+                [t.enumVerified, formatDateTime(detail.kyc.verified_at)],
+                [t.ofcAgFailureReason, detail.kyc.failure_reason ?? '—'],
               ]}
             />
           ) : (
@@ -339,7 +415,7 @@ export function AgentDetailScreen({
       <KycDocumentsCard agentId={agentId} onReviewed={load} />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcNavReferees}</h2>
           <p className="card__hint">{t.ofcAgRefereeHistoryKept}</p>
         </div>
@@ -367,7 +443,7 @@ export function AgentDetailScreen({
                             decision: 'CLEAR',
                             reason,
                           });
-                          return 'Referee cleared.';
+                          return t.ofcAgRefereeCleared;
                         })
                       }
                     >{t.ofcAgClear}</button>
@@ -381,7 +457,7 @@ export function AgentDetailScreen({
                             decision: 'REJECT',
                             reason,
                           });
-                          return 'Referee rejected.';
+                          return t.ofcAgRefereeRejected;
                         })
                       }
                     >{t.ofcAgReject}</button>
@@ -396,7 +472,7 @@ export function AgentDetailScreen({
 
       <div className="grid-2">
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.appTraining}</h2>
           </div>
           <Table
@@ -412,13 +488,13 @@ export function AgentDetailScreen({
         </div>
 
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcAgDevices}</h2>
             <p className="card__hint">{t.ofcAgDevicesBody}</p>
           </div>
           <Table
             columns={[
-              { key: 'device_name', label: 'appDeviceLabel', render: (row) => row.device_name ?? 'Unnamed' },
+              { key: 'device_name', label: 'appDeviceLabel', render: (row) => row.device_name ?? t.ofcAgUnnamed },
               { key: 'pwa_version', label: 'ofcAgVersion' },
               { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
@@ -441,7 +517,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/approve`);
-                              return 'Device approved. The agent can now collect from it.';
+                              return t.ofcAgDeviceApprovedTheAgent;
                             })
                           }
                         >{t.ofcRhApprove}</button>
@@ -463,7 +539,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/suspend`, { reason });
-                              return 'Device suspended and its sessions ended. It can be restored.';
+                              return t.ofcAgDeviceSuspendedAndIts;
                             })
                           }
                         >{t.ofcAgSuspend}</button>
@@ -476,7 +552,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/restore`, { reason });
-                              return 'Device restored. The agent can collect from it again.';
+                              return t.ofcAgDeviceRestoredTheAgent;
                             })
                           }
                         >{t.ofcAgRestore}</button>
@@ -489,7 +565,7 @@ export function AgentDetailScreen({
                           onClick={() =>
                             act(async () => {
                               await api.post(`/agents/devices/${row.id}/revoke`, { reason });
-                              return 'Device revoked and its sessions ended.';
+                              return t.ofcAgDeviceRevokedAndIts;
                             })
                           }
                         >{t.ofcAgRevoke}</button>
@@ -527,7 +603,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'APPROVE', reason });
-                    return 'Application approved.';
+                    return t.ofcAgApplicationApproved;
                   })
                 }
               >{t.ofcAgApproveApplication}</button>
@@ -538,7 +614,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'REQUEST_INFO', reason });
-                    return 'More information requested from the applicant.';
+                    return t.ofcAgMoreInformationRequestedFrom;
                   })
                 }
               >{t.ofcAgRequestMoreInformation}</button>
@@ -549,7 +625,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/review`, { decision: 'REJECT', reason });
-                    return 'Application rejected.';
+                    return t.ofcAgApplicationRejected;
                   })
                 }
               >{t.ofcAgReject}</button>
@@ -573,6 +649,7 @@ export function AgentDetailScreen({
                   ))}
                 </select>
                 <p className="field__hint">{t.ofcAgTerritoryRequired}</p>
+                {territoriesFailed && <TerritoriesUnreadable onRetry={loadTerritories} />}
               </div>
               <button
                 type="button"
@@ -580,7 +657,7 @@ export function AgentDetailScreen({
                 onClick={() =>
                   act(async () => {
                     await api.post(`/agents/${agentId}/activate`, { territoryId });
-                    return 'Agent activated.';
+                    return t.ofcAgAgentActivated;
                   })
                 }
               >{t.ofcAgActivateAgent}</button>
@@ -612,11 +689,15 @@ export function AgentDetailScreen({
                 <option value="">{t.ofcAgSelectTerritory}</option>
                 {territories.map((territory) => (
                   <option key={territory.id} value={territory.id}>
-                    {territory.name} ({territory.lga_name})
+                    {/* Localised, as the activation selector beside it is. A
+                      * Hausa reader had the same territory named one way
+                      * above and the other way here. */}
+                    {localName(lang, territory.name, territory.name_ha)} ({territory.lga_name})
                   </option>
                 ))}
               </select>
               <p className="field__hint">{t.ofcAgMoveTerritoryBody}</p>
+              {territoriesFailed && <TerritoriesUnreadable onRetry={loadTerritories} />}
               <button
                 type="button"
                 className="secondary"
@@ -625,7 +706,7 @@ export function AgentDetailScreen({
                   act(async () => {
                     await api.post(`/agents/${agentId}/territory`, { territoryId });
                     setTerritoryId('');
-                    return 'Territory reassigned. Future collections are attributed to it.';
+                    return t.ofcAgTerritoryReassignedFutureCollections;
                   })
                 }
               >{t.ofcAgReassignTerritory}</button>
@@ -641,7 +722,7 @@ export function AgentDetailScreen({
                 act(async () => {
                   await stepUp('agent.suspend', user.phone);
                   await api.post(`/agents/${agentId}/suspend`, { reason });
-                  return 'Agent suspended. Their sessions and devices have been disabled.';
+                  return t.ofcAgAgentSuspendedTheirSessions;
                 })
               }
             >{t.ofcAgSuspendAgent}</button>
@@ -650,7 +731,7 @@ export function AgentDetailScreen({
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgClearanceHistory}</h2>
         </div>
         <Table
@@ -684,7 +765,9 @@ export function RefereesScreen() {
       .get('/agents/referee-dashboard')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -710,22 +793,39 @@ export function RefereesScreen() {
       });
       setMessage(
         decision === 'CONFIRMED'
-          ? 'Flag upheld. This referee cannot be cleared until it is dismissed.'
+          ? t.ofcAgFlagUpheldThisReferee
           : decision === 'DISMISSED'
-            ? 'Flag dismissed. The referee can be cleared as normal.'
-            : 'Flag marked as under review.',
+            ? t.ofcAgFlagDismissedTheReferee
+            : t.ofcAgFlagMarkedAsUnder,
       );
       setReviewing(null);
       setNote('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
   }
 
-  if (error && !data) return <ErrorAlert error={error} />;
+  /*
+   * The failure replaces the screen, with something to press.
+   *
+   * This returned the alert alone: a refused read left an officer looking at
+   * one sentence, with the queue, the filters and every control gone and
+   * nothing to press. Reloading the page was the only way back, and nothing
+   * said so.
+   */
+  if (error && !data) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={5} />;
 
   return (
@@ -748,7 +848,7 @@ export function RefereesScreen() {
       </div>
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgRefereeRiskFlags}</h2>
           <p className="card__hint">{t.ofcAgRefereeRiskBody}</p>
         </div>
@@ -819,11 +919,12 @@ export function RefereesScreen() {
               onChange={(event) => setNote(event.target.value)}
               placeholder={t.ofcAgSampleRefereeNote}
             />
+            <ReasonRule value={note} minimum={10} />
           </div>
 
           <div className="button-row">
             <button type="button" disabled={busy || note.trim().length < 10} onClick={submitReview}>
-              {busy ? 'Saving…' : 'Record this'}
+              {busy ? t.agEnSaving : t.ofcAgRecordThis}
             </button>
             <button
               type="button"
@@ -838,7 +939,7 @@ export function RefereesScreen() {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{t.ofcAgRefereesMultiple}</h2>
         </div>
         <Table
@@ -892,16 +993,29 @@ export function BankChangesCard() {
   const { t } = usePortalI18n();
   const [changes, setChanges] = useState<PendingBankChange[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * A queue that could not be read, kept apart from a decision that was
+   * refused.
+   *
+   * The catch used to write `[]` here, and an empty queue prints "No bank
+   * account changes are waiting." So an officer whose request failed was told
+   * there was nothing to review — about the one queue where nothing being
+   * reviewed means an agent's commission keeps going to the account they are
+   * asking to move it off.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ changes: PendingBankChange[] }>('/agents/bank-changes')
-      .then((data) => setChanges(data.changes))
+      .then((data) => {
+        setChanges(data.changes);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        setChanges([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -915,10 +1029,7 @@ export function BankChangesCard() {
       setMessage(await run());
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
@@ -927,16 +1038,15 @@ export function BankChangesCard() {
   function decide(change: PendingBankChange, decision: 'APPROVE' | 'REJECT') {
     const reason = window.prompt(
       decision === 'APPROVE'
-        ? `Say how you confirmed this change with ${change.agentName} (at least 10 characters):`
-        : `Say why this change is being refused (at least 10 characters):`,
+        ? t.ofcAgConfirmHowPrompt.replace('{{name}}', change.agentName)
+        : t.ofcAgRefuseWhyPrompt,
     );
     if (reason === null) return;
     if (reason.trim().length < 10) {
       setError({
         code: 'CLIENT',
         message:
-          'Give a reason of at least 10 characters. It is the only record of why the account ' +
-          'somebody is paid into was moved.',
+          t.ofcAgGiveAReasonOf,
         moneyStatus: 'NOT_APPLICABLE',
       });
       return;
@@ -946,16 +1056,24 @@ export function BankChangesCard() {
         `/government/approvals/${change.approvalId}/decide`,
         { decision, reason: reason.trim() },
       );
-      return (
-        result.message ??
-        (decision === 'APPROVE'
-          ? `${change.agentName}'s commission account has been changed.`
-          : `The change for ${change.agentName} was refused. Their existing account is unchanged.`)
-      );
+      /*
+       * The officer's screen decides what the officer reads.
+       *
+       * This was `result.message ?? …`, so the API's English sentence was
+       * preferred to the two translated ones sitting right behind it — the
+       * same shape as `err.message || t.fallback`, which this application has
+       * now been found carrying nine times. The server still returns the
+       * message for anything else that calls the endpoint; the portal no
+       * longer renders it.
+       */
+      void result;
+      return decision === 'APPROVE'
+        ? t.ofcAgAccountChanged.replace('{{name}}', change.agentName)
+        : t.ofcAgChangeRefused.replace('{{name}}', change.agentName);
     });
   }
 
-  if (!changes) return <Loading rows={2} />;
+  if (!changes && !loadError) return <Loading rows={2} />;
 
   return (
     <div className="card">
@@ -967,11 +1085,16 @@ export function BankChangesCard() {
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
-      {changes.length === 0 ? (
+      {loadError ? (
+        <>
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </>
+      ) : (changes ?? []).length === 0 ? (
         <p className="empty">{t.ofcAgNoBankChanges}</p>
       ) : (
         <ul className="list">
-          {changes.map((change) => {
+          {(changes ?? []).map((change) => {
             const confirmed = change.verificationStatus === 'VERIFIED';
             const nameDiffers =
               confirmed &&
@@ -986,29 +1109,37 @@ export function BankChangesCard() {
                 <KeyValue
                   items={[
                     [
-                      'Paid into now',
+                      t.morePaidIntoNow,
                       change.current
                         ? `${change.current.bankName} ${change.current.accountNumberMasked}`
                         : '—',
                     ],
-                    ['Would change to', `${change.bankName} ${change.accountNumberMasked}`],
-                    ['Name the agent gave', change.accountName],
+                    [t.moreWouldChangeTo, `${change.bankName} ${change.accountNumberMasked}`],
+                    [t.ofcAgNameTheAgentGave, change.accountName],
                     [
-                      'Name the bank returned',
+                      t.ofcAgNameTheBankReturned,
                       confirmed
-                        ? (change.verificationResolvedName ?? 'Confirmed, no name returned')
+                        ? (change.verificationResolvedName ?? t.ofcAgConfirmedNoNameReturned)
                         : change.verificationStatus === 'PENDING'
-                          ? 'The bank could not be reached'
-                          : `Not confirmed${change.verificationReason ? `: ${change.verificationReason}` : ''}`,
+                          ? t.ofcAgTheBankCouldNot
+                          : change.verificationReason
+                            ? t.ofcAgNotConfirmedBecause.replace(
+                                '{{reason}}',
+                                change.verificationReason,
+                              )
+                            : t.ofcAgNotConfirmed,
                     ],
-                    ['Reason given', change.requestedReason],
+                    [t.ofcAgReasonGiven, change.requestedReason],
                     [
-                      'Asked for by',
+                      t.ofcAgAskedForBy,
                       change.requestedByRole === 'agent'
-                        ? 'The agent'
-                        : `An officer (${change.requestedByRole ?? 'unknown role'})`,
+                        ? t.ofcAgTheAgent
+                        : t.ofcAgAnOfficer.replace(
+                            '{{role}}',
+                            change.requestedByRole ?? t.ofcAgUnknownRole,
+                          ),
                     ],
-                    ['Requested', formatDateTime(change.requestedAt)],
+                    [t.ofcRhRequested, formatDateTime(change.requestedAt)],
                   ]}
                 />
 
@@ -1026,8 +1157,8 @@ export function BankChangesCard() {
                   <Alert kind="warning" title="moreBankNotConfirmed">
                     <p style={{ margin: 0 }}>
                       {change.verificationStatus === 'PENDING'
-                        ? 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.'
-                        : 'This account cannot be approved while the bank does not confirm it. Refuse the request so the agent can send the right details.'}
+                        ? t.ofcAgTheBankVerificationService
+                        : t.ofcAgThisAccountCannotBe}
                     </p>
                   </Alert>
                 )}
@@ -1045,8 +1176,11 @@ export function BankChangesCard() {
                             {},
                           );
                           return result.verified
-                            ? 'The bank confirmed the account.'
-                            : `The bank still did not confirm it (${result.outcome.toLowerCase()}).`;
+                            ? t.ofcAgTheBankConfirmedThe
+                            : t.ofcAgBankStillNotConfirmed.replace(
+                                '{{outcome}}',
+                                result.outcome.toLowerCase(),
+                              );
                         })
                       }
                     >{t.ofcAgAskBankAgain}</button>
@@ -1074,5 +1208,24 @@ export function BankChangesCard() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Said beside the control it disables, not at the top of the screen.
+ *
+ * The officer's attention is on the dropdown that will not offer anything and
+ * the button that will not move; a banner three sections up is read after
+ * they have concluded the platform is broken.
+ */
+function TerritoriesUnreadable({ onRetry }: { onRetry: () => void }) {
+  const { t } = usePortalI18n();
+  return (
+    <p className="field__hint" role="status">
+      {t.ofcAgTerritoriesUnreadable}{' '}
+      <button type="button" className="link" onClick={onRetry}>
+        {t.actionTryAgain}
+      </button>
+    </p>
   );
 }

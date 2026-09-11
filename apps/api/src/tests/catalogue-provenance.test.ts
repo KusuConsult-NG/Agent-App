@@ -178,10 +178,31 @@ const PROVENANCE: Record<string, { authority: Authority; note: string }> = {
   'ANIMAL-TRADE-TAX': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
   'PRODUCE-SALES-TAX': { authority: 'PSIRS_CONFIRMED', note: 'No instrument identified.' + ' Confirmed by PSIRS, 24 August 2026.' },
 
+  /*
+   * The 1% is the statute's, not the state's.
+   *
+   * Section 29 of the Nigeria Tax Act 2025 charges a small company or an
+   * individual without accounts at 1% of turnover. That figure is federal and
+   * checked, so these three carry it as a rate. The state's contribution is
+   * the turnover it applies to — assumed annual turnover by sector, band and
+   * LGA class — which is published as a schedule in its own table rather than
+   * folded into the item, because a taxpayer can dispute the assumed turnover
+   * and cannot dispute the Act.
+   */
+  'PIT-PRESUMPTIVE-MICRO': {
+    authority: 'FEDERAL_STATUTE',
+    note: 'Section 29, Nigeria Tax Act 2025: 1% of turnover. Turnover from presumptive_schedules.',
+  },
+  'PIT-PRESUMPTIVE-SMALL': {
+    authority: 'FEDERAL_STATUTE',
+    note: 'Section 29, Nigeria Tax Act 2025: 1% of turnover. Turnover from presumptive_schedules.',
+  },
+  'PIT-PRESUMPTIVE-MEDIUM': {
+    authority: 'FEDERAL_STATUTE',
+    note: 'Section 29, Nigeria Tax Act 2025: 1% of turnover. Turnover from presumptive_schedules.',
+  },
+
   // -- No rate, so nothing can be charged ----------------------------------
-  'PIT-PRESUMPTIVE-MICRO': { authority: 'AWAITING_SCHEDULE', note: 'First Schedule table.' },
-  'PIT-PRESUMPTIVE-SMALL': { authority: 'AWAITING_SCHEDULE', note: 'First Schedule table.' },
-  'PIT-PRESUMPTIVE-MEDIUM': { authority: 'AWAITING_SCHEDULE', note: 'First Schedule table.' },
   'BP-REG-SEMI-URBAN': { authority: 'AWAITING_SCHEDULE', note: 'Second Schedule, semi-urban.' },
   'BP-RENEW-SEMI-URBAN': { authority: 'AWAITING_SCHEDULE', note: 'Second Schedule, semi-urban.' },
   'PIT-WHT': { authority: 'AWAITING_SCHEDULE', note: 'Needs a rate table by payment type.' },

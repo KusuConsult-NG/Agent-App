@@ -12,7 +12,7 @@
  * it can be re-run against an existing database without duplicating anything.
  */
 
-import { PLATEAU_LGAS, TRAINING_MODULES, nairaToKobo } from '@psirs/shared';
+import { PLATEAU_LGAS, ROLES, TRAINING_MODULES, nairaToKobo, permissionsForRole } from '@psirs/shared';
 import { pool, queryOne, withTransaction, closePool } from './pool';
 import { config } from '../config';
 import { describeDatabase } from '../env';
@@ -128,31 +128,45 @@ const STATE_CATALOGUE: {
        * with no rate in force until somebody with the Schedule enters it.
        */
       {
+        /*
+         * One per cent of turnover, per section 29 of the Nigeria Tax Act 2025.
+         *
+         * These three carried no rate at all until the presumptive schedule
+         * existed, on the reasoning that the figure was PSIRS's to set. That
+         * conflated two different things: the *rate* is statutory and is this,
+         * while what PSIRS sets is the assumed turnover it applies to — which
+         * now lives in `presumptive_schedules` and is versioned there.
+         *
+         * Keeping the rate here rather than as a constant in the assessment
+         * path means the percentage an assessment was computed at is recorded
+         * on the assessment, and can be re-checked years later against the
+         * version in force at the time.
+         */
         code: 'PIT-PRESUMPTIVE-MICRO',
         name: 'Presumptive Income Tax (micro enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (kananan sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-SMALL',
         name: 'Presumptive Income Tax (small enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (karamar sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-MEDIUM',
         name: 'Presumptive Income Tax (medium enterprise)',
         nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (matsakaiciyar sana\'a)',
-        rateType: 'FIXED',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       /*
        * The Fourth Schedule to the Nigeria Tax Act, 2025, in force since
@@ -544,6 +558,67 @@ const INCENTIVE_PROGRAMMES = [
     linkageMode: 'ADDITIVE_BENEFIT',
   },
   {
+    name: 'Government Palliative (Humanitarian Support)',
+    nameHa: 'Tallafin Gwamnati (Taimakon Jin Kai)',
+    code: 'HUMANITARIAN-PALLIATIVE',
+    description:
+      'Relief distributed by the Plateau State Ministry of Humanitarian Affairs and Poverty ' +
+      'Alleviation. Registered taxpayers receive the base entitlement; sustained tax ' +
+      'compliance raises it to the full one.',
+    benefitType: 'HUMANITARIAN_PALLIATIVE',
+    benefitDescription:
+      'Food and essential-item support distributed through the Ministry of Humanitarian ' +
+      'Affairs. The Ministry decides need; this platform certifies tax standing only.',
+    eligibilityRules: {
+      requires_tin: true,
+      min_score: 90,
+      /*
+       * Ninety across three assessed periods, not ninety today.
+       *
+       * A snapshot score is trivially high for somebody assessed once last
+       * week and perfectly meaningless: paying a single levy on time scores
+       * full marks on punctuality, coverage and arrears at once. Beneficiary
+       * selection off that figure rewards being new to the register rather
+       * than being compliant, and the first year of any scheme is exactly when
+       * that is most common.
+       *
+       * Three assessed periods is the shortest window in which the score is
+       * measuring a habit. It is the same reasoning the score's own
+       * proportional components rest on — what the state asked of this person,
+       * over time — carried into who is chosen.
+       */
+      min_periods: 3,
+      sustained: true,
+    },
+    minimumScore: 90,
+    minimumCompliancePeriods: 3,
+    /*
+     * ADDITIVE, AND THIS IS NOT A DETAIL.
+     *
+     * PRD §40, which migration 017 exists to enforce: the platform must not
+     * automatically deny an essential public service because somebody is not
+     * tax-compliant. A humanitarian palliative is the strongest case of that
+     * rule there is. Relief exists for people in hardship, and the people in
+     * hardship are the least likely to be tax-compliant — so a 90% gate would
+     * withhold food support from the poorest, and withhold it precisely
+     * because they are poor. That is not a strict scheme, it is an inverted
+     * one, and it would be the platform doing it rather than any policy
+     * anybody signed.
+     *
+     * So the threshold is honoured where it belongs. Ninety per cent across
+     * three periods is the line between the base entitlement and the full one
+     * — a reward for paying, which is what a tax incentive is — and nobody
+     * registered is refused relief by this platform's arithmetic.
+     *
+     * `requires_no_arrears` is false for the same reason: owing money is a
+     * debt to recover, not a reason to go without food.
+     */
+    requiresNoArrears: false,
+    approvalAuthority:
+      'Plateau State Ministry of Humanitarian Affairs and Poverty Alleviation',
+    linkageMode: 'ADDITIVE_BENEFIT',
+  },
+  {
     name: 'Input Fertilizer Distribution Programme',
     nameHa: 'Shirin Rabon Takin Zamani',
     code: 'FERTILIZER-SUBSIDY',
@@ -611,7 +686,7 @@ const INCENTIVE_PROGRAMMES = [
   },
 ] as const;
 
-const NOTIFICATION_TEMPLATES = [
+export const NOTIFICATION_TEMPLATES = [
   /*
    * The agent's own money, on the three occasions it moves.
    *
@@ -792,7 +867,101 @@ your authority.
 By accepting, you confirm that you have read and understood this agreement and
 that the information in your application is true.`;
 
+/**
+ * The roles, and the permissions each starts with.
+ *
+ * Migration 059 moved the role-to-permission map out of `rbac.ts` and into the
+ * database, and seeded it. This is here for the two cases the migration cannot
+ * cover: a database created after that migration and then emptied — which is
+ * every test shard between files — and a role added to the compiled list in a
+ * later release.
+ *
+ * IT NEVER OVERWRITES A GRANT SOMEBODY MADE.
+ *
+ * A role that already has grants is left exactly as it is. Re-applying the
+ * compiled map on every seed would silently undo an administrator's
+ * delegation — which is the entire capability this table exists to provide, so
+ * quietly reverting it would be worse than never having built it.
+ */
+async function seedRoles(): Promise<void> {
+  console.log('  seeding roles and permissions...');
+  const PORTAL: readonly string[] = [
+    'supervisor',
+    'revenue_officer',
+    'finance_officer',
+    'auditor',
+    'admin',
+  ];
+  const LABELS: Record<string, [string, string]> = {
+    agent: ['Field agent', 'Wakilin filin aiki'],
+    supervisor: ['Supervisor', 'Mai kula'],
+    revenue_officer: ['Revenue officer', 'Jami’in haraji'],
+    finance_officer: ['Finance officer', 'Jami’in kudi'],
+    auditor: ['Auditor', 'Mai bincike'],
+    admin: ['Administrator', 'Mai gudanarwa'],
+    // No `taxpayer`. Migration 007 removed it from the role list and
+    // `integration.test.ts` asserts the database still refuses such a row — a
+    // citizen never signs in, so there is no credential to phish.
+  };
+
+  /*
+   * How many rows each shipped role may export.
+   *
+   * Seeded rather than left to the column default, because the default is the
+   * floor a role PSIRS creates gets and these six are decisions: the auditor
+   * needs the whole population or an examination is not one; the field agent
+   * takes nothing out at all.
+   *
+   * Only applied when the row is created. An administrator who has raised a
+   * limit has made a decision, and a re-seed must not quietly put it back --
+   * which is the same rule the permission grants below follow.
+   */
+  const EXPORT_LIMITS: Record<string, number> = {
+    agent: 0,
+    supervisor: 20_000,
+    revenue_officer: 20_000,
+    finance_officer: 50_000,
+    auditor: 100_000,
+    admin: 50_000,
+  };
+
+  await withTransaction(async (client) => {
+    for (const [name, [label, labelHa]] of Object.entries(LABELS)) {
+      await client.query(
+        `INSERT INTO roles (name, label, label_ha, is_system, is_portal, export_row_limit)
+         VALUES ($1,$2,$3,TRUE,$4,$5)
+         ON CONFLICT (name) DO UPDATE SET label = EXCLUDED.label,
+                                          label_ha = EXCLUDED.label_ha`,
+        [name, label, labelHa, PORTAL.includes(name), EXPORT_LIMITS[name] ?? 5000],
+      );
+    }
+
+    for (const role of ROLES) {
+      const held = await queryOne<{ count: string }>(
+        client,
+        'SELECT count(*)::text FROM role_permissions WHERE role = $1',
+        [role],
+      );
+      // Already configured — including deliberately configured down to nothing
+      // is not possible here, because a role with no grants is indistinguishable
+      // from an unseeded one. That ambiguity is accepted: a role stripped to
+      // zero permissions is not a state anybody wants to preserve.
+      if (Number(held!.count) > 0) continue;
+
+      for (const permission of permissionsForRole(role)) {
+        await client.query(
+          `INSERT INTO role_permissions (role, permission, reason)
+           VALUES ($1,$2,'Seeded from the compiled map')
+           ON CONFLICT DO NOTHING`,
+          [role, permission],
+        );
+      }
+    }
+  });
+}
+
 async function seedReferenceData(): Promise<void> {
+  await seedRoles();
   console.log('  seeding geography...');
   await withTransaction(async (client) => {
     for (const lga of PLATEAU_LGAS) {

@@ -49,3 +49,24 @@ export function queryParams(route: string): URLSearchParams {
   const index = route.indexOf('?');
   return new URLSearchParams(index === -1 ? '' : route.slice(index + 1));
 }
+
+/**
+ * Change the query string without leaving the screen.
+ *
+ * `navigate` is for going somewhere: it pushes a history entry and scrolls to
+ * the top, both of which are right when an officer clicks a link and wrong on
+ * every keystroke in a filter box. Twenty characters typed into a search field
+ * would be twenty history entries the back button has to walk through, and a
+ * page that jumps to the top while somebody is typing is a page they stop
+ * using.
+ *
+ * `replaceState` writes the same address without either. The filters end up in
+ * the URL, which is what makes them survive a reload and makes a filtered view
+ * something an officer can send to a colleague.
+ */
+export function replaceQuery(path: string, params: URLSearchParams): void {
+  const query = params.toString();
+  const next = `#${query ? `${path}?${query}` : path}`;
+  if (window.location.hash === next) return;
+  window.history.replaceState(null, '', next);
+}

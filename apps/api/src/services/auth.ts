@@ -8,7 +8,6 @@
 
 import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
-import { permissionsForRole } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
@@ -22,6 +21,9 @@ import {
 import { AppError, forbidden, unauthorised, conflict, badRequest, notFound } from '../lib/errors';
 import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
+import { recordTransfer } from './organisation';
+import * as rbacStore from './rbac-store';
+import * as officerDevices from './officer-devices';
 import { queueNotification } from './notifications';
 
 export interface SessionTokens {
@@ -47,6 +49,8 @@ async function createSession(params: {
   email: string | null;
   agentId?: string | null;
   deviceId?: string | null;
+  /** The officer's machine, discovered at sign-in. Null for an agent handset. */
+  officerDeviceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
   /**
@@ -78,13 +82,14 @@ async function createSession(params: {
     const row = await queryOne<{ id: string }>(
       client,
       `INSERT INTO sessions
-         (user_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at,
-          absolute_expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (user_id, refresh_token_hash, device_id, officer_device_id, ip_address, user_agent,
+          expires_at, absolute_expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [
         params.userId,
         sha256(refreshToken),
         params.deviceId ?? null,
+        params.officerDeviceId ?? null,
         params.ipAddress ?? null,
         params.userAgent ?? null,
         // The rolling expiry can never outlast the absolute one.
@@ -123,7 +128,16 @@ async function createSession(params: {
         phone: params.phone,
         email: params.email,
         role: params.role,
-        permissions: permissionsForRole(params.role),
+        /*
+         * From the database, like the middleware.
+         *
+         * The portal renders its menu from this list, so a grant an
+         * administrator made a minute ago has to be in the session the officer
+         * signs in with — otherwise the API allows something the menu does not
+         * offer, which is the exact drift `permissions.ts` in the portal was
+         * written to prevent.
+         */
+        permissions: await rbacStore.permissionsFor(params.role),
         agentId: params.agentId ?? undefined,
       },
     },
@@ -226,6 +240,28 @@ export async function login(params: {
     deviceId = device?.id ?? null;
   }
 
+  /*
+   * The machine an officer is signing in from, discovered rather than
+   * registered.
+   *
+   * Agents are excluded: their device is the handset, it is already bound and
+   * approved, and giving them a second parallel device record would mean two
+   * places to revoke and one of them forgotten. `deviceForSignIn` refuses a
+   * blocked machine here so the officer gets a sentence, and migration 063
+   * refuses it again at the row so a laptop in somebody else's hands cannot
+   * hold a session whatever the caller does.
+   */
+  const officerDeviceId =
+    user.role === 'agent'
+      ? null
+      : await withTransaction((client) =>
+          officerDevices.deviceForSignIn(client, {
+            userId: user.id,
+            userAgent: params.userAgent ?? null,
+            clientDeviceId: params.deviceIdentifier ?? null,
+          }),
+        );
+
   const { tokens } = await createSession({
     userId: user.id,
     role: user.role,
@@ -234,6 +270,7 @@ export async function login(params: {
     email: user.email,
     agentId: agent?.id ?? null,
     deviceId,
+    officerDeviceId,
     ipAddress: params.ipAddress ?? null,
     userAgent: params.userAgent ?? null,
   });
@@ -307,6 +344,7 @@ export async function refresh(params: {
       id: string;
       user_id: string;
       device_id: string | null;
+      officer_device_id: string | null;
       device_identifier: string | null;
       expires_at: Date;
       absolute_expires_at: Date | null;
@@ -320,7 +358,8 @@ export async function refresh(params: {
       status: string;
     }>(
       client,
-      `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
+      `SELECT s.id, s.user_id, s.device_id, s.officer_device_id, s.expires_at,
+              s.absolute_expires_at, s.revoked_at,
               s.revoked_reason, s.rotated_to_session_id,
               d.device_identifier,
               u.full_name, u.phone, u.email, u.role, u.status
@@ -394,6 +433,10 @@ export async function refresh(params: {
       email: session.email,
       agentId: agent?.id ?? null,
       deviceId: session.device_id,
+      // Carried, not rediscovered: a refresh is the same machine by
+      // definition, and re-deriving it from a header would let a rotation
+      // quietly move a session onto a different device record.
+      officerDeviceId: session.officer_device_id,
       ipAddress: params.ipAddress ?? null,
       // Carried, never recomputed: this is what stops rotation from resetting it.
       absoluteExpiresAt: session.absolute_expires_at,
@@ -610,9 +653,25 @@ async function ownRegisteredNumber(userId: string | null, destination: string): 
   return owner.phone;
 }
 
+/**
+ * What a one-time code is for.
+ *
+ * CITIZEN_STATEMENT is the odd one out and deliberately so: every other
+ * purpose belongs to somebody who already has an account. This one proves that
+ * whoever is asking is holding the handset the taxpayer record names, which is
+ * the only proof available to a person with no login at all.
+ */
+export type OtpPurpose =
+  | 'LOGIN'
+  | 'REGISTRATION'
+  | 'STEP_UP'
+  | 'PASSWORD_RESET'
+  | 'REFEREE_VERIFY'
+  | 'CITIZEN_STATEMENT';
+
 export async function requestOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   userId?: string | null;
 }): Promise<{
   sent: boolean;
@@ -692,7 +751,7 @@ type OtpOutcome =
  */
 export async function verifyOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   code: string;
 }): Promise<{ userId: string | null }> {
   const outcome = await withTransaction<OtpOutcome>(async (client) => {
@@ -866,6 +925,17 @@ export async function changeUserRole(params: {
       entityId: params.targetUserId,
       oldValue: { role: target.role },
       newValue: { role: params.newRole, sessionsEnded },
+      reason: params.reason,
+    });
+
+    // The dated posting record, for the same reason as the territory change
+    // below: an audit entry says what was written, a transfer says what
+    // somebody's posting was on a given date.
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'ROLE',
+      fromValue: { role: target.role },
+      toValue: { role: params.newRole },
       reason: params.reason,
     });
 
@@ -1062,11 +1132,36 @@ export async function setOfficerTerritories(params: {
       reason: params.reason,
     });
 
+    /*
+     * And a dated posting record, beside the audit entry.
+     *
+     * They answer different questions. The audit entry says what changed and
+     * when somebody wrote it; the transfer says who covered which territory
+     * from which date — which is what a revenue dispute asks, and what you
+     * cannot reconstruct by replaying a log and hoping none of it is missing.
+     */
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'TERRITORY',
+      fromValue: { territoryIds: before.map((row) => row.territory_id) },
+      toValue: { territoryIds: [...new Set(params.territoryIds)] },
+      reason: params.reason,
+    });
+
+    /*
+     * The count as well as the sentence.
+     *
+     * The sentence was all this returned, so the officer portal had nothing to
+     * build its own from and rendered the English. `covers` is what the
+     * sentence was counting anyway.
+     */
+    const covers = new Set(params.territoryIds).size;
     return {
+      covers,
       message:
-        params.territoryIds.length === 0
+        covers === 0
           ? `${target.full_name} now covers no territory and will see no revenue figures.`
-          : `${target.full_name} now covers ${new Set(params.territoryIds).size} territory(ies).`,
+          : `${target.full_name} now covers ${covers} territory(ies).`,
     };
   });
 }

@@ -15,8 +15,19 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, KeyValue, Loading, Table } from '../ui';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
+import {
+  Alert,
+  Badge,
+  ErrorAlert,
+  KeyValue,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -34,6 +45,29 @@ interface FoundTaxpayer {
 
 const displayName = (t: FoundTaxpayer) =>
   t.business_name ?? `${t.first_name ?? ''} ${t.last_name ?? ''}`.trim();
+
+interface ByItem {
+  revenueItem: string;
+  payments: number;
+  totalKobo: string;
+}
+
+interface PaidRow {
+  transactionReference: string;
+  paidAt: string | null;
+  revenueItem: string;
+  revenueItemHa: string | null;
+  periodLabel: string | null;
+  amountKobo: string;
+  status: string;
+  returned: boolean;
+  receiptNumber: string | null;
+}
+
+interface PaidHistory {
+  summary: { payments: number; totalKobo: string; returnedKobo: string; byItem: ByItem[] };
+  rows: PaidRow[];
+}
 
 export function TaxpayerRecordsScreen({ user }: { user: User }) {
   const { t } = usePortalI18n();
@@ -66,7 +100,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
     try {
       setResults(await api.get<FoundTaxpayer[]>(`/taxpayers/search?q=${encodeURIComponent(search.trim())}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -75,15 +109,15 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
   const touched = Object.entries(form).filter(([key, value]) => key !== 'reason' && value.trim());
 
   const blockedBecause = ((): string | null => {
-    if (touched.length === 0) return 'Enter the corrected value in whichever field is wrong.';
+    if (touched.length === 0) return t.ofcTrEnterTheCorrectedValue;
     if (form.identityNumber.trim() && !form.identityType) {
-      return 'Name the type of identification when changing the number.';
+      return t.ofcTrNameTheTypeOf;
     }
     if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
-      return 'That date of birth is in the future. Check the year.';
+      return t.birthDateFuture;
     }
     if (form.reason.trim().length < 10) {
-      return 'Say what is being corrected and why, in at least 10 characters. It is the only record of why.';
+      return t.ofcTrSayWhatIsBeing;
     }
     return null;
   })();
@@ -97,8 +131,15 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
       await stepUp('taxpayer.identity.change', user.phone);
       const body: Record<string, string> = { reason: form.reason.trim() };
       for (const [key, value] of touched) body[key] = value.trim();
-      const result = await api.post<{ message: string }>(`/taxpayers/${chosen.id}/identity`, body);
-      setMessage(result.message);
+      const result = await api.post<{ changed: string[] }>(
+        `/taxpayers/${chosen.id}/identity`,
+        body,
+      );
+      setMessage(
+        result.changed.length === 1
+          ? t.ofcTrOneDetailCorrected
+          : t.ofcTrDetailsCorrected.replace('{{n}}', String(result.changed.length)),
+      );
       setForm({
         firstName: '',
         middleName: '',
@@ -113,10 +154,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
       setResults(null);
       setSearch('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -162,14 +200,14 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           )}
 
           {results && results.length > 0 && (
-            <ul className="list">
+            <ul className="list list--rows">
               {results.map((taxpayer) => (
                 <li key={taxpayer.id}>
                   <button type="button" className="list__item" onClick={() => setChosen(taxpayer)}>
                     <div className="list__body">
                       <p className="list__title">{displayName(taxpayer)}</p>
                       <p className="list__meta">
-                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone}
+                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone}
                       </p>
                     </div>
                   </button>
@@ -185,9 +223,9 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
           <h2 className="card__title">{displayName(chosen)}</h2>
           <KeyValue
             items={[
-              ['On record now', displayName(chosen)],
-              ['TIN', chosen.tin ?? 'Not yet assigned'],
-              ['Phone', chosen.phone],
+              [t.ofcTrOnRecordNow, displayName(chosen)],
+              ['TIN', chosen.tin ?? t.tpNotYetAssigned],
+              [t.tpPhone, chosen.phone],
             ]}
           />
 
@@ -272,7 +310,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
 
           <div className="button-row">
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-              {busy ? 'Correcting…' : 'Record this correction'}
+              {busy ? t.ofcTrCorrecting : t.ofcTrRecordThisCorrection}
             </button>
             <button type="button" className="secondary" onClick={() => setChosen(null)}>{t.tpChooseSomeoneElse}</button>
           </div>
@@ -283,8 +321,13 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
         <RegisterStatus taxpayerId={chosen.id} name={displayName(chosen)} />
       )}
 
+      {chosen && (can('report:read:all') || can('report:read:territory')) && (
+        <PaymentHistory taxpayerId={chosen.id} />
+      )}
+
       {chosen && can('taxpayer:obligation:waive') && <Obligations taxpayerId={chosen.id} />}
 
+      {chosen && can('incentive:read:all') && <Entitlements taxpayerId={chosen.id} />}
       {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
     </>
   );
@@ -317,6 +360,142 @@ interface ObligationRow {
  * missing from it — so this sends the current set minus the one being removed,
  * rather than a delete.
  */
+/**
+ * What this person has already paid, and for what.
+ *
+ * The question a taxpayer actually asks, which the platform could not answer:
+ * it knew what was owed and had no view of what had been settled. An officer
+ * who has just found somebody by phone, name or TIN can now answer them
+ * without leaving the record.
+ *
+ * The period defaults to the last twelve months rather than to everything.
+ * "What did I pay this year" is the question people ask — they are reconciling
+ * against a bank statement, or checking a levy they think they paid twice —
+ * and an unbounded list answers a question nobody asked, slowly.
+ */
+function PaymentHistory({ taxpayerId }: { taxpayerId: string }) {
+  const { lang, t } = usePortalI18n();
+  const today = new Date();
+  const yearAgo = new Date(today);
+  yearAgo.setFullYear(today.getFullYear() - 1);
+  const asDate = (value: Date) => value.toISOString().slice(0, 10);
+
+  const [from, setFrom] = useState(asDate(yearAgo));
+  const [to, setTo] = useState(asDate(today));
+  const [history, setHistory] = useState<PaidHistory | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    setHistory(null);
+    api
+      .get<PaidHistory>(
+        `/government/taxpayers/${taxpayerId}/payments?from=${from}&to=${to}`,
+      )
+      .then(setHistory)
+      .catch((caught: unknown) => {
+        setError(asApiError(caught));
+      });
+  }, [taxpayerId, from, to]);
+
+  useEffect(load, [load]);
+
+  return (
+    <div className="card">
+      <h2 className="card__title">{t.ofcPhTitle}</h2>
+      <p className="card__hint">{t.ofcPhIntro}</p>
+
+      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div className="field" style={{ maxWidth: 190 }}>
+          <label htmlFor="ph-from">{t.ofcPhFrom}</label>
+          <input id="ph-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+        </div>
+        <div className="field" style={{ maxWidth: 190 }}>
+          <label htmlFor="ph-to">{t.ofcPhTo}</label>
+          <input id="ph-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+        </div>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      {history === null ? (
+        <Loading rows={2} />
+      ) : (
+        <>
+          <div className="stat-row">
+            <Stat label="ofcPhPaid" value={<Money kobo={history.summary.totalKobo} />} />
+            <Stat label="ofcPhPayments" value={String(history.summary.payments)} />
+            {/*
+              * Only when there is some. A row reading "returned ₦0.00" on every
+              * record makes a reversal look like a normal part of paying tax.
+              */}
+            {history.summary.returnedKobo !== '0' ? (
+              <Stat label="ofcPhReturned" value={<Money kobo={history.summary.returnedKobo} />} />
+            ) : null}
+          </div>
+
+          {history.summary.byItem.length > 0 ? (
+            <>
+              <p className="section-title">{t.ofcPhForWhat}</p>
+              <Table
+                columns={[
+                  { key: 'revenueItem', label: 'ofcPhLevy' },
+                  { key: 'payments', label: 'ofcPhPayments' },
+                  {
+                    key: 'totalKobo',
+                    label: 'ofcPhPaid',
+                    numeric: true,
+                    render: (row: ByItem) => <Money kobo={row.totalKobo} />,
+                  },
+                ]}
+                rows={history.summary.byItem}
+                empty="ofcPhNothingPaid"
+              />
+            </>
+          ) : null}
+
+          <p className="section-title">{t.ofcPhEachPayment}</p>
+          <Table
+            columns={[
+              {
+                key: 'paidAt',
+                label: 'ofcPhWhen',
+                render: (row: PaidRow) => (row.paidAt ? formatDate(row.paidAt) : '—'),
+              },
+              {
+                key: 'revenueItem',
+                label: 'ofcPhLevy',
+                render: (row: PaidRow) => localName(lang, row.revenueItem, row.revenueItemHa),
+              },
+              { key: 'periodLabel', label: 'ofcPhPeriod' },
+              {
+                key: 'amountKobo',
+                label: 'ofcPhAmount',
+                numeric: true,
+                render: (row: PaidRow) => <Money kobo={row.amountKobo} />,
+              },
+              { key: 'receiptNumber', label: 'ofcPhReceipt' },
+              {
+                key: 'status',
+                label: 'appStatus',
+                /*
+                 * A reversal is shown as one. Rendering it as an ordinary
+                 * payment would have somebody reading money back out of the
+                 * account as money paid into it.
+                 */
+                render: (row: PaidRow) =>
+                  row.returned ? <Badge status={row.status} /> : enumLabel(row.status, t),
+              },
+            ]}
+            rows={history.rows}
+            empty="ofcPhNothingPaid"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
 function Obligations({ taxpayerId }: { taxpayerId: string }) {
   const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<ObligationRow[] | null>(null);
@@ -329,7 +508,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       .get<ObligationRow[]>(`/taxpayers/${taxpayerId}/obligations`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -346,17 +525,18 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       const remaining = rows
         .filter((r) => r.status === 'ACTIVE' && r.revenueItemId !== row.revenueItemId)
         .map((r) => r.revenueItemId);
-      const result = await api.put<{ message: string }>(
+      const result = await api.put<{ added: number; waived: number }>(
         `/taxpayers/${taxpayerId}/obligations`,
         { itemIds: remaining, source: 'OFFICER_REVIEW' },
       );
-      setMessage(result.message);
+      setMessage(
+        t.ofcTrObligationsUpdated
+          .replace('{{added}}', String(result.added))
+          .replace('{{waived}}', String(result.waived)),
+      );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -366,7 +546,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 
   return (
     <div className="card card--flush">
-      <div style={{ padding: '18px 18px 0' }}>
+      <div className="card__pad">
         <h2 className="card__title">{t.ofcTrLiableFor}</h2>
         <p className="card__hint">{t.ofcTrWaiveBody}</p>
       </div>
@@ -403,6 +583,126 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 }
 
 
+/**
+ * What a taxpayer is actually entitled to, which nothing had shown anybody.
+ *
+ * `/taxpayers/:id/incentives` has existed on `incentive:read:all` and had no
+ * caller — one of the reads recorded in READ_WITHOUT_A_SCREEN. Programmes
+ * grant entitlement, an officer sitting with a taxpayer is the person asked
+ * about it, and the answer was not on any screen.
+ *
+ * THE DISTINCTION THE ENDPOINT WAS BUILT TO CARRY
+ *
+ * `benefit_tier` is BASE or FULL, and the service's own comment says why it
+ * matters: it was "computed, stored and unit-tested since the additive mode
+ * was added, and returned to nobody: a citizen on an additive programme was
+ * told eligible, which is what a gated programme says too, and the difference
+ * between them is the entire PRD 40 safeguard." It reaches a reader here.
+ *
+ * A programme nobody has evaluated this taxpayer against is its own answer
+ * and not a refusal — `eligible` is null there, and null is not false.
+ */
+interface ProgrammeStanding {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  benefit_type: string;
+  benefit_description: string | null;
+  eligible: boolean | null;
+  reasons: string[] | null;
+  benefit_tier: 'BASE' | 'FULL' | null;
+}
+
+function Entitlements({ taxpayerId }: { taxpayerId: string }) {
+  const { lang, t } = usePortalI18n();
+  const [rows, setRows] = useState<ProgrammeStanding[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api
+      .get<{ programmes: ProgrammeStanding[] }>(`/taxpayers/${taxpayerId}/incentives`)
+      .then((result) => setRows(result.programmes ?? []))
+      .catch((caught) => {
+        setError(asApiError(caught));
+        setRows(null);
+      });
+  }, [taxpayerId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const standing = (row: ProgrammeStanding): string => {
+    if (row.eligible === null || row.eligible === undefined) return t.ofcTrNotEvaluated;
+    if (!row.eligible) return t.ofcTrNotEligible;
+    return row.benefit_tier === 'BASE' ? t.ofcTrBaseOnly : t.ofcTrFullBenefit;
+  };
+
+  return (
+    <div className="card card--flush">
+      <div className="card__pad">
+        <h2 className="card__title">{t.ofcTrEntitledTo}</h2>
+        <p className="card__hint">{t.ofcTrEntitledBody}</p>
+      </div>
+
+      {error ? (
+        <div className="card__pad">
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !rows ? (
+        <div className="card__pad">
+          <Loading rows={3} />
+        </div>
+      ) : (
+        <Table
+          columns={[
+            {
+              key: 'name',
+              label: 'ofcTrProgramme',
+              render: (row: ProgrammeStanding) => localName(lang, row.name, row.name_ha),
+            },
+            {
+              key: 'benefit_type',
+              label: 'ofcTrBenefit',
+              render: (row: ProgrammeStanding) => (
+                <>
+                  <Badge status={row.benefit_type} />
+                  {row.benefit_description && (
+                    <p className="table__sub" style={{ margin: '4px 0 0' }}>
+                      {row.benefit_description}
+                    </p>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: 'eligible',
+              label: 'ofcTrEntitlement',
+              render: (row: ProgrammeStanding) => <span>{standing(row)}</span>,
+            },
+            {
+              /*
+               * The reasons an evaluation recorded, which is the only thing
+               * an officer can act on when somebody asks why not.
+               */
+              key: 'reasons',
+              label: 'ofcTrWhyNot',
+              render: (row: ProgrammeStanding) =>
+                row.reasons && row.reasons.length > 0 ? row.reasons.join('; ') : '\u2014',
+            },
+          ]}
+          rows={rows}
+          empty="ofcNoneProgrammesRunning"
+        />
+      )}
+    </div>
+  );
+}
+
 interface VehicleRow {
   id: string;
   registration_number: string;
@@ -436,7 +736,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
       .get<VehicleRow[]>(`/vehicles?taxpayerId=${taxpayerId}`)
       .then(setVehicles)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -449,18 +749,24 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(`/vehicles/${vehicle.id}/status`, {
-        status,
-        reason,
-      });
-      setMessage(result.message);
+      const result = await api.post<{ registrationNumber: string; to: string }>(
+        `/vehicles/${vehicle.id}/status`,
+        {
+          status,
+          reason,
+        },
+      );
+      setMessage(
+        result.to === 'ACTIVE'
+          ? t.ofcTrVehicleBackInService.replace('{{plate}}', result.registrationNumber)
+          : result.to === 'SUSPENDED'
+            ? t.ofcTrVehicleSuspended.replace('{{plate}}', result.registrationNumber)
+            : t.ofcTrVehicleArchived.replace('{{plate}}', result.registrationNumber),
+      );
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -470,7 +776,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
 
   return (
     <div className="card card--flush">
-      <div style={{ padding: '18px 18px 0' }}>
+      <div className="card__pad">
         <h2 className="card__title">{t.ofcTrVehiclesOnRecord}</h2>
         <p className="card__hint">{t.ofcTrVehiclesBody}</p>
 
@@ -484,6 +790,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
               onChange={(event) => setReason(event.target.value)}
               placeholder={t.ofcTrSampleVehicle}
             />
+            <ReasonRule value={reason} minimum={5} />
           </div>
         )}
       </div>
@@ -576,14 +883,33 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(`/taxpayers/${taxpayerId}/status`, {
+      const result = await api.post<{
+        status: string;
+        outstandingKobo: string;
+      }>(`/taxpayers/${taxpayerId}/status`, {
         status,
         reason: reason.trim(),
       });
-      setMessage(result.message);
+      /*
+       * Composed here, because the sentence changes what an officer does next.
+       *
+       * "No new assessment can be raised and reminders stop" is the operative
+       * half, and "what is already owed remains owed" is the half a citizen
+       * will ring about. Both arrived as the server's English.
+       */
+      setMessage(
+        result.status === 'ACTIVE'
+          ? t.ofcTrOnRegisterAgain.replace('{{name}}', name)
+          : `${t.ofcTrRecordEnded
+              .replace('{{name}}', name)
+              .replace('{{status}}', enumLabel(result.status, t))} ` +
+            (BigInt(result.outstandingKobo) > 0n
+              ? t.ofcTrStillOwedAfterEnding
+              : t.ofcTrNothingWasOutstanding),
+      );
       setReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -623,11 +949,12 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
           onChange={(event) => setReason(event.target.value)}
           placeholder={t.ofcTrSampleClosure}
         />
+        <ReasonRule value={reason} minimum={10} />
       </div>
 
       <div className="button-row">
         <button type="button" disabled={busy || reason.trim().length < 10} onClick={submit}>
-          {busy ? 'Recording…' : status === 'ACTIVE' ? 'Put back on the register' : 'Take off the register'}
+          {busy ? t.ofcTrRecording : status === 'ACTIVE' ? t.ofcTrPutBackOnThe : t.ofcTrTakeOffRegister}
         </button>
       </div>
     </div>

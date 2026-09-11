@@ -1,7 +1,7 @@
 /** Agent home screen (PRD §29, §56). */
 
-import { useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -54,15 +54,22 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
     api
       .get<HomeData>('/agents/me/home')
-      .then(setData)
+      .then((result) => {
+        setData(result);
+        setError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(load, [load]);
 
   // An agent who is not yet cleared is sent to their application rather than
   // shown an empty dashboard (Addendum §25).
@@ -87,13 +94,40 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
   }
 
   if (loading) return <Loading rows={4} />;
-  if (error) return <ErrorAlert error={error} />;
-  if (!data) return null;
 
+  /*
+   * The figures need the server. The quick actions do not, and they used to
+   * go with them.
+   *
+   * `if (error) return <ErrorAlert error={error} />` replaced this whole
+   * screen with one sentence — every quick action included. Four of those
+   * eight are reachable from nowhere else in the application: renewing a
+   * vehicle, checking whether a receipt is real, handing out a distribution,
+   * and registering a cooperative. The tab bar does not carry them, and the
+   * comments beside them say as much.
+   *
+   * So a dropped request took four features off an agent's handset. On an
+   * offline-first application, on the one failure the rest of it is built to
+   * survive: captures queue, drafts are kept, `isConnectivityFailure` exists
+   * precisely so that work continues without a signal. The front door was the
+   * part that did not open.
+   *
+   * `!data` was its own version of the same thing — a blank screen, no
+   * sentence, nothing to press.
+   */
   return (
     <>
       <p style={{ margin: '0 0 10px', fontSize: '0.9rem', color: 'var(--muted)' }}>{t[greetingKey()]}</p>
 
+      {!data ? (
+        <div className="card">
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : (
+      <>
       <section className="headline">
         <p className="headline__label">{t.homeCollectedToday}</p>
         <p className="headline__amount">
@@ -126,6 +160,10 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         </Alert>
       )}
 
+      </>
+      )}
+
+      {/* Always drawn. These are links, not readings. */}
       <p className="section-title">{t.homeQuickActions}</p>
       <div className="grid-2">
         {QUICK_ACTIONS.map((action) => (
@@ -136,6 +174,8 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         ))}
       </div>
 
+      {data && (
+      <>
       <p className="section-title">{t.homeRecentTransactions}</p>
       <div className="card card--flush">
         {data.recentTransactions.length === 0 ? (
@@ -185,6 +225,8 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
           </dd>
         </div>
       </div>
+      </>
+      )}
     </>
   );
 }

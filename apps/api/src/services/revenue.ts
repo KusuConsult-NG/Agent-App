@@ -56,6 +56,14 @@ export async function listItems(
   db: Db,
   options: {
     categoryId?: string;
+    /*
+     * Which arm of government the item's revenue belongs to.
+     *
+     * Mirrors the filter `listCategories` has always had. The row already
+     * carries `authority_name`; what it did not carry was the id, so nothing
+     * could ask for one tier's catalogue without matching on a display name.
+     */
+    authorityId?: string;
     taxpayerType?: string;
     lgaId?: string;
     search?: string;
@@ -68,7 +76,7 @@ export async function listItems(
             ri.required_documents, ri.assessment_rules, ri.commission_eligible,
             rc.name AS category_name, rc.name_ha AS category_name_ha, rc.id AS category_id,
             m.name AS mda_name, m.name_ha AS mda_name_ha,
-            ra.name AS authority_name, ra.name_ha AS authority_name_ha,
+            ra.id AS authority_id, ra.name AS authority_name, ra.name_ha AS authority_name_ha, ra.tier,
             r.id AS rate_id, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
             r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version,
             ri.status, ri.status_reason, ri.status_changed_at
@@ -89,13 +97,15 @@ export async function listItems(
         AND ($3::uuid IS NULL OR cardinality(ri.applicable_lga_ids) = 0
              OR $3 = ANY(ri.applicable_lga_ids))
         AND ($4::text IS NULL OR ri.name ILIKE '%' || $4 || '%' OR ri.code ILIKE '%' || $4 || '%')
-      ORDER BY rc.name, ri.name`,
+        AND ($6::uuid IS NULL OR rc.authority_id = $6)
+      ORDER BY ra.tier, rc.name, ri.name`,
     [
       options.categoryId ?? null,
       options.taxpayerType ?? null,
       options.lgaId ?? null,
       options.search ?? null,
       options.includeWithdrawn ?? false,
+      options.authorityId ?? null,
     ],
   );
 }
@@ -233,6 +243,24 @@ export interface CreateAssessmentParams {
   channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
   invoiceValidityDays?: number;
   ipAddress?: string | null;
+  /*
+   * An amount this platform worked out for itself, for the one case the rate
+   * engine cannot express: a liability that is the sum of many computations
+   * rather than one. PAYE is that case — an employer owes the total of what
+   * was deducted from thirty named people, and taxing the payroll as a single
+   * salary would push the whole of it into the top band.
+   *
+   * This is emphatically not a way for a caller to name a price. No route
+   * passes it; only server code that has already computed the figure from
+   * stored evidence does. And the discipline is not what holds it: migration
+   * 056 refuses a PAYE filing whose assessment amount is not exactly the
+   * schedule total, and that total is itself refused unless it equals the sum
+   * of the schedule's lines. A service that invented a number here would be
+   * caught by the database before the transaction committed.
+   */
+  precomputedAmountKobo?: Kobo;
+  /** Why that figure, recorded on the assessment's trace for an auditor. */
+  precomputedReason?: string;
 }
 
 export interface AssessmentResult {
@@ -253,12 +281,34 @@ export interface AssessmentResult {
 /**
  * Create assessment, invoice and transaction as one atomic obligation.
  *
- * The amount comes from `computeAmount` and nothing else: there is no
- * parameter on this function through which a caller can supply an amount
- * (PRD §31 "No agent-created amounts").
+ * The amount comes from `computeAmount` and nothing a caller sent (PRD §31,
+ * "No agent-created amounts"). The single exception is `precomputedAmountKobo`,
+ * which no route passes and which only server code that has already derived
+ * the figure from stored evidence may use — see its own comment, and migration
+ * 056, which refuses the one liability that uses it unless the assessment
+ * matches the schedule it was computed from.
  */
 export async function createAssessment(params: CreateAssessmentParams): Promise<AssessmentResult> {
-  return withTransaction(async (client) => {
+  return withTransaction((client) => createAssessmentIn(client, params));
+}
+
+/**
+ * The same thing, on a caller's transaction.
+ *
+ * Exists for the one case where an assessment is part of a larger indivisible
+ * act: a PAYE return, where the schedule, its employee lines and the
+ * assessment are one filing. Raising the assessment on its own connection
+ * would commit it independently, so a schedule that then failed to insert
+ * would leave an employer holding an invoice with nothing behind it — a bill
+ * nobody could explain, for a liability the platform has no record of.
+ *
+ * Callers with nothing to join should use `createAssessment` above.
+ */
+export async function createAssessmentIn(
+  client: PoolClient,
+  params: CreateAssessmentParams,
+): Promise<AssessmentResult> {
+  {
     const taxpayer = await queryOne<{
       id: string;
       taxpayer_type: string;
@@ -313,7 +363,32 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
     }
 
     const rate = await resolveRate(client, params.revenueItemId, new Date(), taxpayer.lga_id);
-    const computation = computeAmount(rate, params.inputs);
+    /*
+     * The rate version is resolved either way, so a precomputed assessment
+     * still records which bands were in force when it was made and can be
+     * re-checked years later against them.
+     */
+    const computation =
+      params.precomputedAmountKobo === undefined
+        ? computeAmount(rate, params.inputs)
+        : {
+            amountKobo: params.precomputedAmountKobo,
+            declaredBaseKobo: null,
+            trace: [
+              {
+                step: 'Computed from a filed schedule',
+                detail:
+                  params.precomputedReason ??
+                  'Sum of per-person amounts computed by the platform from a filed return',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+              {
+                step: 'Payable',
+                detail: 'Amount payable to government',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+            ],
+          };
 
     if (computation.amountKobo <= 0n) {
       /*
@@ -485,7 +560,7 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
       expiresAt,
       trace: computation.trace,
     };
-  });
+  }
 }
 
 /**

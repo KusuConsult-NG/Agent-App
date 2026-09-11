@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { compareVersions } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -69,20 +69,22 @@ export function FieldAppScreen() {
       .get<History>('/agents/app-version/history')
       .then(setHistory)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
   useEffect(load, [load]);
 
   const blockedBecause = ((): string | null => {
-    if (!VERSION.test(minimum.trim())) return 'Enter the minimum version as digits and dots, like 1.4.0.';
-    if (!VERSION.test(recommended.trim())) return 'Enter the recommended version as digits and dots, like 1.4.0.';
+    if (!VERSION.test(minimum.trim())) return t.ofcFaEnterTheMinimumVersion;
+    if (!VERSION.test(recommended.trim())) return t.ofcFaEnterTheRecommendedVersion;
     if (compareVersions(minimum.trim(), recommended.trim()) > 0) {
-      return `A minimum of ${minimum.trim()} is above the recommended ${recommended.trim()}, so even a handset on the newest build would be refused.`;
+      return t.ofcFaMinimumAboveRecommended
+        .replace('{{minimum}}', minimum.trim())
+        .replace('{{recommended}}', recommended.trim());
     }
     if (notes.trim().length < 10) {
-      return 'Say why the minimum is moving, in at least 10 characters. It is what an agent who is locked out will be shown.';
+      return t.ofcFaSayWhyTheMinimum;
     }
     return null;
   })();
@@ -99,23 +101,31 @@ export function FieldAppScreen() {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>('/agents/app-version', {
+      const result = await api.post<{
+        minimumVersion: string;
+        devicesLockedOut: number;
+        activeDevices: number;
+      }>('/agents/app-version', {
         minimumVersion: minimum.trim(),
         recommendedVersion: recommended.trim(),
         notes: notes.trim(),
         ...(effectiveFrom ? { effectiveFrom: new Date(effectiveFrom).toISOString() } : {}),
       });
-      setMessage(result.message);
+      setMessage(
+        `${t.ofcFaMinimumNow.replace('{{version}}', result.minimumVersion)} ` +
+          (result.devicesLockedOut === 0
+            ? t.ofcFaNoneBelowIt
+            : t.ofcFaCannotCollect
+                .replace('{{locked}}', String(result.devicesLockedOut))
+                .replace('{{total}}', String(result.activeDevices))),
+      );
       setMinimum('');
       setRecommended('');
       setNotes('');
       setEffectiveFrom('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -156,7 +166,7 @@ export function FieldAppScreen() {
             {
               key: 'version',
               label: 'ofcFaBuild',
-              render: (row: FleetRow) => row.version ?? 'Never reported a version',
+              render: (row: FleetRow) => row.version ?? t.ofcFaNeverReportedAVersion,
             },
             { key: 'devices', label: 'ofcFaHandsets', numeric: true },
             {
@@ -185,10 +195,13 @@ export function FieldAppScreen() {
           {stopping !== null && (
             <p className="field__hint">
               {stopping === 0
-                ? `No active handset is below ${minimum.trim()}.`
-                : `${stopping} of ${history.activeDevices} active handset${
-                    history.activeDevices === 1 ? '' : 's'
-                  } would stop collecting until they update.`}
+                ? t.ofcFaNoHandsetBelow.replace('{{version}}', minimum.trim())
+                : (history.activeDevices === 1
+                    ? t.ofcFaHandsetWouldStop
+                    : t.ofcFaHandsetsWouldStop
+                  )
+                    .replace('{{count}}', String(stopping))
+                    .replace('{{total}}', String(history.activeDevices))}
             </p>
           )}
         </div>
@@ -234,7 +247,7 @@ export function FieldAppScreen() {
 
         <div className="button-row">
           <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-            {busy ? 'Publishing…' : 'Publish this minimum'}
+            {busy ? t.ofcFaPublishing : t.ofcFaPublishThisMinimum}
           </button>
         </div>
       </div>
@@ -271,7 +284,7 @@ export function FieldAppScreen() {
               // The seeded row that shipped with the platform has no author,
               // and saying so is more honest than leaving a dash to be read as
               // missing data.
-              render: (row: PublishedVersion) => row.publishedBy ?? 'Shipped with the platform',
+              render: (row: PublishedVersion) => row.publishedBy ?? t.ofcFaShippedWithThePlatform,
             },
             { key: 'notes', label: 'ofcFaWhy' },
           ]}
