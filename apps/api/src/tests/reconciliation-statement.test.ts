@@ -37,7 +37,7 @@ import {
   startTestServer,
   stopTestServer,
 } from './helpers';
-import { query, queryOne } from '../db/pool';
+import { LOCK_NAMESPACE, query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { developmentGatewayControls } from '../integrations/gateway';
@@ -323,6 +323,116 @@ describe('The gateway’s own words are kept', () => {
       [collected.gatewayReference],
     );
     assert.equal(count?.count, '1');
+  });
+});
+
+/**
+ * The button an officer presses, and the lock it used to walk past.
+ *
+ * The scheduled sweep has two guards — a module-level flag for re-entrancy in
+ * one process, and a cross-instance advisory lock — and the manual route
+ * called `runReconciliation` directly, past both. `withJobLock` exists
+ * because replicas meant "N reconciliation sweeps every six hours, each
+ * asking the gateway about every payment reference in a 48-hour window", and
+ * an officer's button is another door onto exactly that.
+ *
+ * What is asserted here is the refusal, not the absence of corruption. There
+ * was no corruption to prevent: runs are keyed by their own `runId`, the
+ * exception queue already takes the newest finding per transaction, and
+ * `confirmPayment` re-reads under `FOR UPDATE`. The harm was gateway traffic,
+ * and the fix is that a second caller is told what is already running rather
+ * than being allowed to double it — or, worse, being silently skipped, which
+ * is the right answer to a timer and the wrong one to a person.
+ */
+describe('Two reconciliations at once', () => {
+  /** Hold the sweep's lock the way another instance would. */
+  async function holdTheLock(): Promise<() => Promise<void>> {
+    const client = await pool.connect();
+    const held = await client.query<{ locked: boolean }>(
+      'SELECT pg_try_advisory_lock($1, hashtext($2)) AS locked',
+      [LOCK_NAMESPACE.WORKER, 'reconciliation-sweep'],
+    );
+    assert.ok(held.rows[0]?.locked, 'the test could not take the lock it means to hold');
+    return async () => {
+      await client
+        .query('SELECT pg_advisory_unlock($1, hashtext($2))', [
+          LOCK_NAMESPACE.WORKER,
+          'reconciliation-sweep',
+        ])
+        .catch(() => undefined);
+      client.release();
+    };
+  }
+
+  it('refuses the second, and says what is already running', async () => {
+    const release = await holdTheLock();
+    try {
+      const period = PERIOD();
+      const response = await post(
+        '/government/reconciliation/run',
+        { from: period.from.toISOString(), to: period.to.toISOString() },
+        { token: finance },
+      );
+
+      assert.equal(response.status, 409);
+      assert.equal(response.body.error.code, 'RECONCILIATION_ALREADY_RUNNING');
+      assert.ok(
+        /already running/i.test(response.body.error.message),
+        response.body.error.message,
+      );
+      /*
+       * The next step is the point. "Skipped" tells an officer nothing; this
+       * has to say why pressing again is not the answer.
+       */
+      assert.ok(
+        /gateway/i.test(response.body.error.nextStep ?? ''),
+        response.body.error.nextStep,
+      );
+    } finally {
+      await release();
+    }
+  });
+
+  it('refuses a manual recovery for the same reason', async () => {
+    // The sweep recovers unverified payments immediately after reconciling,
+    // so a manual recovery beside it is the same doubled gateway traffic.
+    const release = await holdTheLock();
+    try {
+      const period = PERIOD();
+      const response = await post(
+        '/government/reconciliation/recover',
+        { from: period.from.toISOString(), to: period.to.toISOString() },
+        { token: finance },
+      );
+
+      assert.equal(response.status, 409);
+      assert.equal(response.body.error.code, 'RECONCILIATION_ALREADY_RUNNING');
+    } finally {
+      await release();
+    }
+  });
+
+  it('runs normally once the lock is free, and releases it again', async () => {
+    /*
+     * The half that matters most: a lock taken and not given back would make
+     * the button work once per process lifetime, which is a worse failure
+     * than the one being fixed and would look identical to a busy platform.
+     */
+    const period = PERIOD();
+    const first = await post(
+      '/government/reconciliation/run',
+      { from: period.from.toISOString(), to: period.to.toISOString() },
+      { token: finance },
+    );
+    assert.equal(first.status, 200);
+
+    const second = await post(
+      '/government/reconciliation/run',
+      { from: period.from.toISOString(), to: period.to.toISOString() },
+      { token: finance },
+    );
+    assert.equal(second.status, 200, 'the lock was not released after the first run');
+    assert.notEqual(second.body.runId, first.body.runId);
   });
 });
 

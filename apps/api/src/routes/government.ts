@@ -1122,19 +1122,101 @@ governmentRouter.get(
 // Reconciliation and settlement (PRD §46, §47)
 // ---------------------------------------------------------------------------
 
+/**
+ * The button that runs reconciliation now, and the lock it used to walk past.
+ *
+ * WHAT WAS WRONG
+ *
+ * This called `runReconciliation` directly, past both guards the scheduled
+ * path has: the module-level `sweepInFlight` boolean, and the cross-instance
+ * advisory lock `withJobLock` takes. So a finance officer pressing the button
+ * during a sweep — or twice, having had no feedback the first time — started
+ * a second full pass.
+ *
+ * WHAT THAT DOES AND DOES NOT COST, MEASURED AGAINST THE CODE
+ *
+ * It does not corrupt anything, and it is worth saying why rather than
+ * assuming either way:
+ *
+ *   * `runReconciliation` writes only `reconciliation_runs` and
+ *     `reconciliation_records`, both under a fresh `runId`. Two passes produce
+ *     two independent, complete record sets rather than interfering.
+ *   * The worklist is already protected. `exceptionQueue` takes the NEWEST
+ *     finding per transaction, deliberately — its own comment describes the
+ *     bug where the same item appeared eight times with eight Resolve
+ *     buttons. A duplicate pass cannot multiply the queue.
+ *   * `confirmPayment`, on the recovery path, re-reads the payment under
+ *     `FOR UPDATE` and refuses anything not in a confirmable state.
+ *
+ * What it does cost is the gateway, and that is precisely what the lock is
+ * for. `withJobLock` exists because replicas meant "N reconciliation sweeps
+ * every six hours, each asking the gateway about every payment reference in a
+ * 48-hour window" — and an officer's button is another door onto the same
+ * harm, one the lock was never told about.
+ *
+ * WHY A REFUSAL RATHER THAN A SKIP
+ *
+ * The scheduled path answers contention with `{ skipped: true }`, which is
+ * right for a timer and wrong for a person. An officer who presses Reconcile
+ * and is handed "skipped" has learned nothing, and may have pressed precisely
+ * because they distrust the last sweep. So the lock is taken, and losing it
+ * is a 409 that says what is already running and what to do about it.
+ *
+ * `withJobLock` rather than `runJob`: a person pressing a button is not the
+ * scheduled sweep, and recording it as one would put a liveness reading
+ * against `reconciliation-sweep` that no worker produced — the reading the
+ * job-run records exist to make trustworthy.
+ */
+const RECONCILIATION_LOCK = 'reconciliation-sweep';
+
+/** The pass another caller is running, for a refusal that names it. */
+async function reconciliationInFlight(): Promise<string> {
+  const running = await queryOne<{ period_start: Date; period_end: Date; started_at: Date }>(
+    pool,
+    `SELECT period_start, period_end, started_at FROM reconciliation_runs
+      WHERE status = 'RUNNING' ORDER BY started_at DESC LIMIT 1`,
+  );
+  /*
+   * There may be no row yet: the run is inserted after the gateway statement
+   * has been fetched, which is the long part. "One is running and has not
+   * reached the point of recording itself" is still the truth, and better
+   * said plainly than dressed up with figures that do not exist.
+   */
+  if (!running) {
+    return 'A reconciliation pass is already running and has not yet recorded its window.';
+  }
+  return (
+    `A reconciliation covering ${running.period_start.toISOString()} to ` +
+    `${running.period_end.toISOString()} has been running since ` +
+    `${running.started_at.toISOString()} and has not finished.`
+  );
+}
+
 governmentRouter.post(
   '/reconciliation/run',
   requirePermission('payment:reconcile'),
   validateBody(
     z.object({ from: z.string().datetime(), to: z.string().datetime() }),
     async (req, res, data) => {
-      const result = await reconciliation.runReconciliation({
-        from: new Date(data.from),
-        to: new Date(data.to),
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.json(result);
+      const outcome = await withJobLock(RECONCILIATION_LOCK, () =>
+        reconciliation.runReconciliation({
+          from: new Date(data.from),
+          to: new Date(data.to),
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+
+      if (!outcome.ran) {
+        throw conflict(
+          'RECONCILIATION_ALREADY_RUNNING',
+          await reconciliationInFlight(),
+          'Wait for it to finish and open the run it produced. Starting a second pass asks ' +
+            'the gateway about every reference again and tells you nothing the first will not.',
+        );
+      }
+
+      res.json(outcome.value);
     },
   ),
 );
@@ -1150,12 +1232,30 @@ governmentRouter.post(
       limit: z.number().int().min(1).max(500).default(200),
     }),
     async (_req, res, data) => {
-      const result = await reconciliation.recoverUnverifiedPayments({
-        from: new Date(data.from),
-        to: new Date(data.to),
-        limit: data.limit,
-      });
-      res.json(result);
+      /*
+       * The same lock, for the same reason. Recovery asks the gateway to
+       * verify every unconfirmed payment in the window one at a time, and the
+       * scheduled sweep runs it immediately after reconciling — so a manual
+       * recovery alongside a sweep is the doubled gateway traffic again.
+       */
+      const outcome = await withJobLock(RECONCILIATION_LOCK, () =>
+        reconciliation.recoverUnverifiedPayments({
+          from: new Date(data.from),
+          to: new Date(data.to),
+          limit: data.limit,
+        }),
+      );
+
+      if (!outcome.ran) {
+        throw conflict(
+          'RECONCILIATION_ALREADY_RUNNING',
+          await reconciliationInFlight(),
+          'Wait for it to finish. The scheduled sweep recovers unverified payments itself, ' +
+            'so the pass already running will have done this.',
+        );
+      }
+
+      res.json(outcome.value);
     },
   ),
 );
