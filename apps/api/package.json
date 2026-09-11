@@ -32,12 +32,12 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.1",
     "@types/pdfkit": "^0.13.5",
     "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.5",
     "@types/web-push": "^3.6.4",
-    "tsx": "^4.19.2",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }
 }
