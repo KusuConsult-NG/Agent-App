@@ -34,3 +34,31 @@ export function endOfDay(date: Date): Date {
   last.setHours(23, 59, 59, 999);
   return last;
 }
+
+/*
+ * ON WHOSE CLOCK
+ *
+ * `setHours` works in the process's local zone, and so does the midnight `pg`
+ * parsed the DATE into. Both skews are therefore the same one, and cancel: the
+ * window this produces is [local midnight, local end of day], which is the
+ * whole of the day whatever the process is set to.
+ *
+ * It is not the whole of the day in Africa/Lagos unless the process is. This
+ * platform never assumes that — everywhere the question is genuinely "what
+ * time was it for the person", the zone is named outright (`AT TIME ZONE
+ * 'Africa/Lagos'` in fraud.ts and officer-inbox.ts, `timeZone` in the
+ * reminders' Intl options) — so on a UTC process this window runs from 01:00
+ * on the day to 00:59 the next morning, Plateau time.
+ *
+ * That hour is deliberately left alone. It errs late: a certificate lapses an
+ * hour after the day it names rather than an hour before, and the only instant
+ * it excludes is between midnight and 01:00 on the opening day, when nobody is
+ * presenting papers to anybody. Naming the zone here would mean also naming it
+ * at the parse, and the honest fix for that is a date layer that never makes a
+ * `Date` out of a DATE at all — worth doing deliberately, not as a side effect
+ * of this.
+ *
+ * The one deployment where the cancellation fails is a process at a NEGATIVE
+ * UTC offset, where `toISOString().slice(0, 10)` on the result prints the
+ * following day. Plateau State is UTC+1.
+ */
