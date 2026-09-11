@@ -258,10 +258,29 @@ describe('and the states that still must not count as revenue', () => {
  * in is the point: a new module using the confirmed-payment set correctly
  * passes without anybody editing a list of blessed filenames.
  *
- * Requiring two recognised states, rather than one, is what keeps `paye.ts`
- * and `connections.ts` out of it. Those name a different table's statuses —
- * ('PAYMENT_CONFIRMED','RECEIPTED','SETTLED') — which collides with this
- * domain on the single word SETTLED and means something else entirely.
+ * Requiring two recognised states, rather than one, is what lets a failure
+ * tally through. It also let a real defect through, and the correction is
+ * worth keeping rather than quietly editing away.
+ *
+ * WHAT THIS PARAGRAPH USED TO SAY, AND WHY IT WAS WRONG
+ *
+ * It said the rule "keeps `paye.ts` and `connections.ts` out of it. Those name
+ * a different table's statuses — ('PAYMENT_CONFIRMED','RECEIPTED','SETTLED') —
+ * which collides with this domain on the single word SETTLED and means
+ * something else entirely."
+ *
+ * All three of those lists read `FROM transactions tr`. They were not another
+ * table's statuses; `transactions` has no PAYMENT_CONFIRMED and no RECEIPTED,
+ * and its CHECK constraint says so. Two of the three values could never match
+ * anything, so the set meant `SETTLED` alone, and `paid_last_year_kobo` on
+ * three enforcement worklists missed every naira that was verified or
+ * receipted but not yet settled — which is up to 72 hours of ordinary
+ * collections, shown as a money column beside somebody's name on a list of
+ * people to chase.
+ *
+ * The exemption was mine and the reason given for it was not checked. So the
+ * test below does not take anybody's word for which table a status belongs to:
+ * it asks the schema.
  */
 describe('the definition of collected money is not written out by hand', () => {
   const RECOGNISED = new Set([
@@ -339,6 +358,118 @@ describe('the definition of collected money is not written out by hand', () => {
       'these name recognised states in a set that is neither the recognised one nor ' +
         'the confirmed-payment one; import REVENUE_RECOGNISED_STATES rather than ' +
         `retyping it:\n  ${offenders.join('\n  ')}`,
+    );
+  });
+
+  /*
+   * The second rule, which needs no exemption list at all.
+   *
+   * Every status literal compared against `transactions` must be a value that
+   * table's CHECK constraint allows. There is no judgement in this one and
+   * nothing to argue about: a value the column cannot hold matches no row, so
+   * naming it is always a mistake, whatever the query meant to say.
+   *
+   * The allowed set is read from the database rather than written down here,
+   * so adding a status in a migration does not make this fail, and removing
+   * one makes it fail in exactly the places that still name it.
+   */
+  it('never compares a transaction status against a value the column cannot hold', async () => {
+    const constraint = await queryOne<{ def: string }>(
+      pool,
+      `SELECT pg_get_constraintdef(oid) AS def
+         FROM pg_constraint
+        WHERE conrelid = 'transactions'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%status%'`,
+    );
+    assert.ok(constraint, 'transactions has a CHECK constraint naming status');
+    const allowed = new Set(
+      [...constraint!.def.matchAll(/'([A-Z_]+)'::text/g)].map((m) => m[1]!),
+    );
+    assert.ok(allowed.size > 5, `read ${allowed.size} statuses from the constraint`);
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) return walk(full);
+        return full.endsWith('.ts') ? [full] : [];
+      });
+
+    const root = join(__dirname, '..');
+    const files = ['services', 'routes', 'jobs', 'lib', 'integrations', 'middleware']
+      .map((dir) => join(root, dir))
+      .filter((dir) => {
+        try {
+          return statSync(dir).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+      .flatMap(walk);
+
+    const offenders: string[] = [];
+    let listsChecked = 0;
+
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      const relative = file.slice(root.length + 1);
+
+      /*
+       * Per SQL statement, not per file.
+       *
+       * The first version of this collected aliases across the whole file and
+       * reported `p.status names 'VERIFIED'` in reports.ts and `t.status names
+       * 'ACTIVE'` in government.ts. Both were wrong: those files bind `p` to
+       * `payments` and `t` to `taxpayers` in other queries, and an alias means
+       * whatever the statement it appears in says it means. So each template
+       * literal is examined on its own, which is the scope SQL actually gives
+       * an alias.
+       */
+      for (const [statement] of source.matchAll(/`[^`]*`/g)) {
+        if (!/\btransactions\b/i.test(statement)) continue;
+
+        const aliases = new Set(
+          [...statement.matchAll(
+            /\b(?:FROM|JOIN)\s+transactions\s+(?:AS\s+)?([a-z_][a-z0-9_]*)/gi,
+          )]
+            .map((m) => m[1]!)
+            .filter((name) => !['on', 'where', 'set', 'using', 'group', 'order'].includes(name)),
+        );
+        if (/\b(?:FROM|JOIN)\s+transactions\b(?!\s+(?:AS\s+)?[a-z_])/i.test(statement)) {
+          aliases.add('transactions');
+        }
+        if (aliases.size === 0) continue;
+
+        for (const alias of aliases) {
+          const pattern = new RegExp(
+            `\\b${alias}\\.status\\s*(?:=\\s*('[A-Z_]+')|IN\\s*\\(([^)]*)\\))`,
+            'g',
+          );
+          for (const match of statement.matchAll(pattern)) {
+            const clause = match[1] ?? match[2] ?? '';
+            const named = [...clause.matchAll(/'([A-Z_]+)'/g)].map((f) => f[1]!);
+            if (named.length === 0) continue;
+            listsChecked += 1;
+            for (const status of named) {
+              if (!allowed.has(status)) {
+                offenders.push(
+                  `${relative}: ${alias}.status names '${status}', which transactions cannot hold`,
+                );
+              }
+            }
+          }
+        }
+      }
+    }
+
+    assert.ok(
+      listsChecked > 0,
+      'no transaction-status comparison was found at all, so this guard is inert',
+    );
+    assert.deepEqual(
+      offenders,
+      [],
+      `these compare a transaction status against a value the column cannot hold:\n  ${offenders.join('\n  ')}`,
     );
   });
 

@@ -67,6 +67,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { scopeParams, type ReportScope } from './report-scope';
 import { recordAudit } from './audit';
 import { badRequest, notFound } from '../lib/errors';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 
 /**
  * The lawful basis cited on edges this platform derives for itself.
@@ -550,7 +551,7 @@ export async function coverageLeads(
               SELECT SUM(tr.amount_kobo)
                 FROM transactions tr
                WHERE tr.taxpayer_id = t.id
-                 AND tr.status IN ('PAYMENT_CONFIRMED', 'RECEIPTED', 'SETTLED')
+                 AND tr.status IN ${REVENUE_STATES_SQL}
                  AND tr.created_at > now() - interval '1 year'
             ), 0)::text                          AS paid_last_year_kobo
        FROM commercial c
