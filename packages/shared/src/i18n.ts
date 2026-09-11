@@ -1662,6 +1662,7 @@ export interface TranslationDictionary {
   ofcPfCollectedByAgents: string;
   ofcPfFiguresCoverTopAgents: string;
   ofcLvRollIsCapped: string;
+  ofcOvAgentListIsCapped: string;
   ofcPfTaxpayersOnboarded: string;
   ofcPfAgentsWorked: string;
   ofcPfOpenFraudFlags: string;
@@ -5329,6 +5330,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfCollectedByAgents: "Collected by agents",
     ofcPfFiguresCoverTopAgents: "Showing the {{n}} highest-collecting agents, which is all this report returns. The figures above cover only those — an agent below that line is not counted, including one carrying an open fraud flag. The fraud queue lists every flag.",
     ofcLvRollIsCapped: "Showing the {{n}} most recently registered, which is all this search returns. Anyone registered earlier is not on this list — narrow it by LGA or by levy to see them.",
+    ofcOvAgentListIsCapped: "This list holds the {{n}} most recently registered agents. An agent who joined before them cannot be chosen here, which is most of the long-serving ones.",
     ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
     ofcPfAgentsWorked: "Agents who worked",
     ofcPfOpenFraudFlags: "Open fraud flags",
@@ -8797,6 +8799,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPfCollectedByAgents: "Abin da wakilai suka karba",
     ofcPfFiguresCoverTopAgents: "Ana nuna wakilai {{n}} da suka fi karbar kudi, wanda shi ne duk abin da wannan rahoto ke bayarwa. Jimillar da ke sama ta kunshi su kadai — ba a lissafa wakilin da ke kasa da wannan layin ba, har da wanda ke da alamar zamba a bude. Jerin zamba yana nuna kowace alama.",
     ofcLvRollIsCapped: "Ana nuna {{n}} da aka fi sabon yin rajista da su, wanda shi ne duk abin da wannan bincike ke bayarwa. Duk wanda ya yi rajista tun da farko ba ya cikin wannan jerin — ka rage shi da karamar hukuma ko da harajin don ka gan su.",
+    ofcOvAgentListIsCapped: "Wannan jerin yana dauke da wakilai {{n}} da aka fi sabon yin rajista da su. Wakilin da ya shigo kafin su ba za a iya zabar shi a nan ba, wanda hakan ya shafi yawancin tsofaffin wakilai.",
     ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
     ofcPfAgentsWorked: "Wakilan da suka yi aiki",
     ofcPfOpenFraudFlags: "Alamun zamba a bude",

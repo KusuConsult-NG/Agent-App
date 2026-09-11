@@ -382,7 +382,23 @@ export function FraudScreen() {
  */
 interface AuditQuery {
   key: string;
-  label: string;
+  /*
+   * A dictionary key, not a sentence.
+   *
+   * Typed as one so it cannot be anything else. It was `string`, and the five
+   * entries below all hold keys, and the button drew `{query.label}` straight
+   * out — so an auditor opening this screen was offered five buttons labelled
+   * `ofcOvReversedAfterPayment` and the like, in whichever language they had
+   * chosen, since a key is the same identifier in both.
+   *
+   * `prompt` below was already `keyof TranslationDictionary` and already drawn
+   * through `t[...]`, which is what the label needed and did not have. Nothing
+   * caught it: a key is not English prose, so the English-literal lint has no
+   * quarrel with it; these keys do exist in the dictionary, so the Hausa
+   * coverage guard counts them as translated; and no test had ever rendered
+   * this card.
+   */
+  label: keyof TranslationDictionary;
   path: string;
   /** What must be picked first. Absent means the question can be asked as it is. */
   parameter?: {
@@ -712,7 +728,10 @@ export function AuditScreen() {
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<ChainAnswer | null>(null);
-  const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
+  const [queryResult, setQueryResult] = useState<{
+    label: keyof TranslationDictionary;
+    rows: any[];
+  } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
   /*
    * Kept in the URL and in this session. An auditor who filtered to one action,
@@ -833,7 +852,7 @@ export function AuditScreen() {
                 }
               }}
             >
-              {query.label}
+              {t[query.label]}
             </button>
           ))}
         </div>
@@ -855,7 +874,7 @@ export function AuditScreen() {
         <div className="card card--flush">
           <div className="card__pad">
             <div className="card__header">
-              <h2 className="card__title">{queryResult.label}</h2>
+              <h2 className="card__title">{t[queryResult.label]}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
@@ -961,6 +980,23 @@ export function AuditScreen() {
  * taxpayer:read:all, so none of these selects can present a choice the query
  * would then refuse.
  */
+/**
+ * The most agents this picker can offer, which is the endpoint's own ceiling.
+ *
+ * `/agents` clamps to 200 and orders by `created_at DESC`, so the select holds
+ * the 200 most recently registered. An agent who joined before them cannot be
+ * chosen — and for an audit that is the wrong 200 to keep, because the subject
+ * of an investigation is more often a long-serving agent than last month's
+ * intake.
+ *
+ * Taxpayers on this same screen are searched rather than listed, for the
+ * reason given below: there are more of them than any select should hold.
+ * Agents were judged few enough to list, and at some point PSIRS stops being
+ * an organisation where that is true. Until the picker can be searched or
+ * filtered by LGA, saying so is the honest half of the fix.
+ */
+const AGENT_OPTION_LIMIT = 200;
+
 function AuditQueryParameters({
   query,
   onCancel,
@@ -1009,7 +1045,7 @@ function AuditQueryParameters({
     setOptionsFailed(false);
     if (source === 'agents') {
       api
-        .get<{ agents: any[] } | any[]>('/agents?limit=200')
+        .get<{ agents: any[] } | any[]>(`/agents?limit=${AGENT_OPTION_LIMIT}`)
         .then((data) => {
           const list = Array.isArray(data) ? data : data.agents;
           setOptions(
@@ -1138,6 +1174,11 @@ function AuditQueryParameters({
         <ReferenceListFailure
           list={{ failed: optionsFailed, reload: () => setAttempt((n) => n + 1) }}
         />
+        {source === 'agents' && options && options.length >= AGENT_OPTION_LIMIT && (
+          <Alert kind="info">
+            {t.ofcOvAgentListIsCapped.replace('{{n}}', String(options.length))}
+          </Alert>
+        )}
       </div>
 
       {query.period && (
