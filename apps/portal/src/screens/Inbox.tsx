@@ -43,11 +43,26 @@ interface Notification {
 export function InboxScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = usePortalI18n();
   const [rows, setRows] = useState<Notification[] | null>(null);
-  const [unread, setUnread] = useState(0);
+  /*
+   * Null is "not known", and it has to be distinguishable from zero.
+   *
+   * This counter used to start at 0 and stay there when the read failed, so a
+   * refused request put the figure `0` under "Not yet read" -- and under
+   * "Needing attention now", from a `critical` list derived off rows the
+   * screen did not have. Neither is a missing answer. Both are answers.
+   */
+  const [unread, setUnread] = useState<number | null>(null);
   const [unreadOnly, setUnreadOnly] = useState(true);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Kept apart from `error`, which belongs to the button somebody just
+   * pressed. A failed mark-read is about that row; a failed load is about the
+   * whole list, and the two want to be said in different places.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const result = await api.get<{ notifications: Notification[]; unread: number }>(
         `/government/inbox?unreadOnly=${unreadOnly}`,
@@ -55,8 +70,20 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
       setRows(result.notifications);
       setUnread(result.unread);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      setRows([]);
+      if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      else if (caught instanceof Error) {
+        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      /*
+       * `setRows([])` printed "Nothing has been raised for you." This is the
+       * screen the platform's own alarms arrive on -- a stalled job, a
+       * collection that has stopped -- and that sentence is the one answer
+       * that ends the reading. A list that could not be read is not an empty
+       * list, and switching the filter is not a reason to keep showing rows
+       * fetched under the other one.
+       */
+      setRows(null);
+      setUnread(null);
     }
   }, [unreadOnly]);
 
@@ -97,9 +124,18 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
         </Alert>
       )}
 
+      {/*
+        * A dash where a figure is not known. Both of these used to read `0`
+        * from a failed read -- and zero unread, zero needing attention, is
+        * precisely the state an officer closes the screen on.
+        */}
       <div className="stat-grid">
-        <Stat label="ofcInUnread" value={String(unread)} variant={unread > 0 ? 'alert' : undefined} />
-        <Stat label="ofcInCritical" value={String(critical.length)} />
+        <Stat
+          label="ofcInUnread"
+          value={unread === null ? '—' : String(unread)}
+          variant={unread !== null && unread > 0 ? 'alert' : undefined}
+        />
+        <Stat label="ofcInCritical" value={rows === null ? '—' : String(critical.length)} />
       </div>
 
       <div className="card card--flush">
@@ -119,7 +155,7 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
             <button
               type="button"
               className="small secondary"
-              disabled={unread === 0}
+              disabled={unread === null || unread === 0}
               onClick={() => act(async () => { await api.post('/government/inbox/read-all', {}); })}
             >
               {t.ofcInReadAll}
@@ -127,7 +163,19 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
           </div>
         </div>
 
-        {!rows ? (
+        {loadError ? (
+          /*
+            In the table's place, because that is where the list would have
+            been. Reloading the page was the only way out of this before, and
+            the screen did not say so.
+          */
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={() => void load()}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !rows ? (
           <Loading />
         ) : (
           <Table
