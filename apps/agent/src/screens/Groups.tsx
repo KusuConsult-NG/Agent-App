@@ -93,15 +93,29 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const { t } = useI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Kept apart from `error`, the same way the support screen keeps them.
+   *
+   * "No groups yet. When you meet a cooperative, a market association or a
+   * union, register it here" is what the empty list says, and `setGroups([])`
+   * said it from a failed request. That is not only untrue, it is an
+   * instruction: an agent who has already registered a market association and
+   * is told they have none is being invited to register it a second time.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadError(null);
     try {
       const result = await api.get<{ groups: GroupRow[] }>('/groups?limit=100');
       setGroups(result.groups);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      setGroups([]);
+      if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      else if (caught instanceof Error) {
+        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      setGroups(null);
     }
   }, []);
 
@@ -122,13 +136,20 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       <button type="button" onClick={() => navigate('/groups/new')}>{t.grpRegister}</button>
 
-      {groups === null && <Loading rows={3} />}
-
-      {groups?.length === 0 && (
+      {loadError ? (
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={() => void load()}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : groups === null ? (
+        <Loading rows={3} />
+      ) : groups.length === 0 ? (
         <Empty>
           {t.grpEmpty}
         </Empty>
-      )}
+      ) : null}
 
       {groups && groups.length > 0 && (
         <ul className="list">
