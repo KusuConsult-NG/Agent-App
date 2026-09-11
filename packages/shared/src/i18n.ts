@@ -134,6 +134,16 @@ export interface TranslationDictionary {
   errPaymentUnconfirmed: string;
   errPaymentPendingReconciliation: string;
   errPaymentFailed: string;
+  errTrainingScoreBelowPassMark: string;
+  errPhoneAlreadyRegistered: string;
+  errKycAlreadyCleared: string;
+  errDeviceBeforeApproval: string;
+  errDeviceRevokedCannotReregister: string;
+  errNoBankAccountOnRecord: string;
+  errBankDetailsUnchanged: string;
+  errBankChangeAlreadyPending: string;
+  errBankChangeAlreadySettled: string;
+  errPayoutInFlight: string;
   errAgentNotCleared: string;
   errDeviceNotRegistered: string;
   errRateLimited: string;
@@ -3910,6 +3920,23 @@ export const translations: Record<Language, TranslationDictionary> = {
       'The payment has been received but is waiting for settlement. Do not collect again. The receipt is issued as soon as the government account has the money.',
     errPaymentFailed:
       'The payment did not go through. No money has been taken from the taxpayer. You can start it again.',
+    errTrainingScoreBelowPassMark:
+      'You scored {{score}}% on {{module}}. You need at least {{passMark}}% to pass. Go through the module again and retake it.',
+    errPhoneAlreadyRegistered:
+      'An account already exists with this phone number. Sign in instead of applying again.',
+    errKycAlreadyCleared: 'Your identity has already been verified. There is nothing more to do here.',
+    errDeviceBeforeApproval:
+      'You can register this phone once PSIRS has approved your application. You will be told when the review is done.',
+    errDeviceRevokedCannotReregister:
+      'This phone has been withdrawn and cannot be registered again. Use a different phone.',
+    errNoBankAccountOnRecord:
+      'There is no bank account on your record yet, so there is nothing to change. The account is taken on the application form.',
+    errBankDetailsUnchanged: 'Those are the details already on your record. Nothing would change.',
+    errBankChangeAlreadyPending:
+      'A change to your bank account is already with an officer. It has to be approved or refused before you can ask for another.',
+    errBankChangeAlreadySettled: 'A decision has already been made on this change.',
+    errPayoutInFlight:
+      'A payout has not reached your account yet. Your bank details cannot change while money is on its way to them.',
     errAgentNotCleared:
       'You are not yet cleared to collect revenue. Your application must be completed and approved first.',
     errDeviceNotRegistered:
@@ -7340,6 +7367,23 @@ export const translations: Record<Language, TranslationDictionary> = {
       'An karbi kudin amma ana jiran a sasanta shi. Kada ka sake karba. Za a bayar da rasit da zarar kudin ya isa asusun gwamnati.',
     errPaymentFailed:
       'Biyan kudin bai yi nasara ba. Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake farawa.',
+    errTrainingScoreBelowPassMark:
+      'Ka samu kashi {{score}} a {{module}}. Kana bukatar akalla kashi {{passMark}} ka ci jarrabawar. Ka sake nazarin darasin sannan ka sake gwadawa.',
+    errPhoneAlreadyRegistered:
+      'An riga an bude asusu da wannan lambar waya. Ka shiga maimakon ka sake nema.',
+    errKycAlreadyCleared: 'An riga an tantance sunanka. Babu sauran abin yi a nan.',
+    errDeviceBeforeApproval:
+      'Za ka iya yin rajistar wannan wayar bayan PSIRS ta amince da bukatarka. Za a sanar da kai idan an gama dubawa.',
+    errDeviceRevokedCannotReregister:
+      'An janye wannan wayar, ba za a sake yin rajistarta ba. Ka yi amfani da wata wayar.',
+    errNoBankAccountOnRecord:
+      'Babu asusun banki a rikodinka tukuna, don haka babu abin canzawa. Ana daukar asusun a takardar neman aiki.',
+    errBankDetailsUnchanged: 'Wadannan su ne bayanan da ke rikodinka. Babu abin da zai canza.',
+    errBankChangeAlreadyPending:
+      'Canjin asusun bankinka yana hannun jami’i. Sai an amince ko an ki shi kafin ka nemi wani.',
+    errBankChangeAlreadySettled: 'An riga an yanke shawara kan wannan canjin.',
+    errPayoutInFlight:
+      'Akwai kudin da ba su kai asusunka ba tukuna. Ba za a canza bayanan bankinka ba yayin da kudi ke kan hanya zuwa gare su.',
     errAgentNotCleared:
       'Ba a ba ka izinin karbar haraji ba tukuna. Dole a kammala bukatarka a kuma amince da ita.',
     errDeviceNotRegistered:

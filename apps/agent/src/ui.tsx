@@ -69,6 +69,29 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   NETWORK: 'errNetwork',
   UPLOAD_FAILED: 'errUploadFailed',
   UNKNOWN: 'errRequestFailed',
+  /*
+   * BECOMING AN AGENT, AND BEING PAID
+   *
+   * The journey an agent has to complete before they can collect anything,
+   * and the account the money then goes to. Every refusal on it reached them
+   * in English — this map held thirteen codes and not one of them was on
+   * this path, in an application that has offered Hausa since it was built.
+   *
+   * Each has one fixed meaning, which is the test the comment above sets.
+   * Five of them had no code specific enough to key on at all and were
+   * raised as INVALID_REQUEST or FORBIDDEN; they were given one first,
+   * because a sentence nobody can name is a sentence nobody can translate.
+   */
+  TRAINING_SCORE_BELOW_PASS_MARK: 'errTrainingScoreBelowPassMark',
+  PHONE_ALREADY_REGISTERED: 'errPhoneAlreadyRegistered',
+  KYC_ALREADY_CLEARED: 'errKycAlreadyCleared',
+  DEVICE_BEFORE_APPROVAL: 'errDeviceBeforeApproval',
+  DEVICE_REVOKED_CANNOT_REREGISTER: 'errDeviceRevokedCannotReregister',
+  NO_BANK_ACCOUNT_ON_RECORD: 'errNoBankAccountOnRecord',
+  BANK_DETAILS_UNCHANGED: 'errBankDetailsUnchanged',
+  BANK_CHANGE_ALREADY_PENDING: 'errBankChangeAlreadyPending',
+  BANK_CHANGE_ALREADY_SETTLED: 'errBankChangeAlreadySettled',
+  PAYOUT_IN_FLIGHT: 'errPayoutInFlight',
 };
 
 /**
@@ -85,11 +108,32 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
  * is worse than the English, because the reader cannot tell the two apart.
  */
 export function errorText(
-  error: { code: string; message: string },
+  error: { code: string; message: string; details?: { field?: string; issue: string }[] },
   t: TranslationDictionary,
 ): string {
   const translated = TRANSLATED_ERRORS[error.code];
-  return translated ? (t[translated] as string) : error.message;
+  if (!translated) return error.message;
+  /*
+   * Figures come out of `details`, not out of the English sentence.
+   *
+   * The training refusal names a score and a pass mark, and those are the
+   * numbers the agent is actually looking for. Parsing them back out of the
+   * server's prose would break the moment somebody improved the wording —
+   * silently, and in the language nobody testing it reads — so the server
+   * sends them as fields and the placeholder names match.
+   *
+   * A translation with no placeholders is unaffected, and a placeholder the
+   * server did not send is left alone rather than replaced with a blank: a
+   * sentence with a visible gap in it is a bug somebody reports, and one
+   * reading "You scored % on" is a bug they cannot describe.
+   */
+  const sentence = t[translated] as string;
+  if (!error.details?.length || !sentence.includes('{{')) return sentence;
+  return error.details.reduce(
+    (text, detail) =>
+      detail.field ? text.replace(`{{${detail.field}}}`, detail.issue) : text,
+    sentence,
+  );
 }
 
 /**
