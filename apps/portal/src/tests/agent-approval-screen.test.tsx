@@ -101,6 +101,66 @@ beforeEach(() => {
   signInAs('admin');
 });
 
+/**
+ * The dropdown an approved agent cannot be activated without.
+ *
+ * Both territory selectors on this screen gate a button — activation and
+ * reassignment are each disabled until one is chosen — and the list behind
+ * them caught into `setTerritories([])`. So a refused read left an officer
+ * with a dropdown offering only "Select a territory", a button that would not
+ * move, and nothing saying why: an approved agent who cannot be put in the
+ * field, and no indication the platform had merely failed to ask.
+ */
+describe('when the territory list cannot be read', () => {
+  function mockWithoutTerritories(over: Record<string, unknown> = {}) {
+    return vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.includes('/territories')) return Promise.reject(new Error('refused')) as never;
+      if (path.endsWith('/kyc/documents')) return Promise.resolve({ documents: [] }) as never;
+      return Promise.resolve(detail(over)) as never;
+    });
+  }
+
+  it('says so beside the control it disables', async () => {
+    mockWithoutTerritories({ checklist: { ...CLEARED }, outstanding: [], canCollectRevenue: false });
+    renderScreen();
+
+    expect(await screen.findByText(/territory list could not be read/i)).toBeTruthy();
+  });
+
+  it('does not leave the officer reading it as a state with no territories', async () => {
+    // The sentence has to rule out the wrong conclusion, not merely report a
+    // failure: an empty dropdown already suggests "there are none".
+    mockWithoutTerritories({ checklist: { ...CLEARED }, outstanding: [], canCollectRevenue: false });
+    renderScreen();
+
+    expect(await screen.findByText(/not a state with no territories in it/i)).toBeTruthy();
+  });
+
+  it('offers a way to ask again', async () => {
+    let attempt = 0;
+    vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.includes('/territories')) {
+        attempt += 1;
+        return (attempt === 1
+          ? Promise.reject(new Error('refused'))
+          : Promise.resolve([TERRITORY])) as never;
+      }
+      if (path.endsWith('/kyc/documents')) return Promise.resolve({ documents: [] }) as never;
+      return Promise.resolve(
+        detail({ checklist: { ...CLEARED }, outstanding: [], canCollectRevenue: false }),
+      ) as never;
+    });
+    renderScreen();
+    await screen.findByText(/territory list could not be read/i);
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Try again/i })[0]!);
+
+    await waitFor(() =>
+      expect(screen.queryByText(/territory list could not be read/i)).toBeNull(),
+    );
+  });
+});
+
 describe('the clearance checklist', () => {
   it('shows every gate, so an officer can see which one is not met', async () => {
     mockDetail({

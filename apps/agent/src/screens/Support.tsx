@@ -279,7 +279,12 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [ticketId]);
 

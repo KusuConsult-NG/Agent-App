@@ -66,7 +66,12 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
       .get<KycDashboard>('/agents/kyc-dashboard')
       .then(setDashboard)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
 
     const params = new URLSearchParams();
@@ -289,17 +294,42 @@ export function AgentDetailScreen({
       .get<AgentDetail>(`/agents/${agentId}`)
       .then(setDetail)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [agentId]);
 
-  useEffect(() => {
-    load();
+  /*
+   * An empty territory list is not a state with no territories in it.
+   *
+   * This caught into `setTerritories([])`, and both selects below are
+   * required: the activate button and the reassign button are each disabled
+   * until one is chosen. So a refused read left an officer looking at a
+   * dropdown holding only "Select a territory" and a button that would not
+   * move, with nothing saying why — an approved agent who cannot be put to
+   * work, and no way to find out that the platform simply failed to ask.
+   */
+  const [territoriesFailed, setTerritoriesFailed] = useState(false);
+
+  const loadTerritories = useCallback(() => {
+    setTerritoriesFailed(false);
     api
       .get<{ id: string; name: string; name_ha: string | null; lga_name: string }[]>('/government/reference/territories')
       .then(setTerritories)
-      .catch(() => setTerritories([]));
-  }, [load]);
+      .catch(() => {
+        setTerritories([]);
+        setTerritoriesFailed(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+    loadTerritories();
+  }, [load, loadTerritories]);
 
   async function act(fn: () => Promise<string>) {
     setBusy(true);
@@ -631,6 +661,7 @@ export function AgentDetailScreen({
                   ))}
                 </select>
                 <p className="field__hint">{t.ofcAgTerritoryRequired}</p>
+                {territoriesFailed && <TerritoriesUnreadable onRetry={loadTerritories} />}
               </div>
               <button
                 type="button"
@@ -670,11 +701,15 @@ export function AgentDetailScreen({
                 <option value="">{t.ofcAgSelectTerritory}</option>
                 {territories.map((territory) => (
                   <option key={territory.id} value={territory.id}>
-                    {territory.name} ({territory.lga_name})
+                    {/* Localised, as the activation selector beside it is. A
+                      * Hausa reader had the same territory named one way
+                      * above and the other way here. */}
+                    {localName(lang, territory.name, territory.name_ha)} ({territory.lga_name})
                   </option>
                 ))}
               </select>
               <p className="field__hint">{t.ofcAgMoveTerritoryBody}</p>
+              {territoriesFailed && <TerritoriesUnreadable onRetry={loadTerritories} />}
               <button
                 type="button"
                 className="secondary"
@@ -742,7 +777,12 @@ export function RefereesScreen() {
       .get('/agents/referee-dashboard')
       .then(setData)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -783,7 +823,24 @@ export function RefereesScreen() {
     }
   }
 
-  if (error && !data) return <ErrorAlert error={error} />;
+  /*
+   * The failure replaces the screen, with something to press.
+   *
+   * This returned the alert alone: a refused read left an officer looking at
+   * one sentence, with the queue, the filters and every control gone and
+   * nothing to press. Reloading the page was the only way back, and nothing
+   * said so.
+   */
+  if (error && !data) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={5} />;
 
   return (
@@ -1172,5 +1229,24 @@ export function BankChangesCard() {
         </ul>
       )}
     </div>
+  );
+}
+
+/**
+ * Said beside the control it disables, not at the top of the screen.
+ *
+ * The officer's attention is on the dropdown that will not offer anything and
+ * the button that will not move; a banner three sections up is read after
+ * they have concluded the platform is broken.
+ */
+function TerritoriesUnreadable({ onRetry }: { onRetry: () => void }) {
+  const { t } = usePortalI18n();
+  return (
+    <p className="field__hint" role="status">
+      {t.ofcAgTerritoriesUnreadable}{' '}
+      <button type="button" className="link" onClick={onRetry}>
+        {t.actionTryAgain}
+      </button>
+    </p>
   );
 }

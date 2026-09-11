@@ -1741,6 +1741,7 @@ export interface TranslationDictionary {
   ofcAgRequestMoreInformation: string;
   ofcAgAssignTerritory: string;
   ofcAgSelectTerritory: string;
+  ofcAgTerritoriesUnreadable: string;
   ofcAgTerritoryRequired: string;
   ofcAgActivateAgent: string;
   ofcAgActivationBlocked: string;
@@ -5350,6 +5351,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAgRequestMoreInformation: "Request more information",
     ofcAgAssignTerritory: "Assign territory",
     ofcAgSelectTerritory: "Select a territory",
+    ofcAgTerritoriesUnreadable: "The territory list could not be read, so there is nothing to choose from. This is not a state with no territories in it.",
     ofcAgTerritoryRequired: "Every transaction is attributed to a territory, so one must be assigned before activation.",
     ofcAgActivateAgent: "Activate agent",
     ofcAgActivationBlocked: "Activation is blocked until every clearance item is satisfied. An exception requires an approved government override.",
@@ -7859,13 +7861,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnException: "Kuskure",
     ofcFnDate: "Rana",
     ofcFnPayout: "Biya",
-    ofcFnWhereEarned: "Inda ake samun kwamiti",
+    ofcFnWhereEarned: "Inda ake samun kwamishan",
     ofcFnWhereEarnedBody: "An tara, an biya, saura, da wanda aka soke, bisa Karamar Hukuma da kuma bisa wata. Ana nuna wanda aka soke daban: wurin da ake tarawa da yawa amma ana sokewa da yawa yana yin caji ne da ba ya tsayawa, wanda jimilla ba za ta iya gaya maka ba.",
     ofcFnAccrued: "An tara",
     ofcFnPaidOut: "An biya",
     ofcFnReversed: "An soke",
     ofcFnByMonth: "Bisa wata",
-    ofcFnNoCommissionInPeriod: "Ba a tara wani kwamiti a wannan lokacin ba.",
+    ofcFnNoCommissionInPeriod: "Ba a tara wani kwamishan a wannan lokacin ba.",
     ofcFnEntries: "Shigarwa",
     ofcFnBankAccount: "Asusun banki",
     ofcFnRequestedBy: "Wanda ya nema",
@@ -8771,6 +8773,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAgRequestMoreInformation: "Nemi karin bayani",
     ofcAgAssignTerritory: "Ba da yanki",
     ofcAgSelectTerritory: "Zabi yanki",
+    ofcAgTerritoriesUnreadable: "Ba a iya karanta jerin yankuna ba, don haka babu abin da za a zaba. Wannan ba yana nufin babu yankuna ba.",
     ofcAgTerritoryRequired: "Ana danganta kowace ma’amala ga yanki, don haka dole a ba da daya kafin a kunna.",
     ofcAgActivateAgent: "Kunna wakili",
     ofcAgActivationBlocked: "An hana kunnawa har sai an cika kowane sharadin izini. Kebancewa yana bukatar izinin gwamnati na musamman.",

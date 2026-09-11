@@ -16,7 +16,7 @@
  * client had ever sent a coordinate.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -92,16 +92,51 @@ export function RevenueScreen() {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<Summary>('/government/revenue/summary')
       .then(setData)
       .catch((caught) => {
+        /*
+         * The second branch is the one that was missing, on four screens no
+         * test had ever rendered.
+         *
+         * Only an `ApiRequestError` set anything, so a connection that
+         * dropped — or any failure that is not a refusal with a body — left
+         * `error` null and the data null, and the skeleton below went on
+         * drawing forever. A screen that says nothing and never stops loading
+         * is the one failure an officer cannot even report.
+         */
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /*
+   * A refusal with nothing to press is a screen an officer leaves.
+   *
+   * This returned the alert alone, so the only way to ask again was reloading
+   * the page — and nothing said so. The same shape was fixed on the
+   * intelligence drill-down after a single dropped request ended that screen
+   * for good.
+   */
+  if (error) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={6} />;
 
   const territories = data.scope?.kind === 'TERRITORIES' ? data.scope.territories : null;

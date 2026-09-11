@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,357 strings; that one is two pages and links back
+> because it carries all 3,358 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,357 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,358 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,357 strings is worse than no sheet, because it looks complete; this one cannot
+3,358 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,357 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,358 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,357 strings: where the
+- The glossary below is applied consistently across all 3,358 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3278 strings, grouped by where an agent meets them. Lower stakes
+3279 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -739,6 +739,7 @@ instructions — but they are what an agent reads all day.
 | `ofcAgRequestMoreInformation` | Request more information | Nemi karin bayani | ☐ | |
 | `ofcAgAssignTerritory` | Assign territory | Ba da yanki | ☐ | |
 | `ofcAgSelectTerritory` | Select a territory | Zabi yanki | ☐ | |
+| `ofcAgTerritoriesUnreadable` | The territory list could not be read, so there is nothing to choose from. This is not a state with no territories in it. | Ba a iya karanta jerin yankuna ba, don haka babu abin da za a zaba. Wannan ba yana nufin babu yankuna ba. | ☐ | |
 | `ofcAgTerritoryRequired` | Every transaction is attributed to a territory, so one must be assigned before activation. | Ana danganta kowace ma’amala ga yanki, don haka dole a ba da daya kafin a kunna. | ☐ | |
 | `ofcAgActivateAgent` | Activate agent | Kunna wakili | ☐ | |
 | `ofcAgActivationBlocked` | Activation is blocked until every clearance item is satisfied. An exception requires an approved government override. | An hana kunnawa har sai an cika kowane sharadin izini. Kebancewa yana bukatar izinin gwamnati na musamman. | ☐ | |
@@ -1151,13 +1152,13 @@ instructions — but they are what an agent reads all day.
 | `ofcFnException` | Exception | Kuskure | ☐ | |
 | `ofcFnDate` | Date | Rana | ☐ | |
 | `ofcFnPayout` | Payout | Biya | ☐ | |
-| `ofcFnWhereEarned` | Where commission is being earned | Inda ake samun kwamiti | ☐ | |
+| `ofcFnWhereEarned` | Where commission is being earned | Inda ake samun kwamishan | ☐ | |
 | `ofcFnWhereEarnedBody` | Accrued, paid, outstanding and reversed, by Local Government Area and by month. Reversed is shown separately: a place with high accrual and high reversal is raising charges that do not stand up, which a total cannot tell you. | An tara, an biya, saura, da wanda aka soke, bisa Karamar Hukuma da kuma bisa wata. Ana nuna wanda aka soke daban: wurin da ake tarawa da yawa amma ana sokewa da yawa yana yin caji ne da ba ya tsayawa, wanda jimilla ba za ta iya gaya maka ba. | ☐ | |
 | `ofcFnAccrued` | Accrued | An tara | ☐ | |
 | `ofcFnPaidOut` | Paid | An biya | ☐ | |
 | `ofcFnReversed` | Reversed | An soke | ☐ | |
 | `ofcFnByMonth` | By month | Bisa wata | ☐ | |
-| `ofcFnNoCommissionInPeriod` | No commission was accrued in this period. | Ba a tara wani kwamiti a wannan lokacin ba. | ☐ | |
+| `ofcFnNoCommissionInPeriod` | No commission was accrued in this period. | Ba a tara wani kwamishan a wannan lokacin ba. | ☐ | |
 | `ofcFnEntries` | Entries | Shigarwa | ☐ | |
 | `ofcFnBankAccount` | Bank account | Asusun banki | ☐ | |
 | `ofcFnRequestedBy` | Requested by | Wanda ya nema | ☐ | |

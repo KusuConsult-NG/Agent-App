@@ -14,7 +14,7 @@
  * their keystrokes on top of that would be a different product.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
@@ -70,16 +70,41 @@ export function UsageScreen() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<Overview>('/usage/overview')
       .then(setData)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /*
+   * A refusal with nothing to press is a screen an officer leaves.
+   *
+   * This returned the alert alone, so the only way to ask again was reloading
+   * the page — and nothing said so. See `Revenue.tsx`.
+   */
+  if (error) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={6} />;
 
   const registration = data.funnels.find((f) => f.event === 'taxpayer.registration');

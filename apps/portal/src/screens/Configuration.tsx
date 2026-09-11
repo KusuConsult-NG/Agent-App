@@ -952,7 +952,12 @@ export function ProgrammesScreen() {
       .get<any[]>('/government/programmes')
       .then(setProgrammes)
       .catch((caught) => {
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -999,7 +1004,19 @@ export function ProgrammesScreen() {
       {message && <Alert kind="success">{message}</Alert>}
 
       <div className="card card--flush">
-        {!programmes ? (
+        {error && !programmes ? (
+          /*
+           * The failure replaces the list, rather than sitting above a
+           * skeleton that goes on loading. Both were on screen at once: a
+           * sentence saying the read had failed, and below it the animation
+           * that means it is still arriving.
+           */
+          <div style={{ padding: 18 }}>
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !programmes ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
