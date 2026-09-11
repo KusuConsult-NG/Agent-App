@@ -477,6 +477,21 @@ export function AllocationsScreen() {
               label: 'ofcAlOpens',
               render: (row: Round) => formatDateTime(row.opens_at),
             },
+            {
+              /*
+               * And when it closes, which is the half that makes it a window.
+               *
+               * The table gave an opening date and no ending one, so an
+               * officer planning a distribution could see that a round had
+               * started and not whether it had days left or weeks. A round
+               * with no closing date stays open until somebody closes it,
+               * which is a real state and says so rather than showing a blank.
+               */
+              key: 'closes_at',
+              label: 'ofcAlCloses',
+              render: (row: Round) =>
+                row.closes_at ? formatDateTime(row.closes_at) : t.ofcAlNoClosingDate,
+            },
             { key: 'status', label: 'appStatus', render: (row: Round) => <Badge status={row.status} /> },
             {
               key: 'act',

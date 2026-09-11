@@ -313,6 +313,21 @@ function CaseQueue({
                   row.transaction_reference ?? row.agent_code ?? row.taxpayer_name ?? '—',
               },
               {
+                /*
+                 * Whether there is anything to decide on.
+                 *
+                 * A case with no evidence attached cannot be concluded, and
+                 * looked exactly like one with ten files behind it. The count
+                 * was computed and drawn nowhere. Zero is the reading that
+                 * matters, so it is said rather than left as a blank.
+                 */
+                key: 'evidence_count',
+                label: 'ofcCwEvidence',
+                numeric: true,
+                render: (row: CaseRow) =>
+                  Number(row.evidence_count) > 0 ? row.evidence_count : t.ofcCwNoEvidence,
+              },
+              {
                 key: 'due_at',
                 label: 'ofcCwDue',
                 render: (row: CaseRow) =>

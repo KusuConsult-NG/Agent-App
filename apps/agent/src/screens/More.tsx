@@ -454,6 +454,17 @@ export function ReceiptsScreen() {
                     <p className="list__title">{receipt.receipt_number}</p>
                     <p className="list__meta">
                       {receipt.taxpayer_name} · {localName(lang, receipt.revenue_item, receipt.revenue_item_ha)}
+                      {/*
+                        * When it was issued, which is how an agent finds one.
+                        *
+                        * "The receipt I gave that man this morning" is the
+                        * question this list answers, and it showed the number,
+                        * the name and the amount — so two collections from the
+                        * same taxpayer for the same item were one row repeated,
+                        * with nothing to tell them apart.
+                        */}
+                      {' · '}
+                      {formatDateTimeIn(receipt.issued_at, t)}
                     </p>
                   </div>
                   <span className="list__amount">

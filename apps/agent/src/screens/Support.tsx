@@ -116,6 +116,28 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                       {ticket.ticket_number} · {categoryLabel(ticket.category, t)}
                       {ticket.message_count > 0 &&
                         ` · ${t.supRepliesCount.replace('{{n}}', String(ticket.message_count))}`}
+                      {/*
+                        * When anything last happened on it.
+                        *
+                        * The reply count above includes the agent's OWN
+                        * messages, so "2 replies" may be two things they wrote
+                        * and nothing back. It cannot answer the only question
+                        * somebody has about their own complaint — has this
+                        * moved — and `last_message_at`, which was declared
+                        * here and drawn by nothing, is what does.
+                        *
+                        * Worded as the last message rather than the last
+                        * reply, because the field says when the newest message
+                        * was posted and not who posted it. Claiming PSIRS had
+                        * answered would be reading more into it than it holds.
+                        */}
+                      {' · '}
+                      {ticket.last_message_at
+                        ? t.supLastMessage.replace(
+                            '{{when}}',
+                            formatDateTimeIn(ticket.last_message_at, t),
+                          )
+                        : t.supNoMessagesYet}
                     </p>
                   </div>
                   <Badge status={ticket.status} />

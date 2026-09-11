@@ -1038,6 +1038,8 @@ export interface TranslationDictionary {
   ofcGrGroupSuspended: string;
   ofcGrQuantityPeople: string;
   supRepliesCount: string;
+  supLastMessage: string;
+  supNoMessagesYet: string;
   ofcOsQueueUnreadable: string;
   ofcOsQueueUnreadableBody: string;
   ofcUaCoversNothing: string;
@@ -1462,6 +1464,11 @@ export interface TranslationDictionary {
   ofcAlBeneficiariesWord: string;
   ofcAlCollectionPoint: string;
   ofcAlOpens: string;
+  ofcAlCloses: string;
+  ofcAlNoClosingDate: string;
+  ofcCwNoEvidence: string;
+  ofcTxVerified: string;
+  ofcTxNotVerified: string;
   ofcAlClosesOptional: string;
   ofcAlRelease: string;
   ofcAlAwards: string;
@@ -4710,6 +4717,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGrGroupSuspended: "{{name}} suspended.",
     ofcGrQuantityPeople: "{{quantity}} ({{n}} people)",
     supRepliesCount: "{{n}} reply(s)",
+    supLastMessage: "Last message {{when}}",
+    supNoMessagesYet: "No messages yet",
     ofcOsQueueUnreadable: "A queue could not be read",
     ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
     ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
@@ -5124,6 +5133,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAlBeneficiariesWord: "beneficiaries.",
     ofcAlCollectionPoint: "Collection point",
     ofcAlOpens: "Opens",
+    ofcAlCloses: "Closes",
+    ofcAlNoClosingDate: "Open until closed",
+    ofcCwNoEvidence: "None attached",
+    ofcTxVerified: "Money confirmed",
+    ofcTxNotVerified: "Not yet",
     ofcAlClosesOptional: "Closes (optional)",
     ofcAlRelease: "Release",
     ofcAlAwards: "Awards",
@@ -8164,6 +8178,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGrGroupSuspended: "An dakatar da {{name}}.",
     ofcGrQuantityPeople: "{{quantity}} (mutane {{n}})",
     supRepliesCount: "amsa {{n}}",
+    supLastMessage: "Sako na karshe {{when}}",
+    supNoMessagesYet: "Babu sako tukuna",
     ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
     ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
@@ -8578,6 +8594,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAlBeneficiariesWord: "masu amfana.",
     ofcAlCollectionPoint: "Wurin karba",
     ofcAlOpens: "Zai bude",
+    ofcAlCloses: "Rufewa",
+    ofcAlNoClosingDate: "A bude har sai an rufe",
+    ofcCwNoEvidence: "Babu wanda aka hada",
+    ofcTxVerified: "An tabbatar da kudi",
+    ofcTxNotVerified: "Ba tukuna ba",
     ofcAlClosesOptional: "Zai rufe (ba dole ba)",
     ofcAlRelease: "Saki",
     ofcAlAwards: "Bayarwa",

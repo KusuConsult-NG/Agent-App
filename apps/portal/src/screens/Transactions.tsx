@@ -193,6 +193,22 @@ export function TransactionsScreen() {
                 label: 'ofcTxCreated',
                 render: (row) => formatDateTime(row.created_at),
               },
+              {
+                /*
+                 * When the money was actually confirmed, which is not when the
+                 * transaction was raised.
+                 *
+                 * On a list of transactions those two are days apart whenever
+                 * a citizen pays at a bank, and the second is the one that
+                 * says when the State had the money. It was computed and drawn
+                 * nowhere, so the only date here was the one that says when
+                 * somebody asked for it.
+                 */
+                key: 'verified_at',
+                label: 'ofcTxVerified',
+                render: (row) =>
+                  row.verified_at ? formatDateTime(row.verified_at) : t.ofcTxNotVerified,
+              },
             ]}
             rows={rows}
             empty="ofcNoneTransactionsMatchTheseFilters"
