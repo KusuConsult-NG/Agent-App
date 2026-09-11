@@ -520,15 +520,27 @@ export function IntelligenceScreen() {
     else if (drill.lgaId) params.set('lgaId', drill.lgaId);
 
     setRows(null);
+    /*
+     * Cleared before each drill, because it was never cleared at all.
+     *
+     * `error` was set once and read by an early return that replaced the
+     * whole screen — breadcrumb included. So one dropped request while
+     * drilling from the State into a ward left an officer looking at a
+     * sentence with no way back to the level above and no way to try again:
+     * the only controls on this screen are the ones the early return had
+     * just removed. Reloading the page was the only way out.
+     */
+    setError(null);
     api
       .get<GeoRow[]>(`/government/intelligence/geography?${params.toString()}`)
       .then(setRows)
       .catch((caught) => {
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, [drill]);
-
-  if (error) return <ErrorAlert error={error} />;
 
   return (
     <>
@@ -554,7 +566,20 @@ export function IntelligenceScreen() {
       </div>
 
       <div className="card card--flush">
-        {!rows ? (
+        {error ? (
+          /*
+            In the table's place, under a breadcrumb that still works. Going
+            back up a level re-runs the read, which is the retry.
+          */
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={error} />
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setDrill({ ...drill })}
+            >{t.actionTryAgain}</button>
+          </div>
+        ) : !rows ? (
           <div style={{ padding: 18 }}>
             <Loading rows={5} />
           </div>
