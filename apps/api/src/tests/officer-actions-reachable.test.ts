@@ -667,12 +667,19 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * somebody eventually reads it, that nobody could read, was a table costing
    * disk and protecting nobody.
    *
-   * What is left is quieter: a payments list, commission by place, and the
-   * revenue-side obligations duplicate.
+   * `/revenue/taxpayers/:id/obligations` now opens on the agent's collection
+   * screen, before the levy list. It is not a duplicate of
+   * `/taxpayers/:id/obligations`, which is the levies a taxpayer is
+   * registered for: this is the invoices actually open against them. Its own
+   * route comment names the harm of its absence — "refusing here would push
+   * that agent into raising a second assessment for a debt that already
+   * exists" — and that is what the screen did, going from choosing a person
+   * straight to choosing a levy.
+   *
+   * What is left is quieter: a payments list and commission by place.
    */
   '/government/commissions/by-place',
   '/payments',
-  '/revenue/taxpayers/:id/obligations',
   /*
    * The agent's own unsent captures, read back on the handset that made them.
    * An officer has no draft queue.

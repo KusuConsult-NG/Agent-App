@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,343 strings; that one is two pages and links back
+> because it carries all 3,348 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,343 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,348 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,343 strings is worse than no sheet, because it looks complete; this one cannot
+3,348 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,343 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,348 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,343 strings: where the
+- The glossary below is applied consistently across all 3,348 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3264 strings, grouped by where an agent meets them. Lower stakes
+3269 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2583,6 +2583,11 @@ instructions — but they are what an agent reads all day.
 | `colCheckPaymentStatus` | Check payment status | Duba matsayin biyan kudi | ☐ | |
 | `colStartingPayment` | Starting the payment… | Ana fara biyan kudi… | ☐ | |
 | `colStartPayment` | Start the payment | Fara biyan kudi | ☐ | |
+| `colAlreadyOwes` | What they already owe | Abin da suka riga suka ci bashi | ☐ | |
+| `colAlreadyOwesBody` | Open invoices on this taxpayer's record. If the payment in front of you is one of these, take that payment rather than raising a new charge — a second charge for the same thing is a second debt. | Takardun biya da ba a rufe ba a rikodin wannan mai biyan haraji. Idan biyan da ke gabanka daya ne daga cikinsu, ka karbi wannan biyan maimakon ka kara sabon caji — kari na biyu a kan abu daya bashi ne na biyu. | ☐ | |
+| `colOwesUnknown` | Their open invoices could not be read | Ba a iya karanta takardun biyansu ba | ☐ | |
+| `colOwesUnknownBody` | Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy. | Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu. | ☐ | |
+| `colTakeThisPayment` | Take this payment | Karbi wannan biyan | ☐ | |
 | `colChargeRaisedTitle` | The charge was raised. The payment was not. | An yi kimantawa, amma ba a fara biyan kudi ba. | ☐ | |
 | `colChargeRaisedBody` | Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again. | Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin. | ☐ | |
 | `colOpenCharge` | Open this transaction | Bude wannan ma’amala | ☐ | |

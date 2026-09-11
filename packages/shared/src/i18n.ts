@@ -2605,6 +2605,11 @@ export interface TranslationDictionary {
   colCheckPaymentStatus: string;
   colStartingPayment: string;
   colStartPayment: string;
+  colAlreadyOwes: string;
+  colAlreadyOwesBody: string;
+  colOwesUnknown: string;
+  colOwesUnknownBody: string;
+  colTakeThisPayment: string;
   colChargeRaisedTitle: string;
   colChargeRaisedBody: string;
   colOpenCharge: string;
@@ -6162,6 +6167,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPaymentStatus: "Check payment status",
     colStartingPayment: "Starting the payment…",
     colStartPayment: "Start the payment",
+    colAlreadyOwes: "What they already owe",
+    colAlreadyOwesBody: "Open invoices on this taxpayer's record. If the payment in front of you is one of these, take that payment rather than raising a new charge \u2014 a second charge for the same thing is a second debt.",
+    colOwesUnknown: "Their open invoices could not be read",
+    colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
+    colTakeThisPayment: "Take this payment",
     colChargeRaisedTitle: "The charge was raised. The payment was not.",
     colChargeRaisedBody:
       "Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again.",
@@ -9569,6 +9579,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPaymentStatus: "Duba matsayin biyan kudi",
     colStartingPayment: "Ana fara biyan kudi…",
     colStartPayment: "Fara biyan kudi",
+    colAlreadyOwes: "Abin da suka riga suka ci bashi",
+    colAlreadyOwesBody: "Takardun biya da ba a rufe ba a rikodin wannan mai biyan haraji. Idan biyan da ke gabanka daya ne daga cikinsu, ka karbi wannan biyan maimakon ka kara sabon caji \u2014 kari na biyu a kan abu daya bashi ne na biyu.",
+    colOwesUnknown: "Ba a iya karanta takardun biyansu ba",
+    colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
+    colTakeThisPayment: "Karbi wannan biyan",
     colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",
     colChargeRaisedBody:
       "Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin.",

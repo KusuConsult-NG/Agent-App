@@ -49,6 +49,43 @@ interface Quote {
   trace: { step: string; detail: string; amount?: string }[];
 }
 
+/**
+ * What this taxpayer already owes, which the agent could not see.
+ *
+ * `GET /revenue/taxpayers/:id/obligations` was built, permissioned on three
+ * scopes, and called from nowhere — one of the reads recorded in
+ * READ_WITHOUT_A_SCREEN. Its own route comment states exactly the case it was
+ * written for: "serving a walk-up taxpayer requires finding them and knowing
+ * their obligations; that much is the job", and "refusing here would push
+ * that agent into raising a second assessment for a debt that already
+ * exists."
+ *
+ * Which is what the agent was pushed into. The collection screen went from
+ * choosing a person straight to choosing a levy, with no sight of the
+ * invoices already open against them — so a trader with an unpaid market levy
+ * who walks up to pay it gets a fresh assessment for the same levy, and now
+ * owes it twice. The platform then has two invoices and no way to know which
+ * one the money was for.
+ */
+interface Obligation {
+  invoice_id: string;
+  invoice_number: string;
+  total_amount_kobo: string;
+  amount_paid_kobo: string;
+  status: string;
+  expires_at: string | null;
+  issued_at: string;
+  assessment_number: string;
+  period_label: string | null;
+  revenue_item: string;
+  revenue_item_ha: string | null;
+  revenue_category: string;
+  revenue_category_ha: string | null;
+  transaction_id: string | null;
+  transaction_reference: string | null;
+  transaction_status: string | null;
+}
+
 interface TaxpayerSummary {
   id: string;
   taxpayer_type: string;
@@ -158,6 +195,34 @@ export function CollectScreen({
         if (caught instanceof ApiRequestError) setError(caught.error);
       });
   }, [taxpayer]);
+
+  /*
+   * `null` while unknown, `[]` only when the answer is genuinely none.
+   *
+   * "Nothing is outstanding" is the sentence that tells an agent to go ahead
+   * and raise a new charge. A failed read must not be able to say it, because
+   * the charge that follows is a real debt on a real person. `owesFailed`
+   * keeps the two apart.
+   */
+  const [owes, setOwes] = useState<Obligation[] | null>(null);
+  const [owesFailed, setOwesFailed] = useState(false);
+
+  const loadOwes = useCallback(() => {
+    if (!taxpayer) return;
+    setOwesFailed(false);
+    setOwes(null);
+    api
+      .get<Obligation[]>(`/revenue/taxpayers/${taxpayer.id}/obligations`)
+      .then((rows) => setOwes(Array.isArray(rows) ? rows : []))
+      .catch(() => {
+        setOwes(null);
+        setOwesFailed(true);
+      });
+  }, [taxpayer]);
+
+  useEffect(() => {
+    loadOwes();
+  }, [loadOwes]);
 
   const needsBaseAmount =
     selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
@@ -362,6 +427,71 @@ export function CollectScreen({
       </div>
 
       <ErrorAlert error={error} />
+
+      {/*
+        * Before the levy list, not after it.
+        *
+        * An agent who has already picked an item and seen a figure is
+        * committed; the moment this has to change their mind is before they
+        * choose. A trader walking up to pay a market levy they already owe
+        * must be taken to the open invoice, not given a second one.
+        */}
+      {!quote && (owesFailed || owes === null || owes.length > 0) && (
+        <div className="card">
+          <h2 className="card__title">{t.colAlreadyOwes}</h2>
+          {owesFailed ? (
+            <>
+              {/*
+                * Said rather than passed over. An agent who does not know
+                * whether there is an open invoice must be told that they do
+                * not know, because the next thing they do creates a debt.
+                */}
+              <Alert kind="warning" title={t.colOwesUnknown}>
+                <p style={{ margin: 0 }}>{t.colOwesUnknownBody}</p>
+              </Alert>
+              <button type="button" className="secondary" onClick={loadOwes}>
+                {t.actionTryAgain}
+              </button>
+            </>
+          ) : owes === null ? (
+            <Loading />
+          ) : (
+            <>
+              <p className="card__hint">{t.colAlreadyOwesBody}</p>
+              <ul className="list list--rows">
+                {owes.map((row) => (
+                  <li key={row.invoice_id}>
+                    <div className="list__body">
+                      <p className="list__title">
+                        {localName(lang, row.revenue_item, row.revenue_item_ha)}
+                        {row.period_label ? ` · ${row.period_label}` : ''}
+                      </p>
+                      <p className="list__meta">
+                        {row.invoice_number} ·{' '}
+                        <Money
+                          kobo={(
+                            BigInt(row.total_amount_kobo) - BigInt(row.amount_paid_kobo)
+                          ).toString()}
+                        />{' '}
+                        · <Badge status={row.status} />
+                      </p>
+                    </div>
+                    {row.transaction_reference && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
+                      >
+                        {t.colTakeThisPayment}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {!quote && (
         <div className="card">
