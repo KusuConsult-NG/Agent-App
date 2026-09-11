@@ -28,6 +28,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { outstandingExceptionSql } from './reconciliation';
 import { recordAudit } from './audit';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
@@ -119,9 +120,7 @@ export async function periodFigures(
         */
        (SELECT count(*)::text FROM reconciliation_records rr
          LEFT JOIN transactions t ON t.id = rr.transaction_id
-        WHERE rr.reconciled_at IS NULL
-          AND rr.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION',
-                            'AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+        WHERE ${outstandingExceptionSql('rr')}
           AND t.created_at::date BETWEEN $1 AND $2) AS unreconciled,
        (SELECT count(*)::text FROM payments
          WHERE status IN ('INITIATED','PENDING')

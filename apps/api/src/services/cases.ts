@@ -52,6 +52,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextCaseNumber } from '../lib/references';
 import { recordAudit } from './audit';
+import { outstandingExceptionSql } from './reconciliation';
 import * as inbox from './officer-inbox';
 import { ACCEPTED as ACCEPTED_FILES } from './kyc-documents';
 import { storage, storageKey } from './storage';
@@ -1221,9 +1222,7 @@ export async function myWork(db: Db, viewer: Viewer) {
                     rr.created_at, t.transaction_reference
                FROM reconciliation_records rr
                LEFT JOIN transactions t ON t.id = rr.transaction_id
-              WHERE rr.reconciled_at IS NULL
-                AND rr.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION',
-                                  'AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+              WHERE ${outstandingExceptionSql('rr')}
               ORDER BY abs(rr.variance_kobo) DESC LIMIT 25`,
           )
         : Promise.resolve([]),

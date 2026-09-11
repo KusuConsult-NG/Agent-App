@@ -17,6 +17,7 @@
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { outstandingExceptionSql } from './reconciliation';
 import {
   lgaScopeSql,
   scopeParams,
@@ -408,8 +409,7 @@ export async function executiveDashboard(
          -- and the ticket queue really are theirs to see whole.
          (SELECT count(*)::text FROM reconciliation_records rr
            LEFT JOIN transactions t ON t.id = rr.transaction_id
-           WHERE rr.reconciled_at IS NULL
-             AND rr.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+           WHERE ${outstandingExceptionSql('rr')}
              AND ${tx})
            AS reconciliation_exceptions,
          (SELECT count(*)::text FROM approvals WHERE status IN ('REQUESTED','REVIEWED')) AS pending_approvals,
@@ -1260,9 +1260,8 @@ export async function financeOfficerHome(db: Db) {
   return queryOne(
     db,
     `SELECT
-       (SELECT count(*)::text FROM reconciliation_records
-         WHERE reconciled_at IS NULL AND status IN
-           ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION','AMOUNT_MISMATCH','DUPLICATE_PAYMENT'))
+       (SELECT count(*)::text FROM reconciliation_records rr
+         WHERE ${outstandingExceptionSql('rr')})
          AS reconciliation_exceptions,
        (SELECT count(*)::text FROM settlements WHERE reconciled_at IS NULL) AS settlements_unreconciled,
        (SELECT COALESCE(SUM(expected_amount_kobo - received_amount_kobo),0)::text
@@ -1410,9 +1409,7 @@ export async function financeOfficerWorkItems(db: Db) {
               r.variance_kobo::text AS variance_kobo,
               to_char(r.created_at, 'YYYY-MM-DD') AS raised
          FROM reconciliation_records r
-        WHERE r.reconciled_at IS NULL
-          AND r.status IN ('MISSING_PAYMENT','MISSING_PLATFORM_TRANSACTION',
-                           'AMOUNT_MISMATCH','DUPLICATE_PAYMENT')
+        WHERE ${outstandingExceptionSql('r')}
         ORDER BY r.created_at LIMIT 5`,
     ),
     query(
