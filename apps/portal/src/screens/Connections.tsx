@@ -27,7 +27,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -94,6 +94,12 @@ export function ConnectionsScreen() {
   const { lang, t } = usePortalI18n();
   const canRebuild = can('system:configure');
   const canDecide = can('taxpayer:correct');
+  /*
+   * `audit:read`, as the endpoint is. The route's comment says why it is not
+   * the report permissions: "the officers who look at the graph should not be
+   * the ones who decide what the log of their looking says."
+   */
+  const canAudit = can('audit:read');
 
   const [lgas, setLgas] = useState<Lga[]>([]);
   const [filters, setFilters] = useState({ lgaId: '', minimumVehicles: '' });
@@ -495,10 +501,116 @@ export function ConnectionsScreen() {
                 rows={record.liabilities}
                 empty="ofcIgOwesNothing"
               />
+
+              {canAudit && openId && <WhoHasLooked taxpayerId={openId} />}
             </>
           ) : null}
         </div>
       ) : null}
+    </>
+  );
+}
+
+// ===========================================================================
+/**
+ * Who has read this person's record, and under what claimed purpose.
+ *
+ * `GET /government/intelligence/taxpayers/:id/access-log` had no caller
+ * anywhere in either front end — one of the reads recorded in
+ * READ_WITHOUT_A_SCREEN — and its absence made the control above it hollow.
+ *
+ * This screen's own header calls itself "part of the control, not a window
+ * onto it": the API refuses a read without a stated purpose, so an officer
+ * must choose one, and every choice is written to
+ * `taxpayer_connection_access_logs`. That is a data-protection safeguard
+ * whose entire value is that somebody eventually reads it. Written and never
+ * read, it is a table that costs disk and protects nobody — an officer
+ * running coverage queries against a neighbour could pick any purpose from
+ * the dropdown, knowing the record of it went where nothing looks.
+ *
+ * The service returns the officer's ROLE and not their name, and its own
+ * comment says why: "naming the individual invites reprisal in a small LGA
+ * and adds nothing to the accountability the log provides, which runs to the
+ * auditor with the officer's identity intact." So this panel is safe to show
+ * beside the record, and the auditor's fuller view is the audit log itself.
+ */
+interface AccessEntry {
+  purpose: string;
+  at: string;
+  officerRole: string | null;
+}
+
+function WhoHasLooked({ taxpayerId }: { taxpayerId: string }) {
+  const { t } = usePortalI18n();
+  const [rows, setRows] = useState<AccessEntry[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api
+      .get<AccessEntry[]>(`/government/intelligence/taxpayers/${taxpayerId}/access-log`)
+      /*
+       * `Array.isArray`, not a truth test.
+       *
+       * A body this screen does not recognise must not white-screen it. That
+       * is not hypothetical: the first version of this panel took whatever
+       * came back and called `.map` on it, and the existing test for this
+       * screen — which answers every `/intelligence/taxpayers/` path with the
+       * record body — went red with "rows.map is not a function", taking the
+       * connections, the liabilities and the dispute controls down with it.
+       * An unreadable log is a missing section, never a missing screen.
+       */
+      .then((body) => setRows(Array.isArray(body) ? body : []))
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+        /*
+         * "Nobody has opened this record" is the finding an investigation
+         * would stop at. A refused read must not be able to produce it.
+         */
+        setRows(null);
+      });
+  }, [taxpayerId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <>
+      <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcIgWhoHasLooked}</h3>
+      <p className="card__hint">{t.ofcIgWhoHasLookedBody}</p>
+      {error ? (
+        <div>
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !rows ? (
+        <Loading rows={2} />
+      ) : (
+        <Table
+          columns={[
+            {
+              key: 'at',
+              label: 'ofcIgWhenRead',
+              render: (row: AccessEntry) => formatDateTime(row.at),
+            },
+            {
+              key: 'officerRole',
+              label: 'ofcRhRole',
+              render: (row: AccessEntry) =>
+                row.officerRole ? enumLabel(row.officerRole, t) : t.ofcOvSystem,
+            },
+            { key: 'purpose', label: 'ofcIgPurpose' },
+          ]}
+          rows={rows}
+          empty="ofcIgNobodyHasLooked"
+        />
+      )}
     </>
   );
 }

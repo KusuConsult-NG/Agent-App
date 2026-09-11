@@ -1354,6 +1354,10 @@ export interface TranslationDictionary {
   ofcIgUnmatched: string;
   ofcIgUnmatchedExplained: string;
   ofcIgPurpose: string;
+  ofcIgWhoHasLooked: string;
+  ofcIgWhoHasLookedBody: string;
+  ofcIgWhenRead: string;
+  ofcIgNobodyHasLooked: string;
   ofcIgPurposeChoose: string;
   ofcIgPurposeFirst: string;
   ofcIgRegistrations: string;
@@ -4965,6 +4969,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgUnmatched: "Vehicles with no owner matched",
     ofcIgUnmatchedExplained: "{{n}} vehicle(s) on the register are connected to nobody, so they are not in the count above. That is the part of the problem this list cannot see.",
     ofcIgPurpose: "Why are you opening this record?",
+    ofcIgWhoHasLooked: "Who has opened this record",
+    ofcIgWhoHasLookedBody: "Every read of this person's connections, with the purpose the officer stated at the time. The role is shown rather than the name; the audit log carries the individual.",
+    ofcIgWhenRead: "When",
+    ofcIgNobodyHasLooked: "Nobody has opened this record.",
     ofcIgPurposeChoose: "Choose a reason",
     ofcIgPurposeFirst: "Choose a reason first — every read of a record is logged with one.",
     ofcIgRegistrations: "Registrations",
@@ -8368,6 +8376,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcIgUnmatched: "Motocin da ba a gano mai su ba",
     ofcIgUnmatchedExplained: "Motoci {{n}} a rajista ba su da alaka da kowa, don haka ba sa cikin kidayar da ke sama. Wannan shi ne bangaren matsalar da wannan jerin ba zai iya gani ba.",
     ofcIgPurpose: "Me ya sa kake bude wannan rikodin?",
+    ofcIgWhoHasLooked: "Wa ya bude wannan rikodin",
+    ofcIgWhoHasLookedBody: "Duk wani karatun alakokin wannan mutum, tare da dalilin da jami\u2019in ya bayar a lokacin. Ana nuna matsayi maimakon suna; rikodin binciken yana dauke da sunan mutumin.",
+    ofcIgWhenRead: "Yaushe",
+    ofcIgNobodyHasLooked: "Babu wanda ya bude wannan rikodin.",
     ofcIgPurposeChoose: "Zabi dalili",
     ofcIgPurposeFirst: "Ka fara zabar dalili — ana rubuta kowace karatun rikodi da dalili.",
     ofcIgRegistrations: "Lambobin rajista",

@@ -659,11 +659,17 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * endpoint is, because the auditor holds only the second and the auditor is
    * who asks.
    *
-   * What is left is quieter: a payments list, commission by place, the
-   * revenue-side obligations duplicate, and a KYC access log the screen
-   * mentions only in a comment.
+   * `/government/intelligence/taxpayers/:id/access-log` now opens on the
+   * connections screen, behind `audit:read` as the endpoint is. That screen
+   * calls itself "part of the control, not a window onto it" — the API
+   * refuses a read of somebody's record without a stated purpose, and every
+   * purpose is written to a log. A safeguard whose whole value is that
+   * somebody eventually reads it, that nobody could read, was a table costing
+   * disk and protecting nobody.
+   *
+   * What is left is quieter: a payments list, commission by place, and the
+   * revenue-side obligations duplicate.
    */
-  '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
   '/payments',
   '/revenue/taxpayers/:id/obligations',
