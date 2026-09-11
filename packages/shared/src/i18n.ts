@@ -46,6 +46,7 @@ export interface TranslationDictionary {
   service: string;
   amount: string;
   totalPaid: string;
+  colIncludesServiceCharge: string;
   receiptNumber: string;
   verificationCode: string;
   paymentMode: string;
@@ -3879,6 +3880,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     service: 'Revenue Item / Service',
     amount: 'Amount',
     totalPaid: 'Total Paid',
+    colIncludesServiceCharge: 'includes {{charge}} approved service charge, which is not government revenue',
     receiptNumber: 'Receipt Number',
     verificationCode: 'Verification Code',
     paymentMode: 'Payment Mode',
@@ -7349,6 +7351,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     service: 'Nau’in Haraji / Aiki',
     amount: 'Kudin Haraji',
     totalPaid: 'Jimlar Kudin da Aka Biya',
+    colIncludesServiceCharge: 'ya hada da kudin hidima {{charge}} da aka amince da shi, wanda ba kudin shiga na gwamnati ba ne',
     receiptNumber: 'Lambar Rasit',
     verificationCode: 'Lambar Tantancewa',
     paymentMode: 'Hanyar Biyan Kudi',

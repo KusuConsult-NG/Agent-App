@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -673,6 +673,16 @@ interface TransactionStatus {
     transaction_reference: string;
     status: string;
     amount_kobo: string;
+    /*
+     * What the citizen actually hands over, and what of it is the charge.
+     *
+     * `total_amount_kobo = amount_kobo + service_charge_kobo`, enforced by a
+     * CHECK on the table, and the two are never netted — PRD §6, and the
+     * reason `commission.ts` computes commission on `amount_kobo` alone. The
+     * server has been sending the charge to this screen all along and nothing
+     * declared it.
+     */
+    service_charge_kobo: string;
     total_amount_kobo: string;
     invoice_id: string;
     invoice_number: string;
@@ -897,11 +907,41 @@ export function TransactionScreen({
   return (
     <>
       {paid ? (
+        /*
+         * The figure the citizen is looking at, and what it is a figure OF.
+         *
+         * This drew `amount_kobo` — the government portion — as a bare number
+         * under "Payment successful", with nothing saying which of the two
+         * figures it was. Everywhere else in the platform that shows money
+         * says: the printed slip heads it TOTAL PAID, the official receipt
+         * heads it AMOUNT PAID TO GOVERNMENT and discloses the charge beneath
+         * in a sentence, and the detail row three lines below this one is
+         * labelled "Amount" and shows the total.
+         *
+         * So the same screen carried two different numbers for one payment,
+         * and the unlabelled one was the one turned towards the person who had
+         * just handed over money. What "Payment successful — ₦2,050" means to
+         * them is what they paid, which is also what the slip in their hand
+         * will say, so that is what this shows — with the charge disclosed the
+         * way the receipt discloses it rather than folded in silently.
+         *
+         * Latent rather than live: no catalogue item configures a service
+         * charge today, so the two figures are equal and the disclosure does
+         * not render. It is one administrator setting away from not being.
+         */
         <div className="amount-confirm">
           <p className="amount-confirm__label">{t.paymentSuccess}</p>
           <p className="amount-confirm__value">
-            <Money kobo={transaction.amount_kobo} />
+            <Money kobo={transaction.total_amount_kobo} />
           </p>
+          {BigInt(transaction.service_charge_kobo || '0') > 0n && (
+            <p className="amount-confirm__label">
+              {t.colIncludesServiceCharge.replace(
+                '{{charge}}',
+                formatNaira(transaction.service_charge_kobo),
+              )}
+            </p>
+          )}
           <p className="amount-confirm__label">
             {t.colReceiptNumbered.replace('{{number}}', transaction.receipt_number ?? '')}
           </p>
