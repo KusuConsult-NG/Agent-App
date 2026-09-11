@@ -154,8 +154,23 @@ function readAll(dir: string): string {
     .join('\n');
 }
 
+/**
+ * Screens and libraries, not tests.
+ *
+ * A test is not a caller. An endpoint reached only from
+ * `expect(post).toHaveBeenCalledWith('/government/...')` is an endpoint no
+ * officer can reach, and this check exists to say so — the agent half of
+ * `anyClientSource` has always excluded its tests, and the portal half
+ * including them looks like the slip rather than the intention.
+ *
+ * Measured before changing it, the same way as the comment strip above: with
+ * the portal's tests dropped AND the recorded list switched off, the reads
+ * that came back were the same seventeen, every one already recorded. So
+ * nothing in this codebase is reachable only through a test, and this closes
+ * the hole without moving anything into the list.
+ */
 function portalSource(): string {
-  return [PORTAL, join(PORTAL, 'screens'), join(PORTAL, 'lib'), join(PORTAL, 'tests')]
+  return [PORTAL, join(PORTAL, 'screens'), join(PORTAL, 'lib')]
     .map(readAll)
     .join('\n');
 }
