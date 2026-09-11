@@ -180,7 +180,7 @@ export type JobName = keyof typeof BACKGROUND_JOBS;
  * answer for the whole cluster — which is what the Prometheus gauges could
  * never be.
  */
-export async function runJob<T>(
+export async function runJob<T extends string | null | void>(
   name: JobName,
   task: () => Promise<T>,
 ): Promise<JobOutcome<T>> {
@@ -204,10 +204,20 @@ export async function runJob<T>(
   });
 }
 
-/** What a job returned, as a line an operator can read. Jobs return null for "nothing to do". */
-function describe(value: unknown): string | null {
+/**
+ * What a job returned, as a line an operator can read.
+ *
+ * Jobs return null for "nothing to do", and a sentence otherwise. The
+ * constraint on `runJob` above is what keeps that true: this value is written
+ * to `last_detail` and shown on the unattended-work board, and `String()` on
+ * an object yields "[object Object]" — a row that looks like a reading and
+ * says nothing, which is the shape of every defect this board exists to
+ * surface. Refusing it in the type system means a job cannot be written that
+ * way in the first place.
+ */
+function describe(value: string | null | void): string | null {
   if (value === null || value === undefined) return null;
-  return String(value).slice(0, 500);
+  return value.slice(0, 500);
 }
 
 /**

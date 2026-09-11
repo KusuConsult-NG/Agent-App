@@ -881,6 +881,8 @@ export interface TranslationDictionary {
   ofcOvRuns: string;
   ofcOvLastSucceeded: string;
   ofcOvWhatThatMeans: string;
+  ofcOvWhatItDid: string;
+  ofcOvNothingNeededDoing: string;
   ofcOvActor: string;
   ofcOvEntity: string;
   ofcOvResult: string;
@@ -4539,6 +4541,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvRuns: "Runs",
     ofcOvLastSucceeded: "Last succeeded",
     ofcOvWhatThatMeans: "What that means",
+    ofcOvWhatItDid: "What it did",
+    ofcOvNothingNeededDoing: "Nothing needed doing",
     ofcOvActor: "Actor",
     ofcOvEntity: "Entity",
     ofcOvResult: "Result",
@@ -7958,6 +7962,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvRuns: "Gudanarwa",
     ofcOvLastSucceeded: "Nasara ta karshe",
     ofcOvWhatThatMeans: "Abin da hakan ke nufi",
+    ofcOvWhatItDid: "Abin da ya yi",
+    ofcOvNothingNeededDoing: "Babu abin da ya bukaci yi",
     ofcOvActor: "Mai aikatawa",
     ofcOvEntity: "Abu",
     ofcOvResult: "Sakamako",

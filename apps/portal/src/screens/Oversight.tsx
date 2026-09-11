@@ -578,6 +578,33 @@ export function BackgroundWorkPanel() {
           },
           {
             /*
+             * What the last run actually did, which was arriving and being
+             * dropped.
+             *
+             * `jobHealth` has always sent `lastDetail` — "4 reminder(s)
+             * sent", "promoted 12 commission(s) to eligible" — and this
+             * interface declared it and no column drew it. So a HEALTHY row
+             * said the job ran and nothing about whether it found anything,
+             * which is the difference between a reminder sweep working and a
+             * reminder sweep running over an empty queue because the query
+             * behind it broke.
+             *
+             * The server's words are kept, as `nextStep` on a `conflict()` is:
+             * this sentence carries different counts every run, so there is no
+             * code to key a translation on.
+             *
+             * The three cases are kept apart. A succeeded run with no detail
+             * is "nothing needed doing", which is an answer; a job that has
+             * never succeeded gets a dash, and the state column says why.
+             */
+            key: 'whatItDid',
+            label: 'ofcOvWhatItDid',
+            render: (row: JobReport) =>
+              row.lastDetail ??
+              (row.lastSucceededAt ? t.ofcOvNothingNeededDoing : '\u2014'),
+          },
+          {
+            /*
              * Named for what the column shows, not for the field it used to
              * print. `Table` reads `key` for data only when there is no
              * `render`, so if this render is ever dropped the column shows a
