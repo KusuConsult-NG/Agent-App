@@ -780,6 +780,10 @@ export interface TranslationDictionary {
   ofcCfNewRevenueItem: string;
   ofcCfCreatedWithoutPrice: string;
   ofcCfChooseCategory: string;
+  ofcCfArmOfGovernment: string;
+  ofcCfEveryArm: string;
+  ofcCfNoMdaMapped: string;
+  ofcCfCategoriesUnreadable: string;
   ofcCfHowOften: string;
   ofcCfWhatItIsFor: string;
   ofcCfWhoItApplies: string;
@@ -4419,6 +4423,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfNewRevenueItem: "New revenue item",
     ofcCfCreatedWithoutPrice: "The item is created without a price. Set its rate afterwards with “Change rate” — until you do, an agent cannot assess it in the field.",
     ofcCfChooseCategory: "Choose a category",
+    ofcCfArmOfGovernment: "Arm of government",
+    ofcCfEveryArm: "Every arm of government",
+    ofcCfNoMdaMapped: "No ministry, department or agency named",
+    ofcCfCategoriesUnreadable: "The categories could not be read, so there is nothing to choose from yet.",
     ofcCfHowOften: "How often it is charged",
     ofcCfWhatItIsFor: "What it is for",
     ofcCfWhoItApplies: "Who it applies to",
@@ -7811,6 +7819,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfNewRevenueItem: "Sabon nau’in haraji",
     ofcCfCreatedWithoutPrice: "Ana samar da nau’in ba tare da kudi ba. Ka saita kudinsa daga baya da “Canza kudi” — har sai ka yi, wakili ba zai iya kima da shi a filin aiki ba.",
     ofcCfChooseCategory: "Zabi rukuni",
+    ofcCfArmOfGovernment: "Bangaren gwamnati",
+    ofcCfEveryArm: "Dukkan bangarorin gwamnati",
+    ofcCfNoMdaMapped: "Ba a ambaci wata ma\u2019aikata, sashe ko hukuma ba",
+    ofcCfCategoriesUnreadable: "Ba a iya karanta rukunonin ba, don haka babu abin da za a zaba tukuna.",
     ofcCfHowOften: "Sau nawa ake caji",
     ofcCfWhatItIsFor: "Don me ne shi",
     ofcCfWhoItApplies: "Wa ya shafa",

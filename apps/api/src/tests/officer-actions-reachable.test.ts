@@ -642,15 +642,22 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * kept, in the schema's words, "so an auditor can re-run the calculation
    * years later", and until now readable only with a database client.
    *
-   * What is left is quieter: a payment lookup, the MDA list, a transfer
-   * history, commission by place, and a KYC access log the screen mentions
-   * only in a comment.
+   * `/revenue/authorities` now backs a filter on the catalogue screen, and
+   * the absence was not cosmetic. State revenue and Local Government revenue
+   * are separate purses; an item's category decides which one a levy is paid
+   * into, and the category dropdown an officer picks from was flat and
+   * alphabetical with nothing saying which entries were which. Choosing
+   * wrongly does not fail — it collects real money into the wrong
+   * government's revenue.
+   *
+   * What is left is quieter: a payments list, a transfer history, commission
+   * by place, the revenue-side obligations duplicate, and a KYC access log
+   * the screen mentions only in a comment.
    */
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
   '/government/transfers',
   '/payments',
-  '/revenue/authorities',
   '/revenue/taxpayers/:id/obligations',
   /*
    * The agent's own unsent captures, read back on the handset that made them.

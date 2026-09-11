@@ -56,6 +56,14 @@ export async function listItems(
   db: Db,
   options: {
     categoryId?: string;
+    /*
+     * Which arm of government the item's revenue belongs to.
+     *
+     * Mirrors the filter `listCategories` has always had. The row already
+     * carries `authority_name`; what it did not carry was the id, so nothing
+     * could ask for one tier's catalogue without matching on a display name.
+     */
+    authorityId?: string;
     taxpayerType?: string;
     lgaId?: string;
     search?: string;
@@ -68,7 +76,7 @@ export async function listItems(
             ri.required_documents, ri.assessment_rules, ri.commission_eligible,
             rc.name AS category_name, rc.name_ha AS category_name_ha, rc.id AS category_id,
             m.name AS mda_name, m.name_ha AS mda_name_ha,
-            ra.name AS authority_name, ra.name_ha AS authority_name_ha,
+            ra.id AS authority_id, ra.name AS authority_name, ra.name_ha AS authority_name_ha, ra.tier,
             r.id AS rate_id, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
             r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version,
             ri.status, ri.status_reason, ri.status_changed_at
@@ -89,13 +97,15 @@ export async function listItems(
         AND ($3::uuid IS NULL OR cardinality(ri.applicable_lga_ids) = 0
              OR $3 = ANY(ri.applicable_lga_ids))
         AND ($4::text IS NULL OR ri.name ILIKE '%' || $4 || '%' OR ri.code ILIKE '%' || $4 || '%')
-      ORDER BY rc.name, ri.name`,
+        AND ($6::uuid IS NULL OR rc.authority_id = $6)
+      ORDER BY ra.tier, rc.name, ri.name`,
     [
       options.categoryId ?? null,
       options.taxpayerType ?? null,
       options.lgaId ?? null,
       options.search ?? null,
       options.includeWithdrawn ?? false,
+      options.authorityId ?? null,
     ],
   );
 }

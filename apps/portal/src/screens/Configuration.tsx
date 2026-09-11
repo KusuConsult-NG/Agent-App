@@ -7,6 +7,32 @@ import { Alert, Badge, ErrorAlert, Loading, Money, ReasonRule, Table, formatDate
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
+/**
+ * Which arm of government a levy belongs to, and who it is collected for.
+ *
+ * `listItems` has returned `authority_name`, `tier` and `mda_name` on every
+ * row since the MDA mapping was done, and this screen declared none of them
+ * and drew none of them. State revenue and Local Government revenue are
+ * separate purses, and the officer administering the catalogue could not see
+ * which purse any item was in.
+ */
+interface Category {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  authority_name: string;
+  authority_name_ha: string | null;
+  tier: string;
+}
+
+interface Authority {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  code: string;
+  tier: string;
+}
+
 interface RevenueItem {
   id: string;
   code: string;
@@ -14,6 +40,12 @@ interface RevenueItem {
   name_ha: string | null;
   category_name: string;
   category_name_ha: string | null;
+  category_id: string;
+  authority_name: string;
+  authority_name_ha: string | null;
+  tier: string;
+  mda_name: string | null;
+  mda_name_ha: string | null;
   frequency: string;
   rate_type: string | null;
   fixed_amount_kobo: string | null;
@@ -45,7 +77,18 @@ function describeRate(item: RevenueItem, t: TranslationDictionary): string {
 export function CatalogueScreen({ user }: { user: User }) {
   const { lang, t } = usePortalI18n();
   const [items, setItems] = useState<RevenueItem[] | null>(null);
+  /*
+   * The arms of government, from `/revenue/authorities` — an endpoint that had
+   * no caller anywhere in either front end until this filter.
+   *
+   * `null` is "could not be read", which is not "there are none". An empty
+   * list here would silently offer a filter with nothing in it.
+   */
+  const [authorities, setAuthorities] = useState<Authority[] | null>(null);
+  const [authorityId, setAuthorityId] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  /* A failed list is not an empty catalogue; kept apart from action errors. */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<RevenueItem | null>(null);
   const [history, setHistory] = useState<{ item: RevenueItem; rows: any[] } | null>(null);
@@ -65,22 +108,41 @@ export function CatalogueScreen({ user }: { user: User }) {
   const canReadRateHistory = can('audit:read') || can('catalogue:configure');
 
   const load = useCallback(() => {
+    setLoadError(null);
+    const query = new URLSearchParams();
+    // An officer configuring the catalogue sees what has been withdrawn as
+    // well as what is on sale — otherwise a suspended item disappears the
+    // moment it is suspended and nobody can ever restore it.
+    if (can('catalogue:configure')) query.set('includeWithdrawn', 'true');
+    if (authorityId) query.set('authorityId', authorityId);
     api
-      // An officer configuring the catalogue sees what has been withdrawn as
-      // well as what is on sale — otherwise a suspended item disappears the
-      // moment it is suspended and nobody can ever restore it.
-      .get<RevenueItem[]>(
-        can('catalogue:configure') ? '/revenue/items?includeWithdrawn=true' : '/revenue/items',
-      )
+      .get<RevenueItem[]>(`/revenue/items?${query.toString()}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+        /*
+         * Not `setItems([])`. "No revenue item matches" is a sentence about
+         * the catalogue, and a refused request is a sentence about the
+         * request — an officer told the first when the second is true will
+         * conclude the state has no levies configured.
+         */
+        setItems(null);
       });
-  }, []);
+  }, [authorityId]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    api
+      .get<Authority[]>('/revenue/authorities')
+      .then(setAuthorities)
+      .catch(() => setAuthorities(null));
+  }, []);
 
   return (
     <>
@@ -94,6 +156,31 @@ export function CatalogueScreen({ user }: { user: User }) {
             <button type="button" className="small" onClick={() => setCreating(true)}>{t.ofcCfAddRevenueItem}</button>
           )}
         </div>
+
+        {/*
+          * Whose revenue this is. Hidden rather than drawn empty when the
+          * list could not be read: a filter with one option that says
+          * "everything" is not a filter, and pretending to offer a choice
+          * that is not there is worse than not offering it.
+          */}
+        {authorities && authorities.length > 0 && (
+          <div className="field">
+            <label htmlFor="cat-authority">{t.ofcCfArmOfGovernment}</label>
+            <select
+              id="cat-authority"
+              value={authorityId}
+              onChange={(event) => setAuthorityId(event.target.value)}
+            >
+              <option value="">{t.ofcCfEveryArm}</option>
+              {authorities.map((authority) => (
+                <option key={authority.id} value={authority.id}>
+                  {localName(lang, authority.name, authority.name_ha)} ·{' '}
+                  {enumLabel(authority.tier, t)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {creating && (
@@ -185,7 +272,14 @@ export function CatalogueScreen({ user }: { user: User }) {
       )}
 
       <div className="card card--flush">
-        {!items ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !items ? (
           <div style={{ padding: 18 }}>
             <Loading rows={6} />
           </div>
@@ -195,6 +289,26 @@ export function CatalogueScreen({ user }: { user: User }) {
               { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
               { key: 'name', label: 'colRevenueItem', render: (row: RevenueItem) => localName(lang, row.name, row.name_ha) },
               { key: 'category_name', label: 'ofcAgCategory', render: (row: RevenueItem) => localName(lang, row.category_name, row.category_name_ha) },
+              {
+                /*
+                 * Returned on every row since the MDA mapping was done and
+                 * shown on none. PSIRS collects the money; the arm of
+                 * government beneath it is who the money belongs to, and the
+                 * two are not the same question.
+                 */
+                key: 'authority_name',
+                label: 'ofcCfArmOfGovernment',
+                render: (row: RevenueItem) => (
+                  <>
+                    {localName(lang, row.authority_name, row.authority_name_ha)}
+                    <p className="table__sub" style={{ margin: '2px 0 0' }}>
+                      {row.mda_name
+                        ? localName(lang, row.mda_name, row.mda_name_ha)
+                        : t.ofcCfNoMdaMapped}
+                    </p>
+                  </>
+                ),
+              },
               { key: 'frequency', label: 'ofcCfFrequency', render: (row) => <Badge status={row.frequency} /> },
               { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row, t) },
               {
@@ -299,7 +413,17 @@ function NewItemForm({
   onDone: (message: string) => void;
 }) {
   const { lang, t } = usePortalI18n();
-  const [categories, setCategories] = useState<{ id: string; name: string; name_ha: string | null }[]>([]);
+  /*
+   * `null` is "could not be read", and it is not the same as no categories.
+   *
+   * This was `setCategories([])` in the catch. The category is required and
+   * the submit button is disabled without one, so a refused request left an
+   * officer looking at an empty dropdown, a dead button, and nothing saying
+   * why — the same shape as the LGA list that stopped an agent registering
+   * somebody in a market.
+   */
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
@@ -313,12 +437,37 @@ function NewItemForm({
     applicableTaxpayerTypes: ['INDIVIDUAL', 'BUSINESS'] as string[],
   });
 
-  useEffect(() => {
+  const loadCategories = useCallback(() => {
+    setCategoriesFailed(false);
     api
-      .get<{ id: string; name: string; name_ha: string | null }[]>('/revenue/categories')
-      .then(setCategories)
-      .catch(() => setCategories([]));
+      .get<Category[]>('/revenue/categories')
+      .then((rows) => setCategories(rows))
+      .catch(() => {
+        setCategories(null);
+        setCategoriesFailed(true);
+      });
   }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  /*
+   * Grouped by the arm of government the category belongs to.
+   *
+   * `listCategories` orders by tier and returns `authority_name`, and this
+   * screen rendered a flat alphabetical list of names with neither. State
+   * revenue and Local Government revenue are separate purses: an officer
+   * implementing a new bye-law picks the category that decides which one a
+   * levy is paid into, and nothing on the screen told them which was which.
+   * Filing a Council levy under a state category does not fail — it collects
+   * the money into the wrong government's revenue.
+   */
+  const byAuthority = (categories ?? []).reduce<Map<string, Category[]>>((groups, category) => {
+    const key = localName(lang, category.authority_name, category.authority_name_ha);
+    groups.set(key, [...(groups.get(key) ?? []), category]);
+    return groups;
+  }, new Map());
 
   const toggleType = (type: string) =>
     setForm({
@@ -376,13 +525,31 @@ function NewItemForm({
               value={form.categoryId}
               onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
             >
-              <option value="">{t.ofcCfChooseCategory}</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {localName(lang, category.name, category.name_ha)}
-                </option>
+              <option value="">
+                {categoriesFailed ? t.ofcCfCategoriesUnreadable : t.ofcCfChooseCategory}
+              </option>
+              {[...byAuthority].map(([authority, group]) => (
+                <optgroup key={authority} label={authority}>
+                  {group.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {localName(lang, category.name, category.name_ha)}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
+            {categoriesFailed && (
+              /*
+               * The button below is disabled without a category, so without
+               * this the officer is stopped by a control that says nothing.
+               */
+              <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+                {t.ofcCfCategoriesUnreadable}{' '}
+                <button type="button" className="link" onClick={loadCategories}>
+                  {t.actionTryAgain}
+                </button>
+              </p>
+            )}
           </div>
 
           <div className="field">
