@@ -613,12 +613,29 @@ export function CommissionsScreen() {
           <button
             type="button"
             className="secondary"
+            /*
+              This one moves money: it promotes every eligible commission to
+              payable, for every agent at once. The request sat in an async
+              handler with no catch, so a refusal produced no error and no
+              message — and "nothing happened" was indistinguishable from "it
+              worked and the confirmation did not draw". An officer who cannot
+              tell those apart presses it again.
+            */
             onClick={async () => {
-              const result = await api.post<{ promoted: number }>(
-                '/government/commissions/promote',
-              );
-              setMessage(t.ofcFnPromotedForPayout.replace('{{n}}', String(result.promoted)));
-              load();
+              setError(null);
+              setMessage(null);
+              try {
+                const result = await api.post<{ promoted: number }>(
+                  '/government/commissions/promote',
+                );
+                setMessage(t.ofcFnPromotedForPayout.replace('{{n}}', String(result.promoted)));
+                load();
+              } catch (caught) {
+                if (caught instanceof ApiRequestError) setError(caught.error);
+                else if (caught instanceof Error) {
+                  setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+                }
+              }
             }}
           >{t.ofcFnPromoteEligible}</button>
         )}

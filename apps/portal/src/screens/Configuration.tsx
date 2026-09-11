@@ -230,10 +230,22 @@ export function CatalogueScreen({ user }: { user: User }) {
                         type="button"
                         className="small secondary"
                         onClick={async () => {
-                          const rows = await api.get<any[]>(
-                            `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
-                          );
-                          setHistory({ item: row, rows });
+                          setError(null);
+                          try {
+                            const rows = await api.get<any[]>(
+                              `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
+                            );
+                            setHistory({ item: row, rows });
+                          } catch (caught) {
+                            if (caught instanceof ApiRequestError) setError(caught.error);
+                            else if (caught instanceof Error) {
+                              setError({
+                                code: 'CLIENT',
+                                message: caught.message,
+                                moneyStatus: 'NOT_APPLICABLE',
+                              });
+                            }
+                          }
                         }}
                       >{t.colHistory}</button>
                     )}

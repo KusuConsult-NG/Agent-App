@@ -410,11 +410,16 @@ export function ReceiptsScreen() {
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
-  if (!receipts) return <Loading rows={4} />;
+  if (!receipts && !error) return <Loading rows={4} />;
 
   return (
     <>
+      {/*
+        Above the list rather than instead of it. A receipt that would not
+        open is not a reason to take away the ones that would.
+      */}
+      <ErrorAlert error={error} />
+
       <div className="card">
         <h2 className="card__title">{t.moreReceiptsFacilitated}</h2>
         <p className="card__hint">
@@ -423,7 +428,7 @@ export function ReceiptsScreen() {
       </div>
 
       <div className="card card--flush">
-        {receipts.length === 0 ? (
+        {!receipts ? null : receipts.length === 0 ? (
           <p className="empty">{t.moreNoReceipts}</p>
         ) : (
           <ul className="list">
@@ -432,9 +437,31 @@ export function ReceiptsScreen() {
                 <button
                   type="button"
                   className="list__item"
+                  /*
+                    Tapping a receipt used to be able to do nothing at all.
+                    The request sat in an async handler with no catch, so a
+                    lost signal or an expired session produced no error, no
+                    spinner and no change — on the screen an agent opens with
+                    a taxpayer standing in front of them asking for their
+                    receipt. They tap again, and again.
+                  */
                   onClick={async () => {
-                    const detail = await api.get<{ downloadUrl: string }>(`/receipts/${receipt.id}`);
-                    window.open(detail.downloadUrl, '_blank', 'noopener');
+                    setError(null);
+                    try {
+                      const detail = await api.get<{ downloadUrl: string }>(
+                        `/receipts/${receipt.id}`,
+                      );
+                      window.open(detail.downloadUrl, '_blank', 'noopener');
+                    } catch (caught) {
+                      if (caught instanceof ApiRequestError) setError(caught.error);
+                      else if (caught instanceof Error) {
+                        setError({
+                          code: 'CLIENT',
+                          message: caught.message,
+                          moneyStatus: 'NOT_APPLICABLE',
+                        });
+                      }
+                    }
                   }}
                 >
                   <div className="list__body">
