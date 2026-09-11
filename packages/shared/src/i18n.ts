@@ -2217,6 +2217,9 @@ export interface TranslationDictionary {
   ofcTgPeriodQuarterly: string;
   ofcTgPeriodAnnual: string;
   ofcTgAmount: string;
+  ofcTgNeedAmount: string;
+  ofcTgNeedLga: string;
+  ofcTgNeedCategory: string;
   ofcTgNote: string;
   ofcTgTarget: string;
   ofcTgCollected: string;
@@ -5688,6 +5691,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTgPeriodQuarterly: "Quarterly",
     ofcTgPeriodAnnual: "Annual",
     ofcTgAmount: "Target amount",
+    ofcTgNeedAmount: "Enter the amount to be collected in this period.",
+    ofcTgNeedLga: "Choose the Local Government Area this target is for.",
+    ofcTgNeedCategory: "Choose the revenue category this target is for.",
     ofcTgNote: "Why this figure",
     ofcTgTarget: "Target",
     ofcTgCollected: "Collected",
@@ -8995,6 +9001,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTgPeriodQuarterly: "Kwata-kwata",
     ofcTgPeriodAnnual: "Shekara-shekara",
     ofcTgAmount: "Adadin manufa",
+    ofcTgNeedAmount: "Ka shigar da adadin da za a karba a wannan lokaci.",
+    ofcTgNeedLga: "Ka zabi Karamar Hukumar da wannan manufa ta shafa.",
+    ofcTgNeedCategory: "Ka zabi rukunin haraji da wannan manufa ta shafa.",
     ofcTgNote: "Dalilin wannan adadi",
     ofcTgTarget: "Manufa",
     ofcTgCollected: "An tara",

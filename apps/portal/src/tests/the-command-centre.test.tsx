@@ -26,7 +26,7 @@ import { TransactionScreen } from '../screens/Transaction';
 import { CasesScreen, MyWorkScreen } from '../screens/Cases';
 import { GlobalSearch } from '../screens/Search';
 import { TargetsScreen } from '../screens/Targets';
-import { api } from '../lib/api';
+import { ApiRequestError, api } from '../lib/api';
 import { Growth } from '../ui';
 import * as apiModule from '../lib/api';
 import { permissionsForRole, type Role } from '@psirs/shared';
@@ -635,6 +635,126 @@ describe('targets and the forecast beside them', () => {
     await waitFor(() => expect(screen.getByText(/Revenue targets/)).toBeTruthy());
     expect(screen.queryByRole('button', { name: /Set a target/i })).toBeNull();
     expect(screen.queryByRole('button', { name: /Withdraw/i })).toBeNull();
+  });
+
+  /**
+   * The target form, when it will not send.
+   *
+   * Four conditions switch the submit button off — no period, no amount, no
+   * Local Government Area under an LGA-scoped target, no category under a
+   * category-scoped one — and the screen said none of them. The period is the
+   * worst of the four, because it is not something an officer can supply: it is
+   * fetched, and the catch wrote `null` silently, so a failed lookup produced a
+   * form that would not send with nothing at all on the screen that had changed.
+   *
+   * The pattern is the one the allocations and bank-account screens already use.
+   * Name the missing thing, so "why will this not send" is answered where it is
+   * asked rather than in the reader's head.
+   */
+  describe('a target that cannot be set yet', () => {
+    const PERIOD = { periodStart: '2026-09-01', periodEnd: '2026-09-30' };
+
+    /*
+     * The period endpoint is asked for twice: once by the screen, to know
+     * which month the figures belong to, and once by the form, to stamp the
+     * target it is about to set. `period` here answers the FORM's request —
+     * the screen's is always served — so a test about the form's silence
+     * cannot pass on the screen's alert instead. That distinction is not
+     * hypothetical: the first version of this test did exactly that.
+     */
+    function mockWith(period: () => Promise<unknown>) {
+      let served = 0;
+      vi.spyOn(api, 'get').mockImplementation((path: string) => {
+        if (path.includes('/targets/period')) {
+          served += 1;
+          return (served === 1 ? Promise.resolve(PERIOD) : period()) as never;
+        }
+        if (path.includes('/targets/rollup')) return Promise.resolve(rollup) as never;
+        if (path.includes('/forecast')) return Promise.resolve(seasonal) as never;
+        if (path.includes('/government/targets')) return Promise.resolve([target]) as never;
+        if (path.includes('/reference/lgas')) {
+          return Promise.resolve([{ id: 'lga-1', name: 'Jos North' }]) as never;
+        }
+        return Promise.resolve([]) as never;
+      });
+    }
+
+    const openForm = async () => {
+      render(<TargetsScreen user={user('admin')} />);
+      fireEvent.click(await screen.findByRole('button', { name: /Set a target/i }));
+    };
+
+    it('says why, when the period could not be worked out', async () => {
+      signInAs('admin');
+      mockWith(() =>
+        Promise.reject(
+          new ApiRequestError(503, {
+            code: 'UPSTREAM_UNAVAILABLE',
+            message: 'The period for this kind of target could not be worked out.',
+            moneyStatus: 'NOT_APPLICABLE',
+          }),
+        ),
+      );
+
+      await openForm();
+
+      await waitFor(() =>
+        expect(screen.getByText(/could not be worked out/i)).toBeTruthy(),
+      );
+    });
+
+    it('names the amount it is waiting for', async () => {
+      signInAs('admin');
+      mockWith(async () => PERIOD);
+
+      await openForm();
+
+      await waitFor(() =>
+        expect(screen.getByText(/Enter the amount to be collected/i)).toBeTruthy(),
+      );
+    });
+
+    it('names the Local Government Area it is waiting for', async () => {
+      signInAs('admin');
+      mockWith(async () => PERIOD);
+
+      await openForm();
+      await waitFor(() => expect(screen.getByLabelText(/Set against/i)).toBeTruthy());
+
+      fireEvent.change(screen.getByLabelText(/Set against/i), { target: { value: 'LGA' } });
+      const amount = document.querySelector('input[type="number"]') as HTMLInputElement;
+      fireEvent.change(amount, { target: { value: '5000000' } });
+
+      await waitFor(() =>
+        expect(screen.getByText(/Choose the Local Government Area/i)).toBeTruthy(),
+      );
+    });
+
+    /*
+     * The control. A form with everything in it says nothing — a hint that is
+     * always on screen is one nobody reads when it matters.
+     */
+    it('says nothing once it has what it needs', async () => {
+      signInAs('admin');
+      mockWith(async () => PERIOD);
+
+      await openForm();
+      const amount = await waitFor(() => {
+        const found = document.querySelector('input[type="number"]') as HTMLInputElement | null;
+        expect(found).toBeTruthy();
+        return found!;
+      });
+      fireEvent.change(amount, { target: { value: '5000000' } });
+
+      await waitFor(() =>
+        expect(screen.queryByText(/Enter the amount to be collected/i)).toBeNull(),
+      );
+      // Two buttons carry this label — the one that opened the form and the
+      // one that submits it — and the form's is live now that it has an
+      // amount and a period.
+      const labelled = screen.getAllByRole('button', { name: /^Set a target$/i });
+      expect(labelled.some((button) => !(button as HTMLButtonElement).disabled)).toBe(true);
+    });
   });
 });
 

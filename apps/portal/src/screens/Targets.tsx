@@ -460,6 +460,16 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
     note: '',
   });
   const [period, setPeriod] = useState<{ periodStart: string; periodEnd: string } | null>(null);
+  /*
+   * Why the period is missing, when it is.
+   *
+   * The submit button is disabled while `period` is null and `submit()`
+   * returns early on the same condition, so a failed lookup produced a form
+   * that would not send and did not say why. The catch wrote `null` and
+   * nothing else: no alert, no sentence, nothing on the screen that had
+   * changed.
+   */
+  const [periodError, setPeriodError] = useState<ApiError | null>(null);
   const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
@@ -470,8 +480,17 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
       .get<{ periodStart: string; periodEnd: string }>(
         `/government/targets/period?kind=${form.periodKind}`,
       )
-      .then(setPeriod)
-      .catch(() => setPeriod(null));
+      .then((loaded) => {
+        setPeriod(loaded);
+        setPeriodError(null);
+      })
+      .catch((caught) => {
+        setPeriod(null);
+        if (caught instanceof ApiRequestError) setPeriodError(caught.error);
+        else if (caught instanceof Error) {
+          setPeriodError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, [form.periodKind]);
 
   useEffect(() => {
@@ -512,6 +531,24 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
   }
 
   const amountValid = Number(form.amountNaira) > 0;
+
+  /*
+   * What the form is still waiting for, in words rather than a dead button.
+   *
+   * Four conditions switch this button off and none of them said so. The
+   * pattern is the one the allocations and bank-account screens already use:
+   * name the missing thing, so the answer to "why will this not send" is on
+   * the screen rather than in the reader's head. Silent while the period is
+   * still being fetched — there is nothing wrong yet.
+   */
+  const blockedBecause = ((): string | null => {
+    if (periodError) return null; // Said in full by the alert above the button.
+    if (!period) return null;
+    if (!amountValid) return t.ofcTgNeedAmount;
+    if (form.scope === 'LGA' && !form.lgaId) return t.ofcTgNeedLga;
+    if (form.scope === 'CATEGORY' && !form.categoryId) return t.ofcTgNeedCategory;
+    return null;
+  })();
 
   return (
     <div className="card">
@@ -597,6 +634,8 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
         </p>
       )}
 
+      <ErrorAlert error={periodError} />
+
       <label>
         {t.ofcTgNote}
         <textarea
@@ -605,6 +644,12 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
           onChange={(event) => setForm({ ...form, note: event.target.value })}
         />
       </label>
+
+      {blockedBecause && (
+        <p className="muted" role="status">
+          {blockedBecause}
+        </p>
+      )}
 
       <button
         type="button"

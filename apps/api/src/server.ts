@@ -156,9 +156,19 @@ async function main() {
       return sent > 0 ? `delivered ${sent} notification(s)` : null;
     }),
 
+    /*
+     * The one sweep that could never say anything.
+     *
+     * Every other job here answers with a line when it did something — "3
+     * invoice(s) passed their deadline", "12 matched, 0 exception(s)" — and
+     * that line is logged and stored as the run's detail. This one returned
+     * `null` unconditionally, so the sweep that raises fraud flags was the
+     * single job whose record of a run is indistinguishable from a run that
+     * found nothing. `runFraudSweep` has always returned the count.
+     */
     schedule('fraud-sweep', async () => {
-      await withTransaction((client) => runFraudSweep(client));
-      return null;
+      const { flagsRaised } = await withTransaction((client) => runFraudSweep(client));
+      return flagsRaised > 0 ? `${flagsRaised} fraud flag(s) raised` : null;
     }),
 
     schedule('system-alerts', async () => {

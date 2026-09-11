@@ -102,7 +102,17 @@ async function issueDocuments(count: number): Promise<string[]> {
 describe('a document that should exist once, existing several times', () => {
   it('flags a receipt issued again and again for the same transaction', async () => {
     const documents = await issueDocuments(3);
-    await sweep();
+    /*
+     * The count is the sweep's only account of itself.
+     *
+     * It is what the scheduled run records as its detail, and for a long time
+     * the scheduled job threw it away and reported `null` — so the one sweep
+     * that raises fraud flags was the single job whose record of a busy night
+     * read the same as a quiet one. Asserted here beside the flags, so the
+     * number and the rows it counts cannot drift apart.
+     */
+    const { flagsRaised } = await sweep();
+    assert.equal(flagsRaised, 1);
 
     const flags = await flagsFor('REPEATED_RECEIPT_REGENERATION');
     assert.equal(flags.length, 1, JSON.stringify(flags));
@@ -114,7 +124,8 @@ describe('a document that should exist once, existing several times', () => {
 
   it('says nothing about a reversal and a single reissue', async () => {
     await issueDocuments(2);
-    await sweep();
+    const { flagsRaised } = await sweep();
+    assert.equal(flagsRaised, 0, 'nothing raised, so nothing to report');
     assert.deepEqual(await flagsFor('REPEATED_RECEIPT_REGENERATION'), []);
   });
 
