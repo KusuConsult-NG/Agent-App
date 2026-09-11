@@ -95,6 +95,15 @@ export function OrganisationScreen({ user }: { user: User }) {
    * unconditional.
    */
   const mayManage = can('user:manage');
+  /*
+   * Written positively and beside `mayManage`, for the reason above.
+   *
+   * `/government/transfers` is guarded on `user:manage` OR `audit:read`, and
+   * the second is the one that matters: an auditor holds `audit:read` and not
+   * `user:manage`, and an auditor is who asks who was responsible for
+   * somewhere on a date.
+   */
+  const mayReadPostings = can('user:manage') || can('audit:read');
 
   const load = useCallback(async () => {
     setError(null);
@@ -293,6 +302,8 @@ export function OrganisationScreen({ user }: { user: User }) {
           />
         )}
       </div>
+
+      {mayReadPostings && <ServicePostingHistory />}
     </>
   );
 }
@@ -634,20 +645,34 @@ export function PostingPanel({
     }
   }, [officerId]);
 
+  /*
+   * A list that could not be read is not a service with no departments.
+   *
+   * All three of these caught into `setX([])`, and the empty option on each
+   * select reads "Unposted" — a real value. So a refused read left an
+   * administrator looking at a posting form whose only available answer was
+   * to unpost the officer, with nothing saying the lists had failed. That is
+   * worse than a disabled control: it is a wrong action offered as the only
+   * one.
+   */
+  const [listsFailed, setListsFailed] = useState(false);
+
   useEffect(() => {
     if (mayManage) {
       void loadHistory();
+      setListsFailed(false);
+      const failed = () => setListsFailed(true);
       api
         .get<Department[]>('/government/departments')
         .then(setDepartments)
-        .catch(() => setDepartments([]));
-      api.get<Office[]>('/government/offices').then(setOffices).catch(() => setOffices([]));
+        .catch(failed);
+      api.get<Office[]>('/government/offices').then(setOffices).catch(failed);
       api
         .get<Officer[]>('/government/users')
         .then((rows) =>
           setOfficers(rows.filter((row) => row.role !== 'agent' && row.id !== officerId)),
         )
-        .catch(() => setOfficers([]));
+        .catch(failed);
     }
   }, [officerId, loadHistory, mayManage]);
 
@@ -659,6 +684,11 @@ export function PostingPanel({
       <p className="muted">{t.ofcOrPostingBody}</p>
       <ErrorAlert error={error} />
       {notice && <Alert kind="success">{notice}</Alert>}
+      {listsFailed && (
+        <Alert kind="warning" title="ofcOrListsFailedTitle">
+          <p style={{ margin: 0 }}>{t.ofcOrListsFailedBody}</p>
+        </Alert>
+      )}
 
       <div className="filters">
         <label>
@@ -804,6 +834,153 @@ export function PostingPanel({
               key: 'kind',
               label: 'ofcOrPosting',
               render: (row: Transfer) => enumLabel(row.kind, t),
+            },
+            { key: 'reason', label: 'ofcCwWhy' },
+            { key: 'recorded_by_name', label: 'ofcTrRecordedBy' },
+          ]}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===========================================================================
+/**
+ * Who was posted where, across the whole service.
+ *
+ * `GET /government/transfers` was written with its purpose in its own comment
+ * — "the question a revenue dispute asks: who was responsible for Jos North
+ * in March, and the reason postings are a table rather than a log" — and had
+ * no caller anywhere in either front end. One of the reads recorded in
+ * READ_WITHOUT_A_SCREEN.
+ *
+ * The officer panel above answers the same question for ONE officer, which
+ * only helps somebody who already knows whose record to open. A dispute
+ * starts from a place and a date and does not know the name; that is the
+ * whole difficulty, and it is what this answers.
+ *
+ * It is guarded on `user:manage` OR `audit:read`, as the endpoint is. An
+ * auditor holds the second and not the first, and an auditor is who asks.
+ *
+ * WHAT IS NOT SHOWN, AND WHY
+ *
+ * `from_value` and `to_value` hold ids — a department, an office, a
+ * supervisor — that this screen has no way to resolve to names, so a uuid is
+ * all it could print. The officer panel omits them for the same reason, and a
+ * meaningless identifier on screen is worse than an honest absence: it looks
+ * like information. What changed, when, why and on whose instruction is the
+ * record, and all four are here.
+ */
+interface ServiceTransfer extends Transfer {
+  full_name: string;
+  role: string;
+  staff_number: string | null;
+}
+
+const POSTING_KINDS = ['POSTING', 'DEPARTMENT', 'OFFICE', 'SUPERVISOR', 'TERRITORY', 'ROLE'] as const;
+
+function ServicePostingHistory() {
+  const { t } = usePortalI18n();
+  const [rows, setRows] = useState<ServiceTransfer[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [kind, setKind] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+
+  const load = useCallback(() => {
+    setError(null);
+    const query = new URLSearchParams();
+    if (kind) query.set('kind', kind);
+    if (from) query.set('from', from);
+    if (to) query.set('to', to);
+    api
+      .get<ServiceTransfer[]>(`/government/transfers?${query.toString()}`)
+      .then(setRows)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+        /*
+         * "No posting was recorded in this period" is a finding about the
+         * service — it would mean nobody moved — and it is the finding a
+         * dispute would read as exonerating. What stops a refused request
+         * saying it is the error branch below, which is checked before the
+         * table; this clears the rows as well so that the two cannot come
+         * apart if that order is ever changed.
+         */
+        setRows(null);
+      });
+  }, [kind, from, to]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  return (
+    <div className="card">
+      <h3>{t.ofcOrWhoServedWhere}</h3>
+      <p className="muted">{t.ofcOrWhoServedWhereBody}</p>
+
+      <div className="filters">
+        <label>
+          {t.ofcOrWhatMoved}
+          <select value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="">{t.ofcOrAnyKind}</option>
+            {POSTING_KINDS.map((value) => (
+              <option key={value} value={value}>
+                {enumLabel(value, t)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t.ofcFrom}
+          <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+        </label>
+        <label>
+          {t.ofcTo}
+          <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+        </label>
+      </div>
+
+      {error ? (
+        <div>
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !rows ? (
+        <Loading rows={3} />
+      ) : (
+        <Table
+          rows={rows}
+          empty="ofcOrNoPostingsInPeriod"
+          columns={[
+            {
+              key: 'effective_from',
+              label: 'ofcOrEffectiveFrom',
+              render: (row: ServiceTransfer) => formatDate(row.effective_from),
+            },
+            {
+              key: 'full_name',
+              label: 'ofcSearchOfficer',
+              render: (row: ServiceTransfer) => (
+                <>
+                  <strong>{row.full_name}</strong>
+                  <br />
+                  <span className="muted">
+                    {enumLabel(row.role, t)}
+                    {row.staff_number ? ` · ${row.staff_number}` : ''}
+                  </span>
+                </>
+              ),
+            },
+            {
+              key: 'kind',
+              label: 'ofcOrWhatMoved',
+              render: (row: ServiceTransfer) => <Badge status={row.kind} />,
             },
             { key: 'reason', label: 'ofcCwWhy' },
             { key: 'recorded_by_name', label: 'ofcTrRecordedBy' },

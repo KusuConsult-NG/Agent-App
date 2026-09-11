@@ -2163,6 +2163,13 @@ export interface TranslationDictionary {
   ofcOrCovers: string;
   ofcOrClose: string;
   ofcOrPosting: string;
+  ofcOrWhoServedWhere: string;
+  ofcOrWhoServedWhereBody: string;
+  ofcOrWhatMoved: string;
+  ofcOrAnyKind: string;
+  ofcOrNoPostingsInPeriod: string;
+  ofcOrListsFailedTitle: string;
+  ofcOrListsFailedBody: string;
   ofcOrPostingBody: string;
   ofcOrMoveOfficer: string;
   ofcOrDepartment: string;
@@ -5723,6 +5730,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOrCovers: "Administers",
     ofcOrClose: "Close",
     ofcOrPosting: "Posting",
+    ofcOrWhoServedWhere: "Who was posted where",
+    ofcOrWhoServedWhereBody: "Every recorded posting across the service, newest first. A dispute starts from a place and a date and does not know whose record to open, which is what one officer's history cannot answer.",
+    ofcOrWhatMoved: "What moved",
+    ofcOrAnyKind: "Any kind of move",
+    ofcOrNoPostingsInPeriod: "No posting was recorded in this period.",
+    ofcOrListsFailedTitle: "Some lists could not be read",
+    ofcOrListsFailedBody: "The departments, offices or officers did not load, so a choice that looks like \u201cUnposted\u201d may only mean the list is missing. Reload before recording a posting.",
     ofcOrPostingBody: "Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers.",
     ofcOrMoveOfficer: "Move this officer",
     ofcOrDepartment: "Department",
@@ -9119,6 +9133,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOrCovers: "Yana kula da",
     ofcOrClose: "Rufe",
     ofcOrPosting: "Matsayi",
+    ofcOrWhoServedWhere: "Wa aka tura ina",
+    ofcOrWhoServedWhereBody: "Duk wani turawa da aka rubuta a fadin hukumar, sabo tukuna. Takaddama tana farawa daga wuri da rana, ba ta san rikodin wa za a bude ba, wanda hakan tarihin jami\u2019i daya ba zai iya amsawa ba.",
+    ofcOrWhatMoved: "Abin da ya sauya",
+    ofcOrAnyKind: "Kowane irin sauyi",
+    ofcOrNoPostingsInPeriod: "Ba a rubuta wani turawa a wannan lokacin ba.",
+    ofcOrListsFailedTitle: "Ba a iya karanta wasu jerin ba",
+    ofcOrListsFailedBody: "Sassan, ofisoshi ko jami\u2019ai ba su bayyana ba, don haka zabin da ke kama da \u201cBa a tura ba\u201d yana iya nufin jerin ne kawai ya bata. Sake loda kafin ka rubuta turawa.",
     ofcOrPostingBody: "Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban.",
     ofcOrMoveOfficer: "Matsar da wannan jami’i",
     ofcOrDepartment: "Sashe",

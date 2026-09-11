@@ -110,12 +110,22 @@ describe('the taxpayer register, when it could not be read', () => {
 });
 
 describe('the organisation chart, when it could not be read', () => {
+  /*
+   * `getAllByText`, because the screen now makes two independent reads.
+   *
+   * The chart and the service-wide posting history each say what they could
+   * not read, in the place the missing thing would have been. That is the
+   * intended behaviour and not a duplicate: one sentence covering two failed
+   * reads leaves the officer unable to tell which of them came back.
+   */
+  const refusals = () => screen.getAllByText(/register could not be read/i);
+
   it('stops pretending either list is still loading', async () => {
     vi.spyOn(api, 'get').mockRejectedValue(REFUSED);
 
     render(<OrganisationScreen user={USER as never} />);
 
-    await waitFor(() => expect(screen.getByText(/register could not be read/i)).toBeTruthy());
+    await waitFor(() => expect(refusals().length).toBeGreaterThan(0));
     expect(spinner()).toBeNull();
   });
 
@@ -125,7 +135,7 @@ describe('the organisation chart, when it could not be read', () => {
 
     render(<OrganisationScreen user={USER as never} />);
 
-    await waitFor(() => expect(screen.getByText(/register could not be read/i)).toBeTruthy());
+    await waitFor(() => expect(refusals().length).toBeGreaterThan(0));
     expect(screen.queryByText(/No departments/i)).toBeNull();
   });
 

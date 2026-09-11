@@ -650,13 +650,21 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * wrongly does not fail — it collects real money into the wrong
    * government's revenue.
    *
-   * What is left is quieter: a payments list, a transfer history, commission
-   * by place, the revenue-side obligations duplicate, and a KYC access log
-   * the screen mentions only in a comment.
+   * `/government/transfers` now opens on the organisation screen. Its own
+   * comment already stated what it was for — "the question a revenue dispute
+   * asks: who was responsible for Jos North in March" — and the only posting
+   * history on a screen was one officer's, which helps nobody who does not
+   * already know whose record to open. A dispute starts from a place and a
+   * date. The panel is gated on `user:manage` OR `audit:read`, as the
+   * endpoint is, because the auditor holds only the second and the auditor is
+   * who asks.
+   *
+   * What is left is quieter: a payments list, commission by place, the
+   * revenue-side obligations duplicate, and a KYC access log the screen
+   * mentions only in a comment.
    */
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
-  '/government/transfers',
   '/payments',
   '/revenue/taxpayers/:id/obligations',
   /*
