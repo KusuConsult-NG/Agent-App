@@ -222,3 +222,144 @@ describe('and the states that still must not count as revenue', () => {
     assert.equal(sumOf(await report('AGENT_ACTIVITY'), 'collected_kobo'), settled);
   });
 });
+
+// ===========================================================================
+/**
+ * And the guard, because this is the sixth hand-written copy of the same list.
+ *
+ * The fix moves every money query onto `REVENUE_RECOGNISED_STATES`, but
+ * nothing stops the seventh copy: writing `t.status IN ('...','...')` in a new
+ * query is easier than finding the constant, it reads as obviously correct,
+ * and no test fails when one state is missing — the figure is simply smaller
+ * than it should be, which is indistinguishable from a quiet week.
+ *
+ * WHAT THIS CHECKS, AND WHAT IT DELIBERATELY DOES NOT
+ *
+ * Not "no file may name a transaction status". Most such lists are fine and
+ * have nothing to do with revenue: ('FAILED','CANCELLED','EXPIRED') is the
+ * failure tally, ('REVERSED','REFUNDED') is money given back, and a guard
+ * that failed those would need an exemption list long enough that nobody
+ * reads it — the failure mode the field-drawing guard's own comment warns
+ * about.
+ *
+ * So it looks only at lists naming TWO OR MORE of the four recognised states,
+ * which is the shape a revenue predicate has and a failure tally does not.
+ * Such a list must mean one of the two things this platform recognises:
+ *
+ *   RECOGNISED  — the government has the money. Import it, do not retype it.
+ *   CONFIRMED   — SETTLED, RECEIPT_GENERATED, RECONCILIATION_PENDING, the
+ *                 citizen-facing "has this payment gone through", which
+ *                 deliberately excludes the status that exists for a few
+ *                 milliseconds inside one transaction.
+ *
+ * That an allowed set is named by its MEANING rather than by the file it sits
+ * in is the point: a new module using the confirmed-payment set correctly
+ * passes without anybody editing a list of blessed filenames.
+ *
+ * Requiring two recognised states, rather than one, is what keeps `paye.ts`
+ * and `connections.ts` out of it. Those name a different table's statuses —
+ * ('PAYMENT_CONFIRMED','RECEIPTED','SETTLED') — which collides with this
+ * domain on the single word SETTLED and means something else entirely.
+ */
+describe('the definition of collected money is not written out by hand', () => {
+  const RECOGNISED = new Set([
+    'PAYMENT_VERIFIED',
+    'RECEIPT_GENERATED',
+    'RECONCILIATION_PENDING',
+    'SETTLED',
+  ]);
+  const CONFIRMED = new Set(['SETTLED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING']);
+
+  /*
+   * The one exception, recorded rather than excused.
+   *
+   * `settleLinkedTransactions` asks which collections a bank credit can still
+   * advance, and the answer is the two states that are paid but not yet
+   * settled. That is a question about what may move next, not about what the
+   * State has received, and widening it to the recognised set would have the
+   * sweep try to re-settle money it has already settled.
+   */
+  const ALLOWED_ELSEWHERE = new Map([
+    [
+      'services/reconciliation.ts',
+      new Set(['RECEIPT_GENERATED', 'RECONCILIATION_PENDING']),
+    ],
+  ]);
+
+  const sameSet = (a: Set<string>, b: Set<string>) =>
+    a.size === b.size && [...a].every((value) => b.has(value));
+
+  it('every list naming two or more recognised states means one of the two things it can', async () => {
+    const { readdirSync, readFileSync, statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+
+    const walk = (dir: string): string[] =>
+      readdirSync(dir).flatMap((entry) => {
+        const full = join(dir, entry);
+        if (statSync(full).isDirectory()) return walk(full);
+        return full.endsWith('.ts') ? [full] : [];
+      });
+
+    const root = join(import.meta.dirname, '..');
+    const files = ['services', 'routes', 'jobs', 'lib', 'integrations', 'middleware']
+      .map((dir) => join(root, dir))
+      .filter((dir) => {
+        try {
+          return statSync(dir).isDirectory();
+        } catch {
+          return false;
+        }
+      })
+      .flatMap(walk)
+      .filter((file) => !file.endsWith('revenue-states.ts'));
+
+    // A comma-separated run of two or more upper-case quoted identifiers,
+    // which covers both a SQL `IN ('A','B')` and a TypeScript `['A', 'B']`.
+    const runs = /(?:'[A-Z_]+'\s*,\s*)+'[A-Z_]+'/g;
+    const offenders: string[] = [];
+
+    for (const file of files) {
+      const source = readFileSync(file, 'utf8');
+      const relative = file.slice(root.length + 1);
+      for (const match of source.match(runs) ?? []) {
+        const named = new Set(
+          [...match.matchAll(/'([A-Z_]+)'/g)].map((found) => found[1]!),
+        );
+        const recognised = [...named].filter((state) => RECOGNISED.has(state));
+        if (recognised.length < 2) continue;
+        if (sameSet(named, RECOGNISED) || sameSet(named, CONFIRMED)) continue;
+        const permitted = ALLOWED_ELSEWHERE.get(relative);
+        if (permitted && sameSet(named, permitted)) continue;
+        offenders.push(`${relative}: ${match}`);
+      }
+    }
+
+    assert.deepEqual(
+      offenders,
+      [],
+      'these name recognised states in a set that is neither the recognised one nor ' +
+        'the confirmed-payment one; import REVENUE_RECOGNISED_STATES rather than ' +
+        `retyping it:\n  ${offenders.join('\n  ')}`,
+    );
+  });
+
+  /*
+   * The control on the guard itself. A check that cannot fail is not a check,
+   * and the way this one would rot is by matching nothing at all — a broken
+   * regex, a renamed directory, a walk that returns no files.
+   */
+  it('is looking at source that actually contains such lists', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+
+    const confirmed = readFileSync(
+      join(import.meta.dirname, '..', 'services', 'payment-history.ts'),
+      'utf8',
+    );
+    assert.match(
+      confirmed,
+      /(?:'[A-Z_]+'\s*,\s*)+'[A-Z_]+'/,
+      'the pattern no longer matches a known hand-written list, so the guard is inert',
+    );
+  });
+});
