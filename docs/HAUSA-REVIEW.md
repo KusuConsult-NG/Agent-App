@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,249 strings; that one is two pages and links back
+> because it carries all 3,272 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,249 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,272 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,249 strings is worse than no sheet, because it looks complete; this one cannot
+3,272 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,249 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,272 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,249 strings: where the
+- The glossary below is applied consistently across all 3,272 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3170 strings, grouped by where an agent meets them. Lower stakes
+3193 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -494,6 +494,7 @@ instructions — but they are what an agent reads all day.
 | `ofcNavPresumptive` | Presumptive schedule | Jadawalin haraji na kimantawa | ☐ | |
 | `ofcNavPayroll` | Employers and premises | Masu daukar ma’aikata da wurare | ☐ | |
 | `ofcNavConnections` | Assets and leads | Dukiya da alamu | ☐ | |
+| `ofcNavPlatform` | Outside services | Hidimomin waje | ☐ | |
 | `ofcNavInbox` | Inbox | Akwatin sako | ☐ | |
 | `ofcNavMyAccess` | Where I am signed in | Inda na shiga | ☐ | |
 | `ofcNavDashboard` | Collections dashboard | Allon karban haraji | ☐ | |
@@ -2036,6 +2037,27 @@ instructions — but they are what an agent reads all day.
 | `ofcRlExportLimit` | Rows it may export | Layukan da zai iya fitarwa | ☐ | |
 | `ofcRlExportsNothing` | Exports nothing | Ba ya fitar da komai | ☐ | |
 | `ofcCwSave` | Save | Ajiye | ☐ | |
+| `ofcPlTitle` | Services this platform depends on | Hidimomin da wannan dandali ya dogara da su | ☐ | |
+| `ofcPlHint` | Measured from the platform's own traffic, not from test calls. Only a service that could not be reached counts against it — an answer nobody likes is still an answer. | An auna daga zirga-zirgar dandalin kansa, ba daga kiran gwaji ba. Hidimar da ba a iya isa gare ta kadai ake lissafawa a kanta — amsar da ba a so ita ma amsa ce. | ☐ | |
+| `ofcPlAllAnswering` | All answering | Duk suna amsawa | ☐ | |
+| `ofcPlNeedingAttention` | Needing attention | Suna bukatar kulawa | ☐ | |
+| `ofcPlService` | Service | Hidima | ☐ | |
+| `ofcPlState` | State | Yanayi | ☐ | |
+| `ofcPlLastAnswered` | Last answered | Amsa ta karshe | ☐ | |
+| `ofcPlInARow` | Unanswered in a row | Wadanda ba a amsa ba a jere | ☐ | |
+| `ofcPlCalls` | Calls | Kiraye-kiraye | ☐ | |
+| `ofcPlNeverAnswered` | Never | Bai taba ba | ☐ | |
+| `ofcPlAdapter` | Configured as | An saita a matsayin | ☐ | |
+| `ofcPlTin` | The PSIRS TIN service | Hidimar lambar haraji ta PSIRS | ☐ | |
+| `ofcPlKyc` | The government identity service | Hidimar tantance shaidar gwamnati | ☐ | |
+| `ofcPlVehicles` | The vehicle registration authority | Hukumar rajistar ababen hawa | ☐ | |
+| `ofcPlBanks` | Bank name enquiry | Tambayar sunan asusun banki | ☐ | |
+| `ofcPlGateway` | The payment gateway | Kofar biyan kudi | ☐ | |
+| `ofcPlNeverCalledBody` | Has not been called once since this database was created. | Ba a taba kiran ta ba tun lokacin da aka kirkiri wannan bayanan. | ☐ | |
+| `ofcPlDownBody` | {{n}} call(s) in a row could not be answered. | Kiraye-kiraye {{n}} a jere ba a iya amsa su ba. | ☐ | |
+| `ofcPlDegradedBody` | A recent call could not be answered, and the one after it was. | An yi kira kwanan nan ba a amsa ba, sannan aka amsa na gaba. | ☐ | |
+| `ofcPlAnsweringBody` | Answering. | Yana amsawa. | ☐ | |
+| `ofcPlOutageHint` | Until this screen existed, an outage was discovered by noticing a queue had stopped moving. | Kafin wannan allon ya kasance, ana gano tsayawar hidima ne ta hanyar lura cewa jerin aiki ya tsaya. | ☐ | |
 | `ofcInHint` | What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it. | Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi. | ☐ | |
 | `ofcInUnread` | Not yet read | Ba a karanta ba tukuna | ☐ | |
 | `ofcInCritical` | Needing attention now | Na bukatar kulawa yanzu | ☐ | |
@@ -3695,6 +3717,7 @@ instructions — but they are what an agent reads all day.
 | `enumWithdrawn` | Withdrawn | An janye | ☐ | |
 | `enumIntegrationAlert` | An outside service is not answering | Wata hidimar waje ba ta amsawa | ☐ | |
 | `enumNeverCalled` | Not called yet | Ba a kira ba tukuna | ☐ | |
+| `enumHealthy` | Answering | Yana amsawa | ☐ | |
 | `enumDegraded` | A call went unanswered | An yi kira ba a amsa ba | ☐ | |
 | `enumDown` | Not answering | Ba ya amsawa | ☐ | |
 | `enumApprovalWaiting` | An approval is waiting for you | Amincewa na jiran ka | ☐ | |

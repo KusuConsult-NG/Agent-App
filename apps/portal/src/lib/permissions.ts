@@ -504,6 +504,17 @@ const SCREEN: Record<string, NavItem> = {
    */
   fieldApp: { path: '/field-app', label: 'ofcNavFieldApp', permission: 'system:configure' },
   /*
+   * Offered to auditors as well as administrators, because the endpoint is
+   * `system:configure` OR `audit:read` and both have a reason to ask. An
+   * auditor reading a reconciliation exception needs to know whether the
+   * gateway was answering that morning; nobody can tell them from the numbers.
+   */
+  platform: {
+    path: '/platform',
+    label: 'ofcNavPlatform',
+    permission: ['system:configure', 'audit:read'],
+  },
+  /*
    * `allocation:manage`, held by administrators and revenue officers only. A
    * finance officer settles money; they do not decide who gets fertiliser, and
    * offering them a screen the API would refuse is worse than not offering it.
@@ -550,7 +561,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'ofcGroupConfiguration',
       items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.programmes!, SCREEN.allocations!,
-              SCREEN.groups!, SCREEN.fieldApp!],
+              SCREEN.groups!, SCREEN.fieldApp!, SCREEN.platform!],
     },
     {
       group: 'ofcGroupOversight',
@@ -630,7 +641,7 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     {
       group: 'ofcGroupExamination',
       items: [SCREEN.home!, SCREEN.audit!, SCREEN.workbench!, SCREEN.fraud!,
-              SCREEN.transactions!],
+              SCREEN.transactions!, SCREEN.platform!],
     },
     {
       group: 'ofcGroupTheMoney',

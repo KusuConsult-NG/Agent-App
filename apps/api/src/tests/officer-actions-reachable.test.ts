@@ -439,12 +439,12 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * absorbed into a backlog nothing names. Three others found the same way
    * have already been given callers or their own task.
    *
-   * The consequential ones, in the order I would fix them:
+   * `/government/platform/integrations` was the first of these and now has a
+   * screen: `/platform`, offered to administrators and auditors, which is why
+   * it is no longer in the list below. An outage used to be discovered from a
+   * queue that had stopped moving rather than from anywhere that said so.
    *
-   *   `/government/platform/integrations` — whether the gateway, the TIN
-   *     service and the vehicle authority are answering. Nobody can see it,
-   *     which is why an outage is discovered from a queue that stopped
-   *     moving rather than from a screen.
+   * The consequential ones remaining, in the order I would fix them:
    *
    *   `/government/users/:id/activity` — what an officer did. The audit log
    *     exists and is searchable; this is the per-officer view of it, and an
@@ -465,7 +465,6 @@ const READ_WITHOUT_A_SCREEN = new Set([
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
   '/government/transfers',
-  '/government/platform/integrations',
   '/government/audit/reports/:id',
   '/government/users/:id/activity',
   '/government/tickets/:id',

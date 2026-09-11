@@ -1509,6 +1509,29 @@ export interface TranslationDictionary {
   ofcCwSave: string;
   enumIntegrationAlert: string;
   enumNeverCalled: string;
+  enumHealthy: string;
+  ofcNavPlatform: string;
+  ofcPlTitle: string;
+  ofcPlHint: string;
+  ofcPlAllAnswering: string;
+  ofcPlNeedingAttention: string;
+  ofcPlService: string;
+  ofcPlState: string;
+  ofcPlLastAnswered: string;
+  ofcPlInARow: string;
+  ofcPlCalls: string;
+  ofcPlNeverAnswered: string;
+  ofcPlAdapter: string;
+  ofcPlTin: string;
+  ofcPlKyc: string;
+  ofcPlVehicles: string;
+  ofcPlBanks: string;
+  ofcPlGateway: string;
+  ofcPlNeverCalledBody: string;
+  ofcPlDownBody: string;
+  ofcPlDegradedBody: string;
+  ofcPlAnsweringBody: string;
+  ofcPlOutageHint: string;
   enumDegraded: string;
   enumDown: string;
   ofcOvChange: string;
@@ -5021,6 +5044,29 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwSave: "Save",
     enumIntegrationAlert: "An outside service is not answering",
     enumNeverCalled: "Not called yet",
+    enumHealthy: "Answering",
+    ofcNavPlatform: "Outside services",
+    ofcPlTitle: "Services this platform depends on",
+    ofcPlHint: "Measured from the platform's own traffic, not from test calls. Only a service that could not be reached counts against it — an answer nobody likes is still an answer.",
+    ofcPlAllAnswering: "All answering",
+    ofcPlNeedingAttention: "Needing attention",
+    ofcPlService: "Service",
+    ofcPlState: "State",
+    ofcPlLastAnswered: "Last answered",
+    ofcPlInARow: "Unanswered in a row",
+    ofcPlCalls: "Calls",
+    ofcPlNeverAnswered: "Never",
+    ofcPlAdapter: "Configured as",
+    ofcPlTin: "The PSIRS TIN service",
+    ofcPlKyc: "The government identity service",
+    ofcPlVehicles: "The vehicle registration authority",
+    ofcPlBanks: "Bank name enquiry",
+    ofcPlGateway: "The payment gateway",
+    ofcPlNeverCalledBody: "Has not been called once since this database was created.",
+    ofcPlDownBody: "{{n}} call(s) in a row could not be answered.",
+    ofcPlDegradedBody: "A recent call could not be answered, and the one after it was.",
+    ofcPlAnsweringBody: "Answering.",
+    ofcPlOutageHint: "Until this screen existed, an outage was discovered by noticing a queue had stopped moving.",
     enumDegraded: "A call went unanswered",
     enumDown: "Not answering",
     ofcOvChange: "What changed",
@@ -8334,6 +8380,29 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwSave: "Ajiye",
     enumIntegrationAlert: "Wata hidimar waje ba ta amsawa",
     enumNeverCalled: "Ba a kira ba tukuna",
+    enumHealthy: "Yana amsawa",
+    ofcNavPlatform: "Hidimomin waje",
+    ofcPlTitle: "Hidimomin da wannan dandali ya dogara da su",
+    ofcPlHint: "An auna daga zirga-zirgar dandalin kansa, ba daga kiran gwaji ba. Hidimar da ba a iya isa gare ta kadai ake lissafawa a kanta — amsar da ba a so ita ma amsa ce.",
+    ofcPlAllAnswering: "Duk suna amsawa",
+    ofcPlNeedingAttention: "Suna bukatar kulawa",
+    ofcPlService: "Hidima",
+    ofcPlState: "Yanayi",
+    ofcPlLastAnswered: "Amsa ta karshe",
+    ofcPlInARow: "Wadanda ba a amsa ba a jere",
+    ofcPlCalls: "Kiraye-kiraye",
+    ofcPlNeverAnswered: "Bai taba ba",
+    ofcPlAdapter: "An saita a matsayin",
+    ofcPlTin: "Hidimar lambar haraji ta PSIRS",
+    ofcPlKyc: "Hidimar tantance shaidar gwamnati",
+    ofcPlVehicles: "Hukumar rajistar ababen hawa",
+    ofcPlBanks: "Tambayar sunan asusun banki",
+    ofcPlGateway: "Kofar biyan kudi",
+    ofcPlNeverCalledBody: "Ba a taba kiran ta ba tun lokacin da aka kirkiri wannan bayanan.",
+    ofcPlDownBody: "Kiraye-kiraye {{n}} a jere ba a iya amsa su ba.",
+    ofcPlDegradedBody: "An yi kira kwanan nan ba a amsa ba, sannan aka amsa na gaba.",
+    ofcPlAnsweringBody: "Yana amsawa.",
+    ofcPlOutageHint: "Kafin wannan allon ya kasance, ana gano tsayawar hidima ne ta hanyar lura cewa jerin aiki ya tsaya.",
     enumDegraded: "An yi kira ba a amsa ba",
     enumDown: "Ba ya amsawa",
     ofcOvChange: "Abin da ya canza",

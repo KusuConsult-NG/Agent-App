@@ -52,6 +52,7 @@ import { PeriodsScreen } from './screens/Periods';
 import { WorkbenchScreen } from './screens/Workbench';
 import { MyAccessScreen } from './screens/MyAccess';
 import { InboxScreen } from './screens/Inbox';
+import { PlatformScreen } from './screens/Platform';
 import { RolesScreen } from './screens/Roles';
 import { GlobalSearch } from './screens/Search';
 import { LanguageToggle } from './ui';
@@ -284,6 +285,7 @@ function Routes({
   }
   if (matchRoute(route, '/targets')) return <TargetsScreen user={user} />;
   if (matchRoute(route, '/taxpayer-base')) return <TaxpayerBaseScreen />;
+  if (matchRoute(route, '/platform')) return <PlatformScreen />;
   if (matchRoute(route, '/organisation')) return <OrganisationScreen user={user} />;
   if (matchRoute(route, '/periods')) return <PeriodsScreen user={user} />;
   if (matchRoute(route, '/workbench')) return <WorkbenchScreen user={user} />;
