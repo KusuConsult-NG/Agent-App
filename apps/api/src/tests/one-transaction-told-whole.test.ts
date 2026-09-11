@@ -200,6 +200,66 @@ describe('one box, every kind of government reference', () => {
     assert.equal(hit!.path, `/transaction/${collected.transactionId}`);
   });
 
+  /*
+   * An invoice number opens the invoice, and an assessment number the
+   * assessment.
+   *
+   * Both used to resolve to `COALESCE('/transaction/' || t.id, '/outstanding')`
+   * — the transaction when one existed, and the outstanding worklist when one
+   * did not. The fallback was the damage: an invoice with no transaction is an
+   * invoice nobody has paid, which is exactly the invoice somebody rings up
+   * about, and it sent the officer to a list of everybody's unpaid invoices
+   * with no mention of the one they had typed.
+   *
+   * Asserted against a PAID collection deliberately. That is the case the old
+   * behaviour got least wrong, so if the path is the invoice here it is the
+   * invoice everywhere — and a test that only covered the unpaid case would
+   * pass against a COALESCE that still hijacked every paid one.
+   */
+  it('sends an invoice number to the invoice, not to the transaction', async () => {
+    const row = await queryOne<{ invoice_id: string; invoice_number: string }>(
+      pool,
+      `SELECT i.id AS invoice_id, i.invoice_number
+         FROM invoices i
+         JOIN transactions t ON t.invoice_id = i.id
+        WHERE t.id = $1`,
+      [collected.transactionId],
+    );
+    assert.ok(row, 'the collection produced an invoice');
+
+    const found = await get(
+      `/government/search?q=${encodeURIComponent(row!.invoice_number)}`,
+      auth('admin'),
+    );
+    const hit = (found.body.hits as { kind: string; path: string }[]).find(
+      (item) => item.kind === 'invoice',
+    );
+    assert.ok(hit, JSON.stringify(found.body.hits));
+    assert.equal(hit!.path, `/invoice/${row!.invoice_id}`);
+  });
+
+  it('sends an assessment number to the assessment', async () => {
+    const row = await queryOne<{ id: string; assessment_number: string }>(
+      pool,
+      `SELECT a.id, a.assessment_number
+         FROM assessments a
+         JOIN transactions t ON t.assessment_id = a.id
+        WHERE t.id = $1`,
+      [collected.transactionId],
+    );
+    assert.ok(row, 'the collection produced an assessment');
+
+    const found = await get(
+      `/government/search?q=${encodeURIComponent(row!.assessment_number)}`,
+      auth('admin'),
+    );
+    const hit = (found.body.hits as { kind: string; path: string }[]).find(
+      (item) => item.kind === 'assessment',
+    );
+    assert.ok(hit, JSON.stringify(found.body.hits));
+    assert.equal(hit!.path, `/assessment/${row!.id}`);
+  });
+
   it('finds a taxpayer by name and an agent by code', async () => {
     const byName = await get('/government/search?q=Pamdegu', auth('admin'));
     assert.ok(

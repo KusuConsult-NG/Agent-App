@@ -2398,6 +2398,34 @@ export interface TranslationDictionary {
   ofcT3Channel: string;
   ofcT3Where: string;
   ofcT3ServiceCharge: string;
+  ofcChInvoiceIntro: string;
+  ofcChAssessmentIntro: string;
+  ofcChDemanded: string;
+  ofcChPaidSoFar: string;
+  ofcChStillOwed: string;
+  ofcChIssued: string;
+  ofcChPayableUntil: string;
+  ofcChLapsedTitle: string;
+  ofcChLapsed: string;
+  ofcChLapsedNoDate: string;
+  ofcChHowComputed: string;
+  ofcChTraceFrozen: string;
+  ofcChNoTrace: string;
+  ofcChStep: string;
+  ofcChDetail: string;
+  ofcChAmount: string;
+  ofcChVerificationCode: string;
+  ofcChOpenAssessment: string;
+  ofcChOpenTransaction: string;
+  ofcChNoTransaction: string;
+  ofcChPeriod: string;
+  ofcChBaseAmount: string;
+  ofcChDiscount: string;
+  ofcChPayable: string;
+  ofcChRaisedBy: string;
+  ofcChRaisedOn: string;
+  ofcChNoInvoiceTitle: string;
+  ofcChNoInvoiceYet: string;
   ofcT3Verified: string;
   ofcT3NothingLinked: string;
   ofcGroupAdministration: string;
@@ -5926,6 +5954,34 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3Channel: "Channel",
     ofcT3Where: "Where",
     ofcT3ServiceCharge: "Service charge",
+    ofcChInvoiceIntro: "What was demanded, what it was computed from, and how much of it has been paid.",
+    ofcChAssessmentIntro: "What was computed, and whether it has been demanded yet.",
+    ofcChDemanded: "Demanded",
+    ofcChPaidSoFar: "Paid so far",
+    ofcChStillOwed: "Still owed",
+    ofcChIssued: "Issued",
+    ofcChPayableUntil: "Payable until",
+    ofcChLapsedTitle: "The deadline has passed",
+    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChHowComputed: "How the figure was arrived at",
+    ofcChTraceFrozen: "Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today.",
+    ofcChNoTrace: "No calculation was recorded against this assessment.",
+    ofcChStep: "Step",
+    ofcChDetail: "What was done",
+    ofcChAmount: "Amount",
+    ofcChVerificationCode: "Verification code",
+    ofcChOpenAssessment: "Open assessment {{number}}",
+    ofcChOpenTransaction: "Open transaction {{reference}}",
+    ofcChNoTransaction: "Nobody has started a payment against this invoice.",
+    ofcChPeriod: "Period",
+    ofcChBaseAmount: "Before discount",
+    ofcChDiscount: "Discount",
+    ofcChPayable: "Payable",
+    ofcChRaisedBy: "Raised as",
+    ofcChRaisedOn: "Raised on",
+    ofcChNoInvoiceTitle: "Nothing has been demanded yet",
+    ofcChNoInvoiceYet: "No invoice has been raised from this assessment, so nothing is owed against it yet.",
     ofcT3Verified: "Verified",
     ofcT3NothingLinked: "No case or flag is linked to this transaction.",
     ofcGroupAdministration: "Administration",
@@ -9290,6 +9346,34 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcT3Channel: "Hanya",
     ofcT3Where: "Ina",
     ofcT3ServiceCharge: "Kudin hidima",
+    ofcChInvoiceIntro: "Abin da aka bukata, abin da aka lissafa shi daga gare shi, da kuma nawa aka riga aka biya.",
+    ofcChAssessmentIntro: "Abin da aka lissafa, da kuma ko an riga an bukaci biyansa.",
+    ofcChDemanded: "An bukata",
+    ofcChPaidSoFar: "An biya har yanzu",
+    ofcChStillOwed: "Sauran bashi",
+    ofcChIssued: "An fitar",
+    ofcChPayableUntil: "Ana iya biya har zuwa",
+    ofcChLapsedTitle: "Lokacin ya wuce",
+    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChHowComputed: "Yadda aka kai ga wannan adadi",
+    ofcChTraceFrozen: "An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba.",
+    ofcChNoTrace: "Ba a rubuta wani lissafi a kan wannan tantancewa ba.",
+    ofcChStep: "Mataki",
+    ofcChDetail: "Abin da aka yi",
+    ofcChAmount: "Adadi",
+    ofcChVerificationCode: "Lambar tabbatarwa",
+    ofcChOpenAssessment: "Bude tantancewa {{number}}",
+    ofcChOpenTransaction: "Bude ma\u2019amala {{reference}}",
+    ofcChNoTransaction: "Babu wanda ya fara biya a kan wannan takardar biya.",
+    ofcChPeriod: "Lokaci",
+    ofcChBaseAmount: "Kafin rangwame",
+    ofcChDiscount: "Rangwame",
+    ofcChPayable: "Abin biya",
+    ofcChRaisedBy: "An yi shi a matsayin",
+    ofcChRaisedOn: "An yi shi a",
+    ofcChNoInvoiceTitle: "Ba a bukaci komai ba tukuna",
+    ofcChNoInvoiceYet: "Ba a fitar da takardar biya daga wannan tantancewa ba, don haka babu wani bashi a kanta tukuna.",
     ofcT3Verified: "An tabbatar",
     ofcT3NothingLinked: "Babu kara ko alamar hadari da ke da nasaba da wannan ma’amala.",
     ofcGroupAdministration: "Gudanarwa",

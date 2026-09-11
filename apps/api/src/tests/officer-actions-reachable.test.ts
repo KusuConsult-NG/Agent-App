@@ -632,18 +632,25 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * false, and a screen that renders it as one tells a citizen they were
    * refused something nobody has yet considered them for.
    *
-   * What is left is quieter: a support ticket's detail, an assessment or
-   * invoice by id, a payment lookup, the MDA list, a transfer history,
-   * commission by place, and a KYC access log the screen mentions only in a
-   * comment.
+   * `/revenue/invoices/:id` and `/revenue/assessments/:id` now open from the
+   * global search, which already found both by number and had nowhere to send
+   * the officer: the hit's path was the transaction when one existed and the
+   * outstanding worklist when one did not. An invoice with no transaction is
+   * an invoice nobody has paid, which is the one somebody rings up about, so
+   * the search failed in exactly the case it was needed. What those screens
+   * carry that no list could is the frozen `computation_trace` — the steps
+   * kept, in the schema's words, "so an auditor can re-run the calculation
+   * years later", and until now readable only with a database client.
+   *
+   * What is left is quieter: a payment lookup, the MDA list, a transfer
+   * history, commission by place, and a KYC access log the screen mentions
+   * only in a comment.
    */
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
   '/government/transfers',
   '/payments',
   '/revenue/authorities',
-  '/revenue/assessments/:id',
-  '/revenue/invoices/:id',
   '/revenue/taxpayers/:id/obligations',
   /*
    * The agent's own unsent captures, read back on the handset that made them.

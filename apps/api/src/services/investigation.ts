@@ -214,12 +214,25 @@ export async function globalSearch(
                 i.invoice_number AS title,
                 COALESCE(tp.business_name, tp.first_name || ' ' || COALESCE(tp.last_name,''))
                   AS subtitle,
-                COALESCE('/transaction/' || t.id, '/outstanding') AS path,
+                /*
+                 * The invoice itself, always.
+                 *
+                 * This was a COALESCE of '/transaction/' with the
+                 * transaction id, falling back to '/outstanding'
+                 * — the transaction when one existed, and otherwise the
+                 * outstanding worklist, which is a list of everybody's unpaid
+                 * invoices and says nothing about the one searched for. An
+                 * invoice with no transaction is an invoice raised and never
+                 * paid, so the officer holding a number and asking about it
+                 * was sent to a list in exactly the case they needed the
+                 * record. The invoice screen carries the link to the
+                 * transaction when there is one.
+                 */
+                '/invoice/' || i.id AS path,
                 i.total_amount_kobo::text AS amount_kobo, i.status,
                 i.issued_at::text AS occurred_at
            FROM invoices i
            JOIN taxpayers tp ON tp.id = i.taxpayer_id
-           LEFT JOIN transactions t ON t.invoice_id = i.id
           WHERE (i.invoice_number ILIKE $1 OR i.verification_code ILIKE $1)
             AND ($2 OR tp.lga_id = ANY($3::uuid[]))
           ORDER BY i.issued_at DESC LIMIT $4`,
@@ -236,13 +249,15 @@ export async function globalSearch(
                 asm.assessment_number AS reference, asm.assessment_number AS title,
                 COALESCE(tp.business_name, tp.first_name || ' ' || COALESCE(tp.last_name,''))
                   || ' · ' || ri.name AS subtitle,
-                COALESCE('/transaction/' || t.id, '/outstanding') AS path,
+                -- Same as the invoice above: an assessment not yet charged
+                -- has no transaction, and that is the assessment somebody is
+                -- asking about.
+                '/assessment/' || asm.id AS path,
                 asm.amount_kobo::text AS amount_kobo, asm.status,
                 asm.created_at::text AS occurred_at
            FROM assessments asm
            JOIN taxpayers tp ON tp.id = asm.taxpayer_id
            JOIN revenue_items ri ON ri.id = asm.revenue_item_id
-           LEFT JOIN transactions t ON t.assessment_id = asm.id
           WHERE asm.assessment_number ILIKE $1
             AND ($2 OR asm.lga_id = ANY($3::uuid[]))
           ORDER BY asm.created_at DESC LIMIT $4`,

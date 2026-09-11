@@ -301,9 +301,21 @@ function isSurroundingCode(text: string): boolean {
   return (
     /[;=]/.test(text) ||
     /^[:.]/.test(text) ||
-    // The opening of an argument list: `(path, ` between a generic's `>` and
-    // the object literal that follows it.
-    /^\(\w+,/.test(text) ||
+    /*
+     * The opening of a parameter list, between a generic's `>` and the body
+     * or object literal that follows it.
+     *
+     * This was `(path,` — a comma only — and a TYPED parameter list is the
+     * commoner shape: `function useRecord<T>(path: string) {` puts
+     * `(path: string)` between the `>` of `<T>` and the `{` of the body, and
+     * the check reported it as an English string shown to an officer.
+     *
+     * Prose could in principle open with `(word:` too, but only text bounded
+     * by an interpolation on BOTH sides reaches this branch — a parenthetical
+     * that starts right after one `{...}` and ends right before the next,
+     * with nothing outside the brackets, is not a sentence anybody writes.
+     */
+    /^\(\w+[,:)]/.test(text) ||
     /\.[A-Za-z_]\w*\(/.test(text) ||
     /\b(?:import|export|interface|type|function|try|catch|finally|async|await|if|else|typeof|instanceof|new|extends|null|undefined|void)\b/.test(
       text,
