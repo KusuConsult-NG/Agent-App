@@ -113,6 +113,32 @@ const SAFETY_KEYS: (keyof TranslationDictionary)[] = [
   'pubVerdictReversed',
   'pubVerdictNotFound',
   'pubVerdictInvalid',
+
+  /*
+   * And the sentence under the verdict, which is the verdict's whole content.
+   *
+   * The five keys above are the headline — "VALID", "NOT FOUND". They were
+   * translated while the sentence explaining what that means to the person
+   * holding the paper came from `apps/api` in English and was rendered as it
+   * arrived. Two of these thirteen are the reason this tier exists at all:
+   * `verifyAcknowledgementNotReceipt` says the money has NOT reached the
+   * government yet, and `verifyPaymentReversed` says it is on its way back —
+   * both under a green tick, and both meaning the opposite of what the tick
+   * alone suggests.
+   */
+  'verifyReceiptFingerprintMismatch',
+  'verifyReceiptReversed',
+  'verifyReceiptVoided',
+  'verifyReceiptGenuine',
+  'verifyReceiptGenuineUnchecked',
+  'verifyNotFound',
+  'verifyPaymentReversed',
+  'verifyDocumentRevoked',
+  'verifyDocumentFingerprintMismatch',
+  'verifyAcknowledgementNotReceipt',
+  'verifyDocumentExpired',
+  'verifyDocumentGenuine',
+  'verifyDocumentGenuineUnchecked',
 ];
 
 describe('the safety tier is really in Hausa', () => {

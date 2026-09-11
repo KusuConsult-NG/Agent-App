@@ -16,6 +16,7 @@ import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
+import { endOfDay } from '../lib/calendar-day';
 import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
@@ -280,6 +281,7 @@ function captureMessage(outcome: VehicleLookupOutcome): string {
  * vehicle renewal is reconciled, receipted and commissioned by exactly the same
  * machinery as a market levy.
  */
+
 export async function initiateRenewal(params: {
   vehicleId: string;
   revenueItemId: string;
@@ -352,25 +354,6 @@ export async function initiateRenewal(params: {
     );
   }
 
-  const assessment = await createAssessment({
-    taxpayerId: params.taxpayerId,
-    revenueItemId: params.revenueItemId,
-    inputs: {
-      renewalPeriodMonths: params.renewalPeriodMonths,
-      vehicleType: vehicle.vehicle_type,
-      vehicleClass: vehicle.vehicle_class,
-      registrationNumber: vehicle.registration_number,
-    },
-    periodLabel: `${params.renewalPeriodMonths} month vehicle renewal`,
-    actorId: params.actorId,
-    actorRole: params.actorRole,
-    agentId: params.agentId ?? null,
-    territoryId: params.territoryId ?? null,
-    deviceId: params.deviceId ?? null,
-    latitude: params.latitude ?? null,
-    longitude: params.longitude ?? null,
-  });
-
   /*
    * An early renewal carries the unexpired time forward.
    *
@@ -396,6 +379,45 @@ export async function initiateRenewal(params: {
   const periodStart = unexpired ?? now;
   const expiryDate = new Date(periodStart);
   expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
+
+  /*
+   * Worked out before the assessment, not after, so both carry the same dates.
+   *
+   * The renewal row has always recorded this period and the assessment never
+   * did — it carried the sentence "12 month vehicle renewal" instead, composed
+   * here in English and shown to a citizen reading Hausa. The period is dates,
+   * and the dates were already being calculated four lines further down.
+   */
+  const assessment = await createAssessment({
+    taxpayerId: params.taxpayerId,
+    revenueItemId: params.revenueItemId,
+    inputs: {
+      renewalPeriodMonths: params.renewalPeriodMonths,
+      vehicleType: vehicle.vehicle_type,
+      vehicleClass: vehicle.vehicle_class,
+      registrationNumber: vehicle.registration_number,
+    },
+    periodStart: periodStart.toISOString().slice(0, 10),
+    periodEnd: expiryDate.toISOString().slice(0, 10),
+    /*
+     * No label. The period is the two dates above.
+     *
+     * A label was the only thing this assessment recorded about its period,
+     * and every renewal wrote the same words — so the compliance score, which
+     * counts DISTINCT period labels, folded a motorist's 2025 and 2026
+     * renewals into one period and scored them as though they had been
+     * assessed once. Unlabelled, each assessment counts as its own occasion,
+     * which is what the score's own comment says an unlabelled one is.
+     */
+    periodLabel: null,
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    agentId: params.agentId ?? null,
+    territoryId: params.territoryId ?? null,
+    deviceId: params.deviceId ?? null,
+    latitude: params.latitude ?? null,
+    longitude: params.longitude ?? null,
+  });
 
   const renewal = await withTransaction(async (client) => {
     const row = await queryOne<{ id: string }>(
@@ -543,7 +565,16 @@ export async function completeRenewal(params: {
       bytes: pdf,
       verificationCode,
       numberPrefix: 'PSIRS-VEH',
-      expiresAt: renewal.expiry_date,
+      /*
+       * `expiry_date` is a DATE, and `documents.expires_at` is a TIMESTAMPTZ.
+       * Written across untouched it made the certificate invalid from one
+       * second after midnight on the very date printed on it — verification
+       * asks `expires_at < now` — so a motorist stopped on the 4th handed over
+       * papers reading 4 March and was told they had already lapsed. Neither
+       * side knew there was a disagreement, because neither knew the other's
+       * convention.
+       */
+      expiresAt: endOfDay(renewal.expiry_date),
     });
 
     await client.query(

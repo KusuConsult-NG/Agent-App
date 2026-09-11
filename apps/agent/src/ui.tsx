@@ -2,8 +2,8 @@
 
 import type { ReactElement, ReactNode } from 'react';
 import { Children, cloneElement, isValidElement, useId, useState } from 'react';
-import { enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
-import type { TranslationDictionary } from '@psirs/shared';
+import { BLOCKER_TEXT, enumLabel, formatNaira, statusSeverity } from '@psirs/shared';
+import type { AgentBlocker, TranslationDictionary } from '@psirs/shared';
 import type { ApiError } from './lib/api';
 import { useI18n } from './lib/i18n';
 
@@ -51,6 +51,14 @@ function fieldLabel(field: string): string {
  * English one — the agent cannot tell a guess from a translation.
  */
 const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
+  /*
+   * A capture PSIRS refused. These reach here rather than through `ApiError`
+   * because they arrive one-per-draft inside a batch response, but they are
+   * the same thing — a code and a sentence — and they want the same map.
+   */
+  DRAFT_INVALID: 'errDraftInvalid',
+  DRAFT_TYPE_UNSUPPORTED: 'errDraftTypeUnsupported',
+  DRAFT_NOT_PROCESSED: 'errDraftNotProcessed',
   PAYMENT_UNCONFIRMED: 'errPaymentUnconfirmed',
   PAYMENT_PENDING_RECONCILIATION: 'errPaymentPendingReconciliation',
   PAYMENT_FAILED: 'errPaymentFailed',
@@ -59,7 +67,114 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   RATE_LIMITED: 'errRateLimited',
   UPDATE_REQUIRED: 'errUpdateRequired',
   NETWORK: 'errNetwork',
+  UPLOAD_FAILED: 'errUploadFailed',
+  UNKNOWN: 'errRequestFailed',
+  /*
+   * BECOMING AN AGENT, AND BEING PAID
+   *
+   * The journey an agent has to complete before they can collect anything,
+   * and the account the money then goes to. Every refusal on it reached them
+   * in English — this map held thirteen codes and not one of them was on
+   * this path, in an application that has offered Hausa since it was built.
+   *
+   * Each has one fixed meaning, which is the test the comment above sets.
+   * Five of them had no code specific enough to key on at all and were
+   * raised as INVALID_REQUEST or FORBIDDEN; they were given one first,
+   * because a sentence nobody can name is a sentence nobody can translate.
+   */
+  TRAINING_SCORE_BELOW_PASS_MARK: 'errTrainingScoreBelowPassMark',
+  PHONE_ALREADY_REGISTERED: 'errPhoneAlreadyRegistered',
+  KYC_ALREADY_CLEARED: 'errKycAlreadyCleared',
+  DEVICE_BEFORE_APPROVAL: 'errDeviceBeforeApproval',
+  DEVICE_REVOKED_CANNOT_REREGISTER: 'errDeviceRevokedCannotReregister',
+  NO_BANK_ACCOUNT_ON_RECORD: 'errNoBankAccountOnRecord',
+  BANK_DETAILS_UNCHANGED: 'errBankDetailsUnchanged',
+  BANK_CHANGE_ALREADY_PENDING: 'errBankChangeAlreadyPending',
+  BANK_CHANGE_ALREADY_SETTLED: 'errBankChangeAlreadySettled',
+  PAYOUT_IN_FLIGHT: 'errPayoutInFlight',
 };
+
+/**
+ * What an error says, in the reader's language.
+ *
+ * Lifted out of `ErrorAlert` so a screen that renders a refusal in its own
+ * frame can still get the translation. `App.tsx` was the case: the sync
+ * banner destructured `message` and `nextStep` off the `ApiError` and printed
+ * them raw, walking past this map entirely — the Hausa existed and the screen
+ * simply did not go through the component that applies it.
+ *
+ * Everything absent from the map falls back to the server's sentence, for the
+ * reason given above it: a guessed translation of a message nobody has seen
+ * is worse than the English, because the reader cannot tell the two apart.
+ */
+export function errorText(
+  error: { code: string; message: string; details?: { field?: string; issue: string }[] },
+  t: TranslationDictionary,
+): string {
+  const translated = TRANSLATED_ERRORS[error.code];
+  if (!translated) return error.message;
+  /*
+   * Figures come out of `details`, not out of the English sentence.
+   *
+   * The training refusal names a score and a pass mark, and those are the
+   * numbers the agent is actually looking for. Parsing them back out of the
+   * server's prose would break the moment somebody improved the wording —
+   * silently, and in the language nobody testing it reads — so the server
+   * sends them as fields and the placeholder names match.
+   *
+   * A translation with no placeholders is unaffected, and a placeholder the
+   * server did not send is left alone rather than replaced with a blank: a
+   * sentence with a visible gap in it is a bug somebody reports, and one
+   * reading "You scored % on" is a bug they cannot describe.
+   */
+  const sentence = t[translated] as string;
+  if (!error.details?.length || !sentence.includes('{{')) return sentence;
+  return error.details.reduce(
+    (text, detail) =>
+      detail.field ? text.replace(`{{${detail.field}}}`, detail.issue) : text,
+    sentence,
+  );
+}
+
+/**
+ * What to do about an error, in the reader's language.
+ *
+ * `nextStep` is the actionable half — it names the screen to open or the
+ * thing to check — and it sat directly under a message this very component
+ * had just translated, printed exactly as the API composed it. A Hausa
+ * reader got the heading in Hausa, the explanation in Hausa, and the
+ * instruction in English.
+ *
+ * Keyed by the error's own code, which has always travelled beside it, so
+ * nothing new is sent. Only codes specific enough to imply one next step are
+ * here: `VALIDATION_FAILED`, and anything a caller passed to `forbidden()` or
+ * `conflict()`, means something different every time it is raised and keeps
+ * the server's words.
+ */
+const TRANSLATED_NEXT_STEPS: Record<string, keyof TranslationDictionary> = {
+  STEP_UP_REQUIRED: 'nsStepUpRequired',
+  DEVICE_NOT_REGISTERED: 'nsDeviceNotRegistered',
+  DEVICE_REVOKED: 'nsDeviceRevoked',
+  DEVICE_SUSPENDED: 'nsDeviceSuspended',
+  UPDATE_REQUIRED: 'nsUpdateRequired',
+  UPDATE_REQUIRED_TO_ENUMERATE: 'nsUpdateRequiredToEnumerate',
+  TIN_SERVICE_UNAVAILABLE: 'nsTinServiceUnavailable',
+  TIN_NOT_FOUND: 'nsTinNotFound',
+  KYC_PROVIDER_UNAVAILABLE: 'nsKycProviderUnavailable',
+  PAYMENT_UNCONFIRMED: 'nsPaymentUnconfirmed',
+  PAYMENT_FAILED: 'nsPaymentFailed',
+  AGENT_NOT_CLEARED: 'nsAgentNotCleared',
+};
+
+/** The next step for an error, or the server's own words when it has none. */
+export function nextStepText(
+  error: { code: string; nextStep?: string },
+  t: TranslationDictionary,
+): string | null {
+  const translated = TRANSLATED_NEXT_STEPS[error.code];
+  if (translated) return t[translated] as string;
+  return error.nextStep ?? null;
+}
 
 export function ErrorAlert({ error }: { error: ApiError | null }) {
   const { t } = useI18n();
@@ -82,20 +197,33 @@ export function ErrorAlert({ error }: { error: ApiError | null }) {
           ? t.moneyReceived
           : null;
 
-  const translated = TRANSLATED_ERRORS[error.code];
-  const message = translated ? t[translated] : error.message;
+  const message = errorText(error, t);
 
   return (
     <div className={`alert alert--${error.moneyStatus === 'UNCONFIRMED' ? 'warning' : 'error'}`} role="alert">
       <strong>{message}</strong>
       {moneyLine && <p style={{ margin: '6px 0 0', fontWeight: 600 }}>{moneyLine}</p>}
-      {error.nextStep && <p style={{ margin: '6px 0 0' }}>{error.nextStep}</p>}
+      {nextStepText(error, t) && (
+        <p style={{ margin: '6px 0 0' }}>{nextStepText(error, t)}</p>
+      )}
       {error.details && error.details.length > 0 && (
         <ul>
           {error.details.map((detail, index) => (
             <li key={index}>
               {detail.field ? `${fieldLabel(detail.field)}: ` : ''}
-              {detail.issue}
+              {/*
+                * The code first, where the server sent one.
+                *
+                * `issue` is a sentence the API composed, so it is a sentence in
+                * English. The clearance blockers are the case that matters:
+                * an applicant refused at the counter was shown a translated
+                * headline and then seven English lines saying what to do about
+                * it. Anything without a code, or with one this build does not
+                * know, still shows what the server said rather than nothing.
+                */}
+              {detail.code && detail.code in BLOCKER_TEXT
+                ? t[BLOCKER_TEXT[detail.code as AgentBlocker]]
+                : detail.issue}
             </li>
           ))}
         </ul>
@@ -386,6 +514,7 @@ export function PasswordField({
   /** Shown in the browser's own refusal, which otherwise says only "match the requested format". */
   patternHint?: string;
 }) {
+  const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const id = useId();
   const hintId = `${id}-hint`;
@@ -414,10 +543,10 @@ export function PasswordField({
           type="button"
           className="password__toggle"
           aria-pressed={shown}
-          aria-label={shown ? 'Hide password' : 'Show password'}
+          aria-label={shown ? t.uiHidePassword : t.uiShowPassword}
           onClick={() => setShown((current) => !current)}
         >
-          {shown ? 'Hide' : 'Show'}
+          {shown ? t.uiHide : t.uiShow}
         </button>
       </div>
       {hint && (

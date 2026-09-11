@@ -272,14 +272,18 @@ export const DELIBERATELY_UNREACHABLE: Record<string, string> = {
    *
    * `POST /payments/initiate` takes a transaction, not an amount, so a payment
    * is always the whole of what is owed and the CASE that would write
-   * PARTIALLY_PAID cannot take its other arm. Nothing cancels an invoice
-   * either: an unpaid one EXPIRES at its deadline and a reversed one goes back
-   * to UNPAID, because a demand notice that was wrongly paid is still owed.
+   * PARTIALLY_PAID cannot take its other arm.
+   *
+   * CANCELLED used to sit here too, on the reasoning that an unpaid invoice
+   * expires at its deadline and a reversed one returns to UNPAID. Upholding an
+   * objection to a presumptive estimate is the case neither of those covers:
+   * the demand is withdrawn, not lapsed and not re-owed, and leaving the bill
+   * standing would have made a decision in the taxpayer's favour cost them
+   * nothing. So the state is reachable now, and the test that reaches it is
+   * `cancels the bill when the objection is upheld`.
    */
   'invoices.status: PARTIALLY_PAID':
     'A payment is initiated against a transaction, never an amount, so it always settles the invoice in full.',
-  'invoices.status: CANCELLED':
-    'An unpaid invoice expires at its deadline; a reversed one returns to UNPAID because the demand still stands.',
 
   /*
    * The whole payment came back, and every row that records it says REVERSED.

@@ -27,10 +27,11 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, newIdempotencyKey, type ApiError } from '../lib/api';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { Alert, Badge, Empty, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import type { TranslationDictionary } from '@psirs/shared';
 import { enumLabel } from '@psirs/shared';
 
@@ -93,15 +94,26 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
   const { t } = useI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Kept apart from `error`, the same way the support screen keeps them.
+   *
+   * "No groups yet. When you meet a cooperative, a market association or a
+   * union, register it here" is what the empty list says, and `setGroups([])`
+   * said it from a failed request. That is not only untrue, it is an
+   * instruction: an agent who has already registered a market association and
+   * is told they have none is being invited to register it a second time.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
+    setLoadError(null);
     try {
       const result = await api.get<{ groups: GroupRow[] }>('/groups?limit=100');
       setGroups(result.groups);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      setGroups([]);
+      setLoadError(asApiError(caught));
+      setGroups(null);
     }
   }, []);
 
@@ -122,13 +134,20 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       <button type="button" onClick={() => navigate('/groups/new')}>{t.grpRegister}</button>
 
-      {groups === null && <Loading rows={3} />}
-
-      {groups?.length === 0 && (
+      {loadError ? (
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={() => void load()}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : groups === null ? (
+        <Loading rows={3} />
+      ) : groups.length === 0 ? (
         <Empty>
           {t.grpEmpty}
         </Empty>
-      )}
+      ) : null}
 
       {groups && groups.length > 0 && (
         <ul className="list">
@@ -160,7 +179,6 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
 export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = useI18n();
-  const [lgas, setLgas] = useState<Lga[]>([]);
   const [form, setForm] = useState({
     name: '',
     groupType: '',
@@ -173,12 +191,8 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then((rows: Lga[]) => setLgas(rows))
-      .catch(() => setLgas([]));
-  }, []);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
 
   const set = (key: keyof typeof form) => (value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -205,7 +219,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
       );
       navigate(`/groups/${result.groupId}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -264,13 +278,20 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
             onChange={(event) => set('lgaId')(event.target.value)}
             required
           >
-            <option value="">{t.grpChooseOne}</option>
+            <option value="">
+              {lgaList.failed ? t.tpListCouldNotLoad : t.grpChooseOne}
+            </option>
             {lgas.map((lga) => (
               <option key={lga.id} value={lga.id}>
                 {lga.name}
               </option>
             ))}
           </select>
+          {lgaList.failed && (
+            <button type="button" className="secondary" onClick={lgaList.reload}>
+              {t.actionTryAgain}
+            </button>
+          )}
         </div>
 
         <Field label={t.grpCommunity} hint={t.grpCommunityHint}>
@@ -341,7 +362,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     try {
       setGroup(await api.get<GroupDetail>(`/groups/${groupId}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     }
   }, [groupId]);
 
@@ -371,11 +392,11 @@ export function GroupScreen({ groupId }: { groupId: string }) {
         { taxpayerId: chosen.id },
         newIdempotencyKey('group.member'),
       );
-      setAdded(result.message);
+      setAdded(t.agGroupMemberRecorded);
       setChosen(null);
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -391,7 +412,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       );
       setInvitation(result.invitationUrl);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

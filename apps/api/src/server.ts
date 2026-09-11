@@ -12,14 +12,18 @@ import { config, envFileLoaded } from './config';
 import { describeDatabase } from './env';
 import { closePool, pool, withTransaction } from './db/pool';
 import { runMigrations } from './db/migrate';
+import * as rbacStore from './services/rbac-store';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
+import { raiseSystemAlerts } from './services/officer-inbox';
+import { raiseIntegrationAlerts } from './services/integration-health';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
 import { sendDueReminders } from './services/reminders';
 import { expireLapsedInvoices } from './services/revenue';
+import { rebuildVehicleConnections } from './services/connections';
 import { BACKGROUND_JOBS, runJob, type JobName } from './services/jobs';
 import { expireSettledKeys } from './middleware/idempotency';
 import { expireOldEvents } from './services/usage';
@@ -121,6 +125,15 @@ async function main() {
     log.info('skipping migrations on boot; the deploy pipeline owns them', { component: 'boot' });
   }
 
+  /*
+   * Read the role-to-permission map before taking any traffic.
+   *
+   * So the first request of the day is not the one that pays for the query, and
+   * so a database that cannot answer it is discovered on boot rather than on
+   * somebody's first sign-in.
+   */
+  await rbacStore.warm();
+
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info('listening', {
@@ -143,9 +156,28 @@ async function main() {
       return sent > 0 ? `delivered ${sent} notification(s)` : null;
     }),
 
+    /*
+     * The one sweep that could never say anything.
+     *
+     * Every other job here answers with a line when it did something — "3
+     * invoice(s) passed their deadline", "12 matched, 0 exception(s)" — and
+     * that line is logged and stored as the run's detail. This one returned
+     * `null` unconditionally, so the sweep that raises fraud flags was the
+     * single job whose record of a run is indistinguishable from a run that
+     * found nothing. `runFraudSweep` has always returned the count.
+     */
     schedule('fraud-sweep', async () => {
-      await withTransaction((client) => runFraudSweep(client));
-      return null;
+      const { flagsRaised } = await withTransaction((client) => runFraudSweep(client));
+      return flagsRaised > 0 ? `${flagsRaised} fraud flag(s) raised` : null;
+    }),
+
+    schedule('system-alerts', async () => {
+      const { raised } = await withTransaction(async (client) => {
+        const jobs = await raiseSystemAlerts(client);
+        const integrations = await raiseIntegrationAlerts(client);
+        return { raised: jobs.raised + integrations.raised };
+      });
+      return raised > 0 ? `${raised} alert(s) raised` : null;
     }),
 
     schedule('tin-catch-up', async () => {
@@ -201,6 +233,24 @@ async function main() {
       return (
         `${result.summary?.matched} matched, ${result.summary?.exceptions} exception(s), ` +
         `${result.summary?.unchecked} unchecked, ${result.recovery?.verified ?? 0} payment(s) recovered`
+      );
+    }),
+
+    /*
+     * The asset graph, rebuilt from the register the State already keeps.
+     *
+     * Nothing here reaches outside the platform: every edge is derived from a
+     * vehicle row PSIRS holds. The job exists because a lead list that only
+     * refreshes when an administrator remembers is a lead list that goes stale
+     * without anybody noticing it has.
+     */
+    schedule('connection-graph', async () => {
+      const result = await rebuildVehicleConnections(pool);
+      if (result.asserted === 0 && result.ambiguous === 0) return null;
+      return (
+        `${result.asserted} connection(s) asserted ` +
+        `(${result.fromRegistry} from the register, ${result.fromPhone} by shared phone), ` +
+        `${result.ambiguous} vehicle(s) matched more than one taxpayer and were left alone`
       );
     }),
 

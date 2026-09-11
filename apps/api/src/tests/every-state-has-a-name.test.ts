@@ -25,6 +25,8 @@ import {
   APPROVAL_TYPES,
   DOCUMENT_TYPES,
   ENUM_LABELS,
+  ENUM_LABEL_EXCEPTIONS,
+  enumLabel,
   FRAUD_RULES,
   FRAUD_SEVERITIES,
   FREQUENCIES,
@@ -164,5 +166,60 @@ describe('every state the database allows has a name a person can read', () => {
     }
     const stale = Object.keys(NOT_SHOWN_TO_ANYBODY).filter((entry) => !allowed.has(entry));
     assert.deepEqual(stale, []);
+  });
+  /*
+   * The column-scoped exceptions, which are the one place a value is allowed
+   * two words.
+   *
+   * `ENUM_LABELS` is keyed by value on the stated principle that a word means
+   * the same thing wherever it appears, and the module says an exception
+   * belongs beside it, written down and visible. This holds three things about
+   * that list: the column it names is real, the value it overrides is one the
+   * database allows in that column, and the key it points at exists. A stale
+   * entry here is worse than no entry, because it looks like a decision.
+   */
+  it('scopes its exceptions to columns and values that exist', async () => {
+    for (const [column, overrides] of Object.entries(ENUM_LABEL_EXCEPTIONS)) {
+      const [table, name] = column.split('.');
+      assert.ok(table && name, `"${column}" is not table.column`);
+
+      const { rows } = await pool.query<{ definition: string }>(
+        `SELECT pg_get_constraintdef(c.oid) AS definition
+           FROM pg_constraint c
+           JOIN pg_class t ON t.oid = c.conrelid
+          WHERE t.relname = $1 AND c.contype = 'c'
+            AND pg_get_constraintdef(c.oid) LIKE '%' || $2 || '%'`,
+        [table, name],
+      );
+      const allowed = new Set(
+        rows.flatMap((row) => [...row.definition.matchAll(/'([^']+)'/g)].map((m) => m[1])),
+      );
+      assert.ok(allowed.size > 0, `no CHECK constraint on ${column} to scope against`);
+
+      for (const [value, key] of Object.entries(overrides)) {
+        assert.ok(allowed.has(value), `${column} cannot hold "${value}", so overriding it is dead`);
+        assert.ok(key in translations.en, `${column}.${value} points at missing key ${key}`);
+        assert.ok(key in translations.ha, `${column}.${value} has no Hausa for ${key}`);
+      }
+    }
+  });
+
+  /*
+   * And the reason the first exception exists.
+   *
+   * `ASSIGNED` shares a word with every other assigned thing on the platform,
+   * and for a TIN that word said the number had been given to somebody else.
+   * A test naming the two strings is the only thing that stops a later tidy-up
+   * collapsing them back into one.
+   */
+  it('does not tell a taxpayer their own TIN belongs to somebody else', () => {
+    const shared = enumLabel('ASSIGNED', translations.ha);
+    const forATin = enumLabel('ASSIGNED', translations.ha, 'taxpayers.tin_status');
+    assert.notEqual(forATin, shared, 'a TIN status must not reuse the general assigned word');
+    assert.equal(
+      enumLabel('ASSIGNED', translations.en, 'taxpayers.tin_status'),
+      enumLabel('ASSIGNED', translations.en),
+      'the English is the same word and the exception must not quietly change it',
+    );
   });
 });

@@ -146,6 +146,67 @@ export async function reviewGroup(params: {
 }
 
 /**
+ * Give a group a part to play in enumeration, or take it away.
+ *
+ * A registered association is not automatically an attesting body. Standing
+ * over what its members are assessed on is something PSIRS confers, on the
+ * record, with a reason — and the reason is the whole point: a leader who can
+ * contradict an agent's count has real power over a member's bill, and a group
+ * that acquired that power because somebody ticked a box on a registration
+ * form would be a governance failure waiting to be discovered.
+ *
+ * Withdrawing it back to NONE is deliberately allowed. A union that starts
+ * inflating its members' figures should stop being consulted the same day, and
+ * that cannot wait on a schema change.
+ */
+export async function setGroupTaxRole(params: {
+  groupId: string;
+  taxRole: 'ENUMERATION' | 'ATTESTATION' | 'NONE';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ taxRole: string }> {
+  return withTransaction(async (client) => {
+    const group = await queryOne<{ id: string; status: string; tax_role: string }>(
+      client,
+      'SELECT id, status, tax_role FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
+      [params.groupId],
+    );
+    if (!group) throw notFound('That group');
+    /*
+     * Only a group PSIRS has approved. A pending registration is a claim that
+     * an association exists; giving it standing before anybody has checked
+     * would let a group confer authority on itself by registering.
+     */
+    if (group.status !== 'ACTIVE' && params.taxRole !== 'NONE') {
+      throw conflict(
+        'GROUP_NOT_ACTIVE',
+        `This group is ${group.status.toLowerCase()} and cannot be given a part in enumeration ` +
+          'until it has been approved.',
+      );
+    }
+
+    await client.query('UPDATE taxpayer_groups SET tax_role = $2 WHERE id = $1', [
+      params.groupId,
+      params.taxRole,
+    ]);
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'group.tax_role_set',
+      entityType: 'taxpayer_group',
+      entityId: params.groupId,
+      oldValue: { taxRole: group.tax_role },
+      newValue: { taxRole: params.taxRole },
+      reason: params.reason,
+    });
+
+    return { taxRole: params.taxRole };
+  });
+}
+
+/**
  * Record that a taxpayer says they belong to a group.
  *
  * A claim, not a fact, until the leader attests. Re-adding somebody who left
@@ -603,7 +664,7 @@ export async function listGroups(
 ) {
   return query(
     db,
-    `SELECT g.id, g.code, g.name, g.group_type, g.economic_sector, g.status,
+    `SELECT g.id, g.code, g.name, g.group_type, g.economic_sector, g.status, g.tax_role,
             l.name AS lga_name, g.leader_name, g.leader_phone,
             (SELECT count(*) FROM taxpayer_group_members m
               WHERE m.group_id = g.id AND m.status = 'ATTESTED') AS attested_members

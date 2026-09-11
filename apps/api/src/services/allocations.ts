@@ -492,7 +492,27 @@ export async function listAwards(
 ) {
   return query(
     db,
-    `SELECT a.id, a.status, a.quantity, a.collection_code, a.compliance_score,
+    /*
+     * `collection_code` is deliberately absent.
+     *
+     * It is not a reference. It is the credential: `recordCollection` matches
+     * on it alone — "against the code the beneficiary presents" — and the only
+     * other check is that it has not already been used. Anyone holding a code
+     * can collect that person's allocation.
+     *
+     * This query sent up to 500 of them at a time to every holder of
+     * `allocation:read:all`. Nothing consumed them: the portal declared the
+     * field on its row type and never rendered it, which was the right call —
+     * a list of every beneficiary's credential on one screen would let an
+     * officer collect on anybody's behalf without them present. The only
+     * reader of a collection code anywhere sends one a beneficiary has
+     * handed over.
+     *
+     * So the screen not showing it was a control, and this query quietly
+     * undid it for anyone who opened the network tab. The officer is still
+     * told the code once, when they award it and have to pass it on.
+     */
+    `SELECT a.id, a.status, a.quantity, a.compliance_score,
             a.awarded_at, a.collected_at,
             COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name,'')) AS taxpayer_name,
             t.tin, g.name AS group_name

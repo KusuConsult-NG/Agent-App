@@ -36,7 +36,7 @@ That one command:
 1. drops and recreates the `psirs_uat` database — **it owns that database**, so
    nothing you are working on is touched, and the demonstration accounts, which
    share one published password, cannot land anywhere real;
-2. applies all 39 migrations and seeds the reference data: 17 LGAs, 187 wards,
+2. applies all 75 migrations and seeds the reference data: 17 LGAs, 187 wards,
    9 revenue categories, 42 revenue items, 12 training modules, 33 notification
    templates;
 3. seeds five demonstration officers and one field agent — the agent walks the
@@ -115,10 +115,15 @@ walkthrough rather than something to work around.
 ## 3. Run the walkthrough
 
 ```bash
-npx playwright test tests/browser/uat.spec.ts
+npx playwright test
 ```
 
-Seventeen tests, about five minutes, 113 screenshots into `docs/uat-screenshots/`.
+Fifty-five tests across five files, about ten minutes, 223 screenshots into
+`docs/uat-screenshots/`. The command used to name `uat.spec.ts` alone, which is
+29 of those tests; the walkthrough now runs the whole sweep, because the other
+four files photograph the directory too -- the informal-sector screens, a
+citizen reading their own statement, and an agent enumerating with no signal --
+and running only the first left a third of the pictures stale without saying so.
 A console error fails the test it appears in: in a government application a
 React error boundary swallowing an exception looks exactly like an empty table,
 and an officer cannot tell "no fraud flags this week" from "the fraud screen
@@ -149,7 +154,6 @@ This is the sequence worth reading in order.
 | `journey-01b-refused-unregistered-device` | …and is refused the moment money would be committed: *"This device is not registered to your agent account."* |
 | `journey-02-device-registered-pending` | The agent registers the handset from the app |
 | `journey-03` … `journey-05` | An officer finds the agent in the portal and approves the handset |
-| `journey-06-find-taxpayer` | Searching for the taxpayer by name |
 | `journey-07-priced-by-government` | ₦3,000, from the catalogue, with the calculation shown — *the agent never types an amount* |
 | `journey-08-payment-initiated` | **"Payment not yet confirmed. This payment has NOT been marked as received. Do not ask the taxpayer to pay again."** Invoice and transaction references are issued; no receipt exists |
 | `journey-09-acknowledged` | The gateway confirms. **"Payment confirmed — receipt to follow … this is an acknowledgement and NOT a receipt."** Acknowledgement PSIRS-ACK/2026/000025, status RECONCILIATION PENDING |
@@ -172,6 +176,7 @@ has recorded the bank credit. Nothing an agent or an app can press produces it.
 |---|---|
 | `journey-13`, `journey-14`, `journey-15` | Finding a vehicle by registration number and putting a renewal through — priced by formula from the vehicle's class, not by a number anybody typed |
 | `journey-10` … `journey-12` | Registering a taxpayer through the wizard, including the consent and declaration boxes, neither of which is ticked in advance |
+| `journey-20-name-search-stays-in-area`, `journey-21-identifier-reaches-her` | A name typed into the search does not reach a trader in the next Local Government Area; the number she reads out does. This replaced a plain search-by-name step, which is why there is no `journey-06` |
 
 ### The officer portal, role by role
 
@@ -182,27 +187,37 @@ and it proves the menu never offers a screen the API refuses.
 
 | Role | Screens | Prefix |
 |---|---|---|
-| Admin Officer | 18 | `portal-admin-*` |
-| Revenue Officer | 19 | `portal-revenue-*` |
-| Finance Officer | 16 | `portal-finance-*` |
-| State Auditor | 17 | `portal-auditor-*` |
-| Agent Supervisor | 11 | `portal-supervisor-*` |
+| Admin Officer | 33 | `portal-admin-*` |
+| Revenue Officer | 31 | `portal-revenue-*` |
+| Finance Officer | 26 | `portal-finance-*` |
+| State Auditor | 30 | `portal-auditor-*` |
+| Agent Supervisor | 22 | `portal-supervisor-*` |
 
-Eighty-one officer screens across five roles — 86 files including each role's
-home — no console errors, nothing refused. Alongside eleven agent-app screens,
-sixteen journey steps and two public pages, this run produced 115 screenshots.
+142 officer screens across five roles — 147 files including each role's home —
+no console errors, nothing refused. Alongside eleven agent-app screens, eighteen
+journey steps, five public pages, two levy screens and the one photograph of a
+browser PSIRS has never seen, plus fourteen Hausa screens and the twenty-five
+from the other spec files — the informal sector, a citizen reading their own
+statement, an agent enumerating with no signal — this run produced 223
+screenshots.
+
+Because a screen's file is numbered by its place in the menu, adding a screen
+renames every file after it and leaves the old one behind. This directory had
+collected 223 such orphans across earlier menus, three generations of the audit
+log among them; it now holds exactly what one green sweep produces, and a file
+here that a sweep does not rewrite is one to delete rather than to trust.
 
 Worth opening specifically:
 
 * `portal-finance-01-home` — owed to the councils, commission liability,
   settlement variance, exceptions
-* `portal-finance-03-reconciliation` — three-way reconciliation, the exception
+* `portal-finance-*-reconciliation` — three-way reconciliation, the exception
   queue, money in transit, and the settlement recorded against it. This is the
   screen that issues receipts: recording a bank credit here is what turns a
   confirmed collection into a receipted one
-* `portal-auditor-03-audit-log` — the hash-chained trail and its verification
-* `portal-admin-04-agents-clearance` — the six clearance axes per agent
-* `portal-admin-10-field-application` — the version gate and the fleet it governs
+* `portal-auditor-*-audit-log` — the hash-chained trail and its verification
+* `portal-admin-*-agents-clearance` — the six clearance axes per agent
+* `portal-admin-*-field-application` — the version gate and the fleet it governs
 
 ### Without an account
 

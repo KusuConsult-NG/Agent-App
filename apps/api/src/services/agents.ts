@@ -18,6 +18,7 @@
 import type { PoolClient } from 'pg';
 import {
   activationBlockers,
+  blockerSentence,
   compareVersions,
   deriveAccessStage,
   deriveApplicationState,
@@ -675,10 +676,31 @@ export async function completeTrainingModule(params: {
       await refreshClearance(client, params.agentId);
     });
 
-    throw badRequest(
-      `You scored ${params.score ?? 0}% on "${module.title}". ` +
+    /*
+     * Coded, so it can be read in Hausa.
+     *
+     * This was a `badRequest`, which means INVALID_REQUEST — the code the
+     * agent application deliberately does NOT translate, because a validation
+     * message names a field and is generated from the schema, so a guessed
+     * Hausa sentence would be worse than the English one.
+     *
+     * That reasoning does not apply here. This sentence has one fixed
+     * meaning, an agent meets it every time they sit the same test, and it is
+     * the one telling them why they cannot yet be cleared to collect. The
+     * code carries the two numbers so the screen can compose it.
+     */
+    throw new AppError({
+      statusCode: 400,
+      code: 'TRAINING_SCORE_BELOW_PASS_MARK',
+      message:
+        `You scored ${params.score ?? 0}% on "${module.title}". ` +
         `You need at least ${module.pass_mark}% to pass. Review the module and try again.`,
-    );
+      details: [
+        { field: 'score', issue: String(params.score ?? 0) },
+        { field: 'passMark', issue: String(module.pass_mark) },
+        { field: 'module', issue: module.title },
+      ],
+    });
   }
 
   return withTransaction(async (client) => {
@@ -956,10 +978,12 @@ export async function registerDevice(params: {
     // Addendum §26 stage 3: device registration opens only after government
     // approval, so an unvetted applicant cannot bind devices.
     if (!axes.flags.governmentApproved) {
-      throw forbidden(
-        'Devices can only be registered after your application has been approved by PSIRS.',
-        'You will be notified when the review is complete.',
-      );
+      throw new AppError({
+        statusCode: 403,
+        code: 'DEVICE_BEFORE_APPROVAL',
+        message: 'Devices can only be registered after your application has been approved by PSIRS.',
+        nextStep: 'You will be notified when the review is complete.',
+      });
     }
 
     const existing = await queryOne<{ id: string; status: string }>(
@@ -970,9 +994,12 @@ export async function registerDevice(params: {
 
     if (existing) {
       if (existing.status === 'REVOKED') {
-        throw forbidden(
-          'This device has been revoked and cannot be registered again. Use a different device.',
-        );
+        throw new AppError({
+          statusCode: 403,
+          code: 'DEVICE_REVOKED_CANNOT_REREGISTER',
+          message:
+            'This device has been revoked and cannot be registered again. Use a different device.',
+        });
       }
       return { deviceId: existing.id, status: existing.status };
     }
@@ -1441,7 +1468,7 @@ export async function activate(params: {
       if (!params.overrideApprovalId) {
         throw conflict(
           'ACTIVATION_BLOCKED',
-          `This agent cannot be activated yet: ${blockers.join('; ')}.`,
+          `This agent cannot be activated yet: ${blockers.map(blockerSentence).join('; ')}.`,
           'Complete the outstanding clearance requirements, or raise a government override request.',
         );
       }
@@ -1469,7 +1496,11 @@ export async function activate(params: {
             SET override_approval_id = $2,
                 override_reason = $3
           WHERE agent_id = $1`,
-        [params.agentId, params.overrideApprovalId, `Activated with outstanding: ${blockers.join('; ')}`],
+        [
+          params.agentId,
+          params.overrideApprovalId,
+          `Activated with outstanding: ${blockers.map(blockerSentence).join('; ')}`,
+        ],
       );
       await client.query(`UPDATE approvals SET status = 'EXECUTED', executed_at = now() WHERE id = $1`, [
         params.overrideApprovalId,
@@ -1849,10 +1880,13 @@ export async function requestBankAccountChange(params: {
         )
       : null;
     if (!current) {
-      throw badRequest(
-        'This agent has no bank account on record yet, so there is nothing to change. ' +
+      throw new AppError({
+        statusCode: 400,
+        code: 'NO_BANK_ACCOUNT_ON_RECORD',
+        message:
+          'This agent has no bank account on record yet, so there is nothing to change. ' +
           'The account is captured on the application.',
-      );
+      });
     }
 
     const accountNumber = params.accountNumber.trim();
@@ -1860,10 +1894,12 @@ export async function requestBankAccountChange(params: {
       accountNumber === current.account_number &&
       params.bankName.trim() === current.bank_name
     ) {
-      throw badRequest(
-        'Those are the details already on record. Nothing would change.',
-        [{ field: 'accountNumber', issue: 'Same as the account already in use' }],
-      );
+      throw new AppError({
+        statusCode: 400,
+        code: 'BANK_DETAILS_UNCHANGED',
+        message: 'Those are the details already on record. Nothing would change.',
+        details: [{ field: 'accountNumber', issue: 'Same as the account already in use' }],
+      });
     }
 
     const proposed = await queryOne<{ id: string }>(

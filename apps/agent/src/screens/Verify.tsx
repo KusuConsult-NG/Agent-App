@@ -15,10 +15,17 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, type ApiError } from '../lib/api';
-import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
+import {
+  CAMERA_UNAVAILABLE_TEXT,
+  CameraUnavailable,
+  scanForCode,
+  verificationCodeFrom,
+  type ScanHandle,
+} from '../lib/scanner';
 import { Alert, ErrorAlert, Field, KeyValue, Money, Spinner } from '../ui';
 import type { ConnectionState } from '../lib/device';
 import { useI18n } from '../lib/i18n';
+import { VERIFICATION_TEXT, enumLabel, formatDateIn, type VerificationReason } from '@psirs/shared';
 
 /** Exactly the shape `GET /verify/:code` returns. */
 interface VerificationResult {
@@ -32,6 +39,9 @@ interface VerificationResult {
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /** Which of the thirteen answers, so it can be read in Hausa. */
+  reason: VerificationReason;
+  expiresAt?: string;
 }
 
 export function VerifyScreen({ connection }: { connection: ConnectionState }) {
@@ -107,7 +117,7 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
       setScanning(false);
       setCameraError(
         caught instanceof CameraUnavailable
-          ? caught.message
+          ? t[CAMERA_UNAVAILABLE_TEXT[caught.reason]]
           : t.verifyCameraFailed,
       );
     }
@@ -195,23 +205,73 @@ export function VerifyScreen({ connection }: { connection: ConnectionState }) {
 function VerificationOutcome({ result }: { result: VerificationResult }) {
   const { t } = useI18n();
   const genuine = result.status === 'VALID';
+  /*
+   * An acknowledgement is genuine, so it comes back VALID — and this heading
+   * said "Genuine receipt" directly above an alert saying, correctly, that it
+   * is NOT a receipt and the money has not reached the government account.
+   * The screen contradicted itself on the one distinction it exists to make.
+   *
+   * The public portal reached this conclusion already and says why: "a verdict
+   * that says only VALID is read as 'paid' by everybody who takes in the mark
+   * and not the paragraph under it. The mark has to carry the distinction
+   * itself." That is truer here than there — the agent is the one standing in
+   * front of the person holding the paper, reading the heading out.
+   */
+  const acknowledgement = result.documentType === 'PAYMENT_ACKNOWLEDGEMENT';
   return (
     <div className="card">
-      <h2 className="card__title">{genuine ? t.genuineReceipt : t.receiptNotValid}</h2>
+      <h2 className="card__title">
+        {genuine
+          ? acknowledgement
+            ? t.pubVerdictAcknowledgement
+            : t.genuineReceipt
+          : t.receiptNotValid}
+      </h2>
       <Alert kind={genuine ? 'success' : 'error'}>
-        <p style={{ margin: 0 }}>{result.message}</p>
+        {/*
+          * The answer, in the language the agent reads it out in.
+          *
+          * This is the sentence an agent says to the person holding the
+          * paper, and it was the API's English. The difference between "a
+          * genuine receipt" and "a genuine acknowledgement, and NOT a
+          * receipt — the money has not reached the government account" is
+          * the entire point of the exchange, and it cannot be made in a
+          * language the reader does not have.
+          */}
+        <p style={{ margin: 0 }}>
+          {result.expiresAt
+            ? t[VERIFICATION_TEXT[result.reason]].replace(
+                '{{date}}',
+                formatDateIn(result.expiresAt, t),
+              )
+            : t[VERIFICATION_TEXT[result.reason]]}
+        </p>
       </Alert>
 
-      {genuine && (
+      {genuine && (result.receiptNumber || result.documentNumber) && (
         <KeyValue
           items={[
-            [t.receiptNumber, result.receiptNumber ?? '—'],
-            [t.verifyRevenueItem, result.revenueType ?? '—'],
+            /*
+             * A certificate has a document number and no receipt number, and
+             * this read only the latter — so an agent verifying a vehicle
+             * particulars certificate got a dash where the one identifier
+             * tying the paper to the record should be. It was being sent and
+             * dropped.
+             *
+             * The type is run through `enumLabel` for the same reason the
+             * sentence above is translated: VEHICLE_CERTIFICATE is not a thing
+             * to read out to anybody.
+             */
+            [t.receiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
+            [
+              t.verifyRevenueItem,
+              result.revenueType ?? (result.documentType ? enumLabel(result.documentType, t) : '—'),
+            ],
             [t.amount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
             [t.tpLga, result.lga ?? '—'],
             [
               t.verifyIssued,
-              result.issuedAt ? new Date(result.issuedAt).toLocaleDateString('en-NG') : '—',
+              formatDateIn(result.issuedAt, t),
             ],
             [
               t.verifyFingerprint,

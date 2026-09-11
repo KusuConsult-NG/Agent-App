@@ -14,11 +14,12 @@
  * their keystrokes on top of that would be a different product.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Funnel {
   event: string;
@@ -38,12 +39,19 @@ interface Overview {
   screens: { surface: string; screen: string; views: string }[];
 }
 
-const FLOW_LABEL: Record<string, string> = {
-  'taxpayer.registration': 'Registering a taxpayer',
-  collection: 'Taking a collection',
-  'agent.application': 'Applying to become an agent',
-  'vehicle.capture': 'Capturing a vehicle',
+/** Keys rather than words, because this table is built before there is a reader. */
+const FLOW_LABEL: Record<string, keyof TranslationDictionary> = {
+  'taxpayer.registration': 'ofcUsRegisteringATaxpayer',
+  collection: 'ofcUsTakingACollection',
+  'agent.application': 'ofcUsApplyingToBecomeAn',
+  'vehicle.capture': 'ofcUsCapturingAVehicle',
 };
+
+/** The event's own name where the platform has no friendlier one for it. */
+function flowLabel(event: string, t: TranslationDictionary): string {
+  const key = FLOW_LABEL[event];
+  return key ? t[key] : event;
+}
 
 const percent = (part: string, whole: string) => {
   const total = Number(whole);
@@ -62,16 +70,38 @@ export function UsageScreen() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<Overview>('/usage/overview')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /*
+   * A refusal with nothing to press is a screen an officer leaves.
+   *
+   * This returned the alert alone, so the only way to ask again was reloading
+   * the page — and nothing said so. See `Revenue.tsx`.
+   */
+  if (error) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={6} />;
 
   const registration = data.funnels.find((f) => f.event === 'taxpayer.registration');
@@ -126,13 +156,13 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsEveryFlow}</h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsEveryFlow}</h2>
         <Table
           columns={[
             {
               key: 'event',
               label: 'ofcUsFlow',
-              render: (row: Funnel) => FLOW_LABEL[row.event] ?? row.event,
+              render: (row: Funnel) => flowLabel(row.event, t),
             },
             { key: 'started', label: 'ofcUsStarted' },
             { key: 'completed', label: 'ofcUsCompleted' },
@@ -154,15 +184,21 @@ export function UsageScreen() {
         />
       </div>
 
+      {/*
+        * Where people stop, and where they are not starting at all. Two
+        * readings of the same reach question, and each is a short table — side
+        * by side they compare, stacked they read as separate reports.
+        */}
+      <div className="grid-2">
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsWhereGiveUp}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsWhereGiveUpBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsWhereGiveUp}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsWhereGiveUpBody}</p>
         <Table
           columns={[
             {
               key: 'event',
               label: 'ofcUsFlow',
-              render: (row: { event: string }) => FLOW_LABEL[row.event] ?? row.event,
+              render: (row: { event: string }) => flowLabel(row.event, t),
             },
             { key: 'step', label: 'ofcUsLastStepReached' },
             { key: 'abandoned_here', label: 'ofcOsAttempts' },
@@ -173,8 +209,8 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsReachBeyondJos}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcUsReachBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsReachBeyondJos}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsReachBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
@@ -192,10 +228,17 @@ export function UsageScreen() {
           empty="ofcNoneLgaEnoughActivityReport"
         />
       </div>
+      </div>
 
-      <div className="two-column">
+      {/*
+        * `two-column` was never a class. It is not in the stylesheet and never
+        * was, so these two cards have been stacking full width while reading
+        * as though somebody had put them side by side. `grid-2` is the one the
+        * portal actually has.
+        */}
+      <div className="grid-2">
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsOfflineQueue}</h2>
+          <h2 className="card__title card__pad--tight">{t.ofcUsOfflineQueue}</h2>
           <Table
             columns={[
               { key: 'event', label: 'ofcAgEvent' },
@@ -213,7 +256,7 @@ export function UsageScreen() {
         </div>
 
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.pubLanguage}</h2>
+          <h2 className="card__title card__pad--tight">{t.pubLanguage}</h2>
           <Table
             columns={[
               { key: 'language', label: 'pubLanguage' },
@@ -226,7 +269,7 @@ export function UsageScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcUsScreensReached}</h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsScreensReached}</h2>
         <Table
           columns={[
             { key: 'surface', label: 'ofcAgApplication' },

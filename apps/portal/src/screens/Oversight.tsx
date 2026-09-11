@@ -1,12 +1,13 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel, localName } from '@psirs/shared';
-import type { TranslationDictionary } from '@psirs/shared';
+import { useFilters } from '../lib/filters';
+import { CHAIN_TEXT, enumLabel, localName } from '@psirs/shared';
+import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -28,8 +29,8 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
   const entries = Object.entries(detail);
   if (entries.length === 0) return <span>—</span>;
 
-  const readable = entries.filter(([key]) => !key.endsWith('Id'));
-  const identifiers = entries.filter(([key]) => key.endsWith('Id'));
+  const readable = entries.filter(([key]) => !key.endsWith(t.ofcOvId));
+  const identifiers = entries.filter(([key]) => key.endsWith(t.ofcOvId));
 
   return (
     <div className="signal-detail">
@@ -41,7 +42,7 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
       ))}
       {readable.length > 0 && identifiers.length > 0 && (
         <details className="signal-detail__ids">
-          <summary>identifiers</summary>
+          <summary>{t.ofcOvIdentifiers}</summary>
           {identifiers.map(([key, value]) => (
             <div key={key} className="mono">
               {humanise(key, t)} {formatValue(value)}
@@ -96,6 +97,22 @@ export function FraudScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('OPEN');
+  /*
+   * Two reads, two failures, both kept away from the action error.
+   *
+   * The flags catch was already fixed once, for the half of this that
+   * mattered most: it leaves `flags` at null rather than writing `[]`, so an
+   * unread queue cannot read as a queue with nothing in it. But `!flags`
+   * renders the skeleton, so what an officer actually saw was a refusal at the
+   * top of the screen and four grey bars where the queue belongs — and the
+   * leakage figures, on the same shared `error`, simply were not drawn at all.
+   *
+   * Separately, because they answer different questions: the figures say how
+   * much money is unaccounted for, the queue says who is suspected of taking
+   * it, and an officer needs to know which of the two they are missing.
+   */
+  const [flagsError, setFlagsError] = useState<ApiError | null>(null);
+  const [leakageError, setLeakageError] = useState<ApiError | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepResult, setSweepResult] = useState<string | null>(null);
 
@@ -110,17 +127,29 @@ export function FraudScreen() {
   const load = useCallback(() => {
     api
       .get('/government/leakage')
-      .then(setLeakage)
+      .then((loaded) => {
+        setLeakage(loaded);
+        setLeakageError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLeakageError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
       .get<any[]>(`/government/fraud/flags?${params.toString()}`)
-      .then(setFlags)
-      .catch(() => setFlags([]));
+      .then((loaded) => {
+        setFlags(loaded);
+        setFlagsError(null);
+      })
+      // A fraud queue that could not be read is not a queue with no flags in
+      // it, and "no flags" is the reading an officer will take from an empty
+      // table. The refusal reaches the screen instead — in the queue's own
+      // place, rather than above a skeleton that never resolves.
+      .catch((caught) => {
+        setFlagsError(asApiError(caught));
+      });
   }, [statusFilter]);
 
   useEffect(() => {
@@ -129,7 +158,7 @@ export function FraudScreen() {
 
   async function review(id: string, decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED') {
     await withJustification({
-      question: 'Record what you found (at least 10 characters):',
+      question: t.ofcOvRecordWhatYouFound,
       minimum: 10,
       tooShort: t.ofcOvFlagNoteTooShort,
       run: async (note) => {
@@ -169,24 +198,36 @@ export function FraudScreen() {
                     const raised = result.flagsRaised ?? result.raised ?? 0;
                     setSweepResult(
                       raised === 0
-                        ? 'Sweep complete. Nothing new was flagged.'
-                        : `Sweep complete. ${raised} flag(s) raised for review.`,
+                        ? t.ofcOvSweepCompleteNothingNew
+                        : t.ofcOvSweepRaised.replace('{{count}}', String(raised)),
                     );
                     load();
                   } catch (caught) {
-                    if (caught instanceof ApiRequestError) setError(caught.error);
+                    setError(asApiError(caught));
                   } finally {
                     setSweeping(false);
                   }
                 }}
               >
-                {sweeping ? 'Sweeping…' : 'Run a fraud sweep now'}
+                {sweeping ? t.ofcOvSweeping : t.ofcOvRunAFraudSweep}
               </button>
             </div>
             {sweepResult && <Alert kind="success">{sweepResult}</Alert>}
           </>
         )}
       </div>
+
+      {/*
+        Where the figures would have been. Without this the grid is simply
+        absent, and a screen that is missing a section looks like a screen
+        that has nothing to report.
+      */}
+      {leakageError && (
+        <div className="card">
+          <ErrorAlert error={leakageError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
 
       {leakage && (
         <div className="stat-grid">
@@ -225,7 +266,7 @@ export function FraudScreen() {
 
       {leakage && leakage.highRiskAgents.length > 0 && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <h2 className="card__title">{t.ofcOvAgentsWithFlags}</h2>
           </div>
           <Table
@@ -245,7 +286,7 @@ export function FraudScreen() {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <div>
               <h2 className="card__title">{t.ofcOvFraudSignals}</h2>
@@ -266,7 +307,12 @@ export function FraudScreen() {
             </div>
           </div>
         </div>
-        {!flags ? (
+        {flagsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={flagsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !flags ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
@@ -341,7 +387,7 @@ interface AuditQuery {
   /** What must be picked first. Absent means the question can be asked as it is. */
   parameter?: {
     name: string;
-    prompt: string;
+    prompt: keyof TranslationDictionary;
     /** Where the options come from, and how to label them. */
     source: 'agents' | 'revenueItems' | 'taxpayerSearch';
   };
@@ -364,20 +410,20 @@ const AUDIT_QUERIES: AuditQuery[] = [
     key: 'agent-transactions',
     label: 'ofcOvOneAgentCollected',
     path: '/government/audit/queries/agent-transactions',
-    parameter: { name: 'agentId', prompt: 'Which agent?', source: 'agents' },
+    parameter: { name: 'agentId', prompt: 'ofcOvWhichAgent', source: 'agents' },
     period: true,
   },
   {
     key: 'receipts-by-item',
     label: 'ofcOvReceiptsOneItem',
     path: '/government/audit/queries/receipts-by-item',
-    parameter: { name: 'revenueItemCode', prompt: 'Which revenue item?', source: 'revenueItems' },
+    parameter: { name: 'revenueItemCode', prompt: 'ofcOvWhichRevenueItem', source: 'revenueItems' },
   },
   {
     key: 'taxpayer-access',
     label: 'ofcOvWhoLookedAtRecord',
     path: '/government/audit/queries/taxpayer-access',
-    parameter: { name: 'taxpayerId', prompt: 'Which taxpayer?', source: 'taxpayerSearch' },
+    parameter: { name: 'taxpayerId', prompt: 'ofcOvWhichTaxpayer', source: 'taxpayerSearch' },
   },
 ];
 
@@ -404,18 +450,73 @@ interface JobReport {
   state: 'NEVER_RUN' | 'HEALTHY' | 'RUNNING' | 'OVERDUE' | 'FAILING' | 'STALLED';
   lastStartedAt: string | null;
   lastSucceededAt: string | null;
+  lastFailedAt: string | null;
+  /*
+   * Failing on and off right now, computed by the API.
+   *
+   * This screen worked it out for itself to begin with, from `lastFailedAt`
+   * and the interval. That put the same rule in two places, and the other
+   * place is the one that decides whether an administrator is told — a board
+   * and an inbox that disagree about which jobs are flapping are worse than
+   * either alone, because the reader cannot tell which is stale.
+   */
+  flapping: boolean;
   lastDetail: string | null;
+  /**
+   * Why the last run failed.
+   *
+   * `jobHealth()` has always sent this; the interface here simply never
+   * declared it, so the one detail that makes a FAILING row actionable was
+   * arriving and being dropped on the floor.
+   */
+  lastError: string | null;
   consecutiveFailures: number;
   runsTotal: number;
   failuresTotal: number;
   message: string;
 }
 
+/**
+ * How the six states read to somebody deciding what to do about them.
+ *
+ * `describeState` composed these in `apps/api` and this column printed them,
+ * while the column beside it rendered the same `state` as a translated badge.
+ * Every value they are built from was already here: the enum, the count of
+ * consecutive failures, and the error from the last run.
+ *
+ * OVERDUE and STALLED are the pair worth keeping apart. A job that has not
+ * started means the schedule may have stopped; a job that started and never
+ * returned means an instance died holding it. Both show as "not working" and
+ * they are looked into differently.
+ */
+function jobState(row: JobReport, t: TranslationDictionary): string {
+  switch (row.state) {
+    case 'HEALTHY':
+      return t.ofcOvJobHealthy;
+    case 'RUNNING':
+      return t.ofcOvJobRunning;
+    case 'OVERDUE':
+      return t.ofcOvJobOverdue;
+    case 'STALLED':
+      return t.ofcOvJobStalled;
+    case 'FAILING':
+      return t.ofcOvJobFailing
+        .replace('{{count}}', String(row.consecutiveFailures))
+        .replace('{{error}}', row.lastError ?? t.ofcOvJobNoReason);
+    case 'NEVER_RUN':
+      return t.ofcOvJobNeverRun;
+    default:
+      return row.message;
+  }
+}
+
 /** Every-30-seconds and every-6-hours both have to read at a glance. */
-function readInterval(ms: number): string {
-  if (ms < 60_000) return `every ${Math.round(ms / 1000)}s`;
-  if (ms < 60 * 60_000) return `every ${Math.round(ms / 60_000)} min`;
-  return `every ${Math.round(ms / (60 * 60_000))} h`;
+function readInterval(ms: number, t: TranslationDictionary): string {
+  if (ms < 60_000)
+    return t.ofcOvEverySeconds.replace('{{n}}', String(Math.round(ms / 1000)));
+  if (ms < 60 * 60_000)
+    return t.ofcOvEveryMinutes.replace('{{n}}', String(Math.round(ms / 60_000)));
+  return t.ofcOvEveryHours.replace('{{n}}', String(Math.round(ms / (60 * 60_000))));
 }
 
 export function BackgroundWorkPanel() {
@@ -432,7 +533,7 @@ export function BackgroundWorkPanel() {
       .get<{ jobs: JobReport[]; healthy: boolean; needingAttention: number }>('/government/workers')
       .then(setHealth)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -444,8 +545,10 @@ export function BackgroundWorkPanel() {
       <h2 className="card__title">{t.ofcOvUnattendedWork}</h2>
       <p className="card__hint">
         {health.healthy
-          ? 'Every scheduled job has run recently and succeeded.'
-          : `${health.needingAttention} of ${health.jobs.length} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.`}
+          ? t.ofcOvEveryScheduledJobHas
+          : t.ofcOvJobsNeedAttention
+              .replace('{{count}}', String(health.needingAttention))
+              .replace('{{total}}', String(health.jobs.length))}
       </p>
       <Table
         columns={[
@@ -460,7 +563,11 @@ export function BackgroundWorkPanel() {
               </>
             ),
           },
-          { key: 'intervalMs', label: 'ofcOvRuns', render: (row: JobReport) => readInterval(row.intervalMs) },
+          {
+            key: 'intervalMs',
+            label: 'ofcOvRuns',
+            render: (row: JobReport) => readInterval(row.intervalMs, t),
+          },
           {
             key: 'state',
             label: 'ofcOsState',
@@ -472,9 +579,101 @@ export function BackgroundWorkPanel() {
             // no recent success, and that is the distinction worth a column.
             label: 'ofcOvLastSucceeded',
             render: (row: JobReport) =>
-              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : 'Never',
+              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : t.ofcArNeverPaid,
           },
-          { key: 'message', label: 'ofcOvWhatThatMeans' },
+          {
+            /*
+             * What the last run actually did, which was arriving and being
+             * dropped.
+             *
+             * `jobHealth` has always sent `lastDetail` — "4 reminder(s)
+             * sent", "promoted 12 commission(s) to eligible" — and this
+             * interface declared it and no column drew it. So a HEALTHY row
+             * said the job ran and nothing about whether it found anything,
+             * which is the difference between a reminder sweep working and a
+             * reminder sweep running over an empty queue because the query
+             * behind it broke.
+             *
+             * The server's words are kept, as `nextStep` on a `conflict()` is:
+             * this sentence carries different counts every run, so there is no
+             * code to key a translation on.
+             *
+             * The three cases are kept apart. A succeeded run with no detail
+             * is "nothing needed doing", which is an answer; a job that has
+             * never succeeded gets a dash, and the state column says why.
+             */
+            key: 'whatItDid',
+            label: 'ofcOvWhatItDid',
+            render: (row: JobReport) =>
+              row.lastDetail ??
+              (row.lastSucceededAt ? t.ofcOvNothingNeededDoing : '\u2014'),
+          },
+          {
+            /*
+             * The failure this board could not report.
+             *
+             * `state` is FAILING only while `consecutiveFailures > 0`, and one
+             * success resets that counter to zero. A job that fails every other
+             * run therefore reads HEALTHY, `needingAttention` counts it as
+             * nothing, and the line above this table says every scheduled job
+             * has run on schedule — while `runsTotal` and `failuresTotal` sat
+             * in the payload, declared in the interface above, and no column
+             * drew them.
+             *
+             * For the reconciliation sweep that is money not reconciled, on a
+             * board whose entire purpose is to say whether unattended work is
+             * happening.
+             *
+             * Two readings, kept apart. The lifetime record is what it says:
+             * how this job has done overall, which a clean job should be proud
+             * of and a bad one cannot hide. Recently is the sharper one — a
+             * job with a recent success AND a recent failure is flapping now,
+             * whatever its state says, and that is the row to look at today.
+             *
+             * "Recent" is measured against the job's own interval, because
+             * every-30-seconds and every-6-hours mean different things by it.
+             */
+            key: 'record',
+            label: 'ofcOvRecord',
+            render: (row: JobReport) => {
+              if (row.runsTotal === 0) return '\u2014';
+              const clean = row.failuresTotal === 0;
+              return (
+                <>
+                  <span>
+                    {clean
+                      ? t.ofcOvNeverFailed.replace('{{runs}}', String(row.runsTotal))
+                      : t.ofcOvFailedOutOf
+                          .replace('{{failures}}', String(row.failuresTotal))
+                          .replace('{{runs}}', String(row.runsTotal))}
+                  </span>
+                  {row.flapping && (
+                    <>
+                      <br />
+                      <span className="table__sub" role="status">
+                        {t.ofcOvFailingIntermittently.replace(
+                          '{{when}}',
+                          formatDateTime(row.lastFailedAt!),
+                        )}
+                        {row.lastError ? ` ${row.lastError}` : ''}
+                      </span>
+                    </>
+                  )}
+                </>
+              );
+            },
+          },
+          {
+            /*
+             * Named for what the column shows, not for the field it used to
+             * print. `Table` reads `key` for data only when there is no
+             * `render`, so if this render is ever dropped the column shows a
+             * dash rather than quietly going back to the API's English.
+             */
+            key: 'whatThatMeans',
+            label: 'ofcOvWhatThatMeans',
+            render: (row: JobReport) => jobState(row, t),
+          },
         ]}
         rows={health.jobs}
         empty="ofcNoneBackgroundJobsDeclared"
@@ -483,28 +682,74 @@ export function BackgroundWorkPanel() {
   );
 }
 
+/** Exactly what `GET /government/audit/verify` answers with. */
+interface ChainAnswer {
+  valid: boolean;
+  entriesChecked: number;
+  brokenAtSequence?: number;
+  verdict: ChainVerdict;
+  /** The server's English, kept for a build that meets an outcome it does not know. */
+  message: string;
+}
+
+/**
+ * The verdict as a sentence, with its number filled in.
+ *
+ * A verdict this build has never met keeps the server's English rather than
+ * showing nothing: an auditor told the chain is broken and given no reason is
+ * worse off than one given a reason in the wrong language.
+ */
+function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
+  const key = CHAIN_TEXT[answer.verdict];
+  if (!key) return answer.message;
+  return (t[key] as string)
+    .replace('{{count}}', String(answer.entriesChecked))
+    .replace('{{sequence}}', String(answer.brokenAtSequence ?? 0));
+}
+
 export function AuditScreen() {
   const { t } = usePortalI18n();
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
+  const [verification, setVerification] = useState<ChainAnswer | null>(null);
   const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
-  const [filters, setFilters] = useState({ action: '', entityType: '' });
+  /*
+   * Kept in the URL and in this session. An auditor who filtered to one action,
+   * opened the transaction it named and came back used to get the whole log.
+   */
+  const [filters, setFilters] = useFilters('audit', '/audit', { action: '', entityType: '' });
+
+  /*
+   * One builder for the screen and the export.
+   *
+   * They were separate, and drifted: the screen read 150 entries and the
+   * export sent 500 with the same two filters written out again. An officer
+   * exporting what they were looking at should get what they were looking at,
+   * filtered the same way -- so the only difference is how many rows, which is
+   * the one difference that is deliberate.
+   */
+  const auditQuery = useCallback(
+    (limit: number) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (filters.action) params.set('action', filters.action);
+      if (filters.entityType) params.set('entityType', filters.entityType);
+      return params;
+    },
+    [filters],
+  );
 
   useEffect(() => {
-    const params = new URLSearchParams({ limit: '150' });
-    if (filters.action) params.set('action', filters.action);
-    if (filters.entityType) params.set('entityType', filters.entityType);
+    const params = auditQuery(150);
 
     setEntries(null);
     api
       .get<any[]>(`/government/audit?${params.toString()}`)
       .then(setEntries)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
-  }, [filters]);
+  }, [auditQuery]);
 
   return (
     <>
@@ -526,19 +771,14 @@ export function AuditScreen() {
               setError(null);
               setVerification(null);
               try {
-                setVerification(
-                  await api.get<{ valid: boolean; message: string; entriesChecked: number }>(
-                    '/government/audit/verify',
-                  ),
-                );
+                setVerification(await api.get<ChainAnswer>('/government/audit/verify'));
               } catch (caught) {
                 if (caught instanceof ApiRequestError) setError(caught.error);
                 else
                   setError({
                     code: 'VERIFICATION_UNAVAILABLE',
                     message:
-                      'The audit trail could not be checked just now. This is not a finding ' +
-                      'about the trail — try again, and tell support if it persists.',
+                      t.ofcOvTheAuditTrailCould,
                   } as ApiError);
               }
             }}
@@ -550,7 +790,19 @@ export function AuditScreen() {
             kind={verification.valid ? 'success' : 'error'}
             title={verification.valid ? 'ofcOvIntact' : 'ofcOvTampered'}
           >
-            <p style={{ margin: 0 }}>{verification.message}</p>
+            {/*
+              * Which of the four, in the language the heading above is in.
+              *
+              * The heading was already translated and the sentence under it
+              * was the API's English, so an officer reading Hausa was told
+              * "An taba rajistar bincike" and then, in English, what had
+              * actually been done to it. That sentence is the whole answer:
+              * a log whose head was cut off, an entry missing from the
+              * middle, and a row edited after the fact are three different
+              * events, and which one it is decides what the auditor does
+              * next.
+              */}
+            <p style={{ margin: 0 }}>{chainAnswer(verification, t)}</p>
           </Alert>
         )}
       </div>
@@ -577,7 +829,7 @@ export function AuditScreen() {
                   const rows = await api.get<any[]>(query.path);
                   setQueryResult({ label: query.label, rows });
                 } catch (caught) {
-                  if (caught instanceof ApiRequestError) setError(caught.error);
+                  setError(asApiError(caught));
                 }
               }}
             >
@@ -601,7 +853,7 @@ export function AuditScreen() {
 
       {queryResult && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <h2 className="card__title">{queryResult.label}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
@@ -628,14 +880,14 @@ export function AuditScreen() {
       <ErrorAlert error={error} />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="filters">
             <div className="field">
               <label htmlFor="entity">{t.ofcOvEntityType}</label>
               <input
                 id="entity"
                 value={filters.entityType}
-                onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
+                onChange={(event) => setFilters({ entityType: event.target.value })}
                 placeholder={t.ofcOvEntityPlaceholder}
               />
             </div>
@@ -644,21 +896,14 @@ export function AuditScreen() {
               <input
                 id="action"
                 value={filters.action}
-                onChange={(event) => setFilters({ ...filters, action: event.target.value })}
+                onChange={(event) => setFilters({ action: event.target.value })}
                 placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                const params = new URLSearchParams({ limit: '500', format: 'csv' });
-                if (filters.action) params.set('action', filters.action);
-                if (filters.entityType) params.set('entityType', filters.entityType);
-                const csv = await api.get<string>(`/government/audit?${params.toString()}`);
-                downloadCsv(`plateau-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-              }}
-            >{t.ofcExportCsv}</button>
+            <ExportButtons
+              path={`/government/audit?${auditQuery(500).toString()}`}
+              filename={`plateau-audit-${new Date().toISOString().slice(0, 10)}`}
+            />
           </div>
         </div>
 
@@ -677,6 +922,22 @@ export function AuditScreen() {
               { key: 'entity_type', label: 'ofcOvEntity' },
               { key: 'result', label: 'ofcOvResult', render: (row) => <Badge status={row.result} /> },
               { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
+              {
+                /*
+                 * What the action actually changed.
+                 *
+                 * The columns to the left say who did what, and until now that
+                 * was the whole of this screen: an auditor who wanted to know
+                 * what an action *did* opened Transaction 360, which only
+                 * helps if you already know which transaction. The diff is
+                 * rendered here rather than both sides in full, because a
+                 * reader asked to spot which of fourteen fields moved does not
+                 * spot it.
+                 */
+                key: 'change',
+                label: 'ofcOvChange',
+                render: (row) => <BeforeAfter before={row.old_value} after={row.new_value} />,
+              },
               {
                 key: 'hash',
                 label: 'ofcOvHash',
@@ -724,6 +985,14 @@ function AuditQueryParameters({
    * searched to do the thing they have already done.
    */
   const [searched, setSearched] = useState(false);
+  /*
+   * And whether the list could not be read at all, which the select used to
+   * render as "Nothing to choose from" with the control disabled. An auditor
+   * opening an audit on an agent was told PSIRS has no agents — and the one
+   * thing they could do about it, ask again, was not on the screen.
+   */
+  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState(() => {
     const to = new Date();
@@ -737,6 +1006,7 @@ function AuditQueryParameters({
     setOptions(null);
     setValue('');
     setSearched(false);
+    setOptionsFailed(false);
     if (source === 'agents') {
       api
         .get<{ agents: any[] } | any[]>('/agents?limit=200')
@@ -749,7 +1019,10 @@ function AuditQueryParameters({
             })),
           );
         })
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else if (source === 'revenueItems') {
       api
         .get<any[]>('/revenue/items')
@@ -761,13 +1034,16 @@ function AuditQueryParameters({
             })),
           ),
         )
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else {
       // Taxpayers are searched rather than listed: there are more of them than
       // any select should hold, and an auditor arrives knowing a name or number.
       setOptions([]);
     }
-  }, [source]);
+  }, [source, attempt]);
 
   async function runSearch() {
     if (!search.trim()) return;
@@ -785,7 +1061,7 @@ function AuditQueryParameters({
       );
       setSearched(true);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -801,7 +1077,7 @@ function AuditQueryParameters({
       }
       onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -833,7 +1109,7 @@ function AuditQueryParameters({
       )}
 
       <div className="field">
-        <label htmlFor="audit-parameter">{query.parameter!.prompt}</label>
+        <label htmlFor="audit-parameter">{t[query.parameter!.prompt]}</label>
         <select
           id="audit-parameter"
           value={value}
@@ -842,14 +1118,16 @@ function AuditQueryParameters({
         >
           <option value="">
             {!options
-              ? 'Loading…'
+              ? t.ofcOvLoading
               : options.length === 0
                 ? source === 'taxpayerSearch'
                   ? searched
-                    ? 'No taxpayer matched that search'
-                    : 'Search for a taxpayer first'
-                  : 'Nothing to choose from'
-                : 'Select one'}
+                    ? t.ofcOvNoTaxpayerMatchedThat
+                    : t.ofcOvSearchForATaxpayer
+                  : optionsFailed
+                    ? t.ofcListCouldNotLoad
+                    : t.ofcOvNothingToChooseFrom
+                : t.ofcOvSelectOne}
           </option>
           {(options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
@@ -857,6 +1135,9 @@ function AuditQueryParameters({
             </option>
           ))}
         </select>
+        <ReferenceListFailure
+          list={{ failed: optionsFailed, reload: () => setAttempt((n) => n + 1) }}
+        />
       </div>
 
       {query.period && (
@@ -883,7 +1164,7 @@ function AuditQueryParameters({
       )}
 
       <button type="button" disabled={busy || !value} onClick={() => void run()}>
-        {busy ? 'Running…' : 'Run this query'}
+        {busy ? t.ofcOvRunning : t.ofcOvRunThisQuery}
       </button>
     </div>
   );

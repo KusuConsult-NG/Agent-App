@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { ErrorAlert, Field, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 
@@ -39,7 +39,7 @@ export interface PickedTaxpayer {
  * is passed in so it can be in the agent's own language: this is a plain
  * function and cannot reach the dictionary itself.
  */
-export function taxpayerDisplayName(taxpayer: PickedTaxpayer, unnamed = 'Unnamed taxpayer'): string {
+export function taxpayerDisplayName(taxpayer: PickedTaxpayer, unnamed = ''): string {
   return (
     taxpayer.business_name ||
     `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||
@@ -82,7 +82,7 @@ export function TaxpayerPicker({
         ),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

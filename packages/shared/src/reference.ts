@@ -82,6 +82,19 @@ export const FRAUD_RULES = [
    * knew about and an entity type that said 'TRANSACTION'.
    */
   'SETTLEMENT_VARIANCE',
+  /*
+   * The four the officer-readiness assessment found missing, all of which
+   * watch the platform's own people rather than the field.
+   *
+   * Every rule above this point asks whether an agent is behaving oddly. None
+   * of them could see an officer at all, which left the largest single lever
+   * on this platform — a person with `payment:reverse` and a keyboard —
+   * unwatched by the fraud engine that watches everybody else.
+   */
+  'REPEATED_RECEIPT_REGENERATION',
+  'UNUSUAL_TRANSACTION_TIMING',
+  'UNUSUAL_OFFICER_ACTIVITY',
+  'FREQUENT_MANUAL_INTERVENTION',
 ] as const;
 export type FraudRule = (typeof FRAUD_RULES)[number];
 

@@ -31,8 +31,17 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, can, fetchFile, type ApiError } from '../lib/api';
-import { Alert, Badge, Empty, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, fetchFile, type ApiError } from '../lib/api';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -80,16 +89,30 @@ export function KycDocumentsCard({
   const { t } = usePortalI18n();
   const [documents, setDocuments] = useState<KycDocument[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The same distinction the access log below already makes, on the list
+   * itself.
+   *
+   * `setDocuments([])` on a failure printed "This applicant has not submitted
+   * any documents." — and the next thing that happens on this screen is a
+   * decision about whether somebody becomes a government revenue agent. The
+   * warning two lines down exists because approving without opening the
+   * documents rests the identity check on an automated answer alone; being
+   * told there are none to open is the same thing, arrived at by accident.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<KycDocument | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ documents: KycDocument[] }>(`/agents/${agentId}/kyc/documents`)
-      .then((data) => setDocuments(data.documents))
+      .then((data) => {
+        setDocuments(data.documents);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setDocuments([]);
+        setLoadError(asApiError(caught));
       });
   }, [agentId]);
 
@@ -111,7 +134,12 @@ export function KycDocumentsCard({
         </Alert>
       )}
 
-      {!documents ? (
+      {loadError ? (
+        <>
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </>
+      ) : !documents ? (
         <Loading />
       ) : documents.length === 0 ? (
         <Empty>{t.ofcKycNoDocuments}</Empty>
@@ -149,7 +177,7 @@ export function KycDocumentsCard({
                 label: { text: '' },
                 render: (row) => (
                   <button type="button" className="link" onClick={() => setOpen(row)}>
-                    {row.superseded_at ? 'View' : 'Open and review'}
+                    {row.superseded_at ? t.enumView : t.ofcKyOpenAndReview}
                   </button>
                 ),
               },
@@ -204,7 +232,7 @@ function DocumentViewer({
         setUrl(objectUrl);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
     return () => {
@@ -241,7 +269,7 @@ function DocumentViewer({
         else {
           setAccessError({
             code: 'CLIENT',
-            message: 'The access log could not be read.',
+            message: t.ofcKyTheAccessLogCould,
             moneyStatus: 'NOT_APPLICABLE',
           });
         }
@@ -254,12 +282,13 @@ function DocumentViewer({
     try {
       await api.post(`/agents/kyc/documents/${doc.id}/review`, { decision, reason });
       onReviewed(
-        decision === 'ACCEPT'
-          ? `${enumLabel(doc.document_type, t)} accepted.`
-          : `${enumLabel(doc.document_type, t)} rejected. The applicant can see the reason and submit a replacement.`,
+        (decision === 'ACCEPT' ? t.ofcKycAccepted : t.ofcKycRejectedNotice).replace(
+          '{{document}}',
+          enumLabel(doc.document_type, t),
+        ),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -281,7 +310,14 @@ function DocumentViewer({
         <Loading rows={2} />
       ) : url ? (
         isImage ? (
-          <img className="document-viewer__image" src={url} alt={`${enumLabel(doc.document_type, t)} submitted by the applicant`} />
+          <img
+            className="document-viewer__image"
+            src={url}
+            alt={t.ofcKycSubmittedByApplicant.replace(
+              '{{document}}',
+              enumLabel(doc.document_type, t),
+            )}
+          />
         ) : (
           <p className="card__hint">
             {t.ofcKycFileType.replace('{{type}}', doc.content_type)}{' '}
@@ -303,8 +339,8 @@ function DocumentViewer({
         <Alert kind="info" title={{ text: t.ofcKycAlready.replace('{{status}}', enumLabel(doc.verification_status, t)) }}>
           <p style={{ margin: 0 }}>
             {doc.rejection_reason
-              ? `Reason given: ${doc.rejection_reason}`
-              : 'Reviewed on ' + formatDateTime(doc.reviewed_at)}
+              ? t.ofcKycReasonGiven.replace('{{reason}}', doc.rejection_reason)
+              : `${t.ofcKyReviewedOn} ${formatDateTime(doc.reviewed_at)}`}
           </p>
         </Alert>
       ) : can('agent:approve') ? (
@@ -318,6 +354,7 @@ function DocumentViewer({
             maxLength={500}
             onChange={(event) => setReason(event.target.value)}
           />
+          <ReasonRule value={reason} minimum={4} />
           <div className="button-row">
             <button type="button" disabled={busy || reason.trim().length < 4} onClick={() => decide('ACCEPT')}>{t.ofcKycAccept}</button>
             <button

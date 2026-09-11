@@ -88,6 +88,17 @@ export const BACKGROUND_JOBS = {
     purpose: 'Proves against the gateway statement that the money arrived.',
   },
   /*
+   * Daily. The vehicle register changes when somebody registers or renews,
+   * and a lead that appears a day late costs nothing — whereas a graph rebuilt
+   * on every write would assert claims about citizens continuously, which is
+   * the opposite of what a purpose-limited system should do. The job is
+   * idempotent: a live edge cannot be asserted twice.
+   */
+  'connection-graph': {
+    intervalMs: 24 * 60 * 60_000,
+    purpose: 'Derives asset connections from the vehicle register.',
+  },
+  /*
    * The same cadence as reconciliation, so a reminder lands within hours of the
    * invoice entering a window rather than the next day. Each window is flagged
    * on the invoice after the first send, so re-running never duplicates one.
@@ -129,6 +140,26 @@ export const BACKGROUND_JOBS = {
     intervalMs: 60 * 60_000,
     purpose: 'Deletes rate limit buckets whose window has ended.',
   },
+  /*
+   * The job that watches the other jobs.
+   *
+   * Their health was already computed and served at `/government/workers`, and
+   * an officer had to go and look -- which means the way anybody found out the
+   * reminder sweep had been dead for a day was a taxpayer asking why nobody
+   * had written to them. This turns the same figures into something that
+   * arrives in an administrator's inbox.
+   *
+   * It cannot report on itself usefully: a run that never happens raises no
+   * alert about the fact that it never happened. That is a real limit and the
+   * honest answer to it is outside this platform -- but every *other* job now
+   * has a watcher, which is the whole of what was missing.
+   */
+  'system-alerts': {
+    intervalMs: 15 * 60_000,
+    purpose:
+      'Raises an alert when a background job is overdue or failing, ' +
+      'or an integration has stopped answering.',
+  },
 } as const;
 
 export type JobName = keyof typeof BACKGROUND_JOBS;
@@ -149,7 +180,7 @@ export type JobName = keyof typeof BACKGROUND_JOBS;
  * answer for the whole cluster — which is what the Prometheus gauges could
  * never be.
  */
-export async function runJob<T>(
+export async function runJob<T extends string | null | void>(
   name: JobName,
   task: () => Promise<T>,
 ): Promise<JobOutcome<T>> {
@@ -173,10 +204,20 @@ export async function runJob<T>(
   });
 }
 
-/** What a job returned, as a line an operator can read. Jobs return null for "nothing to do". */
-function describe(value: unknown): string | null {
+/**
+ * What a job returned, as a line an operator can read.
+ *
+ * Jobs return null for "nothing to do", and a sentence otherwise. The
+ * constraint on `runJob` above is what keeps that true: this value is written
+ * to `last_detail` and shown on the unattended-work board, and `String()` on
+ * an object yields "[object Object]" — a row that looks like a reading and
+ * says nothing, which is the shape of every defect this board exists to
+ * surface. Refusing it in the type system means a job cannot be written that
+ * way in the first place.
+ */
+function describe(value: string | null | void): string | null {
   if (value === null || value === undefined) return null;
-  return String(value).slice(0, 500);
+  return value.slice(0, 500);
 }
 
 /**
@@ -219,6 +260,19 @@ async function recordFinish(
   detail: string | null,
   error: string | null,
 ): Promise<void> {
+  /*
+   * last_error holds the error from the LAST FAILURE, not from the last run.
+   *
+   * It used to clear on success, which loses the one thing that makes an
+   * intermittent failure actionable: a job that fails and then succeeds kept
+   * last_failed_at and threw away what it said, so the board could report that
+   * something went wrong at 14:03 and never what.
+   *
+   * Nothing that reads it changes. It is only read where consecutive_failures
+   * is above zero -- and there the last run WAS the failure, so the value is
+   * identical either way. What is new is that it survives for last_failed_at
+   * to be paired with.
+   */
   await pool.query(
     `UPDATE background_jobs SET
        last_finished_at = now(),
@@ -227,7 +281,8 @@ async function recordFinish(
        last_detail = $4,
        last_succeeded_at = CASE WHEN $2 = 'SUCCEEDED' THEN now() ELSE last_succeeded_at END,
        last_failed_at = CASE WHEN $2 = 'FAILED' THEN now() ELSE last_failed_at END,
-       last_error = CASE WHEN $2 = 'FAILED' THEN $5 ELSE NULL END,
+       -- The error from the LAST FAILURE, not from the last run. See above.
+       last_error = CASE WHEN $2 = 'FAILED' THEN $5 ELSE last_error END,
        failures_total = failures_total + CASE WHEN $2 = 'FAILED' THEN 1 ELSE 0 END,
        consecutive_failures = CASE WHEN $2 = 'FAILED' THEN consecutive_failures + 1 ELSE 0 END
      WHERE name = $1`,
@@ -251,13 +306,47 @@ export interface JobReport {
   lastStartedAt: Date | null;
   lastFinishedAt: Date | null;
   lastSucceededAt: Date | null;
+  /*
+   * When it last threw, which `state` cannot tell anybody.
+   *
+   * `state` is FAILING only while `consecutive_failures > 0`, and one success
+   * resets that to zero. So a job failing every other run reads HEALTHY, and
+   * the only surviving evidence that anything is wrong is this timestamp next
+   * to a recent `lastSucceededAt`.
+   */
+  lastFailedAt: Date | null;
   lastDetail: string | null;
   lastError: string | null;
   consecutiveFailures: number;
   runsTotal: number;
   failuresTotal: number;
+  /*
+   * Failing on and off right now, whatever `state` says.
+   *
+   * A job with a recent success AND a recent failure is working some of the
+   * time, which `state` cannot express: FAILING needs
+   * `consecutive_failures > 0`, and one success resets that to zero.
+   *
+   * Computed here rather than on the screen that shows it, because the alert
+   * and the board must not be able to disagree about which jobs are flapping.
+   * A board saying one thing and an inbox saying another is worse than either
+   * alone, since the reader has no way to tell which is stale.
+   */
+  flapping: boolean;
   overdueBy: number | null;
   message: string;
+}
+
+/**
+ * How far back "recently" reaches for a given job.
+ *
+ * Ten of its own intervals, floored at an hour and capped at a week. A job
+ * that runs every thirty seconds needs a window wider than five minutes
+ * before "it failed recently" means anything; one that runs twice a day
+ * should not still be called flappy a month later.
+ */
+export function flappingWindowMs(intervalMs: number): number {
+  return Math.min(Math.max(intervalMs * 10, 60 * 60_000), 7 * 24 * 60 * 60_000);
 }
 
 /**
@@ -294,6 +383,7 @@ export async function jobHealth(now = new Date()): Promise<{
     last_outcome: string;
     last_detail: string | null;
     last_succeeded_at: Date | null;
+    last_failed_at: Date | null;
     last_error: string | null;
     consecutive_failures: number;
     runs_total: string;
@@ -314,11 +404,13 @@ export async function jobHealth(now = new Date()): Promise<{
         lastStartedAt: null,
         lastFinishedAt: null,
         lastSucceededAt: null,
+        lastFailedAt: null,
         lastDetail: null,
         lastError: null,
         consecutiveFailures: 0,
         runsTotal: 0,
         failuresTotal: 0,
+        flapping: false,
         overdueBy: null,
         message: 'Has not run once since this database was created.',
       };
@@ -352,11 +444,21 @@ export async function jobHealth(now = new Date()): Promise<{
       lastStartedAt: row.last_started_at,
       lastFinishedAt: row.last_finished_at,
       lastSucceededAt: row.last_succeeded_at,
+      lastFailedAt: row.last_failed_at,
       lastDetail: row.last_detail,
       lastError: row.last_error,
       consecutiveFailures: row.consecutive_failures,
       runsTotal: Number(row.runs_total),
       failuresTotal: Number(row.failures_total),
+      /*
+       * Only while the state says it is fine. A job already reported as
+       * FAILING, OVERDUE or STALLED has a louder thing wrong with it, and
+       * saying it also flaps would put two alerts on one problem.
+       */
+      flapping:
+        state === 'HEALTHY' &&
+        row.last_failed_at !== null &&
+        now.getTime() - row.last_failed_at.getTime() < flappingWindowMs(declared.intervalMs),
       overdueBy: late > 0 ? late : null,
       message: describeState(state, row.last_error, row.consecutive_failures),
     };

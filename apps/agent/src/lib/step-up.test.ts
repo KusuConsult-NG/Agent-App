@@ -18,7 +18,7 @@
 
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { setSession } from './api';
-import { grantStepUp, requestStepUpCode, stepUpDestination } from './step-up';
+import { StepUpUnavailable, grantStepUp, requestStepUpCode, stepUpDestination } from './step-up';
 
 const USER = {
   id: 'u-1',
@@ -95,7 +95,11 @@ describe('Requesting a code', () => {
 
   it('refuses to ask when nobody is signed in', async () => {
     setSession(null);
-    await expect(requestStepUpCode()).rejects.toThrow(/sign in/i);
+    // The type, not the message. This asserted `/sign in/i` against the
+    // English sentence the module used to throw — the sentence a screen then
+    // rendered to an agent reading Hausa. The screen now decides the words, so
+    // matching on them here would only re-tie the knot that was just undone.
+    await expect(requestStepUpCode()).rejects.toBeInstanceOf(StepUpUnavailable);
     expect(calls).toHaveLength(0);
   });
 });

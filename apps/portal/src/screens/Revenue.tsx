@@ -16,8 +16,8 @@
  * client had ever sent a coordinate.
  */
 
-import { useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
@@ -92,16 +92,48 @@ export function RevenueScreen() {
   const [data, setData] = useState<Summary | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<Summary>('/government/revenue/summary')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        /*
+         * The second branch is the one that was missing, on four screens no
+         * test had ever rendered.
+         *
+         * Only an `ApiRequestError` set anything, so a connection that
+         * dropped — or any failure that is not a refusal with a body — left
+         * `error` null and the data null, and the skeleton below went on
+         * drawing forever. A screen that says nothing and never stops loading
+         * is the one failure an officer cannot even report.
+         */
+        setError(asApiError(caught));
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /*
+   * A refusal with nothing to press is a screen an officer leaves.
+   *
+   * This returned the alert alone, so the only way to ask again was reloading
+   * the page — and nothing said so. The same shape was fixed on the
+   * intelligence drill-down after a single dropped request ended that screen
+   * for good.
+   */
+  if (error) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={6} />;
 
   const territories = data.scope?.kind === 'TERRITORIES' ? data.scope.territories : null;
@@ -127,8 +159,8 @@ export function RevenueScreen() {
         >
           <p style={{ margin: 0 }}>
             {territories.length === 0
-              ? 'These figures are empty because your account covers no territory yet.'
-              : 'Every figure here covers your territories only, not the whole state.'}
+              ? t.ofcRvTheseFiguresAreEmpty
+              : t.ofcRvEveryFigureHereCovers}
           </p>
         </Alert>
       )}
@@ -177,9 +209,18 @@ export function RevenueScreen() {
         </Alert>
       )}
 
+      {/*
+        * Left full width, and it was worth trying the other way to find out.
+        *
+        * Paired two-up these four read as a comparison and the page halved,
+        * but every one of them carries five or six columns and `th` is
+        * nowrap: at 660 pixels the money column went off the edge of its own
+        * card. A summary whose figures need a sideways scroll is not a
+        * summary. Length is the cheaper cost.
+        */}
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhoseRevenue}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhoseRevenueBody}<em>for</em>{t.ofcRvMdaNoItem}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvWhoseRevenue}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvWhoseRevenueBody}</p>
         <Table
           columns={[
             { key: 'mda', label: 'ofcRvMinistryDepartment', render: (row: MdaRow) => localName(lang, row.mda, row.mda_ha) },
@@ -202,8 +243,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvOwedToCouncils}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvCouncilsBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvOwedToCouncils}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvCouncilsBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'ofcRvCouncil' },
@@ -229,8 +270,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvWhereGenerated}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvWhereGeneratedBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvWhereGenerated}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvWhereGeneratedBody}</p>
         <Table
           columns={[
             { key: 'lga', label: 'tpLgaShort' },
@@ -256,8 +297,8 @@ export function RevenueScreen() {
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>{t.ofcRvEachAgentGround}</h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>{t.ofcRvGroundBody}</p>
+        <h2 className="card__title card__pad--tight">{t.ofcRvEachAgentGround}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcRvGroundBody}</p>
         <Table
           columns={[
             { key: 'agent_code', label: 'ofcRhAgent' },
@@ -277,7 +318,7 @@ export function RevenueScreen() {
               render: (row: AgentRow) =>
                 row.centre_latitude && row.centre_longitude
                   ? `${row.centre_latitude}, ${row.centre_longitude}`
-                  : 'Not mapped',
+                  : t.ofcRvNotMapped,
             },
           ]}
           rows={data.agents}

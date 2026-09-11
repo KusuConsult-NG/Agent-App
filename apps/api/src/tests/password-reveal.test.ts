@@ -45,7 +45,16 @@ describe('A password field is never typed blind', () => {
   it('has a reveal control in the agent app', () => {
     const ui = readFileSync(join(REPO_ROOT, 'apps', 'agent', 'src', 'ui.tsx'), 'utf8');
     assert.match(ui, /export function PasswordField/);
-    assert.match(ui, /aria-label=\{shown \? 'Hide password' : 'Show password'\}/);
+    /*
+     * The label is bound to `shown` and comes from the dictionary.
+     *
+     * This used to pin the English words. That made a correct change look like
+     * a regression the moment the control was translated, and it asserted the
+     * wrong thing besides: what matters is that the toggle carries a label at
+     * all, and that the label follows the state rather than sitting fixed on
+     * one of the two meanings.
+     */
+    assert.match(ui, /aria-label=\{shown \? t\.\w+ : t\.\w+\}/);
     assert.match(
       ui,
       /type="button"/,

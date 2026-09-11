@@ -1,0 +1,385 @@
+/**
+ * The screen an officer files a PAYE return from.
+ *
+ * One property carries this whole phase: the employer declares what people
+ * were paid, and the platform works out the tax. The screen's job is to make
+ * that structurally true rather than merely stated — there is no field for the
+ * tax, so there is nothing to argue about at a counter, and the officer is
+ * told as much in words they can repeat to the employer.
+ *
+ * The other thing tested here is the denominator. "Forty schools have never
+ * filed" means something different against forty-two schools on the register
+ * than against four hundred, and a screen that shows only the first number has
+ * told the officer less than it appears to.
+ */
+
+import React from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
+import { PayrollScreen } from '../screens/Payroll';
+import * as apiModule from '../lib/api';
+
+const LEADS = {
+  summary: { leads: 2, filing: 5 },
+  rows: [
+    {
+      taxpayerId: 'tp-1',
+      name: 'Highland Academy',
+      tin: 'P9000001',
+      phone: '+2348030000001',
+      lgaId: 'lga-1',
+      lgaName: 'Jos North',
+      economicSector: 'EDUCATION',
+      natureOfBusiness: 'Private secondary school',
+      monthsSinceLastFiling: null,
+      paidLastYearKobo: '0',
+    },
+    {
+      taxpayerId: 'tp-2',
+      name: 'Vom Clinic',
+      tin: null,
+      phone: '+2348030000002',
+      lgaId: 'lga-1',
+      lgaName: 'Jos South',
+      economicSector: 'HEALTHCARE',
+      natureOfBusiness: 'Private clinic',
+      monthsSinceLastFiling: 18,
+      paidLastYearKobo: '250000',
+    },
+  ],
+};
+
+let asked: string[] = [];
+let posted: { path: string; body: any }[] = [];
+let history: any[] = [];
+
+const FILED_RETURN = {
+  scheduleId: 'sch-1',
+  periodYear: 2026,
+  periodMonth: 7,
+  status: 'FILED',
+  employeeCount: 2,
+  grossEmolumentsKobo: '24000000',
+  taxDueKobo: '1600000',
+  filedAt: '2026-08-02T09:00:00.000Z',
+  cancelledReason: null,
+};
+
+function stubApi() {
+  asked = [];
+  posted = [];
+  history = [];
+  vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
+    asked.push(path);
+    if (path.startsWith('/reference/lgas')) return [{ id: 'lga-1', name: 'Jos North' }] as never;
+    if (path.includes('/returns')) return history as never;
+    return LEADS as never;
+  });
+  vi.spyOn(apiModule.api, 'post').mockImplementation(async (path: string, body?: unknown) => {
+    posted.push({ path, body });
+    return {
+      employeeCount: 2,
+      grossEmolumentsKobo: '24000000',
+      taxDueKobo: '1600000',
+      invoiceNumber: 'INV-2026-0042',
+      employeesWithoutTin: 1,
+    } as never;
+  });
+}
+
+beforeEach(() => {
+  cleanup();
+  sessionStorage.clear();
+  vi.spyOn(apiModule, 'can').mockReturnValue(true);
+  stubApi();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+async function openEmployer() {
+  render(<PayrollScreen />);
+  await waitFor(() => expect(screen.getByText('Highland Academy')).toBeTruthy());
+  fireEvent.click(screen.getAllByRole('button', { name: /^Open$/i })[0]!);
+  await waitFor(() => expect(screen.getByText(/File a return/i)).toBeTruthy());
+}
+
+describe('the return form', () => {
+  it('has nowhere to type a tax figure', async () => {
+    await openEmployer();
+
+    /*
+     * The property the whole phase rests on, asserted as an absence. If a tax
+     * box existed the amount would be negotiable at a counter, which is the
+     * entire failure mode of PAYE — and no amount of server-side validation
+     * makes an argument in front of an employer go away.
+     */
+    expect(screen.getByLabelText(/Employee name 1/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Paid this month.*\b1$/i)).toBeTruthy();
+    expect(screen.queryByLabelText(/^tax/i)).toBeNull();
+    expect(screen.queryByLabelText(/tax due/i)).toBeNull();
+  });
+
+  it('tells the officer how the tax is worked out, in words they can repeat', async () => {
+    await openEmployer();
+    const note = screen.getByText(/works out the tax on each of them separately/i);
+    expect(note.textContent).toMatch(/annual bands/i);
+    expect(note.textContent).toMatch(/no box for the tax/i);
+  });
+
+  it('sends emoluments in kobo, from naira on the form', async () => {
+    await openEmployer();
+
+    fireEvent.change(screen.getByLabelText(/Employee name 1/i), { target: { value: 'Ada Okoro' } });
+    fireEvent.change(screen.getByLabelText(/Paid this month.*\b1$/i), { target: { value: '120000' } });
+    fireEvent.click(screen.getByRole('button', { name: /File this return/i }));
+
+    await waitFor(() => {
+      const call = posted.find((entry) => entry.path === '/government/paye/returns');
+      expect(call).toBeTruthy();
+      expect(call!.body.lines).toHaveLength(1);
+      expect(call!.body.lines[0]).toMatchObject({
+        employeeName: 'Ada Okoro',
+        grossEmolumentKobo: '12000000',
+      });
+      expect(call!.body.lines[0].taxKobo).toBeUndefined();
+    });
+  });
+
+  it('will not file an empty return', async () => {
+    await openEmployer();
+    const submit = screen.getByRole('button', { name: /File this return/i });
+    expect(submit).toHaveProperty('disabled', true);
+
+    fireEvent.change(screen.getByLabelText(/Employee name 1/i), { target: { value: 'Ada' } });
+    fireEvent.change(screen.getByLabelText(/Paid this month.*\b1$/i), { target: { value: '120000' } });
+    expect(screen.getByRole('button', { name: /File this return/i })).toHaveProperty(
+      'disabled',
+      false,
+    );
+  });
+
+  it('drops a half-typed row rather than sending a nameless employee', async () => {
+    await openEmployer();
+    fireEvent.change(screen.getByLabelText(/Employee name 1/i), { target: { value: 'Ada Okoro' } });
+    fireEvent.change(screen.getByLabelText(/Paid this month.*\b1$/i), { target: { value: '120000' } });
+    fireEvent.click(screen.getByRole('button', { name: /Add another employee/i }));
+    // Second row left blank on purpose.
+    fireEvent.click(screen.getByRole('button', { name: /File this return/i }));
+
+    await waitFor(() => {
+      const call = posted.find((entry) => entry.path === '/government/paye/returns');
+      expect(call!.body.lines).toHaveLength(1);
+    });
+  });
+
+  it('reports the invoice and the employees with no TIN', async () => {
+    await openEmployer();
+    fireEvent.change(screen.getByLabelText(/Employee name 1/i), { target: { value: 'Ada' } });
+    fireEvent.change(screen.getByLabelText(/Paid this month.*\b1$/i), { target: { value: '120000' } });
+    fireEvent.click(screen.getByRole('button', { name: /File this return/i }));
+
+    await waitFor(() => expect(screen.getByText(/INV-2026-0042/)).toBeTruthy());
+    expect(screen.getByText(/had no TIN/i).textContent).toMatch(/1 of them/);
+  });
+});
+
+describe('the lead list', () => {
+  it('shows how many are already filing, not only how many are not', async () => {
+    render(<PayrollScreen />);
+    await waitFor(() => expect(screen.getByText('Highland Academy')).toBeTruthy());
+
+    expect(screen.getByText('Not filing')).toBeTruthy();
+    expect(screen.getByText('Already filing')).toBeTruthy();
+    expect(screen.getByText('5')).toBeTruthy();
+  });
+
+  it('switches to the consumption tax list on a different endpoint', async () => {
+    render(<PayrollScreen />);
+    await waitFor(() => expect(screen.getByLabelText(/Which list/i)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Which list/i), { target: { value: 'CONSUMPTION' } });
+    await waitFor(() =>
+      expect(asked.some((path) => path.startsWith('/government/consumption-tax/not-paying'))).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('asks the API for a narrower list rather than filtering the page', async () => {
+    render(<PayrollScreen />);
+    await waitFor(() => expect(screen.getByLabelText(/Local government/i)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/Local government/i), { target: { value: 'lga-1' } });
+    await waitFor(() =>
+      expect(asked.some((path) => path.includes('not-filing?') && path.includes('lgaId=lga-1'))).toBe(
+        true,
+      ),
+    );
+  });
+
+  it('names the sector, so an officer knows what they are walking into', async () => {
+    render(<PayrollScreen />);
+    await waitFor(() => expect(screen.getByText('Private secondary school')).toBeTruthy());
+    expect(screen.getByText(/Education/i)).toBeTruthy();
+  });
+});
+
+describe('withdrawing a return', () => {
+  it('will not withdraw one until a reason is written', async () => {
+    history = [FILED_RETURN];
+    await openEmployer();
+
+    const button = screen.getByRole('button', { name: /^Withdraw$/i });
+    expect(button).toHaveProperty('disabled', true);
+    fireEvent.click(button);
+    expect(
+      posted.filter((entry) => entry.path.includes('/cancel')),
+      'retracting the State’s position on what an employer declared is not done silently',
+    ).toHaveLength(0);
+
+    fireEvent.change(screen.getByLabelText(/Why is this return being withdrawn/i), {
+      target: { value: 'Two staff listed who had already left' },
+    });
+    expect(screen.getByRole('button', { name: /^Withdraw$/i })).toHaveProperty('disabled', false);
+  });
+
+  it('sends the reason with the withdrawal', async () => {
+    history = [FILED_RETURN];
+    await openEmployer();
+
+    fireEvent.change(screen.getByLabelText(/Why is this return being withdrawn/i), {
+      target: { value: 'Filed against the wrong school' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Withdraw$/i }));
+
+    await waitFor(() => {
+      const call = posted.find((entry) => entry.path.includes('/cancel'));
+      expect(call).toBeTruthy();
+      expect(call!.path).toBe('/government/paye/returns/sch-1/cancel');
+      expect(call!.body).toMatchObject({ reason: 'Filed against the wrong school' });
+    });
+  });
+
+  it('offers no withdrawal on a return already withdrawn', async () => {
+    history = [{ ...FILED_RETURN, status: 'CANCELLED', cancelledReason: 'Already done' }];
+    await openEmployer();
+    expect(screen.queryByRole('button', { name: /^Withdraw$/i })).toBeNull();
+  });
+});
+
+describe('when the officer may not file', () => {
+  it('shows the list but not the form', async () => {
+    vi.spyOn(apiModule, 'can').mockImplementation((permission: string) => permission !== 'paye:file');
+    render(<PayrollScreen />);
+    await waitFor(() => expect(screen.getByText('Highland Academy')).toBeTruthy());
+    fireEvent.click(screen.getAllByRole('button', { name: /^Open$/i })[0]!);
+
+    await waitFor(() => expect(screen.getByText(/Returns already filed/i)).toBeTruthy());
+    expect(
+      screen.queryByText(/File a return/i),
+      'offering a form the API would refuse is worse than not offering it',
+    ).toBeNull();
+  });
+});
+
+/**
+ * The filing history, when it could not be read.
+ *
+ * An empty history prints "This employer has never filed a return." — a
+ * statement about a named employer, on the screen where an officer decides
+ * whether to chase them. `.catch(() => setHistory([]))` produced that sentence
+ * from a failed request, silently, about somebody who may have filed every
+ * month for a year.
+ *
+ * It is also the sentence that decides what the officer types next: a first
+ * return and a correction to an existing one are different conversations with
+ * the employer.
+ */
+describe('an employer whose history could not be read', () => {
+  const refuseHistory = () => {
+    vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
+      if (path.includes('/returns')) {
+        throw new apiModule.ApiRequestError(503, {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'The filing history could not be read.',
+          moneyStatus: 'NOT_APPLICABLE',
+        });
+      }
+      if (path.startsWith('/reference/lgas')) return [{ id: 'lga-1', name: 'Jos North' }] as never;
+      return LEADS as never;
+    });
+  };
+
+  it('is not reported as never having filed', async () => {
+    refuseHistory();
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/filing history could not be read/i)).toBeTruthy());
+    expect(screen.queryByText(/has never filed a return/i)).toBeNull();
+  });
+
+  it('can still be filed for', async () => {
+    // The history is context, not a precondition. Losing it must not stop an
+    // officer recording a return the employer is standing there to file.
+    refuseHistory();
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/filing history could not be read/i)).toBeTruthy());
+    expect(screen.getByText(/File a return/i)).toBeTruthy();
+  });
+
+  /*
+   * The control. An employer who really has never filed is the whole point of
+   * the leads list, and saying so is what tells the officer which
+   * conversation they are about to have.
+   */
+  it('still says so when they really never have', async () => {
+    history = [];
+    await openEmployer();
+
+    await waitFor(() => expect(screen.getByText(/has never filed a return/i)).toBeTruthy());
+  });
+});
+
+/**
+ * Whether this employer has actually stopped filing.
+ *
+ * The leads table drew the sector, the nature of the business and what they
+ * paid last year — none of which separates an employer who filed last month
+ * from one who has not filed since 2024. That distinction is the only thing
+ * that makes a row a lead, and `monthsSinceLastFiling` says exactly it.
+ *
+ * It was computed, declared on the row type and drawn by no column. The
+ * fixture above carried `null` for both rows, so even the branch that says
+ * "never filed" had never been rendered.
+ */
+describe('which employer to chase first', () => {
+  beforeEach(() => cleanup());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('says how long since an employer last filed', async () => {
+    stubApi();
+    render(<PayrollScreen />);
+
+    await waitFor(() => expect(screen.getByText('Vom Clinic')).toBeTruthy());
+    const row = screen.getByText('Vom Clinic').closest('tr')!;
+    expect(within(row).getByText('18 month(s) ago')).toBeTruthy();
+  });
+
+  it('says never filed, rather than a blank that reads as zero', async () => {
+    /*
+     * A different and louder fact than a long gap: this employer has no
+     * filing history at all. A blank cell would read as "0 months ago", which
+     * is the opposite.
+     */
+    stubApi();
+    render(<PayrollScreen />);
+
+    await waitFor(() => expect(screen.getByText('Highland Academy')).toBeTruthy());
+    const row = screen.getByText('Highland Academy').closest('tr')!;
+    expect(within(row).getByText(/Never filed/i)).toBeTruthy();
+    expect(within(row).queryByText('0 month(s) ago')).toBeNull();
+  });
+});

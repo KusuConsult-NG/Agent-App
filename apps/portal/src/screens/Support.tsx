@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, KeyValue, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -65,15 +65,23 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(() => {
     setTickets(null);
+    setLoadError(null);
     api
       .get<TicketSummary[]>(`/support/tickets${status ? `?status=${status}` : ''}`)
       .then(setTickets)
+      /*
+       * `setTickets([])` printed "No tickets match this filter." from a request
+       * that failed — and took the conduct banner with it, which is the part
+       * that matters. Complaints about how revenue staff treated somebody are
+       * counted out of this same list, so a refused read did not merely show
+       * an empty queue: it said there were no open complaints.
+       */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        setLoadError(asApiError(caught));
       });
   }, [status]);
 
@@ -111,7 +119,12 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
           </label>
         </div>
 
-        {!tickets ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !tickets ? (
           <Loading />
         ) : (
           <Table
@@ -137,6 +150,24 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
               { key: 'assigned_to_name', label: 'ofcSpAssigned', render: (row) => row.assigned_to_name ?? '—' },
               { key: 'message_count', label: 'ofcSpReplies', numeric: true },
               { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
+              {
+                /*
+                 * When it was last touched, which is what triage runs on.
+                 *
+                 * The queue showed when a ticket was raised and not when
+                 * anybody last answered it, so a complaint opened three weeks
+                 * ago and replied to this morning looked exactly like one
+                 * opened three weeks ago and left alone since. The reply count
+                 * beside it does not separate them either: both may say 4.
+                 *
+                 * Null is a ticket nobody has answered at all, which is the
+                 * row to open first and says so in its own words.
+                 */
+                key: 'last_message_at',
+                label: 'ofcSpLastReply',
+                render: (row) =>
+                  row.last_message_at ? formatDateTime(row.last_message_at) : t.ofcSpNoReplyYet,
+              },
             ]}
             rows={tickets}
             empty="ofcNoneTicketsMatchFilter"
@@ -177,7 +208,9 @@ export function TicketDetailScreen({
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -191,11 +224,11 @@ export function TicketDetailScreen({
     try {
       await api.post(`/support/tickets/${ticketId}/messages`, { body: reply, internal });
       setReply('');
-      setMessage(internal ? 'Internal note saved. The reporter cannot see it.' : 'Reply sent.');
+      setMessage(internal ? t.ofcSpInternalNoteSavedThe : t.ofcSpReplySent);
       setInternal(false);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -211,10 +244,10 @@ export function TicketDetailScreen({
         ...(status === 'RESOLVED' ? { resolution } : {}),
       });
       setResolution('');
-      setMessage(`Ticket moved to ${enumLabel(status, t)}.`);
+      setMessage(t.ofcSpTicketMoved.replace('{{status}}', enumLabel(status, t)));
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -241,14 +274,14 @@ export function TicketDetailScreen({
         </div>
         <KeyValue
           items={[
-            ['Status', <Badge status={ticket.status} key="s" />],
-            ['Priority', <Badge status={ticket.priority} key="p" />],
-            ['About', enumLabel(ticket.category, t)],
-            ['Reported by', `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
-            ['Contact', ticket.raised_by_phone],
-            ['Transaction', ticket.transaction_reference ?? '—'],
-            ['Raised', formatDateTime(ticket.created_at)],
-            ['Assigned to', ticket.assigned_to_name ?? 'Nobody yet'],
+            [t.appStatus, <Badge status={ticket.status} key="s" />],
+            [t.ofcSpPriority, <Badge status={ticket.priority} key="p" />],
+            [t.supAbout, enumLabel(ticket.category, t)],
+            [t.ofcSpReportedBy, `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
+            [t.ofcSpContact, ticket.raised_by_phone],
+            [t.supTransactionLabel, ticket.transaction_reference ?? '—'],
+            [t.ofcRhRaisedHeading, formatDateTime(ticket.created_at)],
+            [t.ofcSpAssignedTo, ticket.assigned_to_name ?? t.ofcSpNobodyYet],
           ]}
         />
         {ticket.resolution && (
@@ -304,11 +337,11 @@ export function TicketDetailScreen({
         </Alert>
       ) : (
         <form className="card" onSubmit={send}>
-          <h2 className="card__title">{internal ? 'Add an internal note' : 'Reply to the reporter'}</h2>
+          <h2 className="card__title">{internal ? t.ofcSpAddAnInternalNote : t.ofcSpReplyToTheReporter}</h2>
           <p className="card__hint">
             {internal
-              ? 'Only staff with support access can read this. The reporter never sees it.'
-              : 'This goes to the person who raised the ticket, and they are notified.'}
+              ? t.ofcSpOnlyStaffWithSupport
+              : t.ofcSpThisGoesToThe}
           </p>
           <textarea
             value={reply}
@@ -327,7 +360,7 @@ export function TicketDetailScreen({
               />{t.ofcSpKeepInternal}</label>
           )}
           <button type="submit" disabled={busy || reply.trim().length < 2}>
-            {busy ? 'Saving…' : internal ? 'Save internal note' : 'Send reply'}
+            {busy ? t.agEnSaving : internal ? t.ofcSpSaveInternalNote : t.ofcSpSendReply}
           </button>
         </form>
       )}

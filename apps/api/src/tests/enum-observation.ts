@@ -86,22 +86,42 @@ export async function declaredValues(db = pool): Promise<Map<string, string[]>> 
 }
 
 /**
- * Put the observers in place, once per database.
+ * Put the observers in place, once per database — and again when the schema
+ * they observe has changed underneath them.
  *
  * Every test file calls `startTestServer`, and a shard's files all share one
  * database, so this runs about thirty times against a database that only needs
- * it once. The count check makes the repeats a single cheap query.
+ * it once. Something has to make the repeats cheap.
+ *
+ * WHY THE CHEAP CHECK IS A FINGERPRINT AND NOT A COUNT.
+ *
+ * It counted triggers and returned early when there were two per table. Shard
+ * databases outlive a run, so adding an enum column to a table that already
+ * had one left the count unchanged, the observers stale, and the new column
+ * unobserved — and `check-enum-coverage` then reported its values as states
+ * nothing wrote. That is the worst shape a guard-rail can fail in: it accused
+ * the platform of a gap that was really its own, and the accusation looks
+ * exactly like the real thing it exists to catch. Caught by migration 060
+ * adding `band_at_capture` to a table with observers already on it.
+ *
+ * So the recorded fingerprint is the full set of observed columns. Any change
+ * to it — a new column, a new table, a column dropped — regenerates.
  */
 export async function installEnumObservers(): Promise<void> {
   const columns = await enumColumns();
   const tables = [...new Set(columns.map((c) => c.table))];
+  const fingerprint = columns
+    .map((c) => `${c.table}.${c.column}`)
+    .sort()
+    .join(',');
 
-  const { rows: existing } = await pool.query<{ n: string }>(
-    `SELECT count(*)::text AS n
-       FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
-      WHERE t.tgname LIKE 'observe_enum_%' AND NOT t.tgisinternal`,
+  const { rows: existing } = await pool.query<{ fingerprint: string }>(
+    `SELECT obj_description(c.oid) AS fingerprint
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND c.relname = 'enum_writes'`,
+    [OBSERVATION_SCHEMA],
   );
-  if (Number.parseInt(existing[0]!.n, 10) === tables.length * 2) return;
+  if (existing[0]?.fingerprint === fingerprint) return;
 
   await pool.query(`CREATE SCHEMA IF NOT EXISTS ${OBSERVATION_SCHEMA}`);
   await pool.query(
@@ -146,6 +166,12 @@ export async function installEnumObservers(): Promise<void> {
       );
     }
   }
+
+  // Stamped last, so an install interrupted half way through is repeated
+  // rather than recorded as done.
+  await pool.query(
+    `COMMENT ON TABLE ${OBSERVATION_SCHEMA}.enum_writes IS '${fingerprint.replace(/'/g, "''")}'`,
+  );
 }
 
 /** What this database saw written, keyed `table.column`. */

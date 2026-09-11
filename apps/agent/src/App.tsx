@@ -20,6 +20,7 @@ import {
   isConnectivityFailure,
   logout,
   restoreSession,
+  type ApiError,
   type Session,
 } from './lib/api';
 import {
@@ -31,7 +32,7 @@ import {
 import { pendingDrafts, requestBackgroundSync, syncDrafts } from './lib/drafts';
 import { useI18n } from './lib/i18n';
 import { matchRoute, useRoute } from './router';
-import { Alert, Icons } from './ui';
+import { Alert, Icons, errorText, nextStepText } from './ui';
 import { ApplyScreen, LoginScreen } from './screens/Auth';
 import { ApplicationScreen } from './screens/Application';
 import { HomeScreen } from './screens/Home';
@@ -47,6 +48,7 @@ import {
 import { VerifyScreen } from './screens/Verify';
 import { CollectionScreen } from './screens/Collection';
 import { GroupsScreen, GroupScreen, RegisterGroupScreen } from './screens/Groups';
+import { EnumerateScreen } from './screens/Enumerate';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
@@ -109,7 +111,7 @@ export function App() {
    * queue would otherwise sit at "waiting to send" for ever with the reason
    * known to the server and to nobody else.
    */
-  const [syncProblem, setSyncProblem] = useState<{ message: string; nextStep?: string } | null>(
+  const [syncProblem, setSyncProblem] = useState<ApiError | null>(
     null,
   );
 
@@ -140,9 +142,10 @@ export function App() {
       const outcome = await syncDrafts((drafts) => api.post('/drafts/sync', { drafts }));
       if (outcome.synced > 0 || outcome.rejected > 0) {
         setSyncMessage(
-          `${outcome.synced} saved record(s) sent to PSIRS` +
-            (outcome.rejected > 0 ? `, ${outcome.rejected} need correction` : '') +
-            '.',
+          (outcome.rejected > 0
+            ? t.appDraftsSyncedRejected.replace('{{rejected}}', String(outcome.rejected))
+            : t.appDraftsSynced
+          ).replace('{{count}}', String(outcome.synced)),
         );
       }
       setSyncProblem(null);
@@ -157,13 +160,25 @@ export function App() {
       // The server refused the captures. Retrying will not register a handset
       // or restore a clearance, so the agent is told now, while the records are
       // still on the phone and can still be sent from somewhere that works.
-      if (caught instanceof ApiRequestError) {
-        setSyncProblem({ message: caught.error.message, nextStep: caught.error.nextStep });
-      } else {
-        setSyncProblem({
-          message: t.shellSyncFailed,
-        });
-      }
+      /*
+       * The error itself, not two strings pulled out of it.
+       *
+       * This took `message` and `nextStep` off the `ApiError` and rendered
+       * them raw, which walked straight past `ErrorAlert` and the
+       * `TRANSLATED_ERRORS` map that would already have said it in Hausa. The
+       * translation existed; the screen just did not go through the component
+       * that applies it.
+       *
+       * This is what an agent reads when work captured on their phone was
+       * refused by PSIRS — not when the signal went, which is handled above
+       * and stays silent. The records are still on the device and they need
+       * to know why they will not go.
+       */
+      setSyncProblem(
+        caught instanceof ApiRequestError
+          ? caught.error
+          : { code: 'SYNC_FAILED', message: t.shellSyncFailed, moneyStatus: 'NOT_APPLICABLE' },
+      );
     }
   }, [session, connection, refreshPending]);
 
@@ -288,16 +303,16 @@ export function App() {
         <div className={`connection connection--${connection}`} role="status" aria-live="polite">
           <span className="connection__dot" />
           <span>
-            {connectionCopy.label}
-            {pendingCount > 0 && ` · ${pendingCount} saved record(s) waiting to send`}
+            {t[connectionCopy.label]}
+            {pendingCount > 0 && ` · ${pendingCount} ${t.appRecordsWaiting}`}
           </span>
         </div>
       </header>
 
       <main className="app-main">
         {connection !== 'ONLINE' && (
-          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={connectionCopy.label}>
-            <p style={{ margin: 0 }}>{connectionCopy.detail}</p>
+          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={t[connectionCopy.label]}>
+            <p style={{ margin: 0 }}>{t[connectionCopy.detail]}</p>
           </Alert>
         )}
 
@@ -318,8 +333,17 @@ export function App() {
 
         {syncProblem && (
           <Alert kind="error" title={t.appRecordsNotSent}>
-            <p style={{ margin: 0 }}>{syncProblem.message}</p>
-            {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
+            <p style={{ margin: 0 }}>{errorText(syncProblem, t)}</p>
+            {/*
+              * And what to do about it, which this banner was still printing
+              * in English after the sentence above it was translated. Found
+              * by widening the guard to look at `nextStep` at all — the
+              * earlier fix moved the explanation into the dictionary and
+              * left the instruction under it exactly as the API wrote it.
+              */}
+            {nextStepText(syncProblem, t) && (
+              <p style={{ margin: '0.5rem 0 0' }}>{nextStepText(syncProblem, t)}</p>
+            )}
             <p style={{ margin: '0.5rem 0 0' }}>
               {t.shellNothingLost}
             </p>
@@ -360,6 +384,7 @@ function Routes({
   onSignOut: () => void;
 }) {
   const { t } = useI18n();
+  const enumerateMatch = matchRoute(route, '/taxpayers/:id/enumerate');
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
   const ticketMatch = matchRoute(route, '/support/:id');
@@ -368,6 +393,9 @@ function Routes({
   if (matchRoute(route, '/')) return <HomeScreen navigate={navigate} />;
   if (matchRoute(route, '/application')) return <ApplicationScreen navigate={navigate} />;
   if (matchRoute(route, '/taxpayers')) return <TaxpayersScreen navigate={navigate} />;
+  if (enumerateMatch) {
+    return <EnumerateScreen taxpayerId={enumerateMatch.id!} navigate={navigate} />;
+  }
   if (matchRoute(route, '/taxpayers/new')) {
     return <RegisterTaxpayerScreen navigate={navigate} connection={connection} />;
   }

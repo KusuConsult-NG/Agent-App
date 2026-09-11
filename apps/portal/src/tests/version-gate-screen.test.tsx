@@ -14,6 +14,7 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { FieldAppScreen } from '../screens/FieldApp';
+import { translations } from '@psirs/shared';
 import * as apiModule from '../lib/api';
 
 const HISTORY = {
@@ -108,9 +109,21 @@ describe('Moving the version gate', () => {
   });
 
   it('sends what was entered and reports back what it did', async () => {
-    const post = vi
-      .spyOn(apiModule.api, 'post')
-      .mockResolvedValue({ message: '8 of 12 active handsets cannot collect until they update.' });
+    /*
+     * The counts, not the sentence.
+     *
+     * This mocked `{ message: '8 of 12 active handsets cannot collect…' }` and
+     * asserted that sentence appeared, which pinned the test to wording
+     * composed in `apps/api` — a package with no dictionary and no language.
+     * The screen now builds the sentence from `devicesLockedOut` and
+     * `activeDevices`, so those are what the endpoint is made to return and
+     * what this checks reaches the officer.
+     */
+    const post = vi.spyOn(apiModule.api, 'post').mockResolvedValue({
+      minimumVersion: '1.10.0',
+      devicesLockedOut: 8,
+      activeDevices: 12,
+    });
     render(<FieldAppScreen />);
     await screen.findByLabelText(/Minimum version/i);
 
@@ -129,7 +142,15 @@ describe('Moving the version gate', () => {
         notes: 'Build 1.9.0 rounds the service charge down.',
       }),
     );
-    await screen.findByText(/8 of 12 active handsets cannot collect until they update\./i);
+    await screen.findByText(
+      new RegExp(
+        translations.en.ofcFaCannotCollect
+          .replace('{{locked}}', '8')
+          .replace('{{total}}', '12')
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+        'i',
+      ),
+    );
   });
 
   it('says which row the platform shipped with rather than showing a blank', async () => {

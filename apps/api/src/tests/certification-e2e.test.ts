@@ -594,19 +594,97 @@ describe('RBAC — every role checked against the API, not the UI', () => {
     assert.equal(attempt.status, 403, 'admin must be refused the reversal endpoint');
   });
 
+  /**
+   * The auditor changes nothing about the record, and writes their own findings.
+   *
+   * This used to test the *spelling* of the auditor's permissions — anything
+   * matching `:manage`, `:configure`, `:approve`, `:suspend` or `reverse` was
+   * a write. That is the heuristic `apps/portal/src/lib/permissions.ts` rejects
+   * by name and for good reason: `payment:reconcile` and `taxpayer:tin_sync`
+   * are writes that do not look like it, and `report:financial` looks like one
+   * and is not. The pattern happened to be right until casework arrived, and
+   * then failed on `case:manage` — an auditor opening their own audit case,
+   * which is the opposite of a control problem.
+   *
+   * So it asks the API instead, which is what the heading of this section
+   * promises. Sight of everything: the audit log, the money, the register.
+   * Control of nothing: every endpoint that moves money or alters a record
+   * refuses them, whatever the permission behind it is called.
+   *
+   * The casework permissions are named explicitly rather than pattern-matched,
+   * because a future permission called `case:something` that *did* change the
+   * record must not inherit this exemption by its prefix.
+   */
   it('gives the auditor sight of everything and control of nothing', async () => {
     const tokens = await seedOfficers();
-    const auditorPermissions = permissionsForRole('auditor');
 
-    for (const permission of auditorPermissions) {
-      assert.ok(
-        !/(:manage|:configure|:approve|:suspend|reverse)/.test(permission),
-        `auditor should not hold the mutating permission ${permission}`,
-      );
+    // Sight: the three reads an independent examiner cannot work without.
+    for (const path of ['/government/audit', '/government/transactions', '/government/dashboard']) {
+      const read = await get(path, { token: tokens.auditor });
+      assert.equal(read.status, 200, `the auditor must be able to read ${path}: ${JSON.stringify(read.body)}`);
     }
 
-    const read = await get('/government/audit', { token: tokens.auditor });
-    assert.equal(read.status, 200, `the auditor must be able to read the audit log: ${JSON.stringify(read.body)}`);
+    // Control: refused by the API, not merely unlinked in a menu.
+    for (const path of [
+      '/government/reconciliation/run',
+      '/government/fraud/sweep',
+      '/government/commissions/promote',
+      '/government/reminders/send-due',
+    ]) {
+      const attempt = await post(path, {}, { token: tokens.auditor });
+      assert.equal(attempt.status, 403, `auditor must be refused ${path} (got ${attempt.status})`);
+    }
+
+    /*
+     * And what they may write is their own file, and only that.
+     *
+     * `case:read:all` is a read and is not listed; the six below are the whole
+     * of the auditor's write surface. If a mutating permission is ever added
+     * to the role, this is where it shows up as an unexplained seventh.
+     *
+     * The workbench three joined casework for the reason casework was allowed
+     * in the first place, and the reason is a line rather than a category: an
+     * auditor's writes land in the auditor's own record. A sample says which
+     * transactions were examined, a report freezes figures that were already
+     * readable, a signature puts a name to them. None of the six changes what
+     * a taxpayer owes, what an agent earned, what a rate is, or what a receipt
+     * says -- which is what the refusals above actually test, and what makes
+     * the role read-only in the sense it exists to be.
+     *
+     * `audit:sign` is the one worth arguing about, because a signature carries
+     * weight outside the audit file. It belongs here: what it commits is the
+     * examiner's own opinion, and an auditor who cannot sign their own report
+     * has not been kept independent, only kept quiet.
+     */
+    const OWN_RECORD = [
+      'case:create',
+      'case:contribute',
+      'case:manage',
+      'audit:sample',
+      'audit:report',
+      'audit:sign',
+    ];
+    /*
+     * `data:export` is not a write and is not exempt for free.
+     *
+     * It changes nothing about the record, which is what this assertion is
+     * about; what it does is take a copy out of the platform's control, and
+     * that is governed by its own permission, a per-role row cap and an audit
+     * entry naming the filters and the count -- see `services/export.ts` and
+     * `READ_ONLY_PERMISSIONS` in the portal, which classify it the same way
+     * and for the same stated reason.
+     */
+    const writes = permissionsForRole('auditor').filter(
+      (permission) =>
+        !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$|^data:export$/.test(
+          permission,
+        ),
+    );
+    assert.deepEqual(
+      [...writes].sort(),
+      [...OWN_RECORD].sort(),
+      `the auditor's write surface should be their own record alone, and is: ${writes.join(', ')}`,
+    );
   });
 });
 

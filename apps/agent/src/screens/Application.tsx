@@ -9,10 +9,10 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, APP_VERSION, api, type ApiError } from '../lib/api';
+import { APP_VERSION, ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
-import type { TranslationDictionary } from '@psirs/shared';
+import { BLOCKER_TEXT, type AgentBlocker, type TranslationDictionary } from '@psirs/shared';
 import { useI18n } from '../lib/i18n';
 
 interface ApplicationStatus {
@@ -20,7 +20,7 @@ interface ApplicationStatus {
   accessStage: string;
   statuses: Record<string, string>;
   checklist: Record<string, boolean>;
-  outstanding: string[];
+  outstanding: AgentBlocker[];
   canCollectRevenue: boolean;
   kyc: { identity_number_masked: string; verification_status: string; failure_reason: string | null } | null;
   referees: {
@@ -64,7 +64,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
       setStatus(await api.get<ApplicationStatus>('/agents/me/application'));
       setError(null);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setLoading(false);
     }
@@ -144,9 +144,9 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
         <div className="card">
           <h2 className="card__title">{t.appStillOutstanding}</h2>
           <ul style={{ margin: 0, paddingLeft: 18, fontSize: '0.88rem' }}>
-            {status.outstanding.map((item) => (
-              <li key={item} style={{ marginBottom: 4 }}>
-                {item}
+            {status.outstanding.map((code) => (
+              <li key={code} style={{ marginBottom: 4 }}>
+                {t[BLOCKER_TEXT[code]]}
               </li>
             ))}
           </ul>
@@ -288,7 +288,12 @@ function DocumentCapture({
           accept="image/jpeg,image/png,image/webp,application/pdf"
           capture="environment"
           disabled={busy}
-          hidden
+          /*
+            Clipped by `capture__input` rather than `hidden`: `hidden` is
+            `display: none`, which takes the only control on this step out of
+            the focus order entirely.
+          */
+          className="capture__input"
           onChange={(event) => {
             const file = event.target.files?.[0];
             // A camera capture arrives with a generated name; one chosen from
@@ -325,21 +330,45 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
   const { t } = useI18n();
   const [identityType, setIdentityType] = useState('NIN');
   const [identityNumber, setIdentityNumber] = useState('');
-  const [documents, setDocuments] = useState<KycDocument[]>([]);
+  /*
+   * What is on file, and whether that is known at all.
+   *
+   * `missing` is the required list minus what is held, so an empty `documents`
+   * reports EVERY document as missing. The catch used to write exactly that on
+   * a failed read: an applicant who had already uploaded their identity paper
+   * was told to upload it again, and doing so supersedes the copy on file and
+   * puts a second set of somebody's identity documents into storage for
+   * nothing.
+   *
+   * `null` is "not known yet", which is not a claim about what they have sent.
+   */
+  const [documents, setDocuments] = useState<KycDocument[] | null>(null);
+  const [documentsError, setDocumentsError] = useState<ApiError | null>(null);
   const { busy, error, run } = useAction(onDone);
 
   const loadDocuments = useCallback(() => {
     api
       .get<{ documents: KycDocument[] }>('/agents/me/kyc/documents')
-      .then((result) => setDocuments(result.documents.filter((d) => !d.superseded_at)))
-      .catch(() => setDocuments([]));
+      .then((result) => {
+        setDocuments(result.documents.filter((d) => !d.superseded_at));
+        setDocumentsError(null);
+      })
+      .catch((caught) => {
+        setDocumentsError(asApiError(caught));
+      });
   }, []);
 
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
 
-  const held = (type: string) => documents.find((d) => d.document_type === type);
+  const held = (type: string) => (documents ?? []).find((d) => d.document_type === type);
+  /*
+   * Everything counts as missing while the list is unknown, which keeps the
+   * submit button off — the request carries the selfie's id, and sending it
+   * without knowing what is on file is how a KYC check is run against the
+   * wrong document.
+   */
   const missing = REQUIRED_DOCUMENTS.filter((d) => !held(d.type));
 
   if (status.checklist.kycCleared) {
@@ -403,16 +432,27 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
       </Field>
 
       <p className="section-title">{t.appDocuments}</p>
-      {REQUIRED_DOCUMENTS.map((doc) => (
-        <DocumentCapture
-          key={doc.type}
-          documentType={doc.type}
-          label={t[doc.label]}
-          hint={t[doc.hint]}
-          existing={held(doc.type)}
-          onUploaded={loadDocuments}
-        />
-      ))}
+      {documentsError ? (
+        <>
+          <ErrorAlert error={documentsError} />
+          <button type="button" className="secondary" onClick={loadDocuments}>
+            {t.actionTryAgain}
+          </button>
+        </>
+      ) : documents === null ? (
+        <Loading rows={3} />
+      ) : (
+        REQUIRED_DOCUMENTS.map((doc) => (
+          <DocumentCapture
+            key={doc.type}
+            documentType={doc.type}
+            label={t[doc.label]}
+            hint={t[doc.hint]}
+            existing={held(doc.type)}
+            onUploaded={loadDocuments}
+          />
+        ))
+      )}
 
       <button
         type="submit"
@@ -516,7 +556,8 @@ function RefereeSection({ status, onDone }: { status: ApplicationStatus; onDone:
                 },
               );
               setLink(response.invitationUrl);
-              return response.message;
+              // The screen typed the name in; it does not need it read back.
+              return t.agRefereeRequestSent.replace('{{name}}', form.fullName);
             });
           }}
           style={{ marginTop: 12 }}
@@ -674,16 +715,30 @@ function BankSection({ status, onDone }: { status: ApplicationStatus; onDone: ()
 function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
   const { t } = useI18n();
   const [agreement, setAgreement] = useState<{ version: string; title: string; body: string } | null>(null);
+  /*
+   * The agreement not arriving used to look exactly like it not having
+   * arrived YET: the catch wrote `null`, and null renders the skeleton. An
+   * applicant sat watching four grey bars on the step that gates their
+   * clearance, with nothing anywhere saying a request had failed.
+   */
+  const [agreementError, setAgreementError] = useState<ApiError | null>(null);
   const [accepted, setAccepted] = useState(false);
   const { busy, error, run } = useAction(onDone);
 
-  useEffect(() => {
+  const loadAgreement = useCallback(() => {
     if (status.checklist.agreementAccepted) return;
     api
       .get<{ version: string; title: string; body: string }>('/agents/agreement')
-      .then(setAgreement)
-      .catch(() => setAgreement(null));
+      .then((loaded) => {
+        setAgreement(loaded);
+        setAgreementError(null);
+      })
+      .catch((caught) => {
+        setAgreementError(asApiError(caught));
+      });
   }, [status.checklist.agreementAccepted]);
+
+  useEffect(loadAgreement, [loadAgreement]);
 
   if (status.checklist.agreementAccepted) {
     return (
@@ -703,7 +758,14 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
 
       <ErrorAlert error={error} />
 
-      {agreement ? (
+      {agreementError ? (
+        <>
+          <ErrorAlert error={agreementError} />
+          <button type="button" className="secondary" onClick={loadAgreement}>
+            {t.actionTryAgain}
+          </button>
+        </>
+      ) : agreement ? (
         <>
           <div
             style={{
@@ -783,8 +845,23 @@ function DeviceSection({ status, onDone }: { status: ApplicationStatus; onDone: 
           disabled={busy || !status.checklist.governmentApproved}
           onClick={() =>
             void run(async () => {
-              const result = await api.post<{ message: string }>('/agents/me/devices', profile);
-              return result.message;
+              const result = await api.post<{ status?: string; message: string }>(
+                '/agents/me/devices',
+                profile,
+              );
+              /*
+               * Registering a handset PSIRS already holds returns the row it
+               * has, whatever state that is in — so the three answers are not
+               * interchangeable. "Registered and active" told to somebody
+               * whose handset is suspended is the one thing it is not.
+               */
+              return result.status === 'PENDING'
+                ? t.agDevicePendingApproval
+                : result.status === 'SUSPENDED'
+                  ? t.agDeviceSuspended
+                  : result.status
+                    ? t.agDeviceActive
+                    : result.message;
             })
           }
         >

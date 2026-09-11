@@ -14,8 +14,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
+import { PostingPanel } from './Organisation';
+import { MyAccessScreen } from './MyAccess';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName, type TranslationDictionary } from '@psirs/shared';
 
@@ -76,6 +78,7 @@ const TERRITORY_SCOPED_ROLES = ['supervisor'];
 export function UserAccessScreen({ user }: { user: User }) {
   const { lang, t } = usePortalI18n();
   const [users, setUsers] = useState<PortalUser[] | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<PortalUser | null>(null);
@@ -90,16 +93,28 @@ export function UserAccessScreen({ user }: { user: User }) {
   const [chosenTerritories, setChosenTerritories] = useState<string[]>([]);
   const [coverageReason, setCoverageReason] = useState('');
   const [closing, setClosing] = useState<PortalUser | null>(null);
+  // Whose sessions and devices are being looked at, if not the caller's.
+  const [viewingAccess, setViewingAccess] = useState<PortalUser | null>(null);
   const [chosenStatus, setChosenStatus] = useState<AccountStatus>('SUSPENDED');
   const [statusReason, setStatusReason] = useState('');
 
   const load = useCallback(() => {
     api
       .get<{ users: PortalUser[] }>('/government/users')
-      .then((data) => setUsers(data.users))
+      .then((data) => {
+        setUsers(data.users);
+        setLoadError(null);
+      })
+      /*
+       * A register that could not be read, kept apart from an action that was
+       * refused. The catch used to write `[]`, and an empty table prints "No
+       * officers are recorded." — on the screen that answers who can sign in
+       * to this platform at all. An administrator checking whether a departed
+       * colleague still has access was one failed request away from being
+       * told nobody does.
+       */
       .catch((caught) => {
-        setUsers([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -126,20 +141,38 @@ export function UserAccessScreen({ user }: { user: User }) {
       // into any level of access at all, so it needs a fresh code and not
       // merely a live session.
       await stepUp('user.role.change', user.phone);
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ newRole: string; sessionsEnded: number }>(
         `/government/users/${editing.id}/role`,
         { role: chosenRole, reason: reason.trim() },
       );
-      setMessage(result.message);
+      /*
+       * Composed here, from what the endpoint returns.
+       *
+       * The server sends a `message` and this screen rendered it: an English
+       * sentence, on a screen offering Hausa, naming the new role as
+       * `finance officer` — the code with its underscores swapped for spaces.
+       * This screen's own premise is that "an access decision made from a
+       * label alone is a guess", and then its confirmation showed something
+       * that is not even the label.
+       *
+       * `enumLabel` is what the rest of the screen already uses for a role,
+       * so the sentence an administrator reads afterwards names it the same
+       * way the control they just used did.
+       */
+      setMessage(
+        `${t.ofcUaNowRole
+          .replace('{{name}}', editing.full_name)
+          .replace('{{role}}', enumLabel(result.newRole, t))} ` +
+          (result.sessionsEnded > 0
+            ? t.ofcUaSessionsEnded.replace('{{n}}', String(result.sessionsEnded))
+            : t.ofcUaNoOpenSessions),
+      );
       setEditing(null);
       setChosenRole('');
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -160,19 +193,27 @@ export function UserAccessScreen({ user }: { user: User }) {
     setMessage(null);
     try {
       await stepUp('user.role.change', user.phone);
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ status: AccountStatus; sessionsEnded: number }>(
         `/government/users/${closing.id}/status`,
         { status: chosenStatus, reason: statusReason.trim() },
       );
-      setMessage(result.message);
+      // Same correction as the role change above; the status was arriving as
+      // `suspended`, the enum lowercased, rather than as its label.
+      setMessage(
+        result.status === 'ACTIVE'
+          ? t.ofcUaCanSignInAgain.replace('{{name}}', closing.full_name)
+          : `${t.ofcUaAccountIsNow
+              .replace('{{name}}', closing.full_name)
+              .replace('{{status}}', enumLabel(result.status, t))} ` +
+            (result.sessionsEnded > 0
+              ? t.ofcUaSessionsEndedNow.replace('{{n}}', String(result.sessionsEnded))
+              : t.ofcUaNoOpenSessions),
+      );
       setClosing(null);
       setStatusReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -192,7 +233,7 @@ export function UserAccessScreen({ user }: { user: User }) {
         setChosenTerritories(data.assigned.map((t) => t.id));
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }
 
@@ -202,22 +243,28 @@ export function UserAccessScreen({ user }: { user: User }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ covers: number }>(
         `/government/users/${coverage.id}/territories`,
         { territoryIds: chosenTerritories, reason: coverageReason.trim() },
       );
-      setMessage(result.message);
+      setMessage(
+        result.covers === 0
+          ? t.ofcUaCoversNothing.replace('{{name}}', coverage.full_name)
+          : t.ofcUaCoversTerritories
+              .replace('{{name}}', coverage.full_name)
+              .replace('{{n}}', String(result.covers)),
+      );
       setCoverage(null);
       setTerritories(null);
       setCoverageReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!users) return <Loading rows={5} />;
+  if (!users && !loadError) return <Loading rows={5} />;
 
   return (
     <>
@@ -228,6 +275,26 @@ export function UserAccessScreen({ user }: { user: User }) {
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+
+      {/*
+        * An administrator looking at somebody else's sessions and devices.
+        *
+        * `GET /government/users/:id/sessions` has been permissioned and
+        * documented since it was written, and nothing called it. Blocking a
+        * machine is the control that needs it — its own comment gives the case
+        * as "a laptop already in somebody else's hands" — and until this the
+        * only devices ever loaded were the administrator's own.
+        */}
+      {viewingAccess && (
+        <>
+          <div className="card">
+            <button type="button" className="small secondary" onClick={() => setViewingAccess(null)}>
+              {t.ofcUaBackToMine}
+            </button>
+          </div>
+          <MyAccessScreen user={user} officer={viewingAccess} />
+        </>
+      )}
 
       {editing && (
         <div className="card">
@@ -277,7 +344,7 @@ export function UserAccessScreen({ user }: { user: User }) {
 
           <div className="button-row">
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-              {busy ? 'Changing…' : 'Change access and sign them out'}
+              {busy ? t.ofcUaChanging : t.ofcUaChangeAccessAndSign}
             </button>
             <button
               type="button"
@@ -321,6 +388,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               onChange={(event) => setStatusReason(event.target.value)}
               placeholder={t.ofcUaSampleLeft}
             />
+            <ReasonRule value={statusReason} minimum={10} />
           </div>
 
           {chosenStatus === 'CLOSED' && (
@@ -338,10 +406,10 @@ export function UserAccessScreen({ user }: { user: User }) {
               onClick={submitStatus}
             >
               {busy
-                ? 'Saving…'
+                ? t.agEnSaving
                 : chosenStatus === 'ACTIVE'
-                  ? 'Let them sign in again'
-                  : 'Sign them out and stop the account'}
+                  ? t.ofcUaLetThemSignIn
+                  : t.ofcUaSignThemOutAnd}
             </button>
             <button
               type="button"
@@ -371,7 +439,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                 {territories.available.length === 0 ? (
                   <p className="field__hint">{t.ofcUaNoTerritory}</p>
                 ) : (
-                  <ul className="list" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <ul className="list list--rows" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {territories.available.map((territory) => (
                       <li key={territory.id}>
                         <label className="list__item" style={{ cursor: 'pointer' }}>
@@ -408,6 +476,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                   onChange={(event) => setCoverageReason(event.target.value)}
                   placeholder={t.ofcUaSampleTakingOver}
                 />
+                <ReasonRule value={coverageReason} minimum={10} />
               </div>
 
               {chosenTerritories.length === 0 && (
@@ -424,7 +493,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                   disabled={busy || coverageReason.trim().length < 10}
                   onClick={submitCoverage}
                 >
-                  {busy ? 'Saving…' : 'Save territories'}
+                  {busy ? t.agEnSaving : t.ofcUaSaveTerritories}
                 </button>
                 <button type="button" className="secondary" onClick={() => setCoverage(null)}>{t.camCancel}</button>
               </div>
@@ -433,6 +502,31 @@ export function UserAccessScreen({ user }: { user: User }) {
         </div>
       )}
 
+      {/*
+        * Where this officer is posted, and the dated record of every move.
+        *
+        * Beside the territory panel because an administrator opening one
+        * usually wants the other: territories are what an officer may see, a
+        * posting is who they work with and who answers for them, and moving
+        * somebody normally means both.
+        */}
+      {coverage && (
+        <PostingPanel
+          officerId={coverage.id}
+          onChanged={async () => {
+            await load();
+          }}
+        />
+      )}
+
+      {loadError && (
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
+      {!loadError && (
       <div className="card card--flush">
         <Table
           columns={[
@@ -452,7 +546,7 @@ export function UserAccessScreen({ user }: { user: User }) {
             {
               key: 'last_login_at',
               label: 'ofcUaLastSignedIn',
-              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'),
+              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : t.ofcArNeverPaid),
             },
             {
               key: 'action',
@@ -475,6 +569,14 @@ export function UserAccessScreen({ user }: { user: User }) {
                         setMessage(null);
                       }}
                     >{t.ofcUaChangeAccess}</button>{' '}
+                    <button
+                      type="button"
+                      className="small secondary"
+                      onClick={() => {
+                        setViewingAccess(row as PortalUser);
+                        setMessage(null);
+                      }}
+                    >{t.ofcUaTheirAccess}</button>{' '}
                     {TERRITORY_SCOPED_ROLES.includes(row.role) && (
                       <button
                         type="button"
@@ -498,10 +600,11 @@ export function UserAccessScreen({ user }: { user: User }) {
                 ),
             },
           ]}
-          rows={users}
+          rows={users ?? []}
           empty="ofcNoneOfficersRecorded"
         />
       </div>
+      )}
     </>
   );
 }

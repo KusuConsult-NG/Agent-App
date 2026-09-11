@@ -11,18 +11,20 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { birthDateMessage, birthDateProblem, localName, type TranslationDictionary } from '@psirs/shared';
 import {
-  ApiRequestError,
-  api,
-  isConnectivityFailure,
-  newIdempotencyKey,
-  type ApiError,
-} from '../lib/api';
+  DUPLICATE_REASON_TEXT,
+  birthDateMessage,
+  birthDateProblem,
+  localName,
+  type DuplicateReason,
+  type TranslationDictionary,
+} from '@psirs/shared';
+import { ApiRequestError, api, asApiError, isConnectivityFailure, newIdempotencyKey, type ApiError } from '../lib/api';
 import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
 import { startFlow, track } from '../lib/usage';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface TaxpayerSummary {
@@ -37,15 +39,27 @@ interface TaxpayerSummary {
   status: string;
 }
 
-function displayName(taxpayer: {
-  business_name?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-}): string {
+/**
+ * `t` is passed in because this sits outside the component and a hook cannot
+ * reach it here.
+ *
+ * The fallback used to be reached with `??`, which only catches null and
+ * undefined — and `.trim()` returns an empty string, never null. So a taxpayer
+ * with no business name and no first or last name rendered as a blank row
+ * rather than as "Unnamed taxpayer". `||` is the operator this always wanted.
+ */
+function displayName(
+  taxpayer: {
+    business_name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  },
+  t: TranslationDictionary,
+): string {
   return (
-    taxpayer.business_name ??
-    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ??
-    'Unnamed taxpayer'
+    taxpayer.business_name ||
+    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||
+    t.tpUnnamedTaxpayer
   );
 }
 
@@ -66,7 +80,13 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
         await api.get<TaxpayerSummary[]>(`/taxpayers/search?q=${encodeURIComponent(query.trim())}`),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      /*
+       * Without the second branch an agent pressed Search and nothing
+       * happened: no results, no error, no explanation. A failure that is not
+       * a refusal with a body — a dropped signal in a market, which is the
+       * ordinary case here — set nothing at all.
+       */
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -111,7 +131,7 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
                     onClick={() => navigate(`/taxpayers/${taxpayer.id}`)}
                   >
                     <div className="list__body">
-                      <p className="list__title">{displayName(taxpayer)}</p>
+                      <p className="list__title">{displayName(taxpayer, t)}</p>
                       <p className="list__meta">
                         {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone} ·{' '}
                         {taxpayer.lga_name}
@@ -137,6 +157,19 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
 // Registration wizard
 // ---------------------------------------------------------------------------
 
+interface Ward {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface Sector {
+  code: string;
+  label: string;
+  hausa: string;
+  suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
+}
+
 interface Lga {
   id: string;
   name: string;
@@ -148,7 +181,8 @@ interface DuplicateMatch {
   tin: string | null;
   phone: string;
   score: number;
-  reasons: string[];
+  /** Codes, not prose — see `DUPLICATE_REASON_TEXT` in the shared package. */
+  reasons: DuplicateReason[];
 }
 
 /*
@@ -174,11 +208,24 @@ export function RegisterTaxpayerScreen({
 }) {
   const { lang, t } = useI18n();
   const [step, setStep] = useState(0);
-  const [lgas, setLgas] = useState<Lga[]>([]);
-  const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
+  /*
+   * Three states, because an empty list hid the only way forward.
+   *
+   * The panel below renders on `duplicates.length > 0`, and the "None of
+   * these" button — the override that actually registers the taxpayer — sits
+   * inside it. So when this follow-up fetch failed, `setDuplicates([])` took
+   * the panel away and the override with it: the agent was told PSIRS thinks
+   * this is a duplicate, shown nothing it matched, and left with no button to
+   * press. A citizen is standing in front of them and the registration is
+   * simply dead.
+   *
+   * The mirror image of the report screens that answered a failed read with a
+   * confident zero. Same cause — `[]` meaning two different things — and here
+   * it makes a false dead end rather than a false all-clear.
+   */
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | 'unreadable' | null>(null);
   const [result, setResult] = useState<{ taxpayerId: string; tin: string | null } | null>(null);
   const [savedOffline, setSavedOffline] = useState(false);
 
@@ -209,13 +256,6 @@ export function RegisterTaxpayerScreen({
     [],
   );
 
-  // Sector taxonomy fetched once on mount.
-  const [sectors, setSectors] = useState<{
-    code: string;
-    label: string;
-    hausa: string;
-    suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
-  }[]>([]);
   // Obligation IDs the agent has confirmed for this registration.
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
 
@@ -254,17 +294,17 @@ export function RegisterTaxpayerScreen({
     preferredLanguage: 'en' as 'en' | 'ha',
   });
 
-  useEffect(() => {
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setLgas)
-      .catch(() => setLgas([]));
-
-    fetch('/api/v1/taxpayers/sectors')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setSectors)
-      .catch(() => setSectors([]));
-  }, []);
+  /*
+   * Both of these used to be bare `fetch` calls whose failure branch and whose
+   * empty-answer branch ended in the same place: an empty array. See
+   * `lib/reference.ts` — the LGA is a REQUIRED field on step three, so an
+   * empty list stopped the registration dead while the sentence under the
+   * button said "Choose the Local Government Area."
+   */
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const sectorList = useReferenceList<Sector>('/taxpayers/sectors');
+  const lgas = lgaList.items;
+  const sectors = sectorList.items;
 
   /*
    * Wards for the chosen LGA.
@@ -277,24 +317,10 @@ export function RegisterTaxpayerScreen({
    * purpose is finding where revenue is and is not being collected, that is a
    * false answer rather than a missing one.
    */
-  useEffect(() => {
-    if (!form.lgaId) {
-      setWards([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/v1/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((list) => {
-        if (!cancelled) setWards(list);
-      })
-      .catch(() => {
-        if (!cancelled) setWards([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.lgaId]);
+  const wardList = useReferenceList<Ward>(
+    form.lgaId ? `/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}` : null,
+  );
+  const wards = wardList.items;
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -394,9 +420,30 @@ export function RegisterTaxpayerScreen({
             );
             setDuplicates(check.possibleDuplicates);
           } catch {
-            setDuplicates([]);
+            setDuplicates('unreadable');
           }
         }
+      } else {
+        /*
+         * The branch that was missing, on the screen that creates a person's
+         * record.
+         *
+         * This screen handles being OFFLINE with care — the capture stays on
+         * the phone and says so. What it did not handle is a request that
+         * starts and then fails, which is the one-bar-of-signal case rather
+         * than the no-signal one. The agent got no error, no "saved on
+         * device", and no outcome recorded: the button stopped spinning and
+         * the form sat there exactly as before.
+         *
+         * They cannot tell whether a taxpayer was created, so they submit
+         * again — and duplicate detection is the thing this very screen
+         * exists to get right.
+         */
+        setError(asApiError(caught));
+        track('taxpayer.registration', {
+          flowId: flow.current?.flowId,
+          step: 'failed-unreadable',
+        });
       }
     } finally {
       setBusy(false);
@@ -491,7 +538,13 @@ export function RegisterTaxpayerScreen({
     }
     if (step === 3) {
       if (form.address.trim().length < 5) return t.needAddress;
-      if (form.lgaId === '') return t.needLga;
+      /*
+       * Naming the real obstacle. "Choose the Local Government Area" is the
+       * right sentence when there is a list and the agent has not picked from
+       * it, and exactly the wrong one when the list could not be read: it
+       * blames the agent for the one thing they cannot do.
+       */
+      if (form.lgaId === '') return lgaList.failed ? t.tpListCouldNotLoad : t.needLga;
       return null;
     }
     if (step === 5) {
@@ -535,29 +588,62 @@ export function RegisterTaxpayerScreen({
 
       <ErrorAlert error={error} />
 
-      {duplicates && duplicates.length > 0 && (
+      {duplicates !== null && (Array.isArray(duplicates) ? duplicates.length > 0 : true) && (
         <div className="card">
           <h2 className="card__title">{t.tpPossibleExisting}</h2>
-          <p className="card__hint">{t.tpCheckSamePerson}</p>
-          <ul className="list">
-            {duplicates.map((match) => (
-              <li key={match.taxpayerId}>
-                <button
-                  type="button"
-                  className="list__item"
-                  onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
-                >
-                  <div className="list__body">
-                    <p className="list__title">{match.displayName}</p>
-                    <p className="list__meta">
-                      {match.tin ? `TIN ${match.tin} · ` : ''}
-                      {match.reasons.join('; ')}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+
+          {duplicates === 'unreadable' ? (
+            /*
+             * The warning stands even though the list did not arrive.
+             *
+             * The server has already refused this registration as a possible
+             * duplicate; only the follow-up that says *which* records matched
+             * failed. So the agent still needs the panel — to be told the
+             * comparison is not available to them, and to keep the override
+             * the server itself is willing to accept. Registering blind is a
+             * poor outcome; being unable to register at all, with no
+             * explanation, is a worse one, and the override is recorded for
+             * review either way.
+             */
+            <>
+              <Alert kind="warning" title={t.tpDupCouldNotList}>
+                <p style={{ margin: 0 }}>{t.tpDupCouldNotListBody}</p>
+              </Alert>
+              <button
+                type="button"
+                className="secondary"
+                style={{ marginTop: 12 }}
+                disabled={busy}
+                onClick={() => void submit()}
+              >
+                {t.tpDupTryAgain}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="card__hint">{t.tpCheckSamePerson}</p>
+              <ul className="list">
+                {duplicates.map((match) => (
+                  <li key={match.taxpayerId}>
+                    <button
+                      type="button"
+                      className="list__item"
+                      onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
+                    >
+                      <div className="list__body">
+                        <p className="list__title">{match.displayName}</p>
+                        <p className="list__meta">
+                          {match.tin ? `TIN ${match.tin} · ` : ''}
+                          {match.reasons.map((code) => t[DUPLICATE_REASON_TEXT[code]]).join('; ')}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
           <button
             type="button"
             className="secondary"
@@ -692,7 +778,9 @@ export function RegisterTaxpayerScreen({
                   setForm((previous) => ({ ...previous, lgaId: event.target.value, wardId: '' }));
                 }}
               >
-                <option value="">{t.tpSelectLga}</option>
+                <option value="">
+                  {lgaList.failed ? t.tpListCouldNotLoad : t.tpSelectLga}
+                </option>
                 {lgas.map((lga) => (
                   <option key={lga.id} value={lga.id}>
                     {lga.name}
@@ -700,6 +788,11 @@ export function RegisterTaxpayerScreen({
                 ))}
               </select>
             </Field>
+            {lgaList.failed && (
+              <button type="button" className="secondary" onClick={lgaList.reload}>
+                {t.actionTryAgain}
+              </button>
+            )}
             <Field label={t.tpWard} hint={t.tpWardHint}>
               <select
                 value={form.wardId}
@@ -709,9 +802,11 @@ export function RegisterTaxpayerScreen({
                 <option value="">
                   {!form.lgaId
                     ? t.tpChooseLgaFirst
-                    : wards.length === 0
-                      ? t.tpNoWardsListed
-                      : t.tpSelectWard}
+                    : wardList.failed
+                      ? t.tpListCouldNotLoad
+                      : wards.length === 0
+                        ? t.tpNoWardsListed
+                        : t.tpSelectWard}
                 </option>
                 {wards.map((ward) => (
                   <option key={ward.id} value={ward.id}>
@@ -945,7 +1040,9 @@ export function TaxpayerScreen({
       .get<Profile>(`/taxpayers/${taxpayerId}`)
       .then(setProfile)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // Same as the search above, and worse here: `if (!profile) return
+        // null` below meant a failure without a body drew an empty page.
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [taxpayerId]);
@@ -959,7 +1056,7 @@ export function TaxpayerScreen({
   return (
     <>
       <div className="card">
-        <h2 className="card__title">{displayName(taxpayer as never)}</h2>
+        <h2 className="card__title">{displayName(taxpayer as never, t)}</h2>
         <KeyValue
           items={[
             ['TIN', taxpayer.tin ?? t.tpNotYetAssigned],
@@ -970,6 +1067,19 @@ export function TaxpayerScreen({
         />
         <button type="button" onClick={() => navigate(`/collect?taxpayerId=${taxpayerId}`)}>
           {t.tpCollectRevenue}
+        </button>
+        {/*
+          * Secondary, because collecting is what an agent is usually here to
+          * do. Enumeration is the other errand at the same stall: writing
+          * down what a business looks like so somebody who keeps no accounts
+          * can still be assessed on something other than a guess.
+          */}
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => navigate(`/taxpayers/${taxpayerId}/enumerate`)}
+        >
+          {t.tpEnumerate}
         </button>
       </div>
 

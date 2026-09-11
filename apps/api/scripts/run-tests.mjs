@@ -30,6 +30,28 @@ import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
 
+/*
+ * The database, before anything asks it a question.
+ *
+ * Not because PostgreSQL is unreliable — the log across this repository shows
+ * no crash, no OOM kill and no PANIC. Because a suspended container comes back
+ * with the server stopped, and the first shard to connect then fails with
+ * ECONNREFUSED, which reads exactly like a crash and is not one. Twice in one
+ * session that was misread as flakiness before anybody looked at the log.
+ *
+ * Runs before the shards are even planned, so the failure — if the database
+ * genuinely cannot be reached — arrives as one clear line instead of four
+ * shards dying separately.
+ */
+const preflight = spawnSync('bash', ['../../scripts/ensure-postgres.sh'], {
+  stdio: 'inherit',
+  env: process.env,
+});
+if (preflight.status !== 0) {
+  console.error('Cannot reach the database, so no tests were run.');
+  process.exit(1);
+}
+
 const TESTS_DIR = 'src/tests';
 const BASE_URL =
   process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/psirs_test';

@@ -49,7 +49,19 @@ export type CaptureSource = (typeof CAPTURE_SOURCES)[number];
  * someone storing a payload behind a reviewer's image viewer, and neither is
  * a file this platform should keep.
  */
-const ACCEPTED: { contentType: string; extension: string; matches: (bytes: Buffer) => boolean }[] = [
+export interface FileSignature {
+  contentType: string;
+  extension: string;
+  matches: (bytes: Buffer) => boolean;
+}
+
+/*
+ * Exported because case evidence has the same problem and must not grow a
+ * second, drifting list of what a file is allowed to be. What differs between
+ * the two is the size cap and where the bytes are filed, not which formats the
+ * platform will keep.
+ */
+export const ACCEPTED: FileSignature[] = [
   {
     contentType: 'image/jpeg',
     extension: 'jpg',

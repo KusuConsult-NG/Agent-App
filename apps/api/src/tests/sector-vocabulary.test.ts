@@ -109,6 +109,40 @@ describe('the economic sector vocabulary', () => {
     }
   });
 
+  it('accepts every sector it offers on a group as well as a taxpayer', async () => {
+    /*
+     * `taxpayer_groups.economic_sector` was free text until migration 057,
+     * which is why a market association's trade could not be joined to a
+     * taxpayer's and the presumptive schedule could not look it up. The two
+     * columns now share a vocabulary, and this is the test that keeps them
+     * sharing it: the same drift that once offered agents four sectors the
+     * database refused would otherwise be free to happen again on groups.
+     */
+    const lgaId = await firstLgaId();
+    const officerId = await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM users WHERE phone = '+2348030000101'`,
+    );
+
+    for (const [index, sector] of ECONOMIC_SECTORS.map((s) => s.code).entries()) {
+      const inserted = await query(
+        pool,
+        `INSERT INTO taxpayer_groups
+           (code, name, group_type, lga_id, leader_name, leader_phone, registered_by, economic_sector)
+         VALUES ($1,'Sector Probe Group','OTHER',$2,'Leader',$3,$4,$5)
+         RETURNING id`,
+        [
+          `GRP-SEC-${index}`,
+          lgaId,
+          `+23481${String(900000 + index)}`,
+          officerId!.id,
+          sector,
+        ],
+      );
+      assert.equal(inserted.length, 1, `${sector} was refused on a group`);
+    }
+  });
+
   it('serves the sectors to the registration screen', async () => {
     const response = await get('/taxpayers/sectors', { token: adminToken });
     assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 200));

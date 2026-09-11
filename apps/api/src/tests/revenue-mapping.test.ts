@@ -136,6 +136,49 @@ describe('every revenue item belongs to an arm of government', () => {
     assert.equal(byCode.get('LAND-USE-CHARGE'), 'MDA-LANDS');
   });
 
+  /*
+   * Which purse a levy is paid into, asked for by id.
+   *
+   * `listCategories` has taken an `authorityId` filter since it was written
+   * and `listItems` had none, so nothing could ask for one tier's catalogue
+   * without matching on a display name. State revenue and Local Government
+   * revenue are separate purses, and the officer administering the catalogue
+   * is the person who decides which one a new levy belongs to.
+   *
+   * Asserted as a proper partition — every item in, none out, and the two
+   * tiers summing to the whole — rather than "the filter returns something".
+   * A filter that quietly ignored its argument would pass that weaker test.
+   */
+  it('can be asked for one arm of government at a time', async () => {
+    const authorities = await get('/revenue/authorities', { token: adminToken });
+    assert.equal(authorities.status, 200);
+    const tiers = (authorities.body as { id: string; tier: string }[]);
+    assert.ok(tiers.length >= 2, JSON.stringify(tiers));
+
+    const all = await get('/revenue/items?includeWithdrawn=true', { token: adminToken });
+    assert.equal(all.status, 200);
+
+    let counted = 0;
+    for (const authority of tiers) {
+      const some = await get(
+        `/revenue/items?includeWithdrawn=true&authorityId=${authority.id}`,
+        { token: adminToken },
+      );
+      assert.equal(some.status, 200);
+      const rows = some.body as { authority_id: string }[];
+      for (const row of rows) {
+        assert.equal(row.authority_id, authority.id, 'an item from the wrong arm came back');
+      }
+      counted += rows.length;
+    }
+
+    assert.equal(
+      counted,
+      (all.body as unknown[]).length,
+      'the tiers do not add up to the catalogue, so the filter is dropping or duplicating items',
+    );
+  });
+
   it('reports an MDA with no revenue item rather than hiding it', async () => {
     // An arm of government collecting nothing through the platform is the
     // finding. Absent from the list, nobody ever sees it.

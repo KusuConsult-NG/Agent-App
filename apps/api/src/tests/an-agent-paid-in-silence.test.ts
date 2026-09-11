@@ -681,3 +681,144 @@ describe('the commission an agent has just earned', () => {
     assert.equal(row!.status, 'INACTIVE');
   });
 });
+
+/**
+ * The other way an agent gets paid twice: the officer is told the first one
+ * did not happen.
+ *
+ * `completePayout` is correctly guarded — `FOR UPDATE`, then a status check —
+ * so a second call cannot move money. What it does is tell the officer the
+ * wrong thing about why.
+ *
+ * One sentence covered all five refusable states, and ended "It must be
+ * approved first." A payout reaches APPROVED only from REQUESTED, so that
+ * instruction is true for exactly one of the five. For PAID it read:
+ *
+ *   "This payout is paid and cannot be marked as paid. It must be approved
+ *    first."
+ *
+ * The first clause contradicts itself; the second sends an officer to do
+ * something that cannot be done. The reading it invites is that the payment
+ * did not register — and the officer who believes that raises the payout
+ * again.
+ *
+ * These are the two moments the sentence exists for: a double-click, and a
+ * reply lost on a slow connection. Both land on PAID.
+ *
+ * Kept in this file rather than its own, because the fixture that gets a
+ * payout as far as APPROVED is a hundred and eighty lines long and already
+ * here, beside the other `completePayout` tests.
+ */
+describe('marking a payout paid when it already is', () => {
+  it('says it is done, rather than telling an officer to go and approve it', async () => {
+    const payoutId = await approvedPayout();
+    await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0009',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    });
+
+    // The double-click, or the retry after a reply that never arrived.
+    const second = await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0009',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    }).then(
+      () => null,
+      (error: unknown) => error as { code?: string; message?: string; nextStep?: string },
+    );
+
+    assert.ok(second, 'a second completion must still be refused');
+    assert.equal(second!.code, 'PAYOUT_ALREADY_PAID');
+    assert.doesNotMatch(
+      String(second!.message) + String(second!.nextStep ?? ''),
+      /approved first/i,
+      'an officer who has already paid must not be sent to approve it',
+    );
+  });
+
+  it('gives back the bank reference already on the record', async () => {
+    // The officer's real question is "did my payment register?". The recorded
+    // reference answers it, and is what stops a second payout being raised.
+    const payoutId = await approvedPayout();
+    await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0011',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    });
+
+    const second = await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0011',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    }).catch((error: unknown) => error as { message?: string });
+
+    assert.match(String((second as { message?: string }).message), /FBN\/2026\/0011/);
+  });
+
+  it('still refuses, and pays nothing a second time', async () => {
+    // The control that matters most. The message was always the defect here;
+    // the guard was not, and must stay exactly as strong.
+    const payoutId = await approvedPayout();
+    await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0013',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    });
+
+    // Counted before, because one payout queues COMMISSION_PAID on every
+    // channel the agent has — the claim is that a refused call adds none.
+    const afterFirst = (await notificationsFor('COMMISSION_PAID')).length;
+
+    await assert.rejects(() =>
+      completePayout({
+        payoutId,
+        bankReference: 'DIFFERENT/REF',
+        actorId: officerId,
+        actorRole: 'finance_officer',
+      }),
+    );
+
+    const row = await queryOne<{ status: string; bank_reference: string }>(
+      pool,
+      'SELECT status, bank_reference FROM commission_payouts WHERE id = $1',
+      [payoutId],
+    );
+    assert.equal(row!.status, 'PAID');
+    // The first reference stands: a refused second call must not overwrite it.
+    assert.equal(row!.bank_reference, 'FBN/2026/0013');
+
+    const afterSecond = (await notificationsFor('COMMISSION_PAID')).length;
+    assert.equal(
+      afterSecond,
+      afterFirst,
+      'the agent must not be told a second time that they were paid',
+    );
+  });
+
+  it('still tells an officer to approve one that genuinely needs approving', async () => {
+    // The instruction is not wrong. It was wrong for four states out of five.
+    // From REQUESTED it is exactly the right next step and must survive.
+    await eligibleCommission();
+    const { payoutId } = await requestPayout({
+      agentId,
+      actorId: agentUserId,
+      actorRole: 'agent',
+    });
+
+    const refused = await completePayout({
+      payoutId,
+      bankReference: 'FBN/2026/0015',
+      actorId: officerId,
+      actorRole: 'finance_officer',
+    }).catch((error: unknown) => error as { code?: string; nextStep?: string });
+
+    assert.equal((refused as { code?: string }).code, 'PAYOUT_NOT_APPROVED');
+    assert.match(String((refused as { nextStep?: string }).nextStep), /approved first/i);
+  });
+});

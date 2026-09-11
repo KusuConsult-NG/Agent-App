@@ -1,9 +1,11 @@
 /** Transaction monitoring and export (PRD §48, §49). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, Loading, Money, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Table, formatDateTime } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
+import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
 
 interface TransactionRow {
@@ -42,8 +44,23 @@ export function TransactionsScreen() {
   const { lang, t } = usePortalI18n();
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
-  const [filters, setFilters] = useState({ status: '', lgaId: '', from: '', to: '' });
+  const [rowsError, setRowsError] = useState<ApiError | null>(null);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
+  /*
+   * Kept in the URL and in this session, not in component state.
+   *
+   * An officer who narrowed this list to one LGA and one week, opened a
+   * transaction to read it, and pressed back used to get the unfiltered list
+   * and start again -- which on this screen is most of what they spend the day
+   * doing.
+   */
+  const [filters, setFilters] = useFilters('transactions', '/transactions', {
+    status: '',
+    lgaId: '',
+    from: '',
+    to: '',
+  });
 
   const buildQuery = useCallback(() => {
     const params = new URLSearchParams({ limit: '200' });
@@ -55,28 +72,20 @@ export function TransactionsScreen() {
   }, [filters]);
 
   useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
-
-  useEffect(() => {
     setRows(null);
+    setRowsError(null);
     api
       .get<TransactionRow[]>(`/government/transactions?${buildQuery().toString()}`)
       .then(setRows)
+      /*
+       * Its own state, because `rows` stays null on a failure and null renders
+       * the skeleton. The officer was shown the refusal at the top of the
+       * screen and a list still loading underneath it, for ever.
+       */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setRowsError(asApiError(caught));
       });
   }, [buildQuery]);
-
-  async function exportCsv() {
-    const params = buildQuery();
-    params.set('format', 'csv');
-    const csv = await api.get<string>(`/government/transactions?${params.toString()}`);
-    downloadCsv(`plateau-transactions-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-  }
 
   return (
     <>
@@ -87,7 +96,7 @@ export function TransactionsScreen() {
             <select
               id="status"
               value={filters.status}
-              onChange={(event) => setFilters({ ...filters, status: event.target.value })}
+              onChange={(event) => setFilters({ status: event.target.value })}
             >
               <option value="">{t.ofcAllStatuses}</option>
               {STATUSES.map((status) => (
@@ -103,7 +112,7 @@ export function TransactionsScreen() {
             <select
               id="lga"
               value={filters.lgaId}
-              onChange={(event) => setFilters({ ...filters, lgaId: event.target.value })}
+              onChange={(event) => setFilters({ lgaId: event.target.value })}
             >
               <option value="">{t.ofcAllLgas}</option>
               {lgas.map((lga) => (
@@ -112,6 +121,7 @@ export function TransactionsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">
@@ -120,7 +130,7 @@ export function TransactionsScreen() {
               id="from"
               type="date"
               value={filters.from}
-              onChange={(event) => setFilters({ ...filters, from: event.target.value })}
+              onChange={(event) => setFilters({ from: event.target.value })}
             />
           </div>
 
@@ -130,18 +140,26 @@ export function TransactionsScreen() {
               id="to"
               type="date"
               value={filters.to}
-              onChange={(event) => setFilters({ ...filters, to: event.target.value })}
+              onChange={(event) => setFilters({ to: event.target.value })}
             />
           </div>
 
-          <button type="button" className="secondary" onClick={exportCsv}>{t.ofcExportCsv}</button>
+          <ExportButtons
+            path={`/government/transactions?${buildQuery().toString()}`}
+            filename={`plateau-transactions-${new Date().toISOString().slice(0, 10)}`}
+            disabled={!rows || rows.length === 0}
+          />
         </div>
       </div>
 
       <ErrorAlert error={error} />
 
       <div className="card card--flush">
-        {!rows ? (
+        {rowsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={rowsError} />
+          </div>
+        ) : !rows ? (
           <div style={{ padding: 18 }}>
             <Loading rows={6} />
           </div>
@@ -156,7 +174,7 @@ export function TransactionsScreen() {
               { key: 'taxpayer_name', label: 'colTaxpayerLabel' },
               { key: 'revenue_item', label: 'colRevenueItem', render: (row: TransactionRow) => localName(lang, row.revenue_item, row.revenue_item_ha) },
               { key: 'lga', label: 'tpLgaShort' },
-              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? 'Direct' },
+              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? t.ofcTxDirect },
               {
                 key: 'amount_kobo',
                 label: 'pubVerifyAmount',
@@ -174,6 +192,22 @@ export function TransactionsScreen() {
                 key: 'created_at',
                 label: 'ofcTxCreated',
                 render: (row) => formatDateTime(row.created_at),
+              },
+              {
+                /*
+                 * When the money was actually confirmed, which is not when the
+                 * transaction was raised.
+                 *
+                 * On a list of transactions those two are days apart whenever
+                 * a citizen pays at a bank, and the second is the one that
+                 * says when the State had the money. It was computed and drawn
+                 * nowhere, so the only date here was the one that says when
+                 * somebody asked for it.
+                 */
+                key: 'verified_at',
+                label: 'ofcTxVerified',
+                render: (row) =>
+                  row.verified_at ? formatDateTime(row.verified_at) : t.ofcTxNotVerified,
               },
             ]}
             rows={rows}

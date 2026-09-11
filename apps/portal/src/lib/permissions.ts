@@ -64,13 +64,20 @@ export function can(user: Principal | null, permission: string | readonly string
 }
 
 /**
- * Every permission in the system that changes something.
+ * Every permission that changes the record.
+ *
+ * "The record" is what the platform holds about somebody else: what a taxpayer
+ * owes, what an agent earned, what a rate is, what a receipt says, what
+ * reconciliation concluded. Holding none of these is what makes a role
+ * read-only in the sense an external reviewer cares about.
+ *
+ * It is not the same as "every permission that writes a row" — see
+ * `CASEWORK_PERMISSIONS` below, which write and do not belong here. Every
+ * permission is in exactly one of the three lists, and a test says so by name.
  *
  * Kept as a list rather than derived by pattern-matching the name, because
  * `payment:reconcile` and `taxpayer:tin_sync` do not look like writes and are,
- * while `report:financial` looks like it might be and is not. A test asserts
- * this stays exhaustive against the shared permission list, so a new permission
- * has to be classified rather than silently counted as read-only.
+ * while `report:financial` looks like it might be and is not.
  */
 export const MUTATING_PERMISSIONS = [
   'taxpayer:create',
@@ -118,10 +125,29 @@ export const MUTATING_PERMISSIONS = [
    */
   'taxpayer:correct',
   'taxpayer:obligation:waive',
+  // Filing a PAYE return raises a liability against an employer.
+  'paye:file',
   'group:register',
   'group:manage',
   'allocation:manage',
   'allocation:collect',
+  /*
+   * Setting a revenue target is a decision about what the State expects to
+   * raise, and it changes how every collection figure below it is judged. It
+   * belongs with the writes rather than with casework: a target quietly lowered
+   * makes a shortfall disappear from every screen that reports against it,
+   * which is a change to the record in the sense that matters.
+   */
+  'target:manage',
+  /*
+   * Closing a month freezes what the State says it collected in it; reopening
+   * one unfreezes a figure that has already been reported to the
+   * Accountant-General. Both change the record in the strongest sense the word
+   * has here — after a close, the database itself refuses to write into the
+   * month, and after a reopen it stops refusing.
+   */
+  'period:close',
+  'period:reopen',
 ] as const;
 
 /**
@@ -139,6 +165,24 @@ export const MUTATING_PERMISSIONS = [
  * puts it in one, and the test says so by name.
  */
 export const READ_ONLY_PERMISSIONS = [
+  /*
+   * Exporting is here, and it is the least comfortable member of the list.
+   *
+   * It changes nothing about the record, which is the test this class applies,
+   * and an auditor who cannot take a copy of what they examined cannot produce
+   * a working paper. But it is not the same as reading: a row on screen is
+   * governed by the session, the territory scope and the audit trail, and the
+   * same row in a spreadsheet on somebody's laptop is governed by nothing this
+   * platform can see.
+   *
+   * What makes it safe to file as a read is that it is not free. `data:export`
+   * is its own permission, so it can be taken away from a role without taking
+   * their reports away; every export is capped by role and written to the
+   * audit log with the filters and the row count. Those are the controls doing
+   * the work -- not this classification, which only says the record is
+   * unchanged.
+   */
+  'data:export',
   'taxpayer:read:assigned',
   'taxpayer:read:all',
   'group:read:all',
@@ -171,14 +215,67 @@ export const READ_ONLY_PERMISSIONS = [
   'support:read:own',
   'support:read:all',
   'incentive:read:all',
+  'case:read:all',
+  'target:read:all',
+  'period:read',
 ] as const;
 
 /**
- * True when this officer cannot change anything, anywhere in the portal.
+ * Every permission that writes only the officer's own investigative record.
+ *
+ * A third class, and it exists because of the auditor.
+ *
+ * The brief this was built to asks that auditors open cases, assign them, take
+ * evidence and record findings. That is writing. It is also the opposite of
+ * what `MUTATING_PERMISSIONS` is about: none of it changes what a taxpayer
+ * owes, what an agent earned, what a rate is, or what a receipt says. An
+ * auditor who cannot write a case down is not read-only, they are mute — the
+ * finding leaves in an email and the investigation has no file.
+ *
+ * So the honest statement is not "the auditor writes nothing" but "the auditor
+ * writes nothing except the audit". Splitting the list is how that gets said
+ * in a form a test can check, instead of quietly filing four writes under
+ * reads and letting the read-only marker mean less than it did.
+ *
+ * The line to hold when classifying a future permission: if an outside party's
+ * money, liability or standing changes because of it, it is mutating, however
+ * investigative it sounds. `fraud:manage` closes a flag against an agent and is
+ * mutating for exactly that reason.
+ */
+export const CASEWORK_PERMISSIONS = [
+  'case:create',
+  'case:contribute',
+  'case:manage',
+  /*
+   * The workbench is in this class for the same reason casework is.
+   *
+   * Drawing a sample writes down which transactions an auditor examined;
+   * generating a report freezes figures that were already readable and signing
+   * one puts a name on them. Not one of the three changes what a taxpayer
+   * owes, what an agent earned, or what a receipt says -- which is the line
+   * stated above, applied.
+   *
+   * `audit:sign` is the closest call, because a signature carries weight
+   * outside the audit file. It stays here: what it commits is the auditor's
+   * own opinion, and an examiner who cannot sign their own report has not been
+   * kept independent, only kept quiet.
+   */
+  'audit:sample',
+  'audit:report',
+  'audit:sign',
+] as const;
+
+/**
+ * True when this officer cannot change the record, anywhere in the portal.
  *
  * Today that is exactly the auditor. Stated as a property of the permission set
  * rather than a check for `role === 'auditor'`, so a role that is later granted
  * a mutating permission stops being described as read-only automatically.
+ *
+ * Casework is deliberately not counted; see `CASEWORK_PERMISSIONS`. What the
+ * portal shows a read-only officer is not "you may click nothing" — it is that
+ * nothing they do alters the revenue record, which is the property the role
+ * exists to have.
  */
 export function isReadOnly(user: Principal | null): boolean {
   return !!user && !can(user, MUTATING_PERMISSIONS);
@@ -216,6 +313,38 @@ export interface NavItem {
  */
 const SCREEN: Record<string, NavItem> = {
   home: { path: '/', label: 'home', permission: ['report:read:all', 'report:read:territory'] },
+  /*
+   * The two screens that are the same for every role, and first for all of
+   * them.
+   *
+   * `myWork` is what is waiting for this officer; `cases` is the queue it is
+   * drawn from. Both are gated on `case:read:all`, which all five portal roles
+   * hold — a case is how work crosses a department, and a department that
+   * could not see the queue could not be sent anything.
+   */
+  myWork: { path: '/my-work', label: 'ofcNavMyWork', permission: 'case:read:all' },
+  cases: { path: '/cases', label: 'ofcNavCases', permission: 'case:read:all' },
+  /*
+   * Targets and the forecast beside them.
+   *
+   * `target:read:all`, which every reporting role holds: an achievement
+   * percentage is meaningless to a finance officer who can see the actual and
+   * not the number it is measured against. Setting one is `target:manage` and
+   * is gated inside the screen.
+   */
+  targets: { path: '/targets', label: 'ofcNavTargets', permission: 'target:read:all' },
+  /*
+   * The register as a population.
+   *
+   * `taxpayer:read:all` rather than a reporting permission: these are cohorts
+   * of real people and the counts are drawn from the register itself, so the
+   * gate is the one that opens the register.
+   */
+  taxpayerBase: {
+    path: '/taxpayer-base',
+    label: 'ofcNavTaxpayerAnalytics',
+    permission: 'taxpayer:read:all',
+  },
   dashboard: {
     path: '/dashboard',
     label: 'ofcNavDashboard',
@@ -245,6 +374,49 @@ const SCREEN: Record<string, NavItem> = {
     label: 'ofcNavLevies',
     permission: ['report:read:all', 'report:read:territory'],
   },
+  /*
+   * The same report permissions as the levy screens, and deliberately not
+   * `taxpayer:read:all`. This is a ranked register of citizens with the amount
+   * each owes — the most sensitive list the platform produces — so it is
+   * offered to the roles whose job is the revenue, narrowed to their own
+   * territories by the API rather than by this menu.
+   */
+  arrears: {
+    path: '/arrears',
+    label: 'ofcNavArrears',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
+  /*
+   * The asset graph. Same report permissions as the arrears list, and for the
+   * same reason: it is a view of named citizens and what the State believes
+   * about them, narrowed to the caller's own territories by the API.
+   */
+  connections: {
+    path: '/connections',
+    label: 'ofcNavConnections',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
+  payroll: {
+    path: '/payroll',
+    label: 'ofcNavPayroll',
+    permission: ['report:read:all', 'report:read:territory'],
+  },
+  /*
+   * The published schedule, readable by anyone who may read the catalogue.
+   * A rate table only officers can see is one nobody can contest, and being
+   * contestable by an ordinary person is the point of publishing figures
+   * rather than running a scoring model.
+   */
+  presumptive: {
+    path: '/presumptive',
+    label: 'ofcNavPresumptive',
+    permission: 'catalogue:read',
+  },
+  enumeration: {
+    path: '/enumeration',
+    label: 'ofcNavEnumeration',
+    permission: ['approval:review', 'report:read:all', 'report:read:territory'],
+  },
   transactions: { path: '/transactions', label: 'ofcNavTransactions', permission: 'payment:read:all' },
   agents: { path: '/agents', label: 'ofcNavAgents', permission: 'agent:read:all' },
   referees: { path: '/referees', label: 'ofcNavReferees', permission: 'agent:read:all' },
@@ -254,12 +426,42 @@ const SCREEN: Record<string, NavItem> = {
     permission: ['report:read:all', 'report:read:territory'],
   },
   reconciliation: { path: '/reconciliation', label: 'ofcNavReconciliation', permission: 'report:financial' },
+  /*
+   * The period lock, readable by every reporting role.
+   *
+   * An officer looking at a March figure needs to know whether March can still
+   * move, and that is not a privileged fact. Closing is `period:close` and
+   * reopening `period:reopen`, both gated inside the screen and again on the
+   * API.
+   */
+  periods: { path: '/periods', label: 'ofcNavPeriods', permission: 'period:read' },
   commissions: { path: '/commissions', label: 'ofcNavCommissions', permission: 'commission:read:all' },
   approvals: { path: '/approvals', label: 'ofcNavApprovals', permission: 'approval:review' },
   fraud: { path: '/fraud', label: 'ofcNavFraud', permission: 'fraud:read' },
   support: { path: '/support', label: 'ofcNavSupport', permission: 'support:read:all' },
   outstanding: { path: '/outstanding', label: 'ofcNavOutstanding', permission: 'payment:read:all' },
   audit: { path: '/audit', label: 'ofcNavAudit', permission: 'audit:read' },
+  /*
+   * The workbench sits behind `audit:sample`, not `audit:read`.
+   *
+   * Every officer with `audit:read` can read the log; drawing a sample and
+   * signing a report are the examiner's own work, and offering the screen to
+   * everybody who can read an audit trail would put a "draw a sample" button
+   * in front of officers whose every click on it would 403.
+   */
+  workbench: { path: '/workbench', label: 'ofcNavWorkbench', permission: 'audit:sample' },
+  /*
+   * No permission, deliberately.
+   *
+   * The answer is about the officer asking. Gating it would mean an officer
+   * whose role somebody narrowed could no longer see that their old laptop is
+   * still signed in -- which is exactly the officer most likely to need to
+   * look. `permission` is optional on a `NavItem` for exactly this: a screen
+   * every authenticated officer may open.
+   */
+  myAccess: { path: '/my-access', label: 'ofcNavMyAccess' },
+  // Same reasoning: reading what you were told is not a privilege.
+  inbox: { path: '/inbox', label: 'ofcNavInbox' },
   usage: { path: '/usage', label: 'ofcNavUsage', permission: 'report:read:all' },
   catalogue: { path: '/catalogue', label: 'ofcNavCatalogue', permission: 'catalogue:read' },
   programmes: { path: '/programmes', label: 'ofcNavProgrammes', permission: 'incentive:read:all' },
@@ -273,12 +475,45 @@ const SCREEN: Record<string, NavItem> = {
   },
   users: { path: '/users', label: 'ofcNavUsers', permission: 'user:manage' },
   /*
+   * The delegation of authority itself, which is data now.
+   *
+   * `user:manage` — the same permission that already governs who holds which
+   * role. Who may do what is not something every officer needs to browse.
+   */
+  roles: { path: '/roles', label: 'ofcNavRoles', permission: 'user:manage' },
+  /*
+   * The structure, readable by every portal role and by nobody else.
+   *
+   * `case:read:all` is held by exactly those five and by no field agent, which
+   * is the boundary that matters here. Not the reporting pair: a route that
+   * accepts `report:read:territory` promises to narrow its answer to the
+   * caller's territories, and an organisation chart is not territory data —
+   * see the note on the endpoint. Creating or closing a department is
+   * `user:manage`, gated inside the screen.
+   */
+  organisation: {
+    path: '/organisation',
+    label: 'ofcNavOrganisation',
+    permission: 'case:read:all',
+  },
+  /*
    * `system:configure`, held by administrators alone. Raising the minimum app
    * version stops every agent still on an older build from collecting; that is
    * a different size of decision from suspending one agent, and it is not on a
    * revenue officer's menu.
    */
   fieldApp: { path: '/field-app', label: 'ofcNavFieldApp', permission: 'system:configure' },
+  /*
+   * Offered to auditors as well as administrators, because the endpoint is
+   * `system:configure` OR `audit:read` and both have a reason to ask. An
+   * auditor reading a reconciliation exception needs to know whether the
+   * gateway was answering that morning; nobody can tell them from the numbers.
+   */
+  platform: {
+    path: '/platform',
+    label: 'ofcNavPlatform',
+    permission: ['system:configure', 'audit:read'],
+  },
   /*
    * `allocation:manage`, held by administrators and revenue officers only. A
    * finance officer settles money; they do not decide who gets fertiliser, and
@@ -315,37 +550,51 @@ type NavGroup = { group: keyof TranslationDictionary; items: readonly NavItem[] 
 const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
   admin: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
+    },
+    {
       group: 'ofcGroupAdministration',
-      items: [SCREEN.home!, SCREEN.users!, SCREEN.agents!, SCREEN.referees!],
+      items: [SCREEN.home!, SCREEN.users!, SCREEN.roles!, SCREEN.organisation!,
+              SCREEN.agents!, SCREEN.referees!],
     },
     {
       group: 'ofcGroupConfiguration',
-      items: [SCREEN.catalogue!, SCREEN.programmes!, SCREEN.allocations!, SCREEN.groups!,
-              SCREEN.fieldApp!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.programmes!, SCREEN.allocations!,
+              SCREEN.groups!, SCREEN.fieldApp!, SCREEN.platform!],
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!],
+      items: [SCREEN.audit!, SCREEN.usage!, SCREEN.support!, SCREEN.fraud!,
+              SCREEN.enumeration!, SCREEN.periods!],
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!,
-              SCREEN.transactions!, SCREEN.performance!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.revenue!, SCREEN.targets!, SCREEN.levies!, SCREEN.intelligence!,
+              SCREEN.taxpayerBase!, SCREEN.transactions!,
+              SCREEN.performance!],
     },
   ],
 
   revenue_officer: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
+    },
+    {
       group: 'ofcGroupTheRegister',
-      items: [SCREEN.home!, SCREEN.taxpayerRecords!, SCREEN.outstanding!, SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.enumeration!, SCREEN.taxpayerRecords!, SCREEN.taxpayerBase!,
+              SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupAssessment',
-      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.transactions!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.levies!, SCREEN.transactions!],
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.targets!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupAgentsProgrammes',
@@ -360,14 +609,18 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   finance_officer: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
+    },
+    {
       group: 'ofcGroupSettlement',
-      items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!,
-              SCREEN.approvals!],
+      items: [SCREEN.home!, SCREEN.reconciliation!, SCREEN.periods!, SCREEN.commissions!,
+              SCREEN.outstanding!, SCREEN.approvals!],
     },
     {
       group: 'ofcGroupRevenue',
-      items: [SCREEN.dashboard!, SCREEN.revenue!, SCREEN.levies!, SCREEN.transactions!,
-              SCREEN.intelligence!],
+      items: [SCREEN.dashboard!, SCREEN.arrears!, SCREEN.payroll!, SCREEN.revenue!,
+              SCREEN.targets!, SCREEN.levies!, SCREEN.transactions!, SCREEN.intelligence!],
     },
     {
       group: 'ofcGroupWhoCollected',
@@ -375,23 +628,30 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!],
+      items: [SCREEN.fraud!, SCREEN.audit!, SCREEN.usage!, SCREEN.catalogue!,
+              SCREEN.presumptive!],
     },
   ],
 
   auditor: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
+    },
+    {
       group: 'ofcGroupExamination',
-      items: [SCREEN.home!, SCREEN.audit!, SCREEN.fraud!, SCREEN.transactions!],
+      items: [SCREEN.home!, SCREEN.audit!, SCREEN.workbench!, SCREEN.fraud!,
+              SCREEN.transactions!, SCREEN.platform!],
     },
     {
       group: 'ofcGroupTheMoney',
-      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.outstanding!],
+      items: [SCREEN.reconciliation!, SCREEN.commissions!, SCREEN.periods!,
+              SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!, SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupWhatCharged',
-      items: [SCREEN.catalogue!, SCREEN.levies!, SCREEN.revenue!, SCREEN.dashboard!,
-              SCREEN.intelligence!],
+      items: [SCREEN.catalogue!, SCREEN.presumptive!, SCREEN.levies!, SCREEN.revenue!,
+              SCREEN.targets!, SCREEN.dashboard!, SCREEN.intelligence!, SCREEN.taxpayerBase!],
     },
     {
       group: 'ofcGroupWhoDidIt',
@@ -402,17 +662,23 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
 
   supervisor: [
     {
+      group: 'ofcGroupYourDesk',
+      items: [SCREEN.myWork!, SCREEN.inbox!, SCREEN.cases!, SCREEN.myAccess!],
+    },
+    {
       group: 'ofcGroupMyTerritory',
-      items: [SCREEN.home!, SCREEN.performance!, SCREEN.approvals!, SCREEN.outstanding!],
+      items: [SCREEN.home!, SCREEN.arrears!, SCREEN.connections!, SCREEN.payroll!,
+              SCREEN.enumeration!, SCREEN.performance!, SCREEN.approvals!,
+              SCREEN.outstanding!],
     },
     {
       group: 'ofcGroupRevenueHere',
-      items: [SCREEN.revenue!, SCREEN.levies!, SCREEN.intelligence!, SCREEN.transactions!,
-              SCREEN.commissions!],
+      items: [SCREEN.revenue!, SCREEN.targets!, SCREEN.levies!, SCREEN.intelligence!,
+              SCREEN.transactions!, SCREEN.commissions!],
     },
     {
       group: 'ofcGroupOversight',
-      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!],
+      items: [SCREEN.fraud!, SCREEN.support!, SCREEN.catalogue!, SCREEN.presumptive!],
     },
   ],
 };
@@ -425,7 +691,25 @@ const NAV_BY_ROLE: Record<string, readonly NavGroup[]> = {
  * designed one and a much better outcome than an empty portal.
  */
 const NAV_FALLBACK: readonly NavGroup[] = [
-  { group: 'ofcGroupEverything', items: Object.values(SCREEN) },
+  {
+    group: 'ofcGroupEverything',
+    /*
+     * Everything except the screens that open on authentication alone.
+     *
+     * The filter below drops an item whose permission the role does not hold,
+     * which is what makes a fallback menu safe. A screen with no permission
+     * survives that filter for *every* role -- including the field agent, who
+     * has no menu here because they belong in the agent application and are
+     * turned away at the door. Offering them "where I am signed in", a screen
+     * about officer machines they will never have, is the one way this list
+     * can be wrong.
+     *
+     * A role PSIRS creates therefore reaches these screens by their path and
+     * not from this menu, until somebody arranges a menu for it. That is the
+     * cost, and it is smaller than the alternative.
+     */
+    items: Object.values(SCREEN).filter((item) => item.permission !== undefined),
+  },
 ];
 
 export function navFor(role: string | undefined): readonly NavGroup[] {
@@ -466,7 +750,21 @@ export function availableGroups(
  * from the same filter rather than being assumed.
  */
 export function landingPath(user: Principal | null): string | null {
-  return availableItems(user)[0]?.path ?? null;
+  const items = availableItems(user);
+  /*
+   * The role home when they can open it, not simply the first menu item.
+   *
+   * The menus now open with "Your desk" — my work, and the case queue it is
+   * drawn from — which is the right first *group* and the wrong first *screen*.
+   * `/` is the briefing an officer wants on arriving: what the platform is
+   * waiting on, in their own terms. My work is what is waiting on them
+   * personally, and it is one click away at the top of the menu.
+   *
+   * Taking the first item would have moved every role's landing page as a side
+   * effect of adding a menu group, which is the kind of change nobody decides
+   * and everybody notices.
+   */
+  return items.find((item) => item.path === '/')?.path ?? items[0]?.path ?? null;
 }
 
 /**

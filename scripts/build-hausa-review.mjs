@@ -132,6 +132,11 @@ const GROUPS = [
   ['ofcSp', 'The officer portal — the support desk'],
   ['ofcGp', 'The officer portal — groups and distributions'],
   ['ofcLv', 'The officer portal — levies'],
+  ['ofcAr', 'The officer portal — the arrears worklist'],
+  ['ofcIg', 'The officer portal — assets and coverage leads'],
+  ['ofcPr', 'The officer portal — employers and payroll returns'],
+  ['ofcPs', 'The officer portal — the presumptive schedule'],
+  ['ofcEn', 'The officer portal — enumeration queues'],
   ['ofcAl', 'The officer portal — distribution rounds'],
   ['ofcPf', 'The officer portal — agent performance'],
   ['ofcTx', 'The officer portal — transactions'],
@@ -257,6 +262,29 @@ const rebuilt =
   out.join('\n').trimEnd() +
   '\n\n' +
   sheet.slice(sheet.indexOf(end));
+/*
+ * The prose counts, which the markers do not cover.
+ *
+ * The sentences above the tables say how many strings the sheet carries, and
+ * they are hand-written -- so they said 1,549 for a long time after the
+ * dictionary passed two thousand. That is the exact failure this script exists
+ * to prevent, one section higher up: a reviewer reads "all 1,549 strings" and
+ * takes the sheet for complete. Only comma-formatted four-figure numbers are
+ * checked, so the deliberate historical references ("it listed 78 strings")
+ * are left alone.
+ */
+const claimed = [...sheet.matchAll(/\b(\d,\d{3}) (?:dictionary strings|keys|strings)\b/g)];
+const total = (safety.length + rest.length).toLocaleString('en-US');
+const wrong = claimed.filter((m) => m[1] !== total);
+if (wrong.length > 0) {
+  console.error(
+    `docs/HAUSA-REVIEW.md says ${wrong[0][1]} where the dictionary holds ${total}.\n` +
+      'The generated tables are right and the sentence above them is not, which is\n' +
+      'the worst way round: the reviewer believes the smaller number.',
+  );
+  process.exit(1);
+}
+
 if (check) {
   if (rebuilt !== sheet) {
     console.error(

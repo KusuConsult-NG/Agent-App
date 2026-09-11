@@ -1687,15 +1687,34 @@ describe('Citizens are served by agents, not by a portal', () => {
   });
 
   it('will not let the database hold a citizen login', async () => {
-    // Migration 007 narrowed users.role, so this holds for any caller —
-    // including one at a psql prompt.
+    /*
+     * Refused for any caller, including one at a psql prompt.
+     *
+     * Migration 007 did this with a CHECK constraint and migration 059 replaced
+     * it with a foreign key to `roles`, which deliberately has no `taxpayer`
+     * row. The guarantee is unchanged and the constraint's name is not, so the
+     * assertion is on the refusal rather than on which constraint delivers it —
+     * naming one pins the mechanism and lets the property drift.
+     */
     await assert.rejects(
       pool.query(
         `INSERT INTO users (full_name, phone, password_hash, role)
          VALUES ('Citizen', '+2347099000002', 'x', 'taxpayer')`,
       ),
-      /users_role_check/,
+      /users_role_check|users_role_fkey/,
     );
+
+    /*
+     * And the reason it is refused: there is no such role to hold.
+     *
+     * Asserted separately because the rejection above would also fire if the
+     * roles table were empty or missing, which is a different fault with the
+     * same symptom.
+     */
+    const citizenRole = await pool.query(`SELECT 1 FROM roles WHERE name = 'taxpayer'`);
+    assert.equal(citizenRole.rowCount, 0, 'there is no citizen role to sign in as');
+    const realRoles = await pool.query(`SELECT 1 FROM roles WHERE name = 'admin'`);
+    assert.equal(realRoles.rowCount, 1, 'and the roles table is populated');
   });
 
   it('will not let a transaction claim it came from a citizen portal', async () => {

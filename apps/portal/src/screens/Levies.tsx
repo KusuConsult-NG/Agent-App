@@ -25,8 +25,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import { Alert, Empty, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
 
@@ -134,9 +135,12 @@ export function LeviesScreen() {
    */
   const canReadTaxpayers = can('taxpayer:read:all') || can('report:read:territory');
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const categoryList = useReferenceList<Category>('/revenue/categories');
+  const categories = categoryList.items;
+  const itemList = useReferenceList<Item>('/revenue/items');
+  const items = itemList.items;
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
 
   const [filters, setFilters] = useState({
     categoryId: '',
@@ -153,9 +157,6 @@ export function LeviesScreen() {
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    api.get<Category[]>('/revenue/categories').then(setCategories).catch(() => setCategories([]));
-    api.get<Item[]>('/revenue/items').then(setItems).catch(() => setItems([]));
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   /*
@@ -196,7 +197,7 @@ export function LeviesScreen() {
     if (filters.outstandingOnly) who.set('outstandingOnly', 'true');
 
     const fail = (caught: unknown) => {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     };
 
     if (canReadRevenue) {
@@ -257,7 +258,7 @@ export function LeviesScreen() {
           * reads as a screen that failed to load rather than one that is doing
           * what it is meant to.
           */}
-        <p style={{ color: 'var(--muted)', marginTop: 0, fontSize: '0.85rem' }}>
+        <p className="card__hint">
           {canReadTaxpayers ? t.ofcLvIntroAll : t.ofcLvIntroNoRegister}{' '}
           {t.ofcLvChooseOnce}
         </p>
@@ -279,6 +280,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={categoryList} />
           </div>
 
           <div className="field">
@@ -295,6 +297,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={itemList} />
           </div>
 
           <div className="field">
@@ -311,6 +314,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">
@@ -346,7 +350,7 @@ export function LeviesScreen() {
                 outstandingOnly: false,
               })
             }
-          >{t.ofcAgClear}</button>
+          >{t.appClearFilters}</button>
         </div>
       </div>
 
@@ -397,7 +401,7 @@ export function LeviesScreen() {
                 empty="ofcNoneNothingCollectedFilter"
               />
 
-              <h3 style={{ marginTop: 24, fontSize: '0.95rem' }}>{t.ofcLvByIndividualLevy}</h3>
+              <h3 style={{ marginTop: 24, fontSize: 'var(--text-md)' }}>{t.ofcLvByIndividualLevy}</h3>
               <Table
                 columns={[
                   { key: 'code', label: 'ofcAgCode' },
@@ -425,6 +429,16 @@ export function LeviesScreen() {
         </div>
       )}
 
+      {/*
+        * Left full width, and it was worth trying the other way to find out.
+        *
+        * Side by side these two read as the comparison they are, and the page
+        * halved — but both carry five or six columns and `th` is nowrap, so at
+        * 660 pixels the settled figure and the levy's own name went off the
+        * edge of their cards. An officer chasing arrears needs to see which
+        * levy, and a column that has to be scrolled to is a column that is not
+        * there. Length is the cheaper cost.
+        */}
       {canReadDefaulters && (
         <div className="card">
           <h2 className="card__title">{t.ofcLvBehindOn.replace('{{levy}}', chosenLevy)}</h2>
@@ -475,7 +489,7 @@ export function LeviesScreen() {
             {t.ofcLvRegisteredUnder.replace('{{levy}}', chosenLevy)}
           </h2>
           <div className="filters">
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem' }}>
+            <label className="checkbox">
               <input
                 type="checkbox"
                 checked={filters.outstandingOnly}

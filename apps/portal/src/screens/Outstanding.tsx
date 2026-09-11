@@ -20,9 +20,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Refund {
   id: string;
@@ -81,15 +82,43 @@ interface AwaitingAuthority {
 }
 
 /** A queue the signed-in officer may not read, stated rather than hidden. */
-function NotYours({ what, permission }: { what: string; permission: string }) {
+/**
+ * `what` is a dictionary key, not a heading.
+ *
+ * It was `string` and every call site passed English, which is how four
+ * headings on this screen stayed untranslated while everything around them was
+ * keyed. Typed this way the compiler holds the boundary — the same trade
+ * `Stat`, `Table` and `Alert` already make.
+ */
+function NotYours({ what, permission }: { what: keyof TranslationDictionary; permission: string }) {
   const { t } = usePortalI18n();
   return (
     <div className="card">
-      <h2 className="card__title">{what}</h2>
+      <h2 className="card__title">{t[what]}</h2>
       <p className="card__hint">{t.ofcOsReadingNeeds}<code>{permission}</code>{t.ofcOsNotYours}</p>
     </div>
   );
 }
+
+/**
+ * What a retry did, said by this screen rather than by the server.
+ *
+ * Each of the three endpoints composes an English sentence and returns it as
+ * `message`, and this screen rendered it in preference to the dictionary
+ * string sitting behind the `??` — six English sentences about money that has
+ * not been returned, reaching an officer reading Hausa. The ninth time this
+ * exact shape has been found in this application.
+ *
+ * The counts come back in the payload either way, so the wording belongs
+ * here, where there is a dictionary. The server keeps its `message`: it is
+ * what the scheduled-job log and any non-browser client read, and neither of
+ * those has a language.
+ */
+const PHRASING: Record<string, { done: keyof TranslationDictionary; partly: keyof TranslationDictionary }> = {
+  refunds: { done: 'ofcOsRefundsReturned', partly: 'ofcOsRefundsPartly' },
+  tins: { done: 'ofcOsTinsAssigned', partly: 'ofcOsTinsPartly' },
+  renewals: { done: 'ofcOsRenewalsAcked', partly: 'ofcOsRenewalsPartly' },
+};
 
 export function OutstandingScreen() {
   const { t } = usePortalI18n();
@@ -107,24 +136,44 @@ export function OutstandingScreen() {
   const readsVehicles = can('vehicle:authority_sync');
   const readsTaxpayers = can('taxpayer:read:all');
 
+  /*
+   * Which queues could not be read, as opposed to which are empty.
+   *
+   * Every fetch on this screen answered a failure with `setX([])`, and an
+   * empty array is what an emptied queue looks like. With all four failing —
+   * an expired session, the API down — `waiting` came to zero, `loaded` came
+   * to true, and this screen showed a green success alert reading "Nothing is
+   * outstanding. Every refund has been made."
+   *
+   * The screen's own opening paragraph says why that must not happen: "A
+   * queue nobody can look at is indistinguishable from an empty one, which is
+   * the wrong thing for a refund to be indistinguishable from." It was the
+   * one thing this screen exists to prevent, and it was doing it.
+   */
+  const [unreadable, setUnreadable] = useState<Set<string>>(new Set());
+
   const load = useCallback(() => {
+    setUnreadable(new Set());
+    const failed = (queue: string) => () =>
+      setUnreadable((current) => new Set(current).add(queue));
+
     if (readsRefunds) {
       api
         .get<{ refunds: Refund[] }>('/government/refunds/outstanding')
         .then((data) => setRefunds(data.refunds))
-        .catch(() => setRefunds([]));
+        .catch(failed('refunds'));
     }
     if (readsTins) {
       api
         .get<{ taxpayers: AwaitingTin[] }>('/taxpayers/tin-outstanding')
         .then((data) => setTins(data.taxpayers))
-        .catch(() => setTins([]));
+        .catch(failed('tins'));
     }
     if (readsTaxpayers) {
       api
         .get<{ taxpayers: EndedWithArrears[] }>('/taxpayers/ended-with-arrears')
         .then((data) => setEnded(data.taxpayers))
-        .catch(() => setEnded([]));
+        .catch(failed('ended'));
     }
     if (readsVehicles) {
       api
@@ -135,10 +184,7 @@ export function OutstandingScreen() {
           setRenewals(data.renewals);
           setVehicles(data.vehiclesAwaitingAuthority);
         })
-        .catch(() => {
-          setRenewals([]);
-          setVehicles([]);
-        });
+        .catch(failed('vehicles'));
     }
   }, [readsRefunds, readsTins, readsVehicles, readsTaxpayers]);
 
@@ -151,18 +197,31 @@ export function OutstandingScreen() {
     try {
       const result = await api.post<{
         message?: string;
+        completed?: number;
+        assigned?: number;
+        accepted?: number;
         stillOutstanding?: number;
         stillFailing?: number;
       }>(path, {});
-      // The three queues report what is left under different names. Anything
+      // The three queues report what happened under different names. Anything
       // left means the retry did not resolve it, and saying so in green under
       // the word "complete" would be the cheerful reading of a citizen still
       // waiting for their money.
       const left = result.stillOutstanding ?? result.stillFailing ?? 0;
-      setMessage({ text: result.message ?? 'Retry complete.', resolved: left === 0 });
+      const done = result.completed ?? result.assigned ?? result.accepted ?? 0;
+      const words = PHRASING[key]!;
+      setMessage({
+        text:
+          left === 0
+            ? t[words.done].replace('{{n}}', String(done))
+            : t[words.partly]
+                .replace('{{done}}', String(done))
+                .replace('{{left}}', String(left)),
+        resolved: left === 0,
+      });
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
@@ -183,14 +242,27 @@ export function OutstandingScreen() {
 
   return (
     <>
-      {waiting === 0 && loaded ? (
+      {unreadable.size > 0 && (
+        <Alert kind="warning" title="ofcOsQueueUnreadable">
+          <p style={{ margin: 0 }}>
+            {t.ofcOsQueueUnreadableBody.replace('{{n}}', String(unreadable.size))}
+          </p>
+        </Alert>
+      )}
+      {/*
+        * "Nothing is outstanding" is a claim, and it needs every queue read.
+        *
+        * A queue that failed leaves its list null rather than empty, so
+        * `loaded` is already false while one is outstanding — but a queue that
+        * failed *and* was retried could settle at empty, so the success is
+        * gated on having read them all as well.
+        */}
+      {waiting === 0 && loaded && unreadable.size === 0 ? (
         <Alert kind="success" title="ofcOsNothingOutstanding">
           <p style={{ margin: 0 }}>
             {readsRefunds && readsTins && readsVehicles
-              ? 'Every refund has been returned, every taxpayer has their TIN, and the vehicle ' +
-                'authority has acknowledged every renewal.'
-              : 'Every queue you can see is empty. Others are guarded by permissions your role ' +
-                'does not hold.'}
+              ? t.ofcOsEveryRefundHasBeen
+              : t.ofcOsEveryQueueYouCan}
           </p>
         </Alert>
       ) : (
@@ -214,7 +286,7 @@ export function OutstandingScreen() {
 
       {/* Money first. A citizen waiting on a refund outranks a missing number. */}
       {!readsRefunds ? (
-        <NotYours what="Refunds owed to taxpayers" permission="payment:read:all" />
+        <NotYours what="ofcOsRefundsOwed" permission="payment:read:all" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -240,7 +312,7 @@ export function OutstandingScreen() {
                   {
                     key: 'failure_reason',
                     label: 'ofcOsWhyNotYet',
-                    render: (row) => row.failure_reason ?? 'Not attempted yet',
+                    render: (row) => row.failure_reason ?? t.ofcOsNotAttemptedYet,
                   },
                   {
                     key: 'last_attempt_at',
@@ -258,7 +330,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('refunds', '/government/refunds/retry')}
                 >
-                  {busy === 'refunds' ? 'Asking the gateway…' : 'Ask the gateway again'}
+                  {busy === 'refunds' ? t.ofcOsAskingTheGateway : t.ofcOsAskTheGatewayAgain}
                 </button>
               )}
             </>
@@ -267,7 +339,7 @@ export function OutstandingScreen() {
       )}
 
       {!readsTins ? (
-        <NotYours what="Taxpayers waiting for a TIN" permission="taxpayer:tin_sync" />
+        <NotYours what="ofcOsWaitingTinTitle" permission="taxpayer:tin_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -282,7 +354,11 @@ export function OutstandingScreen() {
                 columns={[
                   { key: 'display_name', label: 'colTaxpayerLabel' },
                   { key: 'phone', label: 'tpPhone' },
-                  { key: 'tin_status', label: 'appStatus', render: (row) => <Badge status={row.tin_status} /> },
+                  {
+                    key: 'tin_status',
+                    label: 'appStatus',
+                    render: (row) => <Badge status={row.tin_status} column="taxpayers.tin_status" />,
+                  },
                   { key: 'tin_attempts', label: 'ofcOsAttempts', numeric: true },
                   { key: 'tin_reason', label: 'ofcOsWhyNotYet', render: (row) => row.tin_reason ?? '—' },
                   { key: 'created_at', label: 'ofcRhRegistered', render: (row) => formatDate(row.created_at) },
@@ -296,7 +372,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('tins', '/taxpayers/tin-retry')}
                 >
-                  {busy === 'tins' ? 'Asking the TIN service…' : 'Ask the TIN service again'}
+                  {busy === 'tins' ? t.ofcOsAskingTheTinService : t.ofcOsAskTheTinService}
                 </button>
               )}
             </>
@@ -305,7 +381,7 @@ export function OutstandingScreen() {
       )}
 
       {!readsVehicles ? (
-        <NotYours what="Renewals the vehicle authority has not acknowledged" permission="vehicle:authority_sync" />
+        <NotYours what="ofcOsRenewalsUnackTitle" permission="vehicle:authority_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
@@ -342,7 +418,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('renewals', '/vehicles/renewals/authority-retry')}
                 >
-                  {busy === 'renewals' ? 'Sending to the authority…' : 'Send to the authority again'}
+                  {busy === 'renewals' ? t.ofcOsSendingToTheAuthority : t.ofcOsSendToTheAuthority}
                 </button>
               )}
             </>
@@ -383,11 +459,11 @@ export function OutstandingScreen() {
         * paid or the record is put back.
         */}
       {!readsTaxpayers ? (
-        <NotYours what="Ended records that still owe" permission="taxpayer:read:all" />
+        <NotYours what="ofcOsEndedOwingTitle" permission="taxpayer:read:all" />
       ) : (
         ended && (
           <div className="card card--flush">
-            <div style={{ padding: '18px 18px 0' }}>
+            <div className="card__pad">
               <h2 className="card__title">{t.ofcOsEndedOwingTitle}</h2>
               <p className="card__hint">{t.ofcOsEndedOwingBody}</p>
             </div>

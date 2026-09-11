@@ -5,6 +5,11 @@
  * across Plateau State's 17 LGAs.
  */
 
+import type { AgentBlocker } from './agent-lifecycle';
+import type { DuplicateReason } from './identity';
+import type { VerificationReason } from './verification';
+import type { ChainVerdict } from './audit-chain';
+
 export type Language = 'en' | 'ha';
 
 export interface TranslationDictionary {
@@ -26,7 +31,6 @@ export interface TranslationDictionary {
   downloadReceipt: string;
   shareReceipt: string;
   printBluetooth: string;
-  scanQr: string;
   registerTaxpayer: string;
   renewVehicle: string;
   pairPrinter: string;
@@ -42,6 +46,7 @@ export interface TranslationDictionary {
   service: string;
   amount: string;
   totalPaid: string;
+  colIncludesServiceCharge: string;
   receiptNumber: string;
   verificationCode: string;
   paymentMode: string;
@@ -130,6 +135,16 @@ export interface TranslationDictionary {
   errPaymentUnconfirmed: string;
   errPaymentPendingReconciliation: string;
   errPaymentFailed: string;
+  errTrainingScoreBelowPassMark: string;
+  errPhoneAlreadyRegistered: string;
+  errKycAlreadyCleared: string;
+  errDeviceBeforeApproval: string;
+  errDeviceRevokedCannotReregister: string;
+  errNoBankAccountOnRecord: string;
+  errBankDetailsUnchanged: string;
+  errBankChangeAlreadyPending: string;
+  errBankChangeAlreadySettled: string;
+  errPayoutInFlight: string;
   errAgentNotCleared: string;
   errDeviceNotRegistered: string;
   errRateLimited: string;
@@ -188,6 +203,12 @@ export interface TranslationDictionary {
   ofcUaChooseRoleFirst: string;
   ofcUaAlreadyHolds: string;
   ofcUaSayWhy: string;
+  ofcUaNowRole: string;
+  ofcUaSessionsEnded: string;
+  ofcUaNoOpenSessions: string;
+  ofcUaCanSignInAgain: string;
+  ofcUaAccountIsNow: string;
+  ofcUaSessionsEndedNow: string;
 
   /**
    * The instruction under a risk flag an officer is deciding on. It sat as a
@@ -210,6 +231,11 @@ export interface TranslationDictionary {
   enumRepeatedFailedPayments: string;
   enumReversalPattern: string;
   enumUnusualVolume: string;
+  enumFrequentManualIntervention: string;
+  enumRepeatedReceiptRegeneration: string;
+  enumUnusualOfficerActivity: string;
+  enumUnusualTransactionTiming: string;
+  enumUser: string;
   enumRapidSuccession: string;
   enumCommissionAnomaly: string;
   enumSettlementVariance: string;
@@ -260,7 +286,39 @@ export interface TranslationDictionary {
   enumArtisanGuild: string;
   enumAssessment: string;
   enumAssessmentCreated: string;
+  dowSun: string;
+  dowMon: string;
+  dowTue: string;
+  dowWed: string;
+  dowThu: string;
+  dowFri: string;
+  dowSat: string;
+  monthJan: string;
+  monthFeb: string;
+  monthMar: string;
+  monthApr: string;
+  monthMay: string;
+  monthJun: string;
+  monthJul: string;
+  monthAug: string;
+  monthSep: string;
+  monthOct: string;
+  monthNov: string;
+  monthDec: string;
+  monJan: string;
+  monFeb: string;
+  monMar: string;
+  monApr: string;
+  monMay: string;
+  monJun: string;
+  monJul: string;
+  monAug: string;
+  monSep: string;
+  monOct: string;
+  monNov: string;
+  monDec: string;
   enumAssigned: string;
+  enumTinAssigned: string;
   enumAttested: string;
   enumAuditor: string;
   enumAuthorityLookup: string;
@@ -494,6 +552,7 @@ export interface TranslationDictionary {
   enumStarted: string;
   enumState: string;
   enumStepUp: string;
+  enumCitizenStatement: string;
   enumStudentUnemployed: string;
   enumSubmitted: string;
   enumSucceeded: string;
@@ -645,6 +704,17 @@ export interface TranslationDictionary {
   ofcTrNameOrDob: string;
   ofcTrWhatAndWhy: string;
   ofcTrLiableFor: string;
+  ofcTrEntitledTo: string;
+  ofcTrEntitledBody: string;
+  ofcTrProgramme: string;
+  ofcTrBenefit: string;
+  ofcTrEntitlement: string;
+  ofcTrNotEvaluated: string;
+  ofcTrNotEligible: string;
+  ofcTrBaseOnly: string;
+  ofcTrFullBenefit: string;
+  ofcTrWhyNot: string;
+  ofcNoneProgrammesRunning: string;
   ofcTrWaiveBody: string;
   ofcTrWaive: string;
   ofcTrVehiclesOnRecord: string;
@@ -706,6 +776,13 @@ export interface TranslationDictionary {
   ofcFnException: string;
   ofcFnDate: string;
   ofcFnPayout: string;
+  ofcFnWhereEarned: string;
+  ofcFnWhereEarnedBody: string;
+  ofcFnAccrued: string;
+  ofcFnPaidOut: string;
+  ofcFnReversed: string;
+  ofcFnByMonth: string;
+  ofcFnNoCommissionInPeriod: string;
   ofcFnEntries: string;
   ofcFnBankAccount: string;
   ofcFnRequestedBy: string;
@@ -721,6 +798,10 @@ export interface TranslationDictionary {
   ofcCfNewRevenueItem: string;
   ofcCfCreatedWithoutPrice: string;
   ofcCfChooseCategory: string;
+  ofcCfArmOfGovernment: string;
+  ofcCfEveryArm: string;
+  ofcCfNoMdaMapped: string;
+  ofcCfCategoriesUnreadable: string;
   ofcCfHowOften: string;
   ofcCfWhatItIsFor: string;
   ofcCfWhoItApplies: string;
@@ -749,6 +830,7 @@ export interface TranslationDictionary {
   ofcCfEssentialServiceLink: string;
   ofcCfBeneficiaries: string;
   ofcCfNoEligibleYet: string;
+  ofcCfShowingSomeBeneficiaries: string;
   ofcCfEssentialProtected: string;
   ofcCfBenefit: string;
   ofcCfMinScore: string;
@@ -758,6 +840,17 @@ export interface TranslationDictionary {
   ofcOvTransactionCount: string;
   ofcOvSettlementsOutstanding: string;
   ofcOvIntact: string;
+  /*
+   * The four answers chain verification can give, each carrying its number.
+   *
+   * `ofcOvChainIntact` takes {{count}}; the three breaks take {{sequence}}.
+   * They are distinct sentences rather than one "tampered with" because what
+   * an auditor does next depends on which of the three it is.
+   */
+  ofcOvChainIntact: string;
+  ofcOvChainGenesisRemoved: string;
+  ofcOvChainLinkMismatch: string;
+  ofcOvChainContentModified: string;
   ofcOvSystem: string;
   ofcOvNoRows: string;
 
@@ -800,6 +893,13 @@ export interface TranslationDictionary {
   ofcOvRuns: string;
   ofcOvLastSucceeded: string;
   ofcOvWhatThatMeans: string;
+  ofcOvWhatItDid: string;
+  ofcOvNothingNeededDoing: string;
+  ofcOvRecord: string;
+  ofcOvNeverFailed: string;
+  ofcOvFailedOutOf: string;
+  ofcOvFailingIntermittently: string;
+  ofcInBody: string;
   ofcOvActor: string;
   ofcOvEntity: string;
   ofcOvResult: string;
@@ -836,6 +936,8 @@ export interface TranslationDictionary {
   ofcDbDrill: string;
   ofcDbPlateauState: string;
   ofcDbPlatformKpis: string;
+  ofcDbKpisUnreadable: string;
+  ofcDbKpisUnreadableBody: string;
   ofcDbSinceBegan: string;
   ofcDbVerifiedOnly: string;
   ofcDbThisMonth: string;
@@ -853,8 +955,18 @@ export interface TranslationDictionary {
   ofcDbMda: string;
   ofcRvGroupedByAssessment: string;
   ofcRvWhoseRevenue: string;
+  /*
+   * One sentence, in one key, in both languages.
+   *
+   * It used to be two: this one ending mid-clause, and `ofcRvMdaNoItem`
+   * BEGINNING with a full stop, with the word "for" rendered between them in
+   * an <em> to italicise it. That made the sentence untranslatable rather
+   * than merely untranslated — Hausa does not strand a preposition at the end
+   * of a clause, so no translation of the first half could end where the
+   * English did, and the reviewer of the second half was shown a fragment
+   * opening with punctuation. The italics were not worth that.
+   */
   ofcRvWhoseRevenueBody: string;
-  ofcRvMdaNoItem: string;
   ofcRvOwedToCouncils: string;
   ofcRvCouncilsBody: string;
   ofcRvWhereGenerated: string;
@@ -917,6 +1029,48 @@ export interface TranslationDictionary {
   ofcOsOwed: string;
   ofcOsWhyEnded: string;
   ofcOsEnded: string;
+  ofcUaTheirAccess: string;
+  ofcUaAccessFor: string;
+  ofcUaBackToMine: string;
+  ofcRhAgentApproved: string;
+  ofcAlRoundQuantity: string;
+  ofcAlAwardedLeft: string;
+  ofcPfWorkedOf: string;
+  ofcFnSettlementClosed: string;
+  ofcGrGroupSuspended: string;
+  ofcGrQuantityPeople: string;
+  supRepliesCount: string;
+  supLastMessage: string;
+  supNoMessagesYet: string;
+  ofcOsQueueUnreadable: string;
+  ofcOsQueueUnreadableBody: string;
+  ofcUaCoversNothing: string;
+  ofcUaCoversTerritories: string;
+  ofcFaMinimumNow: string;
+  ofcFaNoneBelowIt: string;
+  ofcFaCannotCollect: string;
+  ofcTrVehicleBackInService: string;
+  ofcTrVehicleSuspended: string;
+  ofcTrVehicleArchived: string;
+  colPayReceipted: string;
+  colPayAwaitingSettlement: string;
+  colPayStillPending: string;
+  colPayFailed: string;
+  ofcFnPromotedForPayout: string;
+  ofcCfEvaluatedCount: string;
+  ofcTrObligationsUpdated: string;
+  ofcTrOneDetailCorrected: string;
+  ofcTrDetailsCorrected: string;
+  ofcTrOnRegisterAgain: string;
+  ofcTrRecordEnded: string;
+  ofcTrStillOwedAfterEnding: string;
+  ofcTrNothingWasOutstanding: string;
+  ofcOsRefundsReturned: string;
+  ofcOsRefundsPartly: string;
+  ofcOsTinsAssigned: string;
+  ofcOsTinsPartly: string;
+  ofcOsRenewalsAcked: string;
+  ofcOsRenewalsPartly: string;
   ofcUsTitle: string;
   ofcUsReportsCollections: string;
   ofcUsIntro: string;
@@ -985,6 +1139,24 @@ export interface TranslationDictionary {
   ofcGpDistributions: string;
   ofcGpDistributionsIntro: string;
   ofcGpRegisteredGroups: string;
+  ofcPhTitle: string;
+  ofcPhIntro: string;
+  ofcPhFrom: string;
+  ofcPhTo: string;
+  ofcPhPaid: string;
+  ofcPhPayments: string;
+  ofcPhReturned: string;
+  ofcPhForWhat: string;
+  ofcPhLevy: string;
+  ofcPhEachPayment: string;
+  ofcPhWhen: string;
+  ofcPhPeriod: string;
+  ofcPhAmount: string;
+  ofcPhReceipt: string;
+  ofcPhNothingPaid: string;
+  ofcGpTaxRole: string;
+  ofcGpTaxRoleNone: string;
+  ofcGpTaxRoleNeedsReason: string;
   ofcGpGroupsIntro: string;
   ofcGpMembersIntro: string;
   ofcGpMembershipEnded: string;
@@ -1024,6 +1196,263 @@ export interface TranslationDictionary {
   ofcLvLevy: string;
   ofcLvInvoices: string;
   ofcLvOldestDue: string;
+  ofcNavArrears: string;
+  ofcArTitle: string;
+  enumAssessed: string;
+  ofcEnRecorded: string;
+  ofcEnRecordedIntro: string;
+  ofcEnAttestation: string;
+  ofcEnNotYetAssessed: string;
+  ofcEnExempt: string;
+  ofcEnAction: string;
+  ofcEnSettleFirst: string;
+  ofcEnLeaderAgrees: string;
+  ofcEnAssess: string;
+  ofcEnAlreadyObjected: string;
+  ofcEnRecordObjection: string;
+  ofcEnAttestedByName: string;
+  ofcEnStatementFirst: string;
+  ofcEnNothingRecorded: string;
+  enumFactsWrong: string;
+  enumHasRecords: string;
+  enumNotTrading: string;
+  enumEnumeration: string;
+  enumBusinessObservation: string;
+  enumAttestation: string;
+  enumObjected: string;
+  enumUpheld: string;
+  enumAgreed: string;
+  enumDisagreed: string;
+  enumNotSought: string;
+  ofcNavEnumeration: string;
+  ofcEnTitle: string;
+  ofcEnIntro: string;
+  ofcEnDisagreements: string;
+  ofcEnDisagreementsIntro: string;
+  ofcEnGroup: string;
+  ofcEnAgentSaw: string;
+  ofcEnLeaderSays: string;
+  ofcEnBandGap: string;
+  ofcEnSameBand: string;
+  ofcEnObservedOn: string;
+  ofcEnAttestedBy: string;
+  ofcEnNoDisagreements: string;
+  ofcEnObjections: string;
+  ofcEnOpenObjections: string;
+  ofcEnUnderObjection: string;
+  ofcEnWhileOpenTitle: string;
+  ofcEnWhileOpen: string;
+  ofcEnDecisionReason: string;
+  ofcEnDecisionReasonHint: string;
+  ofcEnGround: string;
+  ofcEnWhatTheySay: string;
+  ofcEnRaisedOn: string;
+  ofcEnDecision: string;
+  ofcEnYoursToPassOn: string;
+  ofcEnUphold: string;
+  ofcEnReject: string;
+  ofcEnReasonFirst: string;
+  ofcEnNoObjections: string;
+  ofcPsPublish: string;
+  ofcPsPublishClass: string;
+  ofcPsPublishFigure: string;
+  ofcPsChoose: string;
+  ofcPsIndicators: string;
+  ofcPsIndicatorsHint: string;
+  ofcPsClassPublished: string;
+  ofcPsFigurePublished: string;
+  ofcPsAssumedTurnoverNaira: string;
+  ofcPsAdoptExemption: string;
+  ofcPsAdoptWarningTitle: string;
+  ofcPsAdoptWarning: string;
+  ofcPsConstruction: string;
+  ofcPsCeiling: string;
+  ofcPsLegalBasis: string;
+  ofcPsExemptionAdopted: string;
+  enumSmall: string;
+  enumNano: string;
+  enumPresumptive: string;
+  enumBooks: string;
+  enumClassA: string;
+  enumClassB: string;
+  enumClassC: string;
+  enumClassD: string;
+  enumMicro: string;
+  enumConjunctive: string;
+  enumTurnoverGoverned: string;
+  enumNone: string;
+  enumStall: string;
+  enumKiosk: string;
+  enumLockUpShop: string;
+  enumBuilding: string;
+  ofcNavPresumptive: string;
+  ofcPsTitle: string;
+  ofcPsIntro: string;
+  ofcPsReadiness: string;
+  ofcPsLgasClassified: string;
+  ofcPsCells: string;
+  ofcPsExemptionInForce: string;
+  ofcPsConjunctive: string;
+  ofcPsTurnoverGoverned: string;
+  ofcPsNoExemptionAdopted: string;
+  ofcPsNoExemptionExplained: string;
+  ofcPsPartlyPublished: string;
+  ofcPsPartlyPublishedExplained: string;
+  ofcPsWhatItWouldCost: string;
+  ofcPsCheckIntro: string;
+  ofcPsPremises: string;
+  ofcPsEquipment: string;
+  ofcPsPeople: string;
+  ofcPsWorkItOut: string;
+  ofcPsBand: string;
+  ofcPsClass: string;
+  ofcPsAssumedTurnover: string;
+  ofcPsAllAdoptedUnder: string;
+  ofcPsAnnualTax: string;
+  ofcPsMonthlyTax: string;
+  ofcPsExempt: string;
+  ofcPsExemptExplained: string;
+  ofcPsHowWeGotThere: string;
+  ofcPsStep: string;
+  ofcPsDetail: string;
+  ofcPsAmount: string;
+  ofcPsNoWorking: string;
+  ofcPsClasses: string;
+  ofcPsClassesIntro: string;
+  ofcPsIndexSource: string;
+  ofcPsFrom: string;
+  ofcPsUntil: string;
+  ofcPsNoEndDate: string;
+  ofcPsNoClasses: string;
+  ofcPsTheTable: string;
+  ofcPsInstrument: string;
+  ofcPsVersion: string;
+  ofcPsNoEntries: string;
+  ofcPsHowToChange: string;
+  enumFiled: string;
+  ofcPrWithdraw: string;
+  ofcPrWithdrawReason: string;
+  ofcPrWithdrawFirst: string;
+  ofcNavPayroll: string;
+  ofcPrTitle: string;
+  ofcPrIntro: string;
+  ofcPrWhichList: string;
+  ofcPrListPaye: string;
+  ofcPrListConsumption: string;
+  ofcPrNotFiling: string;
+  ofcPrFiling: string;
+  ofcPrSector: string;
+  ofcPrNature: string;
+  ofcPrOpen: string;
+  ofcPrNoneNotFiling: string;
+  ofcPrNoneNotPaying: string;
+  ofcPrFiledBefore: string;
+  ofcPrPeriod: string;
+  ofcPrEmployees: string;
+  ofcPrGross: string;
+  ofcPrTax: string;
+  ofcPrFiledOn: string;
+  ofcPrWithdrawnBecause: string;
+  ofcPrNeverFiled: string;
+  ofcPrFileAReturn: string;
+  ofcPrHowTheTaxIsWorkedOut: string;
+  ofcPrHowExplained: string;
+  ofcPrYear: string;
+  ofcPrMonth: string;
+  ofcPrEmployeeName: string;
+  ofcPrMonthlyPay: string;
+  ofcPrAddEmployee: string;
+  ofcPrSubmit: string;
+  ofcPrFiledTitle: string;
+  ofcPrFiledExplained: string;
+  ofcPrMissingTins: string;
+  ofcIgReasonLabel: string;
+  ofcIgReasonFirst: string;
+  ofcNavConnections: string;
+  ofcIgTitle: string;
+  ofcIgIntro: string;
+  ofcIgLimitsTitle: string;
+  ofcIgLimits: string;
+  ofcIgAtLeastVehicles: string;
+  ofcIgRebuildLabel: string;
+  ofcIgRebuildAction: string;
+  ofcIgRebuilt: string;
+  ofcIgLeads: string;
+  ofcIgVehicles: string;
+  ofcIgUnmatched: string;
+  ofcIgUnmatchedExplained: string;
+  ofcIgPurpose: string;
+  ofcIgWhoHasLooked: string;
+  ofcIgWhoHasLookedBody: string;
+  ofcIgWhenRead: string;
+  ofcIgNobodyHasLooked: string;
+  ofcIgPurposeChoose: string;
+  ofcIgPurposeFirst: string;
+  ofcIgRegistrations: string;
+  ofcIgGrounds: string;
+  ofcIgFromRegister: string;
+  ofcIgFromPhone: string;
+  ofcIgChargedCommercial: string;
+  ofcIgPaidLastYear: string;
+  ofcIgOpen: string;
+  ofcIgNoLeads: string;
+  ofcIgRecordTitle: string;
+  ofcIgWhatWeClaim: string;
+  ofcIgWhatTheyOwe: string;
+  ofcIgThing: string;
+  ofcIgRelationship: string;
+  ofcIgSource: string;
+  ofcIgObtained: string;
+  ofcIgLawfulBasis: string;
+  ofcIgDecide: string;
+  ofcIgConfirm: string;
+  ofcIgDispute: string;
+  ofcIgWithdraw: string;
+  ofcIgReasonPrompt: string;
+  ofcIgNothingClaimed: string;
+  ofcIgReference: string;
+  ofcIgSince: string;
+  ofcIgPayableNow: string;
+  ofcIgPayableYes: string;
+  ofcIgPayableNeedsReassessment: string;
+  ofcIgOwesNothing: string;
+  enumAsserted: string;
+  enumConfirmedByTaxpayer: string;
+  enumConsistencyCheck: string;
+  enumCoverageLead: string;
+  enumTaxpayerRequest: string;
+  enumWithdrawn: string;
+  ofcArIntro: string;
+  ofcArAtLeast: string;
+  ofcArLapsingWithin: string;
+  ofcArAnyDeadline: string;
+  ofcArWithin7: string;
+  ofcArWithin14: string;
+  ofcArWithin30: string;
+  ofcArCollectableNow: string;
+  ofcArTaxpayers: string;
+  ofcArNeedsReassessment: string;
+  ofcArEndedElsewhere: string;
+  ofcArWhoIsMissing: string;
+  ofcArInFlightExplained: string;
+  ofcArLapsedTitle: string;
+  ofcArLapsedExplained: string;
+  ofcArWhoToCall: string;
+  ofcArShowingLargest: string;
+  ofcArOwedFor: string;
+  ofcArDaysLeft: string;
+  ofcArNoDeadline: string;
+  ofcArLastPaid: string;
+  ofcArNeverPaid: string;
+  ofcArOwingFor: string;
+  ofcArOwingForDays: string;
+  ofcPrLastFiled: string;
+  ofcPrNeverFiledShort: string;
+  ofcPrFiledMonthsAgo: string;
+  ofcSpLastReply: string;
+  ofcSpNoReplyYet: string;
+  ofcArPartPaid: string;
+  ofcArNobodyOwes: string;
   ofcAlIntro: string;
   ofcAlNewRound: string;
   ofcAlProgramme: string;
@@ -1037,6 +1466,11 @@ export interface TranslationDictionary {
   ofcAlBeneficiariesWord: string;
   ofcAlCollectionPoint: string;
   ofcAlOpens: string;
+  ofcAlCloses: string;
+  ofcAlNoClosingDate: string;
+  ofcCwNoEvidence: string;
+  ofcTxVerified: string;
+  ofcTxNotVerified: string;
   ofcAlClosesOptional: string;
   ofcAlRelease: string;
   ofcAlAwards: string;
@@ -1129,14 +1563,109 @@ export interface TranslationDictionary {
   ofcFrom: string;
   ofcTo: string;
   ofcExportCsv: string;
+  ofcRlExportLimit: string;
+  ofcRlExportsNothing: string;
+  ofcCwSave: string;
+  enumIntegrationAlert: string;
+  enumNeverCalled: string;
+  enumHealthy: string;
+  ofcNavPlatform: string;
+  ofcPlTitle: string;
+  ofcPlHint: string;
+  ofcPlAllAnswering: string;
+  ofcPlNeedingAttention: string;
+  ofcPlService: string;
+  ofcPlState: string;
+  ofcPlLastAnswered: string;
+  ofcPlInARow: string;
+  ofcPlCalls: string;
+  ofcPlNeverAnswered: string;
+  ofcPlAdapter: string;
+  ofcPlTin: string;
+  ofcPlKyc: string;
+  ofcPlVehicles: string;
+  ofcPlBanks: string;
+  ofcPlGateway: string;
+  ofcPlNeverCalledBody: string;
+  ofcPlDownBody: string;
+  ofcPlDegradedBody: string;
+  ofcPlAnsweringBody: string;
+  ofcPlOutageHint: string;
+  enumDegraded: string;
+  enumDown: string;
+  ofcOvChange: string;
+  enumApprovalWaiting: string;
+  enumCaseAssigned: string;
+  enumCaseEscalated: string;
+  enumCaseMention: string;
+  enumSystemAlert: string;
+  enumInfo: string;
+  enumWarning: string;
+  ofcNavInbox: string;
+  ofcInHint: string;
+  ofcInUnread: string;
+  ofcInCritical: string;
+  ofcInCriticalTitle: string;
+  ofcInSeverity: string;
+  ofcInKind: string;
+  ofcInSubject: string;
+  ofcInWhen: string;
+  ofcInRead: string;
+  ofcInMarkRead: string;
+  ofcInReadAll: string;
+  ofcInShowAll: string;
+  ofcInShowUnread: string;
+  ofcInToYourRole: string;
+  ofcInNothing: string;
+  ofcNavMyAccess: string;
+  ofcAcSessions: string;
+  ofcAcSessionsHint: string;
+  ofcAcDevices: string;
+  ofcAcActivity: string;
+  ofcAcActivityHint: string;
+  ofcAcActivityMine: string;
+  ofcAcActedDays: string;
+  ofcAcRefusedDays: string;
+  ofcAcOnWhat: string;
+  ofcAcOutcome: string;
+  ofcAcNoActivity: string;
+  ofcAcDevicesHint: string;
+  ofcAcDevice: string;
+  ofcAcUnknownDevice: string;
+  ofcAcThisOne: string;
+  ofcAcAddress: string;
+  ofcAcSignedIn: string;
+  ofcAcLastUsed: string;
+  ofcAcFirstSeen: string;
+  ofcAcLastSeen: string;
+  ofcAcLiveSessions: string;
+  ofcAcEnd: string;
+  ofcAcEndThisOne: string;
+  ofcAcEnded: string;
+  ofcAcBlock: string;
+  ofcAcUnblock: string;
+  ofcAcBlockedBy: string;
+  ofcAcNoSessions: string;
+  ofcAcNoDevices: string;
+  ofcCwUploadEvidence: string;
+  ofcCwUploadHint: string;
+  ofcCwUploadFile: string;
+  ofcCwUploadWhat: string;
+  ofcCwUploadWhere: string;
+  ofcExportExcel: string;
+  ofcExportPdf: string;
+  ofcExportWorking: string;
   ofcDownloadCsv: string;
   ofcTxReceipt: string;
   ofcTxCreated: string;
   ofcPfIntro: string;
   ofcPfCollectedByAgents: string;
+  ofcPfFiguresCoverTopAgents: string;
   ofcPfTaxpayersOnboarded: string;
   ofcPfAgentsWorked: string;
   ofcPfOpenFraudFlags: string;
+  ofcPfFiguresUnreadable: string;
+  ofcPfFiguresUnreadableBody: string;
   ofcPfCollected: string;
   ofcPfAverage: string;
   ofcPfOnboarded: string;
@@ -1244,6 +1773,7 @@ export interface TranslationDictionary {
   ofcAgRequestMoreInformation: string;
   ofcAgAssignTerritory: string;
   ofcAgSelectTerritory: string;
+  ofcAgTerritoriesUnreadable: string;
   ofcAgTerritoryRequired: string;
   ofcAgActivateAgent: string;
   ofcAgActivationBlocked: string;
@@ -1470,6 +2000,495 @@ export interface TranslationDictionary {
   ofcNavUsers: string;
   ofcNavFieldApp: string;
   ofcNavAllocations: string;
+
+  // ---------------------------------------------------------------------
+  // The command centre: one search box, one work queue, one transaction.
+  //
+  // Added with the officer command centre. These name three surfaces that
+  // did not exist — a search that resolves any government reference, a case
+  // that carries work between departments, and the whole story of one
+  // collection on a single screen.
+  // ---------------------------------------------------------------------
+  ofcNavMyWork: string;
+  ofcNavCases: string;
+  ofcGroupYourDesk: string;
+  ofcSearchLabel: string;
+  ofcSearchPlaceholder: string;
+  ofcSearchSearching: string;
+  ofcSearchNoResults: string;
+  ofcSearchCouldNotRun: string;
+  ofcSearchHint: string;
+  ofcSearchTransaction: string;
+  ofcSearchTaxpayer: string;
+  ofcSearchAgent: string;
+  ofcSearchOfficer: string;
+  ofcSearchInvoice: string;
+  ofcSearchReceipt: string;
+  ofcSearchPayment: string;
+  ofcSearchAssessment: string;
+  ofcSearchVehicle: string;
+  ofcSearchRevenueItem: string;
+  ofcSearchPlace: string;
+  ofcSearchCase: string;
+  ofcMwIntro: string;
+  ofcMwAssigned: string;
+  ofcMwAssignedBody: string;
+  ofcMwOpened: string;
+  ofcMwOpenedBody: string;
+  ofcMwMentions: string;
+  ofcMwMentionsBody: string;
+  ofcMwDepartment: string;
+  ofcMwDepartmentBody: string;
+  ofcMwApprovals: string;
+  ofcMwExceptions: string;
+  ofcMwFlags: string;
+  ofcMwOverdue: string;
+  ofcMwNothing: string;
+  ofcMwOpenQueue: string;
+  ofcCwTitle: string;
+  ofcCwIntro: string;
+  ofcCwOpenCase: string;
+  ofcCwStatus: string;
+  ofcNavRoles: string;
+  ofcRlTitle: string;
+  ofcRlIntro: string;
+  ofcRlCatalogueNote: string;
+  ofcRlRole: string;
+  ofcRlOfficers: string;
+  ofcRlPermissions: string;
+  ofcRlSystemRole: string;
+  ofcRlPortalRole: string;
+  ofcRlGrant: string;
+  ofcRlRevoke: string;
+  ofcRlGrantReason: string;
+  ofcRlRevokeReason: string;
+  ofcRlRevokeWarning: string;
+  ofcRlNewRole: string;
+  ofcRlRoleName: string;
+  ofcRlRoleLabel: string;
+  ofcRlCopyFrom: string;
+  ofcRlCopyFromBody: string;
+  ofcRlRetire: string;
+  ofcRlRestore: string;
+  ofcRlIsPortalRole: string;
+  ofcRlSignedOut: string;
+  ofcRlSearchPermission: string;
+  ofcNoneRoles: string;
+  enumClosing: string;
+  ofcNavPeriods: string;
+  enumClean: string;
+  enumException: string;
+  enumNotAvailable: string;
+  enumRandom: string;
+  enumSystematic: string;
+  enumHighestValue: string;
+  enumDrawn: string;
+  enumInReview: string;
+  enumGenerated: string;
+  enumSigned: string;
+  enumTransactionAudit: string;
+  enumAgentActivity: string;
+  enumRevenueCollection: string;
+  enumLgaPerformance: string;
+  enumPaymentReconciliation: string;
+  enumUserActivity: string;
+  enumAnomaly: string;
+  enumAuditSample: string;
+  enumRevenueTarget: string;
+  enumPeriodClosing: string;
+  enumDataChange: string;
+  ofcNavWorkbench: string;
+  ofcWbSamplesDrawn: string;
+  ofcWbItemsOutstanding: string;
+  ofcWbExceptionsFound: string;
+  ofcWbReportsHeld: string;
+  ofcWbSamples: string;
+  ofcWbSamplesHint: string;
+  ofcWbSampleNumber: string;
+  ofcWbTitle: string;
+  ofcWbMethod: string;
+  ofcWbMethodRandom: string;
+  ofcWbMethodSystematic: string;
+  ofcWbMethodHighestValue: string;
+  ofcWbDrawn: string;
+  ofcWbPending: string;
+  ofcWbExceptions: string;
+  ofcWbDrawnAt: string;
+  ofcWbDrawnBy: string;
+  ofcWbNoSamples: string;
+  ofcWbDraw: string;
+  ofcWbDrawHint: string;
+  ofcWbSize: string;
+  ofcWbFrom: string;
+  ofcWbTo: string;
+  ofcWbMinimumNaira: string;
+  ofcWbDrawIsFinal: string;
+  ofcWbDrawnNotice: string;
+  ofcWbSeed: string;
+  ofcWbPopulation: string;
+  ofcWbPosition: string;
+  ofcWbOutcome: string;
+  ofcWbFinding: string;
+  ofcWbRecord: string;
+  ofcWbNoItems: string;
+  ofcWbCompleteHint: string;
+  ofcWbComplete: string;
+  ofcWbReports: string;
+  ofcWbReportsHint: string;
+  ofcWbReportNumber: string;
+  ofcWbReportType: string;
+  ofcWbRows: string;
+  ofcWbPeriod: string;
+  ofcWbGeneratedAt: string;
+  ofcWbSignedBy: string;
+  ofcWbChecksum: string;
+  ofcWbOpenReport: string;
+  ofcWbWhatWasFrozen: string;
+  ofcWbRecomputed: string;
+  ofcWbStored: string;
+  ofcWbChecksumAgrees: string;
+  ofcWbChecksumDiffers: string;
+  ofcWbPayloadRows: string;
+  ofcWbViewIsRecorded: string;
+  ofcWbNoPayload: string;
+  ofcWbAltered: string;
+  ofcWbAlteredTitle: string;
+  ofcWbAlteredBody: string;
+  ofcWbNoReports: string;
+  ofcWbGenerate: string;
+  ofcWbGenerateHint: string;
+  ofcWbGenerated: string;
+  ofcWbGeneratedPartial: string;
+  ofcWbPartialBadge: string;
+  ofcWbPartialReport: string;
+  ofcWbSign: string;
+  ofcWbWithdraw: string;
+  ofcWbActions: string;
+  ofcWbClose: string;
+  ofcWbReference: string;
+  ofcWbTaxpayer: string;
+  ofcWbAmount: string;
+  ofcPeTitle: string;
+  ofcPeIntro: string;
+  ofcPeOpenPeriod: string;
+  ofcPePeriod: string;
+  ofcPeCollected: string;
+  ofcPeSettled: string;
+  ofcPeCommission: string;
+  ofcPeTransactions: string;
+  ofcPeClose: string;
+  ofcPeBeginClosing: string;
+  ofcPeReopen: string;
+  ofcPeClosedBy: string;
+  ofcPeReopenedBy: string;
+  ofcPeClosingNote: string;
+  ofcPeReopenReason: string;
+  ofcPeNotReady: string;
+  ofcPeNotReadyBody: string;
+  ofcPeOverride: string;
+  ofcPeFiguresUnknown: string;
+  ofcPeFiguresUnknownBody: string;
+  ofcPeUnreconciled: string;
+  ofcPePendingPayments: string;
+  ofcPeFiguresNow: string;
+  ofcPeFrozen: string;
+  ofcPeReopenSeparate: string;
+  ofcNonePeriods: string;
+  enumSupervisorChange: string;
+  enumRoleChange: string;
+  ofcNavOrganisation: string;
+  ofcOrTitle: string;
+  ofcOrIntro: string;
+  ofcOrDepartments: string;
+  ofcOrOffices: string;
+  ofcOrOfficesBody: string;
+  ofcOrNewDepartment: string;
+  ofcOrNewOffice: string;
+  ofcOrCode: string;
+  ofcOrFunction: string;
+  ofcOrHead: string;
+  ofcOrParent: string;
+  ofcOrOfficers: string;
+  ofcOrOpenCases: string;
+  ofcOrCovers: string;
+  ofcOrClose: string;
+  ofcOrPosting: string;
+  ofcOrWhoServedWhere: string;
+  ofcOrWhoServedWhereBody: string;
+  ofcOrWhatMoved: string;
+  ofcOrAnyKind: string;
+  ofcOrNoPostingsInPeriod: string;
+  ofcOrListsFailedTitle: string;
+  ofcOrListsFailedBody: string;
+  ofcOrPostingBody: string;
+  ofcOrMoveOfficer: string;
+  ofcOrDepartment: string;
+  ofcListCouldNotLoad: string;
+  ofcOrOffice: string;
+  ofcOrSupervisor: string;
+  ofcOrJobTitle: string;
+  ofcOrStaffNumber: string;
+  ofcOrWhyMoving: string;
+  ofcOrEffectiveFrom: string;
+  ofcOrHistory: string;
+  ofcOrHistoryBody: string;
+  ofcOrNobody: string;
+  ofcOrUnposted: string;
+  ofcCwEscalate: string;
+  ofcCwEscalateBody: string;
+  ofcCwEscalateReason: string;
+  ofcCwEscalatedTo: string;
+  ofcNoneDepartments: string;
+  ofcNoneOffices: string;
+  ofcNoneTransfers: string;
+  enumCollection: string;
+  enumFinance: string;
+  enumAudit: string;
+  enumEnforcement: string;
+  enumTaxpayerServices: string;
+  enumAdministration: string;
+  enumTechnology: string;
+  enumPosting: string;
+  enumDepartment: string;
+  enumOffice: string;
+  enumTerritory: string;
+  ofcDbByChannel: string;
+  ofcDbByChannelBody: string;
+  ofcDbByTaxpayerType: string;
+  ofcDbByItem: string;
+  ofcDbByItemBody: string;
+  ofcDbReversed: string;
+  ofcDbRefunded: string;
+  ofcDbAgentsOnline: string;
+  ofcDbAgentsOnlineHint: string;
+  ofcDbAgentsSuspended: string;
+  ofcDbExpectedRevenue: string;
+  ofcDbExpectedRevenueHint: string;
+  ofcNavTaxpayerAnalytics: string;
+  ofcTaTitle: string;
+  ofcTaIntro: string;
+  ofcTaActive: string;
+  ofcTaActiveHint: string;
+  ofcTaInactive: string;
+  ofcTaNeverPaid: string;
+  ofcTaTotal: string;
+  ofcTaNewThisMonth: string;
+  ofcTaAverageLifetime: string;
+  ofcTaFrequency: string;
+  ofcTaFrequencyBody: string;
+  ofcTaByLga: string;
+  ofcTaByCategory: string;
+  ofcTaTaxpayersAssessed: string;
+  ofcTaTaxpayersPaid: string;
+  ofcTaAveragePayment: string;
+  ofcTaComplianceScore: string;
+  ofcTaOutstanding: string;
+  ofcCmByPlace: string;
+  ofcCmByPeriod: string;
+  ofcCmAccrued: string;
+  ofcCmPaidOut: string;
+  ofcCmOutstandingCommission: string;
+  enumOnce: string;
+  enumTwoToThree: string;
+  enumFourToEleven: string;
+  enumTwelveOrMore: string;
+  ofcDbYesterday: string;
+  ofcDbThisWeek: string;
+  ofcDbVsYesterday: string;
+  ofcDbVsLastWeek: string;
+  ofcDbVsLastMonth: string;
+  ofcDbVsLastYear: string;
+  ofcDbNoComparison: string;
+  ofcDbLastMonthWhole: string;
+  ofcDbDeclining: string;
+  ofcDbDecliningBody: string;
+  ofcDbNoneDeclining: string;
+  ofcDbChange: string;
+  ofcDbShareOfMonth: string;
+  ofcRvAverageTransaction: string;
+  ofcRvCompliance: string;
+  ofcRvComplianceHint: string;
+  ofcPfGrowth: string;
+  ofcPfCategories: string;
+  enumCategory: string;
+  enumItem: string;
+  enumLga: string;
+  ofcNavTargets: string;
+  ofcTgTitle: string;
+  ofcTgIntro: string;
+  ofcTgSetTarget: string;
+  ofcTgScope: string;
+  ofcTgScopeState: string;
+  ofcTgScopeLga: string;
+  ofcTgScopeCategory: string;
+  ofcTgScopeItem: string;
+  ofcTgScopeAgent: string;
+  ofcTgPeriod: string;
+  ofcTgPeriodDaily: string;
+  ofcTgPeriodWeekly: string;
+  ofcTgPeriodMonthly: string;
+  ofcTgPeriodQuarterly: string;
+  ofcTgPeriodAnnual: string;
+  ofcTgAmount: string;
+  ofcTgNeedAmount: string;
+  ofcTgNeedLga: string;
+  ofcTgNeedCategory: string;
+  ofcTgNote: string;
+  ofcTgTarget: string;
+  ofcTgCollected: string;
+  ofcTgAchievement: string;
+  ofcTgGap: string;
+  ofcTgThroughPeriod: string;
+  ofcTgRollup: string;
+  ofcTgRollupBody: string;
+  ofcTgStateTarget: string;
+  ofcTgApportioned: string;
+  ofcTgLgasWithout: string;
+  ofcTgWithdraw: string;
+  ofcTgWithdrawReason: string;
+  ofcTgSuperseded: string;
+  ofcTgSetBy: string;
+  ofcTgShowSuperseded: string;
+  ofcNoneTargetsSet: string;
+  ofcFcTitle: string;
+  ofcFcNotATarget: string;
+  ofcFcProjected: string;
+  ofcFcBasis: string;
+  ofcFcConfidence: string;
+  ofcFcSeasonalShare: string;
+  ofcFcComparablePeriods: string;
+  ofcFcProjectedAchievement: string;
+  forecastSeasonal: string;
+  forecastRunRate: string;
+  forecastTooEarlyInCurve: string;
+  forecastPeriodComplete: string;
+  forecastNotStarted: string;
+  enumSeasonal: string;
+  enumRunRate: string;
+  enumInsufficientHistory: string;
+  enumAwaitingInformation: string;
+  enumEscalated: string;
+  enumInvestigating: string;
+  enumAgentConduct: string;
+  enumCommissionQuery: string;
+  enumDataCorrection: string;
+  enumFraudInvestigation: string;
+  enumGeneral: string;
+  enumReconciliationException: string;
+  enumRevenueAnomaly: string;
+  enumSystemIssue: string;
+  enumTaxpayerDispute: string;
+  enumApproval: string;
+  enumFraudFlag: string;
+  enumManual: string;
+  enumSupportTicket: string;
+  enumAssignment: string;
+  enumComment: string;
+  enumDueDateChange: string;
+  enumEscalation: string;
+  enumEvidence: string;
+  enumNote: string;
+  enumPriorityChange: string;
+  enumResolution: string;
+  enumRouted: string;
+  enumStatusChange: string;
+  ofcCwSubject: string;
+  ofcCwDescription: string;
+  ofcCwCategory: string;
+  ofcCwRisk: string;
+  ofcCwPriority: string;
+  ofcCwDepartment: string;
+  ofcCwAssignee: string;
+  ofcCwNobody: string;
+  ofcCwAnyDepartment: string;
+  ofcCwDue: string;
+  ofcCwOnlyOpen: string;
+  ofcCwOnlyOverdue: string;
+  ofcCwOpenedBy: string;
+  ofcCwCaseNumber: string;
+  ofcCwComments: string;
+  ofcCwEvidence: string;
+  ofcCwBackToQueue: string;
+  ofcCwHistory: string;
+  ofcCwAddComment: string;
+  ofcCwInternalNote: string;
+  ofcCwMention: string;
+  ofcCwPost: string;
+  ofcCwMoveCase: string;
+  ofcCwChangeStatus: string;
+  ofcCwResolution: string;
+  ofcCwResolutionRequired: string;
+  ofcCwSaved: string;
+  ofcCwNotYours: string;
+  ofcCwAbout: string;
+  ofcCwWhy: string;
+  ofcReasonAtLeastChars: string;
+  ofcCwSubjectTooShort: string;
+  ofcCwSampleSubject: string;
+  ofcCwSampleDescription: string;
+  ofcCwAppendOnly: string;
+  ofcNoneCasesMatchFilter: string;
+  ofcT3Title: string;
+  ofcT3Intro: string;
+  ofcT3Find: string;
+  ofcT3FindBody: string;
+  ofcT3Chain: string;
+  ofcT3Assessment: string;
+  ofcT3Invoice: string;
+  ofcT3Payment: string;
+  ofcT3Gateway: string;
+  ofcT3Settlement: string;
+  ofcT3Reconciliation: string;
+  ofcT3Commission: string;
+  ofcT3Refunds: string;
+  ofcT3Timeline: string;
+  ofcT3TimelineBody: string;
+  ofcT3Platform: string;
+  ofcT3OfficerAction: string;
+  ofcT3Before: string;
+  ofcT3After: string;
+  ofcT3CasesAndFlags: string;
+  ofcT3OpenCaseAbout: string;
+  ofcT3Withheld: string;
+  ofcT3WithheldBody: string;
+  ofcT3NoPayment: string;
+  ofcT3NoReceipt: string;
+  ofcT3NoSettlement: string;
+  ofcT3NoCommission: string;
+  ofcT3NoReconciliation: string;
+  ofcT3Channel: string;
+  ofcT3Where: string;
+  ofcT3ServiceCharge: string;
+  ofcChInvoiceIntro: string;
+  ofcChAssessmentIntro: string;
+  ofcChDemanded: string;
+  ofcChPaidSoFar: string;
+  ofcChStillOwed: string;
+  ofcChIssued: string;
+  ofcChPayableUntil: string;
+  ofcChLapsedTitle: string;
+  ofcChLapsed: string;
+  ofcChLapsedNoDate: string;
+  ofcChHowComputed: string;
+  ofcChTraceFrozen: string;
+  ofcChNoTrace: string;
+  ofcChStep: string;
+  ofcChDetail: string;
+  ofcChAmount: string;
+  ofcChVerificationCode: string;
+  ofcChOpenAssessment: string;
+  ofcChOpenTransaction: string;
+  ofcChNoTransaction: string;
+  ofcChPeriod: string;
+  ofcChBaseAmount: string;
+  ofcChDiscount: string;
+  ofcChPayable: string;
+  ofcChRaisedBy: string;
+  ofcChRaisedOn: string;
+  ofcChNoInvoiceTitle: string;
+  ofcChNoInvoiceYet: string;
+  ofcT3Verified: string;
+  ofcT3NothingLinked: string;
   ofcGroupAdministration: string;
   ofcGroupAgentsProgrammes: string;
   ofcGroupAssessment: string;
@@ -1622,6 +2641,8 @@ export interface TranslationDictionary {
   colCheckPrinter: string;
   colPrintBluetooth: string;
   colReceiptCopied: string;
+  colCouldNotCopy: string;
+  colCouldNotCopyBody: string;
   colPreparingInvoice: string;
   colGiveInvoice: string;
   colInvoiceHint: string;
@@ -1630,6 +2651,16 @@ export interface TranslationDictionary {
   colInvoiceNoReference: string;
   colCheckingPayment: string;
   colCheckPaymentStatus: string;
+  colStartingPayment: string;
+  colStartPayment: string;
+  colAlreadyOwes: string;
+  colAlreadyOwesBody: string;
+  colOwesUnknown: string;
+  colOwesUnknownBody: string;
+  colTakeThisPayment: string;
+  colChargeRaisedTitle: string;
+  colChargeRaisedBody: string;
+  colOpenCharge: string;
   colDevGateway: string;
   colDevGatewayHint: string;
   colSimulateSuccess: string;
@@ -1767,8 +2798,61 @@ export interface TranslationDictionary {
   tpTinRequested: string;
   tpTinPending: string;
   tpCollectRevenue: string;
+  tpEnumerate: string;
+  agEnTitle: string;
+  agEnIntro: string;
+  agEnWho: string;
+  agEnPremises: string;
+  agEnPremisesHint: string;
+  agEnEquipment: string;
+  agEnEquipmentHint: string;
+  agEnPeople: string;
+  agEnPeopleHint: string;
+  agEnSector: string;
+  agEnGroup: string;
+  agEnGroupHint: string;
+  agEnNoGroupChosen: string;
+  agEnNoGroupsTitle: string;
+  agEnNoGroups: string;
+  agEnNoAmountTitle: string;
+  agEnNoAmount: string;
+  agEnChoose: string;
+  agEnSave: string;
+  agEnSaving: string;
+  agEnRecordedTitle: string;
+  agEnBand: string;
+  agEnWhatHappensNextTitle: string;
+  agEnNextWithLeader: string;
+  agEnNextWithoutLeader: string;
+  agEnBackToTaxpayer: string;
+  agEnQueuedTitle: string;
+  agEnQueuedNext: string;
+  agEnBandSoFarTitle: string;
+  agEnBandSoFar: string;
   tpViewProfile: string;
+  verifyReceiptFingerprintMismatch: string;
+  verifyReceiptReversed: string;
+  verifyReceiptVoided: string;
+  verifyReceiptGenuine: string;
+  verifyReceiptGenuineUnchecked: string;
+  verifyNotFound: string;
+  verifyPaymentReversed: string;
+  verifyDocumentRevoked: string;
+  verifyDocumentFingerprintMismatch: string;
+  verifyAcknowledgementNotReceipt: string;
+  verifyDocumentExpired: string;
+  verifyDocumentGenuine: string;
+  verifyDocumentGenuineUnchecked: string;
   tpPossibleExisting: string;
+  tpDupIdentityNumber: string;
+  tpDupPhoneAndName: string;
+  tpDupPhone: string;
+  tpDupBusinessNameInLga: string;
+  tpDupNameInLga: string;
+  tpDupCouldNotList: string;
+  tpDupCouldNotListBody: string;
+  tpDupTryAgain: string;
+  actionTryAgain: string;
   tpCheckSamePerson: string;
   tpNoneOfThese: string;
   tpHasTin: string;
@@ -1795,6 +2879,7 @@ export interface TranslationDictionary {
   tpWardHint: string;
   tpChooseLgaFirst: string;
   tpNoWardsListed: string;
+  tpListCouldNotLoad: string;
   tpSelectWard: string;
   tpCommunity: string;
   tpBusinessOrActivity: string;
@@ -1829,16 +2914,7 @@ export interface TranslationDictionary {
   tpVehicles: string;
   tpExpires: string;
   tpNoRenewal: string;
-  camAlign: string;
   camCancel: string;
-  camClose: string;
-  camFlip: string;
-  camInitializing: string;
-  camTryAgain: string;
-  camFlashOn: string;
-  camFlashOff: string;
-  camNoAccess: string;
-  camSwitchFailed: string;
 
   /**
    * The agent's own application: the clearance steps, the documents PSIRS
@@ -1869,6 +2945,17 @@ export interface TranslationDictionary {
   appVerifying: string;
   appStillNeeded: string;
   appStatus: string;
+  /**
+   * Emptying a filter row, which is not the same act as clearing an agent.
+   *
+   * The Levies screen borrowed `ofcAgClear` for its filter reset. In English
+   * that reads fine, because "Clear" happens to mean both things. In Hausa
+   * `ofcAgClear` is "Ba da izini" -- grant permission -- so a Hausa-reading
+   * officer was offered "Grant permission" beside their filters. One word, one
+   * thing: the clearance decision keeps `ofcAgClear`, and resetting a form
+   * gets this.
+   */
+  appClearFilters: string;
   appDocumentOnFile: string;
   appRefereeNoAccount: string;
   appRefereeShareLink: string;
@@ -1905,6 +2992,13 @@ export interface TranslationDictionary {
   appAllRequirementsMet: string;
   appCannotCollectUntil: string;
   appStillOutstanding: string;
+  appBlockerKyc: string;
+  appBlockerReferee: string;
+  appBlockerGovernmentApproval: string;
+  appBlockerTraining: string;
+  appBlockerBank: string;
+  appBlockerAgreement: string;
+  appBlockerDevice: string;
   appComplete: string;
   appGoToDashboard: string;
   appIdentityVerification: string;
@@ -1987,6 +3081,12 @@ export interface TranslationDictionary {
   moreRequestPayout: string;
   moreRequestingPayout: string;
   moreSomeCommissionOwedBack: string;
+  moreSomeCommissionOnHold: string;
+  moreOnHoldBody: string;
+  moreCommissionApproved: string;
+  moreApprovedBody: string;
+  moreSomeCommissionReversed: string;
+  moreReversedBody: string;
   moreReceiptsFacilitated: string;
   moreNoReceipts: string;
   moreSavedRecords: string;
@@ -2123,6 +3223,118 @@ export interface TranslationDictionary {
   allocRecorded: string;
   allocCodeUsed: string;
   scanCamera: string;
+  rcpGovernment: string;
+  prnNoWritable: string;
+  prnNotConnected: string;
+  prnSendFailed: string;
+  prnDisconnected: string;
+  slipTestOk: string;
+  slipWidth: string;
+  slipStatus: string;
+  slipConnected: string;
+  slipReady: string;
+  rcpThanks: string;
+  rcpBureau: string;
+  rcpPlatform: string;
+  rcpTitle: string;
+  rcpDateTime: string;
+  rcpReference: string;
+  rcpLga: string;
+  rcpWard: string;
+  rcpTaxpayer: string;
+  rcpPhone: string;
+  rcpItem: string;
+  rcpCategory: string;
+  rcpAgentCode: string;
+  rcpAgentName: string;
+  rcpScanToVerify: string;
+  rcpCheckOffice: string;
+  rcpCheckOfficeCont: string;
+  rcpOffice: string;
+  rcpVehAdmin: string;
+  rcpVehLicensing: string;
+  rcpVehTitle: string;
+  rcpVehPlate: string;
+  rcpVehDoc: string;
+  rcpVehOwner: string;
+  rcpVehMakeModel: string;
+  rcpVehYear: string;
+  rcpVehChassis: string;
+  rcpVehFrom: string;
+  rcpVehUntil: string;
+  rcpVehFee: string;
+  rcpVehOfficial: string;
+  rcpVehCheck: string;
+  connOnline: string;
+  connOnlineDetail: string;
+  connLimited: string;
+  connLimitedDetail: string;
+  connOffline: string;
+  connOfflineDetail: string;
+  appRecordsWaiting: string;
+  stepUpSignInAgain: string;
+  stepUpEnterCode: string;
+  stepUpCodeRequired: string;
+  morePushUnsupported: string;
+  errUploadFailed: string;
+  errUploadOffline: string;
+  scanCameraDenied: string;
+  scanCameraMissing: string;
+  scanCameraUnsupported: string;
+  colInvoiceReady: string;
+  morePayoutRequested: string;
+  morePayoutClawback: string;
+  agStepCodeSentTo: string;
+  appDraftsSynced: string;
+  appDraftsSyncedRejected: string;
+  errRequestFailed: string;
+  ofcAgConfirmHowPrompt: string;
+  ofcAgRefuseWhyPrompt: string;
+  ofcAgAccountChanged: string;
+  ofcAgChangeRefused: string;
+  ofcAgNotConfirmed: string;
+  ofcAgNotConfirmedBecause: string;
+  ofcAgAnOfficer: string;
+  ofcAgUnknownRole: string;
+  ofcAgBankStillNotConfirmed: string;
+  ofcAlForfeitWhy: string;
+  ofcAlThisBeneficiary: string;
+  ofcAlRoundOpened: string;
+  ofcAlRoundClosed: string;
+  ofcAlRoundCannotCloseBeforeOpen: string;
+  ofcCfItemAdded: string;
+  ofcCfNotAnAmount: string;
+  ofcCfNotAPercentage: string;
+  ofcCfRateRecorded: string;
+  ofcCfProgrammeStatus: string;
+  ofcCfRateCannotBeNegative: string;
+  ofcCfPercentageCannotExceed100: string;
+  ofcFaMinimumAboveRecommended: string;
+  ofcFaNoHandsetBelow: string;
+  ofcFaHandsetWouldStop: string;
+  ofcFaHandsetsWouldStop: string;
+  ofcFnSettlementRecorded: string;
+  ofcFnSettlementDisputed: string;
+  ofcFnTotalCreditedPrompt: string;
+  ofcFnReconciliationAborted: string;
+  ofcFnStatementUnavailable: string;
+  ofcFnReconciliationComplete: string;
+  ofcFnReconciliationUnchecked: string;
+  ofcFnTotalsAgree: string;
+  ofcFnTotalsDisagree: string;
+  ofcFnRecoverChecked: string;
+  ofcFnReversalExecuted: string;
+  ofcGrApproved: string;
+  ofcGrCollectedAt: string;
+  ofcKycAccepted: string;
+  ofcKycRejectedNotice: string;
+  ofcKycSubmittedByApplicant: string;
+  ofcKycReasonGiven: string;
+  ofcOvSweepRaised: string;
+  ofcOvJobsNeedAttention: string;
+  ofcRhInvoiceDocumentReady: string;
+  ofcRhPayoutApproved: string;
+  ofcSpTicketMoved: string;
   verifyCheckReceipt: string;
   verifyScanQr: string;
   verifyTypeCode: string;
@@ -2193,7 +3405,6 @@ export interface TranslationDictionary {
   // Messages & Alerts
   offlineMessage: string;
   offlineNotice: string;
-  scanHelp: string;
   civicDutyThanks: string;
   paymentSuccess: string;
 
@@ -2276,22 +3487,364 @@ export interface TranslationDictionary {
   pubAttestAnswerAll: string;
   pubAttestSubmit: string;
   pubCitizenTitle: string;
+  pubCitizenModeTin: string;
+  pubCitizenModePhone: string;
+  pubCitizenModeName: string;
+  pubCitizenCheck: string;
+  pubCitizenSearching: string;
+  pubCitizenExampleTin: string;
+  pubCitizenExamplePhone: string;
+  pubCitizenExampleName: string;
   pubCitizenByTin: string;
   pubCitizenByPhone: string;
   pubCitizenByName: string;
   pubCitizenTooMany: string;
+  /*
+   * Seven words the check could not see.
+   *
+   * `looksLikeCode` excused any single lowercase token, because that is what
+   * an identifier looks like — and also what most short English words look
+   * like. Most of these need the whole phrase rather than the word, because
+   * Hausa does not put the number, the noun and the preposition where English
+   * does, and a conjunction cannot be placed correctly by concatenation.
+   */
+  ofcDbOr: string;
+  /** Carries {{from}} and {{to}}. */
+  ofcDbDayRange: string;
+  /** Carries {{count}}. */
+  ofcGpBeneficiaryCount: string;
+  /** Carries {{collected}}, {{awarded}} and {{rate}}. */
+  ofcGpCollectedOfAwarded: string;
+  /** Carries {{quantity}} and {{unit}}. */
+  ofcGpEachBeneficiaryGets: string;
+  ofcOvIdentifiers: string;
+  /*
+   * The half of an error that says what to do about it.
+   *
+   * `ApiError.nextStep` sits directly under a message both applications
+   * already translate, and both printed it raw — so a Hausa reader got the
+   * heading in Hausa, the explanation in Hausa, and the instruction in
+   * English. It is the actionable half.
+   *
+   * Keyed by the error's own code, which has always travelled with it.
+   * Only codes specific enough to imply one next step are listed: a
+   * `VALIDATION_FAILED` or a caller-supplied `forbidden()` means something
+   * different every time it is raised, and keeps the server's words.
+   */
+  nsStepUpRequired: string;
+  nsDeviceNotRegistered: string;
+  nsDeviceRevoked: string;
+  nsDeviceSuspended: string;
+  nsUpdateRequired: string;
+  nsUpdateRequiredToEnumerate: string;
+  nsTinServiceUnavailable: string;
+  nsTinNotFound: string;
+  nsKycProviderUnavailable: string;
+  nsPaymentUnconfirmed: string;
+  nsPaymentFailed: string;
+  nsAgentNotCleared: string;
+  /*
+   * What the job monitor says about a job, and how often it runs.
+   *
+   * Both were English on a screen that offers Hausa, and both are composed
+   * from values already on the wire: `state` is an enum the adjacent column
+   * already renders as a translated badge, and the failure count and last
+   * error travel with it. `ofcOvJobFailing` carries {{count}} and {{error}};
+   * the three intervals carry {{n}}.
+   */
+  ofcOvJobHealthy: string;
+  ofcOvJobRunning: string;
+  ofcOvJobOverdue: string;
+  ofcOvJobStalled: string;
+  ofcOvJobFailing: string;
+  ofcOvJobNeverRun: string;
+  ofcOvJobNoReason: string;
+  ofcOvEverySeconds: string;
+  ofcOvEveryMinutes: string;
+  ofcOvEveryHours: string;
+  /*
+   * Why a capture made on a phone would not go.
+   *
+   * Read standing in front of the person whose details were just taken, so
+   * the wording has to be enough to decide what to do there and then.
+   * `errDraftInvalid` carries {{detail}} — the failing fields, as
+   * identifiers; `errDraftTypeUnsupported` carries {{type}} and
+   * `errDraftNotProcessed` {{reference}}, both of which the phone already
+   * knows about its own draft.
+   */
+  errDraftInvalid: string;
+  errDraftTypeUnsupported: string;
+  errDraftNotProcessed: string;
+  /*
+   * What an agent and an officer are told after an action succeeds.
+   *
+   * The last of the server-composed sentences, and like the public portal's
+   * six, none of them needed anything new sent: the vehicle lookup's
+   * `source` and `authorityConfirmed`, the device's `status`, the revenue
+   * item's name and the status the screen itself chose were all already
+   * beside the prose that was built from them.
+   */
+  agVehFoundConfirmed: string;
+  agVehFoundUnconfirmed: string;
+  agVehRegistryUnavailable: string;
+  agVehNotFound: string;
+  agVehFoundAtAuthority: string;
+  /** Carries {{name}}. */
+  agRefereeRequestSent: string;
+  agDevicePendingApproval: string;
+  agDeviceSuspended: string;
+  agDeviceActive: string;
+  agGroupMemberRecorded: string;
+  /** Each carries {{name}}. */
+  ofcItemBackInCatalogue: string;
+  ofcItemSuspended: string;
+  ofcItemRetired: string;
+  /** Carries {{member}} and {{group}}. */
+  ofcGpMemberLeft: string;
+  /*
+   * What a referee, a group leader and a citizen are told after they act.
+   *
+   * Each of these replaced a sentence the API composed and this portal
+   * rendered as it arrived. In every case the value the sentence is built
+   * from — the referee's resulting status, the confirmed and rejected
+   * counts, the number of name matches — was already on the wire beside it,
+   * so nothing new had to be sent; the screen was reaching past the data for
+   * the prose.
+   */
+  pubRefereeThankYouCleared: string;
+  pubRefereeCouldNotVerify: string;
+  pubRefereeUnderReview: string;
+  pubRefereeDeclineRecorded: string;
+  /** Carries {{confirmed}}. */
+  pubGroupAllConfirmed: string;
+  /** Carries {{confirmed}} and {{rejected}}. */
+  pubGroupSomeConfirmed: string;
+  pubCitizenNoTinMatch: string;
+  pubCitizenNoPhoneMatch: string;
+  pubCitizenNoNameMatch: string;
+  pubCitizenOneMatch: string;
+  /** Carries {{count}}. */
+  pubCitizenManyMatches: string;
   pubCitizenStatusHeading: string;
   pubCitizenCompliant: string;
   pubCitizenArrears: string;
   pubCitizenAttention: string;
   pubCitizenNotAssessed: string;
+  pubCitizenMsgCompliant: string;
+  pubCitizenMsgArrears: string;
+  pubCitizenMsgAttention: string;
+  pubCitizenMsgNotAssessed: string;
+  pubCitizenDetail: string;
   pubCitizenTinStatus: string;
   pubCitizenOutstanding: string;
   pubCitizenOutstandingYes: string;
   pubCitizenNone: string;
+  pubStmtFrom: string;
+  pubStmtTo: string;
+  pubStmtBackwards: string;
+  pubStmtAnotherPeriod: string;
+  pubStmtTitle: string;
+  pubStmtIntro: string;
+  pubStmtSendCode: string;
+  pubStmtSending: string;
+  pubStmtCodeSent: string;
+  pubStmtCode: string;
+  pubStmtShow: string;
+  pubStmtChecking: string;
+  pubStmtPeriod: string;
+  pubStmtTotal: string;
+  pubStmtCount: string;
+  pubStmtReturned: string;
+  pubStmtReturnedRow: string;
+  pubStmtForWhat: string;
+  pubStmtEach: string;
+  pubStmtNothing: string;
+  pubStmtFooter: string;
   pubCitizenFooter: string;
   pubCitizenAlso: string;
   pubCitizenVerifyLink: string;
+  agSupYou: string;
+  collAuthorizedFieldOfficer: string;
+  moreDisablePushNotifications: string;
+  moreSentToPsirsYour: string;
+  moreUnknownOwner: string;
+  ofcAgAgentActivated: string;
+  ofcAgAgentAgreementAccepted: string;
+  ofcAgAgentSuspendedTheirSessions: string;
+  ofcAgApplicationApproved: string;
+  ofcAgApplicationRejected: string;
+  ofcAgAskedForBy: string;
+  ofcAgCommissionBankAccountVerified: string;
+  ofcAgConfirmedNoNameReturned: string;
+  ofcAgDeviceApprovedTheAgent: string;
+  ofcAgDeviceRestoredTheAgent: string;
+  ofcAgDeviceRevokedAndIts: string;
+  ofcAgDeviceSuspendedAndIts: string;
+  ofcAgDocumentType: string;
+  ofcAgFailureReason: string;
+  ofcAgFlagDismissedTheReferee: string;
+  ofcAgFlagMarkedAsUnder: string;
+  ofcAgFlagUpheldThisReferee: string;
+  ofcAgGiveAReasonOf: string;
+  ofcAgGovernmentApproved: string;
+  ofcAgIdentityVerifiedKyc: string;
+  ofcAgLivenessCheck: string;
+  ofcAgMandatoryTrainingCompleted: string;
+  ofcAgMoreInformationRequestedFrom: string;
+  ofcAgNameTheAgentGave: string;
+  ofcAgNameTheBankReturned: string;
+  ofcAgNumberOnFile: string;
+  ofcAgReasonGiven: string;
+  ofcAgRecordThis: string;
+  ofcAgRefereeCleared: string;
+  ofcAgRefereeRejected: string;
+  ofcAgTerritoryReassignedFutureCollections: string;
+  ofcAgTheAgent: string;
+  ofcAgTheBankConfirmedThe: string;
+  ofcAgTheBankCouldNot: string;
+  ofcAgTheBankVerificationService: string;
+  ofcAgThisAccountCannotBe: string;
+  ofcAgUnnamed: string;
+  ofcAlChooseTheProgrammeThis: string;
+  ofcAlCreateARound: string;
+  ofcAlCreateRound: string;
+  ofcAlCreating: string;
+  ofcAlGiveTheRoundA: string;
+  ofcAlHowMuchDoesEach: string;
+  ofcAlHowMuchIsThere: string;
+  ofcAlNotYet: string;
+  ofcAlOneBeneficiaryCannotReceive: string;
+  ofcAlRoundCreatedItAwards: string;
+  ofcAlWhenDoesCollectionOpen: string;
+  ofcCfActivate: string;
+  ofcCfAddToTheCatalogue: string;
+  ofcCfAdding: string;
+  ofcCfBusinesses: string;
+  ofcCfCalculatedByFormula: string;
+  ofcCfCurrent: string;
+  ofcCfEnterTheNewAmount: string;
+  ofcCfEnterTheNewRate: string;
+  ofcCfEvaluateAll: string;
+  ofcCfEvaluating: string;
+  ofcCfExistingAssessmentsAreUnaffected: string;
+  ofcCfForExampleRepealedBy: string;
+  ofcCfGiveAReasonFor: string;
+  ofcCfIndividuals: string;
+  ofcCfNoApprovedRateIn: string;
+  ofcCfNoNewAssessmentCan: string;
+  ofcCfNotEligible: string;
+  ofcCfOfAssessableAmount: string;
+  ofcCfProgressiveBands: string;
+  ofcCfRecordNewRateVersion: string;
+  ofcCfRecording: string;
+  ofcCfRestoreItem: string;
+  ofcCfTheItemGoesBack: string;
+  ofcCfWhatChangedForExample: string;
+  ofcCfWithdrawItem: string;
+  ofcDbAverageTimeToConfirm: string;
+  ofcDbDuplicateRegistrationsOverridden: string;
+  ofcDbNewTaxpayersThisMonth: string;
+  ofcDbReversalsAndRefunds: string;
+  ofcDbTaxpayersWithATin: string;
+  ofcDbTotalCollected: string;
+  ofcFaEnterTheMinimumVersion: string;
+  ofcFaEnterTheRecommendedVersion: string;
+  ofcFaNeverReportedAVersion: string;
+  ofcFaPublishThisMinimum: string;
+  ofcFaPublishing: string;
+  ofcFaSayWhyTheMinimum: string;
+  ofcFaShippedWithThePlatform: string;
+  ofcFnBankReferenceForThe: string;
+  ofcFnBankTransferReferenceAt: string;
+  ofcFnEnterTheCreditedAmount: string;
+  ofcFnBankReferenceRequired: string;
+  ofcFnDisputeNoteTooShort: string;
+  ofcFnItHasToAccount: string;
+  ofcFnListTheGatewayReferences: string;
+  ofcFnNothingWasComparedFor: string;
+  ofcFnReRunThisPeriod: string;
+  ofcFnReasonForApprovingThis: string;
+  ofcFnReasonForThisDecision: string;
+  ofcFnRecordHowThisException: string;
+  ofcFnWhatDidTheBank: string;
+  ofcFnWhatTheVarianceTurned: string;
+  ofcGpConfirmationLinkCreated: string;
+  ofcKyOpenAndReview: string;
+  ofcKyReviewedOn: string;
+  ofcKyTheAccessLogCould: string;
+  ofcLgCouldNotReachThe: string;
+  agStepSendingACode: string;
+  agStepCodeSentToNumber: string;
+  uiHide: string;
+  uiHidePassword: string;
+  uiShow: string;
+  uiShowPassword: string;
+  ofcOsAskTheGatewayAgain: string;
+  ofcOsAskTheTinService: string;
+  ofcOsAskingTheGateway: string;
+  ofcOsAskingTheTinService: string;
+  ofcOsEveryQueueYouCan: string;
+  ofcOsEveryRefundHasBeen: string;
+  ofcOsNotAttemptedYet: string;
+  ofcOsSendToTheAuthority: string;
+  ofcOsSendingToTheAuthority: string;
+  ofcOvEveryScheduledJobHas: string;
+  ofcOvId: string;
+  ofcOvLoading: string;
+  ofcOvNoTaxpayerMatchedThat: string;
+  ofcOvNothingToChooseFrom: string;
+  ofcOvRecordWhatYouFound: string;
+  ofcOvRunAFraudSweep: string;
+  ofcOvRunThisQuery: string;
+  ofcOvRunning: string;
+  ofcOvSearchForATaxpayer: string;
+  ofcOvSelectOne: string;
+  ofcOvSweepCompleteNothingNew: string;
+  ofcOvSweeping: string;
+  ofcOvTheAuditTrailCould: string;
+  ofcOvWhichAgent: string;
+  ofcOvWhichRevenueItem: string;
+  ofcOvWhichTaxpayer: string;
+  ofcRhAskTheRegisterAgain: string;
+  ofcRhAsking: string;
+  ofcRhDeviceApproved: string;
+  ofcRhInvoiceDocument: string;
+  ofcRhPreparing: string;
+  ofcRhReAskedTheTin: string;
+  ofcRhRemindersSentToTaxpayers: string;
+  ofcRhSendPaymentReminders: string;
+  ofcRvEveryFigureHereCovers: string;
+  ofcRvNotMapped: string;
+  ofcRvTheseFiguresAreEmpty: string;
+  ofcSpAddAnInternalNote: string;
+  ofcSpAssignedTo: string;
+  ofcSpContact: string;
+  ofcSpInternalNoteSavedThe: string;
+  ofcSpNobodyYet: string;
+  ofcSpOnlyStaffWithSupport: string;
+  ofcSpReplySent: string;
+  ofcSpReplyToTheReporter: string;
+  ofcSpSaveInternalNote: string;
+  ofcSpSendReply: string;
+  ofcSpThisGoesToThe: string;
+  ofcTrCorrecting: string;
+  ofcTrEnterTheCorrectedValue: string;
+  ofcTrNameTheTypeOf: string;
+  ofcTrOnRecordNow: string;
+  ofcTrPutBackOnThe: string;
+  ofcTrRecordThisCorrection: string;
+  ofcTrRecording: string;
+  ofcTrSayWhatIsBeing: string;
+  ofcTxDirect: string;
+  ofcUaChangeAccessAndSign: string;
+  ofcUaChanging: string;
+  ofcUaLetThemSignIn: string;
+  ofcUaSaveTerritories: string;
+  ofcUaSignThemOutAnd: string;
+  ofcUsApplyingToBecomeAn: string;
+  ofcUsCapturingAVehicle: string;
+  ofcUsRegisteringATaxpayer: string;
+  ofcUsTakingACollection: string;
 }
 
 export const translations: Record<Language, TranslationDictionary> = {
@@ -2313,7 +3866,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     downloadReceipt: 'Download Receipt',
     shareReceipt: 'Share Receipt',
     printBluetooth: 'Print (Bluetooth Thermal)',
-    scanQr: 'Scan QR / Barcode',
     registerTaxpayer: 'Register Taxpayer',
     renewVehicle: 'Renew Vehicle',
     pairPrinter: 'Pair Bluetooth Printer',
@@ -2328,6 +3880,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     service: 'Revenue Item / Service',
     amount: 'Amount',
     totalPaid: 'Total Paid',
+    colIncludesServiceCharge: 'includes {{charge}} approved service charge, which is not government revenue',
     receiptNumber: 'Receipt Number',
     verificationCode: 'Verification Code',
     paymentMode: 'Payment Mode',
@@ -2388,6 +3941,23 @@ export const translations: Record<Language, TranslationDictionary> = {
       'The payment has been received but is waiting for settlement. Do not collect again. The receipt is issued as soon as the government account has the money.',
     errPaymentFailed:
       'The payment did not go through. No money has been taken from the taxpayer. You can start it again.',
+    errTrainingScoreBelowPassMark:
+      'You scored {{score}}% on {{module}}. You need at least {{passMark}}% to pass. Go through the module again and retake it.',
+    errPhoneAlreadyRegistered:
+      'An account already exists with this phone number. Sign in instead of applying again.',
+    errKycAlreadyCleared: 'Your identity has already been verified. There is nothing more to do here.',
+    errDeviceBeforeApproval:
+      'You can register this phone once PSIRS has approved your application. You will be told when the review is done.',
+    errDeviceRevokedCannotReregister:
+      'This phone has been withdrawn and cannot be registered again. Use a different phone.',
+    errNoBankAccountOnRecord:
+      'There is no bank account on your record yet, so there is nothing to change. The account is taken on the application form.',
+    errBankDetailsUnchanged: 'Those are the details already on your record. Nothing would change.',
+    errBankChangeAlreadyPending:
+      'A change to your bank account is already with an officer. It has to be approved or refused before you can ask for another.',
+    errBankChangeAlreadySettled: 'A decision has already been made on this change.',
+    errPayoutInFlight:
+      'A payout has not reached your account yet. Your bank details cannot change while money is on its way to them.',
     errAgentNotCleared:
       'You are not yet cleared to collect revenue. Your application must be completed and approved first.',
     errDeviceNotRegistered:
@@ -2422,6 +3992,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUaChooseRoleFirst: "Choose the role this officer should hold.",
     ofcUaAlreadyHolds: "{{name}} already holds the {{role}} role.",
     ofcUaSayWhy: "Say why this access is changing, in at least 10 characters. It is the only record of why.",
+    ofcUaNowRole: "{{name}} is now {{role}}.",
+    ofcUaSessionsEnded: "{{n}} open session(s) ended, so they must sign in again.",
+    ofcUaNoOpenSessions: "They had no open sessions.",
+    ofcUaCanSignInAgain: "{{name}} can sign in again.",
+    ofcUaAccountIsNow: "{{name}}’s account is {{status}}.",
+    ofcUaSessionsEndedNow: "{{n}} open session(s) ended immediately.",
     ofcAgRecordWhatYouFound: "Record what you found: it is the only record of why this flag was left open, upheld or set aside.",
     enumDeviceVelocity: "One handset, too many collections",
     enumSharedPhoneNumber: "One phone number on several taxpayers",
@@ -2430,6 +4006,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Payments that keep failing",
     enumReversalPattern: "A pattern of reversals",
     enumUnusualVolume: "More collections than usual",
+    enumFrequentManualIntervention: "Often changed by hand",
+    enumRepeatedReceiptRegeneration: "Receipt issued or fetched again and again",
+    enumUnusualOfficerActivity: "Busier than this officer's usual day",
+    enumUnusualTransactionTiming: "Collections written late at night",
+    enumUser: "Officer",
     enumRapidSuccession: "Collections one after another, too fast",
     enumCommissionAnomaly: "Commission that does not add up",
     enumSettlementVariance: "The gateway paid a different amount",
@@ -2464,7 +4045,39 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumArtisanGuild: "Artisan guild",
     enumAssessment: "Assessment",
     enumAssessmentCreated: "Assessment made",
+    dowSun: 'Sunday',
+    dowMon: 'Monday',
+    dowTue: 'Tuesday',
+    dowWed: 'Wednesday',
+    dowThu: 'Thursday',
+    dowFri: 'Friday',
+    dowSat: 'Saturday',
+    monthJan: 'January',
+    monthFeb: 'February',
+    monthMar: 'March',
+    monthApr: 'April',
+    monthMay: 'May',
+    monthJun: 'June',
+    monthJul: 'July',
+    monthAug: 'August',
+    monthSep: 'September',
+    monthOct: 'October',
+    monthNov: 'November',
+    monthDec: 'December',
+    monJan: 'Jan',
+    monFeb: 'Feb',
+    monMar: 'Mar',
+    monApr: 'Apr',
+    monMay: 'May',
+    monJun: 'Jun',
+    monJul: 'Jul',
+    monAug: 'Aug',
+    monSep: 'Sept',
+    monOct: 'Oct',
+    monNov: 'Nov',
+    monDec: 'Dec',
     enumAssigned: "Assigned",
+    enumTinAssigned: "Assigned",
     enumAttested: "Attested",
     enumAuditor: "Auditor",
     enumAuthorityLookup: "Authority lookup",
@@ -2698,6 +4311,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumStarted: "Started",
     enumState: "State",
     enumStepUp: "Extra confirmation",
+    enumCitizenStatement: "Statement of payments",
     enumStudentUnemployed: "Student or not working",
     enumSubmitted: "Submitted",
     enumSucceeded: "Succeeded",
@@ -2814,6 +4428,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTrNameOrDob: "A name or date of birth can be corrected here. The document the record is held under decides which person it is about, so an administrator has to make that change.",
     ofcTrWhatAndWhy: "What is being corrected, and why",
     ofcTrLiableFor: "What this taxpayer is liable for",
+    ofcTrEntitledTo: "What this taxpayer is entitled to",
+    ofcTrEntitledBody: "Every programme currently running, and where this taxpayer stands against each. A programme nobody has evaluated them against says so rather than reading as a refusal.",
+    ofcTrProgramme: "Programme",
+    ofcTrBenefit: "Benefit",
+    ofcTrEntitlement: "Entitlement",
+    ofcTrNotEvaluated: "Not evaluated",
+    ofcTrNotEligible: "Not eligible",
+    ofcTrBaseOnly: "Base only",
+    ofcTrFullBenefit: "Full benefit",
+    ofcTrWhyNot: "Why",
+    ofcNoneProgrammesRunning: "No programme is running at the moment.",
     ofcTrWaiveBody: "Waiving an obligation stops future assessments against it. Invoices already raised stay payable — cancelling those is a separate decision, invoice by invoice.",
     ofcTrWaive: "Waive",
     ofcTrVehiclesOnRecord: "Vehicles on this record",
@@ -2870,6 +4495,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnException: "Exception",
     ofcFnDate: "Date",
     ofcFnPayout: "Payout",
+    ofcFnWhereEarned: "Where commission is being earned",
+    ofcFnWhereEarnedBody: "Accrued, paid, outstanding and reversed, by Local Government Area and by month. Reversed is shown separately: a place with high accrual and high reversal is raising charges that do not stand up, which a total cannot tell you.",
+    ofcFnAccrued: "Accrued",
+    ofcFnPaidOut: "Paid",
+    ofcFnReversed: "Reversed",
+    ofcFnByMonth: "By month",
+    ofcFnNoCommissionInPeriod: "No commission was accrued in this period.",
     ofcFnEntries: "Entries",
     ofcFnBankAccount: "Bank account",
     ofcFnRequestedBy: "Requested by",
@@ -2880,6 +4512,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfNewRevenueItem: "New revenue item",
     ofcCfCreatedWithoutPrice: "The item is created without a price. Set its rate afterwards with “Change rate” — until you do, an agent cannot assess it in the field.",
     ofcCfChooseCategory: "Choose a category",
+    ofcCfArmOfGovernment: "Arm of government",
+    ofcCfEveryArm: "Every arm of government",
+    ofcCfNoMdaMapped: "No ministry, department or agency named",
+    ofcCfCategoriesUnreadable: "The categories could not be read, so there is nothing to choose from yet.",
     ofcCfHowOften: "How often it is charged",
     ofcCfWhatItIsFor: "What it is for",
     ofcCfWhoItApplies: "Who it applies to",
@@ -2908,6 +4544,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfEssentialServiceLink: "A programme that links an essential public service to tax compliance can only be created if the legal or policy authority for that linkage is recorded against it.",
     ofcCfBeneficiaries: "Beneficiaries",
     ofcCfNoEligibleYet: "No eligible taxpayers yet. Run \"Evaluate all\" to assess the active taxpayer population.",
+    ofcCfShowingSomeBeneficiaries: "Showing {{shown}} of {{total}} eligible beneficiaries. This list is not the whole roll — do not work it as one.",
     ofcCfEssentialProtected: "Essential services are protected",
     ofcCfBenefit: "Benefit",
     ofcCfMinScore: "Min. score",
@@ -2917,6 +4554,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "{{n}} transaction(s)",
     ofcOvSettlementsOutstanding: "{{n}} settlement(s) outstanding",
     ofcOvIntact: "Audit trail intact",
+    ofcOvChainIntact: "Verified over {{count}} entries. No tampering detected.",
+    ofcOvChainGenesisRemoved:
+      "Broken at entry {{sequence}}: the oldest entry names a predecessor that is not there, so the beginning of the log has been removed.",
+    ofcOvChainLinkMismatch:
+      "Broken at entry {{sequence}}: an entry is missing, or was inserted out of order.",
+    ofcOvChainContentModified:
+      "Broken at entry {{sequence}}: the entry's content does not match its recorded hash, so the row was changed after it was written.",
     ofcOvSystem: "System",
     ofcOvNoRows: "No rows",
     ofcOvLeakageTitle: "Revenue leakage monitoring",
@@ -2955,6 +4599,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvRuns: "Runs",
     ofcOvLastSucceeded: "Last succeeded",
     ofcOvWhatThatMeans: "What that means",
+    ofcOvWhatItDid: "What it did",
+    ofcOvNothingNeededDoing: "Nothing needed doing",
+    ofcOvRecord: "Record",
+    ofcOvNeverFailed: "{{runs}} run(s), none failed",
+    ofcOvFailedOutOf: "{{failures}} of {{runs}} run(s) failed",
+    ofcOvFailingIntermittently: "Failing on and off. Last threw {{when}}.",
+    ofcInBody: "Detail",
     ofcOvActor: "Actor",
     ofcOvEntity: "Entity",
     ofcOvResult: "Result",
@@ -2986,6 +4637,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbDrill: "Drill from State to LGA to Ward to Community to see where revenue is and is not being collected.",
     ofcDbPlateauState: "Plateau State",
     ofcDbPlatformKpis: "Platform KPIs",
+    ofcDbKpisUnreadable: "The platform's own numbers could not be read",
+    ofcDbKpisUnreadableBody: "Payments verified, the reconciliation rate and the count still awaiting it are missing from this page rather than zero. Reload, and raise it if it does not clear.",
     ofcDbSinceBegan: "Since the platform began collecting.",
     ofcDbVerifiedOnly: "Verified revenue only",
     ofcDbThisMonth: "This month",
@@ -3003,8 +4656,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbMda: "MDA",
     ofcRvGroupedByAssessment: "Every figure below is grouped by the LGA and ward on the assessment, which is reliable. The map coordinates are separate and are captured by the agent application at the moment of collection — none has arrived yet, which usually means no version carrying that has been deployed, or agents have not granted location permission on their handsets.",
     ofcRvWhoseRevenue: "Whose revenue this is",
-    ofcRvWhoseRevenueBody: "PSIRS collects the state’s revenue; this is the arm of government each naira is collected",
-    ofcRvMdaNoItem: ". An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence.",
+    ofcRvWhoseRevenueBody: "PSIRS collects the state’s revenue; this is the arm of government each naira is collected for. An MDA with no revenue item is listed rather than hidden — it means nothing is being collected on its behalf through this platform, which is a finding rather than an absence.",
     ofcRvOwedToCouncils: "Owed to the Local Government Councils",
     ofcRvCouncilsBody: "PSIRS collects this on the Councils’ behalf, so it is theirs rather than the State’s. Only items whose rate a Council sets are counted — a State levy collected in a Council’s area is the State’s. Every Council is listed, including those that collected nothing, because a remittance run has to account for all seventeen.",
     ofcRvWhereGenerated: "Where the revenue is generated",
@@ -3062,6 +4714,48 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Owed",
     ofcOsWhyEnded: "Why it ended",
     ofcOsEnded: "Ended",
+    ofcUaTheirAccess: "Where they are signed in",
+    ofcUaAccessFor: "Where {{name}} is signed in",
+    ofcUaBackToMine: "Back to my own access",
+    ofcRhAgentApproved: "{{name}} approved.",
+    ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} each",
+    ofcAlAwardedLeft: "{{awarded}} awarded, {{left}} left",
+    ofcPfWorkedOf: "{{worked}} of {{total}}",
+    ofcFnSettlementClosed: "{{reference}} closed. {{n}} collection(s) settled.",
+    ofcGrGroupSuspended: "{{name}} suspended.",
+    ofcGrQuantityPeople: "{{quantity}} ({{n}} people)",
+    supRepliesCount: "{{n}} reply(s)",
+    supLastMessage: "Last message {{when}}",
+    supNoMessagesYet: "No messages yet",
+    ofcOsQueueUnreadable: "A queue could not be read",
+    ofcOsQueueUnreadableBody: "{{n}} of the queues on this page could not be loaded, so what is shown is not the whole picture. An empty section below does not mean that queue is empty — it means nobody can see it. Reload, and raise it if it does not clear.",
+    ofcUaCoversNothing: "{{name}} now covers no territory and will see no revenue figures.",
+    ofcUaCoversTerritories: "{{name}} now covers {{n}} territory(ies).",
+    ofcFaMinimumNow: "Minimum version is now {{version}}.",
+    ofcFaNoneBelowIt: "No active handset is below it.",
+    ofcFaCannotCollect: "{{locked}} of {{total}} active handset(s) cannot collect until they update.",
+    ofcTrVehicleBackInService: "{{plate}} is back in service and its particulars can be renewed.",
+    ofcTrVehicleSuspended: "{{plate}} is suspended. Renewals are refused until it is lifted.",
+    ofcTrVehicleArchived: "{{plate}} has been taken off the register. Renewals are refused.",
+    colPayReceipted: "Payment confirmed. Receipt {{number}} has been issued.",
+    colPayAwaitingSettlement: "The gateway has confirmed this payment. The government receipt is issued once the money reaches a government account.",
+    colPayStillPending: "The gateway has not answered yet. Do not take this payment again — check back shortly.",
+    colPayFailed: "The payment did not succeed. No money has been received and no receipt has been issued.",
+    ofcFnPromotedForPayout: "{{n}} commission record(s) became eligible for payout.",
+    ofcCfEvaluatedCount: "{{n}} citizen(s) evaluated against this programme.",
+    ofcTrObligationsUpdated: "{{added}} obligation(s) added, {{waived}} waived.",
+    ofcTrOneDetailCorrected: "One detail on this taxpayer record has been corrected. The change is on the audit trail.",
+    ofcTrDetailsCorrected: "{{n}} details on this taxpayer record have been corrected. The change is on the audit trail.",
+    ofcTrOnRegisterAgain: "{{name}} is on the register again and can be assessed.",
+    ofcTrRecordEnded: "{{name}} is {{status}}. No new assessment can be raised and reminders stop.",
+    ofcTrStillOwedAfterEnding: "What is already owed remains owed, and this record now appears in the queue of ended records with arrears.",
+    ofcTrNothingWasOutstanding: "Nothing was outstanding.",
+    ofcOsRefundsReturned: "{{n}} refund(s) returned to taxpayers.",
+    ofcOsRefundsPartly: "{{done}} returned; {{left}} still owed. Those taxpayers have not had their money back yet.",
+    ofcOsTinsAssigned: "{{n}} TIN(s) assigned.",
+    ofcOsTinsPartly: "{{done}} assigned; {{left}} still outstanding. Those taxpayers remain registered and can still be assessed and pay.",
+    ofcOsRenewalsAcked: "{{n}} renewal(s) acknowledged by the vehicle authority.",
+    ofcOsRenewalsPartly: "{{done}} acknowledged; {{left}} still could not be sent. The renewals themselves remain valid — retry again later.",
     ofcUsTitle: "Product usage — last 30 days",
     ofcUsReportsCollections: ", which reports collections.",
     ofcUsIntro: "Usage is reported by the agent application and this portal as they are used. An empty page here means no version carrying the reporting has been deployed yet, or nobody has opened one since it was.",
@@ -3125,6 +4819,24 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Distributions",
     ofcGpDistributionsIntro: "Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to see who has been awarded and who has actually collected.",
     ofcGpRegisteredGroups: "Registered groups",
+    ofcPhTitle: "What they have already paid",
+    ofcPhIntro: "Every payment that reached a government account, and what it was for. A taxpayer asking what they have paid is entitled to an answer they can check against their receipts.",
+    ofcPhFrom: "From",
+    ofcPhTo: "To",
+    ofcPhPaid: "Paid",
+    ofcPhPayments: "Payments",
+    ofcPhReturned: "Returned to them",
+    ofcPhForWhat: "What it went to",
+    ofcPhLevy: "Tax or levy",
+    ofcPhEachPayment: "Each payment",
+    ofcPhWhen: "When",
+    ofcPhPeriod: "Period",
+    ofcPhAmount: "Amount",
+    ofcPhReceipt: "Receipt",
+    ofcPhNothingPaid: "Nothing was paid in this period.",
+    ofcGpTaxRole: "Part in enumeration",
+    ofcGpTaxRoleNone: "No part",
+    ofcGpTaxRoleNeedsReason: "Write down the reason first. Giving a leader standing over what a member is assessed on is recorded.",
     ofcGpGroupsIntro: "Cooperatives, market associations and unions. The member count is confirmed membership only — what an agent recorded but the leader has not yet confirmed does not count towards anything.",
     ofcGpMembersIntro: "Only confirmed members count towards allocations and group-based programmes. Somebody who has left stays on this list: they were a member when whatever they already collected was awarded.",
     ofcGpMembershipEnded: "Reason a membership ended",
@@ -3159,6 +4871,263 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvLevy: "Levy",
     ofcLvInvoices: "Invoices",
     ofcLvOldestDue: "Oldest due",
+    ofcNavArrears: "Arrears worklist",
+    ofcArTitle: "Who owes the State money",
+    enumAssessed: "Assessed",
+    ofcEnRecorded: "What has been recorded",
+    ofcEnRecordedIntro: "Observations from the field and what became of each. An observation the association disputed cannot be assessed until somebody goes back and looks again.",
+    ofcEnAttestation: "Attestation",
+    ofcEnNotYetAssessed: "Not assessed yet",
+    ofcEnExempt: "Exempt",
+    ofcEnAction: "Next",
+    ofcEnSettleFirst: "Disputed — settle it first",
+    ofcEnLeaderAgrees: "Leader confirms",
+    ofcEnAssess: "Assess",
+    ofcEnAlreadyObjected: "Objection open",
+    ofcEnRecordObjection: "Record an objection",
+    ofcEnAttestedByName: "Attesting leader’s name",
+    ofcEnStatementFirst: "Write what the taxpayer says first.",
+    ofcEnNothingRecorded: "Nothing has been recorded yet.",
+    enumFactsWrong: "The facts are wrong",
+    enumHasRecords: "Has proper records",
+    enumNotTrading: "No longer trading",
+    enumEnumeration: "Enumeration only",
+    enumBusinessObservation: "Business written down",
+    enumAttestation: "Enumeration and attestation",
+    enumObjected: "Under objection",
+    enumUpheld: "Upheld",
+    enumAgreed: "Leader agreed",
+    enumDisagreed: "Leader disagreed",
+    enumNotSought: "No attestation sought",
+    ofcNavEnumeration: "Enumeration queues",
+    ofcEnTitle: "What enumeration left for a person to decide",
+    ofcEnIntro: "Two queues. Where an agent and an association leader described the same trader differently, and where a taxpayer has formally disputed an estimate. Both are decisions a machine should not make.",
+    ofcEnDisagreements: "Where the agent and the leader differ",
+    ofcEnDisagreementsIntro: "An agent recorded one thing and the association leader another. Both versions are shown, with the band each would produce — a difference that does not change the band is a phone call, one that does is a visit.",
+    ofcEnGroup: "Association",
+    ofcEnAgentSaw: "The agent recorded",
+    ofcEnLeaderSays: "The leader disputes",
+    ofcEnBandGap: "Effect on the band",
+    ofcEnSameBand: "Same band either way",
+    ofcEnObservedOn: "Recorded on",
+    ofcEnAttestedBy: "Attested by",
+    ofcEnNoDisagreements: "Nothing is in dispute.",
+    ofcEnObjections: "Estimates under objection",
+    ofcEnOpenObjections: "Open objections",
+    ofcEnUnderObjection: "Tax under objection",
+    ofcEnWhileOpenTitle: "While an objection is open",
+    ofcEnWhileOpen: "The debt is not chased. It is off the arrears worklist until this is decided, so nobody will be called about it in the meantime.",
+    ofcEnDecisionReason: "Why are you deciding this way?",
+    ofcEnDecisionReasonHint: "The taxpayer will be shown this.",
+    ofcEnGround: "Ground",
+    ofcEnWhatTheySay: "What the taxpayer says",
+    ofcEnRaisedOn: "Raised on",
+    ofcEnDecision: "Decision",
+    ofcEnYoursToPassOn: "You raised this assessment — another officer must decide",
+    ofcEnUphold: "Uphold the objection",
+    ofcEnReject: "Reject the objection",
+    ofcEnReasonFirst: "Write the reason first.",
+    ofcEnNoObjections: "No estimate is under objection.",
+    ofcPsPublish: "Publishing",
+    ofcPsPublishClass: "Publish a local government class",
+    ofcPsPublishFigure: "Publish a schedule figure",
+    ofcPsChoose: "Choose",
+    ofcPsIndicators: "Indicators behind this class",
+    ofcPsIndicatorsHint: "e.g. road access, electrification, poverty headcount",
+    ofcPsClassPublished: "The classification has been published.",
+    ofcPsFigurePublished: "The figure has been published.",
+    ofcPsAssumedTurnoverNaira: "Assumed annual turnover (₦)",
+    ofcPsAdoptExemption: "Adopt a reading of the exemption",
+    ofcPsAdoptWarningTitle: "This decides who is taxed at all",
+    ofcPsAdoptWarning: "Adopting a construction decides whether a trader with a shop is exempt, which moves the covered population enormously. Record it only on a written opinion, and cite that opinion below — it will be quoted back at PSIRS by the first person who disagrees.",
+    ofcPsConstruction: "Which reading",
+    ofcPsCeiling: "Turnover ceiling (₦)",
+    ofcPsLegalBasis: "Opinion or instrument relied on",
+    ofcPsExemptionAdopted: "The construction has been recorded.",
+    enumSmall: "Small",
+    enumNano: "Nano — exempt",
+    enumPresumptive: "Presumptive — assessed off the schedule",
+    enumBooks: "Books — assessed on records",
+    enumClassA: "Class A — strongest local economy",
+    enumClassB: "Class B",
+    enumClassC: "Class C",
+    enumClassD: "Class D — weakest local economy",
+    enumMicro: "Micro",
+    enumConjunctive: "All three limbs together",
+    enumTurnoverGoverned: "Turnover governs alone",
+    enumNone: "No fixed premises",
+    enumStall: "Market stall or table",
+    enumKiosk: "Kiosk or container",
+    enumLockUpShop: "Lock-up shop",
+    enumBuilding: "Building or yard",
+    ofcNavPresumptive: "Presumptive schedule",
+    ofcPsTitle: "The presumptive schedule",
+    ofcPsIntro: "What a trade of a given size is assumed to turn over, by local government class. The rate is one per cent everywhere — what differs is the assumed turnover, because turnover really is lower in some places. Nobody grants a discount and no officer decides anything.",
+    ofcPsReadiness: "Whether it can be used yet",
+    ofcPsLgasClassified: "Local governments classified",
+    ofcPsCells: "Figures published",
+    ofcPsExemptionInForce: "The exemption as adopted",
+    ofcPsConjunctive: "All three limbs must hold: no fixed premises, no employees, and turnover at or below the ceiling. A trader with a shop is therefore assessed even if their turnover is small.",
+    ofcPsTurnoverGoverned: "Turnover governs alone: anyone at or below the ceiling is exempt, whether or not they have a shop or staff.",
+    ofcPsNoExemptionAdopted: "No reading of the exemption has been adopted",
+    ofcPsNoExemptionExplained: "Nobody can be assessed presumptively until PSIRS records which construction of the nano exemption applies, and on whose written opinion. The two readings differ on whether a trader with a shop is exempt, which is not a question this platform may answer by default.",
+    ofcPsPartlyPublished: "The schedule is only partly published",
+    ofcPsPartlyPublishedExplained: "{{done}} of {{total}} local governments have a published class. Anyone in the rest cannot be assessed, and quoting figures from this table for them would be quoting figures that do not apply.",
+    ofcPsWhatItWouldCost: "What a given trade would pay",
+    ofcPsCheckIntro: "Enter what an agent would see standing in the doorway. There is no field for a turnover or a band — those are worked out from what was observed, which is what stops the figure being negotiable.",
+    ofcPsPremises: "Premises",
+    ofcPsEquipment: "Machines or equipment",
+    ofcPsPeople: "People working besides the operator",
+    ofcPsWorkItOut: "Work it out",
+    ofcPsBand: "Size band",
+    ofcPsClass: "Class",
+    ofcPsAssumedTurnover: "Assumed annual turnover",
+    ofcPsAllAdoptedUnder: 'Every figure below was adopted under',
+    ofcPsAnnualTax: "Tax a year",
+    ofcPsMonthlyTax: "Tax a month",
+    ofcPsExempt: "Exempt — nothing is payable",
+    ofcPsExemptExplained: "This operator is a nano business under the construction of the exemption in force, so no presumptive tax is due at all. That is the law working, not a figure that came out small.",
+    ofcPsHowWeGotThere: "How that figure was reached",
+    ofcPsStep: "Step",
+    ofcPsDetail: "What was used",
+    ofcPsAmount: "Amount",
+    ofcPsNoWorking: "No working to show.",
+    ofcPsClasses: "How each local government is classified",
+    ofcPsClassesIntro: "Classified on data PSIRS does not produce, and fixed for three years. Both are deliberate: a class drawn from an area’s own collection figures would pay it to under-collect, and one that can move next year is one that will be lobbied about.",
+    ofcPsIndexSource: "Whose data",
+    ofcPsFrom: "From",
+    ofcPsUntil: "Until",
+    ofcPsNoEndDate: "No end date set",
+    ofcPsNoClasses: "No local government has a published class yet.",
+    ofcPsTheTable: "The published figures",
+    ofcPsInstrument: "Adopted under",
+    ofcPsVersion: "Version",
+    ofcPsNoEntries: "No figures have been published yet.",
+    ofcPsHowToChange: "A published figure is never edited. Publishing a new one closes the old period and starts a new version, so an assessment made last year can still be checked against the figure it was made under.",
+    enumFiled: "Filed",
+    ofcPrWithdraw: "Withdraw",
+    ofcPrWithdrawReason: "Why is this return being withdrawn?",
+    ofcPrWithdrawFirst: "Write the reason first.",
+    ofcNavPayroll: "Employers and premises",
+    ofcPrTitle: "Employers who should be filing",
+    ofcPrIntro: "Schools, clinics, hotels and haulage yards on the register with no PAYE return on record. One employer with forty staff is worth a hundred market visits, and this list costs no field work — it is built from what registration already recorded.",
+    ofcPrWhichList: "Which list",
+    ofcPrListPaye: "Employers with no PAYE return",
+    ofcPrListConsumption: "Hospitality with no consumption tax",
+    ofcPrNotFiling: "Not filing",
+    ofcPrFiling: "Already filing",
+    ofcPrSector: "Sector",
+    ofcPrNature: "Nature of business",
+    ofcPrOpen: "Open",
+    ofcPrNoneNotFiling: "Every employer in these sectors has filed a return.",
+    ofcPrNoneNotPaying: "Every hospitality premises here has paid consumption tax this year.",
+    ofcPrFiledBefore: "Returns already filed",
+    ofcPrPeriod: "Month",
+    ofcPrEmployees: "Employees",
+    ofcPrGross: "Total pay",
+    ofcPrTax: "Tax due",
+    ofcPrFiledOn: "Filed on",
+    ofcPrWithdrawnBecause: "Withdrawn because",
+    ofcPrNeverFiled: "This employer has never filed a return.",
+    ofcPrFileAReturn: "File a return",
+    ofcPrHowTheTaxIsWorkedOut: "How the tax is worked out",
+    ofcPrHowExplained: "Enter what each person was paid for the month. The platform works out the tax on each of them separately, using the annual bands, and adds it up. There is no box for the tax because the tax is not something anybody types.",
+    ofcPrYear: "Year",
+    ofcPrMonth: "Month number",
+    ofcPrEmployeeName: "Employee name",
+    ofcPrMonthlyPay: "Paid this month (₦)",
+    ofcPrAddEmployee: "Add another employee",
+    ofcPrSubmit: "File this return ({{n}} employees)",
+    ofcPrFiledTitle: "Return filed",
+    ofcPrFiledExplained: "The return covers {{n}} employee(s) and invoice {{invoice}} has been raised for the tax.",
+    ofcPrMissingTins: "{{n}} of them had no TIN — collect those and add them to the next return.",
+    ofcIgReasonLabel: "Why are you changing this claim?",
+    ofcIgReasonFirst: "Write the reason first.",
+    ofcNavConnections: "Assets and leads",
+    ofcIgTitle: "What is connected to a taxpayer",
+    ofcIgIntro: "People running commercial vehicles the State has never assessed for income tax, drawn from the vehicle register PSIRS already keeps. Nothing here comes from outside the platform.",
+    ofcIgLimitsTitle: "What this list is, and what it is not",
+    ofcIgLimits: "Every line is a claim, not a finding. Read the grounds column before acting: a match on a shared phone number is a reason to ask, never a reason to assess. Opening a record is logged against that person with the purpose you choose.",
+    ofcIgAtLeastVehicles: "With at least this many vehicles",
+    ofcIgRebuildLabel: "From the register",
+    ofcIgRebuildAction: "Rebuild connections",
+    ofcIgRebuilt: "{{asserted}} connection(s) recorded: {{registry}} from the register, {{phone}} matched on a shared phone. {{ambiguous}} vehicle(s) matched more than one taxpayer and were left alone.",
+    ofcIgLeads: "People to look at",
+    ofcIgVehicles: "Commercial vehicles",
+    ofcIgUnmatched: "Vehicles with no owner matched",
+    ofcIgUnmatchedExplained: "{{n}} vehicle(s) on the register are connected to nobody, so they are not in the count above. That is the part of the problem this list cannot see.",
+    ofcIgPurpose: "Why are you opening this record?",
+    ofcIgWhoHasLooked: "Who has opened this record",
+    ofcIgWhoHasLookedBody: "Every read of this person's connections, with the purpose the officer stated at the time. The role is shown rather than the name; the audit log carries the individual.",
+    ofcIgWhenRead: "When",
+    ofcIgNobodyHasLooked: "Nobody has opened this record.",
+    ofcIgPurposeChoose: "Choose a reason",
+    ofcIgPurposeFirst: "Choose a reason first — every read of a record is logged with one.",
+    ofcIgRegistrations: "Registrations",
+    ofcIgGrounds: "Grounds",
+    ofcIgFromRegister: "The register names them",
+    ofcIgFromPhone: "Matched on a shared phone number",
+    ofcIgChargedCommercial: "Charged the commercial rate",
+    ofcIgPaidLastYear: "Paid in the last year",
+    ofcIgOpen: "Open record",
+    ofcIgNoLeads: "Nobody in this scope has a commercial vehicle and no income assessment.",
+    ofcIgRecordTitle: "The record",
+    ofcIgWhatWeClaim: "What the State claims about them",
+    ofcIgWhatTheyOwe: "What they owe",
+    ofcIgThing: "Thing",
+    ofcIgRelationship: "Relationship",
+    ofcIgSource: "Where it came from",
+    ofcIgObtained: "Recorded on",
+    ofcIgLawfulBasis: "Power relied on",
+    ofcIgDecide: "Decision",
+    ofcIgConfirm: "Taxpayer confirms",
+    ofcIgDispute: "Taxpayer disputes",
+    ofcIgWithdraw: "Withdraw claim",
+    ofcIgReasonPrompt: "Say why. This is a record about a person, and a change nobody explained cannot be defended to them.",
+    ofcIgNothingClaimed: "The State claims nothing about this person.",
+    ofcIgReference: "Reference",
+    ofcIgSince: "Since",
+    ofcIgPayableNow: "Can be paid now",
+    ofcIgPayableYes: "Yes",
+    ofcIgPayableNeedsReassessment: "No — needs a fresh assessment",
+    ofcIgOwesNothing: "They owe the State nothing.",
+    enumAsserted: "Claimed",
+    enumConfirmedByTaxpayer: "Confirmed by the taxpayer",
+    enumConsistencyCheck: "Checking an assessment against assets",
+    enumCoverageLead: "Looking for people not yet assessed",
+    enumTaxpayerRequest: "The taxpayer asked to see it",
+    enumWithdrawn: "Withdrawn",
+    ofcArIntro: "Assessed, unpaid and still payable, largest debt first. These taxpayers are already on the register — this is money the State is owed today, not money it has to go and find.",
+    ofcArAtLeast: "Owing at least (₦)",
+    ofcArLapsingWithin: "Deadline closing within",
+    ofcArAnyDeadline: "Any deadline",
+    ofcArWithin7: "7 days",
+    ofcArWithin14: "14 days",
+    ofcArWithin30: "30 days",
+    ofcArCollectableNow: "Collectable now",
+    ofcArTaxpayers: "Taxpayers owing",
+    ofcArNeedsReassessment: "Needs re-assessment",
+    ofcArEndedElsewhere: "Owed by closed records",
+    ofcArWhoIsMissing: "Who is not on this list",
+    ofcArInFlightExplained: "Anyone part-way through paying is left off, so this list is safe to work as it stands: {{n}} invoice(s) are excluded because a payment is running against them right now. Nobody holding a receipt will be called.",
+    ofcArLapsedTitle: "Debt that cannot be paid as it stands",
+    ofcArLapsedExplained: "{{n}} invoice(s) have passed their payment deadline. The platform will refuse money against them, so they are counted above but kept off the call list — collecting means raising a fresh assessment first.",
+    ofcArWhoToCall: "Who to call",
+    ofcArShowingLargest: "Showing the {{n}} largest debts. Narrow by LGA or amount to see further down.",
+    ofcArOwedFor: "Owed for",
+    ofcArDaysLeft: "Days left to pay",
+    ofcArNoDeadline: "No deadline",
+    ofcArLastPaid: "Last paid",
+    ofcArNeverPaid: "Never",
+    ofcArOwingFor: "Owing for",
+    ofcArOwingForDays: "{{days}} day(s)",
+    ofcPrLastFiled: "Last filed",
+    ofcPrNeverFiledShort: "Never filed",
+    ofcPrFiledMonthsAgo: "{{months}} month(s) ago",
+    ofcSpLastReply: "Last reply",
+    ofcSpNoReplyYet: "No reply yet",
+    ofcArPartPaid: "Part paid",
+    ofcArNobodyOwes: "Nobody in this scope owes a collectable debt.",
     ofcAlIntro: "A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point.",
     ofcAlNewRound: "New round",
     ofcAlProgramme: "Programme",
@@ -3172,6 +5141,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAlBeneficiariesWord: "beneficiaries.",
     ofcAlCollectionPoint: "Collection point",
     ofcAlOpens: "Opens",
+    ofcAlCloses: "Closes",
+    ofcAlNoClosingDate: "Open until closed",
+    ofcCwNoEvidence: "None attached",
+    ofcTxVerified: "Money confirmed",
+    ofcTxNotVerified: "Not yet",
     ofcAlClosesOptional: "Closes (optional)",
     ofcAlRelease: "Release",
     ofcAlAwards: "Awards",
@@ -3255,14 +5229,109 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "From",
     ofcTo: "To",
     ofcExportCsv: "Export CSV",
+    ofcRlExportLimit: "Rows it may export",
+    ofcRlExportsNothing: "Exports nothing",
+    ofcCwSave: "Save",
+    enumIntegrationAlert: "An outside service is not answering",
+    enumNeverCalled: "Not called yet",
+    enumHealthy: "Answering",
+    ofcNavPlatform: "Outside services",
+    ofcPlTitle: "Services this platform depends on",
+    ofcPlHint: "Measured from the platform's own traffic, not from test calls. Only a service that could not be reached counts against it — an answer nobody likes is still an answer.",
+    ofcPlAllAnswering: "All answering",
+    ofcPlNeedingAttention: "Needing attention",
+    ofcPlService: "Service",
+    ofcPlState: "State",
+    ofcPlLastAnswered: "Last answered",
+    ofcPlInARow: "Unanswered in a row",
+    ofcPlCalls: "Calls",
+    ofcPlNeverAnswered: "Never",
+    ofcPlAdapter: "Configured as",
+    ofcPlTin: "The PSIRS TIN service",
+    ofcPlKyc: "The government identity service",
+    ofcPlVehicles: "The vehicle registration authority",
+    ofcPlBanks: "Bank name enquiry",
+    ofcPlGateway: "The payment gateway",
+    ofcPlNeverCalledBody: "Has not been called once since this database was created.",
+    ofcPlDownBody: "{{n}} call(s) in a row could not be answered.",
+    ofcPlDegradedBody: "A recent call could not be answered, and the one after it was.",
+    ofcPlAnsweringBody: "Answering.",
+    ofcPlOutageHint: "Until this screen existed, an outage was discovered by noticing a queue had stopped moving.",
+    enumDegraded: "A call went unanswered",
+    enumDown: "Not answering",
+    ofcOvChange: "What changed",
+    enumApprovalWaiting: "An approval is waiting for you",
+    enumCaseAssigned: "A case was assigned to you",
+    enumCaseEscalated: "A case was escalated to you",
+    enumCaseMention: "You were named on a case",
+    enumSystemAlert: "Something on the platform has stopped",
+    enumInfo: "For information",
+    enumWarning: "Worth looking at",
+    ofcNavInbox: "Inbox",
+    ofcInHint: "What you have been told, and what the platform is saying about itself. Mark a row read once you have dealt with it.",
+    ofcInUnread: "Not yet read",
+    ofcInCritical: "Needing attention now",
+    ofcInCriticalTitle: "The platform needs attention",
+    ofcInSeverity: "How urgent",
+    ofcInKind: "What it is",
+    ofcInSubject: "What happened",
+    ofcInWhen: "When",
+    ofcInRead: "Read",
+    ofcInMarkRead: "Mark read",
+    ofcInReadAll: "Mark all read",
+    ofcInShowAll: "Show everything",
+    ofcInShowUnread: "Show unread only",
+    ofcInToYourRole: "to your role",
+    ofcInNothing: "Nothing has been raised for you.",
+    ofcNavMyAccess: "Where I am signed in",
+    ofcAcSessions: "Sessions",
+    ofcAcSessionsHint: "Every browser this account is signed in on. End any you do not recognise, then change your password.",
+    ofcAcDevices: "Machines",
+    ofcAcActivity: "What they have done",
+    ofcAcActivityHint: "The last twenty-five things recorded against this account, newest first. A refusal is kept as well as a success — what somebody was stopped from doing is part of the record.",
+    ofcAcActivityMine: "What I have done",
+    ofcAcActedDays: "Actions in the last {{n}} days",
+    ofcAcRefusedDays: "Refused in the last {{n}} days",
+    ofcAcOnWhat: "On what",
+    ofcAcOutcome: "Outcome",
+    ofcAcNoActivity: "Nothing has been recorded against this account.",
+    ofcAcDevicesHint: "Recorded the first time this account signs in from a machine. Blocking one ends every session it holds and stops it opening another.",
+    ofcAcDevice: "Machine",
+    ofcAcUnknownDevice: "Unknown machine",
+    ofcAcThisOne: "this one",
+    ofcAcAddress: "Address",
+    ofcAcSignedIn: "Signed in",
+    ofcAcLastUsed: "Last used",
+    ofcAcFirstSeen: "First seen",
+    ofcAcLastSeen: "Last seen",
+    ofcAcLiveSessions: "Open sessions",
+    ofcAcEnd: "End",
+    ofcAcEndThisOne: "End and sign out",
+    ofcAcEnded: "Ended",
+    ofcAcBlock: "Block",
+    ofcAcUnblock: "Unblock",
+    ofcAcBlockedBy: "Blocked by",
+    ofcAcNoSessions: "This account has never been signed in.",
+    ofcAcNoDevices: "No machine has been recorded yet.",
+    ofcCwUploadEvidence: "Upload evidence",
+    ofcCwUploadHint: "For a document this platform did not issue: a bank advice, a letter, a photograph. Images and PDFs, up to 15 MB.",
+    ofcCwUploadFile: "The file",
+    ofcCwUploadWhat: "What it is",
+    ofcCwUploadWhere: "Where it came from",
+    ofcExportExcel: "Spreadsheet",
+    ofcExportPdf: "Document to file",
+    ofcExportWorking: "Preparing...",
     ofcDownloadCsv: "Download CSV",
     ofcTxReceipt: "Receipt",
     ofcTxCreated: "Created",
     ofcPfIntro: "Collections, reach and trouble side by side. An agent in a commercial ward will out-collect the best agent in a rural one, so read the columns together rather than sorting by naira.",
     ofcPfCollectedByAgents: "Collected by agents",
+    ofcPfFiguresCoverTopAgents: "Showing the {{n}} highest-collecting agents, which is all this report returns. The figures above cover only those — an agent below that line is not counted, including one carrying an open fraud flag. The fraud queue lists every flag.",
     ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
     ofcPfAgentsWorked: "Agents who worked",
     ofcPfOpenFraudFlags: "Open fraud flags",
+    ofcPfFiguresUnreadable: "These figures could not be read",
+    ofcPfFiguresUnreadableBody: "The totals and the list below are missing, not zero. Nothing on this page is a count of anything — in particular, no claim is being made here about open fraud flags. Reload, and raise it if it does not clear.",
     ofcPfCollected: "Collected",
     ofcPfAverage: "Average",
     ofcPfOnboarded: "Onboarded",
@@ -3359,6 +5428,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAgRequestMoreInformation: "Request more information",
     ofcAgAssignTerritory: "Assign territory",
     ofcAgSelectTerritory: "Select a territory",
+    ofcAgTerritoriesUnreadable: "The territory list could not be read, so there is nothing to choose from. This is not a state with no territories in it.",
     ofcAgTerritoryRequired: "Every transaction is attributed to a territory, so one must be assigned before activation.",
     ofcAgActivateAgent: "Activate agent",
     ofcAgActivationBlocked: "Activation is blocked until every clearance item is satisfied. An exception requires an approved government override.",
@@ -3570,6 +5640,486 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Officer access",
     ofcNavFieldApp: "Field application",
     ofcNavAllocations: "Distribution rounds",
+    ofcNavMyWork: "My work",
+    ofcNavCases: "Cases",
+    ofcGroupYourDesk: "Your desk",
+    ofcSearchLabel: "Search government records",
+    ofcSearchPlaceholder: "Reference, TIN, name or receipt number",
+    ofcSearchSearching: "Searching…",
+    ofcSearchNoResults: "Nothing matches that.",
+    ofcSearchCouldNotRun: "The search could not be run. This does not mean there is no such record \u2014 try again.",
+    ofcSearchHint: "Two characters or more.",
+    ofcSearchTransaction: "Transaction",
+    ofcSearchTaxpayer: "Taxpayer",
+    ofcSearchAgent: "Agent",
+    ofcSearchOfficer: "Officer",
+    ofcSearchInvoice: "Invoice",
+    ofcSearchReceipt: "Receipt",
+    ofcSearchPayment: "Payment",
+    ofcSearchAssessment: "Assessment",
+    ofcSearchVehicle: "Vehicle",
+    ofcSearchRevenueItem: "Revenue item",
+    ofcSearchPlace: "Local Government Area",
+    ofcSearchCase: "Case",
+    ofcMwIntro: "Everything waiting for you, wherever on the platform it came from.",
+    ofcMwAssigned: "Assigned to you",
+    ofcMwAssignedBody: "Cases somebody has put in your hands.",
+    ofcMwOpened: "Cases you opened",
+    ofcMwOpenedBody: "Now somebody else’s to work, and still yours to follow.",
+    ofcMwMentions: "Where you were named",
+    ofcMwMentionsBody: "An officer wrote your name on a case.",
+    ofcMwDepartment: "Waiting for your department",
+    ofcMwDepartmentBody: "Sent to your role and picked up by nobody yet.",
+    ofcMwApprovals: "Approvals awaiting a decision",
+    ofcMwExceptions: "Reconciliation exceptions",
+    ofcMwFlags: "Risk flags",
+    ofcMwOverdue: "Overdue",
+    ofcMwNothing: "Nothing is waiting for you.",
+    ofcMwOpenQueue: "Open the whole queue",
+    ofcCwTitle: "Government work queue",
+    ofcCwIntro: "A case carries work between departments, and keeps every step of it.",
+    ofcCwOpenCase: "Open a case",
+    ofcCwStatus: "Status",
+    ofcNavRoles: "Roles & permissions",
+    ofcRlTitle: "Roles and permissions",
+    ofcRlIntro: "Who may do what. This is data now, so a change in the Service's delegation of authority does not wait for a release.",
+    ofcRlCatalogueNote: "The list of permissions that exist stays in code, because a permission is a name the routes check. A grant naming something no route checks would look like a control and be none.",
+    ofcRlRole: "Role",
+    ofcRlOfficers: "Officers holding it",
+    ofcRlPermissions: "Permissions",
+    ofcRlSystemRole: "Ships with the platform",
+    ofcRlPortalRole: "Signs in to this portal",
+    ofcRlGrant: "Grant",
+    ofcRlRevoke: "Take away",
+    ofcRlGrantReason: "Why this authority is being given",
+    ofcRlRevokeReason: "Why this authority is being taken away",
+    ofcRlRevokeWarning: "Everybody holding this role will be signed out. That is deliberate: the map is cached, and thirty seconds is a long time for somebody whose authority has just been withdrawn to keep exercising it.",
+    ofcRlNewRole: "Add a role",
+    ofcRlRoleName: "Name used in code",
+    ofcRlRoleLabel: "What officers see",
+    ofcRlCopyFrom: "Start from",
+    ofcRlCopyFromBody: "Starting from the nearest existing role and taking things away is safer than starting from nothing, which is how a role ends up with everything a week later, one emergency at a time.",
+    ofcRlRetire: "Retire",
+    ofcRlRestore: "Bring back",
+    ofcRlIsPortalRole: "This role signs in to the officer portal",
+    ofcRlSignedOut: "Officers signed out",
+    ofcRlSearchPermission: "Find a permission",
+    ofcNoneRoles: "No role is configured.",
+    enumClosing: "Being closed",
+    ofcNavPeriods: "Financial periods",
+    enumClean: "Clean",
+    enumException: "Exception",
+    enumNotAvailable: "Could not be examined",
+    enumRandom: "Random",
+    enumSystematic: "Every nth",
+    enumHighestValue: "Largest amounts",
+    enumDrawn: "Drawn",
+    enumInReview: "Being examined",
+    enumGenerated: "Generated",
+    enumSigned: "Signed",
+    enumTransactionAudit: "Transaction audit",
+    enumAgentActivity: "Agent activity",
+    enumRevenueCollection: "Revenue collected",
+    enumLgaPerformance: "Council performance",
+    enumPaymentReconciliation: "Payment reconciliation",
+    enumUserActivity: "Officer activity",
+    enumAnomaly: "Anomalies",
+    enumAuditSample: "Audit samples",
+    enumRevenueTarget: "Revenue targets",
+    enumPeriodClosing: "Period closing",
+    enumDataChange: "Record changes",
+    ofcNavWorkbench: "Audit workbench",
+    ofcWbSamplesDrawn: "Samples drawn",
+    ofcWbItemsOutstanding: "Items still to examine",
+    ofcWbExceptionsFound: "Exceptions found",
+    ofcWbReportsHeld: "Reports on file",
+    ofcWbSamples: "Samples",
+    ofcWbSamplesHint: "Each row records a draw that already happened. The criteria, the method and the seed cannot be changed afterwards, which is what lets somebody else reproduce it.",
+    ofcWbSampleNumber: "Sample",
+    ofcWbTitle: "What this is about",
+    ofcWbMethod: "How it was drawn",
+    ofcWbMethodRandom: "At random, from a stored seed",
+    ofcWbMethodSystematic: "Every nth, in date order",
+    ofcWbMethodHighestValue: "The largest amounts (not a sample)",
+    ofcWbDrawn: "Drawn of population",
+    ofcWbPending: "Not yet examined",
+    ofcWbExceptions: "Exceptions",
+    ofcWbDrawnAt: "Drawn on",
+    ofcWbDrawnBy: "Drawn by",
+    ofcWbNoSamples: "No sample has been drawn yet.",
+    ofcWbDraw: "Draw a sample",
+    ofcWbDrawHint: "Say what the sample is for and how wide to look. Leaving a field empty means it does not narrow anything.",
+    ofcWbSize: "How many to draw",
+    ofcWbFrom: "From",
+    ofcWbTo: "To",
+    ofcWbMinimumNaira: "Smallest amount (naira)",
+    ofcWbDrawIsFinal: "A draw cannot be taken back or redrawn. Draw a fresh sample if these criteria are wrong.",
+    ofcWbDrawnNotice: "{{number}} drawn, {{n}} transactions to examine.",
+    ofcWbSeed: "Seed",
+    ofcWbPopulation: "Drawn from",
+    ofcWbPosition: "Item",
+    ofcWbOutcome: "Finding",
+    ofcWbFinding: "What was found",
+    ofcWbRecord: "Record",
+    ofcWbNoItems: "This sample selected nothing.",
+    ofcWbCompleteHint: "A sample can only be completed once every item has a finding. Half-finished work reported as complete is worse than no sample.",
+    ofcWbComplete: "Complete this sample",
+    ofcWbReports: "Audit reports",
+    ofcWbReportsHint: "Each report holds the rows as they stood when it was generated, with a checksum a reader can recompute.",
+    ofcWbReportNumber: "Report",
+    ofcWbReportType: "Question it answers",
+    ofcWbRows: "Rows",
+    ofcWbPeriod: "Period",
+    ofcWbGeneratedAt: "Generated on",
+    ofcWbSignedBy: "Signed by",
+    ofcWbChecksum: "Checksum",
+    ofcWbOpenReport: "Open",
+    ofcWbWhatWasFrozen: "What was frozen",
+    ofcWbRecomputed: "Recomputed now",
+    ofcWbStored: "Stored when signed",
+    ofcWbChecksumAgrees: "The stored rows still hash to the checksum recorded with them.",
+    ofcWbChecksumDiffers: "The stored rows no longer hash to the checksum recorded with them. Read the rows below against a printed copy before relying on either.",
+    ofcWbPayloadRows: "Rows as they were frozen",
+    ofcWbViewIsRecorded: "Opening a signed report is itself recorded against your name.",
+    ofcWbNoPayload: "This report was frozen with no rows in it.",
+    ofcWbAltered: "Altered",
+    ofcWbAlteredTitle: "A report on this page no longer matches its checksum",
+    ofcWbAlteredBody: "{{n}} report(s) below hold figures that no longer hash to the checksum recorded when they were generated. A signature on such a report does not cover what it now shows. This is a change made in the database rather than through the platform — do not rely on those figures, and raise it.",
+    ofcWbNoReports: "No report has been generated yet.",
+    ofcWbGenerate: "Generate a report",
+    ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
+    ofcWbGenerated: "{{number}} generated, {{n}} rows.",
+    ofcWbGeneratedPartial: "{{number}} generated with {{n}} rows — but more than {{n}} matched, so this report holds only the most recent of them and the earliest part of the period is missing. Narrow the period and generate again before signing it.",
+    ofcWbPartialBadge: "Partial",
+    ofcWbPartialReport: "This report stopped at {{n}} rows. More matched than that, so it carries only the most recent {{n}} and the earliest part of its period is not in it — including in the file exported from here. Narrow the period and generate a new report rather than signing this one as a record of the whole period.",
+    ofcWbSign: "Sign",
+    ofcWbWithdraw: "Withdraw",
+    ofcWbActions: "Actions",
+    ofcWbClose: "Close",
+    ofcWbReference: "Reference",
+    ofcWbTaxpayer: "Taxpayer",
+    ofcWbAmount: "Amount",
+    ofcPeTitle: "Financial periods",
+    ofcPeIntro: "Closing a month freezes what the State says it collected in it. After a close the database itself refuses to write into the month — this is a control, not a report.",
+    ofcPeOpenPeriod: "Open a period",
+    ofcPePeriod: "Period",
+    ofcPeCollected: "Collected",
+    ofcPeSettled: "Settled to government",
+    ofcPeCommission: "Commission",
+    ofcPeTransactions: "Transactions",
+    ofcPeClose: "Close the month",
+    ofcPeBeginClosing: "Begin closing",
+    ofcPeReopen: "Reopen",
+    ofcPeClosedBy: "Closed by",
+    ofcPeReopenedBy: "Reopened by",
+    ofcPeClosingNote: "What is being certified",
+    ofcPeReopenReason: "Why it is being reopened",
+    ofcPeNotReady: "Not ready to close",
+    ofcPeNotReadyBody: "Closing over an unresolved exception or a pending payment freezes a figure already known to be wrong. It is sometimes the right call, and it is never a silent one.",
+    ofcPeOverride: "Why you are closing over them",
+    ofcPeFiguresUnknown: "What this month still holds could not be read",
+    ofcPeFiguresUnknownBody: "The platform could not count this month's unresolved exceptions or pending payments, so it cannot tell you whether the figure is settled. It may be. Closing is still possible, and it needs a reason in writing, because a month closed without knowing is a month closed over whatever was there.",
+    ofcPeUnreconciled: "Unresolved exceptions",
+    ofcPePendingPayments: "Payments still pending",
+    ofcPeFiguresNow: "What the month holds now",
+    ofcPeFrozen: "Frozen at close",
+    ofcPeReopenSeparate: "Reopening is the administrator's, not the closer's. The officer who closes the books also being able to unclose them removes most of what a period lock is for.",
+    ofcNonePeriods: "No financial period has been opened yet.",
+    enumSupervisorChange: "Reporting line",
+    enumRoleChange: "Role",
+    ofcNavOrganisation: "Departments & offices",
+    ofcOrTitle: "The organisation",
+    ofcOrIntro: "Who works with whom, who answers for them, and where they sit. A department is a body; a role is what somebody may do. Both are needed and neither replaces the other.",
+    ofcOrDepartments: "Departments",
+    ofcOrOffices: "Revenue offices",
+    ofcOrOfficesBody: "Where officers sit, which is not the territory they cover. The Jos North office administers three LGAs.",
+    ofcOrNewDepartment: "Add a department",
+    ofcOrNewOffice: "Add an office",
+    ofcOrCode: "Code",
+    ofcOrFunction: "Work it does",
+    ofcOrHead: "Answers for it",
+    ofcOrParent: "Sits under",
+    ofcOrOfficers: "Officers",
+    ofcOrOpenCases: "Open cases",
+    ofcOrCovers: "Administers",
+    ofcOrClose: "Close",
+    ofcOrPosting: "Posting",
+    ofcOrWhoServedWhere: "Who was posted where",
+    ofcOrWhoServedWhereBody: "Every recorded posting across the service, newest first. A dispute starts from a place and a date and does not know whose record to open, which is what one officer's history cannot answer.",
+    ofcOrWhatMoved: "What moved",
+    ofcOrAnyKind: "Any kind of move",
+    ofcOrNoPostingsInPeriod: "No posting was recorded in this period.",
+    ofcOrListsFailedTitle: "Some lists could not be read",
+    ofcOrListsFailedBody: "The departments, offices or officers did not load, so a choice that looks like \u201cUnposted\u201d may only mean the list is missing. Reload before recording a posting.",
+    ofcOrPostingBody: "Each part that moves is recorded as its own dated transfer, so a move to Finance and a change of supervisor have separate answers.",
+    ofcOrMoveOfficer: "Move this officer",
+    ofcOrDepartment: "Department",
+    ofcListCouldNotLoad: "This list could not be loaded.",
+    ofcOrOffice: "Office",
+    ofcOrSupervisor: "Reports to",
+    ofcOrJobTitle: "Job title",
+    ofcOrStaffNumber: "Staff number",
+    ofcOrWhyMoving: "Why they are moving",
+    ofcOrEffectiveFrom: "From",
+    ofcOrHistory: "Posting history",
+    ofcOrHistoryBody: "Append-only. Who was responsible for an area in a given month is asked in revenue disputes, and an answer that can be adjusted afterwards is not one.",
+    ofcOrNobody: "Nobody",
+    ofcOrUnposted: "Not posted",
+    ofcCwEscalate: "Escalate",
+    ofcCwEscalateBody: "Sends the case to the officer above, with its whole history attached. If nobody is above, it says so rather than marking the case escalated and leaving it here.",
+    ofcCwEscalateReason: "Why it needs somebody above",
+    ofcCwEscalatedTo: "Escalated to",
+    ofcNoneDepartments: "No department has been created yet.",
+    ofcNoneOffices: "No revenue office has been created yet.",
+    ofcNoneTransfers: "No posting has been recorded for this officer.",
+    enumCollection: "Collection",
+    enumFinance: "Finance",
+    enumAudit: "Audit",
+    enumEnforcement: "Enforcement",
+    enumTaxpayerServices: "Taxpayer services",
+    enumAdministration: "Administration",
+    enumTechnology: "Technology",
+    enumPosting: "Posting",
+    enumDepartment: "Department",
+    enumOffice: "Office",
+    enumTerritory: "Territory",
+    ofcDbByChannel: "How the money arrived",
+    ofcDbByChannelBody: "Recorded on every transaction since the platform started, and never grouped until now. It is the figure behind every decision about where to put agents.",
+    ofcDbByTaxpayerType: "Individuals and businesses",
+    ofcDbByItem: "Revenue by levy",
+    ofcDbByItemBody: "One level below the category, which is where somebody's responsibility sits.",
+    ofcDbReversed: "Reversed",
+    ofcDbRefunded: "Refunded",
+    ofcDbAgentsOnline: "Agents working now",
+    ofcDbAgentsOnlineHint: "Active in the last fifteen minutes",
+    ofcDbAgentsSuspended: "Agents suspended",
+    ofcDbExpectedRevenue: "Assessed and unpaid",
+    ofcDbExpectedRevenueHint: "Money already invoiced and owed. Not a projection.",
+    ofcNavTaxpayerAnalytics: "Taxpayer base",
+    ofcTaTitle: "The taxpayer base",
+    ofcTaIntro: "Not how many people are on the register, but how many are still paying, how often, and where the ones who stopped are.",
+    ofcTaActive: "Paying",
+    ofcTaActiveHint: "Paid something in the last ninety days",
+    ofcTaInactive: "Stopped paying",
+    ofcTaNeverPaid: "Never paid",
+    ofcTaTotal: "On the register",
+    ofcTaNewThisMonth: "Registered this month",
+    ofcTaAverageLifetime: "Average paid, each",
+    ofcTaFrequency: "How often somebody who pays, pays",
+    ofcTaFrequencyBody: "Banded rather than averaged. A mean over a population where most paid once and a few paid twelve times describes nobody in it.",
+    ofcTaByLga: "The register by Local Government Area",
+    ofcTaByCategory: "Which levies the register is engaged with",
+    ofcTaTaxpayersAssessed: "Assessed",
+    ofcTaTaxpayersPaid: "Paid",
+    ofcTaAveragePayment: "Average payment",
+    ofcTaComplianceScore: "Average compliance score",
+    ofcTaOutstanding: "Outstanding",
+    ofcCmByPlace: "Commission by Local Government Area",
+    ofcCmByPeriod: "Commission by month",
+    ofcCmAccrued: "Accrued",
+    ofcCmPaidOut: "Paid",
+    ofcCmOutstandingCommission: "Outstanding",
+    enumOnce: "Once",
+    enumTwoToThree: "Two or three times",
+    enumFourToEleven: "Four to eleven times",
+    enumTwelveOrMore: "Twelve times or more",
+    ofcDbYesterday: "Yesterday",
+    ofcDbThisWeek: "This week",
+    ofcDbVsYesterday: "against yesterday",
+    ofcDbVsLastWeek: "against the same days last week",
+    ofcDbVsLastMonth: "against the same days last month",
+    ofcDbVsLastYear: "against the same period last year",
+    ofcDbNoComparison: "nothing collected then, so no comparison",
+    ofcDbLastMonthWhole: "The whole of last month",
+    ofcDbDeclining: "Categories collecting less than last month",
+    ofcDbDecliningBody: "Ranked by size, a category that halved still sits near the top and looks healthy. This is the same data ranked by direction.",
+    ofcDbNoneDeclining: "Nothing is collecting less than it did last month.",
+    ofcDbChange: "Change",
+    ofcDbShareOfMonth: "Share of the month",
+    ofcRvAverageTransaction: "Average transaction",
+    ofcRvCompliance: "Register paying",
+    ofcRvComplianceHint: "The share of taxpayers registered here who paid anything in the period.",
+    ofcPfGrowth: "Against last month",
+    ofcPfCategories: "Levies worked",
+    enumCategory: "Category",
+    enumItem: "Revenue item",
+    enumLga: "Local Government Area",
+    ofcNavTargets: "Targets & forecast",
+    ofcTgTitle: "Revenue targets",
+    ofcTgIntro: "What the Service expects to raise, and what has come in against it.",
+    ofcTgSetTarget: "Set a target",
+    ofcTgScope: "Set against",
+    ofcTgScopeState: "The whole State",
+    ofcTgScopeLga: "One Local Government Area",
+    ofcTgScopeCategory: "One revenue category",
+    ofcTgScopeItem: "One revenue item",
+    ofcTgScopeAgent: "One agent",
+    ofcTgPeriod: "Period",
+    ofcTgPeriodDaily: "Daily",
+    ofcTgPeriodWeekly: "Weekly",
+    ofcTgPeriodMonthly: "Monthly",
+    ofcTgPeriodQuarterly: "Quarterly",
+    ofcTgPeriodAnnual: "Annual",
+    ofcTgAmount: "Target amount",
+    ofcTgNeedAmount: "Enter the amount to be collected in this period.",
+    ofcTgNeedLga: "Choose the Local Government Area this target is for.",
+    ofcTgNeedCategory: "Choose the revenue category this target is for.",
+    ofcTgNote: "Why this figure",
+    ofcTgTarget: "Target",
+    ofcTgCollected: "Collected",
+    ofcTgAchievement: "Achievement",
+    ofcTgGap: "Gap",
+    ofcTgThroughPeriod: "Through the period",
+    ofcTgRollup: "State target and what was apportioned below it",
+    ofcTgRollupBody: "These do not have to agree. The State figure normally carries headroom, and an LGA with no target of its own is the more useful thing to notice.",
+    ofcTgStateTarget: "State target",
+    ofcTgApportioned: "Apportioned to LGAs",
+    ofcTgLgasWithout: "LGAs with no target",
+    ofcTgWithdraw: "Withdraw",
+    ofcTgWithdrawReason: "Why it is being withdrawn",
+    ofcTgSuperseded: "This replaces an earlier target for the same period.",
+    ofcTgSetBy: "Set by",
+    ofcTgShowSuperseded: "Include revised and withdrawn",
+    ofcNoneTargetsSet: "No target has been set for this period.",
+    ofcFcTitle: "Forecast",
+    ofcFcNotATarget: "This is a forecast, not a target and not guaranteed revenue. It is arithmetic on what has been collected so far and what previous years did by this point.",
+    ofcFcProjected: "Projected for the period",
+    ofcFcBasis: "Worked out from",
+    ofcFcConfidence: "Confidence",
+    ofcFcSeasonalShare: "Usually collected by this point",
+    ofcFcComparablePeriods: "Comparable periods used",
+    ofcFcProjectedAchievement: "Projected against target",
+    forecastSeasonal: "Shaped by the collection curve: previous years are used to say what share of a period is usually in by now.",
+    forecastRunRate: "A straight run rate. There is not enough history to know the collection curve, so this is likely to be wrong early and late in the period.",
+    forecastTooEarlyInCurve: "Previous years had collected almost nothing by this point, so the curve cannot be used yet. A straight run rate is shown instead.",
+    forecastPeriodComplete: "The period has finished. This is the actual figure, not a projection.",
+    forecastNotStarted: "The period has not started. There is nothing to project from yet.",
+    enumSeasonal: "Collection curve",
+    enumRunRate: "Run rate",
+    enumInsufficientHistory: "Not enough history",
+    enumAwaitingInformation: "Awaiting information",
+    enumEscalated: "Escalated",
+    enumInvestigating: "Investigating",
+    enumAgentConduct: "Agent conduct",
+    enumCommissionQuery: "Commission query",
+    enumDataCorrection: "Data correction",
+    enumFraudInvestigation: "Fraud investigation",
+    enumGeneral: "General",
+    enumReconciliationException: "Reconciliation exception",
+    enumRevenueAnomaly: "Revenue anomaly",
+    enumSystemIssue: "System issue",
+    enumTaxpayerDispute: "Taxpayer dispute",
+    enumApproval: "Approval",
+    enumFraudFlag: "Risk flag",
+    enumManual: "Raised by an officer",
+    enumSupportTicket: "Support ticket",
+    enumAssignment: "Assigned",
+    enumComment: "Comment",
+    enumDueDateChange: "Due date changed",
+    enumEscalation: "Escalated",
+    enumEvidence: "Evidence attached",
+    enumNote: "Internal note",
+    enumPriorityChange: "Priority changed",
+    enumResolution: "Resolution",
+    enumRouted: "Routed",
+    enumStatusChange: "Status changed",
+    ofcCwSubject: "Subject",
+    ofcCwDescription: "What happened",
+    ofcCwCategory: "Category",
+    ofcCwRisk: "Risk",
+    ofcCwPriority: "Priority",
+    ofcCwDepartment: "Send to",
+    ofcCwAssignee: "Assign to",
+    ofcCwNobody: "Nobody yet",
+    ofcCwAnyDepartment: "No department",
+    ofcCwDue: "Due",
+    ofcCwOnlyOpen: "Only open cases",
+    ofcCwOnlyOverdue: "Only overdue",
+    ofcCwOpenedBy: "Opened by",
+    ofcCwCaseNumber: "Case",
+    ofcCwComments: "Comments",
+    ofcCwEvidence: "Evidence",
+    ofcCwBackToQueue: "Back to the queue",
+    ofcCwHistory: "History",
+    ofcCwAddComment: "Add a comment",
+    ofcCwInternalNote: "Keep this as an internal note",
+    ofcCwMention: "Name an officer",
+    ofcCwPost: "Post",
+    ofcCwMoveCase: "Move this case",
+    ofcCwChangeStatus: "Change the status",
+    ofcCwResolution: "What it concluded",
+    ofcCwResolutionRequired: "Say what the case concluded before resolving it.",
+    ofcCwSaved: "Saved.",
+    ofcCwNotYours: "This case is not assigned to you and you did not open it, so you may comment and nothing more.",
+    ofcCwAbout: "About",
+    ofcCwWhy: "Why",
+    ofcReasonAtLeastChars: "At least {{n}} characters.",
+    ofcCwSubjectTooShort: "Give the case a subject of at least five characters.",
+    ofcCwSampleSubject: "Collections trebled with no new taxpayers",
+    ofcCwSampleDescription: "Say what you saw, where, and what you would like the other department to check.",
+    ofcCwAppendOnly: "Nothing here can be edited or removed. A correction is another entry.",
+    ofcNoneCasesMatchFilter: "No cases match these filters.",
+    ofcT3Title: "Transaction file",
+    ofcT3Intro: "The whole story of one collection, from the taxpayer to the government account.",
+    ofcT3Find: "Find a transaction",
+    ofcT3FindBody: "A transaction reference, or a receipt number off a citizen’s message.",
+    ofcT3Chain: "The chain",
+    ofcT3Assessment: "Assessment",
+    ofcT3Invoice: "Invoice",
+    ofcT3Payment: "Payment",
+    ofcT3Gateway: "Gateway",
+    ofcT3Settlement: "Settlement",
+    ofcT3Reconciliation: "Reconciliation",
+    ofcT3Commission: "Commission",
+    ofcT3Refunds: "Refunds",
+    ofcT3Timeline: "What happened, in order",
+    ofcT3TimelineBody: "The platform’s own record and the officers’ actions, on one clock.",
+    ofcT3Platform: "Platform",
+    ofcT3OfficerAction: "Officer action",
+    ofcT3Before: "Before",
+    ofcT3After: "After",
+    ofcT3CasesAndFlags: "Cases and risk flags",
+    ofcT3OpenCaseAbout: "Open a case about this transaction",
+    ofcT3Withheld: "Not shown to your role",
+    ofcT3WithheldBody: "These parts exist and your permissions do not reach them. They are named so an empty section is never mistaken for an empty record.",
+    ofcT3NoPayment: "No payment has been attempted.",
+    ofcT3NoReceipt: "No receipt has been issued.",
+    ofcT3NoSettlement: "The money has not reached the government account yet.",
+    ofcT3NoCommission: "No commission was earned.",
+    ofcT3NoReconciliation: "This has not been through a reconciliation run.",
+    ofcT3Channel: "Channel",
+    ofcT3Where: "Where",
+    ofcT3ServiceCharge: "Service charge",
+    ofcChInvoiceIntro: "What was demanded, what it was computed from, and how much of it has been paid.",
+    ofcChAssessmentIntro: "What was computed, and whether it has been demanded yet.",
+    ofcChDemanded: "Demanded",
+    ofcChPaidSoFar: "Paid so far",
+    ofcChStillOwed: "Still owed",
+    ofcChIssued: "Issued",
+    ofcChPayableUntil: "Payable until",
+    ofcChLapsedTitle: "The deadline has passed",
+    ofcChLapsed: "This invoice lapsed on {{date}}. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChLapsedNoDate: "This invoice has lapsed. The platform will refuse money against it, so collecting means raising a fresh assessment first.",
+    ofcChHowComputed: "How the figure was arrived at",
+    ofcChTraceFrozen: "Recorded when the assessment was raised, and frozen since. This is what the calculation did on the day, not what it would do today.",
+    ofcChNoTrace: "No calculation was recorded against this assessment.",
+    ofcChStep: "Step",
+    ofcChDetail: "What was done",
+    ofcChAmount: "Amount",
+    ofcChVerificationCode: "Verification code",
+    ofcChOpenAssessment: "Open assessment {{number}}",
+    ofcChOpenTransaction: "Open transaction {{reference}}",
+    ofcChNoTransaction: "Nobody has started a payment against this invoice.",
+    ofcChPeriod: "Period",
+    ofcChBaseAmount: "Before discount",
+    ofcChDiscount: "Discount",
+    ofcChPayable: "Payable",
+    ofcChRaisedBy: "Raised as",
+    ofcChRaisedOn: "Raised on",
+    ofcChNoInvoiceTitle: "Nothing has been demanded yet",
+    ofcChNoInvoiceYet: "No invoice has been raised from this assessment, so nothing is owed against it yet.",
+    ofcT3Verified: "Verified",
+    ofcT3NothingLinked: "No case or flag is linked to this transaction.",
     ofcGroupAdministration: "Administration",
     ofcGroupAgentsProgrammes: "Agents and programmes",
     ofcGroupAssessment: "Assessment",
@@ -3708,6 +6258,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPrinter: "Check printer connection",
     colPrintBluetooth: "Print (Bluetooth)",
     colReceiptCopied: "Receipt details copied. You can paste them into a message.",
+    colCouldNotCopy: "The phone would not copy it",
+    colCouldNotCopyBody: "Read or type the receipt details below into your message. They are the same details the copy would have carried.",
     colPreparingInvoice: "Preparing the invoice…",
     colGiveInvoice: "Give the taxpayer an invoice",
     colInvoiceHint: "A printable demand notice with the invoice number, what it is for and how the amount was worked out",
@@ -3716,6 +6268,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     colInvoiceNoReference: "Start the payment first if they want to pay at a bank: the reference a bank asks for is issued then, and the invoice does not carry it.",
     colCheckingPayment: "Checking with the payment system…",
     colCheckPaymentStatus: "Check payment status",
+    colStartingPayment: "Starting the payment…",
+    colStartPayment: "Start the payment",
+    colAlreadyOwes: "What they already owe",
+    colAlreadyOwesBody: "Open invoices on this taxpayer's record. If the payment in front of you is one of these, take that payment rather than raising a new charge \u2014 a second charge for the same thing is a second debt.",
+    colOwesUnknown: "Their open invoices could not be read",
+    colOwesUnknownBody: "Nothing here says they owe nothing; it says the platform could not tell you. Raising a charge now risks charging twice for the same levy.",
+    colTakeThisPayment: "Take this payment",
+    colChargeRaisedTitle: "The charge was raised. The payment was not.",
+    colChargeRaisedBody:
+      "Transaction {{reference}} now exists and the taxpayer owes it. Do not work this out again — a second attempt raises a second charge for the same thing, and both would have to be paid. Open the transaction to give them the invoice or to start the payment again.",
+    colOpenCharge: "Open this transaction",
     colDevGateway: "Development gateway",
     colDevGatewayHint: "This platform is running against a test payment gateway. Use these controls to simulate what a real gateway would report.",
     colSimulateSuccess: "Simulate success",
@@ -3763,7 +6326,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyScanHint: "Scan the square on the receipt, or type the code printed beneath it. PSIRS confirms whether the receipt was issued — reading the code only tells you what is on the paper.",
     verifyOfflineBody: "A receipt can only be checked against PSIRS, so this needs a connection. You can still scan the code and check it when you are back online.",
     verifyCouldNotReach: "PSIRS could not be reached, so this receipt could not be checked.",
-    verifyNotAReceiptCode: "That QR code is not a PSIRS receipt code. Keep the receipt in frame.",
+    verifyNotAReceiptCode: "That QR code is not a PSIRS verification code. Keep the receipt in frame.",
     verifyCameraFailed: "The camera could not be opened. Type the code printed under the QR square instead.",
     verifyChecking: "Checking with PSIRS…",
     verifyCheckThisCode: "Check this code",
@@ -3843,8 +6406,61 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpTinRequested: "TIN request submitted",
     tpTinPending: "The TIN service has not returned a number yet. It will appear on the taxpayer’s profile once assigned.",
     tpCollectRevenue: "Collect revenue",
+    tpEnumerate: "Write down the business",
+    agEnTitle: "What the business looks like",
+    agEnIntro: "Write down what you can see. You are not setting a price — the office works out the band from what you record, and the taxpayer is told by notice.",
+    agEnWho: "Who",
+    agEnPremises: "Where they trade from",
+    agEnPremisesHint: "What you can see today, not what they say they are building.",
+    agEnEquipment: "Machines or equipment",
+    agEnEquipmentHint: "Count what is being used for the business. Write 0 if there is none.",
+    agEnPeople: "People working besides the owner",
+    agEnPeopleHint: "Including apprentices and family who work there. Write 0 if the owner works alone.",
+    agEnSector: "Trade",
+    agEnGroup: "Market association",
+    agEnGroupHint: "If they belong to one, the leader will be asked to confirm what you wrote.",
+    agEnNoGroupChosen: "Not through an association",
+    agEnNoGroupsTitle: "No association to record this through",
+    agEnNoGroups: "None of your groups has been given a part in enumeration yet. Record it anyway — an officer can ask the leader later.",
+    agEnNoAmountTitle: "You are not setting the tax",
+    agEnNoAmount: "There is no amount on this form and there will not be one. If the trader asks what it will cost, tell them the office will send a notice, and that they can object to it.",
+    agEnChoose: "Choose",
+    agEnSave: "Save what you saw",
+    agEnSaving: "Saving…",
+    agEnRecordedTitle: "Written down",
+    agEnBand: "Size recorded",
+    agEnWhatHappensNextTitle: "What happens next",
+    agEnNextWithLeader: "The association leader will be asked to confirm this. Nothing is charged until an officer looks at it.",
+    agEnNextWithoutLeader: "An officer will look at this. Nothing is charged yet, and the taxpayer can object once they receive the notice.",
+    agEnBackToTaxpayer: "Back to the taxpayer",
+    agEnQueuedTitle: "Held on this phone",
+    agEnQueuedNext: "There is no signal, so this has not reached the office yet. It will be sent on its own when the phone is back online — do not write it down a second time. The office checks the size again when it arrives.",
+    agEnBandSoFarTitle: "Size from what you have written",
+    agEnBandSoFar: "This is a {{band}} business on what you have entered. If the trader asks, that is what has been written down. It is not the amount — the office works that out and sends a notice.",
     tpViewProfile: "View profile",
+    verifyReceiptFingerprintMismatch: "A receipt with this number exists, but the stored document does not match its original fingerprint. Treat the document you were given as unverified and report it to PSIRS.",
+    verifyReceiptReversed: "This receipt was issued but the payment has since been reversed or refunded. It is no longer valid evidence of payment.",
+    verifyReceiptVoided: "This receipt has been voided and is not valid.",
+    verifyReceiptGenuine: "This is a genuine government receipt issued by PSIRS.",
+    verifyReceiptGenuineUnchecked: "This is a genuine government receipt issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt.",
+    verifyNotFound: "No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS.",
+    verifyPaymentReversed: "This payment was reversed and the money is being returned to the payer, so no government receipt was issued for it. The document is no longer valid evidence of payment. If you have not received the money, contact PSIRS with this number.",
+    verifyDocumentRevoked: "This document has been revoked and is no longer valid.",
+    verifyDocumentFingerprintMismatch: "The stored document does not match its original fingerprint. Report this to PSIRS.",
+    verifyAcknowledgementNotReceipt: "This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt. The payment system has confirmed the payment; the money has not yet reached the government account. A receipt is issued automatically once it does, and can be checked here in the same way.",
+    verifyDocumentExpired: "This document expired on {{date}}.",
+    verifyDocumentGenuine: "This is a genuine government document issued by PSIRS.",
+    verifyDocumentGenuineUnchecked: "This is a genuine government document issued by PSIRS. The stored copy could not be checked just now, so its fingerprint has not been confirmed on this attempt.",
     tpPossibleExisting: "Possible existing taxpayer",
+    tpDupIdentityNumber: "The same identification number is already registered",
+    tpDupPhoneAndName: "Same phone number and same name",
+    tpDupPhone: "This phone number is already registered to another taxpayer",
+    tpDupBusinessNameInLga: "A business with this name is already registered in this LGA",
+    tpDupNameInLga: "A taxpayer with this name is already registered in this LGA",
+    tpDupCouldNotList: "The matching records could not be shown",
+    tpDupCouldNotListBody: "PSIRS has flagged this as a possible duplicate, but the records it matched could not be loaded, so you cannot check them here. Try again. If it will not load, look the person up by phone number before you register them again.",
+    tpDupTryAgain: "Try showing them again",
+    actionTryAgain: "Try again",
     tpCheckSamePerson: "Check whether any of these is the same person before creating a new record.",
     tpNoneOfThese: "None of these — register as a new taxpayer",
     tpHasTin: "Does the taxpayer already have a TIN?",
@@ -3871,6 +6487,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpWardHint: "Where revenue is reported from. Without it this collection cannot be counted below LGA level.",
     tpChooseLgaFirst: "Choose an LGA first",
     tpNoWardsListed: "No wards listed",
+    tpListCouldNotLoad: "This list could not be loaded.",
     tpSelectWard: "Select ward",
     tpCommunity: "Community",
     tpBusinessOrActivity: "Business or activity",
@@ -3905,16 +6522,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpVehicles: "Vehicles",
     tpExpires: "Expires {{date}}",
     tpNoRenewal: "No renewal on record",
-    camAlign: "Align QR code or barcode inside frame",
     camCancel: "Cancel",
-    camClose: "Close scanner",
-    camFlip: "Flip camera",
-    camInitializing: "Initializing camera...",
-    camTryAgain: "Try again",
-    camFlashOn: "Flash: ON",
-    camFlashOff: "Flash: OFF",
-    camNoAccess: "Could not access the device camera.",
-    camSwitchFailed: "The camera could not be switched.",
     appStageSubmitted: "Application submitted",
     appStageKyc: "Identity verified",
     appStageReview: "Ready for government review",
@@ -3940,6 +6548,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     appVerifying: "Verifying…",
     appStillNeeded: "Still needed before this can be submitted:",
     appStatus: "Status",
+    appClearFilters: "Clear",
     appDocumentOnFile: "Document on file",
     appRefereeNoAccount: "They do not need an account — they receive a secure link.",
     appRefereeShareLink: "If your referee did not receive the message, share this link with them directly:",
@@ -3967,6 +6576,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     appAllRequirementsMet: "All clearance requirements have been met.",
     appCannotCollectUntil: "You cannot collect revenue until every requirement below is complete.",
     appStillOutstanding: "Still outstanding",
+    appBlockerKyc: "Your identity has not been checked yet",
+    appBlockerReferee: "No referee has confirmed you yet",
+    appBlockerGovernmentApproval: "PSIRS has not approved your application yet",
+    appBlockerTraining: "You have not finished the required training",
+    appBlockerBank: "Your commission bank account has not been verified",
+    appBlockerAgreement: "You have not accepted the agent agreement",
+    appBlockerDevice: "No device has been registered to you",
     appComplete: "Complete",
     appGoToDashboard: "Go to my dashboard",
     appIdentityVerification: "Identity verification",
@@ -4038,6 +6654,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreRequestPayout: "Request payout",
     moreRequestingPayout: "You are requesting a payout of",
     moreSomeCommissionOwedBack: "Some commission is owed back",
+    moreSomeCommissionOnHold: "Some commission is on hold",
+    moreOnHoldBody: "is on hold and is not counted in any of the figures above. It is held while something about those collections is checked. Ask your supervisor what is outstanding.",
+    moreCommissionApproved: "Some commission is approved for payment",
+    moreApprovedBody: "has been approved and is waiting to be paid. It is no longer available to request, and it has not reached your account yet.",
+    moreSomeCommissionReversed: "Some commission was reversed",
+    moreReversedBody: "was earned on collections that were later reversed, and was never paid. You will not receive it. This is separate from anything owed back.",
     moreReceiptsFacilitated: "Receipts you facilitated",
     moreNoReceipts: "No receipts yet.",
     moreSavedRecords: "Saved records on this device",
@@ -4146,9 +6768,121 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "Recorded",
     allocCodeUsed: "This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.",
     scanCamera: "Camera",
+    rcpGovernment: "PLATEAU STATE GOVERNMENT",
+    prnNoWritable: "No writable printer service was found on this device.",
+    prnNotConnected: "No printer is connected. Connect one first.",
+    prnSendFailed: "The printer did not accept the data. Try again.",
+    prnDisconnected: "The printer disconnected.",
+    slipTestOk: "PRINTER TEST OK",
+    slipWidth: "Width",
+    slipStatus: "Status",
+    slipConnected: "Connected (BLE)",
+    slipReady: "Mobile POS Terminal Ready",
+    rcpThanks: "Thank you for your civic duty",
+    rcpBureau: "INTERNAL REVENUE SERVICE",
+    rcpPlatform: "Digital Grassroots Platform",
+    rcpTitle: "OFFICIAL REVENUE RECEIPT",
+    rcpDateTime: "Date / Time",
+    rcpReference: "Reference",
+    rcpLga: "LGA",
+    rcpWard: "Ward",
+    rcpTaxpayer: "Taxpayer",
+    rcpPhone: "Phone",
+    rcpItem: "Service",
+    rcpCategory: "Category",
+    rcpAgentCode: "Agent ID",
+    rcpAgentName: "Agent Name",
+    rcpScanToVerify: "SCAN TO VERIFY AUTHENTICITY",
+    rcpCheckOffice: "Check this receipt at any",
+    rcpCheckOfficeCont: "PSIRS office with the code.",
+    rcpOffice: "Government Revenue Office",
+    rcpVehAdmin: "MOTOR VEHICLE ADMINISTRATION",
+    rcpVehLicensing: "Vehicle Licensing & Renewal",
+    rcpVehTitle: "VEHICLE RENEWAL CLEARANCE",
+    rcpVehPlate: "Plate Number",
+    rcpVehDoc: "Document Number",
+    rcpVehOwner: "Owner",
+    rcpVehMakeModel: "Make/Model",
+    rcpVehYear: "Year",
+    rcpVehChassis: "Chassis",
+    rcpVehFrom: "Valid From",
+    rcpVehUntil: "Valid Until",
+    rcpVehFee: "FEE PAID",
+    rcpVehOfficial: "OFFICIAL DIGITAL CLEARANCE",
+    rcpVehCheck: "Check the code at PSIRS.",
+    connOnline: "Online",
+    connOnlineDetail: "All services are available.",
+    connLimited: "Poor connection",
+    connLimitedDetail: "Your connection is weak. Payments may take longer to confirm — do not start a payment twice.",
+    connOffline: "Offline",
+    connOfflineDetail: "You can register a taxpayer and write down a business, and both will be sent when you are back online. Payments are not possible while offline.",
+    appRecordsWaiting: "saved records waiting to send",
+    stepUpSignInAgain: "Sign in again to request a code.",
+    stepUpEnterCode: "Enter the one-time code sent to your phone to authorise this action:",
+    stepUpCodeRequired: "A one-time code is required to continue.",
+    morePushUnsupported: "Push notifications are not supported on this device or browser.",
+    errUploadFailed: "The document could not be sent. Try again.",
+    errUploadOffline: "You are offline. An identity document is sent to PSIRS as it is captured and is not stored on this device — take the photograph again when you have a connection.",
+    scanCameraDenied: "PSIRS does not have permission to use the camera. Allow it in your browser settings, or type the code instead.",
+    scanCameraMissing: "No camera was found on this device. Type the code instead.",
+    scanCameraUnsupported: "This browser cannot open the camera. Type the code instead.",
+    colInvoiceReady: "Invoice {{number}} is ready to print or send.",
+    morePayoutRequested: "Payout requested. It will be paid after finance approval. Reference {{reference}}.",
+    morePayoutClawback: "Payout requested for {{amount}}. {{gross}} of commission was eligible and {{clawback}} was deducted for transactions that were reversed after their commission had been paid. It will be paid after finance approval. Reference {{reference}}.",
+    agStepCodeSentTo: "We sent a code to {{phone}}. It is only for this one action.",
+    appDraftsSynced: "{{count}} saved record(s) sent to PSIRS.",
+    appDraftsSyncedRejected: "{{count}} saved record(s) sent to PSIRS, {{rejected}} need correction.",
+    errRequestFailed: "The request failed. Try again, or contact support.",
+    ofcAgConfirmHowPrompt: "Say how you confirmed this change with {{name}} (at least 10 characters):",
+    ofcAgRefuseWhyPrompt: "Say why this change is being refused (at least 10 characters):",
+    ofcAgAccountChanged: "{{name}}’s commission account has been changed.",
+    ofcAgChangeRefused: "The change for {{name}} was refused. Their existing account is unchanged.",
+    ofcAgNotConfirmed: "Not confirmed",
+    ofcAgNotConfirmedBecause: "Not confirmed: {{reason}}",
+    ofcAgAnOfficer: "An officer ({{role}})",
+    ofcAgUnknownRole: "unknown role",
+    ofcAgBankStillNotConfirmed: "The bank still did not confirm it ({{outcome}}).",
+    ofcAlForfeitWhy: "Why is {{name}}’s {{quantity}} forfeited?",
+    ofcAlThisBeneficiary: "this beneficiary",
+    ofcAlRoundOpened: "{{name}} is open. Awards can now be made.",
+    ofcAlRoundClosed: "{{name}} is closed. No further awards.",
+    ofcAlRoundCannotCloseBeforeOpen: "A round cannot close before it opens.",
+    ofcCfItemAdded: "{{name}} has been added to the catalogue. It has no rate yet, so it cannot be assessed until you set one.",
+    ofcCfNotAnAmount: "“{{amount}}” is not an amount in naira. Enter it as 15000 or 15000.00.",
+    ofcCfNotAPercentage: "“{{value}}” is not a percentage. Enter it as 5 or 5.00.",
+    ofcCfRateRecorded: "A new rate version for “{{name}}” has been recorded, effective {{date}}. ",
+    ofcCfProgrammeStatus: "Programme “{{name}}” is now {{status}}.",
+    ofcCfRateCannotBeNegative: "A rate cannot be negative.",
+    ofcCfPercentageCannotExceed100: "A percentage rate cannot be more than 100%.",
+    ofcFaMinimumAboveRecommended: "A minimum of {{minimum}} is above the recommended {{recommended}}, so even a handset on the newest build would be refused.",
+    ofcFaNoHandsetBelow: "No active handset is below {{version}}.",
+    ofcFaHandsetWouldStop: "{{count}} of {{total}} active handset would stop collecting until it is updated.",
+    ofcFaHandsetsWouldStop: "{{count}} of {{total}} active handsets would stop collecting until they update.",
+    ofcFnSettlementRecorded: "{{reference}} recorded. {{count}} collection(s) settled.",
+    ofcFnSettlementDisputed: "{{reference}} recorded and disputed: the credit does not match the collections it covers, so none of them have been settled. Close the dispute once the rest of the money is accounted for.",
+    ofcFnTotalCreditedPrompt: "Total now credited against {{reference}}, in naira. ",
+    ofcFnReconciliationAborted: "Reconciliation did not run: {{reason}} ",
+    ofcFnStatementUnavailable: "the gateway statement could not be retrieved.",
+    ofcFnReconciliationComplete: "Reconciliation complete: {{matched}} matched, {{exceptions}} exception(s)",
+    ofcFnReconciliationUnchecked: ", {{count}} reference(s) the gateway could not be asked about",
+    ofcFnTotalsAgree: ". Platform total and gateway total agree.",
+    ofcFnTotalsDisagree: ". Platform total and gateway total DO NOT agree.",
+    ofcFnRecoverChecked: "Checked {{attempted}} unconfirmed payment(s) against the gateway; {{verified}} were confirmed and have now been receipted.",
+    ofcFnReversalExecuted: "Reversal executed as {{reference}}. {{count}} commission record(s) reversed.",
+    ofcGrApproved: "{{name}} approved. Members can now be recorded.",
+    ofcGrCollectedAt: " · collected at {{place}}",
+    ofcKycAccepted: "{{document}} accepted.",
+    ofcKycRejectedNotice: "{{document}} rejected. The applicant can see the reason and submit a replacement.",
+    ofcKycSubmittedByApplicant: "{{document}} submitted by the applicant",
+    ofcKycReasonGiven: "Reason given: {{reason}}",
+    ofcOvSweepRaised: "Sweep complete. {{count}} flag(s) raised for review.",
+    ofcOvJobsNeedAttention: "{{count}} of {{total}} scheduled jobs need attention. A job that is not running produces nothing to look at, so this is the only place it shows.",
+    ofcRhInvoiceDocumentReady: "Invoice document ready for {{number}}.",
+    ofcRhPayoutApproved: "Payout {{reference}} approved.",
+    ofcSpTicketMoved: "Ticket moved to {{status}}.",
     verifyCheckReceipt: "Check a receipt",
     verifyScanQr: "Scan the QR code",
-    verifyTypeCode: "Or type the receipt code",
+    verifyTypeCode: "Or type the verification code",
     verifyOffline: "You are offline",
     stepUpOneTimeCode: "One-time code",
     stepUpExpired: "That code has expired",
@@ -4178,7 +6912,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     receiptNotValid: 'Not a valid receipt',
     receiptNotValidBody:
       'No government document matches that number or code. If you were given a receipt bearing this number, it was not issued by PSIRS.',
-    receiptCodeShape: 'A receipt code looks like T7C72-QTUDN. Check the code and try again.',
+    receiptCodeShape: 'A verification code looks like T7C72-QTUDN. Check the code and try again.',
 
     needFirstName: 'Enter the taxpayer\u2019s first name.',
     needLastName: 'Enter the taxpayer\u2019s last name.',
@@ -4206,7 +6940,6 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     offlineMessage: 'You are offline. Saved records will sync when signal returns.',
     offlineNotice: 'Captured offline. No money has been marked as received until confirmed.',
-    scanHelp: 'Align the receipt QR code or vehicle license inside the frame.',
     civicDutyThanks: 'Thank you for fulfilling your civic duty.',
     paymentSuccess: 'Payment Successful',
     pubService: 'Plateau State Internal Revenue Service',
@@ -4274,22 +7007,317 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubAttestAnswerAll: 'Please answer for every person before sending.',
     pubAttestSubmit: 'Send my answers',
     pubCitizenTitle: 'Check your tax status',
+    pubCitizenModeTin: 'By TIN',
+    pubCitizenModePhone: 'By phone',
+    pubCitizenModeName: 'By name',
+    pubCitizenCheck: 'Check status',
+    pubCitizenSearching: 'Searching…',
+    pubCitizenExampleTin: 'e.g. PL-000001234',
+    pubCitizenExamplePhone: 'e.g. 08012345678',
+    pubCitizenExampleName: 'e.g. Aminu Ibrahim',
     pubCitizenByTin: 'Tax Identification Number (TIN)',
     pubCitizenByPhone: 'Registered phone number',
     pubCitizenByName: 'Full name or business name',
     pubCitizenTooMany: 'Use your TIN or exact phone number for a precise result.',
+    ofcDbOr: 'or',
+    ofcDbDayRange: '{{from}} to {{to}}',
+    ofcGpBeneficiaryCount: '{{count}} beneficiaries',
+    ofcGpCollectedOfAwarded: '{{collected}} of {{awarded}} ({{rate}}%)',
+    ofcGpEachBeneficiaryGets: '{{quantity}} {{unit}} each',
+    ofcOvIdentifiers: 'identifiers',
+    nsStepUpRequired: 'Confirm this with the one-time code, then try again.',
+    nsDeviceNotRegistered:
+      'Open Profile, then "View my application and clearance", to register it.',
+    nsDeviceRevoked:
+      'A revoked handset cannot be registered again. Register the replacement handset and ask your supervisor to approve it.',
+    nsDeviceSuspended: 'Your supervisor can tell you why, and restore it.',
+    nsUpdateRequired: 'Close and reopen the app to install the latest version.',
+    nsUpdateRequiredToEnumerate:
+      'Close and reopen the app to install the latest version. Anything already saved on this phone will still be sent.',
+    nsTinServiceUnavailable:
+      'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — that would create a second TIN for someone who already has one.',
+    nsTinNotFound:
+      'Check the number against the taxpayer’s own document first — a mistyped digit is the usual cause. Only if they have never had a TIN, go back and register them without one; the platform will apply for a new TIN for them.',
+    nsKycProviderUnavailable: 'Try again in a few minutes. Your application is unchanged.',
+    nsPaymentUnconfirmed: 'Open the transaction from your history to see its current status.',
+    nsPaymentFailed: 'Start the payment again, or choose a different payment method.',
+    nsAgentNotCleared: 'Open "My Application" to see what is still outstanding.',
+    ofcOvJobHealthy: 'Running on schedule.',
+    ofcOvJobRunning: 'Running now.',
+    ofcOvJobOverdue: 'Has not started when it should have. The schedule itself may have stopped.',
+    ofcOvJobStalled:
+      'Started and never finished. Whichever instance was running it did not come back.',
+    ofcOvJobFailing: 'Failed {{count}} times in a row: {{error}}',
+    ofcOvJobNeverRun: 'Has not run once since this database was created.',
+    ofcOvJobNoReason: 'no reason recorded',
+    ofcOvEverySeconds: 'every {{n}}s',
+    ofcOvEveryMinutes: 'every {{n}} min',
+    ofcOvEveryHours: 'every {{n}} h',
+    errDraftInvalid:
+      'PSIRS could not accept this capture: {{detail}}. It is still on your phone — correct it and send it again.',
+    errDraftTypeUnsupported:
+      'This version of the app made a "{{type}}" capture that PSIRS cannot process yet. It has not been lost — update the app, or quote this reference to support.',
+    errDraftNotProcessed:
+      'PSIRS could not process this capture. It is still on your phone — quote reference {{reference}} to support.',
+    agVehFoundConfirmed: 'Vehicle found and confirmed against the vehicle authority record.',
+    agVehFoundUnconfirmed:
+      'Vehicle found on the platform. It has not been confirmed against the vehicle authority.',
+    agVehRegistryUnavailable:
+      'The vehicle authority could not be reached, so we cannot say whether this vehicle is registered. Try again shortly. If the renewal cannot wait, capture the details manually — the record will be flagged for checking once the authority is back.',
+    agVehNotFound:
+      'No record of this vehicle was found on the platform or at the vehicle authority. Capture the vehicle details manually — the record will be marked as unverified.',
+    agVehFoundAtAuthority:
+      'Vehicle found at the vehicle authority. Confirm the owner before proceeding.',
+    agRefereeRequestSent: 'A verification request has been sent to {{name}}.',
+    agDevicePendingApproval: 'Device registered and awaiting approval by your supervisor.',
+    agDeviceSuspended: 'This device is registered but suspended. Your supervisor can restore it.',
+    agDeviceActive: 'Device registered and active.',
+    agGroupMemberRecorded:
+      'Recorded. The membership counts only once the group leader has confirmed it.',
+    ofcItemBackInCatalogue: '{{name}} is back in the catalogue and can be assessed again.',
+    ofcItemSuspended:
+      '{{name}} is suspended. No new assessment can be raised against it; invoices already issued stay payable.',
+    ofcItemRetired:
+      '{{name}} has been retired. Invoices already issued stay payable, and the item cannot be brought back.',
+    ofcGpMemberLeft:
+      '{{member}} is recorded as having left {{group}}. They keep what they already collected and will not be counted in future allocations.',
+    pubRefereeThankYouCleared: 'Thank you. Your verification has been completed and recorded.',
+    pubRefereeCouldNotVerify:
+      'Your identity could not be verified. PSIRS may contact you for more information.',
+    pubRefereeUnderReview:
+      'Thank you. Your response has been recorded and is now being reviewed by PSIRS.',
+    pubRefereeDeclineRecorded:
+      'Your decision has been recorded. The applicant will be told they need a different referee.',
+    pubGroupAllConfirmed: 'Thank you. You confirmed {{confirmed}} membership(s).',
+    pubGroupSomeConfirmed:
+      'Thank you. You confirmed {{confirmed}} membership(s) and did not confirm {{rejected}}.',
+    pubCitizenNoTinMatch: 'No taxpayer record found for that TIN.',
+    pubCitizenNoPhoneMatch: 'No taxpayer record found for that phone number.',
+    pubCitizenNoNameMatch: 'No record found with that name.',
+    pubCitizenOneMatch: 'One matching record found.',
+    pubCitizenManyMatches: '{{count}} records found with a similar name.',
     pubCitizenStatusHeading: 'Tax compliance status',
     pubCitizenCompliant: 'Compliant',
     pubCitizenArrears: 'Has arrears',
     pubCitizenAttention: 'Needs attention',
     pubCitizenNotAssessed: 'Not yet assessed',
+    pubCitizenMsgCompliant: 'Your tax records are up to date. Keep paying on time to maintain your status.',
+    pubCitizenMsgArrears: 'You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay.',
+    pubCitizenMsgAttention: 'Your compliance score needs improvement. Paying your obligations on time will raise it.',
+    pubCitizenMsgNotAssessed: 'Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment.',
+    pubCitizenDetail: 'For your TIN, your compliance score, what you owe and which support programmes you qualify for, visit any PSIRS office or an authorised revenue agent. They will confirm who you are first, which is why those details are not shown here.',
     pubCitizenTinStatus: 'TIN status',
     pubCitizenOutstanding: 'Outstanding obligations',
     pubCitizenOutstandingYes: 'Yes — please contact PSIRS',
     pubCitizenNone: 'None',
+    pubStmtFrom: "From",
+    pubStmtTo: "To",
+    pubStmtBackwards: "The start of the period is after its end.",
+    pubStmtAnotherPeriod: "Look at a different period (sends a new code)",
+    pubStmtTitle: "What you have already paid",
+    pubStmtIntro: "To see your payments we send a code to the phone number on your record. It is never sent to a number typed here.",
+    pubStmtSendCode: "Send me a code",
+    pubStmtSending: "Sending…",
+    pubStmtCodeSent: "If a record matches, a code has gone to the phone number on it. Enter it below.",
+    pubStmtCode: "Code from the SMS",
+    pubStmtShow: "Show my payments",
+    pubStmtChecking: "Checking…",
+    pubStmtPeriod: "Payments from {{from}} to {{to}}.",
+    pubStmtTotal: "Total paid",
+    pubStmtCount: "Payments",
+    pubStmtReturned: "Returned to you",
+    pubStmtReturnedRow: "returned to you",
+    pubStmtForWhat: "What it went to",
+    pubStmtEach: "Each payment",
+    pubStmtNothing: "Nothing was paid in this period.",
+    pubStmtFooter: "Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record.",
     pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
     pubCitizenAlso: 'Also available:',
     pubCitizenVerifyLink: 'Verify a payment receipt',
+    agSupYou: 'You',
+    collAuthorizedFieldOfficer: 'Authorized Field Officer',
+    moreDisablePushNotifications: 'Disable Push Notifications',
+    moreSentToPsirsYour: 'Sent to PSIRS. Your commission still goes to your existing account until an officer approves the change.',
+    moreUnknownOwner: 'Unknown owner',
+    ofcAgAgentActivated: 'Agent activated.',
+    ofcAgAgentAgreementAccepted: 'Agent agreement accepted',
+    ofcAgAgentSuspendedTheirSessions: 'Agent suspended. Their sessions and devices have been disabled.',
+    ofcAgApplicationApproved: 'Application approved.',
+    ofcAgApplicationRejected: 'Application rejected.',
+    ofcAgAskedForBy: 'Asked for by',
+    ofcAgCommissionBankAccountVerified: 'Commission bank account verified',
+    ofcAgConfirmedNoNameReturned: 'Confirmed, no name returned',
+    ofcAgDeviceApprovedTheAgent: 'Device approved. The agent can now collect from it.',
+    ofcAgDeviceRestoredTheAgent: 'Device restored. The agent can collect from it again.',
+    ofcAgDeviceRevokedAndIts: 'Device revoked and its sessions ended.',
+    ofcAgDeviceSuspendedAndIts: 'Device suspended and its sessions ended. It can be restored.',
+    ofcAgDocumentType: 'Document type',
+    ofcAgFailureReason: 'Failure reason',
+    ofcAgFlagDismissedTheReferee: 'Flag dismissed. The referee can be cleared as normal.',
+    ofcAgFlagMarkedAsUnder: 'Flag marked as under review.',
+    ofcAgFlagUpheldThisReferee: 'Flag upheld. This referee cannot be cleared until it is dismissed.',
+    ofcAgGiveAReasonOf: 'Give a reason of at least 10 characters. It is the only record of why the account somebody is paid into was moved.',
+    ofcAgGovernmentApproved: 'Government approved',
+    ofcAgIdentityVerifiedKyc: 'Identity verified (KYC)',
+    ofcAgLivenessCheck: 'Liveness check',
+    ofcAgMandatoryTrainingCompleted: 'Mandatory training completed',
+    ofcAgMoreInformationRequestedFrom: 'More information requested from the applicant.',
+    ofcAgNameTheAgentGave: 'Name the agent gave',
+    ofcAgNameTheBankReturned: 'Name the bank returned',
+    ofcAgNumberOnFile: 'Number on file',
+    ofcAgReasonGiven: 'Reason given',
+    ofcAgRecordThis: 'Record this',
+    ofcAgRefereeCleared: 'Referee cleared.',
+    ofcAgRefereeRejected: 'Referee rejected.',
+    ofcAgTerritoryReassignedFutureCollections: 'Territory reassigned. Future collections are attributed to it.',
+    ofcAgTheAgent: 'The agent',
+    ofcAgTheBankConfirmedThe: 'The bank confirmed the account.',
+    ofcAgTheBankCouldNot: 'The bank could not be reached',
+    ofcAgTheBankVerificationService: 'The bank verification service could not be reached. Try again before deciding — an unconfirmed account cannot be approved.',
+    ofcAgThisAccountCannotBe: 'This account cannot be approved while the bank does not confirm it. Refuse the request so the agent can send the right details.',
+    ofcAgUnnamed: 'Unnamed',
+    ofcAlChooseTheProgrammeThis: 'Choose the programme this round distributes under.',
+    ofcAlCreateARound: 'Create a round',
+    ofcAlCreateRound: 'Create round',
+    ofcAlCreating: 'Creating…',
+    ofcAlGiveTheRoundA: 'Give the round a name people will recognise.',
+    ofcAlHowMuchDoesEach: 'How much does each beneficiary receive?',
+    ofcAlHowMuchIsThere: 'How much is there to distribute in total?',
+    ofcAlNotYet: 'Not yet',
+    ofcAlOneBeneficiaryCannotReceive: 'One beneficiary cannot receive more than the whole round holds.',
+    ofcAlRoundCreatedItAwards: 'Round created. It awards nothing until you open it.',
+    ofcAlWhenDoesCollectionOpen: 'When does collection open?',
+    ofcCfActivate: 'Activate',
+    ofcCfAddToTheCatalogue: 'Add to the catalogue',
+    ofcCfAdding: 'Adding…',
+    ofcCfBusinesses: 'Businesses',
+    ofcCfCalculatedByFormula: 'Calculated by formula',
+    ofcCfCurrent: 'Current',
+    ofcCfEnterTheNewAmount: 'Enter the new amount. Leave nothing to chance \\u2014 type 0 if the levy is being suspended.',
+    ofcCfEnterTheNewRate: 'Enter the new rate as a percentage. Type 0 if the levy is being suspended.',
+    ofcCfEvaluateAll: 'Evaluate all',
+    ofcCfEvaluating: 'Evaluating…',
+    ofcCfExistingAssessmentsAreUnaffected: 'Existing assessments are unaffected.',
+    ofcCfForExampleRepealedBy: 'For example: repealed by the Plateau State Finance Law amendment.',
+    ofcCfGiveAReasonFor: 'Give a reason for the rate change, in at least 10 characters.',
+    ofcCfIndividuals: 'Individuals',
+    ofcCfNoApprovedRateIn: 'No approved rate in force',
+    ofcCfNoNewAssessmentCan: 'No new assessment can be raised against a withdrawn item. Invoices already issued stay payable — withdrawing an item is not a decision to write off arrears.',
+    ofcCfNotEligible: 'Not eligible',
+    ofcCfOfAssessableAmount: '% of assessable amount',
+    ofcCfProgressiveBands: 'Progressive bands',
+    ofcCfRecordNewRateVersion: 'Record new rate version',
+    ofcCfRecording: 'Recording…',
+    ofcCfRestoreItem: 'Restore item',
+    ofcCfTheItemGoesBack: 'The item goes back into the catalogue and can be assessed against again.',
+    ofcCfWhatChangedForExample: 'What changed — for example, the tariff was confirmed against the gazette.',
+    ofcCfWithdrawItem: 'Withdraw item',
+    ofcDbAverageTimeToConfirm: 'Average time to confirm a payment',
+    ofcDbDuplicateRegistrationsOverridden: 'Duplicate registrations overridden',
+    ofcDbNewTaxpayersThisMonth: 'New taxpayers this month',
+    ofcDbReversalsAndRefunds: 'Reversals and refunds',
+    ofcDbTaxpayersWithATin: 'Taxpayers with a TIN',
+    ofcDbTotalCollected: 'Total collected',
+    ofcFaEnterTheMinimumVersion: 'Enter the minimum version as digits and dots, like 1.4.0.',
+    ofcFaEnterTheRecommendedVersion: 'Enter the recommended version as digits and dots, like 1.4.0.',
+    ofcFaNeverReportedAVersion: 'Never reported a version',
+    ofcFaPublishThisMinimum: 'Publish this minimum',
+    ofcFaPublishing: 'Publishing…',
+    ofcFaSayWhyTheMinimum: 'Say why the minimum is moving, in at least 10 characters. It is what an agent who is locked out will be shown.',
+    ofcFaShippedWithThePlatform: 'Shipped with the platform',
+    ofcFnBankReferenceForThe: 'Bank reference for the credit that settles it',
+    ofcFnBankTransferReferenceAt: 'Bank transfer reference (at least 3 characters):',
+    ofcFnEnterTheCreditedAmount: 'Enter the credited amount in naira, for example 1250000.00.',
+    ofcFnBankReferenceRequired:
+      'Enter the bank reference for the credit that settles this. It is what ties the settlement to the money that actually arrived.',
+    ofcFnDisputeNoteTooShort:
+      'Say what the variance turned out to be, in at least 10 characters. It is the only record of why this settlement was closed.',
+    ofcFnItHasToAccount: 'It has to account for the collections in the batch in full.',
+    ofcFnListTheGatewayReferences: 'List the gateway references this credit covers.',
+    ofcFnNothingWasComparedFor: 'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
+    ofcFnReRunThisPeriod: 'Re-run this period once the gateway is reachable.',
+    ofcFnReasonForApprovingThis: 'Reason for approving this payout (at least 5 characters):',
+    ofcFnReasonForThisDecision: 'Reason for this decision (at least 10 characters):',
+    ofcFnRecordHowThisException: 'Record how this exception was resolved (at least 10 characters):',
+    ofcFnWhatDidTheBank: 'What did the bank say? (at least 10 characters)',
+    ofcFnWhatTheVarianceTurned: 'What the variance turned out to be',
+    ofcGpConfirmationLinkCreated: 'Confirmation link created.',
+    ofcKyOpenAndReview: 'Open and review',
+    ofcKyReviewedOn: 'Reviewed on',
+    ofcKyTheAccessLogCould: 'The access log could not be read.',
+    ofcLgCouldNotReachThe: 'Could not reach the revenue platform. Check your connection.',
+    agStepSendingACode: 'Sending a one-time code…',
+    agStepCodeSentToNumber: 'We sent a code to your registered number.',
+    uiHide: 'Hide',
+    uiHidePassword: 'Hide password',
+    uiShow: 'Show',
+    uiShowPassword: 'Show password',
+    ofcOsAskTheGatewayAgain: 'Ask the gateway again',
+    ofcOsAskTheTinService: 'Ask the TIN service again',
+    ofcOsAskingTheGateway: 'Asking the gateway…',
+    ofcOsAskingTheTinService: 'Asking the TIN service…',
+    ofcOsEveryQueueYouCan: 'Every queue you can see is empty. Others are guarded by permissions your role does not hold.',
+    ofcOsEveryRefundHasBeen: 'Every refund has been returned, every taxpayer has their TIN, and the vehicle authority has acknowledged every renewal.',
+    ofcOsNotAttemptedYet: 'Not attempted yet',
+    ofcOsSendToTheAuthority: 'Send to the authority again',
+    ofcOsSendingToTheAuthority: 'Sending to the authority…',
+    ofcOvEveryScheduledJobHas: 'Every scheduled job has run recently and succeeded.',
+    ofcOvId: 'Id',
+    ofcOvLoading: 'Loading…',
+    ofcOvNoTaxpayerMatchedThat: 'No taxpayer matched that search',
+    ofcOvNothingToChooseFrom: 'Nothing to choose from',
+    ofcOvRecordWhatYouFound: 'Record what you found (at least 10 characters):',
+    ofcOvRunAFraudSweep: 'Run a fraud sweep now',
+    ofcOvRunThisQuery: 'Run this query',
+    ofcOvRunning: 'Running…',
+    ofcOvSearchForATaxpayer: 'Search for a taxpayer first',
+    ofcOvSelectOne: 'Select one',
+    ofcOvSweepCompleteNothingNew: 'Sweep complete. Nothing new was flagged.',
+    ofcOvSweeping: 'Sweeping…',
+    ofcOvTheAuditTrailCould: 'The audit trail could not be checked just now. This is not a finding about the trail — try again, and tell support if it persists.',
+    ofcOvWhichAgent: 'Which agent?',
+    ofcOvWhichRevenueItem: 'Which revenue item?',
+    ofcOvWhichTaxpayer: 'Which taxpayer?',
+    ofcRhAskTheRegisterAgain: 'Ask the register again',
+    ofcRhAsking: 'Asking…',
+    ofcRhDeviceApproved: 'Device approved.',
+    ofcRhInvoiceDocument: 'Invoice document',
+    ofcRhPreparing: 'Preparing…',
+    ofcRhReAskedTheTin: 'Re-asked the TIN register for everyone still waiting.',
+    ofcRhRemindersSentToTaxpayers: 'Reminders sent to taxpayers with something due.',
+    ofcRhSendPaymentReminders: 'Send payment reminders',
+    ofcRvEveryFigureHereCovers: 'Every figure here covers your territories only, not the whole state.',
+    ofcRvNotMapped: 'Not mapped',
+    ofcRvTheseFiguresAreEmpty: 'These figures are empty because your account covers no territory yet.',
+    ofcSpAddAnInternalNote: 'Add an internal note',
+    ofcSpAssignedTo: 'Assigned to',
+    ofcSpContact: 'Contact',
+    ofcSpInternalNoteSavedThe: 'Internal note saved. The reporter cannot see it.',
+    ofcSpNobodyYet: 'Nobody yet',
+    ofcSpOnlyStaffWithSupport: 'Only staff with support access can read this. The reporter never sees it.',
+    ofcSpReplySent: 'Reply sent.',
+    ofcSpReplyToTheReporter: 'Reply to the reporter',
+    ofcSpSaveInternalNote: 'Save internal note',
+    ofcSpSendReply: 'Send reply',
+    ofcSpThisGoesToThe: 'This goes to the person who raised the ticket, and they are notified.',
+    ofcTrCorrecting: 'Correcting…',
+    ofcTrEnterTheCorrectedValue: 'Enter the corrected value in whichever field is wrong.',
+    ofcTrNameTheTypeOf: 'Name the type of identification when changing the number.',
+    ofcTrOnRecordNow: 'On record now',
+    ofcTrPutBackOnThe: 'Put back on the register',
+    ofcTrRecordThisCorrection: 'Record this correction',
+    ofcTrRecording: 'Recording…',
+    ofcTrSayWhatIsBeing: 'Say what is being corrected and why, in at least 10 characters. It is the only record of why.',
+    ofcTxDirect: 'Direct',
+    ofcUaChangeAccessAndSign: 'Change access and sign them out',
+    ofcUaChanging: 'Changing…',
+    ofcUaLetThemSignIn: 'Let them sign in again',
+    ofcUaSaveTerritories: 'Save territories',
+    ofcUaSignThemOutAnd: 'Sign them out and stop the account',
+    ofcUsApplyingToBecomeAn: 'Applying to become an agent',
+    ofcUsCapturingAVehicle: 'Capturing a vehicle',
+    ofcUsRegisteringATaxpayer: 'Registering a taxpayer',
+    ofcUsTakingACollection: 'Taking a collection',
   },
   ha: {
     appName: 'Hukumar Haraji ta Jihar Filato (PSIRS)',
@@ -4309,7 +7337,6 @@ export const translations: Record<Language, TranslationDictionary> = {
     downloadReceipt: 'Sauke Rasit (PDF)',
     shareReceipt: 'Tura Rasit',
     printBluetooth: 'Buga Rasit a Inji (Bluetooth)',
-    scanQr: 'Duba Lambar QR',
     registerTaxpayer: 'Yi Rajistar Mai Biyan Haraji',
     renewVehicle: 'Sabunta Lasisin Mota',
     pairPrinter: 'Hada Injin Buga Rasit',
@@ -4324,8 +7351,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     service: 'Nau’in Haraji / Aiki',
     amount: 'Kudin Haraji',
     totalPaid: 'Jimlar Kudin da Aka Biya',
+    colIncludesServiceCharge: 'ya hada da kudin hidima {{charge}} da aka amince da shi, wanda ba kudin shiga na gwamnati ba ne',
     receiptNumber: 'Lambar Rasit',
-    verificationCode: 'Lambar Tabbatarwa',
+    verificationCode: 'Lambar Tantancewa',
     paymentMode: 'Hanyar Biyan Kudi',
     neverCollectCash: 'Kada ka karbi kudi a hannu',
     neverCollectCashBody:
@@ -4359,7 +7387,7 @@ export const translations: Record<Language, TranslationDictionary> = {
       'BA A nuna an karbi wannan kudin ba. Kada ka ce wa mai biyan haraji ya sake biya \u2014 ka sake dubawa nan da dan lokaci.',
     paymentAcknowledged: 'An tabbatar da biyan kudin \u2014 rasit zai biyo baya',
     paymentAcknowledgedBody:
-      'Na\u02bburar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya.',
+      'Na’urar biyan kudi ta tabbatar da wannan biyan. Gwamnati ba ta riga ta karbi kudin ba, don haka wannan shaidar karbar kudi ce, BA rasit ba. Za a fitar da rasit ta atomatik da zarar kudin ya isa asusun gwamnati. Kada ka ce wa mai biyan haraji ya sake biya.',
     acknowledgementLabel: 'Shaidar karbar kudi',
 
     findTaxpayerFirst: 'Ka nemo mai biyan haraji tukuna. Dole a danganta kowane biyan kudi ga wani.',
@@ -4380,6 +7408,23 @@ export const translations: Record<Language, TranslationDictionary> = {
       'An karbi kudin amma ana jiran a sasanta shi. Kada ka sake karba. Za a bayar da rasit da zarar kudin ya isa asusun gwamnati.',
     errPaymentFailed:
       'Biyan kudin bai yi nasara ba. Ba a karbi kudi daga mai biyan haraji ba. Kana iya sake farawa.',
+    errTrainingScoreBelowPassMark:
+      'Ka samu kashi {{score}} a {{module}}. Kana bukatar akalla kashi {{passMark}} ka ci jarrabawar. Ka sake nazarin darasin sannan ka sake gwadawa.',
+    errPhoneAlreadyRegistered:
+      'An riga an bude asusu da wannan lambar waya. Ka shiga maimakon ka sake nema.',
+    errKycAlreadyCleared: 'An riga an tantance sunanka. Babu sauran abin yi a nan.',
+    errDeviceBeforeApproval:
+      'Za ka iya yin rajistar wannan wayar bayan PSIRS ta amince da bukatarka. Za a sanar da kai idan an gama dubawa.',
+    errDeviceRevokedCannotReregister:
+      'An janye wannan wayar, ba za a sake yin rajistarta ba. Ka yi amfani da wata wayar.',
+    errNoBankAccountOnRecord:
+      'Babu asusun banki a rikodinka tukuna, don haka babu abin canzawa. Ana daukar asusun a takardar neman aiki.',
+    errBankDetailsUnchanged: 'Wadannan su ne bayanan da ke rikodinka. Babu abin da zai canza.',
+    errBankChangeAlreadyPending:
+      'Canjin asusun bankinka yana hannun jami’i. Sai an amince ko an ki shi kafin ka nemi wani.',
+    errBankChangeAlreadySettled: 'An riga an yanke shawara kan wannan canjin.',
+    errPayoutInFlight:
+      'Akwai kudin da ba su kai asusunka ba tukuna. Ba za a canza bayanan bankinka ba yayin da kudi ke kan hanya zuwa gare su.',
     errAgentNotCleared:
       'Ba a ba ka izinin karbar haraji ba tukuna. Dole a kammala bukatarka a kuma amince da ita.',
     errDeviceNotRegistered:
@@ -4414,6 +7459,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcUaChooseRoleFirst: "Ka zabi matsayin da wannan jami’in zai rike.",
     ofcUaAlreadyHolds: "{{name}} ya riga ya rike matsayin {{role}}.",
     ofcUaSayWhy: "Ka fada dalilin canja wannan izini, da akalla haruffa 10. Shi ne kadai bayanin dalilin.",
+    ofcUaNowRole: "{{name}} yanzu {{role}} ne.",
+    ofcUaSessionsEnded: "An kawo karshen zaman da aka bude {{n}}, don haka sai sun sake shiga.",
+    ofcUaNoOpenSessions: "Ba su da wani zaman a bude.",
+    ofcUaCanSignInAgain: "{{name}} na iya sake shiga.",
+    ofcUaAccountIsNow: "Asusun {{name}} yanzu {{status}} ne.",
+    ofcUaSessionsEndedNow: "An kawo karshen zaman da aka bude {{n}} nan take.",
     ofcAgRecordWhatYouFound: "Ka rubuta abin da ka gano: shi ne kadai bayanin dalilin da ya sa aka bar wannan alamar a bude, aka tabbatar da ita, ko aka yi watsi da ita.",
     enumDeviceVelocity: "Na’ura daya, karbar kudi da yawa",
     enumSharedPhoneNumber: "Lambar waya daya a kan masu biyan haraji da yawa",
@@ -4422,6 +7473,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumRepeatedFailedPayments: "Biyan kudi da ke ci gaba da gazawa",
     enumReversalPattern: "Yanayin mayar da kudi akai-akai",
     enumUnusualVolume: "Karbar kudi fiye da yadda aka saba",
+    enumFrequentManualIntervention: "Ana yawan canza shi da hannu",
+    enumRepeatedReceiptRegeneration: "An sake fitar da rasit ko saukar da shi sau da yawa",
+    enumUnusualOfficerActivity: "Aiki ya fi na yau da kullun na wannan jami’in",
+    enumUnusualTransactionTiming: "An rubuta karbar kudi da tsakar dare",
+    enumUser: "Jami’i",
     enumRapidSuccession: "Karbar kudi a jere, da sauri sosai",
     enumCommissionAnomaly: "Kwamishan da bai yi daidai ba",
     enumSettlementVariance: "Hanyar biya ta biya wani adadi daban",
@@ -4456,7 +7512,39 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumArtisanGuild: "Kungiyar masu sana’a",
     enumAssessment: "Kimantawa",
     enumAssessmentCreated: "An yi kimantawa",
+    dowSun: 'Lahadi',
+    dowMon: 'Litinin',
+    dowTue: 'Talata',
+    dowWed: 'Laraba',
+    dowThu: 'Alhamis',
+    dowFri: 'Jumma’a',
+    dowSat: 'Asabar',
+    monthJan: 'Janairu',
+    monthFeb: 'Faburairu',
+    monthMar: 'Maris',
+    monthApr: 'Afirilu',
+    monthMay: 'Mayu',
+    monthJun: 'Yuni',
+    monthJul: 'Yuli',
+    monthAug: 'Agusta',
+    monthSep: 'Satumba',
+    monthOct: 'Oktoba',
+    monthNov: 'Nuwamba',
+    monthDec: 'Disamba',
+    monJan: 'Jan',
+    monFeb: 'Fab',
+    monMar: 'Mar',
+    monApr: 'Afi',
+    monMay: 'May',
+    monJun: 'Yun',
+    monJul: 'Yul',
+    monAug: 'Agu',
+    monSep: 'Sat',
+    monOct: 'Okt',
+    monNov: 'Nuw',
+    monDec: 'Dis',
     enumAssigned: "An ba wa wani",
+    enumTinAssigned: "An bayar",
     enumAttested: "An shaida",
     enumAuditor: "Mai binciken lissafi",
     enumAuthorityLookup: "Binciken hukuma",
@@ -4690,6 +7778,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     enumStarted: "An fara",
     enumState: "Jiha",
     enumStepUp: "Karin tabbatarwa",
+    enumCitizenStatement: "Bayanin biyayya",
     enumStudentUnemployed: "Dalibi ko marar aikin yi",
     enumSubmitted: "An tura",
     enumSucceeded: "Ya yi nasara",
@@ -4806,6 +7895,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTrNameOrDob: "Ana iya gyara suna ko ranar haihuwa a nan. Takardar da aka rike rikodin a kanta ce ke yanke wanne mutum ya shafa, don haka mai gudanarwa ne ya kamata ya yi wannan canjin.",
     ofcTrWhatAndWhy: "Abin da ake gyarawa, da dalilin",
     ofcTrLiableFor: "Abin da wannan mai biyan haraji ke bin sa",
+    ofcTrEntitledTo: "Abin da wannan mai biyan haraji ke da hakkin samu",
+    ofcTrEntitledBody: "Duk shirin da ke gudana yanzu, da inda wannan mai biyan haraji yake a kan kowanne. Shirin da ba a tantance shi a kansa ba yana fadin haka, maimakon a karanta shi a matsayin kin amincewa.",
+    ofcTrProgramme: "Shiri",
+    ofcTrBenefit: "Amfani",
+    ofcTrEntitlement: "Hakki",
+    ofcTrNotEvaluated: "Ba a tantance ba",
+    ofcTrNotEligible: "Bai cancanta ba",
+    ofcTrBaseOnly: "Tushe kadai",
+    ofcTrFullBenefit: "Cikakken amfani",
+    ofcTrWhyNot: "Dalili",
+    ofcNoneProgrammesRunning: "Babu shirin da ke gudana a yanzu.",
     ofcTrWaiveBody: "Yafe wajibi yana tsayar da kima na gaba a kansa. Takardun biya da aka riga aka yi suna nan a biya — soke su shawara ce daban, takarda bayan takarda.",
     ofcTrWaive: "Yafe",
     ofcTrVehiclesOnRecord: "Motoci a wannan rikodin",
@@ -4862,6 +7962,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnException: "Kuskure",
     ofcFnDate: "Rana",
     ofcFnPayout: "Biya",
+    ofcFnWhereEarned: "Inda ake samun kwamishan",
+    ofcFnWhereEarnedBody: "An tara, an biya, saura, da wanda aka soke, bisa Karamar Hukuma da kuma bisa wata. Ana nuna wanda aka soke daban: wurin da ake tarawa da yawa amma ana sokewa da yawa yana yin caji ne da ba ya tsayawa, wanda jimilla ba za ta iya gaya maka ba.",
+    ofcFnAccrued: "An tara",
+    ofcFnPaidOut: "An biya",
+    ofcFnReversed: "An soke",
+    ofcFnByMonth: "Bisa wata",
+    ofcFnNoCommissionInPeriod: "Ba a tara wani kwamishan a wannan lokacin ba.",
     ofcFnEntries: "Shigarwa",
     ofcFnBankAccount: "Asusun banki",
     ofcFnRequestedBy: "Wanda ya nema",
@@ -4872,6 +7979,10 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfNewRevenueItem: "Sabon nau’in haraji",
     ofcCfCreatedWithoutPrice: "Ana samar da nau’in ba tare da kudi ba. Ka saita kudinsa daga baya da “Canza kudi” — har sai ka yi, wakili ba zai iya kima da shi a filin aiki ba.",
     ofcCfChooseCategory: "Zabi rukuni",
+    ofcCfArmOfGovernment: "Bangaren gwamnati",
+    ofcCfEveryArm: "Dukkan bangarorin gwamnati",
+    ofcCfNoMdaMapped: "Ba a ambaci wata ma\u2019aikata, sashe ko hukuma ba",
+    ofcCfCategoriesUnreadable: "Ba a iya karanta rukunonin ba, don haka babu abin da za a zaba tukuna.",
     ofcCfHowOften: "Sau nawa ake caji",
     ofcCfWhatItIsFor: "Don me ne shi",
     ofcCfWhoItApplies: "Wa ya shafa",
@@ -4900,6 +8011,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfEssentialServiceLink: "Ana iya samar da shirin da ke hada muhimmiyar hidimar jama’a da biyan haraji ne kawai idan an rubuta ikon doka ko manufa na wannan hadin a kansa.",
     ofcCfBeneficiaries: "Masu amfana",
     ofcCfNoEligibleYet: "Babu masu biyan haraji da suka cancanta tukuna. Ka gudanar da “Duba duka” domin auna masu biyan harajin da ke aiki.",
+    ofcCfShowingSomeBeneficiaries: "Ana nuna {{shown}} daga cikin {{total}} masu amfana da suka cancanta. Wannan jerin ba cikakken jerin ba ne — kada ka yi aiki da shi kamar cikakke.",
     ofcCfEssentialProtected: "An kare muhimman hidimomi",
     ofcCfBenefit: "Tallafi",
     ofcCfMinScore: "Mafi karancin maki",
@@ -4909,6 +8021,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "Ma’amaloli {{n}}",
     ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
     ofcOvIntact: "Rajistar bincike ba ta lalace ba",
+    ofcOvChainIntact: "An tantance shigarwa {{count}}. Ba a sami wata alamar taba ba.",
+    ofcOvChainGenesisRemoved:
+      "An karye a shigarwa {{sequence}}: shigarwa mafi tsufa tana nuni da wanda ya gabace ta amma ba ya nan, don haka an cire farkon rajistar.",
+    ofcOvChainLinkMismatch:
+      "An karye a shigarwa {{sequence}}: akwai shigarwa da ta bata, ko kuma an sanya ta ba bisa tsari ba.",
+    ofcOvChainContentModified:
+      "An karye a shigarwa {{sequence}}: abin da ke cikin shigarwar bai yi daidai da hash da aka ajiye ba, don haka an canza layin bayan an rubuta shi.",
     ofcOvSystem: "Tsarin",
     ofcOvNoRows: "Babu layuka",
     ofcOvLeakageTitle: "Sa ido kan yoyon haraji",
@@ -4947,6 +8066,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvRuns: "Gudanarwa",
     ofcOvLastSucceeded: "Nasara ta karshe",
     ofcOvWhatThatMeans: "Abin da hakan ke nufi",
+    ofcOvWhatItDid: "Abin da ya yi",
+    ofcOvNothingNeededDoing: "Babu abin da ya bukaci yi",
+    ofcOvRecord: "Tarihi",
+    ofcOvNeverFailed: "Gudu {{runs}}, babu wanda ya gaza",
+    ofcOvFailedOutOf: "{{failures}} cikin gudu {{runs}} sun gaza",
+    ofcOvFailingIntermittently: "Yana gazawa lokaci zuwa lokaci. Ya gaza {{when}} a karshe.",
+    ofcInBody: "Bayani",
     ofcOvActor: "Mai aikatawa",
     ofcOvEntity: "Abu",
     ofcOvResult: "Sakamako",
@@ -4978,6 +8104,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbDrill: "Ka sauka daga Jiha zuwa Karamar Hukuma zuwa Unguwa zuwa Al’umma domin ganin inda ake karbar haraji da inda ba a karba ba.",
     ofcDbPlateauState: "Jihar Filato",
     ofcDbPlatformKpis: "Ma’aunan aikin dandali",
+    ofcDbKpisUnreadable: "Ba a iya karanta alkaluman dandalin kansa ba",
+    ofcDbKpisUnreadableBody: "Biyan da aka tabbatar, adadin daidaitawa, da adadin da ke jiran daidaitawa ba sa nan a wannan shafi — ba sifili ba ne. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcDbSinceBegan: "Tun lokacin da dandalin ya fara karba.",
     ofcDbVerifiedOnly: "Harajin da aka tabbatar kawai",
     ofcDbThisMonth: "Wannan watan",
@@ -4995,8 +8123,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcDbMda: "Ma’aikata",
     ofcRvGroupedByAssessment: "An hada kowane adadi a kasa bisa ga Karamar Hukuma da unguwar da ke kan kimar, wanda abin dogaro ne. Wurin taswira daban ne kuma manhajar wakilai ce ke daukar sa a lokacin karba — babu wanda ya iso tukuna, wanda yawanci yana nufin ba a tura sigar da ke dauke da shi ba, ko wakilai ba su ba da izinin wuri a wayoyinsu ba.",
     ofcRvWhoseRevenue: "Harajin wa ne wannan",
-    ofcRvWhoseRevenueBody: "PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira",
-    ofcRvMdaNoItem: ". Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba.",
+    ofcRvWhoseRevenueBody: "PSIRS na karbar harajin jiha; wannan shi ne bangaren gwamnatin da ake karbar kowace naira dominsa. Ana jera ma’aikatar da babu nau’in haraji maimakon a boye ta — yana nufin ba a karbar komai a madadinta ta wannan dandalin, wanda binciken ne ba rashin komai ba.",
     ofcRvOwedToCouncils: "Ana bin Kananan Hukumomi",
     ofcRvCouncilsBody: "PSIRS na karbar wannan a madadin Kananan Hukumomi, don haka nasu ne ba na Jiha ba. Nau’ikan da Karamar Hukuma ke sanya kudinsu kawai ake kirgawa — harajin Jiha da aka karba a yankin Karamar Hukuma na Jiha ne. Ana jera kowace Karamar Hukuma, hade da wadanda ba su karbi komai ba, saboda turawar kudi dole ta yi lissafin dukkan goma sha bakwai.",
     ofcRvWhereGenerated: "Inda ake samar da harajin",
@@ -5054,6 +8181,48 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOsOwed: "Ana bin",
     ofcOsWhyEnded: "Dalilin da ya sa ya kare",
     ofcOsEnded: "Ya kare",
+    ofcUaTheirAccess: "Inda ya shiga",
+    ofcUaAccessFor: "Inda {{name}} ya shiga",
+    ofcUaBackToMine: "Koma ga nawa",
+    ofcRhAgentApproved: "An amince da {{name}}.",
+    ofcAlRoundQuantity: "{{total}} {{unit}}, {{per}} ga kowanne",
+    ofcAlAwardedLeft: "An bayar {{awarded}}, {{left}} ya rage",
+    ofcPfWorkedOf: "{{worked}} cikin {{total}}",
+    ofcFnSettlementClosed: "An rufe {{reference}}. An daidaita tarin kudi {{n}}.",
+    ofcGrGroupSuspended: "An dakatar da {{name}}.",
+    ofcGrQuantityPeople: "{{quantity}} (mutane {{n}})",
+    supRepliesCount: "amsa {{n}}",
+    supLastMessage: "Sako na karshe {{when}}",
+    supNoMessagesYet: "Babu sako tukuna",
+    ofcOsQueueUnreadable: "Ba a iya karanta wani jeri ba",
+    ofcOsQueueUnreadableBody: "Ba a iya lodin jeri {{n}} a wannan shafi ba, don haka abin da ake nunawa ba shi ne cikakken hoto ba. Sashe mara komai a kasa ba yana nufin jerin babu komai ba — yana nufin babu wanda ke iya ganin sa. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
+    ofcUaCoversNothing: "{{name}} yanzu ba shi da wani yanki kuma ba zai ga lambobin kudaden shiga ba.",
+    ofcUaCoversTerritories: "{{name}} yanzu yana rufe yankuna {{n}}.",
+    ofcFaMinimumNow: "Mafi karancin sigar yanzu {{version}} ce.",
+    ofcFaNoneBelowIt: "Babu wata na’ura mai aiki da ke kasa da ita.",
+    ofcFaCannotCollect: "Na’urori {{locked}} cikin {{total}} masu aiki ba za su iya karbar kudi ba sai sun sabunta.",
+    ofcTrVehicleBackInService: "An maido da {{plate}} aiki kuma za a iya sabunta takardunta.",
+    ofcTrVehicleSuspended: "An dakatar da {{plate}}. Ba za a karbi sabuntawa ba sai an dage dakatarwar.",
+    ofcTrVehicleArchived: "An cire {{plate}} daga rajista. Ba za a karbi sabuntawa ba.",
+    colPayReceipted: "An tabbatar da biyan kudi. An fitar da rasit {{number}}.",
+    colPayAwaitingSettlement: "Tashar ta tabbatar da wannan biyan kudi. Za a fitar da rasit na gwamnati sai kudin ya isa asusun gwamnati.",
+    colPayStillPending: "Tashar ba ta ba da amsa ba tukuna. Kada ka sake karbar wannan kudin — ka sake dubawa nan ba da jimawa ba.",
+    colPayFailed: "Biyan kudin bai yi nasara ba. Ba a karbi kudi ba kuma ba a fitar da rasit ba.",
+    ofcFnPromotedForPayout: "Rikodin kwamishan {{n}} sun cancanci a biya su.",
+    ofcCfEvaluatedCount: "An auna ’yan kasa {{n}} bisa wannan shirin.",
+    ofcTrObligationsUpdated: "An kara wajibai {{added}}, an yafe {{waived}}.",
+    ofcTrOneDetailCorrected: "An gyara bayani daya a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike.",
+    ofcTrDetailsCorrected: "An gyara bayanai {{n}} a wannan rikodin mai biyan haraji. Sauyin yana kan tarihin bincike.",
+    ofcTrOnRegisterAgain: "{{name}} ya koma kan rajista kuma za a iya yi masa kima.",
+    ofcTrRecordEnded: "{{name}} yanzu {{status}} ne. Ba za a iya yin sabuwar kima ba kuma tunatarwa za ta tsaya.",
+    ofcTrStillOwedAfterEnding: "Abin da ake bin sa yana nan, kuma wannan rikodin yanzu yana cikin jerin rikodin da aka rufe da ake bin su.",
+    ofcTrNothingWasOutstanding: "Babu abin da ya rage.",
+    ofcOsRefundsReturned: "An mayar da kudi {{n}} ga masu biyan haraji.",
+    ofcOsRefundsPartly: "An mayar {{done}}; {{left}} har yanzu ana bin su. Wadannan masu biyan haraji ba su samu kudinsu ba tukuna.",
+    ofcOsTinsAssigned: "An ba da TIN {{n}}.",
+    ofcOsTinsPartly: "An ba da {{done}}; {{left}} har yanzu ya rage. Wadannan masu biyan haraji na kan rajista kuma za a iya yi musu kima kuma za su iya biya.",
+    ofcOsRenewalsAcked: "Hukumar motoci ta amince da sabuntawa {{n}}.",
+    ofcOsRenewalsPartly: "An amince da {{done}}; {{left}} har yanzu ba a iya aikawa ba. Sabuntawar da kansu suna da inganci — ka sake gwadawa daga baya.",
     ofcUsTitle: "Amfani da manhaja — kwanaki 30 na karshe",
     ofcUsReportsCollections: ", wanda ke bayar da rahoton karba.",
     ofcUsIntro: "Manhajar wakilai da wannan shafin suna bayar da rahoton amfani yayin da ake amfani da su. Shafi mara komai a nan yana nufin ba a tura sigar da ke dauke da rahoton ba tukuna, ko babu wanda ya bude daya tun lokacin.",
@@ -5117,6 +8286,24 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcGpDistributions: "Rabo",
     ofcGpDistributionsIntro: "Taki, iri da sauran rabon da ke da adadi tsayayye a bayansu. Ka bude daya don ganin wanda aka ba da wanda ya karba a hakika.",
     ofcGpRegisteredGroups: "Kungiyoyin da aka yi wa rajista",
+    ofcPhTitle: "Abin da suka riga suka biya",
+    ofcPhIntro: "Kowane biyan da ya isa asusun gwamnati, da abin da aka biya shi. Mai biyan haraji da ya tambayi abin da ya biya yana da hakkin samun amsar da zai iya duba ta da rasitunsa.",
+    ofcPhFrom: "Daga",
+    ofcPhTo: "Zuwa",
+    ofcPhPaid: "An biya",
+    ofcPhPayments: "Biyayya",
+    ofcPhReturned: "An mayar musu",
+    ofcPhForWhat: "Abin da aka biya",
+    ofcPhLevy: "Haraji ko kudin shiga",
+    ofcPhEachPayment: "Kowane biya",
+    ofcPhWhen: "Yaushe",
+    ofcPhPeriod: "Lokaci",
+    ofcPhAmount: "Adadi",
+    ofcPhReceipt: "Rasit",
+    ofcPhNothingPaid: "Ba a biya komai a wannan lokacin ba.",
+    ofcGpTaxRole: "Rawar da take takawa a kidaya",
+    ofcGpTaxRoleNone: "Babu rawar da take takawa",
+    ofcGpTaxRoleNeedsReason: "Ka rubuta dalili tukuna. Ba shugaba iko a kan abin da za a kimanta wa dan kungiya ana ajiye shi a rubuce.",
     ofcGpGroupsIntro: "Kungiyoyin hadin kai, kungiyoyin kasuwa da kungiyoyin sana’a. Adadin mambobi shi ne wanda aka tabbatar kawai — abin da wakili ya rubuta amma shugaba bai tabbatar ba tukuna ba ya kirguwa a komai.",
     ofcGpMembersIntro: "Mambobin da aka tabbatar kawai ne ke kirguwa ga rabo da shirye-shiryen kungiya. Wanda ya fita yana nan a jerin: mamba ne a lokacin da aka ba shi abin da ya riga ya karba.",
     ofcGpMembershipEnded: "Dalilin da ya sa mamba ta kare",
@@ -5151,6 +8338,263 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLvLevy: "Haraji",
     ofcLvInvoices: "Takardun biya",
     ofcLvOldestDue: "Mafi tsufa da ya kamata a biya",
+    ofcNavArrears: "Jerin bashin da ake bin jiha",
+    ofcArTitle: "Wanda ke bin jiha bashi",
+    enumAssessed: "An kimanta",
+    ofcEnRecorded: "Abin da aka rubuta",
+    ofcEnRecordedIntro: "Abubuwan da aka lura da su daga fili da abin da ya faru da kowanne. Ba za a iya kimanta abin da kungiya ta ki amincewa da shi ba sai wani ya sake dawowa ya duba.",
+    ofcEnAttestation: "Tabbatarwa",
+    ofcEnNotYetAssessed: "Ba a kimanta ba tukuna",
+    ofcEnExempt: "An kebe",
+    ofcEnAction: "Na gaba",
+    ofcEnSettleFirst: "Ana takaddama — a fara warwarewa",
+    ofcEnLeaderAgrees: "Shugaba ya tabbatar",
+    ofcEnAssess: "Kimanta",
+    ofcEnAlreadyObjected: "Ana kalubalanta",
+    ofcEnRecordObjection: "Rubuta kalubale",
+    ofcEnAttestedByName: "Sunan shugaban da ke tabbatarwa",
+    ofcEnStatementFirst: "Ka fara rubuta abin da mai biyan haraji ya ce.",
+    ofcEnNothingRecorded: "Ba a rubuta komai ba tukuna.",
+    enumFactsWrong: "Bayanan ba daidai ba",
+    enumHasRecords: "Yana da rikodi na gaskiya",
+    enumNotTrading: "Ba ya kasuwanci kuma",
+    enumEnumeration: "Kidaya kadai",
+    enumBusinessObservation: "An rubuta kasuwanci",
+    enumAttestation: "Kidaya da tabbatarwa",
+    enumObjected: "Ana kalubalanta",
+    enumUpheld: "An amince",
+    enumAgreed: "Shugaba ya amince",
+    enumDisagreed: "Shugaba bai amince ba",
+    enumNotSought: "Ba a nemi tabbatarwa ba",
+    ofcNavEnumeration: "Jerin aikin kidayar",
+    ofcEnTitle: "Abin da kidayar ta bar wa mutum ya yanke",
+    ofcEnIntro: "Jeri biyu. Inda wakili da shugaban kungiya suka bayyana mai sana’a daban, da kuma inda mai biyan haraji ya ki amincewa da kiyasi a hukumance. Duka biyu shawarwari ne da bai kamata na’ura ta yanke ba.",
+    ofcEnDisagreements: "Inda bayanan suka bambanta",
+    ofcEnDisagreementsIntro: "Wakili ya rubuta abu daya shugaban kungiya kuma ya rubuta wani. An nuna bayanan biyu, tare da matakin da kowanne zai haifar — bambancin da bai canza mataki ba kiran waya ne, wanda ya canza kuwa ziyara ce.",
+    ofcEnGroup: "Kungiya",
+    ofcEnAgentSaw: "Wakili ya rubuta",
+    ofcEnLeaderSays: "Shugaba ya ki amincewa",
+    ofcEnBandGap: "Tasiri a kan mataki",
+    ofcEnSameBand: "Mataki daya ko ta yaya",
+    ofcEnObservedOn: "An rubuta a",
+    ofcEnAttestedBy: "Wanda ya tabbatar",
+    ofcEnNoDisagreements: "Babu bayanin da ake takaddama a kai.",
+    ofcEnObjections: "Kiyasin da ake kalubalanta",
+    ofcEnOpenObjections: "Kalubalen da ba a warware ba",
+    ofcEnUnderObjection: "Harajin da ake kalubalanta",
+    ofcEnWhileOpenTitle: "Yayin da ake kalubalanta",
+    ofcEnWhileOpen: "Ba a bin bashin. An cire shi daga jerin bashin da ake bi har sai an yanke shawara, don haka ba za a kira kowa a kansa ba a wannan lokacin.",
+    ofcEnDecisionReason: "Me ya sa kake yanke haka?",
+    ofcEnDecisionReasonHint: "Za a nuna wa mai biyan haraji wannan.",
+    ofcEnGround: "Dalili",
+    ofcEnWhatTheySay: "Abin da mai biyan haraji ya ce",
+    ofcEnRaisedOn: "An gabatar a",
+    ofcEnDecision: "Shawara",
+    ofcEnYoursToPassOn: "Kai ka yi wannan kimantawa — wani jami’i ne zai yanke",
+    ofcEnUphold: "Amince da kalubalen",
+    ofcEnReject: "Ki kalubalen",
+    ofcEnReasonFirst: "Ka fara rubuta dalili.",
+    ofcEnNoObjections: "Babu kiyasin da ake kalubalanta.",
+    ofcPsPublish: "Wallafawa",
+    ofcPsPublishClass: "Wallafa matakin karamar hukuma",
+    ofcPsPublishFigure: "Wallafa adadin jadawali",
+    ofcPsChoose: "Zaba",
+    ofcPsIndicators: "Alamomin da suka haifar da wannan mataki",
+    ofcPsIndicatorsHint: "misali hanya, wutar lantarki, adadin talauci",
+    ofcPsClassPublished: "An wallafa rarrabuwar.",
+    ofcPsFigurePublished: "An wallafa adadin.",
+    ofcPsAssumedTurnoverNaira: "Kudin shigar shekara da ake zato (₦)",
+    ofcPsAdoptExemption: "Amince da fassarar kebewa",
+    ofcPsAdoptWarningTitle: "Wannan yana yanke wanda za a biya haraji",
+    ofcPsAdoptWarning: "Amince da fassara yana yanke ko an kebe mai shago, wanda ke canza adadin mutanen da abin ya shafa sosai. Ka rubuta shi ne kawai bisa ra’ayin da aka rubuta, kuma ka ambaci wannan ra’ayin a kasa — mutum na farko da bai yarda ba zai maido da shi ga PSIRS.",
+    ofcPsConstruction: "Wace fassara",
+    ofcPsCeiling: "Iyakar kudin shiga (₦)",
+    ofcPsLegalBasis: "Ra’ayi ko dokar da aka dogara a kai",
+    ofcPsExemptionAdopted: "An rubuta fassarar.",
+    enumSmall: "Karami",
+    enumNano: "Nano — an kebe",
+    enumPresumptive: "Kimantawa — bisa jadawali",
+    enumBooks: "Littattafai — bisa rikodin",
+    enumClassA: "Mataki A — tattalin arziki mafi karfi",
+    enumClassB: "Mataki B",
+    enumClassC: "Mataki C",
+    enumClassD: "Mataki D — tattalin arziki mafi rauni",
+    enumMicro: "Karami sosai",
+    enumConjunctive: "Dukkan sharudda uku tare",
+    enumTurnoverGoverned: "Kudin shiga kadai ke yanke hukunci",
+    enumNone: "Babu wurin dindindin",
+    enumStall: "Rumfa ko tebur a kasuwa",
+    enumKiosk: "Kanti ko kwantena",
+    enumLockUpShop: "Shago mai kulle",
+    enumBuilding: "Gini ko fili",
+    ofcNavPresumptive: "Jadawalin haraji na kimantawa",
+    ofcPsTitle: "Jadawalin haraji na kimantawa",
+    ofcPsIntro: "Abin da ake ganin sana’a mai wani girma take samu, bisa matakin karamar hukuma. Adadin haraji kashi daya ne a ko’ina — abin da ya bambanta shi ne kudin shigar da ake zato, domin hakika samu ya fi kankanta a wasu wurare. Babu wanda ke bayar da ragi kuma babu jami’in da ke yanke shawara.",
+    ofcPsReadiness: "Ko ana iya amfani da shi tukuna",
+    ofcPsLgasClassified: "Kananan hukumomin da aka rarraba",
+    ofcPsCells: "Adadin da aka wallafa",
+    ofcPsExemptionInForce: "Kebewar kamar yadda aka amince da ita",
+    ofcPsConjunctive: "Dole ne dukkan sharudda uku su cika: babu wurin kasuwanci na dindindin, babu ma’aikata, kuma kudin shiga bai wuce iyaka ba. Don haka ana kimanta mai shago ko da kudin shigarsa kadan ne.",
+    ofcPsTurnoverGoverned: "Kudin shiga kadai ke yanke hukunci: duk wanda bai wuce iyaka ba an kebe shi, ko yana da shago ko ma’aikata ko babu.",
+    ofcPsNoExemptionAdopted: "Ba a amince da wata fassarar kebewa ba",
+    ofcPsNoExemptionExplained: "Ba za a iya kimanta kowa ba har sai PSIRS ta rubuta wace fassarar kebewar nano ce ta shafi, kuma bisa ra’ayin wa aka rubuta. Fassarorin biyu sun bambanta kan ko an kebe mai shago, kuma wannan ba tambaya ce da wannan tsarin zai amsa da kansa ba.",
+    ofcPsPartlyPublished: "An wallafa jadawalin bangare kadai",
+    ofcPsPartlyPublishedExplained: "Kananan hukumomi {{done}} daga {{total}} ne ke da matakin da aka wallafa. Ba za a iya kimanta wadanda ke sauran ba, kuma ambaton adadi daga wannan jadawalin gare su zai zama ambaton abin da bai shafe su ba.",
+    ofcPsWhatItWouldCost: "Abin da wata sana’a za ta biya",
+    ofcPsCheckIntro: "Ka shigar da abin da wakili zai gani yana tsaye a bakin kofa. Babu wurin shigar da kudin shiga ko mataki — ana lissafa su daga abin da aka gani, wanda shi ne ke hana a yi ciniki a kan adadin.",
+    ofcPsPremises: "Wurin sana’a",
+    ofcPsEquipment: "Injuna ko kayan aiki",
+    ofcPsPeople: "Mutanen da ke aiki ban da mai sana’a",
+    ofcPsWorkItOut: "Yi lissafi",
+    ofcPsBand: "Matakin girma",
+    ofcPsClass: "Mataki",
+    ofcPsAssumedTurnover: "Kudin shigar shekara da ake zato",
+    ofcPsAllAdoptedUnder: 'An amince da kowace lamba a kasa a karkashin',
+    ofcPsAnnualTax: "Harajin shekara",
+    ofcPsMonthlyTax: "Harajin wata",
+    ofcPsExempt: "An kebe — babu abin biya",
+    ofcPsExemptExplained: "Wannan mai sana’a kanana ne bisa fassarar kebewar da ke aiki, don haka babu wani harajin kimantawa da ya kamata. Wannan doka ce ke aiki, ba adadi ne da ya fito kankani ba.",
+    ofcPsHowWeGotThere: "Yadda aka kai ga wannan adadin",
+    ofcPsStep: "Mataki",
+    ofcPsDetail: "Abin da aka yi amfani da shi",
+    ofcPsAmount: "Adadi",
+    ofcPsNoWorking: "Babu lissafin da za a nuna.",
+    ofcPsClasses: "Yadda aka rarraba kowace karamar hukuma",
+    ofcPsClassesIntro: "An rarraba bisa bayanan da PSIRS ba ta samar ba, kuma an daidaita shi na shekara uku. Duka biyu da gangan ne: mataki da aka samo daga kudin da yankin ya tara zai sa a rage tarawa, kuma wanda za a iya canzawa badi zai jawo matsin lamba.",
+    ofcPsIndexSource: "Bayanan wa",
+    ofcPsFrom: "Daga",
+    ofcPsUntil: "Har zuwa",
+    ofcPsNoEndDate: "Ba a saita ranar karshe ba",
+    ofcPsNoClasses: "Babu karamar hukumar da ke da matakin da aka wallafa tukuna.",
+    ofcPsTheTable: "Adadin da aka wallafa",
+    ofcPsInstrument: "An amince da shi karkashin",
+    ofcPsVersion: "Sigar",
+    ofcPsNoEntries: "Ba a wallafa wani adadi ba tukuna.",
+    ofcPsHowToChange: "Ba a taba gyara adadin da aka wallafa. Wallafa sabo yana rufe tsohon lokaci ya fara sabuwar siga, don haka ana iya duba kimantawar bara bisa adadin da aka yi ta a kansa.",
+    enumFiled: "An kai",
+    ofcPrWithdraw: "Janye",
+    ofcPrWithdrawReason: "Me ya sa ake janye wannan rahoto?",
+    ofcPrWithdrawFirst: "Ka fara rubuta dalili.",
+    ofcNavPayroll: "Masu daukar ma’aikata da wurare",
+    ofcPrTitle: "Masu daukar ma’aikata da ya kamata su kai rahoto",
+    ofcPrIntro: "Makarantu, asibitoci, otal-otal da wuraren jigilar kaya da ke cikin rajista amma ba su kai rahoton PAYE ba. Mai daukar ma’aikata 40 ya fi ziyarar kasuwa dari daraja, kuma wannan jerin bai bukaci aikin fili ba — an gina shi daga abin da rajista ta riga ta rubuta.",
+    ofcPrWhichList: "Wanne jeri",
+    ofcPrListPaye: "Masu daukar ma’aikata da ba su kai rahoton PAYE ba",
+    ofcPrListConsumption: "Wuraren baki da ba su biya harajin amfani ba",
+    ofcPrNotFiling: "Ba sa kai rahoto",
+    ofcPrFiling: "Suna kai rahoto",
+    ofcPrSector: "Bangare",
+    ofcPrNature: "Irin kasuwanci",
+    ofcPrOpen: "Bude",
+    ofcPrNoneNotFiling: "Kowane mai daukar ma’aikata a wadannan bangarori ya kai rahoto.",
+    ofcPrNoneNotPaying: "Kowane wurin baki a nan ya biya harajin amfani a wannan shekara.",
+    ofcPrFiledBefore: "Rahotannin da aka riga aka kai",
+    ofcPrPeriod: "Wata",
+    ofcPrEmployees: "Ma’aikata",
+    ofcPrGross: "Jimlar albashi",
+    ofcPrTax: "Harajin da ya kamata",
+    ofcPrFiledOn: "An kai a",
+    ofcPrWithdrawnBecause: "An janye saboda",
+    ofcPrNeverFiled: "Wannan mai daukar ma’aikata bai taba kai rahoto ba.",
+    ofcPrFileAReturn: "Kai rahoto",
+    ofcPrHowTheTaxIsWorkedOut: "Yadda ake lissafin haraji",
+    ofcPrHowExplained: "Ka shigar da abin da aka biya kowane mutum a wannan wata. Tsarin zai lissafa harajin kowannensu daban, ta amfani da matakan shekara, sannan ya hada su. Babu wurin shigar da haraji domin haraji ba abin da kowa ke rubutawa ba ne.",
+    ofcPrYear: "Shekara",
+    ofcPrMonth: "Lambar wata",
+    ofcPrEmployeeName: "Sunan ma’aikaci",
+    ofcPrMonthlyPay: "An biya wannan wata (₦)",
+    ofcPrAddEmployee: "Kara wani ma’aikaci",
+    ofcPrSubmit: "Kai wannan rahoto (ma’aikata {{n}})",
+    ofcPrFiledTitle: "An kai rahoto",
+    ofcPrFiledExplained: "Rahoton ya shafi ma’aikata {{n}} kuma an fitar da daftari {{invoice}} na haraji.",
+    ofcPrMissingTins: "{{n}} daga cikinsu ba su da TIN — ka tattara su ka kara su a rahoto na gaba.",
+    ofcIgReasonLabel: "Me ya sa kake canza wannan ikirari?",
+    ofcIgReasonFirst: "Ka fara rubuta dalili.",
+    ofcNavConnections: "Dukiya da alamu",
+    ofcIgTitle: "Abin da ke da alaka da mai biyan haraji",
+    ofcIgIntro: "Mutanen da ke tafiyar da motocin kasuwanci wadanda jiha ba ta taba kimanta harajin kudin shiga a kansu ba, daga rajistar motoci da PSIRS ke rike da ita. Babu abin da ya fito daga wajen tsarin.",
+    ofcIgLimitsTitle: "Menene wannan jerin, kuma menene ba shi ba",
+    ofcIgLimits: "Kowane layi ikirari ne, ba binciken karshe ba. Ka karanta ginshikin dalili kafin ka yi aiki: daidaituwa ta lambar waya daya dalili ne na tambaya, ba na kimantawa ba. Ana rubuta bude rikodi a kan mutumin tare da dalilin da ka zaba.",
+    ofcIgAtLeastVehicles: "Da akalla motoci masu yawa haka",
+    ofcIgRebuildLabel: "Daga rajista",
+    ofcIgRebuildAction: "Sake gina alakoki",
+    ofcIgRebuilt: "An rubuta alaka {{asserted}}: {{registry}} daga rajista, {{phone}} sun dace ta lambar waya daya. Motoci {{ambiguous}} sun dace da fiye da mai biyan haraji daya kuma an bar su.",
+    ofcIgLeads: "Mutanen da za a duba",
+    ofcIgVehicles: "Motocin kasuwanci",
+    ofcIgUnmatched: "Motocin da ba a gano mai su ba",
+    ofcIgUnmatchedExplained: "Motoci {{n}} a rajista ba su da alaka da kowa, don haka ba sa cikin kidayar da ke sama. Wannan shi ne bangaren matsalar da wannan jerin ba zai iya gani ba.",
+    ofcIgPurpose: "Me ya sa kake bude wannan rikodin?",
+    ofcIgWhoHasLooked: "Wa ya bude wannan rikodin",
+    ofcIgWhoHasLookedBody: "Duk wani karatun alakokin wannan mutum, tare da dalilin da jami\u2019in ya bayar a lokacin. Ana nuna matsayi maimakon suna; rikodin binciken yana dauke da sunan mutumin.",
+    ofcIgWhenRead: "Yaushe",
+    ofcIgNobodyHasLooked: "Babu wanda ya bude wannan rikodin.",
+    ofcIgPurposeChoose: "Zabi dalili",
+    ofcIgPurposeFirst: "Ka fara zabar dalili — ana rubuta kowace karatun rikodi da dalili.",
+    ofcIgRegistrations: "Lambobin rajista",
+    ofcIgGrounds: "Dalili",
+    ofcIgFromRegister: "Rajista ta ambace su",
+    ofcIgFromPhone: "An dace ta lambar waya daya",
+    ofcIgChargedCommercial: "An caje kudin kasuwanci",
+    ofcIgPaidLastYear: "An biya a shekarar da ta gabata",
+    ofcIgOpen: "Bude rikodi",
+    ofcIgNoLeads: "Babu wanda ke da motar kasuwanci kuma ba a kimanta harajin kudin shiga a kansa ba a wannan yanki.",
+    ofcIgRecordTitle: "Rikodin",
+    ofcIgWhatWeClaim: "Abin da jiha ke ikirari a kansu",
+    ofcIgWhatTheyOwe: "Abin da suke bin bashi",
+    ofcIgThing: "Abu",
+    ofcIgRelationship: "Alaka",
+    ofcIgSource: "Inda ya fito",
+    ofcIgObtained: "An rubuta a",
+    ofcIgLawfulBasis: "Ikon da aka dogara a kai",
+    ofcIgDecide: "Shawara",
+    ofcIgConfirm: "Mai biyan haraji ya tabbatar",
+    ofcIgDispute: "Mai biyan haraji ya ki amincewa",
+    ofcIgWithdraw: "Janye ikirari",
+    ofcIgReasonPrompt: "Ka fadi dalili. Wannan rikodi ne game da mutum, kuma canjin da babu wanda ya bayyana ba za a iya kare shi a gaban sa ba.",
+    ofcIgNothingClaimed: "Jiha ba ta ikirari komai a kan wannan mutumin.",
+    ofcIgReference: "Lamba",
+    ofcIgSince: "Tun",
+    ofcIgPayableNow: "Ana iya biya yanzu",
+    ofcIgPayableYes: "Eh",
+    ofcIgPayableNeedsReassessment: "A’a — yana bukatar sabon kimantawa",
+    ofcIgOwesNothing: "Ba sa bin jiha komai.",
+    enumAsserted: "An yi ikirari",
+    enumConfirmedByTaxpayer: "Mai biyan haraji ya tabbatar",
+    enumConsistencyCheck: "Duba kimantawa da dukiya",
+    enumCoverageLead: "Neman wadanda ba a kimanta ba tukuna",
+    enumTaxpayerRequest: "Mai biyan haraji ya nemi ganin sa",
+    enumWithdrawn: "An janye",
+    ofcArIntro: "An kimanta, ba a biya ba, kuma har yanzu ana iya biya, mafi girman bashi da farko. Wadannan masu biyan haraji suna cikin rajista — wannan kudi ne da ake bin jiha yau, ba kudin da za ta fita nema ba.",
+    ofcArAtLeast: "Yana bin akalla (₦)",
+    ofcArLapsingWithin: "Ranar karshe na zuwa cikin",
+    ofcArAnyDeadline: "Kowace ranar karshe",
+    ofcArWithin7: "Kwana 7",
+    ofcArWithin14: "Kwana 14",
+    ofcArWithin30: "Kwana 30",
+    ofcArCollectableNow: "Ana iya karba yanzu",
+    ofcArTaxpayers: "Masu biyan haraji da ke bin bashi",
+    ofcArNeedsReassessment: "Yana bukatar sake kimantawa",
+    ofcArEndedElsewhere: "Bashin rikodin da aka rufe",
+    ofcArWhoIsMissing: "Wanda ba ya cikin wannan jerin",
+    ofcArInFlightExplained: "An bar duk wanda ke tsakiyar biya, don haka ana iya aiki da wannan jerin kamar yadda yake: an cire daftari {{n}} saboda ana biya a kansu yanzu. Ba za a kira wanda ke rike da rasit ba.",
+    ofcArLapsedTitle: "Bashin da ba a iya biya kamar yadda yake",
+    ofcArLapsedExplained: "Daftari {{n}} sun wuce ranar karshen biya. Tsarin zai ki karbar kudi a kansu, don haka an kidaya su a sama amma ba a sa su cikin jerin kira ba — karba yana nufin fara sabon kimantawa.",
+    ofcArWhoToCall: "Wanda za a kira",
+    ofcArShowingLargest: "Ana nuna manyan bashi {{n}}. Ka rage ta LGA ko adadi domin ganin kasa.",
+    ofcArOwedFor: "Bashin",
+    ofcArDaysLeft: "Kwanakin da suka rage a biya",
+    ofcArNoDeadline: "Babu ranar karshe",
+    ofcArLastPaid: "Biya na karshe",
+    ofcArNeverPaid: "Bai taba ba",
+    ofcArOwingFor: "Ana bin bashi tun",
+    ofcArOwingForDays: "kwana {{days}}",
+    ofcPrLastFiled: "Karshen shigarwa",
+    ofcPrNeverFiledShort: "Bai taba shigarwa ba",
+    ofcPrFiledMonthsAgo: "watanni {{months}} da suka wuce",
+    ofcSpLastReply: "Amsa ta karshe",
+    ofcSpNoReplyYet: "Babu amsa tukuna",
+    ofcArPartPaid: "An biya wani sashe",
+    ofcArNobodyOwes: "Babu wanda ke bin bashin da ake iya karba a wannan yanki.",
     ofcAlIntro: "Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba.",
     ofcAlNewRound: "Sabon zagaye",
     ofcAlProgramme: "Shiri",
@@ -5164,6 +8608,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAlBeneficiariesWord: "masu amfana.",
     ofcAlCollectionPoint: "Wurin karba",
     ofcAlOpens: "Zai bude",
+    ofcAlCloses: "Rufewa",
+    ofcAlNoClosingDate: "A bude har sai an rufe",
+    ofcCwNoEvidence: "Babu wanda aka hada",
+    ofcTxVerified: "An tabbatar da kudi",
+    ofcTxNotVerified: "Ba tukuna ba",
     ofcAlClosesOptional: "Zai rufe (ba dole ba)",
     ofcAlRelease: "Saki",
     ofcAlAwards: "Bayarwa",
@@ -5247,14 +8696,109 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFrom: "Daga",
     ofcTo: "Zuwa",
     ofcExportCsv: "Fitar da CSV",
+    ofcRlExportLimit: "Layukan da zai iya fitarwa",
+    ofcRlExportsNothing: "Ba ya fitar da komai",
+    ofcCwSave: "Ajiye",
+    enumIntegrationAlert: "Wata hidimar waje ba ta amsawa",
+    enumNeverCalled: "Ba a kira ba tukuna",
+    enumHealthy: "Yana amsawa",
+    ofcNavPlatform: "Hidimomin waje",
+    ofcPlTitle: "Hidimomin da wannan dandali ya dogara da su",
+    ofcPlHint: "An auna daga zirga-zirgar dandalin kansa, ba daga kiran gwaji ba. Hidimar da ba a iya isa gare ta kadai ake lissafawa a kanta — amsar da ba a so ita ma amsa ce.",
+    ofcPlAllAnswering: "Duk suna amsawa",
+    ofcPlNeedingAttention: "Suna bukatar kulawa",
+    ofcPlService: "Hidima",
+    ofcPlState: "Yanayi",
+    ofcPlLastAnswered: "Amsa ta karshe",
+    ofcPlInARow: "Wadanda ba a amsa ba a jere",
+    ofcPlCalls: "Kiraye-kiraye",
+    ofcPlNeverAnswered: "Bai taba ba",
+    ofcPlAdapter: "An saita a matsayin",
+    ofcPlTin: "Hidimar lambar haraji ta PSIRS",
+    ofcPlKyc: "Hidimar tantance shaidar gwamnati",
+    ofcPlVehicles: "Hukumar rajistar ababen hawa",
+    ofcPlBanks: "Tambayar sunan asusun banki",
+    ofcPlGateway: "Kofar biyan kudi",
+    ofcPlNeverCalledBody: "Ba a taba kiran ta ba tun lokacin da aka kirkiri wannan bayanan.",
+    ofcPlDownBody: "Kiraye-kiraye {{n}} a jere ba a iya amsa su ba.",
+    ofcPlDegradedBody: "An yi kira kwanan nan ba a amsa ba, sannan aka amsa na gaba.",
+    ofcPlAnsweringBody: "Yana amsawa.",
+    ofcPlOutageHint: "Kafin wannan allon ya kasance, ana gano tsayawar hidima ne ta hanyar lura cewa jerin aiki ya tsaya.",
+    enumDegraded: "An yi kira ba a amsa ba",
+    enumDown: "Ba ya amsawa",
+    ofcOvChange: "Abin da ya canza",
+    enumApprovalWaiting: "Amincewa na jiran ka",
+    enumCaseAssigned: "An ba ka wani shari\u2019a",
+    enumCaseEscalated: "An daga shari\u2019a zuwa gare ka",
+    enumCaseMention: "An ambaci sunanka a shari\u2019a",
+    enumSystemAlert: "Wani abu a tsarin ya tsaya",
+    enumInfo: "Don sanarwa",
+    enumWarning: "Ya cancanci duba",
+    ofcNavInbox: "Akwatin sako",
+    ofcInHint: "Abin da aka gaya maka, da abin da tsarin ke fada game da kansa. Ka yi wa layi alama a matsayin an karanta bayan ka magance shi.",
+    ofcInUnread: "Ba a karanta ba tukuna",
+    ofcInCritical: "Na bukatar kulawa yanzu",
+    ofcInCriticalTitle: "Tsarin na bukatar kulawa",
+    ofcInSeverity: "Yadda yake da gaggawa",
+    ofcInKind: "Menene shi",
+    ofcInSubject: "Abin da ya faru",
+    ofcInWhen: "Yaushe",
+    ofcInRead: "An karanta",
+    ofcInMarkRead: "Yi masa alamar an karanta",
+    ofcInReadAll: "Yi wa duka alamar an karanta",
+    ofcInShowAll: "Nuna komai",
+    ofcInShowUnread: "Nuna wanda ba a karanta ba kadai",
+    ofcInToYourRole: "ga matsayinka",
+    ofcInNothing: "Ba a tayar da komai a gare ka ba.",
+    ofcNavMyAccess: "Inda na shiga",
+    ofcAcSessions: "Zaman shiga",
+    ofcAcSessionsHint: "Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.",
+    ofcAcDevices: "Na\u2019urori",
+    ofcAcActivity: "Abin da suka yi",
+    ofcAcActivityHint: "Abubuwa ashirin da biyar na karshe da aka rubuta a kan wannan asusun, sabo tukuna. Ana ajiye kin amincewa kamar yadda ake ajiye nasara \u2014 abin da aka hana wani yi wani bangare ne na tarihin.",
+    ofcAcActivityMine: "Abin da na yi",
+    ofcAcActedDays: "Ayyuka a cikin kwanaki {{n}} da suka gabata",
+    ofcAcRefusedDays: "Wadanda aka ki a cikin kwanaki {{n}} da suka gabata",
+    ofcAcOnWhat: "A kan me",
+    ofcAcOutcome: "Sakamako",
+    ofcAcNoActivity: "Ba a rubuta komai a kan wannan asusun ba.",
+    ofcAcDevicesHint: "Ana rubuta shi lokacin da asusun ya fara shiga daga na\u2019ura. Toshe daya yana kawo karshen kowane zaman da yake rike da shi kuma yana hana shi bude wani.",
+    ofcAcDevice: "Na\u2019ura",
+    ofcAcUnknownDevice: "Na\u2019urar da ba a sani ba",
+    ofcAcThisOne: "wannan",
+    ofcAcAddress: "Adireshi",
+    ofcAcSignedIn: "An shiga",
+    ofcAcLastUsed: "An yi amfani da shi ta karshe",
+    ofcAcFirstSeen: "An fara ganin sa",
+    ofcAcLastSeen: "An gan shi ta karshe",
+    ofcAcLiveSessions: "Zaman da ke bude",
+    ofcAcEnd: "Kawo karshe",
+    ofcAcEndThisOne: "Kawo karshe ka fita",
+    ofcAcEnded: "An kawo karshe",
+    ofcAcBlock: "Toshe",
+    ofcAcUnblock: "Cire toshewa",
+    ofcAcBlockedBy: "Wanda ya toshe",
+    ofcAcNoSessions: "Wannan asusun bai taba shiga ba.",
+    ofcAcNoDevices: "Ba a rubuta wata na\u2019ura ba tukuna.",
+    ofcCwUploadEvidence: "Loda shaida",
+    ofcCwUploadHint: "Don takardar da wannan tsarin bai fitar ba: sanarwar banki, wasika, hoto. Hotuna da PDF, har zuwa 15 MB.",
+    ofcCwUploadFile: "Fayil",
+    ofcCwUploadWhat: "Menene shi",
+    ofcCwUploadWhere: "Daga ina ya zo",
+    ofcExportExcel: "Takardar lissafi",
+    ofcExportPdf: "Takarda don ajiyewa",
+    ofcExportWorking: "Ana shirya...",
     ofcDownloadCsv: "Sauke CSV",
     ofcTxReceipt: "Rasit",
     ofcTxCreated: "An kirkira",
     ofcPfIntro: "Karba, isa da matsala gefe da gefe. Wakili a unguwar kasuwanci zai fi karbar mafi kyawun wakili a unguwar karkara, don haka ka karanta ginshikan tare maimakon jera su da naira.",
     ofcPfCollectedByAgents: "Abin da wakilai suka karba",
+    ofcPfFiguresCoverTopAgents: "Ana nuna wakilai {{n}} da suka fi karbar kudi, wanda shi ne duk abin da wannan rahoto ke bayarwa. Jimillar da ke sama ta kunshi su kadai — ba a lissafa wakilin da ke kasa da wannan layin ba, har da wanda ke da alamar zamba a bude. Jerin zamba yana nuna kowace alama.",
     ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
     ofcPfAgentsWorked: "Wakilan da suka yi aiki",
     ofcPfOpenFraudFlags: "Alamun zamba a bude",
+    ofcPfFiguresUnreadable: "Ba a iya karanta wadannan alkaluma ba",
+    ofcPfFiguresUnreadableBody: "Jimillar da jerin da ke kasa ba sa nan — ba sifili ba ne. Babu wata lamba a wannan shafi da ke nufin komai, musamman ba a ce komai game da alamun zamba da ke bude ba. Ka sake lodi, kuma ka daga kara idan bai warware ba.",
     ofcPfCollected: "An karba",
     ofcPfAverage: "Matsakaici",
     ofcPfOnboarded: "An shigar",
@@ -5351,6 +8895,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAgRequestMoreInformation: "Nemi karin bayani",
     ofcAgAssignTerritory: "Ba da yanki",
     ofcAgSelectTerritory: "Zabi yanki",
+    ofcAgTerritoriesUnreadable: "Ba a iya karanta jerin yankuna ba, don haka babu abin da za a zaba. Wannan ba yana nufin babu yankuna ba.",
     ofcAgTerritoryRequired: "Ana danganta kowace ma’amala ga yanki, don haka dole a ba da daya kafin a kunna.",
     ofcAgActivateAgent: "Kunna wakili",
     ofcAgActivationBlocked: "An hana kunnawa har sai an cika kowane sharadin izini. Kebancewa yana bukatar izinin gwamnati na musamman.",
@@ -5562,6 +9107,486 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcNavUsers: "Izinin jami’ai",
     ofcNavFieldApp: "Manhajar filin aiki",
     ofcNavAllocations: "Zagayen rabon kaya",
+    ofcNavMyWork: "Aikina",
+    ofcNavCases: "Kararraki",
+    ofcGroupYourDesk: "Teburinka",
+    ofcSearchLabel: "Nemi bayanan gwamnati",
+    ofcSearchPlaceholder: "Lamba, TIN, suna ko lambar rasit",
+    ofcSearchSearching: "Ana nema…",
+    ofcSearchNoResults: "Babu abin da ya dace da haka.",
+    ofcSearchCouldNotRun: "Ba a iya gudanar da binciken ba. Wannan ba yana nufin babu irin wannan rikodin ba \u2014 sake gwadawa.",
+    ofcSearchHint: "Haruffa biyu ko fiye.",
+    ofcSearchTransaction: "Ma’amala",
+    ofcSearchTaxpayer: "Mai biyan haraji",
+    ofcSearchAgent: "Wakili",
+    ofcSearchOfficer: "Jami’i",
+    ofcSearchInvoice: "Takardar biya",
+    ofcSearchReceipt: "Rasit",
+    ofcSearchPayment: "Biyan kudi",
+    ofcSearchAssessment: "Kima",
+    ofcSearchVehicle: "Abin hawa",
+    ofcSearchRevenueItem: "Nau’in haraji",
+    ofcSearchPlace: "Karamar hukuma",
+    ofcSearchCase: "Kara",
+    ofcMwIntro: "Duk abin da ke jiranka, ko daga ina ya zo a manhajar.",
+    ofcMwAssigned: "An ba ka",
+    ofcMwAssignedBody: "Kararrakin da wani ya sa a hannunka.",
+    ofcMwOpened: "Kararrakin da ka bude",
+    ofcMwOpenedBody: "Yanzu na wani ne ya yi, amma har yanzu naka ne ka bi.",
+    ofcMwMentions: "Inda aka ambace ka",
+    ofcMwMentionsBody: "Wani jami’i ya rubuta sunanka a kan kara.",
+    ofcMwDepartment: "Yana jiran sashenka",
+    ofcMwDepartmentBody: "An aika wa matsayinka kuma babu wanda ya karba tukuna.",
+    ofcMwApprovals: "Amincewa da ke jiran hukunci",
+    ofcMwExceptions: "Bambancin lissafi",
+    ofcMwFlags: "Alamun hadari",
+    ofcMwOverdue: "Ya wuce lokaci",
+    ofcMwNothing: "Babu abin da ke jiranka.",
+    ofcMwOpenQueue: "Bude dukkan jerin aikin",
+    ofcCwTitle: "Jerin aikin gwamnati",
+    ofcCwIntro: "Kara na daukar aiki tsakanin sassa, kuma yana rike da kowane matakinsa.",
+    ofcCwOpenCase: "Bude kara",
+    ofcCwStatus: "Matsayi",
+    ofcNavRoles: "Matsayi da izini",
+    ofcRlTitle: "Matsayi da izini",
+    ofcRlIntro: "Wa zai iya yin me. Wannan bayanai ne yanzu, don haka sauya wa wanda Hukumar ta ba iko ba ya jiran sabon fitarwa.",
+    ofcRlCatalogueNote: "Jerin izinin da suke nan ya kasance a cikin lambar, saboda izini suna ne da hanyoyin ke duba. Bayar da izinin da babu hanyar da ke duba shi zai yi kama da iko amma ba iko ba ne.",
+    ofcRlRole: "Matsayi",
+    ofcRlOfficers: "Jami’an da ke rike da shi",
+    ofcRlPermissions: "Izini",
+    ofcRlSystemRole: "Yana zuwa da manhajar",
+    ofcRlPortalRole: "Yana shiga wannan tashar",
+    ofcRlGrant: "Bayar",
+    ofcRlRevoke: "Cire",
+    ofcRlGrantReason: "Dalilin bayar da wannan iko",
+    ofcRlRevokeReason: "Dalilin cire wannan iko",
+    ofcRlRevokeWarning: "Duk wanda ke rike da wannan matsayi za a fitar da shi. An yi haka da gangan: ana ajiye taswirar, kuma dakika talatin lokaci ne mai tsawo ga wanda aka cire wa iko ya ci gaba da amfani da shi.",
+    ofcRlNewRole: "Kara matsayi",
+    ofcRlRoleName: "Sunan da ake amfani da shi a lambar",
+    ofcRlRoleLabel: "Abin da jami’ai ke gani",
+    ofcRlCopyFrom: "Fara daga",
+    ofcRlCopyFromBody: "Farawa daga matsayin da ya fi kusa sannan a cire abubuwa ya fi aminci fiye da farawa ba tare da komai ba, wanda shi ne yadda matsayi ke samun komai bayan mako guda, gaggawa daya bayan daya.",
+    ofcRlRetire: "Yi ritaya",
+    ofcRlRestore: "Mayar da shi aiki",
+    ofcRlIsPortalRole: "Wannan matsayi yana shiga tashar jami’ai",
+    ofcRlSignedOut: "Jami’an da aka fitar",
+    ofcRlSearchPermission: "Nemo izini",
+    ofcNoneRoles: "Ba a saita wani matsayi ba.",
+    enumClosing: "Ana rufewa",
+    ofcNavPeriods: "Lokutan kudi",
+    enumClean: "Babu matsala",
+    enumException: "Matsala",
+    enumNotAvailable: "Ba a iya duba shi ba",
+    enumRandom: "Bazuwa",
+    enumSystematic: "Kowane na n",
+    enumHighestValue: "Mafi girman kudi",
+    enumDrawn: "An zana",
+    enumInReview: "Ana duba shi",
+    enumGenerated: "An samar da shi",
+    enumSigned: "An sa hannu",
+    enumTransactionAudit: "Binciken cinikayya",
+    enumAgentActivity: "Ayyukan wakili",
+    enumRevenueCollection: "Kudin da aka karba",
+    enumLgaPerformance: "Aikin karamar hukuma",
+    enumPaymentReconciliation: "Daidaita biyan kudi",
+    enumUserActivity: "Ayyukan jami’i",
+    enumAnomaly: "Abubuwan da ba a saba gani ba",
+    enumAuditSample: "Samfuran bincike",
+    enumRevenueTarget: "Burin kudin shiga",
+    enumPeriodClosing: "Rufe lokaci",
+    enumDataChange: "Canje-canjen bayanai",
+    ofcNavWorkbench: "Teburin bincike",
+    ofcWbSamplesDrawn: "Samfuran da aka zana",
+    ofcWbItemsOutstanding: "Abubuwan da suka rage a duba",
+    ofcWbExceptionsFound: "Matsalolin da aka samu",
+    ofcWbReportsHeld: "Rahotannin da ke fayil",
+    ofcWbSamples: "Samfura",
+    ofcWbSamplesHint: "Kowane layi yana rubuta zanen da ya riga ya faru. Ba za a iya canza sharudda, hanya ko iri ba bayan haka, wanda shi ne abin da ke ba wani damar maimaita shi.",
+    ofcWbSampleNumber: "Samfur",
+    ofcWbTitle: "Abin da ya shafa",
+    ofcWbMethod: "Yadda aka zana shi",
+    ofcWbMethodRandom: "Bazuwa, daga iri da aka ajiye",
+    ofcWbMethodSystematic: "Kowane na n, bisa tsarin kwanan wata",
+    ofcWbMethodHighestValue: "Mafi girman kudi (ba samfur ba ne)",
+    ofcWbDrawn: "An zana daga jimla",
+    ofcWbPending: "Ba a duba ba tukuna",
+    ofcWbExceptions: "Matsaloli",
+    ofcWbDrawnAt: "An zana a",
+    ofcWbDrawnBy: "Wanda ya zana",
+    ofcWbNoSamples: "Ba a zana samfur ba tukuna.",
+    ofcWbDraw: "Zana samfur",
+    ofcWbDrawHint: "Ka fada me ake bukatar samfurin da kuma yadda za a duba. Barin fili babu komai yana nufin ba ya rage komai.",
+    ofcWbSize: "Nawa za a zana",
+    ofcWbFrom: "Daga",
+    ofcWbTo: "Zuwa",
+    ofcWbMinimumNaira: "Mafi karancin kudi (naira)",
+    ofcWbDrawIsFinal: "Ba za a iya soke zane ko sake zana shi ba. Ka zana sabon samfur idan wadannan sharuddan ba daidai ba ne.",
+    ofcWbDrawnNotice: "An zana {{number}}, cinikayya {{n}} za a duba.",
+    ofcWbSeed: "Iri",
+    ofcWbPopulation: "An zana daga",
+    ofcWbPosition: "Abu",
+    ofcWbOutcome: "Sakamako",
+    ofcWbFinding: "Abin da aka samu",
+    ofcWbRecord: "Rubuta",
+    ofcWbNoItems: "Wannan samfurin bai zabi komai ba.",
+    ofcWbCompleteHint: "Ba za a iya kammala samfur ba sai kowane abu ya sami sakamako. Aikin da ba a gama ba amma aka ce an gama ya fi rashin samfur muni.",
+    ofcWbComplete: "Kammala wannan samfurin",
+    ofcWbReports: "Rahotannin bincike",
+    ofcWbReportsHint: "Kowane rahoto yana rike da bayanan yadda suke a lokacin da aka samar da shi, tare da lambar tantancewa da mai karatu zai iya sake lissafawa.",
+    ofcWbReportNumber: "Rahoto",
+    ofcWbReportType: "Tambayar da yake amsawa",
+    ofcWbRows: "Layuka",
+    ofcWbPeriod: "Lokaci",
+    ofcWbGeneratedAt: "An samar a",
+    ofcWbSignedBy: "Wanda ya sa hannu",
+    ofcWbChecksum: "Lambar tantancewa",
+    ofcWbOpenReport: "Bude",
+    ofcWbWhatWasFrozen: "Abin da aka daskarar",
+    ofcWbRecomputed: "An sake lissafawa yanzu",
+    ofcWbStored: "An ajiye lokacin sa hannu",
+    ofcWbChecksumAgrees: "Layukan da aka ajiye har yanzu suna bayar da lambar tantancewar da aka rubuta tare da su.",
+    ofcWbChecksumDiffers: "Layukan da aka ajiye ba sa kara bayar da lambar tantancewar da aka rubuta tare da su. Ka karanta layukan da ke kasa tare da kwafin da aka buga kafin ka dogara da ko wanne.",
+    ofcWbPayloadRows: "Layuka kamar yadda aka daskarar da su",
+    ofcWbViewIsRecorded: "Budewar rahoton da aka sa wa hannu ana rubuta ta a kan sunanka.",
+    ofcWbNoPayload: "An daskarar da wannan rahoton ba tare da wani layi a ciki ba.",
+    ofcWbAltered: "An sauya",
+    ofcWbAlteredTitle: "Wani rahoto a wannan shafi bai sake dacewa da lambar tantancewarsa ba",
+    ofcWbAlteredBody: "Rahotanni {{n}} da ke kasa suna dauke da lambobin da ba su sake dacewa da lambar tantancewar da aka rubuta lokacin da aka kirkire su ba. Sa hannu a kan irin wannan rahoto bai shafi abin da yake nunawa yanzu ba. Wannan sauyi ne da aka yi a cikin bayanan kai tsaye, ba ta hanyar dandalin ba — kada ka dogara da wadannan lambobin, kuma ka daga kara.",
+    ofcWbNoReports: "Ba a samar da rahoto ba tukuna.",
+    ofcWbGenerate: "Samar da rahoto",
+    ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",
+    ofcWbGenerated: "An samar da {{number}}, layuka {{n}}.",
+    ofcWbGeneratedPartial: "An samar da {{number}} da layuka {{n}} — amma fiye da {{n}} suka dace, don haka wannan rahoto ya kunshi na baya-bayan nan kadai kuma farkon lokacin ba ya ciki. Ka rage lokacin ka sake samarwa kafin ka sa hannu.",
+    ofcWbPartialBadge: "Bai cika ba",
+    ofcWbPartialReport: "Wannan rahoto ya tsaya a layuka {{n}}. Fiye da haka suka dace, don haka ya kunshi na baya-bayan nan {{n}} kadai kuma farkon lokacinsa ba ya ciki — har da a cikin fayil din da aka fitar daga nan. Ka rage lokacin ka samar da sabon rahoto maimakon sa hannu a kan wannan a matsayin tarihin dukan lokacin.",
+    ofcWbSign: "Sa hannu",
+    ofcWbWithdraw: "Janye",
+    ofcWbActions: "Ayyuka",
+    ofcWbClose: "Rufe",
+    ofcWbReference: "Lamba",
+    ofcWbTaxpayer: "Mai biyan haraji",
+    ofcWbAmount: "Kudi",
+    ofcPeTitle: "Lokutan kudi",
+    ofcPeIntro: "Rufe wata yana daskarar da abin da Jihar ta ce ta tara a cikinsa. Bayan rufewa, bayanan kansu suna hana rubutu cikin watan — wannan iko ne, ba rahoto ba.",
+    ofcPeOpenPeriod: "Bude lokaci",
+    ofcPePeriod: "Lokaci",
+    ofcPeCollected: "An tara",
+    ofcPeSettled: "An tura wa gwamnati",
+    ofcPeCommission: "Kwamishan",
+    ofcPeTransactions: "Ma’amaloli",
+    ofcPeClose: "Rufe watan",
+    ofcPeBeginClosing: "Fara rufewa",
+    ofcPeReopen: "Sake budewa",
+    ofcPeClosedBy: "Wanda ya rufe",
+    ofcPeReopenedBy: "Wanda ya sake budewa",
+    ofcPeClosingNote: "Abin da ake tabbatarwa",
+    ofcPeReopenReason: "Dalilin sake budewa",
+    ofcPeNotReady: "Bai shirya rufewa ba",
+    ofcPeNotReadyBody: "Rufewa a kan bambancin da ba a warware ba ko biyan da ke jira yana daskarar da adadin da aka riga aka san ba daidai ba ne. Wani lokaci shi ne daidai, kuma ba a taba yin sa a boye ba.",
+    ofcPeOverride: "Dalilin rufewa duk da haka",
+    ofcPeFiguresUnknown: "Ba a iya karanta abin da wannan wata ke rike da shi ba",
+    ofcPeFiguresUnknownBody: "Dandalin bai iya kirga sauran matsalolin da ba a warware ba ko biyan da ke jira na wannan wata ba, don haka ba zai iya gaya maka ko lambar ta tabbata ba. Watakila ta tabbata. Har yanzu ana iya rufewa, kuma yana bukatar dalili a rubuce, domin wata da aka rufe ba tare da sani ba, an rufe shi ne a kan duk abin da ke ciki.",
+    ofcPeUnreconciled: "Bambancin da ba a warware ba",
+    ofcPePendingPayments: "Biyan da ke jira",
+    ofcPeFiguresNow: "Abin da watan ke da shi yanzu",
+    ofcPeFrozen: "An daskare a rufewa",
+    ofcPeReopenSeparate: "Sake budewa na mai gudanarwa ne, ba na wanda ya rufe ba. Idan jami’in da ya rufe littattafan zai iya sake budewa, hakan na kawar da yawancin dalilin kulle lokacin.",
+    ofcNonePeriods: "Ba a bude wani lokacin kudi ba tukuna.",
+    enumSupervisorChange: "Layin rahoto",
+    enumRoleChange: "Matsayi",
+    ofcNavOrganisation: "Sassa da ofisoshi",
+    ofcOrTitle: "Kungiyar",
+    ofcOrIntro: "Wanda ke aiki da wa, wanda ke da alhakinsu, da inda suke zaune. Sashe jiki ne; matsayi shi ne abin da mutum zai iya yi. Ana bukatar dukansu kuma babu wanda ya maye gurbin dayan.",
+    ofcOrDepartments: "Sassa",
+    ofcOrOffices: "Ofisoshin haraji",
+    ofcOrOfficesBody: "Inda jami’ai ke zaune, wanda ba yankin da suke rufewa ba ne. Ofishin Jos North yana kula da kananan hukumomi uku.",
+    ofcOrNewDepartment: "Kara sashe",
+    ofcOrNewOffice: "Kara ofishi",
+    ofcOrCode: "Lamba",
+    ofcOrFunction: "Aikin da yake yi",
+    ofcOrHead: "Wanda ke da alhakinsa",
+    ofcOrParent: "Yana karkashin",
+    ofcOrOfficers: "Jami’ai",
+    ofcOrOpenCases: "Kararrakin da ba a rufe ba",
+    ofcOrCovers: "Yana kula da",
+    ofcOrClose: "Rufe",
+    ofcOrPosting: "Matsayi",
+    ofcOrWhoServedWhere: "Wa aka tura ina",
+    ofcOrWhoServedWhereBody: "Duk wani turawa da aka rubuta a fadin hukumar, sabo tukuna. Takaddama tana farawa daga wuri da rana, ba ta san rikodin wa za a bude ba, wanda hakan tarihin jami\u2019i daya ba zai iya amsawa ba.",
+    ofcOrWhatMoved: "Abin da ya sauya",
+    ofcOrAnyKind: "Kowane irin sauyi",
+    ofcOrNoPostingsInPeriod: "Ba a rubuta wani turawa a wannan lokacin ba.",
+    ofcOrListsFailedTitle: "Ba a iya karanta wasu jerin ba",
+    ofcOrListsFailedBody: "Sassan, ofisoshi ko jami\u2019ai ba su bayyana ba, don haka zabin da ke kama da \u201cBa a tura ba\u201d yana iya nufin jerin ne kawai ya bata. Sake loda kafin ka rubuta turawa.",
+    ofcOrPostingBody: "Ana rubuta kowane bangare da ya motsa a matsayin canjin kansa mai kwanan wata, don haka matsawa zuwa Kudi da sauya wanda ake bayar da rahoto gare shi suna da amsoshi daban.",
+    ofcOrMoveOfficer: "Matsar da wannan jami’i",
+    ofcOrDepartment: "Sashe",
+    ofcListCouldNotLoad: "Ba a iya loda wannan jerin ba.",
+    ofcOrOffice: "Ofishi",
+    ofcOrSupervisor: "Yana bayar da rahoto ga",
+    ofcOrJobTitle: "Mukami",
+    ofcOrStaffNumber: "Lambar ma’aikaci",
+    ofcOrWhyMoving: "Dalilin matsawa",
+    ofcOrEffectiveFrom: "Daga",
+    ofcOrHistory: "Tarihin matsayi",
+    ofcOrHistoryBody: "Ana kara kawai. Ana tambayar wa ke da alhakin wani yanki a wani wata a jayayyar haraji, kuma amsar da za a iya gyarawa daga baya ba amsa ba ce.",
+    ofcOrNobody: "Babu kowa",
+    ofcOrUnposted: "Ba a saka ba",
+    ofcCwEscalate: "Daukaka",
+    ofcCwEscalateBody: "Yana aika karar ga jami’in da ke sama, tare da duk tarihinta. Idan babu kowa a sama, zai fada maimakon a sa alamar daukaka a bar ta a nan.",
+    ofcCwEscalateReason: "Dalilin bukatar wani a sama",
+    ofcCwEscalatedTo: "An daukaka zuwa",
+    ofcNoneDepartments: "Ba a kirkiri wani sashe ba tukuna.",
+    ofcNoneOffices: "Ba a kirkiri ofishin haraji ba tukuna.",
+    ofcNoneTransfers: "Ba a rubuta wani matsayi ga wannan jami’i ba.",
+    enumCollection: "Karbar kudi",
+    enumFinance: "Kudi",
+    enumAudit: "Bincike",
+    enumEnforcement: "Aiwatarwa",
+    enumTaxpayerServices: "Hidimar masu biyan haraji",
+    enumAdministration: "Gudanarwa",
+    enumTechnology: "Fasaha",
+    enumPosting: "Matsayi",
+    enumDepartment: "Sashe",
+    enumOffice: "Ofishi",
+    enumTerritory: "Yanki",
+    ofcDbByChannel: "Yadda kudin ya shigo",
+    ofcDbByChannelBody: "An rubuta shi a kan kowace ma’amala tun farkon manhajar, kuma ba a taba tarawa ba har yanzu. Shi ne adadin da ke bayan kowane shawara kan inda za a sanya wakilai.",
+    ofcDbByTaxpayerType: "Mutane da kasuwanci",
+    ofcDbByItem: "Haraji bisa kowane nau’i",
+    ofcDbByItemBody: "Mataki daya kasa da nau’in, inda alhakin wani yake.",
+    ofcDbReversed: "An soke",
+    ofcDbRefunded: "An mayar",
+    ofcDbAgentsOnline: "Wakilan da ke aiki yanzu",
+    ofcDbAgentsOnlineHint: "Sun yi aiki cikin mintuna goma sha biyar da suka wuce",
+    ofcDbAgentsSuspended: "Wakilan da aka dakatar",
+    ofcDbExpectedRevenue: "An kima kuma ba a biya ba",
+    ofcDbExpectedRevenueHint: "Kudin da aka riga aka fitar da takardar biya kuma ana bin sa. Ba hasashe ba.",
+    ofcNavTaxpayerAnalytics: "Masu biyan haraji",
+    ofcTaTitle: "Masu biyan haraji",
+    ofcTaIntro: "Ba yawan mutanen da ke rajista ba, sai dai nawa ne har yanzu ke biya, sau nawa, da kuma inda wadanda suka daina suke.",
+    ofcTaActive: "Suna biya",
+    ofcTaActiveHint: "Sun biya wani abu cikin kwanaki casa’in da suka wuce",
+    ofcTaInactive: "Sun daina biya",
+    ofcTaNeverPaid: "Ba su taba biya ba",
+    ofcTaTotal: "A rajista",
+    ofcTaNewThisMonth: "An yi rajista wannan watan",
+    ofcTaAverageLifetime: "Matsakaicin abin da kowa ya biya",
+    ofcTaFrequency: "Sau nawa mai biya yake biya",
+    ofcTaFrequencyBody: "An rarraba maimakon a dauki matsakaici. Matsakaici a cikin jama’a inda mafi yawa suka biya sau daya kuma kadan suka biya sau goma sha biyu ba ya siffanta kowa a cikinsu.",
+    ofcTaByLga: "Rajista bisa karamar hukuma",
+    ofcTaByCategory: "Harajin da masu rajista ke da alaka da su",
+    ofcTaTaxpayersAssessed: "An kima",
+    ofcTaTaxpayersPaid: "Sun biya",
+    ofcTaAveragePayment: "Matsakaicin biya",
+    ofcTaComplianceScore: "Matsakaicin makin bin doka",
+    ofcTaOutstanding: "Abin da ake bin su",
+    ofcCmByPlace: "Kwamishan bisa karamar hukuma",
+    ofcCmByPeriod: "Kwamishan bisa wata",
+    ofcCmAccrued: "An tara",
+    ofcCmPaidOut: "An biya",
+    ofcCmOutstandingCommission: "Bai biya ba",
+    enumOnce: "Sau daya",
+    enumTwoToThree: "Sau biyu ko uku",
+    enumFourToEleven: "Sau hudu zuwa goma sha daya",
+    enumTwelveOrMore: "Sau goma sha biyu ko fiye",
+    ofcDbYesterday: "Jiya",
+    ofcDbThisWeek: "Wannan makon",
+    ofcDbVsYesterday: "kan jiya",
+    ofcDbVsLastWeek: "kan kwanakin makon jiya",
+    ofcDbVsLastMonth: "kan kwanakin watan jiya",
+    ofcDbVsLastYear: "kan wannan lokaci na bara",
+    ofcDbNoComparison: "ba a tara komai a lokacin ba, don haka babu kwatanci",
+    ofcDbLastMonthWhole: "Duk watan jiya",
+    ofcDbDeclining: "Nau’ikan da suka tara kasa da watan jiya",
+    ofcDbDecliningBody: "Idan aka jera bisa girma, nau’in da ya ragu da rabi zai kasance a saman kuma zai yi kama da lafiya. Wannan bayanai iri daya ne aka jera bisa hanya.",
+    ofcDbNoneDeclining: "Babu abin da ke tarawa kasa da watan jiya.",
+    ofcDbChange: "Canji",
+    ofcDbShareOfMonth: "Kason watan",
+    ofcRvAverageTransaction: "Matsakaicin ma’amala",
+    ofcRvCompliance: "Rajistar da ke biya",
+    ofcRvComplianceHint: "Kason masu biyan haraji da aka yi rajista a nan da suka biya wani abu a lokacin.",
+    ofcPfGrowth: "Kan watan jiya",
+    ofcPfCategories: "Harajin da ake aiki da su",
+    enumCategory: "Nau’i",
+    enumItem: "Harajin guda",
+    enumLga: "Karamar hukuma",
+    ofcNavTargets: "Manufura da hasashe",
+    ofcTgTitle: "Manufofin haraji",
+    ofcTgIntro: "Abin da Hukumar ke tsammanin tarawa, da abin da ya shigo a kansa.",
+    ofcTgSetTarget: "Sanya manufa",
+    ofcTgScope: "An sanya wa",
+    ofcTgScopeState: "Duk Jihar",
+    ofcTgScopeLga: "Karamar hukuma daya",
+    ofcTgScopeCategory: "Nau’in haraji daya",
+    ofcTgScopeItem: "Harajin guda daya",
+    ofcTgScopeAgent: "Wakili daya",
+    ofcTgPeriod: "Lokaci",
+    ofcTgPeriodDaily: "Kullum",
+    ofcTgPeriodWeekly: "Mako-mako",
+    ofcTgPeriodMonthly: "Wata-wata",
+    ofcTgPeriodQuarterly: "Kwata-kwata",
+    ofcTgPeriodAnnual: "Shekara-shekara",
+    ofcTgAmount: "Adadin manufa",
+    ofcTgNeedAmount: "Ka shigar da adadin da za a karba a wannan lokaci.",
+    ofcTgNeedLga: "Ka zabi Karamar Hukumar da wannan manufa ta shafa.",
+    ofcTgNeedCategory: "Ka zabi rukunin haraji da wannan manufa ta shafa.",
+    ofcTgNote: "Dalilin wannan adadi",
+    ofcTgTarget: "Manufa",
+    ofcTgCollected: "An tara",
+    ofcTgAchievement: "Cimma buri",
+    ofcTgGap: "Rata",
+    ofcTgThroughPeriod: "Cikin lokacin",
+    ofcTgRollup: "Manufar jiha da abin da aka raba a karkashinta",
+    ofcTgRollupBody: "Ba lallai su daidaita ba. Adadin Jihar yakan dauki karin sarari, kuma karamar hukuma da ba ta da manufa ita ce abin lura mafi amfani.",
+    ofcTgStateTarget: "Manufar jiha",
+    ofcTgApportioned: "An raba wa kananan hukumomi",
+    ofcTgLgasWithout: "Kananan hukumomin da ba su da manufa",
+    ofcTgWithdraw: "Janye",
+    ofcTgWithdrawReason: "Dalilin janyewa",
+    ofcTgSuperseded: "Wannan ya maye gurbin manufar da ta gabata na wannan lokaci.",
+    ofcTgSetBy: "Wanda ya sanya",
+    ofcTgShowSuperseded: "Hada da wadanda aka sauya ko janye",
+    ofcNoneTargetsSet: "Ba a sanya manufa don wannan lokaci ba.",
+    ofcFcTitle: "Hasashe",
+    ofcFcNotATarget: "Wannan hasashe ne, ba manufa ba kuma ba tabbataccen kudin shiga ba. Lissafi ne kan abin da aka tara ya zuwa yanzu da abin da shekarun baya suka yi a wannan lokaci.",
+    ofcFcProjected: "Hasashen lokacin",
+    ofcFcBasis: "An lissafa daga",
+    ofcFcConfidence: "Tabbaci",
+    ofcFcSeasonalShare: "Yawanci ana tarawa ya zuwa yanzu",
+    ofcFcComparablePeriods: "Lokutan da aka kwatanta",
+    ofcFcProjectedAchievement: "Hasashe kan manufa",
+    forecastSeasonal: "An tsara shi bisa yadda ake tarawa: an yi amfani da shekarun baya don sanin kaso nawa ake tarawa ya zuwa yanzu.",
+    forecastRunRate: "Kai tsaye bisa saurin tarawa. Babu isasshen tarihi don sanin yadda ake tarawa, don haka watakila ba daidai ba ne a farko da karshen lokacin.",
+    forecastTooEarlyInCurve: "Shekarun baya kusan ba su tara komai ba ya zuwa yanzu, don haka ba za a iya amfani da yadda ake tarawa ba tukuna. An nuna saurin tarawa kai tsaye.",
+    forecastPeriodComplete: "Lokacin ya kare. Wannan shi ne ainihin adadin, ba hasashe ba.",
+    forecastNotStarted: "Lokacin bai fara ba. Babu abin da za a yi hasashe daga gare shi tukuna.",
+    enumSeasonal: "Yadda ake tarawa",
+    enumRunRate: "Saurin tarawa",
+    enumInsufficientHistory: "Babu isasshen tarihi",
+    enumAwaitingInformation: "Ana jiran bayani",
+    enumEscalated: "An daukaka",
+    enumInvestigating: "Ana bincike",
+    enumAgentConduct: "Halin wakili",
+    enumCommissionQuery: "Tambaya kan kwamishan",
+    enumDataCorrection: "Gyaran bayanai",
+    enumFraudInvestigation: "Binciken zamba",
+    enumGeneral: "Na gama-gari",
+    enumReconciliationException: "Bambancin lissafi",
+    enumRevenueAnomaly: "Rashin daidaito a haraji",
+    enumSystemIssue: "Matsalar manhaja",
+    enumTaxpayerDispute: "Takaddamar mai biyan haraji",
+    enumApproval: "Amincewa",
+    enumFraudFlag: "Alamar hadari",
+    enumManual: "Jami’i ya bude",
+    enumSupportTicket: "Takardar taimako",
+    enumAssignment: "An ba wa",
+    enumComment: "Sharhi",
+    enumDueDateChange: "An sauya ranar karshe",
+    enumEscalation: "An daukaka",
+    enumEvidence: "An hada hujja",
+    enumNote: "Bayanin cikin gida",
+    enumPriorityChange: "An sauya muhimmanci",
+    enumResolution: "Warware",
+    enumRouted: "An tura",
+    enumStatusChange: "An sauya matsayi",
+    ofcCwSubject: "Batu",
+    ofcCwDescription: "Abin da ya faru",
+    ofcCwCategory: "Nau’i",
+    ofcCwRisk: "Hadari",
+    ofcCwPriority: "Muhimmanci",
+    ofcCwDepartment: "Aika wa",
+    ofcCwAssignee: "Ba wa",
+    ofcCwNobody: "Babu kowa tukuna",
+    ofcCwAnyDepartment: "Babu sashe",
+    ofcCwDue: "Ranar karshe",
+    ofcCwOnlyOpen: "Kararrakin da ba a rufe ba kadai",
+    ofcCwOnlyOverdue: "Wadanda suka wuce lokaci kadai",
+    ofcCwOpenedBy: "Wanda ya bude",
+    ofcCwCaseNumber: "Kara",
+    ofcCwComments: "Sharhi",
+    ofcCwEvidence: "Hujja",
+    ofcCwBackToQueue: "Koma jerin aikin",
+    ofcCwHistory: "Tarihi",
+    ofcCwAddComment: "Kara sharhi",
+    ofcCwInternalNote: "Ajiye wannan a matsayin bayanin cikin gida",
+    ofcCwMention: "Ambaci jami’i",
+    ofcCwPost: "Aika",
+    ofcCwMoveCase: "Matsar da wannan kara",
+    ofcCwChangeStatus: "Sauya matsayi",
+    ofcCwResolution: "Abin da ya kammala",
+    ofcCwResolutionRequired: "Fada abin da karar ta kammala kafin ka warware ta.",
+    ofcCwSaved: "An adana.",
+    ofcCwNotYours: "Ba a ba ka wannan kara ba kuma ba kai ka bude ta ba, don haka za ka iya yin sharhi kadai.",
+    ofcCwAbout: "Game da",
+    ofcCwWhy: "Dalili",
+    ofcReasonAtLeastChars: "Akalla haruffa {{n}}.",
+    ofcCwSubjectTooShort: "Ba karar batu na akalla haruffa biyar.",
+    ofcCwSampleSubject: "Karbar kudi ta ninka sau uku ba tare da sabbin masu biyan haraji ba",
+    ofcCwSampleDescription: "Fada abin da ka gani, a ina, da abin da kake so dayan sashen ya duba.",
+    ofcCwAppendOnly: "Ba za a iya gyara ko cire komai a nan ba. Gyara wani shigarwa ne.",
+    ofcNoneCasesMatchFilter: "Babu kara da ya dace da wadannan tacewa.",
+    ofcT3Title: "Fayil din ma’amala",
+    ofcT3Intro: "Cikakken labarin karbar kudi guda, daga mai biyan haraji zuwa asusun gwamnati.",
+    ofcT3Find: "Nemo ma’amala",
+    ofcT3FindBody: "Lambar ma’amala, ko lambar rasit daga sakon dan kasa.",
+    ofcT3Chain: "Sarkar",
+    ofcT3Assessment: "Kima",
+    ofcT3Invoice: "Takardar biya",
+    ofcT3Payment: "Biyan kudi",
+    ofcT3Gateway: "Kofar biyan kudi",
+    ofcT3Settlement: "Turawar kudi",
+    ofcT3Reconciliation: "Daidaita lissafi",
+    ofcT3Commission: "Kwamishan",
+    ofcT3Refunds: "Mayar da kudi",
+    ofcT3Timeline: "Abin da ya faru, bi da bi",
+    ofcT3TimelineBody: "Rijistar manhajar da ayyukan jami’ai, a agogo guda.",
+    ofcT3Platform: "Manhaja",
+    ofcT3OfficerAction: "Aikin jami’i",
+    ofcT3Before: "Kafin",
+    ofcT3After: "Bayan",
+    ofcT3CasesAndFlags: "Kararraki da alamun hadari",
+    ofcT3OpenCaseAbout: "Bude kara game da wannan ma’amala",
+    ofcT3Withheld: "Ba a nuna wa matsayinka ba",
+    ofcT3WithheldBody: "Wadannan sassan suna nan amma izininka bai kai gare su ba. An ambace su domin kada a dauki sashe mara komai a matsayin rijista mara komai.",
+    ofcT3NoPayment: "Ba a yi yunkurin biyan kudi ba.",
+    ofcT3NoReceipt: "Ba a bayar da rasit ba.",
+    ofcT3NoSettlement: "Kudin bai isa asusun gwamnati ba tukuna.",
+    ofcT3NoCommission: "Ba a samu kwamishan ba.",
+    ofcT3NoReconciliation: "Wannan bai wuce ta zagayen daidaita lissafi ba.",
+    ofcT3Channel: "Hanya",
+    ofcT3Where: "Ina",
+    ofcT3ServiceCharge: "Kudin hidima",
+    ofcChInvoiceIntro: "Abin da aka bukata, abin da aka lissafa shi daga gare shi, da kuma nawa aka riga aka biya.",
+    ofcChAssessmentIntro: "Abin da aka lissafa, da kuma ko an riga an bukaci biyansa.",
+    ofcChDemanded: "An bukata",
+    ofcChPaidSoFar: "An biya har yanzu",
+    ofcChStillOwed: "Sauran bashi",
+    ofcChIssued: "An fitar",
+    ofcChPayableUntil: "Ana iya biya har zuwa",
+    ofcChLapsedTitle: "Lokacin ya wuce",
+    ofcChLapsed: "Wannan takardar biya ta kare a {{date}}. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChLapsedNoDate: "Wannan takardar biya ta kare. Dandalin zai ki karbar kudi a kanta, don haka sai an sabunta tantancewa kafin a iya karba.",
+    ofcChHowComputed: "Yadda aka kai ga wannan adadi",
+    ofcChTraceFrozen: "An rubuta shi lokacin da aka yi tantancewar, kuma ba a canza shi ba tun daga nan. Wannan shi ne abin da lissafin ya yi a ranar, ba abin da zai yi a yau ba.",
+    ofcChNoTrace: "Ba a rubuta wani lissafi a kan wannan tantancewa ba.",
+    ofcChStep: "Mataki",
+    ofcChDetail: "Abin da aka yi",
+    ofcChAmount: "Adadi",
+    ofcChVerificationCode: "Lambar tabbatarwa",
+    ofcChOpenAssessment: "Bude tantancewa {{number}}",
+    ofcChOpenTransaction: "Bude ma\u2019amala {{reference}}",
+    ofcChNoTransaction: "Babu wanda ya fara biya a kan wannan takardar biya.",
+    ofcChPeriod: "Lokaci",
+    ofcChBaseAmount: "Kafin rangwame",
+    ofcChDiscount: "Rangwame",
+    ofcChPayable: "Abin biya",
+    ofcChRaisedBy: "An yi shi a matsayin",
+    ofcChRaisedOn: "An yi shi a",
+    ofcChNoInvoiceTitle: "Ba a bukaci komai ba tukuna",
+    ofcChNoInvoiceYet: "Ba a fitar da takardar biya daga wannan tantancewa ba, don haka babu wani bashi a kanta tukuna.",
+    ofcT3Verified: "An tabbatar",
+    ofcT3NothingLinked: "Babu kara ko alamar hadari da ke da nasaba da wannan ma’amala.",
     ofcGroupAdministration: "Gudanarwa",
     ofcGroupAgentsProgrammes: "Wakilai da shirye-shirye",
     ofcGroupAssessment: "Kima",
@@ -5700,6 +9725,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPrinter: "Ka duba hadin na’urar buga takarda",
     colPrintBluetooth: "Buga (Bluetooth)",
     colReceiptCopied: "An kwafi bayanan rasit. Za ka iya liko su cikin sako.",
+    colCouldNotCopy: "Wayar ba ta kwafa shi ba",
+    colCouldNotCopyBody: "Karanta ko rubuta bayanan rasit da ke kasa cikin sakonka. Su ne bayanan da kwafin zai dauka.",
     colPreparingInvoice: "Ana shirya takardar biya…",
     colGiveInvoice: "Ba mai biyan haraji takardar biya",
     colInvoiceHint: "Sanarwar biya da za a iya bugawa, dauke da lambar takardar biya, abin da ake biya da yadda aka lissafa kudin",
@@ -5708,6 +9735,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     colInvoiceNoReference: "Ka fara biyan kudin idan suna son biya a banki: lambar da banki ke nema ana bayar da ita a lokacin, kuma takardar biya ba ta dauke da ita ba.",
     colCheckingPayment: "Ana dubawa tare da tsarin biyan kudi…",
     colCheckPaymentStatus: "Duba matsayin biyan kudi",
+    colStartingPayment: "Ana fara biyan kudi…",
+    colStartPayment: "Fara biyan kudi",
+    colAlreadyOwes: "Abin da suka riga suka ci bashi",
+    colAlreadyOwesBody: "Takardun biya da ba a rufe ba a rikodin wannan mai biyan haraji. Idan biyan da ke gabanka daya ne daga cikinsu, ka karbi wannan biyan maimakon ka kara sabon caji \u2014 kari na biyu a kan abu daya bashi ne na biyu.",
+    colOwesUnknown: "Ba a iya karanta takardun biyansu ba",
+    colOwesUnknownBody: "Wannan ba ya nufin ba su da bashi; yana nufin dandalin bai iya gaya maka ba. Yin sabon caji yanzu na iya haifar da cajin abu daya sau biyu.",
+    colTakeThisPayment: "Karbi wannan biyan",
+    colChargeRaisedTitle: "An yi kimantawa, amma ba a fara biyan kudi ba.",
+    colChargeRaisedBody:
+      "Ma’amala {{reference}} ta wanzu yanzu kuma mai biyan haraji na bin ta. Kada ka sake lissafa wannan — sake gwadawa zai haifar da kimantawa ta biyu a kan abu daya, kuma za a bukaci a biya dukansu. Ka bude ma’amalar domin ba shi takardar biya ko ka sake fara biyan kudin.",
+    colOpenCharge: "Bude wannan ma’amala",
     colDevGateway: "Tashar gwaji",
     colDevGatewayHint: "Wannan dandalin yana aiki da tashar biyan kudi ta gwaji. Ka yi amfani da wadannan don kwaikwayon abin da tashar gaske za ta bayar.",
     colSimulateSuccess: "Kwaikwayon nasara",
@@ -5755,7 +9793,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     verifyScanHint: "Ka duba murabba’in da ke kan rasit, ko ka rubuta lambar da ke kasansa. PSIRS na tabbatar ko an bayar da rasit — karanta lambar kawai yana gaya maka abin da ke kan takardar.",
     verifyOfflineBody: "Ba za a iya duba rasit ba sai ta PSIRS, don haka wannan yana bukatar hanyar sadarwa. Za ka iya duba lambar sannan ka tantance ta idan ka dawo kan layi.",
     verifyCouldNotReach: "Ba a iya samun PSIRS ba, don haka ba a iya duba wannan rasit ba.",
-    verifyNotAReceiptCode: "Wannan QR code ba lambar rasit ta PSIRS ba ce. Ka rike rasit a cikin firam.",
+    verifyNotAReceiptCode: "Wannan QR code ba lambar tantancewa ta PSIRS ba ce. Ka rike rasit a cikin firam.",
     verifyCameraFailed: "Ba a iya bude kyamara ba. Maimakon haka ka rubuta lambar da aka buga karkashin murabba’in QR.",
     verifyChecking: "Ana dubawa tare da PSIRS…",
     verifyCheckThisCode: "Duba wannan lambar",
@@ -5835,8 +9873,61 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpTinRequested: "An tura bukatar TIN",
     tpTinPending: "Sashen TIN bai dawo da lamba ba tukuna. Za ta bayyana a bayanan mai biyan haraji da zarar an ba shi.",
     tpCollectRevenue: "Karbi haraji",
+    tpEnumerate: "Rubuta yadda kasuwancin yake",
+    agEnTitle: "Yadda kasuwancin yake",
+    agEnIntro: "Ka rubuta abin da kake gani. Ba kai ne kake sanya farashi ba — ofis shi ke fitar da mataki daga abin da ka rubuta, kuma za a sanar da mai biyan haraji da takarda.",
+    agEnWho: "Wane ne",
+    agEnPremises: "Inda yake kasuwanci",
+    agEnPremisesHint: "Abin da kake gani yau, ba abin da ya ce zai gina ba.",
+    agEnEquipment: "Injuna ko kayan aiki",
+    agEnEquipmentHint: "Ka kirga abin da ake amfani da shi don kasuwanci. Ka rubuta 0 idan babu.",
+    agEnPeople: "Mutanen da ke aiki banda mai shi",
+    agEnPeopleHint: "Har da almajirai da ’yan uwa da ke aiki a wurin. Ka rubuta 0 idan mai shi kadai ke aiki.",
+    agEnSector: "Sana’a",
+    agEnGroup: "Kungiyar kasuwa",
+    agEnGroupHint: "Idan yana cikin daya, za a tambayi shugaba ya tabbatar da abin da ka rubuta.",
+    agEnNoGroupChosen: "Ba ta hannun kungiya ba",
+    agEnNoGroupsTitle: "Babu kungiyar da za a bi",
+    agEnNoGroups: "Babu wata kungiyarka da aka ba ta rawa a kidaya har yanzu. Ka rubuta duk da haka — jami’i na iya tambayar shugaba daga baya.",
+    agEnNoAmountTitle: "Ba kai ne kake sanya harajin ba",
+    agEnNoAmount: "Babu adadi a wannan takarda kuma ba za a sa ba. Idan mai kasuwanci ya tambaya nawa ne, ka ce masa ofis zai aika da sanarwa, kuma yana da damar kalubalantar ta.",
+    agEnChoose: "Zaba",
+    agEnSave: "Ajiye abin da ka gani",
+    agEnSaving: "Ana ajiyewa…",
+    agEnRecordedTitle: "An rubuta",
+    agEnBand: "Girman da aka rubuta",
+    agEnWhatHappensNextTitle: "Abin da zai biyo baya",
+    agEnNextWithLeader: "Za a tambayi shugaban kungiya ya tabbatar da wannan. Ba a caji komai ba sai jami’i ya duba shi.",
+    agEnNextWithoutLeader: "Jami’i zai duba wannan. Ba a caji komai ba tukuna, kuma mai biyan haraji na iya kalubalanta idan ya karbi sanarwa.",
+    agEnBackToTaxpayer: "Koma ga mai biyan haraji",
+    agEnQueuedTitle: "Yana kan wannan wayar",
+    agEnQueuedNext: "Babu sigina, don haka wannan bai kai ofis ba tukuna. Za a aika da shi da kansa idan wayar ta koma kan layi — kada ka sake rubuta shi. Ofis zai sake duba girman idan ya iso.",
+    agEnBandSoFarTitle: "Girma daga abin da ka rubuta",
+    agEnBandSoFar: "Wannan kasuwanci na {{band}} ne bisa abin da ka shigar. Idan mai kasuwanci ya tambaya, wannan shi ne abin da aka rubuta. Ba shi ne adadin kudi ba — ofis zai fitar da shi ya aika da sanarwa.",
     tpViewProfile: "Duba bayanai",
+    verifyReceiptFingerprintMismatch: "Akwai rasit mai wannan lamba, amma takardar da aka adana ba ta yi daidai da asalin sa ba. Ka dauki takardar da aka ba ka a matsayin wadda ba a tabbatar ba, kuma ka sanar da PSIRS.",
+    verifyReceiptReversed: "An bayar da wannan rasit amma an juyar da biyan kudin ko an mayar da shi tun daga nan. Ba ya kara zama shaidar biya.",
+    verifyReceiptVoided: "An soke wannan rasit kuma ba ya aiki.",
+    verifyReceiptGenuine: "Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar.",
+    verifyReceiptGenuineUnchecked: "Wannan rasit na gwamnati ne na gaskiya wanda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba.",
+    verifyNotFound: "Babu takardar gwamnati da ta yi daidai da wannan lamba ko lambar tabbatarwa. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta bayar da shi ba.",
+    verifyPaymentReversed: "An juyar da wannan biyan kudin kuma ana mayar da kudin ga wanda ya biya, don haka ba a bayar da rasitin gwamnati a kansa ba. Takardar ba ta kara zama shaidar biya. Idan ba ka karbi kudin ba, ka tuntubi PSIRS da wannan lamba.",
+    verifyDocumentRevoked: "An soke wannan takardar kuma ba ta kara aiki.",
+    verifyDocumentFingerprintMismatch: "Takardar da aka adana ba ta yi daidai da asalin sa ba. Ka sanar da PSIRS.",
+    verifyAcknowledgementNotReceipt: "Wannan tabbacin karbar kudi ne na gaskiya daga PSIRS, kuma BA rasitin gwamnati ba ne. Tsarin biyan kudi ya tabbatar da biyan; kudin bai kai asusun gwamnati ba tukuna. Ana bayar da rasit ta atomatik da zarar ya kai, kuma ana iya duba shi a nan haka nan.",
+    verifyDocumentExpired: "Wannan takardar ta kare a {{date}}.",
+    verifyDocumentGenuine: "Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar.",
+    verifyDocumentGenuineUnchecked: "Wannan takardar gwamnati ce ta gaskiya wadda PSIRS ta bayar. Ba a iya duba kwafin da aka adana a yanzu ba, don haka ba a tabbatar da asalin sa a wannan yunkurin ba.",
     tpPossibleExisting: "Mai biyan haraji da watakila yana nan",
+    tpDupIdentityNumber: "An riga an yi rajistar wannan lambar shaida",
+    tpDupPhoneAndName: "Lambar waya daya da suna daya",
+    tpDupPhone: "An riga an yi rajistar wannan lambar waya ga wani mai biyan haraji",
+    tpDupBusinessNameInLga: "An riga an yi rajistar wani kasuwanci mai wannan suna a wannan karamar hukuma",
+    tpDupNameInLga: "An riga an yi rajistar wani mai biyan haraji mai wannan suna a wannan karamar hukuma",
+    tpDupCouldNotList: "Ba a iya nuna bayanan da suka yi daidai ba",
+    tpDupCouldNotListBody: "PSIRS ta ce watakila wannan kwafi ne, amma ba a iya lodin bayanan da ta samu ba, don haka ba za ka iya duba su a nan ba. Ka sake gwadawa. Idan bai lodi ba, ka nemi mutumin da lambar waya kafin ka sake yi masa rajista.",
+    tpDupTryAgain: "Sake gwada nuna su",
+    actionTryAgain: "Sake gwadawa",
     tpCheckSamePerson: "Ka duba ko daya daga cikin wadannan shi ne mutumin kafin ka bude sabuwar rajista.",
     tpNoneOfThese: "Babu daya daga cikinsu — yi rajistar sabon mai biyan haraji",
     tpHasTin: "Mai biyan haraji yana da TIN kuwa?",
@@ -5863,6 +9954,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpWardHint: "Inda ake bayar da rahoton haraji. Ba tare da shi ba, ba za a iya kirga wannan karban a kasa da matakin Karamar Hukuma ba.",
     tpChooseLgaFirst: "Ka zabi Karamar Hukuma tukuna",
     tpNoWardsListed: "Babu unguwannin da aka jera",
+    tpListCouldNotLoad: "Ba a iya loda wannan jerin ba.",
     tpSelectWard: "Zabi unguwa",
     tpCommunity: "Al’umma",
     tpBusinessOrActivity: "Kasuwanci ko sana’a",
@@ -5897,16 +9989,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpVehicles: "Motoci",
     tpExpires: "Zai kare {{date}}",
     tpNoRenewal: "Babu sabuntawa a rajista",
-    camAlign: "Ka daidaita QR code ko barcode cikin firam",
     camCancel: "Soke",
-    camClose: "Rufe na’urar dubawa",
-    camFlip: "Juya kyamara",
-    camInitializing: "Ana shirya kyamara...",
-    camTryAgain: "Sake gwadawa",
-    camFlashOn: "Fitila: A KUNNE",
-    camFlashOff: "Fitila: A KASHE",
-    camNoAccess: "Ba a iya samun kyamarar na’ura ba.",
-    camSwitchFailed: "Ba a iya canza kyamara ba.",
     appStageSubmitted: "An mika bukata",
     appStageKyc: "An tabbatar da shaida",
     appStageReview: "A shirye don nazarin gwamnati",
@@ -5932,6 +10015,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     appVerifying: "Ana tabbatarwa…",
     appStillNeeded: "Abin da ya rage kafin a iya turawa:",
     appStatus: "Matsayi",
+    appClearFilters: "Sake saita",
     appDocumentOnFile: "Takardar da ke rijista",
     appRefereeNoAccount: "Ba sa bukatar asusu — za su karbi hanyar sadarwa mai tsaro.",
     appRefereeShareLink: "Idan mai shaidarka bai karbi sakon ba, ka aika masa da wannan hanyar kai tsaye:",
@@ -5959,6 +10043,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     appAllRequirementsMet: "An cika dukkan sharudan izinin.",
     appCannotCollectUntil: "Ba za ka iya karbar haraji ba sai an kammala dukkan sharudan da ke kasa.",
     appStillOutstanding: "Sauran da ba a kammala ba",
+    appBlockerKyc: "Ba a duba shaidarka ba tukuna",
+    appBlockerReferee: "Babu mai shaida da ya tabbatar da kai tukuna",
+    appBlockerGovernmentApproval: "PSIRS ba ta amince da bukatarka ba tukuna",
+    appBlockerTraining: "Ba ka kammala horon da ake bukata ba",
+    appBlockerBank: "Ba a tabbatar da asusun bankin kwamishan dinka ba",
+    appBlockerAgreement: "Ba ka amince da yarjejeniyar wakili ba",
+    appBlockerDevice: "Ba a yi rajistar wata na’ura da sunanka ba",
     appComplete: "An kammala",
     appGoToDashboard: "Je shafin aikina",
     appIdentityVerification: "Tabbatar da shaida",
@@ -6030,6 +10121,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     moreRequestPayout: "Nemi a biya ka",
     moreRequestingPayout: "Kana neman a biya ka",
     moreSomeCommissionOwedBack: "Ana bin ka wasu kwamishan",
+    moreSomeCommissionOnHold: "An dakatar da wasu kwamishan",
+    moreOnHoldBody: "an dakatar da shi kuma ba a kirga shi cikin ko daya daga cikin alkaluman da ke sama ba. Ana rike shi yayin da ake duba wani abu game da wadannan karbe-karben. Ka tambayi shugabanka abin da ya rage.",
+    moreCommissionApproved: "An amince a biya wasu kwamishan",
+    moreApprovedBody: "an amince da shi kuma yana jiran a biya. Ba za ka iya sake neman sa ba, kuma bai kai asusunka ba tukuna.",
+    moreSomeCommissionReversed: "An juyar da wasu kwamishan",
+    moreReversedBody: "an same shi a kan karbe-karben da aka juyar da su daga baya, kuma ba a taba biyan sa ba. Ba za ka karbe shi ba. Wannan ya bambanta da abin da ake bin ka.",
     moreReceiptsFacilitated: "Rasit da ka taimaka a bayar",
     moreNoReceipts: "Babu rasit tukuna.",
     moreSavedRecords: "Bayanan da aka ajiye a wannan na’ura",
@@ -6138,9 +10235,121 @@ export const translations: Record<Language, TranslationDictionary> = {
     allocRecorded: "An rubuta",
     allocCodeUsed: "An riga an yi amfani da wannan lambar. Idan mai amfana ya dawo da ita, PSIRS ba za ta karba ba.",
     scanCamera: "Kyamara",
+    rcpGovernment: "GWAMNATIN JIHAR FILATO",
+    prnNoWritable: "Ba a samu hanyar bugawa a wannan na’ura ba.",
+    prnNotConnected: "Ba a hada da na’urar bugawa ba. Ka hada da daya tukuna.",
+    prnSendFailed: "Na’urar bugawa ba ta karbi bayanan ba. Ka sake gwadawa.",
+    prnDisconnected: "Na’urar bugawa ta katse.",
+    slipTestOk: "GWAJIN NA’URAR BUGAWA YA YI",
+    slipWidth: "Fadi",
+    slipStatus: "Matsayi",
+    slipConnected: "An hada (BLE)",
+    slipReady: "Na’urar POS a shirye take",
+    rcpThanks: "Mun gode da sauke nauyin ku",
+    rcpBureau: "HUKUMAR KARBAR HARAJI",
+    rcpPlatform: "Tsarin Karbar Haraji na Dijital",
+    rcpTitle: "RASIT NA HARAJI NA HUKUMA",
+    rcpDateTime: "Kwanan Wata / Lokaci",
+    rcpReference: "Lambar Tunani",
+    rcpLga: "Karamar Hukuma",
+    rcpWard: "Gunduma",
+    rcpTaxpayer: "Mai Biyan Haraji",
+    rcpPhone: "Lambar Waya",
+    rcpItem: "Hidima",
+    rcpCategory: "Rukuni",
+    rcpAgentCode: "Lambar Wakili",
+    rcpAgentName: "Sunan Wakili",
+    rcpScanToVerify: "DUBA DOMIN TANTANCE SAHIHANCI",
+    rcpCheckOffice: "Ka duba wannan rasit a",
+    rcpCheckOfficeCont: "kowane ofishin PSIRS.",
+    rcpOffice: "Ofishin Karbar Harajin Gwamnati",
+    rcpVehAdmin: "HUKUMAR KULA DA MOTOCI",
+    rcpVehLicensing: "Lasisi da Sabunta Takardun Mota",
+    rcpVehTitle: "TAKARDAR SABUNTA MOTA",
+    rcpVehPlate: "Lambar Mota",
+    rcpVehDoc: "Lambar Takarda",
+    rcpVehOwner: "Mai Mota",
+    rcpVehMakeModel: "Nau’i/Samfuri",
+    rcpVehYear: "Shekara",
+    rcpVehChassis: "Lambar Chassis",
+    rcpVehFrom: "Yana aiki daga",
+    rcpVehUntil: "Yana aiki har",
+    rcpVehFee: "KUDIN DA AKA BIYA",
+    rcpVehOfficial: "TAKARDAR HUKUMA TA DIJITAL",
+    rcpVehCheck: "Ka duba lambar a PSIRS.",
+    connOnline: "Akwai hanyar sadarwa",
+    connOnlineDetail: "Duk ayyukan suna aiki.",
+    connLimited: "Hanyar sadarwa mai rauni",
+    connLimitedDetail: "Hanyar sadarwarka tana da rauni. Tabbatar da biyan kudi na iya daukar lokaci — kada ka fara biyan kudi sau biyu.",
+    connOffline: "Babu hanyar sadarwa",
+    connOfflineDetail: "Za ka iya yin rajistar mai biyan haraji ka kuma rubuta sana’a, za a aika dukansu idan ka dawo kan layi. Ba a iya biyan kudi ba yayin da babu hanyar sadarwa.",
+    appRecordsWaiting: "bayanan da aka ajiye suna jiran aikawa",
+    stepUpSignInAgain: "Ka sake shiga don neman lamba.",
+    stepUpEnterCode: "Ka shigar da lambar sirri da aka aika zuwa wayarka domin amincewa da wannan aikin:",
+    stepUpCodeRequired: "Ana bukatar lambar sirri kafin a ci gaba.",
+    morePushUnsupported: "Wannan na’ura ko burauza ba ta goyon bayan sanarwar turawa ba.",
+    errUploadFailed: "Ba a iya aika takardar ba. Ka sake gwadawa.",
+    errUploadOffline: "Babu hanyar sadarwa. Ana aika takardar shaida zuwa PSIRS yayin daukarta, ba a ajiye ta a wannan na’ura ba — ka sake daukar hoton idan ka samu hanyar sadarwa.",
+    scanCameraDenied: "PSIRS ba ta da izinin amfani da kyamara. Ka ba da izini a saitin burauzarka, ko ka rubuta lambar.",
+    scanCameraMissing: "Ba a samu kyamara a wannan na’ura ba. Maimakon haka ka rubuta lambar.",
+    scanCameraUnsupported: "Wannan burauzar ba ta iya bude kyamara ba. Maimakon haka ka rubuta lambar.",
+    colInvoiceReady: "Takardar biyan kudi {{number}} tana shirye don bugawa ko aikawa.",
+    morePayoutRequested: "An nemi biyan kudi. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}.",
+    morePayoutClawback: "An nemi biyan {{amount}}. {{gross}} na kwamishan ya cancanta, an kuma cire {{clawback}} saboda ma’amalolin da aka juyar bayan an biya kwamishansu. Za a biya bayan amincewar sashen kudi. Lamba: {{reference}}.",
+    agStepCodeSentTo: "Mun aika lamba zuwa {{phone}}. Don wannan aiki daya kadai ne.",
+    appDraftsSynced: "An aika bayanai {{count}} da aka ajiye zuwa PSIRS.",
+    appDraftsSyncedRejected: "An aika bayanai {{count}} da aka ajiye zuwa PSIRS, {{rejected}} na bukatar gyara.",
+    errRequestFailed: "Bukatar ba ta yi nasara ba. Ka sake gwadawa, ko ka tuntubi tallafi.",
+    ofcAgConfirmHowPrompt: "Ka bayyana yadda ka tabbatar da wannan canji tare da {{name}} (akalla haruffa 10):",
+    ofcAgRefuseWhyPrompt: "Ka bayyana dalilin da ya sa ake ki wannan canji (akalla haruffa 10):",
+    ofcAgAccountChanged: "An canza asusun kwamishan na {{name}}.",
+    ofcAgChangeRefused: "An ki canjin {{name}}. Asusunsu na yanzu bai canza ba.",
+    ofcAgNotConfirmed: "Ba a tabbatar ba",
+    ofcAgNotConfirmedBecause: "Ba a tabbatar ba: {{reason}}",
+    ofcAgAnOfficer: "Wani jami’i ({{role}})",
+    ofcAgUnknownRole: "matsayin da ba a sani ba",
+    ofcAgBankStillNotConfirmed: "Banki bai tabbatar da shi ba har yanzu ({{outcome}}).",
+    ofcAlForfeitWhy: "Me ya sa aka kwace {{quantity}} na {{name}}?",
+    ofcAlThisBeneficiary: "wannan mai amfana",
+    ofcAlRoundOpened: "{{name}} a bude yake. Yanzu za a iya yin rabo.",
+    ofcAlRoundClosed: "An rufe {{name}}. Babu sauran rabo.",
+    ofcAlRoundCannotCloseBeforeOpen: "Zagaye ba zai iya rufewa kafin ya bude ba.",
+    ofcCfItemAdded: "An kara {{name}} a cikin jerin. Ba shi da adadin kudi tukuna, don haka ba za a iya yin kima ba sai ka saita daya.",
+    ofcCfNotAnAmount: "“{{amount}}” ba adadi ne a naira ba. Ka shigar da shi kamar 15000 ko 15000.00.",
+    ofcCfNotAPercentage: "“{{value}}” ba kaso ne ba. Ka shigar da shi kamar 5 ko 5.00.",
+    ofcCfRateRecorded: "An yi rijistar sabon adadin kudi na “{{name}}”, mai aiki daga {{date}}. ",
+    ofcCfProgrammeStatus: "Shirin “{{name}}” yanzu {{status}}.",
+    ofcCfRateCannotBeNegative: "Adadin kudi ba zai iya zama kasa da sifili ba.",
+    ofcCfPercentageCannotExceed100: "Kaso ba zai iya wuce 100% ba.",
+    ofcFaMinimumAboveRecommended: "Mafi karancin {{minimum}} ya wuce {{recommended}} da aka ba da shawara, don haka za a ki ko na’urar da ke da sabon salo.",
+    ofcFaNoHandsetBelow: "Babu na’urar da ke aiki da ke kasa da {{version}}.",
+    ofcFaHandsetWouldStop: "Na’ura {{count}} daga cikin {{total}} da ke aiki za ta daina karbar kudi har sai an sabunta ta.",
+    ofcFaHandsetsWouldStop: "Na’urori {{count}} daga cikin {{total}} da ke aiki za su daina karbar kudi har sai an sabunta su.",
+    ofcFnSettlementRecorded: "An yi rijistar {{reference}}. An daidaita tarin kudi {{count}}.",
+    ofcFnSettlementDisputed: "An yi rijistar {{reference}} kuma an yi takaddama: kudin da aka shigar bai yi daidai da tarin kudin da ya shafa ba, don haka ba a daidaita ko daya daga cikinsu ba. Ka rufe takaddamar idan an gano sauran kudin.",
+    ofcFnTotalCreditedPrompt: "Jimlar kudin da aka shigar kan {{reference}}, a naira. ",
+    ofcFnReconciliationAborted: "Ba a gudanar da daidaitawa ba: {{reason}} ",
+    ofcFnStatementUnavailable: "ba a iya samun bayanin kudi na kofar biyan kudi ba.",
+    ofcFnReconciliationComplete: "An kammala daidaitawa: {{matched}} sun yi daidai, {{exceptions}} ba su yi daidai ba",
+    ofcFnReconciliationUnchecked: ", lambobi {{count}} da ba a iya tambayar kofar biyan kudi a kansu ba",
+    ofcFnTotalsAgree: ". Jimlar dandali da jimlar kofar biyan kudi sun yi daidai.",
+    ofcFnTotalsDisagree: ". Jimlar dandali da jimlar kofar biyan kudi BA SU YI daidai BA.",
+    ofcFnRecoverChecked: "An duba biyan kudi {{attempted}} da ba a tabbatar ba a kofar biyan kudi; an tabbatar da {{verified}} kuma an ba su rasit yanzu.",
+    ofcFnReversalExecuted: "An zartar da juyawa a matsayin {{reference}}. An juyar da bayanan kwamishan {{count}}.",
+    ofcGrApproved: "An amince da {{name}}. Yanzu za a iya rubuta mambobi.",
+    ofcGrCollectedAt: " · ana karba a {{place}}",
+    ofcKycAccepted: "An karbi {{document}}.",
+    ofcKycRejectedNotice: "An ki {{document}}. Mai nema zai iya ganin dalili ya kuma sake tura wata.",
+    ofcKycSubmittedByApplicant: "{{document}} da mai nema ya tura",
+    ofcKycReasonGiven: "Dalilin da aka bayar: {{reason}}",
+    ofcOvSweepRaised: "An kammala bincike. An daga tuta {{count}} domin dubawa.",
+    ofcOvJobsNeedAttention: "Ayyuka {{count}} daga cikin {{total}} da aka tsara suna bukatar kulawa. Aikin da ba ya gudana ba ya haifar da abin dubawa, don haka nan kadai yake bayyana.",
+    ofcRhInvoiceDocumentReady: "Takardar biyan kudi {{number}} tana shirye.",
+    ofcRhPayoutApproved: "An amince da biyan {{reference}}.",
+    ofcSpTicketMoved: "An mayar da takardar zuwa {{status}}.",
     verifyCheckReceipt: "Duba rasit",
     verifyScanQr: "Duba lambar QR",
-    verifyTypeCode: "Ko rubuta lambar rasit",
+    verifyTypeCode: "Ko rubuta lambar tantancewa",
     verifyOffline: "Ba ka da intanet",
     stepUpOneTimeCode: "Lambar amfani sau daya",
     stepUpExpired: "Lambar ta kare",
@@ -6170,7 +10379,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     receiptNotValid: 'Rasit din ba na gaskiya ba ne',
     receiptNotValidBody:
       'Babu takardar gwamnati da ta dace da wannan lamba ko code. Idan an ba ka rasit mai wannan lamba, ba PSIRS ce ta fitar da shi ba.',
-    receiptCodeShape: 'Lambar rasit tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa.',
+    receiptCodeShape: 'Lambar tantancewa tana kama da T7C72-QTUDN. Ka duba lambar ka sake gwadawa.',
 
     needFirstName: 'Ka rubuta sunan farko na mai biyan haraji.',
     needLastName: 'Ka rubuta sunan karshe na mai biyan haraji.',
@@ -6198,7 +10407,6 @@ export const translations: Record<Language, TranslationDictionary> = {
 
     offlineMessage: 'Babu hanyar sadarwa a yanzu. Za a aika bayanan da zaran an samu netiwok.',
     offlineNotice: 'An ajiye a waya. Ba a karbi kudi a tsari ba har sai an tabbatar.',
-    scanHelp: 'Sanya lambar QR ta rasit din a tsakiyar akwatin.',
     civicDutyThanks: 'Mun gode da kuka sauke nauyin da ya rataya a wuyanku.',
     paymentSuccess: 'An Biyar da Kudi Cikin Nasara',
     pubService: 'Hukumar Karbar Haraji ta Jihar Filato',
@@ -6266,23 +10474,393 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubAttestAnswerAll: 'Da fatan za ka amsa game da kowane mutum kafin aikawa.',
     pubAttestSubmit: 'Aika amsoshina',
     pubCitizenTitle: 'Duba matsayin harajinka',
+    pubCitizenModeTin: 'Ta TIN',
+    pubCitizenModePhone: 'Ta waya',
+    pubCitizenModeName: 'Ta suna',
+    pubCitizenCheck: 'Duba matsayi',
+    pubCitizenSearching: 'Ana dubawa…',
+    pubCitizenExampleTin: 'misali PL-000001234',
+    pubCitizenExamplePhone: 'misali 08012345678',
+    pubCitizenExampleName: 'misali Aminu Ibrahim',
     pubCitizenByTin: 'Lambar Shaidar Haraji (TIN)',
     pubCitizenByPhone: 'Lambar wayar da aka yi rijista',
     pubCitizenByName: 'Cikakken suna ko sunan kasuwanci',
     pubCitizenTooMany: 'Yi amfani da TIN dinka ko ainihin lambar wayarka don sakamako madaidaici.',
+    ofcDbOr: 'ko',
+    ofcDbDayRange: 'daga {{from}} zuwa {{to}}',
+    ofcGpBeneficiaryCount: 'masu cin gajiya {{count}}',
+    ofcGpCollectedOfAwarded: '{{collected}} daga cikin {{awarded}} ({{rate}}%)',
+    ofcGpEachBeneficiaryGets: '{{quantity}} {{unit}} kowanne',
+    ofcOvIdentifiers: 'Lambobin ganewa',
+    nsStepUpRequired: 'Ka tabbatar da wannan da lambar amfani sau daya, sannan ka sake gwadawa.',
+    nsDeviceNotRegistered:
+      'Ka bude Bayanan Kaina, sannan "Duba nemana da izinina", domin ka yi rajistarta.',
+    nsDeviceRevoked:
+      'Ba za a iya sake yin rajistar na’urar da aka soke ba. Ka yi rajistar na’ura ta maye gurbi ka nemi shugabanka ya amince da ita.',
+    nsDeviceSuspended: 'Shugabanka na iya gaya maka dalili, kuma ya mayar da ita.',
+    nsUpdateRequired: 'Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga.',
+    nsUpdateRequiredToEnumerate:
+      'Ka rufe manhajar ka sake budewa domin shigar da sabuwar siga. Duk abin da aka riga aka ajiye a wannan waya za a aika shi.',
+    nsTinServiceUnavailable:
+      'Ka sake gwadawa nan da mintuna kadan. KADA ka yi rajistar wannan mai biyan haraji a matsayin sabon mai neman TIN — hakan zai kirkiri TIN na biyu ga wanda ya riga ya mallaki daya.',
+    nsTinNotFound:
+      'Da farko ka duba lambar da takardar mai biyan harajin kansa — yawanci kuskuren buga lamba ne sanadi. Sai kawai idan bai taba mallakar TIN ba, ka koma ka yi rajistarsa ba tare da TIN ba; dandalin zai nema masa sabuwar TIN.',
+    nsKycProviderUnavailable: 'Ka sake gwadawa nan da mintuna kadan. Nemanka bai canza ba.',
+    nsPaymentUnconfirmed: 'Ka bude cinikin daga tarihinka domin ka ga halin da yake ciki yanzu.',
+    nsPaymentFailed: 'Ka sake fara biyan, ko ka zabi wata hanyar biya.',
+    nsAgentNotCleared: 'Ka bude "Nemana" domin ka ga abin da ya rage.',
+    ofcOvJobHealthy: 'Yana gudana bisa tsarin lokaci.',
+    ofcOvJobRunning: 'Yana gudana yanzu.',
+    ofcOvJobOverdue:
+      'Bai fara a lokacin da ya kamata ba. Wataran tsarin lokacin kansa ya tsaya.',
+    ofcOvJobStalled:
+      'Ya fara amma bai kammala ba. Wurin da yake gudana bai dawo ba.',
+    ofcOvJobFailing: 'Ya gaza sau {{count}} a jere: {{error}}',
+    ofcOvJobNeverRun: 'Bai taba gudana ba tun lokacin da aka kirkiri wannan ma’ajiyar bayanai.',
+    ofcOvJobNoReason: 'ba a rubuta dalili ba',
+    ofcOvEverySeconds: 'kowane dakika {{n}}',
+    ofcOvEveryMinutes: 'kowane minti {{n}}',
+    ofcOvEveryHours: 'kowane awa {{n}}',
+    errDraftInvalid:
+      'PSIRS ba ta iya karbar wannan shigarwa ba: {{detail}}. Tana nan a wayarka — ka gyara ta ka sake aikawa.',
+    errDraftTypeUnsupported:
+      'Wannan sigar manhajar ta yi shigarwa irin "{{type}}" wadda PSIRS ba ta iya sarrafawa tukuna. Ba a rasa ta ba — ka sabunta manhajar, ko ka ba da wannan lamba ga tallafi.',
+    errDraftNotProcessed:
+      'PSIRS ba ta iya sarrafa wannan shigarwa ba. Tana nan a wayarka — ka ba da lamba {{reference}} ga tallafi.',
+    agVehFoundConfirmed: 'An sami motar kuma an tabbatar da ita a rajistar hukumar motoci.',
+    agVehFoundUnconfirmed:
+      'An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna.',
+    agVehRegistryUnavailable:
+      'Ba a iya tuntubar hukumar motoci ba, don haka ba za mu iya cewa an yi rajistar wannan mota ba. Ka sake gwadawa nan ba da dadewa ba. Idan sabuntawar ba za ta iya jira ba, ka shigar da bayanan da hannu — za a yi wa rajistar alama domin a duba ta idan hukumar ta dawo.',
+    agVehNotFound:
+      'Ba a sami rajistar wannan mota a dandalin ko a hukumar motoci ba. Ka shigar da bayanan motar da hannu — za a yi wa rajistar alama a matsayin wadda ba a tabbatar da ita ba.',
+    agVehFoundAtAuthority:
+      'An sami motar a hukumar motoci. Ka tabbatar da mai ita kafin ka ci gaba.',
+    agRefereeRequestSent: 'An aika bukatar tantancewa zuwa ga {{name}}.',
+    agDevicePendingApproval: 'An yi rajistar na’urar kuma tana jiran amincewar shugabanka.',
+    agDeviceSuspended: 'An yi rajistar wannan na’ura amma an dakatar da ita. Shugabanka na iya mayar da ita.',
+    agDeviceActive: 'An yi rajistar na’urar kuma tana aiki.',
+    agGroupMemberRecorded:
+      'An rubuta. Mambancin zai kirgu ne kawai bayan shugaban kungiyar ya tabbatar da shi.',
+    ofcItemBackInCatalogue: '{{name}} ya dawo cikin lissafin kuma ana iya kimanta shi kuma.',
+    ofcItemSuspended:
+      'An dakatar da {{name}}. Ba za a iya kada wani sabon kimantawa a kansa ba; takardun biya da aka riga aka fitar sun ci gaba da zama abin biya.',
+    ofcItemRetired:
+      'An yi ritayar {{name}}. Takardun biya da aka riga aka fitar sun ci gaba da zama abin biya, kuma ba za a iya mayar da abun ba.',
+    ofcGpMemberLeft:
+      'An rubuta cewa {{member}} ya bar {{group}}. Yana rike da abin da ya riga ya karba kuma ba za a kirga shi a rabon nan gaba ba.',
+    pubRefereeThankYouCleared: 'Na gode. An kammala tantancewarka kuma an rubuta ta.',
+    pubRefereeCouldNotVerify:
+      'Ba a iya tantance wanene kai ba. PSIRS na iya tuntubarka domin karin bayani.',
+    pubRefereeUnderReview:
+      'Na gode. An rubuta amsarka kuma yanzu PSIRS na duba ta.',
+    pubRefereeDeclineRecorded:
+      'An rubuta shawararka. Za a gaya wa mai nema cewa yana bukatar wani mai shaida.',
+    pubGroupAllConfirmed: 'Na gode. Ka tabbatar da mambobi {{confirmed}}.',
+    pubGroupSomeConfirmed:
+      'Na gode. Ka tabbatar da mambobi {{confirmed}} kuma ba ka tabbatar da {{rejected}} ba.',
+    pubCitizenNoTinMatch: 'Ba a sami rajistar mai biyan haraji da wannan TIN ba.',
+    pubCitizenNoPhoneMatch: 'Ba a sami rajistar mai biyan haraji da wannan lambar waya ba.',
+    pubCitizenNoNameMatch: 'Ba a sami rajista da wannan suna ba.',
+    pubCitizenOneMatch: 'An sami rajista guda daya da ta yi daidai.',
+    pubCitizenManyMatches: 'An sami rajista {{count}} masu kama da wannan suna.',
     pubCitizenStatusHeading: 'Matsayin bin ka’idar haraji',
     pubCitizenCompliant: 'Ya bi ka’ida',
     pubCitizenArrears: 'Yana da bashin haraji',
     pubCitizenAttention: 'Yana bukatar kulawa',
     pubCitizenNotAssessed: 'Ba a kimanta ba tukuna',
+    pubCitizenMsgCompliant: 'Bayanan harajinka sun cika. Ka ci gaba da biya a kan lokaci domin ka rike wannan matsayi.',
+    pubCitizenMsgArrears: 'Kana da harajin da ake bin ka. Da fatan za ka tuntubi ofishin PSIRS mafi kusa da kai ko wakilin karbar haraji domin ka biya.',
+    pubCitizenMsgAttention: 'Makin bin ka’idar harajinka yana bukatar gyara. Biyan harajin da ake bin ka a kan lokaci zai daga shi.',
+    pubCitizenMsgNotAssessed: 'Ba a kimanta maka komai ba tukuna, don haka babu makin bin ka’ida da za a nuna. Wannan zai sabunta bayan kimantawarka ta farko.',
+    pubCitizenDetail: 'Domin sanin TIN dinka, makin bin ka’idarka, abin da ake bin ka da kuma shirye-shiryen tallafi da ka cancanta, ka ziyarci kowane ofishin PSIRS ko wakilin karbar haraji da izini. Za su fara tabbatar da ko wane ne kai, shi ya sa ba a nuna wadannan bayanai a nan ba.',
     pubCitizenTinStatus: 'Matsayin TIN',
     pubCitizenOutstanding: 'Harajin da ake bin ka',
     pubCitizenOutstandingYes: 'Eh — da fatan za ka tuntubi PSIRS',
     pubCitizenNone: 'Babu',
+    pubStmtFrom: "Daga",
+    pubStmtTo: "Zuwa",
+    pubStmtBackwards: "Farkon lokacin ya zo bayan karshensa.",
+    pubStmtAnotherPeriod: "Duba wani lokaci dabam (za a aika sabuwar lamba)",
+    pubStmtTitle: "Abin da ka riga ka biya",
+    pubStmtIntro: "Domin ganin biyayyarka muna aika lamba zuwa lambar wayar da ke rubuce a bayananka. Ba a taba aika ta zuwa lambar da aka rubuta a nan ba.",
+    pubStmtSendCode: "Aiko min da lamba",
+    pubStmtSending: "Ana aikawa…",
+    pubStmtCodeSent: "Idan akwai bayanan da suka dace, an aika lamba zuwa wayar da ke kansu. Ka shigar da ita a kasa.",
+    pubStmtCode: "Lambar da ke cikin sakon",
+    pubStmtShow: "Nuna min biyayyata",
+    pubStmtChecking: "Ana duba…",
+    pubStmtPeriod: "Biyayya daga {{from}} zuwa {{to}}.",
+    pubStmtTotal: "Jimlar da aka biya",
+    pubStmtCount: "Biyayya",
+    pubStmtReturned: "An mayar maka",
+    pubStmtReturnedRow: "an mayar maka",
+    pubStmtForWhat: "Abin da aka biya",
+    pubStmtEach: "Kowane biya",
+    pubStmtNothing: "Ba a biya komai a wannan lokacin ba.",
+    pubStmtFooter: "Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne.",
     pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
     pubCitizenAlso: 'Akwai kuma:',
     pubCitizenVerifyLink: 'Tantance rasitin biyan kudi',
+    agSupYou: 'Kai',
+    collAuthorizedFieldOfficer: 'Jami’in fili mai izini',
+    moreDisablePushNotifications: 'Kashe sanarwar turawa',
+    moreSentToPsirsYour: 'An tura wa PSIRS. Kwamishan naka zai ci gaba da zuwa asusunka na yanzu har sai wani jami’i ya amince da canjin.',
+    moreUnknownOwner: 'Ba a san mai shi ba',
+    ofcAgAgentActivated: 'An kunna wakilin.',
+    ofcAgAgentAgreementAccepted: 'An amince da yarjejeniyar wakili',
+    ofcAgAgentSuspendedTheirSessions: 'An dakatar da wakilin. An kashe zamansa da na’urorinsa.',
+    ofcAgApplicationApproved: 'An amince da bukatar.',
+    ofcAgApplicationRejected: 'An ki bukatar.',
+    ofcAgAskedForBy: 'Wanda ya nema',
+    ofcAgCommissionBankAccountVerified: 'An tabbatar da asusun bankin kwamishan',
+    ofcAgConfirmedNoNameReturned: 'An tabbatar, amma ba a mayar da suna ba',
+    ofcAgDeviceApprovedTheAgent: 'An amince da na’urar. Yanzu wakili zai iya karba da ita.',
+    ofcAgDeviceRestoredTheAgent: 'An mayar da na’urar. Wakili zai iya sake karba da ita.',
+    ofcAgDeviceRevokedAndIts: 'An janye na’urar kuma an kawo karshen zamanta.',
+    ofcAgDeviceSuspendedAndIts: 'An dakatar da na’urar kuma an kawo karshen zamanta. Ana iya mayar da ita.',
+    ofcAgDocumentType: 'Nau’in takarda',
+    ofcAgFailureReason: 'Dalilin gazawa',
+    ofcAgFlagDismissedTheReferee: 'An soke gargadin. Ana iya tabbatar da mai shaida kamar yadda aka saba.',
+    ofcAgFlagMarkedAsUnder: 'An sanya gargadin a matsayin ana bincike.',
+    ofcAgFlagUpheldThisReferee: 'An tabbatar da gargadin. Ba za a iya tabbatar da wannan mai shaida ba sai an soke shi.',
+    ofcAgGiveAReasonOf: 'Ka bayar da dalili na akalla haruffa 10. Shi ne kadai rikodin dalilin da ya sa aka sauya asusun da ake biyan wani a ciki.',
+    ofcAgGovernmentApproved: 'Gwamnati ta amince',
+    ofcAgIdentityVerifiedKyc: 'An tabbatar da shaida (KYC)',
+    ofcAgLivenessCheck: 'Tabbatar da mutum na gaske',
+    ofcAgMandatoryTrainingCompleted: 'An kammala horon wajibi',
+    ofcAgMoreInformationRequestedFrom: 'An nemi karin bayani daga mai nema.',
+    ofcAgNameTheAgentGave: 'Sunan da wakili ya bayar',
+    ofcAgNameTheBankReturned: 'Sunan da banki ya mayar',
+    ofcAgNumberOnFile: 'Lambar da ke rubuce',
+    ofcAgReasonGiven: 'Dalilin da aka bayar',
+    ofcAgRecordThis: 'Rubuta wannan',
+    ofcAgRefereeCleared: 'An tabbatar da mai shaida.',
+    ofcAgRefereeRejected: 'An ki mai shaida.',
+    ofcAgTerritoryReassignedFutureCollections: 'An sauya yankin. Za a danganta karbar kudi ta gaba da shi.',
+    ofcAgTheAgent: 'Wakilin',
+    ofcAgTheBankConfirmedThe: 'Banki ya tabbatar da asusun.',
+    ofcAgTheBankCouldNot: 'Ba a samu banki ba',
+    ofcAgTheBankVerificationService: 'Ba a samu sabis din tabbatar da banki ba. Ka sake gwadawa kafin ka yanke shawara — ba za a iya amincewa da asusun da ba a tabbatar ba.',
+    ofcAgThisAccountCannotBe: 'Ba za a iya amincewa da wannan asusu ba matukar banki bai tabbatar da shi ba. Ka ki bukatar domin wakili ya aiko da bayanan da suka dace.',
+    ofcAgUnnamed: 'Ba shi da suna',
+    ofcAlChooseTheProgrammeThis: 'Ka zabi shirin da wannan zagaye zai rarraba a karkashinsa.',
+    ofcAlCreateARound: 'Kirkiri zagaye',
+    ofcAlCreateRound: 'Kirkiri zagaye',
+    ofcAlCreating: 'Ana kirkira…',
+    ofcAlGiveTheRoundA: 'Ka ba zagayen suna da mutane za su gane.',
+    ofcAlHowMuchDoesEach: 'Nawa kowane mai amfana zai samu?',
+    ofcAlHowMuchIsThere: 'Nawa ne za a rarraba gaba daya?',
+    ofcAlNotYet: 'Ba tukuna',
+    ofcAlOneBeneficiaryCannotReceive: 'Mai amfana daya ba zai iya samun fiye da abin da zagayen ya kunsa ba.',
+    ofcAlRoundCreatedItAwards: 'An kirkiri zagayen. Ba ya bayar da komai sai ka bude shi.',
+    ofcAlWhenDoesCollectionOpen: 'Yaushe karbar za ta bude?',
+    ofcCfActivate: 'Kunna',
+    ofcCfAddToTheCatalogue: 'Kara a cikin kundin',
+    ofcCfAdding: 'Ana karawa…',
+    ofcCfBusinesses: 'Kasuwanci',
+    ofcCfCalculatedByFormula: 'An kirga ta hanyar tsari',
+    ofcCfCurrent: 'Na yanzu',
+    ofcCfEnterTheNewAmount: 'Ka shigar da sabon adadin. Kada ka bar komai a zato — ka rubuta 0 idan ana dakatar da harajin.',
+    ofcCfEnterTheNewRate: 'Ka shigar da sabon farashin a matsayin kaso. Ka rubuta 0 idan ana dakatar da harajin.',
+    ofcCfEvaluateAll: 'Auna duka',
+    ofcCfEvaluating: 'Ana auna…',
+    ofcCfExistingAssessmentsAreUnaffected: 'Kimantawar da ake da ita ba za ta shafu ba.',
+    ofcCfForExampleRepealedBy: 'Misali: an soke shi ta gyaran Dokar Kudi ta Jihar Filato.',
+    ofcCfGiveAReasonFor: 'Ka bayar da dalilin canjin farashin, a cikin akalla haruffa 10.',
+    ofcCfIndividuals: 'Mutane',
+    ofcCfNoApprovedRateIn: 'Babu farashin da aka amince da shi a aiki',
+    ofcCfNoNewAssessmentCan: 'Ba za a iya yin sabon kimantawa a kan nau’in da aka janye ba. Takardun da aka riga aka bayar suna nan a biya — janye nau’i ba shawara ba ce ta yafe bashin da ake bin mutane.',
+    ofcCfNotEligible: 'Bai cancanta ba',
+    ofcCfOfAssessableAmount: '% na adadin da ake kimantawa',
+    ofcCfProgressiveBands: 'Matakan haraji masu hawa',
+    ofcCfRecordNewRateVersion: 'Rubuta sabon salon farashi',
+    ofcCfRecording: 'Ana rubutawa…',
+    ofcCfRestoreItem: 'Mayar da nau’in',
+    ofcCfTheItemGoesBack: 'Nau’in yana komawa cikin kundin kuma ana iya sake kimanta shi.',
+    ofcCfWhatChangedForExample: 'Me ya canza — misali, an tabbatar da kudin a kan jaridar gwamnati.',
+    ofcCfWithdrawItem: 'Janye nau’in',
+    ofcDbAverageTimeToConfirm: 'Matsakaicin lokacin tabbatar da biya',
+    ofcDbDuplicateRegistrationsOverridden: 'Rijistar da aka maimaita da aka wuce',
+    ofcDbNewTaxpayersThisMonth: 'Sabbin masu biyan haraji a wannan wata',
+    ofcDbReversalsAndRefunds: 'Mayarwa da dawo da kudi',
+    ofcDbTaxpayersWithATin: 'Masu biyan haraji da ke da TIN',
+    ofcDbTotalCollected: 'Jimlar abin da aka karba',
+    ofcFaEnterTheMinimumVersion: 'Ka shigar da mafi karancin salo da lambobi da digo, kamar 1.4.0.',
+    ofcFaEnterTheRecommendedVersion: 'Ka shigar da salon da ake ba da shawara da lambobi da digo, kamar 1.4.0.',
+    ofcFaNeverReportedAVersion: 'Bai taba bayar da rahoton salo ba',
+    ofcFaPublishThisMinimum: 'Buga wannan mafi karanci',
+    ofcFaPublishing: 'Ana bugawa…',
+    ofcFaSayWhyTheMinimum: 'Ka fadi dalilin da ya sa ake motsa mafi karanci, a cikin akalla haruffa 10. Shi ne abin da wakilin da aka killace zai gani.',
+    ofcFaShippedWithThePlatform: 'An aiko shi tare da dandalin',
+    ofcFnBankReferenceForThe: 'Lambar banki na kudin da ya kammala shi',
+    ofcFnBankTransferReferenceAt: 'Lambar tura kudi ta banki (akalla haruffa 3):',
+    ofcFnEnterTheCreditedAmount: 'Ka shigar da adadin da aka shigar a naira, misali 1250000.00.',
+    ofcFnBankReferenceRequired:
+      'Ka shigar da lambar banki na kudin da ya kammala wannan. Ita ce ke hada turawar da kudin da suka iso da gaske.',
+    ofcFnDisputeNoteTooShort:
+      'Ka fada abin da bambancin ya zamo, da akalla haruffa 10. Shi ne kadai bayanin dalilin rufe wannan turawa.',
+    ofcFnItHasToAccount: 'Dole ne ya biya karbar da ke cikin rukunin gaba daya.',
+    ofcFnListTheGatewayReferences: 'Ka jera lambobin shigarwar da wannan kudi ya kunsa.',
+    ofcFnNothingWasComparedFor: 'Ba a kwatanta komai a wannan lokaci ba, don haka ba a tabbatar da komai game da shi ba. Ka sake gwadawa idan an samu shigarwar.',
+    ofcFnReRunThisPeriod: 'Ka sake gudanar da wannan lokaci idan an samu shigarwar.',
+    ofcFnReasonForApprovingThis: 'Dalilin amincewa da wannan fitar da kudi (akalla haruffa 5):',
+    ofcFnReasonForThisDecision: 'Dalilin wannan shawara (akalla haruffa 10):',
+    ofcFnRecordHowThisException: 'Ka rubuta yadda aka warware wannan matsala (akalla haruffa 10):',
+    ofcFnWhatDidTheBank: 'Me banki ya ce? (akalla haruffa 10)',
+    ofcFnWhatTheVarianceTurned: 'Abin da bambancin ya zamo',
+    ofcGpConfirmationLinkCreated: 'An kirkiri hanyar tabbatarwa.',
+    ofcKyOpenAndReview: 'Bude ka duba',
+    ofcKyReviewedOn: 'An duba a ranar',
+    ofcKyTheAccessLogCould: 'Ba a iya karanta rikodin shiga ba.',
+    ofcLgCouldNotReachThe: 'Ba a iya isa ga dandalin haraji ba. Ka duba haduwarka da yanar gizo.',
+    agStepSendingACode: 'Ana aika lamba ta lokaci daya…',
+    agStepCodeSentToNumber: 'Mun aika lamba zuwa lambarka da aka yi rijista.',
+    uiHide: 'Boye',
+    uiHidePassword: 'Boye kalmar sirri',
+    uiShow: 'Nuna',
+    uiShowPassword: 'Nuna kalmar sirri',
+    ofcOsAskTheGatewayAgain: 'Sake tambayar shigarwar',
+    ofcOsAskTheTinService: 'Sake tambayar sabis din TIN',
+    ofcOsAskingTheGateway: 'Ana tambayar shigarwar…',
+    ofcOsAskingTheTinService: 'Ana tambayar sabis din TIN…',
+    ofcOsEveryQueueYouCan: 'Duk jerin da za ka iya gani babu komai a ciki. Sauran suna karkashin izinin da matsayinka bai kunsa ba.',
+    ofcOsEveryRefundHasBeen: 'An mayar da kowane kudi, kowane mai biyan haraji yana da TIN dinsa, kuma hukumar ababen hawa ta amsa kowane sabuntawa.',
+    ofcOsNotAttemptedYet: 'Ba a gwada ba tukuna',
+    ofcOsSendToTheAuthority: 'Sake turawa hukumar',
+    ofcOsSendingToTheAuthority: 'Ana turawa hukumar…',
+    ofcOvEveryScheduledJobHas: 'Kowane aikin da aka tsara ya gudana kwanan nan kuma ya yi nasara.',
+    ofcOvId: 'Lamba',
+    ofcOvLoading: 'Ana lodi…',
+    ofcOvNoTaxpayerMatchedThat: 'Babu mai biyan haraji da ya dace da wannan bincike',
+    ofcOvNothingToChooseFrom: 'Babu abin da za a zaba',
+    ofcOvRecordWhatYouFound: 'Ka rubuta abin da ka gano (akalla haruffa 10):',
+    ofcOvRunAFraudSweep: 'Gudanar da sharewar zamba yanzu',
+    ofcOvRunThisQuery: 'Gudanar da wannan tambaya',
+    ofcOvRunning: 'Ana gudanarwa…',
+    ofcOvSearchForATaxpayer: 'Ka fara neman mai biyan haraji',
+    ofcOvSelectOne: 'Ka zabi daya',
+    ofcOvSweepCompleteNothingNew: 'An kammala sharewar. Ba a sami sabon abin gargadi ba.',
+    ofcOvSweeping: 'Ana sharewa…',
+    ofcOvTheAuditTrailCould: 'Ba a iya duba tarihin binciken a yanzu ba. Wannan ba bincike ba ne a kan tarihin — ka sake gwadawa, ka kuma sanar da tallafi idan ya ci gaba.',
+    ofcOvWhichAgent: 'Wane wakili?',
+    ofcOvWhichRevenueItem: 'Wane nau’in haraji?',
+    ofcOvWhichTaxpayer: 'Wane mai biyan haraji?',
+    ofcRhAskTheRegisterAgain: 'Sake tambayar rijistar',
+    ofcRhAsking: 'Ana tambaya…',
+    ofcRhDeviceApproved: 'An amince da na’urar.',
+    ofcRhInvoiceDocument: 'Takardar biyan kudi',
+    ofcRhPreparing: 'Ana shirya…',
+    ofcRhReAskedTheTin: 'An sake tambayar rijistar TIN game da duk wanda ke jira.',
+    ofcRhRemindersSentToTaxpayers: 'An aika tunatarwa ga masu biyan haraji da ke da abin biya.',
+    ofcRhSendPaymentReminders: 'Aika tunatarwar biya',
+    ofcRvEveryFigureHereCovers: 'Kowace lamba a nan ta shafi yankunanka ne kadai, ba dukan jihar ba.',
+    ofcRvNotMapped: 'Ba a danganta ba',
+    ofcRvTheseFiguresAreEmpty: 'Wadannan lambobi babu komai a cikinsu domin asusunka bai kunshi wani yanki ba tukuna.',
+    ofcSpAddAnInternalNote: 'Kara bayanin cikin gida',
+    ofcSpAssignedTo: 'An ba wa',
+    ofcSpContact: 'Hanyar tuntuba',
+    ofcSpInternalNoteSavedThe: 'An ajiye bayanin cikin gida. Wanda ya kawo korafin ba zai gan shi ba.',
+    ofcSpNobodyYet: 'Ba wanda ya karba tukuna',
+    ofcSpOnlyStaffWithSupport: 'Ma’aikatan da ke da izinin tallafi ne kadai za su iya karanta wannan. Wanda ya kawo korafin ba ya ganin sa ko kadan.',
+    ofcSpReplySent: 'An aika amsar.',
+    ofcSpReplyToTheReporter: 'Amsa wa wanda ya kawo korafin',
+    ofcSpSaveInternalNote: 'Ajiye bayanin cikin gida',
+    ofcSpSendReply: 'Aika amsar',
+    ofcSpThisGoesToThe: 'Wannan zai je wa wanda ya kawo korafin, kuma za a sanar da shi.',
+    ofcTrCorrecting: 'Ana gyarawa…',
+    ofcTrEnterTheCorrectedValue: 'Ka shigar da darajar da aka gyara a duk filin da ba daidai ba ne.',
+    ofcTrNameTheTypeOf: 'Ka fadi nau’in shaidar mutum idan kana canza lambar.',
+    ofcTrOnRecordNow: 'Abin da ke rubuce yanzu',
+    ofcTrPutBackOnThe: 'Mayar da shi cikin rijistar',
+    ofcTrRecordThisCorrection: 'Rubuta wannan gyara',
+    ofcTrRecording: 'Ana rubutawa…',
+    ofcTrSayWhatIsBeing: 'Ka fadi abin da ake gyarawa da dalili, a cikin akalla haruffa 10. Shi ne kadai rikodin dalilin.',
+    ofcTxDirect: 'Kai tsaye',
+    ofcUaChangeAccessAndSign: 'Canza izini ka fitar da su',
+    ofcUaChanging: 'Ana canzawa…',
+    ofcUaLetThemSignIn: 'Bar su su sake shiga',
+    ofcUaSaveTerritories: 'Ajiye yankunan',
+    ofcUaSignThemOutAnd: 'Fitar da su ka dakatar da asusun',
+    ofcUsApplyingToBecomeAn: 'Nema domin zama wakili',
+    ofcUsCapturingAVehicle: 'Daukar bayanan mota',
+    ofcUsRegisteringATaxpayer: 'Yin rijistar mai biyan haraji',
+    ofcUsTakingACollection: 'Karbar kudi',
   },
+};
+
+/**
+ * The seven clearance blockers, as dictionary keys.
+ *
+ * `activationBlockers` returns codes so that the applicant's own screen — and
+ * the 403 they get if they try to collect anyway — can be read in the language
+ * they chose. This table is the join between the two, and it lives here rather
+ * than in either client because both of them need it and neither owns it.
+ *
+ * Typed against `AgentBlocker`, so adding a gate to the lifecycle without
+ * writing the sentence somebody has to read fails the build.
+ */
+export const BLOCKER_TEXT: Record<AgentBlocker, keyof TranslationDictionary> = {
+  KYC: 'appBlockerKyc',
+  REFEREE: 'appBlockerReferee',
+  GOVERNMENT_APPROVAL: 'appBlockerGovernmentApproval',
+  TRAINING: 'appBlockerTraining',
+  BANK: 'appBlockerBank',
+  AGREEMENT: 'appBlockerAgreement',
+  DEVICE: 'appBlockerDevice',
+};
+
+/**
+ * The five duplicate-match reasons, as dictionary keys.
+ *
+ * Same join as `BLOCKER_TEXT`, for the same reason: the sentence is composed
+ * on the server and read by somebody who may not read English. Typed against
+ * `DuplicateReason`, so a new reason without a string fails the build.
+ */
+export const DUPLICATE_REASON_TEXT: Record<DuplicateReason, keyof TranslationDictionary> = {
+  IDENTITY_NUMBER: 'tpDupIdentityNumber',
+  PHONE_AND_NAME: 'tpDupPhoneAndName',
+  PHONE: 'tpDupPhone',
+  BUSINESS_NAME_IN_LGA: 'tpDupBusinessNameInLga',
+  NAME_IN_LGA: 'tpDupNameInLga',
+};
+
+/**
+ * The eleven verification answers, as dictionary keys.
+ *
+ * The third such table, after `BLOCKER_TEXT` and `DUPLICATE_REASON_TEXT`, and
+ * the one where being wrong costs the most: these sentences tell somebody
+ * whether the State has their money. Typed against `VerificationReason`, so a
+ * new answer without a string fails the build.
+ */
+export const VERIFICATION_TEXT: Record<VerificationReason, keyof TranslationDictionary> = {
+  RECEIPT_FINGERPRINT_MISMATCH: 'verifyReceiptFingerprintMismatch',
+  RECEIPT_REVERSED: 'verifyReceiptReversed',
+  RECEIPT_VOIDED: 'verifyReceiptVoided',
+  RECEIPT_GENUINE: 'verifyReceiptGenuine',
+  RECEIPT_GENUINE_UNCHECKED: 'verifyReceiptGenuineUnchecked',
+  NOT_FOUND: 'verifyNotFound',
+  PAYMENT_REVERSED: 'verifyPaymentReversed',
+  DOCUMENT_REVOKED: 'verifyDocumentRevoked',
+  DOCUMENT_FINGERPRINT_MISMATCH: 'verifyDocumentFingerprintMismatch',
+  ACKNOWLEDGEMENT_NOT_RECEIPT: 'verifyAcknowledgementNotReceipt',
+  DOCUMENT_EXPIRED: 'verifyDocumentExpired',
+  DOCUMENT_GENUINE: 'verifyDocumentGenuine',
+  DOCUMENT_GENUINE_UNCHECKED: 'verifyDocumentGenuineUnchecked',
+};
+
+/**
+ * Which dictionary key says each chain verdict.
+ *
+ * Typed against the verdict union, so a fifth outcome added to
+ * `audit-chain.ts` without a sentence here fails the build rather than
+ * rendering `undefined` at the one place government checks the log.
+ */
+export const CHAIN_TEXT: Record<ChainVerdict, keyof TranslationDictionary> = {
+  INTACT: 'ofcOvChainIntact',
+  GENESIS_REMOVED: 'ofcOvChainGenesisRemoved',
+  LINK_MISMATCH: 'ofcOvChainLinkMismatch',
+  CONTENT_MODIFIED: 'ofcOvChainContentModified',
 };
 
 export function getTranslation(lang: Language = 'en'): TranslationDictionary {

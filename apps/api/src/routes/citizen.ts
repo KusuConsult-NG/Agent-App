@@ -16,9 +16,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { pool, queryOne } from '../db/pool';
+import { badRequest } from '../lib/errors';
 import { rateLimit } from '../middleware/security';
-import { validateQuery } from '../middleware/validate';
+import { validateBody, validateQuery } from '../middleware/validate';
 import { syncTaxpayerComplianceAndIncentives } from '../services/incentives';
+import { requestOtp, verifyOtp } from '../services/auth';
+import { paymentHistory } from '../services/payment-history';
 import { logVerificationAttempt } from '../services/receipts';
 
 export const citizenRouter = Router();
@@ -301,4 +304,158 @@ citizenRouter.get(
         'who you are first, which is why those details are not shown here.',
     });
   }),
+);
+
+
+/* ---------------------------------------------------------------------------
+ * "What have I already paid?"
+ *
+ * The question a taxpayer asks most and the platform could not answer. It
+ * cannot be answered by the endpoint above, and the reasoning is that
+ * endpoint's own: it cannot tell the taxpayer from anybody who knows their
+ * phone number, which is why the date of the last payment was taken out of it.
+ * A year of payments is that judgement a hundred times over — every levy, when,
+ * and how much, which together describe somebody's trade, their takings and
+ * their movements.
+ *
+ * So this is not a stricter identifier, it is a different kind of proof. A TIN
+ * and a phone number are both things a stranger can know. A code sent to the
+ * number ON THE RECORD is something only the person holding that handset can
+ * read.
+ * ------------------------------------------------------------------------- */
+
+/** Find the record without saying whether one was found. */
+async function taxpayerFor(tin?: string, phone?: string) {
+  if (tin) {
+    return queryOne<{ id: string; phone: string }>(
+      pool,
+      `SELECT id, phone FROM taxpayers WHERE tin = $1 AND status <> 'MERGED'`,
+      [tin.trim().toUpperCase()],
+    );
+  }
+  if (phone) {
+    return queryOne<{ id: string; phone: string }>(
+      pool,
+      `SELECT id, phone FROM taxpayers WHERE phone = $1 AND status <> 'MERGED'
+        ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
+      [phone.trim()],
+    );
+  }
+  return null;
+}
+
+const identifierSchema = z
+  .object({
+    tin: z.string().min(3).max(30).optional(),
+    phone: z.string().min(8).max(20).optional(),
+  })
+  .refine((value) => Boolean(value.tin || value.phone), {
+    message: 'Give your TIN or the phone number on your record.',
+  });
+
+citizenRouter.post(
+  '/statement/request',
+  rateLimit({ windowMs: 60_000, max: 5, keyPrefix: 'citizen-statement-request', keyBy: 'ip' }),
+  validateBody(identifierSchema, async (req, res, data) => {
+    const taxpayer = await taxpayerFor(data.tin, data.phone);
+
+    if (taxpayer) {
+      /*
+       * To the number on the record. Never to a number in the request.
+       *
+       * This is the whole control. A stranger who knows somebody's TIN gets
+       * one outcome from this endpoint: that person's phone buzzes. They learn
+       * nothing, and the taxpayer finds out somebody asked.
+       */
+      await requestOtp({
+        destination: taxpayer.phone,
+        purpose: 'CITIZEN_STATEMENT',
+        userId: null,
+      });
+    }
+
+    /*
+     * The same answer either way.
+     *
+     * A "no record found" here would turn this into a TIN validity oracle that
+     * costs nothing to query — worse than the one on the status endpoint,
+     * because that one at least answers a question the citizen came to ask.
+     * This endpoint's answer is "if that record exists, its phone has a code",
+     * which is true whether or not it does.
+     */
+    res.json({
+      sent: true,
+      message:
+        'If a record matches, a code has been sent to the phone number on it. ' +
+        'The code is not sent to a number you type here.',
+    });
+  }),
+);
+
+citizenRouter.post(
+  '/statement',
+  rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'citizen-statement', keyBy: 'ip' }),
+  validateBody(
+    identifierSchema.and(
+      z.object({
+        code: z.string().min(4).max(10),
+        from: z.string().date().optional(),
+        to: z.string().date().optional(),
+      }),
+    ),
+    async (req, res, data) => {
+      const taxpayer = await taxpayerFor(data.tin, data.phone);
+      if (!taxpayer) {
+        throw badRequest('That code is not valid, or it has expired. Ask for a new one.');
+      }
+
+      /*
+       * `verifyOtp` counts the attempt and refuses on its own budget, so a
+       * six-digit code cannot be walked through. It is checked against the
+       * number on the record, which is where it was sent.
+       */
+      await verifyOtp({
+        destination: taxpayer.phone,
+        purpose: 'CITIZEN_STATEMENT',
+        code: data.code,
+      });
+
+      const to = data.to ?? new Date().toISOString().slice(0, 10);
+      const from =
+        data.from ??
+        (() => {
+          const start = new Date(to);
+          start.setFullYear(start.getFullYear() - 1);
+          return start.toISOString().slice(0, 10);
+        })();
+
+      const history = await paymentHistory(pool, { taxpayerId: taxpayer.id, from, to });
+
+      res.json({
+        from: history.from,
+        to: history.to,
+        summary: history.summary,
+        /*
+         * Without the receipt numbers.
+         *
+         * A receipt number is verification material in this platform — the
+         * public verification endpoint takes one and confirms a payment
+         * against it. Handing the set out here would let whoever passed the
+         * code check verify payments elsewhere as though they held the
+         * receipts. The taxpayer has the paper; this is the list, not the
+         * proof.
+         */
+        rows: history.rows.map((row) => ({
+          paidAt: row.paidAt,
+          revenueItem: row.revenueItem,
+          revenueItemHa: row.revenueItemHa,
+          periodLabel: row.periodLabel,
+          periodStart: row.periodStart,
+          periodEnd: row.periodEnd,
+          amountKobo: row.amountKobo,
+          returned: row.returned,
+        })),
+      });
+    },
+  ),
 );

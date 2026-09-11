@@ -14,6 +14,8 @@
  *   reference   — the transaction/payment reference to quote to support
  */
 
+import { blockerSentence, type AgentBlocker } from '@psirs/shared';
+
 export type MoneyStatus =
   /** No payment was attempted; nothing has been debited. */
   | 'NOT_DEBITED'
@@ -27,6 +29,15 @@ export type MoneyStatus =
 export interface ErrorDetail {
   field?: string;
   issue: string;
+  /**
+   * A stable name for what this detail is, where one exists.
+   *
+   * `issue` is prose, and prose composed here is prose in English. A client
+   * that knows the code can say the same thing in the reader's language;
+   * one that does not still has `issue` to fall back on, which is why both
+   * travel rather than the code replacing the sentence.
+   */
+  code?: string;
 }
 
 export class AppError extends Error {
@@ -201,14 +212,16 @@ export function internal(reference?: string): AppError {
 }
 
 /** Raised when the agent is not cleared to perform revenue work (Addendum §26). */
-export function notCleared(blockers: string[]): AppError {
+export function notCleared(blockers: readonly AgentBlocker[]): AppError {
   return new AppError({
     statusCode: 403,
     code: 'AGENT_NOT_CLEARED',
     message:
       'You are not yet cleared to carry out revenue collection. ' +
       'Your application must be completed and approved first.',
-    details: blockers.map((issue) => ({ issue })),
+    // Both, deliberately: the agent PWA reads the code and says it in Hausa,
+    // and anything else reading this response still gets a sentence.
+    details: blockers.map((code) => ({ code, issue: blockerSentence(code) })),
     nextStep: 'Open "My Application" to see what is still outstanding.',
   });
 }

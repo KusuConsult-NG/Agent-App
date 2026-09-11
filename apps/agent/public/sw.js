@@ -16,7 +16,16 @@
  * receipt, so financial reads fail loudly offline instead.
  */
 
-const VERSION = 'psirs-agent-v1';
+/*
+ * Bumped to v2 with the navigation change below.
+ *
+ * A browser installs a new service worker only when the BYTES of this file
+ * differ from the one it holds. Nothing in the build touches this constant,
+ * so every deploy shipped a byte-identical worker and no handset ever
+ * installed a new one — which is also why `activate`, and the cache clearing
+ * it does, had not run since the first install.
+ */
+const VERSION = 'psirs-agent-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const REFERENCE_CACHE = `${VERSION}-reference`;
 
@@ -133,8 +142,43 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Application shell: cache first, so the app opens instantly and works
-  // offline for the draft-capture workflows.
+  /*
+   * Opening the application: the network first, the cache as the fallback.
+   *
+   * This used to be cache-first with no revalidation, like the assets below.
+   * For a hashed bundle that is right — the name changes when the contents
+   * do. For the shell it meant a handset served its cached `index.html` for
+   * ever: a deploy changed the bundle names, the cached shell went on naming
+   * the old ones, and those were cached too. The application could not update.
+   *
+   * Which matters because of what sits on the other side of it. The version
+   * gate is "the one lever that stops a bad build collecting money" — it
+   * answers 426 and refuses the collection. An agent on a build that has been
+   * stopped could not collect AND could not receive the fix, and `nextStep`
+   * told them to update an application that was serving itself from a cache.
+   * Clearing site data was the only way out, on a handset in a market.
+   *
+   * Network first costs a request that the fallback covers: offline, the
+   * shell still opens from the cache, which is what the draft-capture
+   * workflows need.
+   */
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(SHELL_CACHE).then((cache) => cache.put('/index.html', copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match('/index.html').then((cached) => cached ?? caches.match('/'))),
+    );
+    return;
+  }
+
+  // Static assets: cache first. A hashed filename changes when its contents
+  // do, so a hit is never stale.
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;

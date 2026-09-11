@@ -11,6 +11,7 @@
  *     money-status wording of PRD §60 rather than inventing their own.
  */
 
+import { translations } from '@psirs/shared';
 import { getDeviceIdentifier } from './device';
 
 export const APP_VERSION: string =
@@ -18,13 +19,61 @@ export const APP_VERSION: string =
 
 const API_BASE = '/api/v1';
 
+/**
+ * An upload was attempted with no connection.
+ *
+ * No message: the screen renders `t.errUploadOffline`. The English sentence
+ * that used to be here was what an agent read, in an application that offers
+ * Hausa.
+ */
+export class UploadOffline extends Error {
+  constructor() {
+    super('upload attempted while offline');
+    this.name = 'UploadOffline';
+  }
+}
+
 export interface ApiError {
   code: string;
   message: string;
   moneyStatus: 'NOT_DEBITED' | 'UNCONFIRMED' | 'RECEIVED' | 'NOT_APPLICABLE';
   reference?: string;
   nextStep?: string;
-  details?: { field?: string; issue: string }[];
+  details?: { field?: string; issue: string; code?: string }[];
+}
+
+/**
+ * Anything that was thrown, as an error a person can be shown.
+ *
+ * This exists because the same three lines were written out by hand at more
+ * than eighty call sites, and at more than eighty call sites they were
+ * written out WRONG — in two shapes:
+ *
+ *     setError(asApiError(caught));
+ *     setError(asApiError(caught));
+ *
+ * The first sets nothing and the second sets null, so every failure that is
+ * not a refusal with a body — a dropped connection, a parse failure, a
+ * timeout — reached the officer or the agent as silence. A button stopped
+ * spinning and nothing else changed, which on a state-changing action is the
+ * worst possible answer: the person cannot tell whether it went through, so
+ * they press it again.
+ *
+ * That class has been swept twice before and grew back both times, because a
+ * three-line branch repeated everywhere is a thing people copy from the
+ * nearest example. One function cannot be copied wrong, and the guard beside
+ * it (`every-failure-is-said-out-loud.test.ts`) refuses the raw shapes.
+ *
+ * A thrown non-Error gets `UNKNOWN` rather than its `String()`, which would
+ * be "[object Object]": the code is one `ErrorAlert` translates, so the
+ * reader gets a sentence in their own language instead of a cast.
+ */
+export function asApiError(caught: unknown): ApiError {
+  if (caught instanceof ApiRequestError) return caught.error;
+  if (caught instanceof Error) {
+    return { code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' };
+  }
+  return { code: 'UNKNOWN', message: '', moneyStatus: 'NOT_APPLICABLE' };
 }
 
 export class ApiRequestError extends Error {
@@ -66,7 +115,21 @@ export class ApiRequestError extends Error {
  */
 export function isConnectivityFailure(error: unknown): boolean {
   if (error instanceof ApiRequestError) {
-    return error.status === 503 && error.error.code === 'OFFLINE';
+    /*
+     * Two shapes, and both must be recognised.
+     *
+     * OFFLINE with a 503 is the service worker answering for a network it
+     * knows is not there. NETWORK with no status is `request` wrapping a fetch
+     * that never got an answer — it wraps them so that a screen testing only
+     * for `ApiRequestError` has something to show instead of a blank page, and
+     * the whole offline capture path hangs off this function returning true
+     * for exactly those. Miss the second and an agent in a market with no
+     * signal is shown an error where their work should have been queued.
+     */
+    return (
+      (error.status === 503 && error.error.code === 'OFFLINE') ||
+      (error.status === 0 && error.error.code === 'NETWORK')
+    );
   }
   // A request that never reached the network at all.
   return error instanceof TypeError || (error instanceof DOMException && error.name === 'AbortError');
@@ -235,7 +298,11 @@ async function uploadRequest<T>(path: string, file: Blob, filename?: string): Pr
   if (!response.ok) {
     throw new ApiRequestError(response.status, (payload as { error: ApiError })?.error ?? {
       code: 'UPLOAD_FAILED',
-      message: 'The document could not be sent. Try again.',
+      // Never rendered: `UPLOAD_FAILED` is in `TRANSLATED_ERRORS`, so
+      // `ErrorAlert` shows `t.errUploadFailed` and ignores this. It exists
+      // because `ApiError.message` is required, and it is deliberately not a
+      // sentence anybody should see.
+      message: 'upload failed',
       moneyStatus: 'NOT_APPLICABLE',
     }, payload);
   }
@@ -272,7 +339,10 @@ async function rawRequest<T>(path: string, options: RequestOptions = {}): Promis
   if (!response.ok) {
     const error = (payload as { error?: ApiError })?.error ?? {
       code: 'UNKNOWN',
-      message: `The request failed (${response.status}). Try again, or contact support.`,
+      // Never rendered: `UNKNOWN` is in `TRANSLATED_ERRORS`, so `ErrorAlert`
+      // shows `t.errRequestFailed` and ignores this. Lower case, by the
+      // convention that marks a line nobody reads.
+      message: `request failed with status ${response.status}`,
       moneyStatus: 'NOT_APPLICABLE' as const,
     };
     throw new ApiRequestError(response.status, error, payload);
@@ -326,10 +396,57 @@ function refreshOnce(): Promise<void> {
  * gone, and looping would lock a field agent out of the error message telling
  * them to sign in again.
  */
+/**
+ * A request that never got an answer, given the shape every caller handles.
+ *
+ * `ApiRequestError` used to mean only "the server said no", so every handler
+ * that reasonably tested for it dropped everything else on the floor. Eighty-two
+ * of them did, across both applications, and the worst was the confirm on a
+ * payment: an agent standing in front of somebody who has just handed over
+ * money, the connection drops mid-request, and the screen says nothing at all.
+ * Nothing at all is the one answer that makes them press the button again.
+ *
+ * The money status is the honest part. A read that never arrived moves no
+ * money whether it arrived or not. A write under `/payments` that never got an
+ * answer is a write whose effect is unknown — which is exactly what
+ * UNCONFIRMED means, and it is why the agent is told not to collect again
+ * rather than told nothing. Every other write says NOT_APPLICABLE, because
+ * telling an agent their taxpayer may have been debited by a failed support
+ * ticket is its own kind of wrong.
+ */
+function couldNotReach(path: string, method: string): ApiRequestError {
+  const write = method.toUpperCase() !== 'GET';
+  return new ApiRequestError(
+    0,
+    {
+      code: 'NETWORK',
+      // Never rendered: `NETWORK` is in `ErrorAlert`'s translated set, so the
+      // agent reads it in their own language. Present for anything that logs.
+      message: translations.en.errNetwork,
+      moneyStatus: write && path.startsWith('/payments') ? 'UNCONFIRMED' : 'NOT_APPLICABLE',
+    },
+    null,
+  );
+}
+
+/**
+ * Did the request fail without reaching PSIRS at all?
+ *
+ * `fetch` rejects with a TypeError for that. An `AbortError` is deliberately
+ * not included: a request the application itself cancelled — a superseded
+ * search, a screen left before it loaded — is not a failure anybody needs to
+ * be told about, and surfacing one would put an alert on the screen every
+ * time an agent types.
+ */
+function neverReachedPsirs(error: unknown): boolean {
+  return error instanceof TypeError;
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   try {
     return await rawRequest<T>(path, options);
   } catch (error) {
+    if (neverReachedPsirs(error)) throw couldNotReach(path, options.method ?? 'GET');
     const isExpired =
       error instanceof ApiRequestError &&
       error.status === 401 &&
@@ -368,10 +485,7 @@ export const api = {
    */
   upload: async <T>(path: string, file: Blob, filename?: string): Promise<T> => {
     if (!navigator.onLine) {
-      throw new Error(
-        'You are offline. An identity document is sent to PSIRS as it is captured and is not ' +
-          'stored on this device — take the photograph again when you have a connection.',
-      );
+      throw new UploadOffline();
     }
     return uploadRequest<T>(path, file, filename);
   },

@@ -21,7 +21,7 @@ import {
 import { idempotent } from '../middleware/idempotency';
 import { rateLimit } from '../middleware/security';
 import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
-import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
+import { assertOwnRecord, callerAgentId, listScopeAgentId, seesEverything } from '../lib/ownership';
 import { notFound, forbidden, badRequest } from '../lib/errors';
 import * as payments from '../services/payments';
 import * as receipts from '../services/receipts';
@@ -264,8 +264,28 @@ receiptRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (req, res, data) => {
-      // Agents see receipts for transactions they facilitated; officers see all.
-      const agentScoped = req.auth!.role === 'agent';
+      /*
+       * Narrowed by the permission, not by the role's name.
+       *
+       * This read `req.auth!.role === 'agent'` and passed `null` for anything
+       * else — so the scope was decided by a string while the gate above was
+       * decided by a permission, and the two can come apart. `role_permissions`
+       * is a table PSIRS edits without a deployment, precisely so delegation
+       * can change; grant `receipt:read:own` to a role not spelled `agent` and
+       * this route admitted them on the narrow permission and then applied no
+       * narrowing, returning every receipt in the state with the taxpayer names
+       * and TINs attached.
+       *
+       * Its two siblings below — the receipt by id, and the document behind it
+       * — already ask `seesEverything(req, 'receipt:read:all')` and fail closed.
+       * This one asked something else and failed open, which is the asymmetry
+       * `ownership.ts` was written to stop: "six hand-rolled versions is how
+       * five of them end up subtly different and one ends up missing."
+       *
+       * No behaviour changes today. `receipt:read:own` is held by `agent`
+       * alone, so the two tests agree on every session that currently exists.
+       */
+      const scopeToAgent = listScopeAgentId(req, 'receipt:read:all');
       res.json(
         await query(
           pool,
@@ -280,7 +300,7 @@ receiptRouter.get(
             WHERE ($1::uuid IS NULL OR r.taxpayer_id = $1)
               AND ($2::uuid IS NULL OR t.agent_id = $2)
             ORDER BY r.issued_at DESC LIMIT $3`,
-          [data.taxpayerId ?? null, agentScoped ? (req.auth!.agentId ?? null) : null, data.limit],
+          [data.taxpayerId ?? null, scopeToAgent, data.limit],
         ),
       );
     },

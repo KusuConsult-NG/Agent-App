@@ -13,14 +13,18 @@
 import { whereAmI } from '../lib/location';
 import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, newIdempotencyKey, type ApiError } from '../lib/api';
 import { verificationUrlFor } from '../lib/verification-url';
-import { bluetoothPrinter } from '../lib/bluetooth-printer';
+import {
+  PRINTER_PROBLEM_TEXT,
+  PrinterUnavailable,
+  bluetoothPrinter,
+} from '../lib/bluetooth-printer';
 import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -45,6 +49,43 @@ interface Quote {
   trace: { step: string; detail: string; amount?: string }[];
 }
 
+/**
+ * What this taxpayer already owes, which the agent could not see.
+ *
+ * `GET /revenue/taxpayers/:id/obligations` was built, permissioned on three
+ * scopes, and called from nowhere — one of the reads recorded in
+ * READ_WITHOUT_A_SCREEN. Its own route comment states exactly the case it was
+ * written for: "serving a walk-up taxpayer requires finding them and knowing
+ * their obligations; that much is the job", and "refusing here would push
+ * that agent into raising a second assessment for a debt that already
+ * exists."
+ *
+ * Which is what the agent was pushed into. The collection screen went from
+ * choosing a person straight to choosing a levy, with no sight of the
+ * invoices already open against them — so a trader with an unpaid market levy
+ * who walks up to pay it gets a fresh assessment for the same levy, and now
+ * owes it twice. The platform then has two invoices and no way to know which
+ * one the money was for.
+ */
+interface Obligation {
+  invoice_id: string;
+  invoice_number: string;
+  total_amount_kobo: string;
+  amount_paid_kobo: string;
+  status: string;
+  expires_at: string | null;
+  issued_at: string;
+  assessment_number: string;
+  period_label: string | null;
+  revenue_item: string;
+  revenue_item_ha: string | null;
+  revenue_category: string;
+  revenue_category_ha: string | null;
+  transaction_id: string | null;
+  transaction_reference: string | null;
+  transaction_status: string | null;
+}
+
 interface TaxpayerSummary {
   id: string;
   taxpayer_type: string;
@@ -58,6 +99,27 @@ interface TaxpayerSummary {
 
 function taxpayerName(taxpayer: TaxpayerSummary): string {
   return taxpayer.business_name ?? `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim();
+}
+
+/**
+ * What a confirmation attempt means, in the agent's language.
+ *
+ * Exported so a test can assert the real branch rather than a copy of it. A
+ * test that re-implements this decides nothing about the screen: the screen
+ * could stop calling it and the test would stay green, which is the shape
+ * this application has been found carrying several times already.
+ */
+export function paymentOutcomeText(
+  t: TranslationDictionary,
+  result: { status: string; receiptNumber?: string },
+): string {
+  return result.status === 'FAILED'
+    ? t.colPayFailed
+    : result.status === 'PENDING'
+      ? t.colPayStillPending
+      : result.receiptNumber
+        ? t.colPayReceipted.replace('{{number}}', result.receiptNumber)
+        : t.colPayAwaitingSettlement;
 }
 
 export function CollectScreen({
@@ -102,6 +164,19 @@ export function CollectScreen({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * A charge that exists when the payment does not.
+   *
+   * `createAndPay` is two requests and only the second can fail on its own.
+   * When it does, the assessment has already been raised — an invoice, a
+   * reference, a debt the taxpayer owes — and this screen used to show the
+   * payment error above a live "Confirm and proceed to payment" button.
+   * Pressing it again raises a SECOND assessment for the same obligation, and
+   * several invoices against one taxpayer and one item is a legitimate shape
+   * here (the arrears worklist is built on it), so nothing downstream will
+   * ever question the duplicate.
+   */
+  const [raised, setRaised] = useState<{ reference: string } | null>(null);
 
   useEffect(() => {
     if (!initialTaxpayerId) return;
@@ -117,9 +192,37 @@ export function CollectScreen({
       .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayer]);
+
+  /*
+   * `null` while unknown, `[]` only when the answer is genuinely none.
+   *
+   * "Nothing is outstanding" is the sentence that tells an agent to go ahead
+   * and raise a new charge. A failed read must not be able to say it, because
+   * the charge that follows is a real debt on a real person. `owesFailed`
+   * keeps the two apart.
+   */
+  const [owes, setOwes] = useState<Obligation[] | null>(null);
+  const [owesFailed, setOwesFailed] = useState(false);
+
+  const loadOwes = useCallback(() => {
+    if (!taxpayer) return;
+    setOwesFailed(false);
+    setOwes(null);
+    api
+      .get<Obligation[]>(`/revenue/taxpayers/${taxpayer.id}/obligations`)
+      .then((rows) => setOwes(Array.isArray(rows) ? rows : []))
+      .catch(() => {
+        setOwes(null);
+        setOwesFailed(true);
+      });
+  }, [taxpayer]);
+
+  useEffect(() => {
+    loadOwes();
+  }, [loadOwes]);
 
   const needsBaseAmount =
     selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
@@ -153,7 +256,7 @@ export function CollectScreen({
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -163,6 +266,9 @@ export function CollectScreen({
     if (!taxpayer || !selectedItem) return;
     setBusy(true);
     setError(null);
+    // Held outside the try so the catch can tell the two failures apart: one
+    // where the taxpayer now owes something, and one where nothing happened.
+    let reference: string | null = null;
     try {
       const inputs: Record<string, string> = {};
       if (needsBaseAmount) {
@@ -191,6 +297,8 @@ export function CollectScreen({
         newIdempotencyKey('assessment'),
       );
 
+      reference = assessment.transactionReference;
+
       await api.post<{ authorisationUrl: string }>(
         '/payments/initiate',
         { transactionId: assessment.transactionId },
@@ -203,14 +311,25 @@ export function CollectScreen({
       flow.current?.complete('payment-initiated');
       navigate(`/transactions/${assessment.transactionReference}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) {
-        setError(caught.error);
-        // A nil liability is not a failed collection — it is the correct
-        // answer, and counting it as failure would make the exempt look like
-        // a bug in the funnel.
-        if (caught.error.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
-        else flow.current?.fail(`refused-${caught.error.code}`);
-      }
+      // Whatever went wrong: if the assessment got through, the taxpayer owes
+      // this and the agent has to be told before they reach for the button
+      // again.
+      if (reference !== null) setRaised({ reference });
+      /*
+       * The comment above was true and the code did not implement it.
+       *
+       * Only an `ApiRequestError` set anything, so a dropped signal — the
+       * ordinary failure in a market — left the agent with a button that
+       * stopped spinning, no message, and an assessment that may well have
+       * gone through. They reach for it again, and the taxpayer owes twice.
+       */
+      const failure = asApiError(caught);
+      setError(failure);
+      // A nil liability is not a failed collection — it is the correct
+      // answer, and counting it as failure would make the exempt look like
+      // a bug in the funnel.
+      if (failure.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
+      else flow.current?.fail(`refused-${failure.code}`);
     } finally {
       setBusy(false);
     }
@@ -250,7 +369,7 @@ export function CollectScreen({
                   ),
                 );
               } catch (caught) {
-                if (caught instanceof ApiRequestError) setError(caught.error);
+                setError(asApiError(caught));
               } finally {
                 setBusy(false);
               }
@@ -315,6 +434,71 @@ export function CollectScreen({
       </div>
 
       <ErrorAlert error={error} />
+
+      {/*
+        * Before the levy list, not after it.
+        *
+        * An agent who has already picked an item and seen a figure is
+        * committed; the moment this has to change their mind is before they
+        * choose. A trader walking up to pay a market levy they already owe
+        * must be taken to the open invoice, not given a second one.
+        */}
+      {!quote && (owesFailed || owes === null || owes.length > 0) && (
+        <div className="card">
+          <h2 className="card__title">{t.colAlreadyOwes}</h2>
+          {owesFailed ? (
+            <>
+              {/*
+                * Said rather than passed over. An agent who does not know
+                * whether there is an open invoice must be told that they do
+                * not know, because the next thing they do creates a debt.
+                */}
+              <Alert kind="warning" title={t.colOwesUnknown}>
+                <p style={{ margin: 0 }}>{t.colOwesUnknownBody}</p>
+              </Alert>
+              <button type="button" className="secondary" onClick={loadOwes}>
+                {t.actionTryAgain}
+              </button>
+            </>
+          ) : owes === null ? (
+            <Loading />
+          ) : (
+            <>
+              <p className="card__hint">{t.colAlreadyOwesBody}</p>
+              <ul className="list list--rows">
+                {owes.map((row) => (
+                  <li key={row.invoice_id}>
+                    <div className="list__body">
+                      <p className="list__title">
+                        {localName(lang, row.revenue_item, row.revenue_item_ha)}
+                        {row.period_label ? ` · ${row.period_label}` : ''}
+                      </p>
+                      <p className="list__meta">
+                        {row.invoice_number} ·{' '}
+                        <Money
+                          kobo={(
+                            BigInt(row.total_amount_kobo) - BigInt(row.amount_paid_kobo)
+                          ).toString()}
+                        />{' '}
+                        · <Badge status={row.status} />
+                      </p>
+                    </div>
+                    {row.transaction_reference && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
+                      >
+                        {t.colTakeThisPayment}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {!quote && (
         <div className="card">
@@ -433,15 +617,44 @@ export function CollectScreen({
                 <p style={{ margin: 0 }}>{t.cashChannelReminder}</p>
               </Alert>
 
-              <div className="button-row">
-                <button type="button" className="secondary" onClick={() => setQuote(null)}>
-                  {t.colChangeChoice}
-                </button>
-                <button type="button" disabled={busy} onClick={createAndPay}>
-                  {busy ? <Spinner /> : null}
-                  {t.colConfirmProceed}
-                </button>
-              </div>
+              {raised ? (
+                /*
+                  The charge is raised and the payment is not.
+
+                  Both of the buttons this replaces lead back to a second
+                  assessment — one by recalculating, one by confirming again —
+                  and the taxpayer would owe both. What is left is the
+                  transaction itself, which is a real place to go: it renders
+                  the invoice they can pay at a bank, and it is where the
+                  payment can be started again.
+                */
+                <>
+                  <Alert kind="error" title={t.colChargeRaisedTitle}>
+                    <p style={{ margin: 0 }}>
+                      {t.colChargeRaisedBody.replace('{{reference}}', raised.reference)}
+                    </p>
+                  </Alert>
+
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/transactions/${raised.reference}`)}
+                    >
+                      {t.colOpenCharge}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="button-row">
+                  <button type="button" className="secondary" onClick={() => setQuote(null)}>
+                    {t.colChangeChoice}
+                  </button>
+                  <button type="button" disabled={busy} onClick={createAndPay}>
+                    {busy ? <Spinner /> : null}
+                    {t.colConfirmProceed}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </>
@@ -460,6 +673,16 @@ interface TransactionStatus {
     transaction_reference: string;
     status: string;
     amount_kobo: string;
+    /*
+     * What the citizen actually hands over, and what of it is the charge.
+     *
+     * `total_amount_kobo = amount_kobo + service_charge_kobo`, enforced by a
+     * CHECK on the table, and the two are never netted — PRD §6, and the
+     * reason `commission.ts` computes commission on `amount_kobo` alone. The
+     * server has been sending the charge to this screen all along and nothing
+     * declared it.
+     */
+    service_charge_kobo: string;
     total_amount_kobo: string;
     invoice_id: string;
     invoice_number: string;
@@ -472,6 +695,7 @@ interface TransactionStatus {
     last_name: string | null;
     business_name: string | null;
     tin: string | null;
+    preferred_language: string | null;
     payment_id: string | null;
     payment_status: string | null;
     payment_reference: string | null;
@@ -504,17 +728,44 @@ export function TransactionScreen({
 }) {
   const { lang, t } = useI18n();
   const [data, setData] = useState<TransactionStatus | null>(null);
+  /*
+   * The receipt is printed in the taxpayer's language, not the agent's.
+   *
+   * `lang` above is what this agent reads; `preferred_language` is what the
+   * person being handed the paper reads, recorded at registration. They are
+   * routinely different — a Hausa-reading agent collecting from an
+   * English-reading trader, or the reverse — and the paper belongs to the
+   * citizen. English when the record does not say, which is the same fallback
+   * the message queue uses.
+   */
+  const receiptLanguage: Language = data?.transaction.preferred_language === 'ha' ? 'ha' : 'en';
+  const receiptLabels = translations[receiptLanguage];
   const [error, setError] = useState<ApiError | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [invoicing, setInvoicing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * The receipt text, shown only when the handset would not take it.
+   *
+   * `navigator.clipboard.writeText` is refused on an insecure origin, without
+   * permission, and on some handsets outside the gesture that started the
+   * click — and the screen used to say "Receipt details copied" regardless.
+   * The agent then pastes whatever was in the clipboard before into the
+   * message they send the citizen: no receipt number and no verification
+   * code, on the only proof that citizen has that they paid.
+   *
+   * The recovery is the text itself. A failed copy puts it on the screen to
+   * be read out or typed, which is what an agent does anyway when the phone
+   * in their hand is not the phone they are sending from.
+   */
+  const [shareText, setShareText] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setData(await api.get<TransactionStatus>(`/payments/transactions/${reference}/status`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setLoading(false);
     }
@@ -540,11 +791,45 @@ export function TransactionScreen({
         `/revenue/invoices/${transaction.invoice_id}/document`,
       );
       window.open(document.downloadUrl, '_blank', 'noopener');
-      setNotice(`Invoice ${document.documentNumber} is ready to print or send.`);
+      setNotice(t.colInvoiceReady.replace('{{number}}', document.documentNumber));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setInvoicing(false);
+    }
+  }
+
+  /**
+   * Hand this transaction to the payment gateway.
+   *
+   * Reachable whenever the assessment was raised and the payment was not —
+   * which is exactly the state an agent is sent here in. Until now the only
+   * control on that screen called `confirmPayment`, which returns immediately
+   * when there is no `payment_id`: a button that did nothing at all, silently,
+   * on the one screen that exists to recover from a failed handoff. The hint
+   * beside the invoice already told the agent to start the payment first,
+   * because a bank reference is only issued then; this is the control that
+   * instruction was describing.
+   *
+   * A second press cannot open a second payment: the server answers with the
+   * one already in flight rather than initiating again.
+   */
+  async function startPayment() {
+    if (!data) return;
+    setConfirming(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.post<{ authorisationUrl: string }>(
+        '/payments/initiate',
+        { transactionId: data.transaction.id },
+        newIdempotencyKey('payment'),
+      );
+      await load();
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setConfirming(false);
     }
   }
 
@@ -554,15 +839,28 @@ export function TransactionScreen({
     setError(null);
     setNotice(null);
     try {
-      const result = await api.post<{ status: string; message: string; receiptNumber?: string }>(
-        `/payments/${data.transaction.payment_id}/confirm`,
-      );
-      setNotice(result.message);
+      const result = await api.post<{
+        status: 'VERIFIED' | 'PENDING' | 'FAILED';
+        receiptNumber?: string;
+      }>(`/payments/${data.transaction.payment_id}/confirm`);
+      /*
+       * Said here, in the agent's language, rather than taken from the server.
+       *
+       * This is the sentence an agent reads standing in front of somebody who
+       * has just handed over money, and it was the API's English — including
+       * "The payment did not succeed. No money has been received and no
+       * receipt has been issued." An agent who cannot read that sentence
+       * cannot tell the person in front of them what happened to their money.
+       *
+       * The status and the receipt number are on the response, and they are
+       * what actually distinguish the four outcomes.
+       */
+      setNotice(paymentOutcomeText(t, result));
       await load();
     } catch (caught) {
       // A pending gateway answer arrives here as PAYMENT_UNCONFIRMED, and the
       // wording tells the agent explicitly not to collect again.
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -580,7 +878,7 @@ export function TransactionScreen({
       });
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -609,11 +907,41 @@ export function TransactionScreen({
   return (
     <>
       {paid ? (
+        /*
+         * The figure the citizen is looking at, and what it is a figure OF.
+         *
+         * This drew `amount_kobo` — the government portion — as a bare number
+         * under "Payment successful", with nothing saying which of the two
+         * figures it was. Everywhere else in the platform that shows money
+         * says: the printed slip heads it TOTAL PAID, the official receipt
+         * heads it AMOUNT PAID TO GOVERNMENT and discloses the charge beneath
+         * in a sentence, and the detail row three lines below this one is
+         * labelled "Amount" and shows the total.
+         *
+         * So the same screen carried two different numbers for one payment,
+         * and the unlabelled one was the one turned towards the person who had
+         * just handed over money. What "Payment successful — ₦2,050" means to
+         * them is what they paid, which is also what the slip in their hand
+         * will say, so that is what this shows — with the charge disclosed the
+         * way the receipt discloses it rather than folded in silently.
+         *
+         * Latent rather than live: no catalogue item configures a service
+         * charge today, so the two figures are equal and the disclosure does
+         * not render. It is one administrator setting away from not being.
+         */
         <div className="amount-confirm">
           <p className="amount-confirm__label">{t.paymentSuccess}</p>
           <p className="amount-confirm__value">
-            <Money kobo={transaction.amount_kobo} />
+            <Money kobo={transaction.total_amount_kobo} />
           </p>
+          {BigInt(transaction.service_charge_kobo || '0') > 0n && (
+            <p className="amount-confirm__label">
+              {t.colIncludesServiceCharge.replace(
+                '{{charge}}',
+                formatNaira(transaction.service_charge_kobo),
+              )}
+            </p>
+          )}
           <p className="amount-confirm__label">
             {t.colReceiptNumbered.replace('{{number}}', transaction.receipt_number ?? '')}
           </p>
@@ -642,6 +970,26 @@ export function TransactionScreen({
 
       <ErrorAlert error={error} />
       {notice && !error && <Alert kind="success">{notice}</Alert>}
+      {shareText && (
+        <Alert kind="warning" title={t.colCouldNotCopy}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colCouldNotCopyBody}</p>
+          <p
+            style={{
+              margin: 0,
+              padding: '0.5rem',
+              background: 'var(--surface-sunken, #f4f4f4)',
+              borderRadius: '4px',
+              // The whole point is that it can be read off the screen and
+              // typed, so it wraps rather than running off the side of a
+              // handset held in one hand.
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {shareText}
+          </p>
+        </Alert>
+      )}
 
       <div className="card">
         <KeyValue
@@ -690,11 +1038,17 @@ export function TransactionScreen({
                   revenueItemName: transaction.revenue_item,
                   revenueCategoryName: transaction.revenue_category,
                   amountKobo: transaction.total_amount_kobo,
-                  paymentMethod: transaction.payment_status || 'POS / Online',
+                  paymentMethod: transaction.payment_status || receiptLabels.enumPos,
                   channel: 'FIELD_AGENT',
-                  lgaName: 'Plateau State',
+                  lgaName: receiptLabels.ofcDbPlateauState,
                   wardName: null,
-                  agentName: 'Authorized Field Officer',
+                  /*
+                   * These two were the agent's dictionary on the citizen's
+                   * receipt — a Hausa-reading agent printed a Hausa job title
+                   * onto an English-reading citizen's paper. They now come
+                   * from the same language as the rest of the document.
+                   */
+                  agentName: receiptLabels.collAuthorizedFieldOfficer,
                   agentCode: 'AGT',
                   issuedAt: new Date().toISOString(),
                   /*
@@ -705,15 +1059,25 @@ export function TransactionScreen({
                    */
                   verificationUrl: verificationUrlFor(transaction.receipt_code) ?? undefined,
                   verificationCode: transaction.receipt_code ?? undefined,
-                });
+                }, receiptLanguage);
                 setNotice(t.colPrinted);
-              } catch (err: any) {
+              } catch (err) {
                 setError({
                   code: 'PRINT_FAILED',
-                  message: t.colPrintFailed.replace(
-                    '{{reason}}',
-                    err.message || t.colCheckPrinter,
-                  ),
+                  /*
+                   * The specific refusal, not the wrapper around it.
+                   *
+                   * `err.message` used to fill `{{reason}}`, which put an
+                   * English sentence inside a Hausa one. Every printer
+                   * failure now names itself — `prnNotConnected` says what
+                   * to do about it, which the generic wording never did —
+                   * and only a failure from somewhere else falls back to
+                   * the wrapper.
+                   */
+                  message:
+                    err instanceof PrinterUnavailable
+                      ? t[PRINTER_PROBLEM_TEXT[err.problem]]
+                      : t.colPrintFailed.replace('{{reason}}', t.colCheckPrinter),
                   moneyStatus: 'NOT_APPLICABLE',
                 });
               }
@@ -732,11 +1096,30 @@ export function TransactionScreen({
                 .replace('{{number}}', transaction.receipt_number ?? '')
                 .replace('{{name}}', name)
                 .replace('{{code}}', transaction.receipt_code ?? '');
+              setShareText(null);
               if (navigator.share) {
-                await navigator.share({ title: t.colShareTitle, text }).catch(() => undefined);
-              } else {
-                await navigator.clipboard.writeText(text).catch(() => undefined);
+                try {
+                  await navigator.share({ title: t.colShareTitle, text });
+                  return;
+                } catch (caught) {
+                  /*
+                   * Closing the share sheet is a decision, not a failure, and
+                   * it arrives here as an AbortError. Saying anything about it
+                   * would be telling the agent something went wrong when they
+                   * are the one who changed their mind.
+                   */
+                  if (caught instanceof Error && caught.name === 'AbortError') return;
+                  // Anything else and the sheet did not carry it. Fall through
+                  // to the clipboard, which is the route a handset without
+                  // `share` takes anyway.
+                }
+              }
+              try {
+                await navigator.clipboard.writeText(text);
                 setNotice(t.colReceiptCopied);
+              } catch {
+                setNotice(null);
+                setShareText(text);
               }
             }}
           >{t.colShareReceipt}</button>
@@ -763,7 +1146,7 @@ export function TransactionScreen({
             {transaction.expires_at
               ? t.colInvoiceValidUntil.replace(
                   '{{date}}',
-                  new Date(transaction.expires_at).toLocaleDateString('en-NG'),
+                  formatDateIn(transaction.expires_at, t),
                 )
               : ''}
             .{' '}
@@ -772,10 +1155,18 @@ export function TransactionScreen({
               : t.colInvoiceNoReference}
           </p>
 
-          <button type="button" disabled={confirming} onClick={confirmPayment}>
-            {confirming ? <Spinner /> : null}
-            {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
-          </button>
+          {/* Nothing to check until there is a payment to check on. */}
+          {transaction.payment_id ? (
+            <button type="button" disabled={confirming} onClick={confirmPayment}>
+              {confirming ? <Spinner /> : null}
+              {confirming ? t.colCheckingPayment : t.colCheckPaymentStatus}
+            </button>
+          ) : (
+            <button type="button" disabled={confirming} onClick={startPayment}>
+              {confirming ? <Spinner /> : null}
+              {confirming ? t.colStartingPayment : t.colStartPayment}
+            </button>
+          )}
 
           {/* Development only. The API refuses simulation outside the mock
               gateway, but the control should not be visible to a field agent
@@ -805,7 +1196,7 @@ export function TransactionScreen({
               <div className="list__body">
                 <p className="list__title">{enumLabel(event.to_status, t)}</p>
                 <p className="list__meta">
-                  {new Date(event.created_at).toLocaleString('en-NG')}
+                  {formatDateTimeIn(event.created_at, t)}
                   {event.reason ? ` · ${event.reason}` : ''}
                 </p>
               </div>
