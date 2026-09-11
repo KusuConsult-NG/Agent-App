@@ -507,14 +507,18 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * recomputed beside the value stored. "Something changed" is not a finding
    * anybody can act on.
    *
-   * The consequential ones remaining, in the order I would fix them:
+   * `/taxpayers/:id/incentives` now opens on the taxpayer record, beside the
+   * obligations and the vehicles. What it carries that nothing else did is
+   * `benefit_tier`: BASE and FULL are different entitlements, and both used to
+   * reach an officer as the one word "eligible". A programme nobody has
+   * evaluated this taxpayer against is a third answer again — null is not
+   * false, and a screen that renders it as one tells a citizen they were
+   * refused something nobody has yet considered them for.
    *
-   *   `/taxpayers/:id/incentives` — what a citizen is entitled to. Programmes
-   *     grant entitlement and nothing shows a taxpayer their own.
-   *
-   * The rest are quieter: a support ticket's detail, an assessment or invoice
-   * by id, a payment lookup, the MDA list, a transfer history, commission by
-   * place, and a KYC access log the screen mentions only in a comment.
+   * What is left is quieter: a support ticket's detail, an assessment or
+   * invoice by id, a payment lookup, the MDA list, a transfer history,
+   * commission by place, and a KYC access log the screen mentions only in a
+   * comment.
    */
   '/government/intelligence/taxpayers/:id/access-log',
   '/government/commissions/by-place',
@@ -526,7 +530,6 @@ const READ_WITHOUT_A_SCREEN = new Set([
   '/revenue/assessments/:id',
   '/revenue/invoices/:id',
   '/revenue/taxpayers/:id/obligations',
-  '/taxpayers/:id/incentives',
 ]);
 
 describe('the portal can read every fact the API will tell it', () => {

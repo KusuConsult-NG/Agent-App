@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,289 strings; that one is two pages and links back
+> because it carries all 3,300 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,289 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,300 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,289 strings is worse than no sheet, because it looks complete; this one cannot
+3,300 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,289 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,300 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,289 strings: where the
+- The glossary below is applied consistently across all 3,300 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3210 strings, grouped by where an agent meets them. Lower stakes
+3221 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1379,6 +1379,16 @@ instructions — but they are what an agent reads all day.
 | `ofcTrNameOrDob` | A name or date of birth can be corrected here. The document the record is held under decides which person it is about, so an administrator has to make that change. | Ana iya gyara suna ko ranar haihuwa a nan. Takardar da aka rike rikodin a kanta ce ke yanke wanne mutum ya shafa, don haka mai gudanarwa ne ya kamata ya yi wannan canjin. | ☐ | |
 | `ofcTrWhatAndWhy` | What is being corrected, and why | Abin da ake gyarawa, da dalilin | ☐ | |
 | `ofcTrLiableFor` | What this taxpayer is liable for | Abin da wannan mai biyan haraji ke bin sa | ☐ | |
+| `ofcTrEntitledTo` | What this taxpayer is entitled to | Abin da wannan mai biyan haraji ke da hakkin samu | ☐ | |
+| `ofcTrEntitledBody` | Every programme currently running, and where this taxpayer stands against each. A programme nobody has evaluated them against says so rather than reading as a refusal. | Duk shirin da ke gudana yanzu, da inda wannan mai biyan haraji yake a kan kowanne. Shirin da ba a tantance shi a kansa ba yana fadin haka, maimakon a karanta shi a matsayin kin amincewa. | ☐ | |
+| `ofcTrProgramme` | Programme | Shiri | ☐ | |
+| `ofcTrBenefit` | Benefit | Amfani | ☐ | |
+| `ofcTrEntitlement` | Entitlement | Hakki | ☐ | |
+| `ofcTrNotEvaluated` | Not evaluated | Ba a tantance ba | ☐ | |
+| `ofcTrNotEligible` | Not eligible | Bai cancanta ba | ☐ | |
+| `ofcTrBaseOnly` | Base only | Tushe kadai | ☐ | |
+| `ofcTrFullBenefit` | Full benefit | Cikakken amfani | ☐ | |
+| `ofcTrWhyNot` | Why | Dalili | ☐ | |
 | `ofcTrWaiveBody` | Waiving an obligation stops future assessments against it. Invoices already raised stay payable — cancelling those is a separate decision, invoice by invoice. | Yafe wajibi yana tsayar da kima na gaba a kansa. Takardun biya da aka riga aka yi suna nan a biya — soke su shawara ce daban, takarda bayan takarda. | ☐ | |
 | `ofcTrWaive` | Waive | Yafe | ☐ | |
 | `ofcTrVehiclesOnRecord` | Vehicles on this record | Motoci a wannan rikodin | ☐ | |
@@ -1941,6 +1951,7 @@ instructions — but they are what an agent reads all day.
 
 | Key | English | Hausa (draft) | OK? | Your correction |
 |---|---|---|:---:|---|
+| `ofcNoneProgrammesRunning` | No programme is running at the moment. | Babu shirin da ke gudana a yanzu. | ☐ | |
 | `ofcNoneConfirmedCollectionReachedGovernment` | Every confirmed collection has reached the government account. | Duk karban da aka tabbatar ya isa asusun gwamnati. | ☐ | |
 | `ofcNoneEveryoneTin` | Everyone has their TIN. | Kowa yana da TIN dinsa. | ☐ | |
 | `ofcNoneLgaEnoughActivityReport` | No LGA has enough activity to report without singling somebody out. | Babu Karamar Hukuma da ke da isasshen aiki da za a bayar da rahoto ba tare da nuna wani ba. | ☐ | |

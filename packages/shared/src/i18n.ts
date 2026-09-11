@@ -693,6 +693,17 @@ export interface TranslationDictionary {
   ofcTrNameOrDob: string;
   ofcTrWhatAndWhy: string;
   ofcTrLiableFor: string;
+  ofcTrEntitledTo: string;
+  ofcTrEntitledBody: string;
+  ofcTrProgramme: string;
+  ofcTrBenefit: string;
+  ofcTrEntitlement: string;
+  ofcTrNotEvaluated: string;
+  ofcTrNotEligible: string;
+  ofcTrBaseOnly: string;
+  ofcTrFullBenefit: string;
+  ofcTrWhyNot: string;
+  ofcNoneProgrammesRunning: string;
   ofcTrWaiveBody: string;
   ofcTrWaive: string;
   ofcTrVehiclesOnRecord: string;
@@ -4303,6 +4314,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTrNameOrDob: "A name or date of birth can be corrected here. The document the record is held under decides which person it is about, so an administrator has to make that change.",
     ofcTrWhatAndWhy: "What is being corrected, and why",
     ofcTrLiableFor: "What this taxpayer is liable for",
+    ofcTrEntitledTo: "What this taxpayer is entitled to",
+    ofcTrEntitledBody: "Every programme currently running, and where this taxpayer stands against each. A programme nobody has evaluated them against says so rather than reading as a refusal.",
+    ofcTrProgramme: "Programme",
+    ofcTrBenefit: "Benefit",
+    ofcTrEntitlement: "Entitlement",
+    ofcTrNotEvaluated: "Not evaluated",
+    ofcTrNotEligible: "Not eligible",
+    ofcTrBaseOnly: "Base only",
+    ofcTrFullBenefit: "Full benefit",
+    ofcTrWhyNot: "Why",
+    ofcNoneProgrammesRunning: "No programme is running at the moment.",
     ofcTrWaiveBody: "Waiving an obligation stops future assessments against it. Invoices already raised stay payable — cancelling those is a separate decision, invoice by invoice.",
     ofcTrWaive: "Waive",
     ofcTrVehiclesOnRecord: "Vehicles on this record",
@@ -7656,6 +7678,17 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTrNameOrDob: "Ana iya gyara suna ko ranar haihuwa a nan. Takardar da aka rike rikodin a kanta ce ke yanke wanne mutum ya shafa, don haka mai gudanarwa ne ya kamata ya yi wannan canjin.",
     ofcTrWhatAndWhy: "Abin da ake gyarawa, da dalilin",
     ofcTrLiableFor: "Abin da wannan mai biyan haraji ke bin sa",
+    ofcTrEntitledTo: "Abin da wannan mai biyan haraji ke da hakkin samu",
+    ofcTrEntitledBody: "Duk shirin da ke gudana yanzu, da inda wannan mai biyan haraji yake a kan kowanne. Shirin da ba a tantance shi a kansa ba yana fadin haka, maimakon a karanta shi a matsayin kin amincewa.",
+    ofcTrProgramme: "Shiri",
+    ofcTrBenefit: "Amfani",
+    ofcTrEntitlement: "Hakki",
+    ofcTrNotEvaluated: "Ba a tantance ba",
+    ofcTrNotEligible: "Bai cancanta ba",
+    ofcTrBaseOnly: "Tushe kadai",
+    ofcTrFullBenefit: "Cikakken amfani",
+    ofcTrWhyNot: "Dalili",
+    ofcNoneProgrammesRunning: "Babu shirin da ke gudana a yanzu.",
     ofcTrWaiveBody: "Yafe wajibi yana tsayar da kima na gaba a kansa. Takardun biya da aka riga aka yi suna nan a biya — soke su shawara ce daban, takarda bayan takarda.",
     ofcTrWaive: "Yafe",
     ofcTrVehiclesOnRecord: "Motoci a wannan rikodin",
