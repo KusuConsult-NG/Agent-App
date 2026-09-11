@@ -280,6 +280,32 @@ function captureMessage(outcome: VehicleLookupOutcome): string {
  * vehicle renewal is reconciled, receipted and commissioned by exactly the same
  * machinery as a market levy.
  */
+
+/**
+ * The instant a calendar day stops being today.
+ *
+ * `vehicle_renewals.expiry_date` is a DATE — a day, with no time in it — and
+ * `pg` hands it back as midnight at the START of that day. Written straight
+ * into `documents.expires_at`, which is a TIMESTAMPTZ, that made the
+ * certificate invalid from one second after midnight on the very date printed
+ * on it: verification asks `expires_at < now`, and for the whole of the
+ * expiry day it was.
+ *
+ * So a motorist stopped on the 4th handed over papers reading 4 March and was
+ * told by this platform that they had already lapsed. Neither side knew there
+ * was a disagreement, because neither side knew the other's convention.
+ *
+ * The end of the day rather than the start of the next one, deliberately. The
+ * value is also formatted back to the reader in the DOCUMENT_EXPIRED sentence,
+ * and midnight on the 5th would tell somebody holding a certificate dated the
+ * 4th that it expired on the 5th — trading one disagreement for another.
+ */
+function endOfDay(date: Date): Date {
+  const last = new Date(date);
+  last.setHours(23, 59, 59, 999);
+  return last;
+}
+
 export async function initiateRenewal(params: {
   vehicleId: string;
   revenueItemId: string;
@@ -563,7 +589,7 @@ export async function completeRenewal(params: {
       bytes: pdf,
       verificationCode,
       numberPrefix: 'PSIRS-VEH',
-      expiresAt: renewal.expiry_date,
+      expiresAt: endOfDay(renewal.expiry_date),
     });
 
     await client.query(
