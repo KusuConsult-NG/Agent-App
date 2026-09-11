@@ -798,7 +798,7 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
    * keeps the server's words rather than being given a sentence that would
    * be wrong somewhere else.
    */
-  '../ui.tsx:132 error.nextStep',
+  '../ui.tsx#1 error.nextStep',
   /*
    * THE AGENT PWA
    *
@@ -817,10 +817,10 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
    * never met — which is what a deployment looks like while the API is ahead
    * of the app, and is better than a blank where the answer belongs.
    */
-  '../lib/drafts.ts:247 result.message',
-  '../screens/More.tsx:59 draft.message',
-  '../screens/More.tsx:80 lookup.message',
-  '../screens/Application.tsx:865 result.message',
+  '../lib/drafts.ts#1 result.message',
+  '../screens/More.tsx#1 draft.message',
+  '../screens/More.tsx#1 lookup.message',
+  '../screens/Application.tsx#1 result.message',
 ]);
 
 describe('no screen speaks the API’s English', () => {
@@ -829,29 +829,36 @@ describe('no screen speaks the API’s English', () => {
     for (const [path, source] of Object.entries(SURFACES)) {
       const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
       /*
-       * Each site is named by its line, because six identical
+       * Each site is named by WHICH occurrence it is, because six identical
        * `result.message` in one file cannot otherwise be given six reasons.
        *
-       * The line is found in the original source rather than in the
-       * comment-stripped copy: stripping shifts the numbering, and a list
-       * that sends a reader to the wrong line is worse than one with no
-       * numbers at all. Repeats are counted, so the second `result.message`
-       * in a file resolves to the second occurrence.
+       * It used to be named by its line, and that made the list break for a
+       * reason that has nothing to do with what it is guarding: adding a
+       * comment anywhere above an accepted site moved it, and the check
+       * failed on a line nobody had touched. Twice in one evening. The
+       * ordinal distinguishes the six just as well and does not move when the
+       * lines above it do.
+       *
+       * The line is still reported, because a list that cannot send a reader
+       * to the site is worse than one with no numbers at all. It is found in
+       * the original source rather than in the comment-stripped copy, since
+       * stripping shifts the numbering.
        */
       const seen = new Map<string, number>();
-      const lineOf = (text: string) => {
+      const placeOf = (text: string) => {
         const nth = (seen.get(text) ?? 0) + 1;
         seen.set(text, nth);
         let from = -1;
         for (let i = 0; i < nth; i += 1) from = source.indexOf(text, from + 1);
-        return from < 0 ? 0 : source.slice(0, from).split('\n').length;
+        return { nth, line: from < 0 ? 0 : source.slice(0, from).split('\n').length };
       };
       for (const rule of [A_MESSAGE_OFF_A_PAYLOAD, A_COLUMN_OF_MESSAGES, A_NEXT_STEP]) {
         rule.lastIndex = 0;
         for (const match of code.matchAll(rule)) {
           if (rule === A_MESSAGE_OFF_A_PAYLOAD && ERROR_BINDINGS.has(match[1]!)) continue;
-          const site = `${path}:${lineOf(match[0])} ${match[0]}`;
-          if (!STILL_RENDERING_THE_SERVER.has(site)) offenders.push(site);
+          const { nth, line } = placeOf(match[0]);
+          const site = `${path}#${nth} ${match[0]}`;
+          if (!STILL_RENDERING_THE_SERVER.has(site)) offenders.push(`${site} (line ${line})`);
         }
       }
     }

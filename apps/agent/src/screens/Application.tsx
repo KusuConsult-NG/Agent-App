@@ -288,7 +288,12 @@ function DocumentCapture({
           accept="image/jpeg,image/png,image/webp,application/pdf"
           capture="environment"
           disabled={busy}
-          hidden
+          /*
+            Clipped by `capture__input` rather than `hidden`: `hidden` is
+            `display: none`, which takes the only control on this step out of
+            the focus order entirely.
+          */
+          className="capture__input"
           onChange={(event) => {
             const file = event.target.files?.[0];
             // A camera capture arrives with a generated name; one chosen from
