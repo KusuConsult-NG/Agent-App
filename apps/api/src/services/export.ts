@@ -499,6 +499,16 @@ export interface PdfReport {
   /** Present when the report is a signed `audit_reports` row. */
   reportNumber?: string | null;
   checksum?: string | null;
+  /**
+   * Set when the query hit its row cap and these are only the most recent rows.
+   *
+   * This renderer already refuses to drop columns silently — the ones that do
+   * not fit are named under the table, because "the reader has to be told the
+   * file has more in it than the paper does". Rows dropped before the payload
+   * was ever built are the same statement about the same reader, and were the
+   * one kind of omission that reached the page unannounced.
+   */
+  truncatedAt?: number | null;
 }
 
 const INK = '#12211a';
@@ -610,6 +620,23 @@ export function renderReportPdf(report: PdfReport): Promise<Buffer> {
       .filter(Boolean)
       .join('  -  ');
     document.text(stamp, left);
+    /*
+     * Before the covering line and before the checksum, because it qualifies
+     * both: the period below is not what this file contains, and the checksum
+     * below verifies only what it does contain.
+     */
+    if (report.truncatedAt) {
+      document.fillColor(INK).text(
+        `PARTIAL REPORT - more than ${report.truncatedAt.toLocaleString()} rows matched. ` +
+          'This file carries only the most recent ' +
+          `${report.truncatedAt.toLocaleString()}, so the earliest part of the period below ` +
+          'is not in it. Narrow the period and generate again for a complete record.',
+        left,
+        undefined,
+        { width },
+      );
+      document.fillColor(MUTED);
+    }
     const parameters = Object.entries(report.parameters)
       .filter(([, value]) => value !== null && value !== undefined && value !== '')
       .map(([key, value]) => `${key}: ${text(value)}`)

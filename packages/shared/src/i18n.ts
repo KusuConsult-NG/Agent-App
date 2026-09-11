@@ -2157,6 +2157,9 @@ export interface TranslationDictionary {
   ofcWbGenerate: string;
   ofcWbGenerateHint: string;
   ofcWbGenerated: string;
+  ofcWbGeneratedPartial: string;
+  ofcWbPartialBadge: string;
+  ofcWbPartialReport: string;
   ofcWbSign: string;
   ofcWbWithdraw: string;
   ofcWbActions: string;
@@ -5784,6 +5787,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGenerate: "Generate a report",
     ofcWbGenerateHint: "Generating freezes the figures. Signing is a separate step, and often a different officer.",
     ofcWbGenerated: "{{number}} generated, {{n}} rows.",
+    ofcWbGeneratedPartial: "{{number}} generated with {{n}} rows — but more than {{n}} matched, so this report holds only the most recent of them and the earliest part of the period is missing. Narrow the period and generate again before signing it.",
+    ofcWbPartialBadge: "Partial",
+    ofcWbPartialReport: "This report stopped at {{n}} rows. More matched than that, so it carries only the most recent {{n}} and the earliest part of its period is not in it — including in the file exported from here. Narrow the period and generate a new report rather than signing this one as a record of the whole period.",
     ofcWbSign: "Sign",
     ofcWbWithdraw: "Withdraw",
     ofcWbActions: "Actions",
@@ -9247,6 +9253,9 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcWbGenerate: "Samar da rahoto",
     ofcWbGenerateHint: "Samar da rahoto yana daskarar da lambobin. Sa hannu mataki ne daban, kuma sau da yawa jami’i ne daban.",
     ofcWbGenerated: "An samar da {{number}}, layuka {{n}}.",
+    ofcWbGeneratedPartial: "An samar da {{number}} da layuka {{n}} — amma fiye da {{n}} suka dace, don haka wannan rahoto ya kunshi na baya-bayan nan kadai kuma farkon lokacin ba ya ciki. Ka rage lokacin ka sake samarwa kafin ka sa hannu.",
+    ofcWbPartialBadge: "Bai cika ba",
+    ofcWbPartialReport: "Wannan rahoto ya tsaya a layuka {{n}}. Fiye da haka suka dace, don haka ya kunshi na baya-bayan nan {{n}} kadai kuma farkon lokacinsa ba ya ciki — har da a cikin fayil din da aka fitar daga nan. Ka rage lokacin ka samar da sabon rahoto maimakon sa hannu a kan wannan a matsayin tarihin dukan lokacin.",
     ofcWbSign: "Sa hannu",
     ofcWbWithdraw: "Janye",
     ofcWbActions: "Ayyuka",

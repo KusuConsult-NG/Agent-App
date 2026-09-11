@@ -519,11 +519,22 @@ export function reportChecksum(parameters: unknown, payload: unknown): string {
 export async function generateReport(
   viewer: Viewer,
   input: { reportType: ReportType; title: string; parameters: ReportParameters },
-): Promise<{ id: string; reportNumber: string; rowCount: number; checksum: string }> {
+): Promise<{
+  id: string;
+  reportNumber: string;
+  rowCount: number;
+  checksum: string;
+  complete: boolean;
+}> {
   const scope = await resolveReportScope(pool, viewer);
 
   return withTransaction(async (client) => {
-    const rows = await runReportQuery(client, input.reportType, input.parameters, scope);
+    const { rows, complete } = await runReportQuery(
+      client,
+      input.reportType,
+      input.parameters,
+      scope,
+    );
     /*
      * Hashed after the round trip that JSONB will do anyway.
      *
@@ -535,7 +546,28 @@ export async function generateReport(
      * reported itself as altered the first time anybody checked one. Doing the
      * serialisation once, here, is what makes the two ends comparable.
      */
-    const payload = JSON.parse(JSON.stringify({ rows, generatedFor: scope.kind })) as unknown;
+    /*
+     * Coverage goes INSIDE the payload, and therefore inside the checksum.
+     *
+     * Not beside it. The payload is the artefact: it is what the PDF is drawn
+     * from months later, what a verifier re-hashes, and the only part of a
+     * report that a reader holding the file can check. A completeness flag
+     * kept in a column next to it would be absent from the PDF, absent from
+     * anything exported, and strippable without breaking the checksum — which
+     * is the same as not recording it.
+     *
+     * Reports generated before this existed carry no `coverage` key, and that
+     * is the honest record for them: not complete, not partial, not known.
+     * Their stored payloads and checksums are untouched, so they verify
+     * exactly as before.
+     */
+    const payload = JSON.parse(
+      JSON.stringify({
+        rows,
+        generatedFor: scope.kind,
+        coverage: { complete, rowCap: ROW_CAP },
+      }),
+    ) as unknown;
     const checksum = reportChecksum(input.parameters, payload);
     const reportNumber = await nextNumber(client, 'audit_report_number_seq', 'PSIRS-AR');
 
@@ -543,8 +575,8 @@ export async function generateReport(
       client,
       `INSERT INTO audit_reports (
          report_number, report_type, title, parameters, period_start, period_end,
-         payload, row_count, checksum, generated_by
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+         payload, row_count, checksum, generated_by, coverage_complete
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        RETURNING id`,
       [
         reportNumber,
@@ -557,6 +589,7 @@ export async function generateReport(
         rows.length,
         checksum,
         viewer.userId,
+        complete,
       ],
     );
 
@@ -570,13 +603,17 @@ export async function generateReport(
         reportNumber,
         reportType: input.reportType,
         rowCount: rows.length,
+        // In the audit entry too: "who generated a partial report of Q3" is a
+        // question somebody may need to ask later, and the entry is where it
+        // is answered.
+        complete,
         checksum,
         parameters: input.parameters,
       },
       reason: input.title.trim(),
     });
 
-    return { id: report!.id, reportNumber, rowCount: rows.length, checksum };
+    return { id: report!.id, reportNumber, rowCount: rows.length, checksum, complete };
   });
 }
 
@@ -692,7 +729,8 @@ export async function listReports(db: Db, filters: { reportType?: string | null;
   const rows = await query<StoredReport>(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
-            r.period_start, r.period_end, r.row_count, r.checksum, r.status,
+            r.period_start, r.period_end, r.row_count, r.checksum, r.coverage_complete,
+            r.status,
             r.generated_at, r.signed_at, r.signature_note, r.withdrawn_reason,
             r.payload,
             g.full_name AS generated_by_name,
@@ -731,6 +769,16 @@ export interface StoredReport {
   payload: unknown;
   row_count: number;
   checksum: string;
+  /*
+   * Whether the query returned every matching row.
+   *
+   * NULL for reports generated before coverage was recorded — which is the
+   * honest answer for them, and deliberately not `true`. The binding copy of
+   * this lives in `payload.coverage` where the checksum covers it; this column
+   * exists so the workbench can list partial reports without opening every
+   * payload.
+   */
+  coverage_complete: boolean | null;
   status: string;
   generated_at: string;
   signed_at: string | null;
@@ -748,6 +796,7 @@ export async function getReport(
     db,
     `SELECT r.id, r.report_number, r.report_type, r.title, r.parameters,
             r.period_start, r.period_end, r.payload, r.row_count, r.checksum,
+            r.coverage_complete,
             r.status, r.generated_at, r.signed_at, r.signature_note, r.withdrawn_reason,
             g.full_name AS generated_by_name,
             s.full_name AS signed_by_name
@@ -779,7 +828,76 @@ async function nextNumber(client: PoolClient, sequence: string, prefix: string):
  * rather than computed verdicts -- see the note at the top of the file about
  * not producing an opinion.
  */
+/**
+ * The most rows a row-level report will carry.
+ *
+ * Not a preference. The payload is stored as a single JSONB value, hashed
+ * whole, and rendered to a PDF a page at a time, so a report of a quarter of a
+ * million transactions is not an artefact this platform can produce. The cap
+ * is what keeps the object buildable.
+ *
+ * What it must never do is make the report LIE about the period it covers, and
+ * for a long time it did: the query took the most recent 5,000 rows, stored
+ * `row_count = 5000`, hashed those rows, and carried `period_start` saying the
+ * report covered the whole quarter. An auditor signed that, and the PDF's
+ * checksum line invited a reader to verify it — which it does, faithfully,
+ * for the tail end of a period whose beginning was never in the file.
+ *
+ * `ORDER BY created_at DESC` is what makes the omission worst: the rows
+ * dropped are the OLDEST in the window, which is where anything long-running
+ * sits.
+ */
+export const ROW_CAP = 5000;
+
+/**
+ * The report types whose queries carry that cap.
+ *
+ * The rest are aggregates — one row per agent, LGA, period or target — and are
+ * bounded by what they group by rather than by a LIMIT. Truncating those to
+ * 5,000 would be a defect this file introduced rather than fixed, so the
+ * completeness check is applied only to the types listed here.
+ *
+ * A set beside the SQL is exactly the thing that rots, so
+ * `a-report-that-did-not-say-it-stopped.test.ts` reads this source and fails
+ * if a `LIMIT` appears in a branch that is not named here, or a name here has
+ * no LIMIT.
+ */
+export const CAPPED_REPORTS = new Set<ReportType>([
+  'TRANSACTION_AUDIT',
+  'PAYMENT_RECONCILIATION',
+  'USER_ACTIVITY',
+  'ANOMALY',
+  'FRAUD_FLAG',
+  'DATA_CHANGE',
+]);
+
+/**
+ * Run a report, and say whether what came back is all of it.
+ *
+ * One row beyond the cap is requested and thrown away. That extra row is the
+ * whole mechanism: it is the difference between "5,000 rows matched" and
+ * "more than 5,000 matched", which is the difference between a report an
+ * auditor can sign and one they must narrow first.
+ *
+ * The exact total was considered and not taken. It costs a second count query
+ * over the same predicate on every generation, and the decision it informs —
+ * sign this, or narrow the period and generate again — is already settled by
+ * knowing the report is partial and which end of it is missing.
+ */
 async function runReportQuery(
+  client: PoolClient,
+  reportType: ReportType,
+  parameters: ReportParameters,
+  scope: ReportScope,
+): Promise<{ rows: Record<string, unknown>[]; complete: boolean }> {
+  const fetched = await runReportRows(client, reportType, parameters, scope);
+  if (!CAPPED_REPORTS.has(reportType) || fetched.length <= ROW_CAP) {
+    return { rows: fetched, complete: true };
+  }
+  return { rows: fetched.slice(0, ROW_CAP), complete: false };
+}
+
+async function runReportRows(
   client: PoolClient,
   reportType: ReportType,
   parameters: ReportParameters,
@@ -824,7 +942,7 @@ async function runReportQuery(
            LEFT JOIN agents a ON a.id = t.agent_id
           WHERE ${transactionScopeSql('t', 1, 2)} AND ${window('t', 3)}
           ORDER BY t.created_at DESC
-          LIMIT 5000`,
+          LIMIT ${ROW_CAP + 1}`,
         scoped,
       );
 
@@ -892,7 +1010,7 @@ async function runReportQuery(
            LEFT JOIN settlements st ON st.id = p.settlement_id
           WHERE ${transactionScopeSql('t', 1, 2)} AND ${window('p', 3)}
           ORDER BY p.created_at DESC
-          LIMIT 5000`,
+          LIMIT ${ROW_CAP + 1}`,
         scoped,
       );
 
@@ -924,7 +1042,7 @@ async function runReportQuery(
             AND ($3::uuid IS NULL OR al.actor_id = $3)
           GROUP BY u.full_name, u.role, al.action
           ORDER BY times DESC
-          LIMIT 5000`,
+          LIMIT ${ROW_CAP + 1}`,
         [...dates, parameters.userId ?? null],
       );
 
@@ -939,7 +1057,7 @@ async function runReportQuery(
            LEFT JOIN agents a ON a.id = f.agent_id
           WHERE ${window('f', 1)}
           ORDER BY f.created_at DESC
-          LIMIT 5000`,
+          LIMIT ${ROW_CAP + 1}`,
         dates,
       );
 
@@ -1000,7 +1118,7 @@ async function runReportQuery(
           WHERE al.old_value IS NOT NULL
             AND ${window('al', 1)}
           ORDER BY al.created_at DESC
-          LIMIT 5000`,
+          LIMIT ${ROW_CAP + 1}`,
         dates,
       );
   }

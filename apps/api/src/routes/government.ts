@@ -3942,6 +3942,20 @@ governmentRouter.get(
       const report = await workbench.getReport(pool, req.params.id!);
       const rows = ((report.payload as { rows?: Record<string, unknown>[] })?.rows ??
         []) as Record<string, unknown>[];
+      /*
+       * Whether this report is all of its period, taken from the payload
+       * rather than the column beside it.
+       *
+       * The payload is what the checksum covers, so it is the copy that
+       * travels with an exported file and the copy a reader can verify.
+       * Reports generated before coverage was recorded carry no key here, and
+       * are left unmarked: unknown is not the same as partial, and stamping
+       * PARTIAL on a report that may well be complete would be its own false
+       * claim.
+       */
+      const coverage = (report.payload as { coverage?: { complete?: boolean; rowCap?: number } })
+        ?.coverage;
+      const truncatedAt = coverage?.complete === false ? (coverage.rowCap ?? rows.length) : null;
 
       if (data.format === 'pdf') {
         if (!req.auth!.permissions.includes('data:export')) {
@@ -3970,6 +3984,7 @@ governmentRouter.get(
           generatedBy: String(report.generated_by_name ?? 'PSIRS'),
           reportNumber: String(report.report_number),
           checksum: String(report.checksum),
+          truncatedAt,
         });
         res.setHeader('content-type', 'application/pdf');
         res.setHeader(
@@ -3984,7 +3999,14 @@ governmentRouter.get(
         rows,
         format: data.format,
         subject: String(report.title),
-        filename: String(report.report_number).replace(/\//g, '-'),
+        /*
+         * A spreadsheet has nowhere to put a banner — a note row would shift
+         * every column under it and break the thing somebody opens this format
+         * to do. The filename carries it instead, which survives being saved,
+         * emailed and filed in a way a cell would not.
+         */
+        filename:
+          String(report.report_number).replace(/\//g, '-') + (truncatedAt ? '-PARTIAL' : ''),
         parameters: (report.parameters ?? {}) as Record<string, unknown>,
       });
     },
