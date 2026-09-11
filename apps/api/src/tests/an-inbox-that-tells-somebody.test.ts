@@ -38,6 +38,7 @@ import { query, queryOne, withTransaction } from '../db/pool';
 import { forget } from '../services/rbac-store';
 import { seedReferenceData } from '../db/seed';
 import { raiseSystemAlerts } from '../services/officer-inbox';
+import { jobHealth } from '../services/jobs';
 
 const PHONES = {
   admin: '+2348083000001',
@@ -70,22 +71,76 @@ beforeEach(async () => {
 const auth = (who: keyof typeof PHONES) => ({ token: tokens[who] });
 const sweep = () => withTransaction((client) => raiseSystemAlerts(client));
 
-/** Put a job into a state the alert sweep cares about. */
+/**
+ * Put a job into a state the alert sweep cares about.
+ *
+ * `last_failed_at` is set because `finishJob` always sets it on a FAILED run,
+ * and a fixture that omits it is not the row the platform writes. It was
+ * omitted, and that made the control asserting a FAILING job is not ALSO
+ * reported as flapping pass without exercising anything: the flapping rule
+ * begins `last_failed_at !== null`, so a null made it false for the wrong
+ * reason.
+ */
 async function jobIsFailing(name: string, failures = 3): Promise<void> {
   await query(
     pool,
     `INSERT INTO background_jobs
        (name, last_started_at, last_finished_at, last_outcome, last_error,
-        consecutive_failures, runs_total, failures_total)
+        last_failed_at, consecutive_failures, runs_total, failures_total)
      VALUES ($1, now() - interval '1 hour', now() - interval '1 hour', 'FAILED',
-             'the gateway refused the statement', $2::int, 10, $2::int)
+             'the gateway refused the statement', now() - interval '1 hour',
+             $2::int, 10, $2::int)
      ON CONFLICT (name) DO UPDATE
         SET consecutive_failures = EXCLUDED.consecutive_failures,
             last_outcome = 'FAILED',
             last_error = EXCLUDED.last_error,
+            last_failed_at = EXCLUDED.last_failed_at,
             last_started_at = EXCLUDED.last_started_at,
             last_finished_at = EXCLUDED.last_finished_at`,
     [name, failures],
+  );
+}
+
+/**
+ * Put a job into the state no other state can express: working some of the
+ * time.
+ *
+ * A recent success AND a recent failure, with `consecutive_failures` at zero
+ * because the most recent run happened to work. `jobHealth` reports this as
+ * HEALTHY, which is why nothing used to be raised for it.
+ */
+async function jobIsFlapping(name: string): Promise<void> {
+  await query(
+    pool,
+    `INSERT INTO background_jobs
+       (name, last_started_at, last_finished_at, last_outcome, last_error,
+        last_succeeded_at, last_failed_at,
+        consecutive_failures, runs_total, failures_total)
+     VALUES ($1, now() - interval '1 minute', now() - interval '1 minute', 'SUCCEEDED',
+             'Remita returned 503 for the statement.',
+             now() - interval '1 minute', now() - interval '10 minutes',
+             0, 900, 446)
+     ON CONFLICT (name) DO UPDATE
+        SET last_outcome = 'SUCCEEDED',
+            last_error = EXCLUDED.last_error,
+            last_started_at = EXCLUDED.last_started_at,
+            last_finished_at = EXCLUDED.last_finished_at,
+            last_succeeded_at = EXCLUDED.last_succeeded_at,
+            last_failed_at = EXCLUDED.last_failed_at,
+            consecutive_failures = 0,
+            runs_total = EXCLUDED.runs_total,
+            failures_total = EXCLUDED.failures_total`,
+    [name],
+  );
+}
+
+/** The same job, but the failure is long past and it has been fine since. */
+async function jobFailedLongAgo(name: string): Promise<void> {
+  await jobIsFlapping(name);
+  await query(
+    pool,
+    `UPDATE background_jobs SET last_failed_at = now() - interval '365 days' WHERE name = $1`,
+    [name],
   );
 }
 
@@ -430,5 +485,102 @@ describe('what one officer has been doing', () => {
       assert.ok(!(scoreish in body), `activity must not compute a ${scoreish}`);
     }
     assert.ok(Array.isArray(body.byDay));
+  });
+});
+
+/**
+ * A job that works some of the time, and the administrator nobody told.
+ *
+ * `jobHealth` sets FAILING only while `consecutive_failures > 0`, and the SQL
+ * behind that counter resets it to zero on any success. So a reconciliation
+ * sweep failing every other run reads HEALTHY, contributes nothing to
+ * `needingAttention`, and — because `raiseSystemAlerts` keys severity off the
+ * state — raised nothing at all. For reconciliation that is money not
+ * reconciled, and the only surfaces that could have said so were a board
+ * nobody had been sent to.
+ *
+ * The board now shows it. This is the other half: `officer-inbox.ts` argues in
+ * its own opening comment that the way anybody found out was that somebody
+ * went and looked, which is exactly the failure mode a board alone has.
+ */
+describe('a job that is working some of the time', () => {
+  it('is reported as flapping even though its state is healthy', async () => {
+    await jobIsFlapping('reconciliation-sweep');
+
+    const { jobs, needingAttention } = await jobHealth();
+    const sweepJob = jobs.find((job) => job.name === 'reconciliation-sweep')!;
+
+    assert.equal(sweepJob.state, 'HEALTHY', 'which is why nothing used to be raised');
+    assert.equal(sweepJob.flapping, true);
+    assert.equal(
+      jobs.filter((job) => job.name === 'reconciliation-sweep' && job.state !== 'HEALTHY').length,
+      0,
+      'and it still counts as nothing needing attention, which is the point',
+    );
+    assert.ok(needingAttention >= 0);
+  });
+
+  it('raises a warning an administrator will actually receive', async () => {
+    await jobIsFlapping('reconciliation-sweep');
+    await sweep();
+
+    const inbox = await get('/government/inbox', auth('admin'));
+    const body = inbox.body as {
+      notifications: { kind: string; severity: string; subject: string; body: string }[];
+    };
+    const alert = body.notifications.find((n) => n.subject.includes('working some of the time'));
+    assert.ok(alert, JSON.stringify(body.notifications.map((n) => n.subject)));
+    assert.equal(alert!.kind, 'SYSTEM_ALERT');
+    // WARNING, not CRITICAL: the job IS working, some of the time, and an
+    // administrator who cannot tell that from work not happening at all stops
+    // reading either.
+    assert.equal(alert!.severity, 'WARNING');
+    assert.match(alert!.body, /446 of 900/);
+    assert.match(alert!.body, /Remita returned 503/, 'the error survived the success after it');
+  });
+
+  it('raises it once, not once per sweep', async () => {
+    await jobIsFlapping('reconciliation-sweep');
+    await sweep();
+    await sweep();
+    await sweep();
+
+    const inbox = await get('/government/inbox', auth('admin'));
+    const body = inbox.body as { notifications: { subject: string }[] };
+    assert.equal(
+      body.notifications.filter((n) => n.subject.includes('working some of the time')).length,
+      1,
+    );
+  });
+
+  it('says nothing about a failure that is long past', async () => {
+    /*
+     * The control that stops this becoming noise, and the reason the window is
+     * measured against the job's own interval rather than being a fixed
+     * number: every-30-seconds and every-6-hours mean different things by
+     * "recently".
+     */
+    await jobFailedLongAgo('reconciliation-sweep');
+
+    const { jobs } = await jobHealth();
+    assert.equal(jobs.find((job) => job.name === 'reconciliation-sweep')!.flapping, false);
+
+    await sweep();
+    const inbox = await get('/government/inbox', auth('admin'));
+    const body = inbox.body as { notifications: { subject: string }[] };
+    assert.equal(
+      body.notifications.filter((n) => n.subject.includes('working some of the time')).length,
+      0,
+    );
+  });
+
+  it('says nothing about a job that is simply failing, which has its own alert', async () => {
+    // Two alerts on one problem is how an administrator learns to skim.
+    await jobIsFailing('reconciliation-sweep');
+
+    const { jobs } = await jobHealth();
+    const sweepJob = jobs.find((job) => job.name === 'reconciliation-sweep')!;
+    assert.equal(sweepJob.state, 'FAILING');
+    assert.equal(sweepJob.flapping, false);
   });
 });

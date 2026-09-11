@@ -320,8 +320,33 @@ export interface JobReport {
   consecutiveFailures: number;
   runsTotal: number;
   failuresTotal: number;
+  /*
+   * Failing on and off right now, whatever `state` says.
+   *
+   * A job with a recent success AND a recent failure is working some of the
+   * time, which `state` cannot express: FAILING needs
+   * `consecutive_failures > 0`, and one success resets that to zero.
+   *
+   * Computed here rather than on the screen that shows it, because the alert
+   * and the board must not be able to disagree about which jobs are flapping.
+   * A board saying one thing and an inbox saying another is worse than either
+   * alone, since the reader has no way to tell which is stale.
+   */
+  flapping: boolean;
   overdueBy: number | null;
   message: string;
+}
+
+/**
+ * How far back "recently" reaches for a given job.
+ *
+ * Ten of its own intervals, floored at an hour and capped at a week. A job
+ * that runs every thirty seconds needs a window wider than five minutes
+ * before "it failed recently" means anything; one that runs twice a day
+ * should not still be called flappy a month later.
+ */
+export function flappingWindowMs(intervalMs: number): number {
+  return Math.min(Math.max(intervalMs * 10, 60 * 60_000), 7 * 24 * 60 * 60_000);
 }
 
 /**
@@ -385,6 +410,7 @@ export async function jobHealth(now = new Date()): Promise<{
         consecutiveFailures: 0,
         runsTotal: 0,
         failuresTotal: 0,
+        flapping: false,
         overdueBy: null,
         message: 'Has not run once since this database was created.',
       };
@@ -424,6 +450,15 @@ export async function jobHealth(now = new Date()): Promise<{
       consecutiveFailures: row.consecutive_failures,
       runsTotal: Number(row.runs_total),
       failuresTotal: Number(row.failures_total),
+      /*
+       * Only while the state says it is fine. A job already reported as
+       * FAILING, OVERDUE or STALLED has a louder thing wrong with it, and
+       * saying it also flaps would put two alerts on one problem.
+       */
+      flapping:
+        state === 'HEALTHY' &&
+        row.last_failed_at !== null &&
+        now.getTime() - row.last_failed_at.getTime() < flappingWindowMs(declared.intervalMs),
       overdueBy: late > 0 ? late : null,
       message: describeState(state, row.last_error, row.consecutive_failures),
     };

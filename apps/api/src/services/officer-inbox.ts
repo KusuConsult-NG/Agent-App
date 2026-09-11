@@ -232,6 +232,42 @@ export async function raiseSystemAlerts(client: PoolClient): Promise<{ raised: n
   let raised = 0;
 
   for (const job of health.jobs) {
+    /*
+     * A job that works some of the time, which no state can say.
+     *
+     * `state` is FAILING only while `consecutive_failures > 0`, and one
+     * success resets that to zero — so a reconciliation sweep failing every
+     * other run is HEALTHY, raises nothing, and the unattended-work board
+     * counts it as nothing needing attention. For reconciliation that is
+     * money not reconciled.
+     *
+     * WARNING rather than CRITICAL, deliberately. The job IS working, some of
+     * the time; CRITICAL is reserved for work that is not happening at all,
+     * and an administrator who cannot tell those apart at a glance stops
+     * reading either.
+     *
+     * Its own dedupe key, so a job that flaps and then fails outright still
+     * raises the louder alert rather than being silenced by this one.
+     */
+    if (job.flapping) {
+      const created = await raise(client, {
+        role: 'admin',
+        kind: 'SYSTEM_ALERT',
+        severity: 'WARNING',
+        subject: `${job.name}: working some of the time`,
+        body:
+          `${job.purpose}\n` +
+          `${job.failuresTotal} of ${job.runsTotal} run(s) have failed. ` +
+          `Last threw ${job.lastFailedAt?.toISOString() ?? 'unknown'}, ` +
+          `last succeeded ${job.lastSucceededAt?.toISOString() ?? 'never'}.` +
+          (job.lastError ? `\nLast error: ${job.lastError}` : ''),
+        entityType: 'background_job',
+        entityId: job.name,
+        dedupeKey: `job:${job.name}:flapping`,
+      });
+      if (created) raised += 1;
+    }
+
     const severity = JOB_ALERT_SEVERITY[job.state];
     if (!severity) continue;
 

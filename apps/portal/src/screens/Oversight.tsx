@@ -451,6 +451,16 @@ interface JobReport {
   lastStartedAt: string | null;
   lastSucceededAt: string | null;
   lastFailedAt: string | null;
+  /*
+   * Failing on and off right now, computed by the API.
+   *
+   * This screen worked it out for itself to begin with, from `lastFailedAt`
+   * and the interval. That put the same rule in two places, and the other
+   * place is the one that decides whether an administrator is told — a board
+   * and an inbox that disagree about which jobs are flapping are worse than
+   * either alone, because the reader cannot tell which is stale.
+   */
+  flapping: boolean;
   lastDetail: string | null;
   /**
    * Why the last run failed.
@@ -498,18 +508,6 @@ function jobState(row: JobReport, t: TranslationDictionary): string {
     default:
       return row.message;
   }
-}
-
-/**
- * How far back "recently" reaches for a given job.
- *
- * Ten of its own intervals, floored at an hour and capped at a week. A job
- * that runs every thirty seconds needs a window wider than five minutes before
- * "it failed recently" means anything; one that runs twice a day should not
- * still be called flappy a month later.
- */
-function recentlyMeans(intervalMs: number): number {
-  return Math.min(Math.max(intervalMs * 10, 60 * 60_000), 7 * 24 * 60 * 60_000);
 }
 
 /** Every-30-seconds and every-6-hours both have to read at a glance. */
@@ -640,10 +638,6 @@ export function BackgroundWorkPanel() {
             render: (row: JobReport) => {
               if (row.runsTotal === 0) return '\u2014';
               const clean = row.failuresTotal === 0;
-              const flapping =
-                row.state === 'HEALTHY' &&
-                row.lastFailedAt !== null &&
-                Date.now() - new Date(row.lastFailedAt).getTime() < recentlyMeans(row.intervalMs);
               return (
                 <>
                   <span>
@@ -653,7 +647,7 @@ export function BackgroundWorkPanel() {
                           .replace('{{failures}}', String(row.failuresTotal))
                           .replace('{{runs}}', String(row.runsTotal))}
                   </span>
-                  {flapping && (
+                  {row.flapping && (
                     <>
                       <br />
                       <span className="table__sub" role="status">

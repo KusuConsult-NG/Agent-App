@@ -22,6 +22,7 @@ const job = (over: Partial<Record<string, unknown>> = {}) => ({
   lastStartedAt: '2026-08-26T06:00:00.000Z',
   lastSucceededAt: '2026-08-26T06:00:00.000Z',
   lastFailedAt: null,
+  flapping: false,
   lastDetail: '4 reminder(s) sent',
   lastError: null,
   consecutiveFailures: 0,
@@ -196,6 +197,7 @@ describe('a job that fails and recovers and fails again', () => {
     lastSucceededAt: '2026-08-26T06:00:00.000Z',
     lastFailedAt: '2026-08-26T00:00:00.000Z',
     lastError: 'Remita returned 503 for the statement.',
+    flapping: true,
   });
 
   it('shows the lifetime record rather than only the last run', async () => {
@@ -207,13 +209,11 @@ describe('a job that fails and recovers and fails again', () => {
   });
 
   it('says it is failing on and off, even though its state is healthy', async () => {
-    vi.setSystemTime(new Date('2026-08-26T07:00:00.000Z'));
     serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
 
     render(<BackgroundWorkPanel />);
 
     expect(await screen.findByText(/Failing on and off/i)).toBeTruthy();
-    vi.useRealTimers();
   });
 
   it('says what the intermittent failure was', async () => {
@@ -221,13 +221,11 @@ describe('a job that fails and recovers and fails again', () => {
      * The other half, and the reason `last_error` no longer clears on success.
      * "Something went wrong at 00:00" is not something anybody can act on.
      */
-    vi.setSystemTime(new Date('2026-08-26T07:00:00.000Z'));
     serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
 
     render(<BackgroundWorkPanel />);
 
     expect(await screen.findByText(/Remita returned 503 for the statement/)).toBeTruthy();
-    vi.useRealTimers();
   });
 
   it('says nothing of the sort about a job that has never failed', async () => {
@@ -243,18 +241,30 @@ describe('a job that fails and recovers and fails again', () => {
   it('says nothing of the sort about a failure that is long past', async () => {
     /*
      * The second control, and the one that stops this becoming noise. A job
-     * that failed a year ago and has been perfect since has a permanent mark
-     * on its lifetime record and is not flapping — the window is measured
-     * against the job's own interval, because every-30-seconds and
-     * every-6-hours mean different things by "recently".
+     * that failed a year ago and has been perfect since carries a permanent
+     * mark on its lifetime record and is not flapping.
+     *
+     * WHERE THAT IS DECIDED. This screen used to work the window out for
+     * itself, from `lastFailedAt` and the interval, with the clock moved
+     * forward to test it. It does not any more: the API sends `flapping`,
+     * because the same rule also decides whether an administrator is woken,
+     * and a board that disagrees with the inbox is worse than either alone.
+     * The window itself is asserted in `a-job-that-did-not-run.test.ts`,
+     * against real rows rather than a moved clock.
+     *
+     * What is held here is that the screen believes the flag rather than
+     * inferring from the lifetime record — 446 failures and no current
+     * problem must read as a history, not an alarm.
      */
-    vi.setSystemTime(new Date('2027-08-26T07:00:00.000Z'));
-    serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
+    serve({
+      jobs: [job({ runsTotal: 900, failuresTotal: 446, lastFailedAt: '2025-08-26T00:00:00.000Z', flapping: false })],
+      healthy: true,
+      needingAttention: 0,
+    });
 
     render(<BackgroundWorkPanel />);
 
     expect(await screen.findByText(/446 of 900 run\(s\) failed/)).toBeTruthy();
     expect(screen.queryByText(/Failing on and off/i)).toBeNull();
-    vi.useRealTimers();
   });
 });
