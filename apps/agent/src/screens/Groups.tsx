@@ -31,6 +31,7 @@ import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/a
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { Alert, Badge, Empty, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import type { TranslationDictionary } from '@psirs/shared';
 import { enumLabel } from '@psirs/shared';
 
@@ -181,7 +182,6 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
 export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = useI18n();
-  const [lgas, setLgas] = useState<Lga[]>([]);
   const [form, setForm] = useState({
     name: '',
     groupType: '',
@@ -194,12 +194,8 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then((rows: Lga[]) => setLgas(rows))
-      .catch(() => setLgas([]));
-  }, []);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
 
   const set = (key: keyof typeof form) => (value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -285,13 +281,20 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
             onChange={(event) => set('lgaId')(event.target.value)}
             required
           >
-            <option value="">{t.grpChooseOne}</option>
+            <option value="">
+              {lgaList.failed ? t.tpListCouldNotLoad : t.grpChooseOne}
+            </option>
             {lgas.map((lga) => (
               <option key={lga.id} value={lga.id}>
                 {lga.name}
               </option>
             ))}
           </select>
+          {lgaList.failed && (
+            <button type="button" className="secondary" onClick={lgaList.reload}>
+              {t.actionTryAgain}
+            </button>
+          )}
         </div>
 
         <Field label={t.grpCommunity} hint={t.grpCommunityHint}>

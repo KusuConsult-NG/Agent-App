@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { ApiRequestError, api, login, type ApiError, type Session } from '../lib/api';
 import { Alert, ErrorAlert, Field, PasswordField, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 
 export function LoginScreen({
   onSignedIn,
@@ -107,7 +108,6 @@ export function ApplyScreen({
   languageSwitch?: React.ReactNode;
 }) {
   const { t } = useI18n();
-  const [lgas, setLgas] = useState<Lga[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [result, setResult] = useState<{ applicationNumber: string } | null>(null);
@@ -126,14 +126,13 @@ export function ApplyScreen({
     accountNumber: '',
   });
 
-  useEffect(() => {
-    // Reference geography is public and cached by the service worker, so this
-    // works on a weak connection.
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
+  /*
+   * Reference geography is public and cached by the service worker, so this
+   * usually works on a weak connection. When it does not, `failed` says so
+   * rather than the form quietly offering no LGA to apply from.
+   */
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
 
   const update = (key: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((previous) => ({ ...previous, [key]: event.target.value }));
@@ -242,7 +241,9 @@ export function ApplyScreen({
         </Field>
         <Field label={t.grpLga} required>
           <select value={form.lgaId} onChange={update('lgaId')} required>
-            <option value="">{t.authSelectLga}</option>
+            <option value="">
+              {lgaList.failed ? t.tpListCouldNotLoad : t.authSelectLga}
+            </option>
             {lgas.map((lga) => (
               <option key={lga.id} value={lga.id}>
                 {lga.name} ({lga.zone})
@@ -250,6 +251,16 @@ export function ApplyScreen({
             ))}
           </select>
         </Field>
+        {/*
+          * An applicant cannot submit without an LGA, so an empty list ends
+          * the application. Saying which of the two it is, and offering the
+          * read again, is the least this can do.
+          */}
+        {lgaList.failed && (
+          <button type="button" className="secondary" onClick={lgaList.reload}>
+            {t.actionTryAgain}
+          </button>
+        )}
         <Field label={t.grpCommunity}>
           <input value={form.community} onChange={update('community')} />
         </Field>

@@ -37,6 +37,7 @@ import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../l
 import { requestBackgroundSync, submitOrQueue } from '../lib/drafts';
 import { Alert, ErrorAlert, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import { bandFor, enumLabel, type Premises, type SizeBand } from '@psirs/shared';
 
 interface Profile {
@@ -78,7 +79,8 @@ export function EnumerateScreen({
   const { t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [groups, setGroups] = useState<Group[] | null>(null);
-  const [sectors, setSectors] = useState<{ code: string; label: string }[]>([]);
+  const sectorList = useReferenceList<{ code: string; label: string }>('/taxpayers/sectors');
+  const sectors = sectorList.items;
   const [form, setForm] = useState({
     premises: '',
     equipmentCount: '',
@@ -124,10 +126,6 @@ export function EnumerateScreen({
       .then((result) => setGroups(result.groups.filter((group) => group.tax_role !== 'NONE')))
       .catch(() => setGroups([]));
 
-    fetch('/api/v1/taxpayers/sectors')
-      .then((response) => (response.ok ? response.json() : []))
-      .then((rows: { code: string; label: string }[]) => setSectors(rows))
-      .catch(() => setSectors([]));
   }, [taxpayerId]);
 
   const set = (key: keyof typeof form) => (value: string) =>
@@ -336,7 +334,9 @@ export function EnumerateScreen({
           value={form.economicSector}
           onChange={(event) => set('economicSector')(event.target.value)}
         >
-          <option value="">{t.tpSelectSector}</option>
+          <option value="">
+            {sectorList.failed ? t.tpListCouldNotLoad : t.tpSelectSector}
+          </option>
           {sectors.map((sector) => (
             <option key={sector.code} value={sector.code}>
               {sector.label}
@@ -344,6 +344,11 @@ export function EnumerateScreen({
           ))}
         </select>
       </Field>
+      {sectorList.failed && (
+        <button type="button" className="secondary" onClick={sectorList.reload}>
+          {t.actionTryAgain}
+        </button>
+      )}
 
       {groups === null ? null : groups.length === 0 ? (
         <Alert kind="info" title={t.agEnNoGroupsTitle}>

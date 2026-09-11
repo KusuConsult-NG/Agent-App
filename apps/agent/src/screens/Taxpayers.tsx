@@ -30,6 +30,7 @@ import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
 import { startFlow, track } from '../lib/usage';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface TaxpayerSummary {
@@ -156,6 +157,19 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
 // Registration wizard
 // ---------------------------------------------------------------------------
 
+interface Ward {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface Sector {
+  code: string;
+  label: string;
+  hausa: string;
+  suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
+}
+
 interface Lga {
   id: string;
   name: string;
@@ -194,8 +208,6 @@ export function RegisterTaxpayerScreen({
 }) {
   const { lang, t } = useI18n();
   const [step, setStep] = useState(0);
-  const [lgas, setLgas] = useState<Lga[]>([]);
-  const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   /*
@@ -244,13 +256,6 @@ export function RegisterTaxpayerScreen({
     [],
   );
 
-  // Sector taxonomy fetched once on mount.
-  const [sectors, setSectors] = useState<{
-    code: string;
-    label: string;
-    hausa: string;
-    suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
-  }[]>([]);
   // Obligation IDs the agent has confirmed for this registration.
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
 
@@ -289,17 +294,17 @@ export function RegisterTaxpayerScreen({
     preferredLanguage: 'en' as 'en' | 'ha',
   });
 
-  useEffect(() => {
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setLgas)
-      .catch(() => setLgas([]));
-
-    fetch('/api/v1/taxpayers/sectors')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setSectors)
-      .catch(() => setSectors([]));
-  }, []);
+  /*
+   * Both of these used to be bare `fetch` calls whose failure branch and whose
+   * empty-answer branch ended in the same place: an empty array. See
+   * `lib/reference.ts` — the LGA is a REQUIRED field on step three, so an
+   * empty list stopped the registration dead while the sentence under the
+   * button said "Choose the Local Government Area."
+   */
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const sectorList = useReferenceList<Sector>('/taxpayers/sectors');
+  const lgas = lgaList.items;
+  const sectors = sectorList.items;
 
   /*
    * Wards for the chosen LGA.
@@ -312,24 +317,10 @@ export function RegisterTaxpayerScreen({
    * purpose is finding where revenue is and is not being collected, that is a
    * false answer rather than a missing one.
    */
-  useEffect(() => {
-    if (!form.lgaId) {
-      setWards([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/v1/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((list) => {
-        if (!cancelled) setWards(list);
-      })
-      .catch(() => {
-        if (!cancelled) setWards([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.lgaId]);
+  const wardList = useReferenceList<Ward>(
+    form.lgaId ? `/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}` : null,
+  );
+  const wards = wardList.items;
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -526,7 +517,13 @@ export function RegisterTaxpayerScreen({
     }
     if (step === 3) {
       if (form.address.trim().length < 5) return t.needAddress;
-      if (form.lgaId === '') return t.needLga;
+      /*
+       * Naming the real obstacle. "Choose the Local Government Area" is the
+       * right sentence when there is a list and the agent has not picked from
+       * it, and exactly the wrong one when the list could not be read: it
+       * blames the agent for the one thing they cannot do.
+       */
+      if (form.lgaId === '') return lgaList.failed ? t.tpListCouldNotLoad : t.needLga;
       return null;
     }
     if (step === 5) {
@@ -760,7 +757,9 @@ export function RegisterTaxpayerScreen({
                   setForm((previous) => ({ ...previous, lgaId: event.target.value, wardId: '' }));
                 }}
               >
-                <option value="">{t.tpSelectLga}</option>
+                <option value="">
+                  {lgaList.failed ? t.tpListCouldNotLoad : t.tpSelectLga}
+                </option>
                 {lgas.map((lga) => (
                   <option key={lga.id} value={lga.id}>
                     {lga.name}
@@ -768,6 +767,11 @@ export function RegisterTaxpayerScreen({
                 ))}
               </select>
             </Field>
+            {lgaList.failed && (
+              <button type="button" className="secondary" onClick={lgaList.reload}>
+                {t.actionTryAgain}
+              </button>
+            )}
             <Field label={t.tpWard} hint={t.tpWardHint}>
               <select
                 value={form.wardId}
@@ -777,9 +781,11 @@ export function RegisterTaxpayerScreen({
                 <option value="">
                   {!form.lgaId
                     ? t.tpChooseLgaFirst
-                    : wards.length === 0
-                      ? t.tpNoWardsListed
-                      : t.tpSelectWard}
+                    : wardList.failed
+                      ? t.tpListCouldNotLoad
+                      : wards.length === 0
+                        ? t.tpNoWardsListed
+                        : t.tpSelectWard}
                 </option>
                 {wards.map((ward) => (
                   <option key={ward.id} value={ward.id}>

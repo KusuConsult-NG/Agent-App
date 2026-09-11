@@ -102,14 +102,22 @@ beforeEach(() => {
   cleanup();
   setAppLanguage('ha');
   /*
-   * The reference lists come through a bare `fetch`, not the api client — see
-   * the effect in `RegisterTaxpayerScreen`. Mocking `api.get` alone leaves the
-   * LGA picker empty and the wizard cannot get past step three.
+   * The reference lists go through `useReferenceList`, which reads them with
+   * the api client rather than a bare `fetch` — so this answers with a real
+   * `Response` that `rawRequest` can read, not a `json()` stub.
+   *
+   * They are still mocked at the transport rather than through `api.get`,
+   * which is the point of the hook: the LGA list is a required field on step
+   * three, and a list that does not arrive stops the wizard there. Nothing
+   * below gets past that step without this.
    */
   vi.spyOn(globalThis, 'fetch').mockImplementation((async (input: RequestInfo | URL) => {
     const url = String(input);
     const body = url.includes('/reference/lgas') ? LGAS : [];
-    return { ok: true, json: async () => body } as Response;
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
   }) as never);
   vi.spyOn(api, 'get').mockResolvedValue([] as never);
 });

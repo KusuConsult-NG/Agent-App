@@ -2731,6 +2731,7 @@ export interface TranslationDictionary {
   tpWardHint: string;
   tpChooseLgaFirst: string;
   tpNoWardsListed: string;
+  tpListCouldNotLoad: string;
   tpSelectWard: string;
   tpCommunity: string;
   tpBusinessOrActivity: string;
@@ -6183,6 +6184,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpWardHint: "Where revenue is reported from. Without it this collection cannot be counted below LGA level.",
     tpChooseLgaFirst: "Choose an LGA first",
     tpNoWardsListed: "No wards listed",
+    tpListCouldNotLoad: "This list could not be loaded.",
     tpSelectWard: "Select ward",
     tpCommunity: "Community",
     tpBusinessOrActivity: "Business or activity",
@@ -9494,6 +9496,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     tpWardHint: "Inda ake bayar da rahoton haraji. Ba tare da shi ba, ba za a iya kirga wannan karban a kasa da matakin Karamar Hukuma ba.",
     tpChooseLgaFirst: "Ka zabi Karamar Hukuma tukuna",
     tpNoWardsListed: "Babu unguwannin da aka jera",
+    tpListCouldNotLoad: "Ba a iya loda wannan jerin ba.",
     tpSelectWard: "Zabi unguwa",
     tpCommunity: "Al’umma",
     tpBusinessOrActivity: "Kasuwanci ko sana’a",
