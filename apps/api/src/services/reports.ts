@@ -5,8 +5,10 @@
  *
  *   * Only *recognised* revenue is counted. A transaction counts towards
  *     collections once its payment is verified — never at invoice stage, and
- *     never on an agent's say-so. `REVENUE_STATES` below is that definition,
- *     applied everywhere so no two dashboards can disagree.
+ *     never on an agent's say-so. `REVENUE_STATES_SQL` in `lib/revenue-states`
+ *     is that definition, applied everywhere so no two dashboards can
+ *     disagree — a promise this module kept and the audit workbench, which
+ *     had written the list out again by hand, did not.
  *
  *   * PRD §67's audit questions are answerable without touching production
  *     tables directly: each is a function here.
@@ -14,6 +16,7 @@
 
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import {
   lgaScopeSql,
   scopeParams,
@@ -21,8 +24,6 @@ import {
   type ReportScope,
 } from './report-scope';
 
-/** Revenue is recognised only after independent verification (PRD §17, §95). */
-const REVENUE_STATES = `('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')`;
 
 /**
  * The executive dashboard, narrowed to what the caller may see.
@@ -120,7 +121,7 @@ export async function executiveDashboard(
 
            COALESCE(SUM(t.amount_kobo),0) AS total
          FROM transactions t CROSS JOIN windows w
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
        )
        SELECT
          today::text            AS today_kobo,
@@ -161,7 +162,7 @@ export async function executiveDashboard(
              AND ($1 OR a.territory_id = ANY($2::uuid[]))) AS agents_awaiting_review,
          (SELECT count(*)::text FROM transactions t WHERE ${tx}) AS total_transactions,
          (SELECT count(*)::text FROM transactions t
-           WHERE t.status IN ${REVENUE_STATES} AND ${tx}) AS successful_transactions,
+           WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}) AS successful_transactions,
          (SELECT count(*)::text FROM transactions t
            WHERE t.status IN ('FAILED','CANCELLED','EXPIRED') AND ${tx}) AS failed_transactions,
          (SELECT count(*)::text FROM transactions t
@@ -264,7 +265,7 @@ export async function executiveDashboard(
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
            JOIN revenue_categories rc ON rc.id = ri.category_id
            CROSS JOIN bounds b
-          WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+          WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
           GROUP BY rc.name, rc.name_ha
        )
        SELECT category, category_ha,
@@ -283,7 +284,7 @@ export async function executiveDashboard(
       `SELECT l.name AS lga, l.zone, count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM lgas l
-         LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES}
+         LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES_SQL}
               AND ${tx}
         WHERE ${lgaScopeSql('l', 3, 4)}
         GROUP BY l.name, l.zone ORDER BY COALESCE(SUM(t.amount_kobo),0) DESC`,
@@ -295,7 +296,7 @@ export async function executiveDashboard(
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM agents a
          JOIN users u ON u.id = a.user_id
-         LEFT JOIN transactions t ON t.agent_id = a.id AND t.status IN ${REVENUE_STATES}
+         LEFT JOIN transactions t ON t.agent_id = a.id AND t.status IN ${REVENUE_STATES_SQL}
               AND ${tx}
         WHERE a.operational_status = 'ACTIVE'
           AND ($1 OR a.territory_id = ANY($2::uuid[]))
@@ -312,7 +313,7 @@ export async function executiveDashboard(
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          LEFT JOIN mdas m ON m.id = ri.mda_id
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
         GROUP BY m.name, m.name_ha ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
@@ -330,7 +331,7 @@ export async function executiveDashboard(
               count(t.id)::text AS transactions,
               COALESCE(SUM(t.amount_kobo),0)::text AS amount_kobo
          FROM transactions t
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
         GROUP BY t.channel ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
@@ -350,7 +351,7 @@ export async function executiveDashboard(
               COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo
          FROM transactions t
          JOIN taxpayers tp ON tp.id = t.taxpayer_id
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
         GROUP BY tp.taxpayer_type ORDER BY SUM(t.amount_kobo) DESC`,
       scoped,
     ),
@@ -370,7 +371,7 @@ export async function executiveDashboard(
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
-        WHERE t.status IN ${REVENUE_STATES} AND ${tx}
+        WHERE t.status IN ${REVENUE_STATES_SQL} AND ${tx}
         GROUP BY ri.name, ri.name_ha, ri.code, rc.name, rc.name_ha
         ORDER BY SUM(t.amount_kobo) DESC LIMIT 25`,
       scoped,
@@ -383,7 +384,7 @@ export async function executiveDashboard(
               count(t.id)::text AS transactions
          FROM generate_series(CURRENT_DATE - interval '29 days', CURRENT_DATE, interval '1 day') AS day
          LEFT JOIN transactions t
-                ON t.created_at::date = day::date AND t.status IN ${REVENUE_STATES}
+                ON t.created_at::date = day::date AND t.status IN ${REVENUE_STATES_SQL}
                AND ${tx}
         GROUP BY day ORDER BY day`,
       scoped,
@@ -462,7 +463,7 @@ export async function geographicIntelligence(
               COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
               (SELECT COALESCE(SUM(p.amount_kobo),0)::text
                  FROM transactions p JOIN taxpayers ptp ON ptp.id = p.taxpayer_id
-                WHERE p.ward_id = $1 AND p.status IN ${REVENUE_STATES}
+                WHERE p.ward_id = $1 AND p.status IN ${REVENUE_STATES_SQL}
                   AND ptp.community IS NOT DISTINCT FROM tp.community
                   AND p.created_at BETWEEN $6 AND $7
                   AND ${transactionScopeSql('p', 4, 5)}) AS previous_amount_kobo,
@@ -470,7 +471,7 @@ export async function geographicIntelligence(
                 WHERE reg.ward_id = $1 AND reg.status = 'ACTIVE'
                   AND reg.community IS NOT DISTINCT FROM tp.community) AS registered_taxpayers
          FROM transactions t JOIN taxpayers tp ON tp.id = t.taxpayer_id
-        WHERE t.ward_id = $1 AND t.status IN ${REVENUE_STATES}
+        WHERE t.ward_id = $1 AND t.status IN ${REVENUE_STATES_SQL}
           AND t.created_at BETWEEN $2 AND $3
           AND ${transactionScopeSql('t', 4, 5)}
         GROUP BY tp.community ORDER BY SUM(t.amount_kobo) DESC`,
@@ -489,13 +490,13 @@ export async function geographicIntelligence(
               COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
               (SELECT COALESCE(SUM(p.amount_kobo),0)::text
                  FROM transactions p
-                WHERE p.ward_id = w.id AND p.status IN ${REVENUE_STATES}
+                WHERE p.ward_id = w.id AND p.status IN ${REVENUE_STATES_SQL}
                   AND p.created_at BETWEEN $7 AND $8
                   AND ${transactionScopeSql('p', 4, 5)}) AS previous_amount_kobo,
               (SELECT count(*)::text FROM taxpayers tp
                 WHERE tp.ward_id = w.id AND tp.status = 'ACTIVE') AS registered_taxpayers
          FROM wards w
-         LEFT JOIN transactions t ON t.ward_id = w.id AND t.status IN ${REVENUE_STATES}
+         LEFT JOIN transactions t ON t.ward_id = w.id AND t.status IN ${REVENUE_STATES_SQL}
               AND t.created_at BETWEEN $2 AND $3
               AND ${transactionScopeSql('t', 4, 5)}
         WHERE w.lga_id = $1 AND ($4 OR w.lga_id = ANY($6::uuid[]))
@@ -534,13 +535,13 @@ export async function geographicIntelligence(
             COALESCE(ROUND(AVG(t.amount_kobo)),0)::text AS average_kobo,
             (SELECT COALESCE(SUM(p.amount_kobo),0)::text
                FROM transactions p
-              WHERE p.lga_id = l.id AND p.status IN ${REVENUE_STATES}
+              WHERE p.lga_id = l.id AND p.status IN ${REVENUE_STATES_SQL}
                 AND p.created_at BETWEEN $6 AND $7
                 AND ${transactionScopeSql('p', 3, 4)}) AS previous_amount_kobo,
             (SELECT count(*)::text FROM taxpayers tp
               WHERE tp.lga_id = l.id AND tp.status = 'ACTIVE') AS registered_taxpayers
        FROM lgas l
-       LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES}
+       LEFT JOIN transactions t ON t.lga_id = l.id AND t.status IN ${REVENUE_STATES_SQL}
             AND t.created_at BETWEEN $1 AND $2
             AND ${transactionScopeSql('t', 3, 4)}
       WHERE ${lgaScopeSql('l', 3, 5)}
@@ -600,11 +601,11 @@ export async function agentPerformance(
     db,
     `SELECT a.id AS agent_id, a.agent_code, u.full_name, l.name AS lga,
             a.operational_status,
-            count(t.id) FILTER (WHERE t.status IN ${REVENUE_STATES})::text AS successful_transactions,
+            count(t.id) FILTER (WHERE t.status IN ${REVENUE_STATES_SQL})::text AS successful_transactions,
             count(t.id) FILTER (WHERE t.status IN ('FAILED','CANCELLED','EXPIRED'))::text AS failed_transactions,
             count(t.id) FILTER (WHERE t.status IN ('REVERSED','REFUNDED'))::text AS reversed_transactions,
-            COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES}),0)::text AS collected_kobo,
-            COALESCE(ROUND(AVG(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES})),0)::text
+            COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES_SQL}),0)::text AS collected_kobo,
+            COALESCE(ROUND(AVG(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES_SQL})),0)::text
               AS average_transaction_kobo,
             (SELECT count(*)::text FROM taxpayers tp WHERE tp.registered_by_agent_id = a.id) AS taxpayers_onboarded,
             (SELECT count(*)::text FROM taxpayers tp
@@ -632,14 +633,14 @@ export async function agentPerformance(
             (SELECT count(DISTINCT ri.category_id)::text
                FROM transactions ct
                JOIN revenue_items ri ON ri.id = ct.revenue_item_id
-              WHERE ct.agent_id = a.id AND ct.status IN ${REVENUE_STATES})
+              WHERE ct.agent_id = a.id AND ct.status IN ${REVENUE_STATES_SQL})
               AS categories_processed,
             COALESCE(SUM(t.amount_kobo) FILTER (
-              WHERE t.status IN ${REVENUE_STATES}
+              WHERE t.status IN ${REVENUE_STATES_SQL}
                 AND t.created_at::date >= date_trunc('month', CURRENT_DATE)::date),0)::text
               AS month_kobo,
             COALESCE(SUM(t.amount_kobo) FILTER (
-              WHERE t.status IN ${REVENUE_STATES}
+              WHERE t.status IN ${REVENUE_STATES_SQL}
                 AND t.created_at::date >= (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
                 AND t.created_at::date <= LEAST(
                       (date_trunc('month', CURRENT_DATE) - interval '1 month')::date
@@ -653,7 +654,7 @@ export async function agentPerformance(
       WHERE ($1::uuid IS NULL OR a.id = $1)
         AND ($3 OR a.territory_id = ANY($4::uuid[]))
       GROUP BY a.id, a.agent_code, u.full_name, l.name, a.operational_status
-      ORDER BY COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES}),0) DESC
+      ORDER BY COALESCE(SUM(t.amount_kobo) FILTER (WHERE t.status IN ${REVENUE_STATES_SQL}),0) DESC
       LIMIT $2`,
     [params.agentId ?? null, params.limit ?? 100, statewide, territoryIds],
   ).then((rows) =>
@@ -687,8 +688,8 @@ export async function agentToday(db: Db, agentId: string) {
     queryOne(
       db,
       `SELECT
-         COALESCE(SUM(amount_kobo) FILTER (WHERE status IN ${REVENUE_STATES}),0)::text AS collected_kobo,
-         count(*) FILTER (WHERE status IN ${REVENUE_STATES})::text AS successful,
+         COALESCE(SUM(amount_kobo) FILTER (WHERE status IN ${REVENUE_STATES_SQL}),0)::text AS collected_kobo,
+         count(*) FILTER (WHERE status IN ${REVENUE_STATES_SQL})::text AS successful,
          count(*)::text AS total,
          count(*) FILTER (WHERE status IN ('PAYMENT_PENDING','PAYMENT_INITIATED'))::text AS pending
        FROM transactions
@@ -848,7 +849,7 @@ export async function kpis(db: Db) {
   return queryOne(
     db,
     `SELECT
-       (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions WHERE status IN ${REVENUE_STATES})
+       (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions WHERE status IN ${REVENUE_STATES_SQL})
          AS total_collection_kobo,
        (SELECT count(*)::text FROM taxpayers WHERE created_at >= date_trunc('month', CURRENT_DATE))
          AS new_taxpayers_this_month,
@@ -863,7 +864,7 @@ export async function kpis(db: Db) {
           FROM reconciliation_records) AS reconciliation_rate_percent,
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * (SELECT count(*) FROM receipts) / count(*), 2)::text END
-          FROM transactions WHERE status IN ${REVENUE_STATES}) AS receipt_generation_rate_percent,
+          FROM transactions WHERE status IN ${REVENUE_STATES_SQL}) AS receipt_generation_rate_percent,
        (SELECT count(*)::text FROM transactions WHERE status = 'RECONCILIATION_PENDING')
          AS unreconciled_transactions,
        (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED')) AS reversals,
@@ -965,7 +966,7 @@ export async function revenueByMda(
        FROM mdas m
        LEFT JOIN revenue_items ri ON ri.mda_id = m.id
        LEFT JOIN transactions t ON t.revenue_item_id = ri.id
-            AND t.status IN ${REVENUE_STATES}
+            AND t.status IN ${REVENUE_STATES_SQL}
             AND t.created_at BETWEEN $1 AND $2
             AND ${transactionScopeSql('t', 3, 4)}
       GROUP BY m.name, m.name_ha, m.code
@@ -1006,7 +1007,7 @@ export async function revenueGenerationAreas(
        FROM transactions t
        JOIN lgas l ON l.id = t.lga_id
        LEFT JOIN wards w ON w.id = t.ward_id
-      WHERE t.status IN ${REVENUE_STATES}
+      WHERE t.status IN ${REVENUE_STATES_SQL}
         AND t.created_at BETWEEN $1 AND $2
         AND ${transactionScopeSql('t', 3, 4)}
       GROUP BY l.name, l.zone, w.name
@@ -1051,7 +1052,7 @@ export async function agentCollectionMap(
        JOIN agents a ON a.id = t.agent_id
        JOIN users u ON u.id = a.user_id
        LEFT JOIN territories ter ON ter.id = t.territory_id
-      WHERE t.status IN ${REVENUE_STATES}
+      WHERE t.status IN ${REVENUE_STATES_SQL}
         AND t.created_at BETWEEN $1 AND $2
         AND ${transactionScopeSql('t', 3, 4)}
       GROUP BY a.agent_code, u.full_name, ter.name, ter.name_ha
@@ -1086,7 +1087,7 @@ export async function collectionMappingCoverage(
               AS located_amount_kobo,
             COALESCE(SUM(amount_kobo),0)::text AS total_amount_kobo
        FROM transactions t
-      WHERE t.status IN ${REVENUE_STATES}
+      WHERE t.status IN ${REVENUE_STATES_SQL}
         AND t.created_at BETWEEN $1 AND $2
         AND ${transactionScopeSql('t', 3, 4)}`,
     [from, to, statewide, territoryIds],
@@ -1133,7 +1134,7 @@ export async function localGovernmentRemittance(
               SUM(t.amount_kobo) AS amount_kobo
          FROM transactions t
          JOIN revenue_items ri ON ri.id = t.revenue_item_id
-        WHERE t.status IN ${REVENUE_STATES}
+        WHERE t.status IN ${REVENUE_STATES_SQL}
           AND t.created_at BETWEEN $1 AND $2
           AND ${transactionScopeSql('t', 3, 4)}
           -- An item rated per Council is a Council's revenue. This is the
@@ -1281,7 +1282,7 @@ export async function financeOfficerHome(db: Db) {
        -- this screen more than on any other.
        (SELECT COALESCE(SUM(t.amount_kobo),0)::text
           FROM transactions t
-         WHERE t.status IN ${REVENUE_STATES}
+         WHERE t.status IN ${REVENUE_STATES_SQL}
            AND EXISTS (SELECT 1 FROM revenue_item_rates r
                         WHERE r.revenue_item_id = t.revenue_item_id AND r.lga_id IS NOT NULL))
          AS owed_to_councils_kobo`,
@@ -1499,7 +1500,7 @@ export async function revenueByCategory(
   params: CategoryBreakdownParams = {},
   scope: ReportScope = { kind: 'STATEWIDE' },
 ) {
-  const conditions: string[] = [`t.status IN ${REVENUE_STATES}`];
+  const conditions: string[] = [`t.status IN ${REVENUE_STATES_SQL}`];
   const values: unknown[] = [];
   const add = (clause: string, value: unknown) => {
     values.push(value);
@@ -1736,11 +1737,11 @@ export async function taxpayerAnalytics(
       `WITH base AS (
          SELECT tp.id, tp.taxpayer_type, tp.created_at,
                 (SELECT max(t.created_at) FROM transactions t
-                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS last_paid_at,
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES_SQL}) AS last_paid_at,
                 (SELECT COALESCE(SUM(t.amount_kobo),0) FROM transactions t
-                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS paid_kobo,
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES_SQL}) AS paid_kobo,
                 (SELECT count(*) FROM transactions t
-                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}) AS payments
+                  WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES_SQL}) AS payments
            FROM taxpayers tp
           WHERE tp.status = 'ACTIVE'
             AND ($1::uuid IS NULL OR tp.lga_id = $1)
@@ -1776,7 +1777,7 @@ export async function taxpayerAnalytics(
                 AS new_this_month,
               count(tp.id) FILTER (WHERE EXISTS (
                 SELECT 1 FROM transactions t
-                 WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES}
+                 WHERE t.taxpayer_id = tp.id AND t.status IN ${REVENUE_STATES_SQL}
                    AND t.created_at > now() - interval '90 days'))::text AS active,
               COALESCE(SUM(tc.outstanding_amount_kobo),0)::text AS outstanding_kobo,
               COALESCE(ROUND(AVG(tc.score)),0)::text AS average_compliance_score
@@ -1837,7 +1838,7 @@ export async function taxpayerAnalytics(
                 COALESCE(ROUND(AVG(t.amount_kobo)),0) AS average_kobo
            FROM transactions t
            JOIN taxpayers tp ON tp.id = t.taxpayer_id
-          WHERE t.status IN ${REVENUE_STATES}
+          WHERE t.status IN ${REVENUE_STATES_SQL}
             AND t.created_at > now() - interval '365 days'
             AND ($1::uuid IS NULL OR tp.lga_id = $1)
             AND ($2::uuid IS NULL OR tp.ward_id = $2)

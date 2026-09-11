@@ -32,6 +32,7 @@ import type { Db } from '../db/pool';
 import type { Permission } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { canonicalJson, recordAudit } from './audit';
 import {
   resolveReportScope,
@@ -953,7 +954,7 @@ async function runReportRows(
                 count(*)::text AS transactions,
                 count(*) FILTER (WHERE t.status IN ('REVERSED','REFUNDED'))::text AS reversed,
                 COALESCE(sum(t.amount_kobo) FILTER (
-                  WHERE t.status IN ('PAYMENT_VERIFIED','RECEIPT_GENERATED','SETTLED')), 0)::text
+                  WHERE t.status IN ${REVENUE_STATES_SQL}), 0)::text
                   AS collected_kobo
            FROM transactions t
            JOIN agents a ON a.id = t.agent_id
@@ -976,7 +977,7 @@ async function runReportRows(
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
            JOIN revenue_categories rc ON rc.id = ri.category_id
           WHERE ${transactionScopeSql('t', 1, 2)} AND ${window('t', 3)}
-            AND t.status IN ('PAYMENT_VERIFIED','RECEIPT_GENERATED','SETTLED')
+            AND t.status IN ${REVENUE_STATES_SQL}
           GROUP BY rc.name, ri.name
           ORDER BY revenue_kobo DESC`,
         scoped,
@@ -992,7 +993,7 @@ async function runReportRows(
            FROM transactions t
            JOIN lgas l ON l.id = t.lga_id
           WHERE ${transactionScopeSql('t', 1, 2)} AND ${window('t', 3)}
-            AND t.status IN ('PAYMENT_VERIFIED','RECEIPT_GENERATED','SETTLED')
+            AND t.status IN ${REVENUE_STATES_SQL}
           GROUP BY l.name, l.code
           ORDER BY revenue_kobo DESC`,
         scoped,
