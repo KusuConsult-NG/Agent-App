@@ -312,6 +312,29 @@ export async function raiseSystemAlerts(client: PoolClient): Promise<{ raised: n
 const ENUMERATION_IN_AN_HOUR = 500;
 
 /**
+ * The same question at the other door, which is a narrower one.
+ *
+ * Two unauthenticated surfaces write to `verification_attempts`, and they are
+ * not throttled alike. The receipt verifier admits 60 requests a minute, so
+ * 3,600 in the window above. The citizen status lookup — what a named person
+ * owes, by TIN or exact phone — admits 10, so 600.
+ *
+ * One threshold therefore cannot serve both. Five hundred is a comfortable
+ * fraction of the receipt door's ceiling and 83% of this one, which would mean
+ * an enumerator had to sustain nearly the maximum possible rate for a full
+ * hour before anybody was told. That is the wrong way round: the citizen door
+ * is the one `citizen.ts` says needs watching most — "a TIN is far more
+ * guessable than a receipt number" — and it is the one where what comes back
+ * is about a person rather than about a piece of paper.
+ *
+ * A hundred is a sixth of what this door can physically emit in the window,
+ * about ten minutes of deliberate work, and far more than a shared address
+ * reaches by accident — the 10-a-minute cap already holds the total any
+ * address can produce, carrier NAT included, to 600.
+ */
+const TAXPAYER_LOOKUPS_IN_AN_HOUR = 100;
+
+/**
  * Somebody reading the receipt book.
  *
  * `GET /verify/:code` is unauthenticated, by design — PRD §20 and §43 want a
@@ -350,20 +373,27 @@ async function raiseEnumerationAlerts(client: PoolClient): Promise<number> {
     address: string;
     identifiers: string;
     lookups: string;
-    kinds: string;
+    kind: string;
   }>(
     client,
+    /*
+     * Grouped by the door as well as the address, so each is judged against
+     * what it can physically emit. An address working both raises two alerts,
+     * which is right: they are two different exposures and an officer reading
+     * one should not have the other folded into it.
+     */
     `SELECT host(ip_address) AS address,
+            lookup_type AS kind,
             count(DISTINCT lookup_value)::text AS identifiers,
-            count(*)::text AS lookups,
-            string_agg(DISTINCT lookup_type, ', ' ORDER BY lookup_type) AS kinds
+            count(*)::text AS lookups
        FROM verification_attempts
       WHERE result = 'VALID'
         AND ip_address IS NOT NULL
         AND created_at > now() - interval '1 hour'
-      GROUP BY ip_address
-     HAVING count(DISTINCT lookup_value) > $1`,
-    [ENUMERATION_IN_AN_HOUR],
+      GROUP BY ip_address, lookup_type
+     HAVING count(DISTINCT lookup_value) >
+            CASE WHEN lookup_type = 'TAXPAYER' THEN $2::bigint ELSE $1::bigint END`,
+    [ENUMERATION_IN_AN_HOUR, TAXPAYER_LOOKUPS_IN_AN_HOUR],
   );
 
   let raised = 0;
@@ -380,23 +410,31 @@ async function raiseEnumerationAlerts(client: PoolClient): Promise<number> {
      * dismissed the first, which is the right behaviour for something that may
      * have been dismissed as a known network.
      */
+    const taxpayerDoor = row.kind === 'TAXPAYER';
     const created = await raise(client, {
       role: 'admin',
       kind: 'SYSTEM_ALERT',
       severity: 'WARNING',
-      subject: `${row.address} looked up ${row.identifiers} different records in an hour`,
+      subject: `${row.address} looked up ${row.identifiers} different ${
+        taxpayerDoor ? 'taxpayers' : 'records'
+      } in an hour`,
       body:
-        'The public verification page answers without an account, and accepts receipt and ' +
-        'document numbers as well as verification codes. Those numbers run in sequence, so ' +
-        'an address working through them can read what was collected, for what, where and ' +
-        'when — though not who paid.\n' +
+        (taxpayerDoor
+          ? 'The citizen status page answers without an account, and says what a named ' +
+            'person owes when given their TIN or their exact phone number. A TIN is far ' +
+            'more guessable than a receipt number, and what comes back is about a person.'
+          : 'The public verification page answers without an account, and accepts receipt ' +
+            'and document numbers as well as verification codes. Those numbers run in ' +
+            'sequence, so an address working through them can read what was collected, ' +
+            'for what, where and when — though not who paid.') +
+        '\n' +
         `${row.lookups} successful lookup(s) across ${row.identifiers} distinct ` +
-        `identifier(s) (${row.kinds}) in the last hour.\n` +
+        `identifier(s) of kind ${row.kind} in the last hour.\n` +
         'A shared mobile network can carry a lot of honest traffic, so check the address ' +
         'before acting on it.',
       entityType: 'verification_source',
       entityId: row.address,
-      dedupeKey: `verification:enumeration:${row.address}`,
+      dedupeKey: `verification:enumeration:${row.kind}:${row.address}`,
     });
     if (created) raised += 1;
   }

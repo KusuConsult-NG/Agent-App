@@ -64,11 +64,16 @@ beforeEach(async () => {
 async function lookedUp(
   address: string,
   count: number,
-  options: { result?: string; distinct?: boolean; agoMinutes?: number } = {},
+  options: {
+    result?: string;
+    distinct?: boolean;
+    agoMinutes?: number;
+    kind?: 'RECEIPT' | 'TAXPAYER';
+  } = {},
 ): Promise<void> {
   await pool.query(
     `INSERT INTO verification_attempts (lookup_type, lookup_value, result, ip_address, created_at)
-     SELECT 'RECEIPT',
+     SELECT $7,
             $4 || '-' || (CASE WHEN $5::boolean THEN n::text ELSE '1' END),
             $3, $1::inet, now() - ($6 || ' minutes')::interval
        FROM generate_series(1, $2) AS n`,
@@ -79,6 +84,7 @@ async function lookedUp(
       `PSIRS-RCP-2026`,
       options.distinct ?? true,
       String(options.agoMinutes ?? 5),
+      options.kind ?? 'RECEIPT',
     ],
   );
 }
@@ -130,6 +136,51 @@ describe('an address working through the receipt numbers', () => {
   });
 });
 
+describe('the other door, which is a narrower one', () => {
+  /*
+   * Two unauthenticated surfaces write to this table and they are not
+   * throttled alike: the receipt verifier admits 60 requests a minute, the
+   * citizen status lookup 10. One threshold cannot serve both — five hundred
+   * is a comfortable fraction of the first ceiling and 83% of the second,
+   * which would have meant an enumerator sustaining nearly the maximum
+   * possible rate for a full hour before anybody was told.
+   *
+   * That was the wrong way round. The citizen door is the one `citizen.ts`
+   * says needs watching most — "a TIN is far more guessable than a receipt
+   * number" — and what comes back there is about a person rather than about a
+   * piece of paper.
+   */
+  it('reports a TIN sweep well below the receipt threshold', async () => {
+    await lookedUp('203.0.113.11', 150, { kind: 'TAXPAYER' });
+
+    const alerts = await sweep();
+    assert.equal(alerts.length, 1, JSON.stringify(alerts));
+    assert.match(String(alerts[0]!.subject), /150 different taxpayers/);
+    assert.match(String(alerts[0]!.body), /TIN is far more guessable/);
+  });
+
+  it('does not report the same volume of receipt lookups', async () => {
+    // The control that proves the two doors are judged apart rather than the
+    // threshold simply having been lowered for everything.
+    await lookedUp('203.0.113.12', 150, { kind: 'RECEIPT' });
+
+    assert.deepEqual(await sweep(), []);
+  });
+
+  it('raises one alert per door when an address works both', async () => {
+    /*
+     * Two different exposures. An officer reading about the receipt book
+     * should not have a TIN sweep folded into the same row and dismissed with
+     * it.
+     */
+    await lookedUp('203.0.113.13', 600, { kind: 'RECEIPT' });
+    await lookedUp('203.0.113.13', 150, { kind: 'TAXPAYER' });
+
+    const alerts = await sweep();
+    assert.equal(alerts.length, 2, JSON.stringify(alerts.map((a) => a.subject)));
+  });
+});
+
 describe('the traffic that is not that', () => {
   /*
    * The controls. This rule watches an unauthenticated page that every citizen
@@ -176,7 +227,7 @@ describe('the traffic that is not that', () => {
      * note — and this pins it so that lowering it is a decision somebody makes
      * on purpose rather than a tweak that starts flagging a carrier.
      */
-    await lookedUp('203.0.113.9', 500);
+    await lookedUp('203.0.113.9', 500, { kind: 'RECEIPT' });
 
     assert.deepEqual(await sweep(), []);
   });
