@@ -86,7 +86,16 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
         await api.get<TaxpayerSummary[]>(`/taxpayers/search?q=${encodeURIComponent(query.trim())}`),
       );
     } catch (caught) {
+      /*
+       * Without the second branch an agent pressed Search and nothing
+       * happened: no results, no error, no explanation. A failure that is not
+       * a refusal with a body — a dropped signal in a market, which is the
+       * ordinary case here — set nothing at all.
+       */
       if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
     } finally {
       setBusy(false);
     }
@@ -1019,7 +1028,12 @@ export function TaxpayerScreen({
       .get<Profile>(`/taxpayers/${taxpayerId}`)
       .then(setProfile)
       .catch((caught) => {
+        // Same as the search above, and worse here: `if (!profile) return
+        // null` below meant a failure without a body drew an empty page.
         if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       })
       .finally(() => setLoading(false));
   }, [taxpayerId]);
