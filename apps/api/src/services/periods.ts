@@ -27,10 +27,10 @@
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { recordAudit } from './audit';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
-const REVENUE_STATES = `('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')`;
 
 export type PeriodStatus = 'OPEN' | 'CLOSING' | 'CLOSED';
 
@@ -98,7 +98,7 @@ export async function periodFigures(
     db,
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions
-         WHERE status IN ${REVENUE_STATES}
+         WHERE status IN ${REVENUE_STATES_SQL}
            AND created_at::date BETWEEN $1 AND $2) AS collected_kobo,
        (SELECT COALESCE(SUM(received_amount_kobo),0)::text FROM settlements
          WHERE settlement_date BETWEEN $1 AND $2) AS settled_kobo,
@@ -106,7 +106,7 @@ export async function periodFigures(
          WHERE created_at::date BETWEEN $1 AND $2 AND status <> 'REVERSED')
          AS commission_kobo,
        (SELECT count(*)::text FROM transactions
-         WHERE status IN ${REVENUE_STATES}
+         WHERE status IN ${REVENUE_STATES_SQL}
            AND created_at::date BETWEEN $1 AND $2) AS transaction_count,
        /*
         * The two figures that say whether the month is ready to close.

@@ -11,12 +11,13 @@
  * this code.
  */
 
-import { parseKobo } from '@psirs/shared';
+import { REVENUE_RECOGNISED_STATES, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import { endOfDay } from '../lib/calendar-day';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
@@ -525,8 +526,10 @@ export async function completeRenewal(params: {
       };
     }
 
-    const paidStates = ['PAYMENT_VERIFIED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING', 'SETTLED'];
-    if (!renewal.transaction_status || !paidStates.includes(renewal.transaction_status)) {
+    if (
+      !renewal.transaction_status ||
+      !(REVENUE_RECOGNISED_STATES as readonly string[]).includes(renewal.transaction_status)
+    ) {
       throw conflict(
         'RENEWAL_NOT_PAID',
         'The renewal document cannot be issued until the payment has been confirmed. ' +
@@ -734,7 +737,7 @@ export async function pendingRenewals(db: Db, limit = 100) {
     db,
     `SELECT r.id FROM vehicle_renewals r JOIN transactions t ON t.id = r.transaction_id
       WHERE r.document_id IS NULL
-        AND t.status IN ('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')
+        AND t.status IN ${REVENUE_STATES_SQL}
       LIMIT $1`,
     [limit],
   );
