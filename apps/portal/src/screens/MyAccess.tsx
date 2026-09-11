@@ -94,8 +94,27 @@ export function MyAccessScreen({
   const [devices, setDevices] = useState<DeviceRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * Kept apart from `error`, which belongs to the button somebody pressed.
+   *
+   * This read answered a failure with `setSessions([]); setDevices([])`, and
+   * the two empty states are not blanks. They read:
+   *
+   *   "This account has never been signed in."
+   *   "No machine has been recorded yet."
+   *
+   * On this screen, of all of them. Blocking a machine is the one control
+   * gated on `user:manage` here, and the case for it — set down in the
+   * comment above — is "a laptop already in somebody else's hands". So an
+   * administrator opening somebody's access to revoke a machine, on a
+   * connection that dropped, was told the account had never been used and no
+   * machine existed. There is nothing to block, and nothing saying the
+   * question had not been answered.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
+    setLoadError(null);
     try {
       const result = await api.get<{ sessions: SessionRow[]; devices: DeviceRow[] }>(
         officer ? `/government/users/${officer.id}/sessions` : '/government/sessions/mine',
@@ -103,9 +122,14 @@ export function MyAccessScreen({
       setSessions(result.sessions);
       setDevices(result.devices);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      setSessions([]);
-      setDevices([]);
+      if (caught instanceof ApiRequestError) setLoadError(caught.error);
+      else if (caught instanceof Error) {
+        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      // Unknown, not empty. An empty list here is a statement about somebody's
+      // account that an administrator would act on.
+      setSessions(null);
+      setDevices(null);
     }
   }, [officer]);
 
@@ -146,7 +170,14 @@ export function MyAccessScreen({
             <p className="card__hint">{t.ofcAcSessionsHint}</p>
           </div>
         </div>
-        {!sessions ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={() => void load()}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !sessions ? (
           <Loading />
         ) : (
           <Table
@@ -228,7 +259,11 @@ export function MyAccessScreen({
             <p className="card__hint">{t.ofcAcDevicesHint}</p>
           </div>
         </div>
-        {!devices ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+          </div>
+        ) : !devices ? (
           <Loading />
         ) : (
           <Table
