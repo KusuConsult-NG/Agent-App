@@ -919,6 +919,12 @@ function RateChangeForm({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * One request's worth of the roll. The endpoint's own ceiling is 200; a
+ * hundred fills the panel, and the notice below says what it is a hundred of.
+ */
+const BENEFICIARY_PAGE = 100;
+
 export function ProgrammesScreen() {
   const { lang, t } = usePortalI18n();
   const [programmes, setProgrammes] = useState<any[] | null>(null);
@@ -926,6 +932,16 @@ export function ProgrammesScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedProgramme, setSelectedProgramme] = useState<any | null>(null);
   const [beneficiaries, setBeneficiaries] = useState<any[] | null>(null);
+  /*
+   * How many there actually are, which is not how many arrived.
+   *
+   * This panel asks for a hundred and drew whatever came back, with nothing
+   * saying it was a hundred of three thousand. It is the roll for a social
+   * programme — an amnesty, a health scheme, fertiliser — so an officer
+   * working a table that looks complete simply never reaches beneficiary 101,
+   * and has no way to discover that they exist.
+   */
+  const [beneficiaryTotal, setBeneficiaryTotal] = useState(0);
   const [evaluating, setEvaluating] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -946,10 +962,12 @@ export function ProgrammesScreen() {
   async function viewBeneficiaries(programme: any) {
     setSelectedProgramme(programme);
     setBeneficiaries(null);
-    const result = await api.get<{ beneficiaries: any[] }>(
-      `/government/programmes/${programme.id}/beneficiaries?limit=100`,
+    setBeneficiaryTotal(0);
+    const result = await api.get<{ beneficiaries: any[]; total: number }>(
+      `/government/programmes/${programme.id}/beneficiaries?limit=${BENEFICIARY_PAGE}`,
     );
     setBeneficiaries(result.beneficiaries);
+    setBeneficiaryTotal(result.total);
   }
 
   async function evaluateAll(programme: any) {
@@ -1088,6 +1106,14 @@ export function ProgrammesScreen() {
           ) : beneficiaries.length === 0 ? (
             <p className="card__hint">{t.ofcCfNoEligibleYet}</p>
           ) : (
+            <>
+            {beneficiaries.length < beneficiaryTotal && (
+              <p className="card__hint" role="status">
+                {t.ofcCfShowingSomeBeneficiaries
+                  .replace('{{shown}}', String(beneficiaries.length))
+                  .replace('{{total}}', String(beneficiaryTotal))}
+              </p>
+            )}
             <Table
               columns={[
                 { key: 'tin', label: 'tpStepTin', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
@@ -1112,6 +1138,7 @@ export function ProgrammesScreen() {
               rows={beneficiaries}
               empty="ofcNoneBeneficiariesFound"
             />
+            </>
           )}
         </div>
       )}

@@ -829,6 +829,7 @@ export interface TranslationDictionary {
   ofcCfEssentialServiceLink: string;
   ofcCfBeneficiaries: string;
   ofcCfNoEligibleYet: string;
+  ofcCfShowingSomeBeneficiaries: string;
   ofcCfEssentialProtected: string;
   ofcCfBenefit: string;
   ofcCfMinScore: string;
@@ -4537,6 +4538,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfEssentialServiceLink: "A programme that links an essential public service to tax compliance can only be created if the legal or policy authority for that linkage is recorded against it.",
     ofcCfBeneficiaries: "Beneficiaries",
     ofcCfNoEligibleYet: "No eligible taxpayers yet. Run \"Evaluate all\" to assess the active taxpayer population.",
+    ofcCfShowingSomeBeneficiaries: "Showing {{shown}} of {{total}} eligible beneficiaries. This list is not the whole roll — do not work it as one.",
     ofcCfEssentialProtected: "Essential services are protected",
     ofcCfBenefit: "Benefit",
     ofcCfMinScore: "Min. score",
@@ -7998,6 +8000,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCfEssentialServiceLink: "Ana iya samar da shirin da ke hada muhimmiyar hidimar jama’a da biyan haraji ne kawai idan an rubuta ikon doka ko manufa na wannan hadin a kansa.",
     ofcCfBeneficiaries: "Masu amfana",
     ofcCfNoEligibleYet: "Babu masu biyan haraji da suka cancanta tukuna. Ka gudanar da “Duba duka” domin auna masu biyan harajin da ke aiki.",
+    ofcCfShowingSomeBeneficiaries: "Ana nuna {{shown}} daga cikin {{total}} masu amfana da suka cancanta. Wannan jerin ba cikakken jerin ba ne — kada ka yi aiki da shi kamar cikakke.",
     ofcCfEssentialProtected: "An kare muhimman hidimomi",
     ofcCfBenefit: "Tallafi",
     ofcCfMinScore: "Mafi karancin maki",

@@ -2501,12 +2501,25 @@ governmentRouter.get(
   requirePermission('incentive:read:all'),
   validateQuery(
     z.object({
-      eligible: z.enum(['true', 'false']).optional(),
+      eligible: z.enum(['true', 'false', 'all']).optional(),
       limit: z.coerce.number().int().min(1).max(200).default(50),
       offset: z.coerce.number().int().min(0).default(0),
     }),
     async (req, res, data) => {
-      const eligibleOnly = data.eligible !== 'false'; // default: only eligible
+      /*
+       * `eligible=false` used to mean "do not filter", so a caller asking for
+       * the people this programme turned down was handed the entire evaluated
+       * population with the refusals buried in it. The schema declared an
+       * enum of true and false; the implementation read it as a switch.
+       *
+       * It now means what it says, and the third state it was standing in for
+       * has its own spelling. Nothing passed the parameter, so nothing that
+       * relied on the old reading exists — the officer panel omits it, and
+       * omitting it still means the eligible roll, which is what that panel
+       * is for.
+       */
+      const eligibleFilter =
+        data.eligible === 'all' ? null : data.eligible === 'false' ? false : true;
       const rows = await query<{
         taxpayer_id: string;
         tin: string | null;
@@ -2516,8 +2529,26 @@ governmentRouter.get(
         eligible: boolean;
         reasons: unknown;
         evaluated_at: Date;
+        matching_total: string;
       }>(
         pool,
+        /*
+         * `count(*) over ()` is evaluated before LIMIT, so this is how many
+         * beneficiaries match — not how many came back.
+         *
+         * `total` was `rows.length`: the size of the page, under a name that
+         * means the opposite. A roll of three thousand people answered 50, and
+         * the one instrument a caller had for telling a full page from a
+         * complete list said they were the same thing.
+         *
+         * The tiebreaker on the sort matters more than it looks. `score` is an
+         * integer from 0 to 100 across a whole state's taxpayers, so ties are
+         * not an edge case, they are most of the list — and an ORDER BY that
+         * does not resolve them leaves Postgres free to return a different
+         * hundred each time the page is opened. This is the roll for an
+         * amnesty or a health scheme: who is on it should not depend on the
+         * query plan.
+         */
         `SELECT
            pe.taxpayer_id,
            t.tin,
@@ -2526,18 +2557,26 @@ governmentRouter.get(
            tc.score,
            pe.eligible,
            pe.reasons,
-           pe.evaluated_at
+           pe.evaluated_at,
+           count(*) OVER () AS matching_total
          FROM programme_eligibility pe
          JOIN taxpayers t ON t.id = pe.taxpayer_id
          JOIN lgas l ON l.id = t.lga_id
          LEFT JOIN taxpayer_compliance tc ON tc.taxpayer_id = pe.taxpayer_id
          WHERE pe.programme_id = $1
            AND ($4::boolean IS NULL OR pe.eligible = $4)
-         ORDER BY tc.score DESC NULLS LAST
+         ORDER BY tc.score DESC NULLS LAST, pe.taxpayer_id
          LIMIT $2 OFFSET $3`,
-        [req.params.id, data.limit, data.offset, eligibleOnly ? true : null],
+        [req.params.id, data.limit, data.offset, eligibleFilter],
       );
-      res.json({ beneficiaries: rows, total: rows.length, limit: data.limit, offset: data.offset });
+      // No rows carry no count, and none matching is a total of zero.
+      const total = Number(rows[0]?.matching_total ?? 0);
+      res.json({
+        beneficiaries: rows.map(({ matching_total: _count, ...row }) => row),
+        total,
+        limit: data.limit,
+        offset: data.offset,
+      });
     },
   ),
 );
