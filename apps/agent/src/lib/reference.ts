@@ -70,6 +70,19 @@ export function useReferenceList<T>(
     let cancelled = false;
     setLoading(true);
     setFailed(false);
+    /*
+     * The previous list goes before the next one is asked for.
+     *
+     * Wards are the reason. The path changes when the agent picks a different
+     * Local Government Area, and holding the old LGA's wards until the new
+     * ones arrive leaves them selectable in the meantime — the registration
+     * screen already says why that must not happen: "Leaving it selected
+     * would file this registration in a ward of a different LGA; the server
+     * refuses that, but the agent should not have to be told."
+     *
+     * The selection is cleared by the screen. These are the options.
+     */
+    setItems([]);
 
     request<unknown>(path, { authenticated: false })
       .then((body) => {
