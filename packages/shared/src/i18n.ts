@@ -1440,6 +1440,13 @@ export interface TranslationDictionary {
   ofcArNoDeadline: string;
   ofcArLastPaid: string;
   ofcArNeverPaid: string;
+  ofcArOwingFor: string;
+  ofcArOwingForDays: string;
+  ofcPrLastFiled: string;
+  ofcPrNeverFiledShort: string;
+  ofcPrFiledMonthsAgo: string;
+  ofcSpLastReply: string;
+  ofcSpNoReplyYet: string;
   ofcArPartPaid: string;
   ofcArNobodyOwes: string;
   ofcAlIntro: string;
@@ -5095,6 +5102,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArNoDeadline: "No deadline",
     ofcArLastPaid: "Last paid",
     ofcArNeverPaid: "Never",
+    ofcArOwingFor: "Owing for",
+    ofcArOwingForDays: "{{days}} day(s)",
+    ofcPrLastFiled: "Last filed",
+    ofcPrNeverFiledShort: "Never filed",
+    ofcPrFiledMonthsAgo: "{{months}} month(s) ago",
+    ofcSpLastReply: "Last reply",
+    ofcSpNoReplyYet: "No reply yet",
     ofcArPartPaid: "Part paid",
     ofcArNobodyOwes: "Nobody in this scope owes a collectable debt.",
     ofcAlIntro: "A programme decides who is eligible; a round is one actual distribution. Awards accrue only while a round is open, which is what stops a programme distributing on paper what is not at the collection point.",
@@ -8542,6 +8556,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcArNoDeadline: "Babu ranar karshe",
     ofcArLastPaid: "Biya na karshe",
     ofcArNeverPaid: "Bai taba ba",
+    ofcArOwingFor: "Ana bin bashi tun",
+    ofcArOwingForDays: "kwana {{days}}",
+    ofcPrLastFiled: "Karshen shigarwa",
+    ofcPrNeverFiledShort: "Bai taba shigarwa ba",
+    ofcPrFiledMonthsAgo: "watanni {{months}} da suka wuce",
+    ofcSpLastReply: "Amsa ta karshe",
+    ofcSpNoReplyYet: "Babu amsa tukuna",
     ofcArPartPaid: "An biya wani sashe",
     ofcArNobodyOwes: "Babu wanda ke bin bashin da ake iya karba a wannan yanki.",
     ofcAlIntro: "Shiri yana yanke wanda ya cancanta; zagaye kuwa rabo daya ne na hakika. Ana tara bayarwa ne kawai yayin da zagayen yake a bude, wannan ne ke hana shiri raba a takarda abin da babu shi a wurin karba.",

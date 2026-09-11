@@ -284,6 +284,31 @@ export function PayrollScreen() {
               },
               { key: 'natureOfBusiness', label: 'ofcPrNature' },
               {
+                /*
+                 * Whether this employer has stopped filing, which is the only
+                 * thing that makes them a lead.
+                 *
+                 * The table showed sector, nature of business and what they
+                 * paid last year — none of which separates an employer who
+                 * filed last month from one who has not filed since 2024.
+                 * `monthsSinceLastFiling` says exactly that and was computed,
+                 * declared and drawn nowhere.
+                 *
+                 * Null means they have never filed at all, which is a
+                 * different and louder fact than a long gap, so it gets its
+                 * own words rather than a blank an officer reads as zero.
+                 */
+                key: 'monthsSinceLastFiling',
+                label: 'ofcPrLastFiled',
+                render: (row: Lead) =>
+                  row.monthsSinceLastFiling === null
+                    ? t.ofcPrNeverFiledShort
+                    : t.ofcPrFiledMonthsAgo.replace(
+                        '{{months}}',
+                        String(row.monthsSinceLastFiling),
+                      ),
+              },
+              {
                 key: 'paidLastYearKobo',
                 label: 'ofcIgPaidLastYear',
                 numeric: true,

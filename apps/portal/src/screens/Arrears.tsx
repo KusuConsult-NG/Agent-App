@@ -247,6 +247,29 @@ export function ArrearsScreen() {
                     row.daysUntilLapse === null ? t.ofcArNoDeadline : String(row.daysUntilLapse),
                 },
                 {
+                  /*
+                   * How long they have owed it, which is not the same question
+                   * as how long is left to pay.
+                   *
+                   * `daysUntilLapse` answers urgency by deadline and is null
+                   * for a debt with no expiry — and for those rows the column
+                   * beside this one reads "No deadline" and the table then
+                   * said nothing about age at all. So a taxpayer who has owed
+                   * ₦50,000 for four hundred days sat in the worklist looking
+                   * exactly like one billed last week, and the ordering is by
+                   * amount, so nothing else surfaced them either.
+                   *
+                   * `oldestDaysOutstanding` has been computed and sent all
+                   * along. It is the oldest unpaid invoice, not the newest,
+                   * because the question is how long this has been going on.
+                   */
+                  key: 'oldestDaysOutstanding',
+                  label: 'ofcArOwingFor',
+                  numeric: true,
+                  render: (row: ArrearsRow) =>
+                    t.ofcArOwingForDays.replace('{{days}}', String(row.oldestDaysOutstanding)),
+                },
+                {
                   key: 'lastPaymentAt',
                   label: 'ofcArLastPaid',
                   render: (row: ArrearsRow) =>

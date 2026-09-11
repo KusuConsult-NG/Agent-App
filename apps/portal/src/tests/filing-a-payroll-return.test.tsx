@@ -15,7 +15,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { PayrollScreen } from '../screens/Payroll';
 import * as apiModule from '../lib/api';
 
@@ -43,7 +43,7 @@ const LEADS = {
       lgaName: 'Jos South',
       economicSector: 'HEALTHCARE',
       natureOfBusiness: 'Private clinic',
-      monthsSinceLastFiling: null,
+      monthsSinceLastFiling: 18,
       paidLastYearKobo: '250000',
     },
   ],
@@ -340,5 +340,46 @@ describe('an employer whose history could not be read', () => {
     await openEmployer();
 
     await waitFor(() => expect(screen.getByText(/has never filed a return/i)).toBeTruthy());
+  });
+});
+
+/**
+ * Whether this employer has actually stopped filing.
+ *
+ * The leads table drew the sector, the nature of the business and what they
+ * paid last year — none of which separates an employer who filed last month
+ * from one who has not filed since 2024. That distinction is the only thing
+ * that makes a row a lead, and `monthsSinceLastFiling` says exactly it.
+ *
+ * It was computed, declared on the row type and drawn by no column. The
+ * fixture above carried `null` for both rows, so even the branch that says
+ * "never filed" had never been rendered.
+ */
+describe('which employer to chase first', () => {
+  beforeEach(() => cleanup());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('says how long since an employer last filed', async () => {
+    stubApi();
+    render(<PayrollScreen />);
+
+    await waitFor(() => expect(screen.getByText('Vom Clinic')).toBeTruthy());
+    const row = screen.getByText('Vom Clinic').closest('tr')!;
+    expect(within(row).getByText('18 month(s) ago')).toBeTruthy();
+  });
+
+  it('says never filed, rather than a blank that reads as zero', async () => {
+    /*
+     * A different and louder fact than a long gap: this employer has no
+     * filing history at all. A blank cell would read as "0 months ago", which
+     * is the opposite.
+     */
+    stubApi();
+    render(<PayrollScreen />);
+
+    await waitFor(() => expect(screen.getByText('Highland Academy')).toBeTruthy());
+    const row = screen.getByText('Highland Academy').closest('tr')!;
+    expect(within(row).getByText(/Never filed/i)).toBeTruthy();
+    expect(within(row).queryByText('0 month(s) ago')).toBeNull();
   });
 });

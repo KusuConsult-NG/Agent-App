@@ -150,6 +150,24 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
               { key: 'assigned_to_name', label: 'ofcSpAssigned', render: (row) => row.assigned_to_name ?? '—' },
               { key: 'message_count', label: 'ofcSpReplies', numeric: true },
               { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
+              {
+                /*
+                 * When it was last touched, which is what triage runs on.
+                 *
+                 * The queue showed when a ticket was raised and not when
+                 * anybody last answered it, so a complaint opened three weeks
+                 * ago and replied to this morning looked exactly like one
+                 * opened three weeks ago and left alone since. The reply count
+                 * beside it does not separate them either: both may say 4.
+                 *
+                 * Null is a ticket nobody has answered at all, which is the
+                 * row to open first and says so in its own words.
+                 */
+                key: 'last_message_at',
+                label: 'ofcSpLastReply',
+                render: (row) =>
+                  row.last_message_at ? formatDateTime(row.last_message_at) : t.ofcSpNoReplyYet,
+              },
             ]}
             rows={tickets}
             empty="ofcNoneTicketsMatchFilter"
