@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
-import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
@@ -919,6 +919,14 @@ function AuditQueryParameters({
    * searched to do the thing they have already done.
    */
   const [searched, setSearched] = useState(false);
+  /*
+   * And whether the list could not be read at all, which the select used to
+   * render as "Nothing to choose from" with the control disabled. An auditor
+   * opening an audit on an agent was told PSIRS has no agents — and the one
+   * thing they could do about it, ask again, was not on the screen.
+   */
+  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState(() => {
     const to = new Date();
@@ -932,6 +940,7 @@ function AuditQueryParameters({
     setOptions(null);
     setValue('');
     setSearched(false);
+    setOptionsFailed(false);
     if (source === 'agents') {
       api
         .get<{ agents: any[] } | any[]>('/agents?limit=200')
@@ -944,7 +953,10 @@ function AuditQueryParameters({
             })),
           );
         })
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else if (source === 'revenueItems') {
       api
         .get<any[]>('/revenue/items')
@@ -956,13 +968,16 @@ function AuditQueryParameters({
             })),
           ),
         )
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else {
       // Taxpayers are searched rather than listed: there are more of them than
       // any select should hold, and an auditor arrives knowing a name or number.
       setOptions([]);
     }
-  }, [source]);
+  }, [source, attempt]);
 
   async function runSearch() {
     if (!search.trim()) return;
@@ -1043,7 +1058,9 @@ function AuditQueryParameters({
                   ? searched
                     ? t.ofcOvNoTaxpayerMatchedThat
                     : t.ofcOvSearchForATaxpayer
-                  : t.ofcOvNothingToChooseFrom
+                  : optionsFailed
+                    ? t.ofcListCouldNotLoad
+                    : t.ofcOvNothingToChooseFrom
                 : t.ofcOvSelectOne}
           </option>
           {(options ?? []).map((option) => (
@@ -1052,6 +1069,9 @@ function AuditQueryParameters({
             </option>
           ))}
         </select>
+        <ReferenceListFailure
+          list={{ failed: optionsFailed, reload: () => setAttempt((n) => n + 1) }}
+        />
       </div>
 
       {query.period && (

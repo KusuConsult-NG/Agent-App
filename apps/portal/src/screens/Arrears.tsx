@@ -27,7 +27,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 
 interface Lga {
@@ -68,13 +69,13 @@ interface Worklist {
 
 export function ArrearsScreen() {
   const { t } = usePortalI18n();
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
   const [filters, setFilters] = useState({ lgaId: '', minimumNaira: '', lapsingWithinDays: '' });
   const [worklist, setWorklist] = useState<Worklist | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   const load = useCallback(() => {
@@ -132,6 +133,7 @@ export function ArrearsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">

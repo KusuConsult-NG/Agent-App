@@ -21,7 +21,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table, formatDate } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, ReferenceListFailure, Table, formatDate } from '../ui';
+import { useReferenceList, type ReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -79,7 +80,6 @@ export function OrganisationScreen({ user }: { user: User }) {
   const { t, lang } = usePortalI18n();
   const [departments, setDepartments] = useState<Department[] | null>(null);
   const [offices, setOffices] = useState<Office[] | null>(null);
-  const [officers, setOfficers] = useState<Officer[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [adding, setAdding] = useState<'department' | 'office' | null>(null);
@@ -131,14 +131,10 @@ export function OrganisationScreen({ user }: { user: User }) {
    * staff list they cannot use. The other four roles open this screen to read
    * the chart, and ask for nothing they would be refused.
    */
-  useEffect(() => {
-    if (mayManage) {
-      api
-        .get<Officer[]>('/government/users')
-        .then((rows) => setOfficers(rows.filter((row) => row.role !== 'agent')))
-        .catch(() => setOfficers([]));
-    }
-  }, [mayManage]);
+  const officerList = useReferenceList<Officer>(mayManage ? '/government/users' : null, {
+    select: (body) => (body as Officer[]).filter((row) => row.role !== 'agent'),
+  });
+  const officers = officerList.items;
 
   return (
     <>
@@ -165,7 +161,7 @@ export function OrganisationScreen({ user }: { user: User }) {
 
       {adding === 'department' && (
         <DepartmentForm
-          officers={officers}
+          officerList={officerList}
           departments={departments ?? []}
           onDone={async (message) => {
             setAdding(null);
@@ -176,7 +172,7 @@ export function OrganisationScreen({ user }: { user: User }) {
       )}
       {adding === 'office' && (
         <OfficeForm
-          officers={officers}
+          officerList={officerList}
           onDone={async (message) => {
             setAdding(null);
             setNotice(message);
@@ -350,14 +346,15 @@ function CloseDepartmentButton({
 
 // ===========================================================================
 function DepartmentForm({
-  officers,
+  officerList,
   departments,
   onDone,
 }: {
-  officers: Officer[];
+  officerList: ReferenceList<Officer>;
   departments: Department[];
   onDone: (message: string) => Promise<void>;
 }) {
+  const officers = officerList.items;
   const { t } = usePortalI18n();
   const [form, setForm] = useState({
     code: '',
@@ -415,6 +412,7 @@ function DepartmentForm({
             ))}
           </select>
         </label>
+        <ReferenceListFailure list={officerList} />
         <label>
           {t.ofcOrParent}
           <select
@@ -462,12 +460,13 @@ function DepartmentForm({
 
 // ===========================================================================
 function OfficeForm({
-  officers,
+  officerList,
   onDone,
 }: {
-  officers: Officer[];
+  officerList: ReferenceList<Officer>;
   onDone: (message: string) => Promise<void>;
 }) {
+  const officers = officerList.items;
   const { t } = usePortalI18n();
   const [form, setForm] = useState({
     code: '',
@@ -478,16 +477,17 @@ function OfficeForm({
     headUserId: '',
   });
   const [covers, setCovers] = useState<string[]>([]);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
+  /*
+   * Creating an office is `disabled={... || !form.lgaId}`, and every option
+   * in that select comes from this list. An empty one leaves the placeholder
+   * as the only choice, so the button never enables — a new tax office simply
+   * cannot be opened, and nothing said the list failed to arrive rather than
+   * Plateau State having no Local Government Areas.
+   */
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
 
   return (
     <div className="card">
@@ -513,6 +513,7 @@ function OfficeForm({
             ))}
           </select>
         </label>
+        <ReferenceListFailure list={lgaList} />
         <label>
           {/*
             * The office's own LGA is added by the server whether or not it is
@@ -548,6 +549,7 @@ function OfficeForm({
             ))}
           </select>
         </label>
+        <ReferenceListFailure list={officerList} />
       </div>
       <button
         type="button"

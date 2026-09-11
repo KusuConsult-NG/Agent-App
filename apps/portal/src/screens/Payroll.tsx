@@ -23,7 +23,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
-import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -89,7 +90,8 @@ export function PayrollScreen() {
   const { t } = usePortalI18n();
   const canFile = can('paye:file');
 
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
   const [view, setView] = useState<'PAYE' | 'CONSUMPTION'>('PAYE');
   const [filters, setFilters] = useState({ lgaId: '' });
   const [leads, setLeads] = useState<Leads | null>(null);
@@ -119,7 +121,6 @@ export function PayrollScreen() {
   const [withdrawReason, setWithdrawReason] = useState('');
 
   useEffect(() => {
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   const loadLeads = useCallback(() => {
@@ -248,6 +249,7 @@ export function PayrollScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
         </div>
 

@@ -27,7 +27,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -101,7 +102,8 @@ export function ConnectionsScreen() {
    */
   const canAudit = can('audit:read');
 
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
   const [filters, setFilters] = useState({ lgaId: '', minimumVehicles: '' });
   const [leads, setLeads] = useState<Leads | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
@@ -122,7 +124,6 @@ export function ConnectionsScreen() {
   const [rebuilt, setRebuilt] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   const loadLeads = useCallback(() => {
@@ -243,6 +244,7 @@ export function ConnectionsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">

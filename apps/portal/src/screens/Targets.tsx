@@ -34,7 +34,9 @@ import {
   Stat,
   Table,
   formatDate,
+  ReferenceListFailure,
 } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -481,8 +483,10 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
    * changed.
    */
   const [periodError, setPeriodError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
+  const categoryList = useReferenceList<{ id: string; name: string }>('/revenue/categories');
+  const categories = categoryList.items;
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -500,17 +504,6 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
         setPeriodError(asApiError(caught));
       });
   }, [form.periodKind]);
-
-  useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-    api
-      .get<{ id: string; name: string }[]>('/revenue/categories')
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
 
   async function submit() {
     if (!period) return;
@@ -591,6 +584,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </label>
         )}
 
@@ -608,6 +602,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={categoryList} />
           </label>
         )}
 

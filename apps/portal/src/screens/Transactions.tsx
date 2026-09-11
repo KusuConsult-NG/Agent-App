@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, ExportButtons, Loading, Money, Table, formatDateTime } from '../ui';
+import { Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Table, formatDateTime } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
@@ -44,7 +45,8 @@ export function TransactionsScreen() {
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [rowsError, setRowsError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
   /*
    * Kept in the URL and in this session, not in component state.
    *
@@ -68,13 +70,6 @@ export function TransactionsScreen() {
     if (filters.to) params.set('to', new Date(`${filters.to}T23:59:59`).toISOString());
     return params;
   }, [filters]);
-
-  useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
 
   useEffect(() => {
     setRows(null);
@@ -126,6 +121,7 @@ export function TransactionsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">

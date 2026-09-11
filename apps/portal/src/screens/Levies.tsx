@@ -26,7 +26,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
-import { Alert, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, Empty, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
 
@@ -134,9 +135,12 @@ export function LeviesScreen() {
    */
   const canReadTaxpayers = can('taxpayer:read:all') || can('report:read:territory');
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const categoryList = useReferenceList<Category>('/revenue/categories');
+  const categories = categoryList.items;
+  const itemList = useReferenceList<Item>('/revenue/items');
+  const items = itemList.items;
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
 
   const [filters, setFilters] = useState({
     categoryId: '',
@@ -153,9 +157,6 @@ export function LeviesScreen() {
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    api.get<Category[]>('/revenue/categories').then(setCategories).catch(() => setCategories([]));
-    api.get<Item[]>('/revenue/items').then(setItems).catch(() => setItems([]));
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   /*
@@ -279,6 +280,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={categoryList} />
           </div>
 
           <div className="field">
@@ -295,6 +297,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={itemList} />
           </div>
 
           <div className="field">
@@ -311,6 +314,7 @@ export function LeviesScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">

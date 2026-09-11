@@ -19,7 +19,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
-import { BarList, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { BarList, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -58,7 +59,8 @@ export function TaxpayerBaseScreen() {
   const { t, lang } = usePortalI18n();
   const [data, setData] = useState<Analytics | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
   const [lgaId, setLgaId] = useState('');
 
   const load = useCallback(async () => {
@@ -74,13 +76,6 @@ export function TaxpayerBaseScreen() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
 
   return (
     <>
@@ -98,6 +93,7 @@ export function TaxpayerBaseScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </label>
         </div>
         <ErrorAlert error={error} />

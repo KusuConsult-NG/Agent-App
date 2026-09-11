@@ -25,7 +25,8 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
-import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { Alert, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -91,7 +92,8 @@ export function PresumptiveScreen() {
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
   const [check, setCheck] = useState({
     economicSector: 'ARTISAN_CRAFT',
     lgaId: '',
@@ -151,17 +153,29 @@ export function PresumptiveScreen() {
 
   useEffect(() => {
     load();
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then((rows) => {
-        setLgas(rows);
-        setCheck((current) => ({ ...current, lgaId: current.lgaId || (rows[0]?.id ?? '') }));
-      })
-      .catch(() => setLgas([]));
   }, [load]);
 
+  /*
+   * The LGA being classified: whichever one the officer picked, and otherwise
+   * the first in the list.
+   *
+   * Derived rather than seeded into `check` by an effect. An effect would put
+   * a render between the list arriving and the button becoming pressable, and
+   * the button is `disabled={busy || !lgaId}` — so for one tick the screen
+   * offers a control that does nothing. Reading the default here means the
+   * list arriving and the button working are the same render.
+   *
+   * When the list did NOT arrive there is nothing to default to, and the
+   * button stays off. That is correct — there is genuinely no LGA to assess
+   * against — but it used to happen with an empty select and no statement of
+   * why, leaving an officer with a trader in front of them unable to classify
+   * them and unable to find out what was wrong. `ReferenceListFailure` below
+   * is what changed.
+   */
+  const lgaId = check.lgaId || lgas[0]?.id || '';
+
   const runPreview = async () => {
-    if (!check.lgaId) return;
+    if (!lgaId) return;
     setBusy(true);
     setPreviewError(null);
     setPreview(null);
@@ -183,7 +197,7 @@ export function PresumptiveScreen() {
       setPreview(
         await api.post<Preview>('/government/presumptive/preview', {
           economicSector: check.economicSector,
-          lgaId: check.lgaId,
+          lgaId,
           observations,
         }),
       );
@@ -285,7 +299,7 @@ export function PresumptiveScreen() {
                 <label htmlFor="ps-lga">{t.pubVerifyLga}</label>
                 <select
                   id="ps-lga"
-                  value={check.lgaId}
+                  value={lgaId}
                   onChange={(event) => setCheck({ ...check, lgaId: event.target.value })}
                 >
                   {lgas.map((lga) => (
@@ -294,6 +308,7 @@ export function PresumptiveScreen() {
                     </option>
                   ))}
                 </select>
+                <ReferenceListFailure list={lgaList} />
               </div>
 
               {/*
@@ -342,7 +357,7 @@ export function PresumptiveScreen() {
             </div>
 
             <p>
-              <button type="button" onClick={runPreview} disabled={busy || !check.lgaId}>
+              <button type="button" onClick={runPreview} disabled={busy || !lgaId}>
                 {t.ofcPsWorkItOut}
               </button>
             </p>
@@ -517,6 +532,7 @@ export function PresumptiveScreen() {
                       </option>
                     ))}
                   </select>
+                  <ReferenceListFailure list={lgaList} />
                 </div>
                 <div className="field">
                   <label htmlFor="ps-new-class">{t.ofcPsClass}</label>
