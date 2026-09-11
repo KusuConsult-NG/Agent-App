@@ -52,6 +52,8 @@ import {
   startTestServer,
   stopTestServer,
 } from './helpers';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { query, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 
@@ -289,10 +291,7 @@ describe('the definition of collected money is not written out by hand', () => {
   const sameSet = (a: Set<string>, b: Set<string>) =>
     a.size === b.size && [...a].every((value) => b.has(value));
 
-  it('every list naming two or more recognised states means one of the two things it can', async () => {
-    const { readdirSync, readFileSync, statSync } = await import('node:fs');
-    const { join } = await import('node:path');
-
+  it('every list naming two or more recognised states means one of the two things it can', () => {
     const walk = (dir: string): string[] =>
       readdirSync(dir).flatMap((entry) => {
         const full = join(dir, entry);
@@ -300,7 +299,7 @@ describe('the definition of collected money is not written out by hand', () => {
         return full.endsWith('.ts') ? [full] : [];
       });
 
-    const root = join(import.meta.dirname, '..');
+    const root = join(__dirname, '..');
     const files = ['services', 'routes', 'jobs', 'lib', 'integrations', 'middleware']
       .map((dir) => join(root, dir))
       .filter((dir) => {
@@ -348,12 +347,9 @@ describe('the definition of collected money is not written out by hand', () => {
    * and the way this one would rot is by matching nothing at all — a broken
    * regex, a renamed directory, a walk that returns no files.
    */
-  it('is looking at source that actually contains such lists', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { join } = await import('node:path');
-
+  it('is looking at source that actually contains such lists', () => {
     const confirmed = readFileSync(
-      join(import.meta.dirname, '..', 'services', 'payment-history.ts'),
+      join(__dirname, '..', 'services', 'payment-history.ts'),
       'utf8',
     );
     assert.match(
