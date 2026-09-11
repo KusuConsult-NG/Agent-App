@@ -46,6 +46,33 @@ const UNIQUE_CONSTRAINT_MESSAGES: Record<string, string> = {
   agents_user_id_key: 'This user already has an agent application.',
 };
 
+/**
+ * Map overlap-constraint names to language the caller can act on.
+ *
+ * The same idea as the unique map above, for `EXCLUDE USING gist`. Four tables
+ * carry one, and each is a rule about a period of time not being covered
+ * twice: two financial months, two classes for one LGA, two constructions of
+ * the nano exemption, two presumptive assessments of one taxpayer for one year.
+ *
+ * These are reference data with dated windows, so the ordinary mistake is not
+ * exotic. Reclassifying an LGA or adopting a replacement policy without first
+ * giving the current one an end date is exactly what somebody does the first
+ * time they use the screen, and the answer they need is "close the current one
+ * first", not a reference number.
+ */
+const OVERLAP_CONSTRAINT_MESSAGES: Record<string, string> = {
+  financial_periods_do_not_overlap:
+    'A financial period already covers part of those dates. Periods cannot overlap.',
+  lga_class_no_overlap:
+    'This LGA already has a class covering part of that period. Give the current ' +
+    'classification an end date first, then publish the new one.',
+  nano_policy_no_overlap:
+    'A nano exemption policy already covers part of that period. Give the current ' +
+    'policy an end date first, then adopt the new one.',
+  presumptive_no_overlap:
+    'This taxpayer already has a presumptive assessment covering part of that period.',
+};
+
 export function errorHandler(
   error: unknown,
   req: Request,
@@ -148,6 +175,47 @@ export function errorHandler(
           code: 'DUPLICATE_RECORD',
           message,
           moneyStatus: 'NOT_DEBITED',
+        }).toJSON(),
+      );
+      return;
+    }
+
+    /*
+     * 23P01 exclusion_violation.
+     *
+     * Without this the request fell past every branch below to the 500 at the
+     * bottom of this function, whose comment reads: "Nothing above recognised
+     * this, which means it is a bug rather than a rule firing." An overlap
+     * constraint IS a rule firing, and it fired correctly. The officer got an
+     * internal error and a reference number for an action the platform had
+     * decided, on purpose, to refuse — and `reportError` woke somebody about
+     * it, so the same mistake also spent an alert.
+     *
+     * It survived because nothing had ever called the two routes that reach
+     * it: `POST /presumptive/lga-classes` and `POST /presumptive/nano-policy`
+     * are both on the never-exercised list. Neither service pre-checks the
+     * overlap the way `openPeriod` does for financial periods, so the database
+     * is the only thing refusing, and the refusal had nowhere to go.
+     */
+    if (error.code === '23P01') {
+      const message =
+        (error.constraint && OVERLAP_CONSTRAINT_MESSAGES[error.constraint]) ??
+        'That period overlaps one that already exists. Nothing has been changed.';
+      log.warn('an overlap rule blocked the request', {
+        requestId: req.requestId,
+        component: 'http',
+        constraint: error.constraint,
+        detail: error.detail,
+        path: req.path,
+      });
+      res.status(409).json(
+        new AppError({
+          statusCode: 409,
+          code: 'OVERLAPPING_PERIOD',
+          message,
+          moneyStatus: 'NOT_DEBITED',
+          nextStep:
+            'Close the existing record by giving it an end date, then try again.',
         }).toJSON(),
       );
       return;
