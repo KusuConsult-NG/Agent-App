@@ -325,21 +325,48 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
   const { t } = useI18n();
   const [identityType, setIdentityType] = useState('NIN');
   const [identityNumber, setIdentityNumber] = useState('');
-  const [documents, setDocuments] = useState<KycDocument[]>([]);
+  /*
+   * What is on file, and whether that is known at all.
+   *
+   * `missing` is the required list minus what is held, so an empty `documents`
+   * reports EVERY document as missing. The catch used to write exactly that on
+   * a failed read: an applicant who had already uploaded their identity paper
+   * was told to upload it again, and doing so supersedes the copy on file and
+   * puts a second set of somebody's identity documents into storage for
+   * nothing.
+   *
+   * `null` is "not known yet", which is not a claim about what they have sent.
+   */
+  const [documents, setDocuments] = useState<KycDocument[] | null>(null);
+  const [documentsError, setDocumentsError] = useState<ApiError | null>(null);
   const { busy, error, run } = useAction(onDone);
 
   const loadDocuments = useCallback(() => {
     api
       .get<{ documents: KycDocument[] }>('/agents/me/kyc/documents')
-      .then((result) => setDocuments(result.documents.filter((d) => !d.superseded_at)))
-      .catch(() => setDocuments([]));
+      .then((result) => {
+        setDocuments(result.documents.filter((d) => !d.superseded_at));
+        setDocumentsError(null);
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setDocumentsError(caught.error);
+        else if (caught instanceof Error) {
+          setDocumentsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, []);
 
   useEffect(() => {
     loadDocuments();
   }, [loadDocuments]);
 
-  const held = (type: string) => documents.find((d) => d.document_type === type);
+  const held = (type: string) => (documents ?? []).find((d) => d.document_type === type);
+  /*
+   * Everything counts as missing while the list is unknown, which keeps the
+   * submit button off — the request carries the selfie's id, and sending it
+   * without knowing what is on file is how a KYC check is run against the
+   * wrong document.
+   */
   const missing = REQUIRED_DOCUMENTS.filter((d) => !held(d.type));
 
   if (status.checklist.kycCleared) {
@@ -403,16 +430,27 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
       </Field>
 
       <p className="section-title">{t.appDocuments}</p>
-      {REQUIRED_DOCUMENTS.map((doc) => (
-        <DocumentCapture
-          key={doc.type}
-          documentType={doc.type}
-          label={t[doc.label]}
-          hint={t[doc.hint]}
-          existing={held(doc.type)}
-          onUploaded={loadDocuments}
-        />
-      ))}
+      {documentsError ? (
+        <>
+          <ErrorAlert error={documentsError} />
+          <button type="button" className="secondary" onClick={loadDocuments}>
+            {t.actionTryAgain}
+          </button>
+        </>
+      ) : documents === null ? (
+        <Loading rows={3} />
+      ) : (
+        REQUIRED_DOCUMENTS.map((doc) => (
+          <DocumentCapture
+            key={doc.type}
+            documentType={doc.type}
+            label={t[doc.label]}
+            hint={t[doc.hint]}
+            existing={held(doc.type)}
+            onUploaded={loadDocuments}
+          />
+        ))
+      )}
 
       <button
         type="submit"
@@ -675,16 +713,33 @@ function BankSection({ status, onDone }: { status: ApplicationStatus; onDone: ()
 function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDone: () => void }) {
   const { t } = useI18n();
   const [agreement, setAgreement] = useState<{ version: string; title: string; body: string } | null>(null);
+  /*
+   * The agreement not arriving used to look exactly like it not having
+   * arrived YET: the catch wrote `null`, and null renders the skeleton. An
+   * applicant sat watching four grey bars on the step that gates their
+   * clearance, with nothing anywhere saying a request had failed.
+   */
+  const [agreementError, setAgreementError] = useState<ApiError | null>(null);
   const [accepted, setAccepted] = useState(false);
   const { busy, error, run } = useAction(onDone);
 
-  useEffect(() => {
+  const loadAgreement = useCallback(() => {
     if (status.checklist.agreementAccepted) return;
     api
       .get<{ version: string; title: string; body: string }>('/agents/agreement')
-      .then(setAgreement)
-      .catch(() => setAgreement(null));
+      .then((loaded) => {
+        setAgreement(loaded);
+        setAgreementError(null);
+      })
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setAgreementError(caught.error);
+        else if (caught instanceof Error) {
+          setAgreementError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+      });
   }, [status.checklist.agreementAccepted]);
+
+  useEffect(loadAgreement, [loadAgreement]);
 
   if (status.checklist.agreementAccepted) {
     return (
@@ -704,7 +759,14 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
 
       <ErrorAlert error={error} />
 
-      {agreement ? (
+      {agreementError ? (
+        <>
+          <ErrorAlert error={agreementError} />
+          <button type="button" className="secondary" onClick={loadAgreement}>
+            {t.actionTryAgain}
+          </button>
+        </>
+      ) : agreement ? (
         <>
           <div
             style={{

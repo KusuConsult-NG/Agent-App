@@ -820,7 +820,7 @@ const STILL_RENDERING_THE_SERVER = new Set<string>([
   '../lib/drafts.ts:247 result.message',
   '../screens/More.tsx:59 draft.message',
   '../screens/More.tsx:80 lookup.message',
-  '../screens/Application.tsx:803 result.message',
+  '../screens/Application.tsx:865 result.message',
 ]);
 
 describe('no screen speaks the API’s English', () => {
