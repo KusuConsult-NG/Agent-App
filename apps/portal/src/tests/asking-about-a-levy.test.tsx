@@ -232,3 +232,99 @@ describe('an officer with no taxpayer access at all', () => {
     expect(asked.filter((path) => path.startsWith('/taxpayers/search'))).toHaveLength(0);
   });
 });
+
+/**
+ * And the part of the roll that is not on the screen.
+ *
+ * `searchTaxpayers` clamps to 100 however much is asked for, and orders by
+ * `created_at DESC`. So an officer who filters to a levy and an LGA and reads
+ * a hundred names has not been shown everybody registered — and what is
+ * missing is the OLDEST registrations, which for a compliance question is the
+ * wrong hundred to lose. A trader who has been on Market Levy for nine years
+ * is exactly the one being looked for.
+ *
+ * The screen said nothing. A roll that stops at its own page size, under a
+ * heading asking who is registered, reads as the answer to that question.
+ */
+describe('the registrant roll says when it is not everybody', () => {
+  const registrant = (index: number) => ({
+    id: `tp-${index}`,
+    first_name: 'Registered',
+    last_name: `Trader${index}`,
+    business_name: null,
+    taxpayer_type: 'INDIVIDUAL',
+    tin: `P${String(index).padStart(8, '0')}`,
+    phone: `+23480000${String(index).padStart(5, '0')}`,
+    lga_name: 'Jos North',
+    ward_name: 'Naraguta',
+    status: 'ACTIVE',
+  });
+
+  /** The same stub, with a chosen number of registrants behind the search. */
+  function stubWithRegistrants(count: number) {
+    vi.restoreAllMocks();
+    vi.spyOn(apiModule, 'can').mockReturnValue(true);
+    asked = [];
+    vi.spyOn(apiModule.api, 'get').mockImplementation(async (path: string) => {
+      asked.push(path);
+      if (path.startsWith('/revenue/categories')) {
+        return [{ id: 'cat-1', name: 'Market and trade levies', code: 'MKT' }] as never;
+      }
+      if (path.startsWith('/revenue/items')) {
+        return [
+          { id: 'item-1', code: 'MARKET-LEVY', name: 'Daily market levy', category_name: 'Market and trade levies' },
+        ] as never;
+      }
+      if (path.startsWith('/reference/lgas')) return [{ id: 'lga-1', name: 'Jos North' }] as never;
+      if (path.startsWith('/government/revenue/by-category')) return EMPTY_REVENUE as never;
+      if (path.startsWith('/government/revenue/defaulters')) return EMPTY_DEFAULTERS as never;
+      if (path.startsWith('/taxpayers/search')) {
+        return Array.from({ length: count }, (_unused, index) => registrant(index)) as never;
+      }
+      return [] as never;
+    });
+  }
+
+  async function chooseALevy() {
+    render(<LeviesScreen />);
+    await waitFor(() => expect(screen.getByLabelText(/Tax category/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Tax category/i), { target: { value: 'cat-1' } });
+  }
+
+  it('says so when the roll comes back full', async () => {
+    stubWithRegistrants(100);
+    await chooseALevy();
+
+    await waitFor(() => expect(screen.getByText(/Trader0/)).toBeTruthy());
+    expect(
+      screen.getByText(/most recently registered/i),
+      'a hundred names under "who is registered" reads as everybody',
+    ).toBeTruthy();
+  });
+
+  it('says nothing when the roll is genuinely shorter than the page', async () => {
+    // The control. A notice on every roll is a notice nobody reads, and would
+    // make the screen claim an omission that did not happen.
+    stubWithRegistrants(7);
+    await chooseALevy();
+
+    await waitFor(() => expect(screen.getByText(/Trader0/)).toBeTruthy());
+    expect(screen.queryByText(/most recently registered/i)).toBeNull();
+  });
+
+  it('asks for exactly the number it then reasons about', async () => {
+    /*
+     * The notice fires on `length >= the cap`, so a request for a different
+     * number would either never trigger it or trigger it early. Holding the
+     * two together is what stops that drifting apart.
+     */
+    stubWithRegistrants(100);
+    await chooseALevy();
+
+    await waitFor(() => {
+      const search = asked.find((path) => path.startsWith('/taxpayers/search'));
+      expect(search).toBeTruthy();
+      expect(search).toContain('limit=100');
+    });
+  });
+});

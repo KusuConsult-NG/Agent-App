@@ -114,6 +114,28 @@ interface Registrant {
 const displayName = (row: Registrant) =>
   row.business_name ?? `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() ?? '—';
 
+/**
+ * The most registrants this roll can show, which is the search's own ceiling.
+ *
+ * `searchTaxpayers` clamps to 100 however much is asked for, and orders by
+ * `created_at DESC`. So what falls off is not an arbitrary hundred: it is the
+ * OLDEST registrations, which for a compliance question is the wrong hundred
+ * to lose — a trader who has been on Market Levy for nine years is exactly who
+ * an officer checking the roll is looking for.
+ *
+ * Three other capped lists on this platform were looked at and deliberately
+ * left alone, because they are newest-first logs at 500 and 1000 where the cap
+ * is unlikely to bite and nothing is summed or signed off them. This one is
+ * different on two counts: the ceiling is 100, which a common levy in a
+ * populous LGA passes easily, and the roll is not a side panel here — "who is
+ * registered under it" is what this section of the screen is for.
+ *
+ * The notice says the list is capped rather than how many matched, because
+ * the endpoint does not report a total and inventing one would be worse than
+ * saying plainly that this is not everybody.
+ */
+const REGISTRANT_LIMIT = 100;
+
 export function LeviesScreen() {
   const { lang, t } = usePortalI18n();
   const canReadRevenue =
@@ -225,7 +247,7 @@ export function LeviesScreen() {
     if (canReadTaxpayers && [...who.keys()].length > 0) {
       setRegistrants(null);
       api
-        .get<Registrant[]>('/taxpayers/search?limit=100&' + who.toString())
+        .get<Registrant[]>(`/taxpayers/search?limit=${REGISTRANT_LIMIT}&` + who.toString())
         .then(setRegistrants)
         .catch(fail);
     } else {
@@ -498,6 +520,11 @@ export function LeviesScreen() {
                 }
               />{t.ofcLvOnlyUnpaid}</label>
           </div>
+          {registrants !== null && registrants.length >= REGISTRANT_LIMIT && (
+            <Alert kind="info">
+              {t.ofcLvRollIsCapped.replace('{{n}}', String(registrants.length))}
+            </Alert>
+          )}
           {registrants === null ? (
             <Loading />
           ) : registrants.length === 0 && !filters.categoryId && !filters.revenueItemId &&
