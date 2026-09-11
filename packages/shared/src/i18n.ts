@@ -765,6 +765,13 @@ export interface TranslationDictionary {
   ofcFnException: string;
   ofcFnDate: string;
   ofcFnPayout: string;
+  ofcFnWhereEarned: string;
+  ofcFnWhereEarnedBody: string;
+  ofcFnAccrued: string;
+  ofcFnPaidOut: string;
+  ofcFnReversed: string;
+  ofcFnByMonth: string;
+  ofcFnNoCommissionInPeriod: string;
   ofcFnEntries: string;
   ofcFnBankAccount: string;
   ofcFnRequestedBy: string;
@@ -4429,6 +4436,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnException: "Exception",
     ofcFnDate: "Date",
     ofcFnPayout: "Payout",
+    ofcFnWhereEarned: "Where commission is being earned",
+    ofcFnWhereEarnedBody: "Accrued, paid, outstanding and reversed, by Local Government Area and by month. Reversed is shown separately: a place with high accrual and high reversal is raising charges that do not stand up, which a total cannot tell you.",
+    ofcFnAccrued: "Accrued",
+    ofcFnPaidOut: "Paid",
+    ofcFnReversed: "Reversed",
+    ofcFnByMonth: "By month",
+    ofcFnNoCommissionInPeriod: "No commission was accrued in this period.",
     ofcFnEntries: "Entries",
     ofcFnBankAccount: "Bank account",
     ofcFnRequestedBy: "Requested by",
@@ -7841,6 +7855,13 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcFnException: "Kuskure",
     ofcFnDate: "Rana",
     ofcFnPayout: "Biya",
+    ofcFnWhereEarned: "Inda ake samun kwamiti",
+    ofcFnWhereEarnedBody: "An tara, an biya, saura, da wanda aka soke, bisa Karamar Hukuma da kuma bisa wata. Ana nuna wanda aka soke daban: wurin da ake tarawa da yawa amma ana sokewa da yawa yana yin caji ne da ba ya tsayawa, wanda jimilla ba za ta iya gaya maka ba.",
+    ofcFnAccrued: "An tara",
+    ofcFnPaidOut: "An biya",
+    ofcFnReversed: "An soke",
+    ofcFnByMonth: "Bisa wata",
+    ofcFnNoCommissionInPeriod: "Ba a tara wani kwamiti a wannan lokacin ba.",
     ofcFnEntries: "Shigarwa",
     ofcFnBankAccount: "Asusun banki",
     ofcFnRequestedBy: "Wanda ya nema",

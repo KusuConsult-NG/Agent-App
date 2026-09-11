@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import type { Label } from '../ui';
 import { withJustification } from '../lib/justify';
 import { BankChangesCard } from './Agents';
 import { usePortalI18n } from '../lib/i18n';
@@ -591,12 +592,26 @@ export function CommissionsScreen() {
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  /*
+   * Kept apart from `error`, which belongs to the buttons on this screen.
+   *
+   * A failed list left `payouts` at null and drew the skeleton below forever:
+   * the error said the read was refused and the table underneath went on
+   * saying it was still arriving. An officer reading the two together cannot
+   * tell whether to wait.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
+
   const load = useCallback(() => {
+    setLoadError(null);
     api
       .get<any[]>('/government/commissions/payouts')
       .then(setPayouts)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        else if (caught instanceof Error) {
+          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
       });
   }, []);
 
@@ -645,7 +660,14 @@ export function CommissionsScreen() {
       {message && <Alert kind="success">{message}</Alert>}
 
       <div className="card card--flush">
-        {!payouts ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !payouts ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
@@ -762,7 +784,119 @@ export function CommissionsScreen() {
           />
         )}
       </div>
+
+      <CommissionByPlace />
     </>
+  );
+}
+
+/**
+ * Where commission is being earned, and how it has moved month by month.
+ *
+ * `GET /government/commissions/by-place` was written with its purpose in its
+ * own one-line comment — "commission by place and by month, which is how a
+ * Council asks about it" — and had no caller anywhere in either front end.
+ * One of the reads recorded in READ_WITHOUT_A_SCREEN.
+ *
+ * The commissions screen is a payout queue: one row per agent per payout,
+ * which answers "who is owed" and nothing about where the money is coming
+ * from. A Council asking how much its agents earned last quarter, or an
+ * officer asking why the commission bill has moved, had nowhere to look.
+ *
+ * Reversed is a column rather than a footnote. A place with high accrual and
+ * high reversal is not a place collecting well; it is a place raising
+ * charges that do not stand up, and the two are indistinguishable in a total.
+ */
+function CommissionByPlace() {
+  const { t } = usePortalI18n();
+  const [report, setReport] = useState<{
+    byLga: Record<string, string>[];
+    byPeriod: Record<string, string>[];
+  } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api
+      .get<{ byLga: Record<string, string>[]; byPeriod: Record<string, string>[] }>(
+        '/government/commissions/by-place',
+      )
+      .then(setReport)
+      .catch((caught) => {
+        if (caught instanceof ApiRequestError) setError(caught.error);
+        else if (caught instanceof Error) {
+          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+        }
+        setReport(null);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /* Both halves are lists; neither is a figure this screen may invent. */
+  const rows = (key: 'byLga' | 'byPeriod') =>
+    report && Array.isArray(report[key]) ? report[key] : [];
+
+  const money = (label: Label, field: string) => ({
+    key: field,
+    label,
+    numeric: true,
+    render: (row: Record<string, string>) => <Money kobo={row[field]} />,
+  });
+
+  return (
+    <div className="card card--flush">
+      <div className="card__pad">
+        <h2 className="card__title">{t.ofcFnWhereEarned}</h2>
+        <p className="card__hint">{t.ofcFnWhereEarnedBody}</p>
+      </div>
+
+      {error ? (
+        <div style={{ padding: 18 }}>
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !report ? (
+        <div style={{ padding: 18 }}>
+          <Loading rows={3} />
+        </div>
+      ) : (
+        <>
+          <Table
+            columns={[
+              { key: 'lga', label: 'tpLgaShort' },
+              { key: 'commissions', label: 'ofcFnEntries', numeric: true },
+              money('ofcFnAccrued', 'accrued_kobo'),
+              money('ofcFnPaidOut', 'paid_kobo'),
+              money('ofcAgOutstanding', 'outstanding_kobo'),
+              money('ofcFnReversed', 'reversed_kobo'),
+            ]}
+            rows={rows('byLga')}
+            empty="ofcFnNoCommissionInPeriod"
+          />
+
+          <div className="card__pad">
+            <h3 className="card__title">{t.ofcFnByMonth}</h3>
+          </div>
+          <Table
+            columns={[
+              { key: 'period', label: 'ofcPhPeriod' },
+              { key: 'commissions', label: 'ofcFnEntries', numeric: true },
+              money('ofcFnAccrued', 'accrued_kobo'),
+              money('ofcFnPaidOut', 'paid_kobo'),
+              money('ofcAgOutstanding', 'outstanding_kobo'),
+              money('ofcFnReversed', 'reversed_kobo'),
+            ]}
+            rows={rows('byPeriod')}
+            empty="ofcFnNoCommissionInPeriod"
+          />
+        </>
+      )}
+    </div>
   );
 }
 

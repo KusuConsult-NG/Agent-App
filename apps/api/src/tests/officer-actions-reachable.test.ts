@@ -676,9 +676,18 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * exists" — and that is what the screen did, going from choosing a person
    * straight to choosing a levy.
    *
-   * What is left is quieter: a payments list and commission by place.
+   * `/government/commissions/by-place` now opens under the payout queue on
+   * the commissions screen. Its own one-line comment already said what it was
+   * for — "commission by place and by month, which is how a Council asks
+   * about it" — and the queue it sits under answers "who is owed" and nothing
+   * about where the money comes from.
+   *
+   * One left: `/payments`, a filterable list of gateway payments across every
+   * agent. The transaction screen already tells the whole story of any one
+   * payment and the search finds it by reference, so this is a browse of
+   * something nobody browses. Recorded rather than given a screen, and the
+   * first officer who asks for it should get one.
    */
-  '/government/commissions/by-place',
   '/payments',
   /*
    * The agent's own unsent captures, read back on the handset that made them.
