@@ -433,6 +433,29 @@ describe('the standard audit questions are written in words', () => {
     }
   });
 
+  /*
+   * The third place the same value is drawn, and the one that survived.
+   *
+   * Typing `label` as `keyof TranslationDictionary` stops a SENTENCE being put
+   * in the field — that is a compile error now. It does nothing about the key
+   * being rendered raw, because a string-literal union is a perfectly good
+   * ReactNode. This site passed the typecheck before and after the type
+   * changed, and only rendering the screen finds it.
+   */
+  it('heads the question that asks for a parameter with words too', async () => {
+    quiet();
+    setPortalLanguage('en');
+    await renderSettled(en);
+
+    // This one needs an agent chosen, so pressing it opens the parameter card.
+    fireEvent.click(screen.getByRole('button', { name: en.ofcOvOneAgentCollected }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: en.ofcOvOneAgentCollected })).toBeTruthy(),
+    );
+    expect(screen.queryByRole('heading', { name: 'ofcOvOneAgentCollected' })).toBeNull();
+  });
+
   it('heads the answer with the question, not its key', async () => {
     quiet();
     setPortalLanguage('en');

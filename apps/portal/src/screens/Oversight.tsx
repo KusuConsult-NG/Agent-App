@@ -1122,7 +1122,7 @@ function AuditQueryParameters({
   return (
     <div className="card">
       <div className="card__header">
-        <h2 className="card__title">{query.label}</h2>
+        <h2 className="card__title">{t[query.label]}</h2>
         <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
