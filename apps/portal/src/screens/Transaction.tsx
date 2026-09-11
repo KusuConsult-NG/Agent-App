@@ -27,7 +27,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, BeforeAfter, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -75,7 +75,7 @@ export function TransactionScreen({
     api
       .get<Full>(`/government/transactions/${encodeURIComponent(transactionKey)}/full`)
       .then(setFull)
-      .catch((caught) => setError(caught instanceof ApiRequestError ? caught.error : null));
+      .catch((caught) => setError(asApiError(caught)));
   }, [transactionKey]);
 
   if (error) return <div className="card"><ErrorAlert error={error} /></div>;

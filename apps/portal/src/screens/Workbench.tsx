@@ -43,14 +43,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiRequestError,
-  api,
-  can,
-  stepUp,
-  type ApiError,
-  type User,
-} from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -180,10 +173,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
       setSamples(drawn.samples);
       setReports(generated.reports);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setLoadError(caught.error);
-      else if (caught instanceof Error) {
-        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setLoadError(asApiError(caught));
       // Unknown, not empty. One `Promise.all`, so a single refusal leaves
       // both unknown — which is honest: neither was read.
       setSamples(null);
@@ -216,10 +206,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
     try {
       setOpenReport(await api.get<ReportDetail>(`/government/audit/reports/${id}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setReportError(caught.error);
-      else if (caught instanceof Error) {
-        setReportError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setReportError(asApiError(caught));
       setOpenReport(null);
     }
   }, []);
@@ -229,7 +216,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
     try {
       setOpen(await api.get<SampleDetail>(`/government/audit/samples/${id}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     }
   }, []);
 
@@ -647,7 +634,7 @@ function DrawForm({ onDrawn }: { onDrawn: (message: string) => Promise<void> }) 
                 .replace('{{n}}', String(result.sampleSize)),
             );
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -766,7 +753,7 @@ function SampleDetailPanel({
                 });
                 await onChanged(t.ofcCwSaved);
               } catch (caught) {
-                setError(caught instanceof ApiRequestError ? caught.error : null);
+                setError(asApiError(caught));
               } finally {
                 setBusy(false);
               }
@@ -821,7 +808,7 @@ function FindingControl({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -896,7 +883,7 @@ function GenerateForm({ onGenerated }: { onGenerated: (message: string) => Promi
                 .replace('{{n}}', String(result.rowCount)),
             );
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -986,7 +973,7 @@ function ReportActions({
             setReason('');
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }

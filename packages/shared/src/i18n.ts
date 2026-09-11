@@ -1984,6 +1984,7 @@ export interface TranslationDictionary {
   ofcSearchPlaceholder: string;
   ofcSearchSearching: string;
   ofcSearchNoResults: string;
+  ofcSearchCouldNotRun: string;
   ofcSearchHint: string;
   ofcSearchTransaction: string;
   ofcSearchTaxpayer: string;
@@ -5570,6 +5571,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSearchPlaceholder: "Reference, TIN, name or receipt number",
     ofcSearchSearching: "Searching…",
     ofcSearchNoResults: "Nothing matches that.",
+    ofcSearchCouldNotRun: "The search could not be run. This does not mean there is no such record \u2014 try again.",
     ofcSearchHint: "Two characters or more.",
     ofcSearchTransaction: "Transaction",
     ofcSearchTaxpayer: "Taxpayer",
@@ -8992,6 +8994,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcSearchPlaceholder: "Lamba, TIN, suna ko lambar rasit",
     ofcSearchSearching: "Ana nema…",
     ofcSearchNoResults: "Babu abin da ya dace da haka.",
+    ofcSearchCouldNotRun: "Ba a iya gudanar da binciken ba. Wannan ba yana nufin babu irin wannan rikodin ba \u2014 sake gwadawa.",
     ofcSearchHint: "Haruffa biyu ko fiye.",
     ofcSearchTransaction: "Ma’amala",
     ofcSearchTaxpayer: "Mai biyan haraji",

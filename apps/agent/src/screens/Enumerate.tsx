@@ -33,7 +33,7 @@
  */
 
 import { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, isConnectivityFailure, type ApiError } from '../lib/api';
 import { requestBackgroundSync, submitOrQueue } from '../lib/drafts';
 import { Alert, ErrorAlert, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
@@ -118,7 +118,7 @@ export function EnumerateScreen({
         }
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
     api
@@ -222,7 +222,7 @@ export function EnumerateScreen({
         await requestBackgroundSync();
       }
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

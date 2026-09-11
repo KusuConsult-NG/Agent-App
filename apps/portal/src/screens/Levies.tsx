@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
@@ -196,7 +196,7 @@ export function LeviesScreen() {
     if (filters.outstandingOnly) who.set('outstandingOnly', 'true');
 
     const fail = (caught: unknown) => {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     };
 
     if (canReadRevenue) {

@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
@@ -115,7 +115,7 @@ export function OrganisationScreen({ user }: { user: User }) {
       setDepartments(dept);
       setOffices(office);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, []);
 
@@ -336,7 +336,7 @@ function CloseDepartmentButton({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -448,7 +448,7 @@ function DepartmentForm({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -567,7 +567,7 @@ function OfficeForm({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -637,10 +637,7 @@ export function PostingPanel({
     try {
       setHistory(await api.get<Transfer[]>(`/government/users/${officerId}/transfers`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setHistoryError(caught.error);
-      else if (caught instanceof Error) {
-        setHistoryError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setHistoryError(asApiError(caught));
       setHistory(null);
     }
   }, [officerId]);
@@ -800,7 +797,7 @@ export function PostingPanel({
             await loadHistory();
             await onChanged?.();
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -897,10 +894,7 @@ function ServicePostingHistory() {
       .get<ServiceTransfer[]>(`/government/transfers?${query.toString()}`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
         /*
          * "No posting was recorded in this period" is a finding about the
          * service — it would mean nobody moved — and it is the finding a

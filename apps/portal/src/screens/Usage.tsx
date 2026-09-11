@@ -16,7 +16,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -78,10 +78,7 @@ export function UsageScreen() {
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, []);
 

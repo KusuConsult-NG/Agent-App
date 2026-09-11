@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -100,7 +100,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
     try {
       setResults(await api.get<FoundTaxpayer[]>(`/taxpayers/search?q=${encodeURIComponent(search.trim())}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -154,10 +154,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
       setResults(null);
       setSearch('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -397,7 +394,7 @@ function PaymentHistory({ taxpayerId }: { taxpayerId: string }) {
       )
       .then(setHistory)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId, from, to]);
 
@@ -511,7 +508,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       .get<ObligationRow[]>(`/taxpayers/${taxpayerId}/obligations`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -539,10 +536,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -630,10 +624,7 @@ function Entitlements({ taxpayerId }: { taxpayerId: string }) {
       .get<{ programmes: ProgrammeStanding[] }>(`/taxpayers/${taxpayerId}/incentives`)
       .then((result) => setRows(result.programmes ?? []))
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
         setRows(null);
       });
   }, [taxpayerId]);
@@ -745,7 +736,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
       .get<VehicleRow[]>(`/vehicles?taxpayerId=${taxpayerId}`)
       .then(setVehicles)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -775,10 +766,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -921,7 +909,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
       );
       setReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

@@ -9,7 +9,7 @@ import {
   getTranslation,
   statusSeverity,
 } from '@psirs/shared';
-import { ApiRequestError, downloadExport, type ApiError } from './lib/api';
+import { ApiRequestError, asApiError, downloadExport, type ApiError } from './lib/api';
 import { getPortalLanguage, usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -574,7 +574,7 @@ export function ExportButtons({
             try {
               await downloadExport(path, format, filename);
             } catch (caught) {
-              setError(caught instanceof ApiRequestError ? caught.error : null);
+              setError(asApiError(caught));
             } finally {
               setBusy(null);
             }

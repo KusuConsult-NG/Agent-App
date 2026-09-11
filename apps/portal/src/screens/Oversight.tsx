@@ -1,7 +1,7 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
@@ -132,10 +132,7 @@ export function FraudScreen() {
         setLeakageError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLeakageError(caught.error);
-        else if (caught instanceof Error) {
-          setLeakageError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLeakageError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
@@ -151,10 +148,7 @@ export function FraudScreen() {
       // table. The refusal reaches the screen instead — in the queue's own
       // place, rather than above a skeleton that never resolves.
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setFlagsError(caught.error);
-        else if (caught instanceof Error) {
-          setFlagsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setFlagsError(asApiError(caught));
       });
   }, [statusFilter]);
 
@@ -209,7 +203,7 @@ export function FraudScreen() {
                     );
                     load();
                   } catch (caught) {
-                    if (caught instanceof ApiRequestError) setError(caught.error);
+                    setError(asApiError(caught));
                   } finally {
                     setSweeping(false);
                   }
@@ -528,7 +522,7 @@ export function BackgroundWorkPanel() {
       .get<{ jobs: JobReport[]; healthy: boolean; needingAttention: number }>('/government/workers')
       .then(setHealth)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -687,7 +681,7 @@ export function AuditScreen() {
       .get<any[]>(`/government/audit?${params.toString()}`)
       .then(setEntries)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [auditQuery]);
 
@@ -769,7 +763,7 @@ export function AuditScreen() {
                   const rows = await api.get<any[]>(query.path);
                   setQueryResult({ label: query.label, rows });
                 } catch (caught) {
-                  if (caught instanceof ApiRequestError) setError(caught.error);
+                  setError(asApiError(caught));
                 }
               }}
             >
@@ -986,7 +980,7 @@ function AuditQueryParameters({
       );
       setSearched(true);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1002,7 +996,7 @@ function AuditQueryParameters({
       }
       onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }

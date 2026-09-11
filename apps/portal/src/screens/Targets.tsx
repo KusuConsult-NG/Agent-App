@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -142,7 +142,7 @@ export function TargetsScreen({ user }: { user: User }) {
       setForecast(projection);
       setRollup(roll);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [periodKind, includeInactive]);
 
@@ -382,7 +382,7 @@ function WithdrawButton({
             setOpen(false);
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -497,10 +497,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
       })
       .catch((caught) => {
         setPeriod(null);
-        if (caught instanceof ApiRequestError) setPeriodError(caught.error);
-        else if (caught instanceof Error) {
-          setPeriodError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setPeriodError(asApiError(caught));
       });
   }, [form.periodKind]);
 
@@ -535,7 +532,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
       });
       await onDone(t.ofcCwSaved);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

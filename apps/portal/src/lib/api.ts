@@ -21,6 +21,40 @@ export interface ApiError {
   details?: { field?: string; issue: string }[];
 }
 
+/**
+ * Anything that was thrown, as an error a person can be shown.
+ *
+ * This exists because the same three lines were written out by hand at more
+ * than eighty call sites, and at more than eighty call sites they were
+ * written out WRONG — in two shapes:
+ *
+ *     setError(asApiError(caught));
+ *     setError(asApiError(caught));
+ *
+ * The first sets nothing and the second sets null, so every failure that is
+ * not a refusal with a body — a dropped connection, a parse failure, a
+ * timeout — reached the officer or the agent as silence. A button stopped
+ * spinning and nothing else changed, which on a state-changing action is the
+ * worst possible answer: the person cannot tell whether it went through, so
+ * they press it again.
+ *
+ * That class has been swept twice before and grew back both times, because a
+ * three-line branch repeated everywhere is a thing people copy from the
+ * nearest example. One function cannot be copied wrong, and the guard beside
+ * it (`every-failure-is-said-out-loud.test.ts`) refuses the raw shapes.
+ *
+ * A thrown non-Error gets `UNKNOWN` rather than its `String()`, which would
+ * be "[object Object]": the code is one `ErrorAlert` translates, so the
+ * reader gets a sentence in their own language instead of a cast.
+ */
+export function asApiError(caught: unknown): ApiError {
+  if (caught instanceof ApiRequestError) return caught.error;
+  if (caught instanceof Error) {
+    return { code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' };
+  }
+  return { code: 'UNKNOWN', message: '', moneyStatus: 'NOT_APPLICABLE' };
+}
+
 export class ApiRequestError extends Error {
   readonly status: number;
   readonly error: ApiError;

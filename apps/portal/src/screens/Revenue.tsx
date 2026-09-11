@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
@@ -108,10 +108,7 @@ export function RevenueScreen() {
          * drawing forever. A screen that says nothing and never stops loading
          * is the one failure an officer cannot even report.
          */
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, []);
 

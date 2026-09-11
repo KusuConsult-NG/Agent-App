@@ -36,7 +36,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { enumLabel, type TranslationDictionary } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -100,10 +100,7 @@ export function PlatformScreen() {
       .get<Platform>('/government/platform/integrations')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
         /*
          * Left unknown rather than emptied. "All answering" is the single most
          * dangerous thing this screen could say from a read that failed, and

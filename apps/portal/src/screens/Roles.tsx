@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
@@ -58,7 +58,7 @@ export function RolesScreen({ user }: { user: User }) {
       setRoles(body.roles);
       setGrantable(body.grantable);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, []);
 
@@ -290,7 +290,7 @@ function LifecycleButton({
             setOpen(false);
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -370,7 +370,7 @@ function PermissionEditor({
           : `${t.ofcRlSignedOut}: ${result.sessionsEnded}`,
       );
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -507,7 +507,7 @@ function NewRoleForm({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -591,7 +591,7 @@ function ExportLimitControl({
             setReason('');
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }

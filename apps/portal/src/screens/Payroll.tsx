@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -136,7 +136,7 @@ export function PayrollScreen() {
       .get<Leads>(path)
       .then(setLeads)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setLeads({ summary: { leads: 0, filing: 0 }, rows: [] });
       });
   }, [filters, view]);
@@ -157,10 +157,7 @@ export function PayrollScreen() {
       .get<Return_[]>(`/government/paye/employers/${lead.taxpayerId}/returns`)
       .then(setHistory)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setHistoryError(caught.error);
-        else if (caught instanceof Error) {
-          setHistoryError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setHistoryError(asApiError(caught));
       });
   };
 
@@ -181,7 +178,7 @@ export function PayrollScreen() {
       setHistory(refreshed);
       loadLeads();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setFilingError(caught.error);
+      setFilingError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -212,7 +209,7 @@ export function PayrollScreen() {
         .then(setHistory)
         .catch(() => undefined);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setFilingError(caught.error);
+      setFilingError(asApiError(caught));
     } finally {
       setBusy(false);
     }

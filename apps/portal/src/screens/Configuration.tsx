@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, ReasonRule, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -119,10 +119,7 @@ export function CatalogueScreen({ user }: { user: User }) {
       .get<RevenueItem[]>(`/revenue/items?${query.toString()}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
         /*
          * Not `setItems([])`. "No revenue item matches" is a sentence about
          * the catalogue, and a refused request is a sentence about the
@@ -351,14 +348,7 @@ export function CatalogueScreen({ user }: { user: User }) {
                             );
                             setHistory({ item: row, rows });
                           } catch (caught) {
-                            if (caught instanceof ApiRequestError) setError(caught.error);
-                            else if (caught instanceof Error) {
-                              setError({
-                                code: 'CLIENT',
-                                message: caught.message,
-                                moneyStatus: 'NOT_APPLICABLE',
-                              });
-                            }
+                            setError(asApiError(caught));
                           }
                         }}
                       >{t.colHistory}</button>
@@ -507,10 +497,7 @@ function NewItemForm({
             });
             onDone(t.ofcCfItemAdded.replace('{{name}}', form.name.trim()));
           } catch (caught) {
-            if (caught instanceof ApiRequestError) setError(caught.error);
-            else if (caught instanceof Error) {
-              setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-            }
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -716,10 +703,7 @@ function WithdrawItemForm({
                     : result.message,
             );
           } catch (caught) {
-            if (caught instanceof ApiRequestError) setError(caught.error);
-            else if (caught instanceof Error) {
-              setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-            }
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -849,10 +833,7 @@ function RateChangeForm({
           .replace('{{date}}', effectiveFrom) + t.ofcCfExistingAssessmentsAreUnaffected,
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -954,10 +935,7 @@ export function ProgrammesScreen() {
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -984,7 +962,7 @@ export function ProgrammesScreen() {
       setMessage(t.ofcCfEvaluatedCount.replace('{{n}}', String(result.evaluated)));
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setEvaluating(null);
     }
@@ -1078,14 +1056,7 @@ export function ProgrammesScreen() {
                               );
                               load();
                             } catch (caught) {
-                              if (caught instanceof ApiRequestError) setError(caught.error);
-                              else if (caught instanceof Error) {
-                                setError({
-                                  code: 'CLIENT',
-                                  message: caught.message,
-                                  moneyStatus: 'NOT_APPLICABLE',
-                                });
-                              }
+                              setError(asApiError(caught));
                             }
                           }}
                         >

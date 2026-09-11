@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
@@ -67,6 +67,18 @@ export function VerifyScreen({ code }: { code?: string }) {
         } else {
           setError(caught.error);
         }
+      } else {
+        /*
+         * The branch that was missing, on the one surface whose reader has
+         * nobody to ask.
+         *
+         * A citizen checking a receipt at a counter, on a connection that
+         * dropped, got no verdict and no error: the page sat exactly as it
+         * had before they pressed. They cannot tell that from the platform
+         * having no record of their receipt, and there is no officer beside
+         * them to explain the difference.
+         */
+        setError(asApiError(caught));
       }
     } finally {
       setBusy(false);
@@ -269,7 +281,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       .publicGet<Invitation>(`/referee/${token}`)
       .then(setInvitation)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -301,7 +313,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
        */
       setOutcome(refereeOutcome(result.status, t) ?? result.message);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -317,7 +329,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       // One outcome, so one sentence: the decision is recorded either way.
       setOutcome(t.pubRefereeDeclineRecorded);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -645,7 +657,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
       .publicGet<AttestationView>(`/group-attestation/${token}`)
       .then(setView)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -680,7 +692,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
           : t.pubGroupAllConfirmed.replace('{{confirmed}}', String(result.attested)),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -898,7 +910,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       await api.publicPost('/citizen-status/statement/request', body);
       setStage('sent');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -918,7 +930,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       setStatement(data);
       setStage('shown');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1257,7 +1269,7 @@ export function CitizenPortalScreen() {
       );
       setResult(data);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

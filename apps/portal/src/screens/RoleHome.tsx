@@ -27,7 +27,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -91,10 +91,7 @@ function useAction(reload: () => void) {
         setDone(said);
         reload();
       } catch (caught) {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       } finally {
         setBusy(null);
       }
@@ -327,7 +324,7 @@ export function RoleHomeScreen({
       .get<Home>('/government/home')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 

@@ -24,7 +24,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -145,7 +145,7 @@ export function PresumptiveScreen() {
       .get<Schedule>('/government/presumptive/schedule')
       .then(setSchedule)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -188,7 +188,7 @@ export function PresumptiveScreen() {
         }),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setPreviewError(caught.error);
+      setPreviewError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -610,7 +610,7 @@ export function PresumptiveScreen() {
                       setPublishNote(t.ofcPsClassPublished);
                       load();
                     } catch (caught) {
-                      if (caught instanceof ApiRequestError) setPublishError(caught.error);
+                      setPublishError(asApiError(caught));
                     } finally {
                       setBusy(false);
                     }
@@ -717,7 +717,7 @@ export function PresumptiveScreen() {
                       setPublishNote(t.ofcPsFigurePublished);
                       load();
                     } catch (caught) {
-                      if (caught instanceof ApiRequestError) setPublishError(caught.error);
+                      setPublishError(asApiError(caught));
                     } finally {
                       setBusy(false);
                     }
@@ -799,7 +799,7 @@ export function PresumptiveScreen() {
                           setPublishNote(t.ofcPsExemptionAdopted);
                           load();
                         } catch (caught) {
-                          if (caught instanceof ApiRequestError) setPublishError(caught.error);
+                          setPublishError(asApiError(caught));
                         } finally {
                           setBusy(false);
                         }

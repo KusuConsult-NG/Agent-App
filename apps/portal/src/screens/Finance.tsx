@@ -1,7 +1,7 @@
 /** Reconciliation, settlement, commission and maker-checker approvals. */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import type { Label } from '../ui';
 import { withJustification } from '../lib/justify';
@@ -59,7 +59,7 @@ export function ReconciliationScreen() {
         setLoadError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        setLoadError(asApiError(caught));
       });
     /*
      * A list that could not be read is not a list with nothing in it.
@@ -74,13 +74,13 @@ export function ReconciliationScreen() {
       .get<any[]>('/government/reconciliation/exceptions')
       .then(setExceptions)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        setLoadError(asApiError(caught));
       });
     api
       .get<any[]>('/government/reconciliation/awaiting-settlement')
       .then(setInTransit)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -136,7 +136,7 @@ export function ReconciliationScreen() {
       setEntry({ ...entry, gatewayReferences: '', receivedNaira: '', bankReference: '' });
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -199,7 +199,7 @@ export function ReconciliationScreen() {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -256,7 +256,7 @@ export function ReconciliationScreen() {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -281,7 +281,7 @@ export function ReconciliationScreen() {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -608,10 +608,7 @@ export function CommissionsScreen() {
       .get<any[]>('/government/commissions/payouts')
       .then(setPayouts)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -646,10 +643,7 @@ export function CommissionsScreen() {
                 setMessage(t.ofcFnPromotedForPayout.replace('{{n}}', String(result.promoted)));
                 load();
               } catch (caught) {
-                if (caught instanceof ApiRequestError) setError(caught.error);
-                else if (caught instanceof Error) {
-                  setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-                }
+                setError(asApiError(caught));
               }
             }}
           >{t.ofcFnPromoteEligible}</button>
@@ -823,10 +817,7 @@ function CommissionByPlace() {
       )
       .then(setReport)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
         setReport(null);
       });
   }, []);
@@ -916,7 +907,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
       .get<any[]>(`/government/approvals?${params.toString()}`)
       .then(setApprovals)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [statusFilter]);
 
@@ -953,10 +944,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     }
   }
 

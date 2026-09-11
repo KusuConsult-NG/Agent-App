@@ -36,7 +36,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -153,10 +153,7 @@ export function MyAccessScreen({
       setSessions(result.sessions);
       setDevices(result.devices);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setLoadError(caught.error);
-      else if (caught instanceof Error) {
-        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setLoadError(asApiError(caught));
       // Unknown, not empty. An empty list here is a statement about somebody's
       // account that an administrator would act on.
       setSessions(null);
@@ -171,10 +168,7 @@ export function MyAccessScreen({
         await api.get<Activity>(`/government/users/${officer ? officer.id : user.id}/activity`),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setActivityError(caught.error);
-      else if (caught instanceof Error) {
-        setActivityError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setActivityError(asApiError(caught));
       // Unknown, not empty, for the same reason as the two lists above.
       setActivity(null);
     }
@@ -194,7 +188,7 @@ export function MyAccessScreen({
       setNotice(t.ofcCwSaved);
       await load();
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }
 
@@ -546,7 +540,7 @@ function BlockControl({
             setReason('');
             await onDone();
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }

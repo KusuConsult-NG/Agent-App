@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -70,10 +70,7 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
       setRows(result.notifications);
       setUnread(result.unread);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setLoadError(caught.error);
-      else if (caught instanceof Error) {
-        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setLoadError(asApiError(caught));
       /*
        * `setRows([])` printed "Nothing has been raised for you." This is the
        * screen the platform's own alarms arrive on -- a stalled job, a
@@ -97,7 +94,7 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
       await action();
       await load();
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }
 

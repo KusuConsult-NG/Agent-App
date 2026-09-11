@@ -19,13 +19,7 @@ import {
   type DuplicateReason,
   type TranslationDictionary,
 } from '@psirs/shared';
-import {
-  ApiRequestError,
-  api,
-  isConnectivityFailure,
-  newIdempotencyKey,
-  type ApiError,
-} from '../lib/api';
+import { ApiRequestError, api, asApiError, isConnectivityFailure, newIdempotencyKey, type ApiError } from '../lib/api';
 import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
 import { startFlow, track } from '../lib/usage';
@@ -92,10 +86,7 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
        * a refusal with a body — a dropped signal in a market, which is the
        * ordinary case here — set nothing at all.
        */
-      if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -432,6 +423,27 @@ export function RegisterTaxpayerScreen({
             setDuplicates('unreadable');
           }
         }
+      } else {
+        /*
+         * The branch that was missing, on the screen that creates a person's
+         * record.
+         *
+         * This screen handles being OFFLINE with care — the capture stays on
+         * the phone and says so. What it did not handle is a request that
+         * starts and then fails, which is the one-bar-of-signal case rather
+         * than the no-signal one. The agent got no error, no "saved on
+         * device", and no outcome recorded: the button stopped spinning and
+         * the form sat there exactly as before.
+         *
+         * They cannot tell whether a taxpayer was created, so they submit
+         * again — and duplicate detection is the thing this very screen
+         * exists to get right.
+         */
+        setError(asApiError(caught));
+        track('taxpayer.registration', {
+          flowId: flow.current?.flowId,
+          step: 'failed-unreadable',
+        });
       }
     } finally {
       setBusy(false);
@@ -1030,10 +1042,7 @@ export function TaxpayerScreen({
       .catch((caught) => {
         // Same as the search above, and worse here: `if (!profile) return
         // null` below meant a failure without a body drew an empty page.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [taxpayerId]);

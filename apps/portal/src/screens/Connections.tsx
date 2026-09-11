@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -136,7 +136,7 @@ export function ConnectionsScreen() {
       .get<Leads>(`/government/intelligence/leads?${params.toString()}`)
       .then(setLeads)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setLeads({ summary: { leads: 0, vehicles: 0, unmatchedVehicles: 0 }, rows: [] });
       });
   }, [filters]);
@@ -169,7 +169,7 @@ export function ConnectionsScreen() {
       )
       .then(setRecord)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setRecordError(caught.error);
+        setRecordError(asApiError(caught));
       });
   };
 
@@ -187,7 +187,7 @@ export function ConnectionsScreen() {
       setReason('');
       if (openId) openRecord(openId);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setRecordError(caught.error);
+      setRecordError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -212,7 +212,7 @@ export function ConnectionsScreen() {
       );
       loadLeads();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -562,10 +562,7 @@ function WhoHasLooked({ taxpayerId }: { taxpayerId: string }) {
        */
       .then((body) => setRows(Array.isArray(body) ? body : []))
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
         /*
          * "Nobody has opened this record" is the finding an investigation
          * would stop at. A refused read must not be able to produce it.

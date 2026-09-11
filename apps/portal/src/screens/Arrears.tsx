@@ -26,7 +26,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -90,7 +90,7 @@ export function ArrearsScreen() {
       .get<Worklist>(`/government/arrears?${params.toString()}`)
       .then(setWorklist)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setWorklist({
           summary: {
             taxpayers: 0,

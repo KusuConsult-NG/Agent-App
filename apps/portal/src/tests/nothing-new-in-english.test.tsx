@@ -183,6 +183,17 @@ function isSurroundingCode(text: string): boolean {
     /[;=]/.test(text) ||
     /^[:.]/.test(text) ||
     /*
+     * The whole run is the single word `return`.
+     *
+     * `return { code: 'CLIENT', ... }` after a closing brace puts exactly
+     * that between `}` and `{`. Matched as the ENTIRE text rather than as
+     * `\breturn\b`, which is the mistake this file has already made once: a
+     * bare identifier matches prose, and "…create a new account if they
+     * return." excused a whole English paragraph from the check. A sentence
+     * is never the single word "return", so the exact form cannot.
+     */
+    text === 'return' ||
+    /*
      * The opening of a parameter list, between a generic's `>` and the body
      * or object literal that follows it.
      *
@@ -311,6 +322,20 @@ const ALL_SOURCES = SOURCES;
  */
 function looksLikeTypeScript(text: string): boolean {
   return (
+    /*
+     * MEASURED, because this is the shape that has misfired before.
+     *
+     * `word` plus a space can appear in prose — "they return it", "the public
+     * register", "a class of levy" — so this rule could in principle excuse
+     * an English sentence, exactly as the bare-identifier version once did.
+     * Switched off entirely, across both applications, nothing new is
+     * reported except real TypeScript (`return uploadRequest`). It is hiding
+     * no English today.
+     *
+     * Left as it is on that measurement rather than rewritten on a theory. If
+     * it ever does excuse a sentence, the fix is to require punctuation that
+     * writing does not carry, not to delete the rule.
+     */
     /\b(?:public|private|protected|readonly|class|function|return|implements|extends)\s/.test(text) ||
     // A return type or a typed parameter: `): Promise`, `(path: string`.
     /\)\s*:\s*[A-Z]/.test(text) ||

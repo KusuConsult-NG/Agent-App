@@ -18,7 +18,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { BarList, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
@@ -67,7 +67,7 @@ export function TaxpayerBaseScreen() {
       const params = lgaId ? `?lgaId=${lgaId}` : '';
       setData(await api.get<Analytics>(`/government/taxpayers/analytics${params}`));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [lgaId]);
 

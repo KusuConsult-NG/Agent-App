@@ -1,7 +1,7 @@
 /** Transaction monitoring and export (PRD §48, §49). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Badge, ErrorAlert, ExportButtons, Loading, Money, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
@@ -88,10 +88,7 @@ export function TransactionsScreen() {
        * screen and a list still loading underneath it, for ever.
        */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setRowsError(caught.error);
-        else if (caught instanceof Error) {
-          setRowsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setRowsError(asApiError(caught));
       });
   }, [buildQuery]);
 

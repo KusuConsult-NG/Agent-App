@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -77,10 +77,7 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
       .get<TicketSummary[]>('/support/tickets')
       .then(setTickets)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -163,7 +160,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       });
       navigate(`/support/${created.id}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -281,10 +278,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -304,7 +298,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       if (result.reopened) setNotice(t.supReopenedNotice);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

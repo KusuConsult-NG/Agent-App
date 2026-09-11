@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Growth, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -75,7 +75,7 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
       .get<AgentRow[]>('/agents/performance?limit=200')
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setRows('unreadable');
       });
   }, []);

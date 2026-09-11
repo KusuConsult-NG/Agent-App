@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, getUser, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, getUser, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -117,10 +117,7 @@ export function EnumerationScreen() {
   const readingFailed =
     (set: (error: ApiError | null) => void) =>
     (caught: unknown): void => {
-      if (caught instanceof ApiRequestError) set(caught.error);
-      else if (caught instanceof Error) {
-        set({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      set(asApiError(caught));
     };
 
   const load = useCallback(() => {
@@ -171,7 +168,7 @@ export function EnumerationScreen() {
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setDecisionError(caught.error);
+      setDecisionError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -184,7 +181,7 @@ export function EnumerationScreen() {
       await api.post(path, body);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setDecisionError(caught.error);
+      setDecisionError(asApiError(caught));
     } finally {
       setBusy(false);
     }

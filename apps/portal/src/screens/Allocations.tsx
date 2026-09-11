@@ -25,7 +25,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -121,10 +121,7 @@ export function AllocationsScreen() {
         setRoundsError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setRoundsError(caught.error);
-        else if (caught instanceof Error) {
-          setRoundsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setRoundsError(asApiError(caught));
       });
     api
       .get<any[]>('/government/programmes')
@@ -133,10 +130,7 @@ export function AllocationsScreen() {
         setProgrammesError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setProgrammesError(caught.error);
-        else if (caught instanceof Error) {
-          setProgrammesError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setProgrammesError(asApiError(caught));
       });
   }, []);
 
@@ -151,7 +145,7 @@ export function AllocationsScreen() {
       setMessage(said);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
@@ -167,10 +161,7 @@ export function AllocationsScreen() {
     } catch (caught) {
       // In the drawer rather than at the top of the screen: that is where the
       // question was asked and where the answer is being looked for.
-      if (caught instanceof ApiRequestError) setAwardsError(caught.error);
-      else if (caught instanceof Error) {
-        setAwardsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setAwardsError(asApiError(caught));
     }
   }
 

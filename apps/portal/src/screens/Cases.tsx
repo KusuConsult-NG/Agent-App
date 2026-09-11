@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, uploadFile, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, uploadFile, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -157,7 +157,7 @@ function CaseQueue({
     try {
       setRows(await api.get<CaseRow[]>(`/government/cases?${params.toString()}`));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [filters]);
 
@@ -381,7 +381,7 @@ function OpenCaseForm({
       });
       onOpened(created.id);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -561,7 +561,7 @@ function CaseDetail({
     try {
       setDetail(await api.get<CaseDetailBody>(`/government/cases/${caseId}`));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [caseId]);
 
@@ -816,7 +816,7 @@ function CaseControls({
       await action();
       await onDone(message);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1165,7 +1165,7 @@ export function MyWorkScreen({ user }: { user: User }) {
       .get<MyWork>('/government/my-work')
       .then(setWork)
       .catch((caught) =>
-        setError(caught instanceof ApiRequestError ? caught.error : null),
+        setError(asApiError(caught)),
       );
   }, []);
 
@@ -1449,7 +1449,7 @@ function EvidenceUpload({
               setProvenance('');
               await onUploaded(t.ofcCwSaved);
             } catch (caught) {
-              setError(caught instanceof ApiRequestError ? caught.error : null);
+              setError(asApiError(caught));
             } finally {
               setBusy(false);
             }

@@ -13,7 +13,7 @@
 import { whereAmI } from '../lib/location';
 import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, newIdempotencyKey, type ApiError } from '../lib/api';
 import { verificationUrlFor } from '../lib/verification-url';
 import {
   PRINTER_PROBLEM_TEXT,
@@ -192,7 +192,7 @@ export function CollectScreen({
       .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayer]);
 
@@ -256,7 +256,7 @@ export function CollectScreen({
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -315,14 +315,21 @@ export function CollectScreen({
       // this and the agent has to be told before they reach for the button
       // again.
       if (reference !== null) setRaised({ reference });
-      if (caught instanceof ApiRequestError) {
-        setError(caught.error);
-        // A nil liability is not a failed collection — it is the correct
-        // answer, and counting it as failure would make the exempt look like
-        // a bug in the funnel.
-        if (caught.error.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
-        else flow.current?.fail(`refused-${caught.error.code}`);
-      }
+      /*
+       * The comment above was true and the code did not implement it.
+       *
+       * Only an `ApiRequestError` set anything, so a dropped signal — the
+       * ordinary failure in a market — left the agent with a button that
+       * stopped spinning, no message, and an assessment that may well have
+       * gone through. They reach for it again, and the taxpayer owes twice.
+       */
+      const failure = asApiError(caught);
+      setError(failure);
+      // A nil liability is not a failed collection — it is the correct
+      // answer, and counting it as failure would make the exempt look like
+      // a bug in the funnel.
+      if (failure.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
+      else flow.current?.fail(`refused-${failure.code}`);
     } finally {
       setBusy(false);
     }
@@ -362,7 +369,7 @@ export function CollectScreen({
                   ),
                 );
               } catch (caught) {
-                if (caught instanceof ApiRequestError) setError(caught.error);
+                setError(asApiError(caught));
               } finally {
                 setBusy(false);
               }
@@ -733,7 +740,7 @@ export function TransactionScreen({
     try {
       setData(await api.get<TransactionStatus>(`/payments/transactions/${reference}/status`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setLoading(false);
     }
@@ -761,7 +768,7 @@ export function TransactionScreen({
       window.open(document.downloadUrl, '_blank', 'noopener');
       setNotice(t.colInvoiceReady.replace('{{number}}', document.documentNumber));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setInvoicing(false);
     }
@@ -795,7 +802,7 @@ export function TransactionScreen({
       );
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -828,7 +835,7 @@ export function TransactionScreen({
     } catch (caught) {
       // A pending gateway answer arrives here as PAYMENT_UNCONFIRMED, and the
       // wording tells the agent explicitly not to collect again.
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -846,7 +853,7 @@ export function TransactionScreen({
       });
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }

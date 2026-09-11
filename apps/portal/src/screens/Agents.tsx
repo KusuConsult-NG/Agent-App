@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { KycDocumentsCard } from './KycDocuments';
 import {
   Alert,
@@ -68,10 +68,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
@@ -83,10 +80,7 @@ export function AgentsScreen({ navigate }: { navigate: (path: string) => void })
         setAgentsError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setAgentsError(caught.error);
-        else if (caught instanceof Error) {
-          setAgentsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setAgentsError(asApiError(caught));
       });
   }, [statusFilter]);
 
@@ -296,10 +290,7 @@ export function AgentDetailScreen({
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, [agentId]);
 
@@ -339,10 +330,7 @@ export function AgentDetailScreen({
       setMessage(await fn());
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -779,10 +767,7 @@ export function RefereesScreen() {
       .catch((caught) => {
         // A failure that is not a refusal with a body set nothing at all, so
         // the screen said nothing and went on loading. See `Revenue.tsx`.
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -817,7 +802,7 @@ export function RefereesScreen() {
       setNote('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1030,10 +1015,7 @@ export function BankChangesCard() {
         setLoadError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -1047,10 +1029,7 @@ export function BankChangesCard() {
       setMessage(await run());
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
