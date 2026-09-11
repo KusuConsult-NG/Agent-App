@@ -155,10 +155,18 @@ function readEndpoints() {
       }
 
       if (named.length === 0) continue;
-      const prefix = ROUTER_PREFIX[start[1]] ?? '';
+      const prefix = ROUTER_PREFIX[start[1]];
+      if (prefix === undefined) {
+        throw new Error(
+          `${start[1]} is not mounted in app.ts, so ${path[1]} has no URL. ` +
+            'Add the mount, or this row would name a path that does not exist.',
+        );
+      }
       for (const permission of named) {
         if (!byPermission.has(permission)) byPermission.set(permission, []);
-        byPermission.get(permission).push(`${start[2].toUpperCase()} ${prefix}${path[1]}`);
+        // `receiptRouter.get('/')` is `GET /receipts`, not `GET /receipts/`.
+        const url = prefix + (path[1] === '/' ? '' : path[1]);
+        byPermission.get(permission).push(`${start[2].toUpperCase()} ${url}`);
       }
     }
   }
@@ -193,23 +201,32 @@ function readEndpoints() {
  * moved since the platform's first week, and a wrong prefix in a document is
  * visible to any reader who tries the path.
  */
-const ROUTER_PREFIX = {
-  governmentRouter: '/government',
-  draftRouter: '/drafts',
-  agentRouter: '/agents',
-  taxpayerRouter: '/taxpayers',
-  revenueRouter: '/revenue',
-  paymentRouter: '/payments',
-  vehicleRouter: '/vehicles',
-  groupRouter: '/groups',
-  usageRouter: '/usage',
-  supportRouter: '/support',
-  refereeRouter: '/referees',
-  citizenRouter: '/citizen',
-  authRouter: '/auth',
-  referenceRouter: '/reference',
-  pushRouter: '/push',
-};
+/**
+ * Where each router is mounted, read from `app.ts` rather than kept by hand.
+ *
+ * This was a literal map, and a hand-kept map of something the code already
+ * states drifts. Six routers were missing from it -- receipts, documents,
+ * verification, webhooks, allocations and the group attestation link -- and
+ * every one of those fell through `?? ''`, so their rows in the matrix named
+ * a path with no prefix on it at all: `document:read:all` was published as
+ * granting `GET /:id`, and `allocation:collect` as granting `POST
+ * /collections`. A matrix of who may do what, naming endpoints that do not
+ * exist, cannot be checked against anything.
+ *
+ * Two more were simply wrong: `/referees` for a router mounted at `/referee`,
+ * and `/citizen` for one mounted at `/citizen-status`. Those were worse than
+ * the blanks, because they looked right.
+ *
+ * A router with no mount now throws. Falling back to '' is how eight of these
+ * stayed wrong through every regeneration of this document.
+ */
+const ROUTER_PREFIX = Object.fromEntries(
+  [
+    ...readFileSync(join(ROOT, 'apps/api/src/app.ts'), 'utf8').matchAll(
+      /\bapi\.use\(\s*'([^']*)'\s*,\s*(\w+)\s*\)/g,
+    ),
+  ].map((match) => [match[2], match[1]]),
+);
 
 /**
  * The eight verbs the brief asks about, and what counts as each.
