@@ -118,8 +118,9 @@ export async function fetchFile(path: string): Promise<Blob> {
         );
         setSession(session);
         response = await send();
-      } catch {
-        setSession(null);
+      } catch (refreshFailure) {
+        // As in `request`: a refresh that never arrived is not a refusal.
+        if (!neverReachedThePlatform(refreshFailure)) setSession(null);
       }
     }
   }
@@ -224,6 +225,14 @@ function couldNotReach(): ApiRequestError {
  *
  * `fetch` rejects with a TypeError for that, and only for that. A request the
  * application itself cancelled is not a failure anybody needs to be told about.
+ *
+ * Two questions turn on this, not one. The first is what to show — answered by
+ * `couldNotReach()` below. The second is whether to end the session, and the
+ * answer there is never: only a refusal that ARRIVED tells us a session is
+ * finished. A refresh that did not reach the platform tells us nothing at all,
+ * and signing an officer out on that guess destroys the refresh token they
+ * would have come back on. Every refresh below is sent through `raw`, so a
+ * lost connection reaches these catches as the bare TypeError this recognises.
  */
 function neverReachedThePlatform(error: unknown): boolean {
   return error instanceof TypeError;
@@ -254,8 +263,12 @@ async function request<T>(
       );
       setSession(session);
       return await raw<T>(path, options);
-    } catch {
-      setSession(null);
+    } catch (refreshFailure) {
+      // Only a refusal ends the session, which is the rule the agent app
+      // already holds to. This `try` covers the retried request as well as
+      // the refresh, so a connection that drops between the two used to take
+      // the session with it.
+      if (!neverReachedThePlatform(refreshFailure)) setSession(null);
       throw error;
     }
   }
@@ -315,8 +328,21 @@ export async function restoreSession(): Promise<User | null> {
     );
     setSession(session);
     return session.user;
-  } catch {
-    setSession(null);
+  } catch (failure) {
+    /*
+     * The worst of the four, because this one runs on page load.
+     *
+     * An officer opened the portal, the connection hiccuped for the second
+     * this request took, and the refresh token was deleted — so they were at
+     * the login screen needing a password, on a connection that had just
+     * proved unreliable, with a session that had been perfectly good.
+     *
+     * Keeping the token does not put them back at their desk: this still
+     * answers null, and the App still draws the login screen. It means a
+     * reload once the connection returns restores them without a password
+     * instead of the session being gone for good.
+     */
+    if (!neverReachedThePlatform(failure)) setSession(null);
     return null;
   }
 }
@@ -415,8 +441,9 @@ export async function uploadFile(path: string, file: File): Promise<unknown> {
         );
         setSession(session);
         response = await send();
-      } catch {
-        setSession(null);
+      } catch (refreshFailure) {
+        // As in `request`: a refresh that never arrived is not a refusal.
+        if (!neverReachedThePlatform(refreshFailure)) setSession(null);
       }
     }
   }
