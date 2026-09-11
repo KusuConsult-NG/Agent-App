@@ -1659,6 +1659,7 @@ export interface TranslationDictionary {
   ofcTxCreated: string;
   ofcPfIntro: string;
   ofcPfCollectedByAgents: string;
+  ofcPfFiguresCoverTopAgents: string;
   ofcPfTaxpayersOnboarded: string;
   ofcPfAgentsWorked: string;
   ofcPfOpenFraudFlags: string;
@@ -5320,6 +5321,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTxCreated: "Created",
     ofcPfIntro: "Collections, reach and trouble side by side. An agent in a commercial ward will out-collect the best agent in a rural one, so read the columns together rather than sorting by naira.",
     ofcPfCollectedByAgents: "Collected by agents",
+    ofcPfFiguresCoverTopAgents: "Showing the {{n}} highest-collecting agents, which is all this report returns. The figures above cover only those — an agent below that line is not counted, including one carrying an open fraud flag. The fraud queue lists every flag.",
     ofcPfTaxpayersOnboarded: "Taxpayers onboarded",
     ofcPfAgentsWorked: "Agents who worked",
     ofcPfOpenFraudFlags: "Open fraud flags",
@@ -8782,6 +8784,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcTxCreated: "An kirkira",
     ofcPfIntro: "Karba, isa da matsala gefe da gefe. Wakili a unguwar kasuwanci zai fi karbar mafi kyawun wakili a unguwar karkara, don haka ka karanta ginshikan tare maimakon jera su da naira.",
     ofcPfCollectedByAgents: "Abin da wakilai suka karba",
+    ofcPfFiguresCoverTopAgents: "Ana nuna wakilai {{n}} da suka fi karbar kudi, wanda shi ne duk abin da wannan rahoto ke bayarwa. Jimillar da ke sama ta kunshi su kadai — ba a lissafa wakilin da ke kasa da wannan layin ba, har da wanda ke da alamar zamba a bude. Jerin zamba yana nuna kowace alama.",
     ofcPfTaxpayersOnboarded: "Masu biyan haraji da aka shigar",
     ofcPfAgentsWorked: "Wakilan da suka yi aiki",
     ofcPfOpenFraudFlags: "Alamun zamba a bude",

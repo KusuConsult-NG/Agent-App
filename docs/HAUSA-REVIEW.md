@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,391 strings; that one is two pages and links back
+> because it carries all 3,392 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,391 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,392 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,391 strings is worse than no sheet, because it looks complete; this one cannot
+3,392 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,391 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,392 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,391 strings: where the
+- The glossary below is applied consistently across all 3,392 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3312 strings, grouped by where an agent meets them. Lower stakes
+3313 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -1954,6 +1954,7 @@ instructions — but they are what an agent reads all day.
 | `ofcPfAgentsWithFlag` | {{n}} agent(s) with an open fraud flag | Wakilai {{n}} da ke da alamar zamba a bude | ☐ | |
 | `ofcPfIntro` | Collections, reach and trouble side by side. An agent in a commercial ward will out-collect the best agent in a rural one, so read the columns together rather than sorting by naira. | Karba, isa da matsala gefe da gefe. Wakili a unguwar kasuwanci zai fi karbar mafi kyawun wakili a unguwar karkara, don haka ka karanta ginshikan tare maimakon jera su da naira. | ☐ | |
 | `ofcPfCollectedByAgents` | Collected by agents | Abin da wakilai suka karba | ☐ | |
+| `ofcPfFiguresCoverTopAgents` | Showing the {{n}} highest-collecting agents, which is all this report returns. The figures above cover only those — an agent below that line is not counted, including one carrying an open fraud flag. The fraud queue lists every flag. | Ana nuna wakilai {{n}} da suka fi karbar kudi, wanda shi ne duk abin da wannan rahoto ke bayarwa. Jimillar da ke sama ta kunshi su kadai — ba a lissafa wakilin da ke kasa da wannan layin ba, har da wanda ke da alamar zamba a bude. Jerin zamba yana nuna kowace alama. | ☐ | |
 | `ofcPfTaxpayersOnboarded` | Taxpayers onboarded | Masu biyan haraji da aka shigar | ☐ | |
 | `ofcPfAgentsWorked` | Agents who worked | Wakilan da suka yi aiki | ☐ | |
 | `ofcPfOpenFraudFlags` | Open fraud flags | Alamun zamba a bude | ☐ | |
