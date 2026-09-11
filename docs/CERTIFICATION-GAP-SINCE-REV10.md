@@ -84,9 +84,9 @@ mechanism that has since changed.
    "payroll", "presumptive", "command centre" and "revenue target" returns
    nothing at all.
 2. **"189 of 189 declared routes exercised."** The repository's own
-   `route-coverage.mjs` now reports **267 of 281**. The fourteen it names are
-   listed below; they are the most actionable item in this document, because
-   one of them was hiding a money defect.
+   `route-coverage.mjs` now reports **269 of 281**. The twelve it still names
+   are listed below; they are the most actionable item in this document,
+   because one of the original fourteen was hiding a money defect.
 
    ```
    GET  /government/intelligence/leads
@@ -94,14 +94,12 @@ mechanism that has since changed.
    POST /government/intelligence/rebuild
    GET  /government/paye/not-filing
    GET  /government/consumption-tax/not-paying
-   POST /government/paye/returns/:id/cancel          (fixed; now covered)
    POST /government/presumptive/band
    POST /government/presumptive/lga-classes
    POST /government/presumptive/nano-policy
    POST /government/enumeration/observations/:id/attest
    GET  /government/enumeration/objections
    POST /government/enumeration/assessments/:id/object
-   GET  /government/periods/figures
    POST /government/cases/:id/evidence/upload
    ```
 
@@ -112,7 +110,11 @@ mechanism that has since changed.
    the defect was not found by reading the service, which had already been
    read and passed as sound.
 
-   The other thirteen were examined after it and their *semantics* hold up —
+   Two have since been covered: `POST /paye/returns/:id/cancel`, by the tests
+   that accompany its fix, and `GET /periods/figures`, by the tests that pin
+   which calendar day a closed month's bounds mean.
+
+   The rest were examined and their *semantics* hold up —
    `lga_classes` and `nano_exemption_policies` each carry an `EXCLUDE USING
    gist` overlap constraint, immutability and no-delete triggers; a
    presumptive assessment snapshots the policy it was made under; and the
@@ -131,6 +133,52 @@ mechanism that has since changed.
    held in code. Migration `059` made it data, editable at runtime and cached.
 7. **The financial-integrity section** predates the closed-month control in
    `058`, which is now the mechanism by which a reported month is final.
+
+## One open question a revision would have to settle: which day
+
+Not a defect, and not something changed here. A measurement, recorded because
+it is a decision nobody has written down.
+
+Thirty money queries across `reports.ts` (23), `periods.ts` (5) and `targets.ts`
+(2) put a transaction in a day with a bare `created_at::date`. That resolves in
+the database session's zone, which is `Etc/UTC`. Two other modules ask the same
+kind of question and name the zone outright — `officer-inbox.ts` uses
+`date_trunc('day', created_at AT TIME ZONE 'Africa/Lagos')` and `fraud.ts`
+extracts the hour the same way, with a comment saying why: "the question is what
+time it was for the person".
+
+Plateau State is UTC+1, so the two do not agree about the first hour of every
+day. Measured directly:
+
+```
+ the_instant                  | 2026-08-31 23:30:00+00
+ plateau_wall_clock           | 2026-09-01 00:30:00
+ date_the_query_buckets_it_as | 2026-08-31
+ date_it_happened_in_plateau  | 2026-09-01
+ counted_in_august            | t
+ counted_in_september         | f
+```
+
+Money taken at half past midnight on 1 September, Plateau time, is counted in
+August. The partition is consistent — every transaction lands in exactly one
+bucket and the buckets tile the timeline, so nothing is lost or double-counted,
+and an annual total is unaffected. What is affected is which month a figure
+belongs to, and for `financial_periods` that figure is written once and frozen
+by a trigger that refuses to reopen the month.
+
+`lib/calendar-day.ts` has already reasoned about this hour and accepted it, but
+for a different consumer: certificates and amnesty windows, where "the only
+instant it excludes is between midnight and 01:00 on the opening day, when
+nobody is presenting papers to anybody". That argument is about a person
+carrying a document to an office. It does not obviously carry over to a gateway
+webhook, which arrives at whatever hour it arrives. The same file names the
+honest fix and says it is "worth doing deliberately, not as a side effect".
+
+Deliberately is the point. Changing it would move every reported figure at every
+month boundary, so it is a decision for PSIRS rather than a change to make while
+passing. What is recorded here is that the platform currently answers "which
+day" in two different ways depending on which module is asked, and that nothing
+says which one a financial month is supposed to use.
 
 ## What this document deliberately does not do
 

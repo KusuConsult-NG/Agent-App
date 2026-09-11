@@ -41,6 +41,72 @@ export interface Actor {
 }
 
 /**
+ * A calendar day, as `YYYY-MM-DD`, and never as a `Date`.
+ *
+ * NOT A BUG FIX. The figures were right before this and are right after it.
+ * What changes is what they depend on.
+ *
+ * A period's bounds are days on a calendar. They were carried as `Date`s, and
+ * the two ends of this module built them differently: `/periods/figures` used
+ * `z.coerce.date()`, which reads `2026-09-30` as midnight UTC whatever the
+ * process is set to, while `closePeriod` read the same day out of a DATE
+ * column, which `pg` hands back as midnight LOCAL. On `TZ=Africa/Lagos` those
+ * are an hour apart, and `2026-09-29T23:00Z` as the end of a month ending on
+ * the 30th would drop every naira taken on the last day out of
+ * `financial_periods.collected_kobo` — which migration 058's trigger then
+ * refuses to let anybody correct.
+ *
+ * It does not happen, and the reason is worth writing down because it is not
+ * visible in this file. `pg` serialises a `Date` parameter back in LOCAL time
+ * WITH its offset — `2026-08-31T00:00:00.000+01:00` — and Postgres, inferring
+ * the parameter as `date` from the `::date` on the other side, keeps the date
+ * part. The local parse and the local serialisation are the same skew twice
+ * and they cancel, which is the argument `lib/calendar-day.ts` already makes
+ * about `setHours`: "Both skews are therefore the same one, and cancel."
+ *
+ * WHY CHANGE IT THEN
+ *
+ * Because that cancellation is a three-way coincidence between how `pg` parses
+ * DATE, how `pg` serialises `Date`, and how Postgres infers an untyped
+ * parameter — and the correctness of a figure nobody can reopen rested on all
+ * three continuing to agree, with nothing anywhere saying so. Any one of them
+ * moving (a driver major, `parseInputDatesAsUTC`, someone adding an explicit
+ * `::timestamptz` to one of these subqueries) would take the last day of every
+ * closed month with it, silently.
+ *
+ * So the bounds are strings from the moment they leave the database until they
+ * are compared in SQL, and the comparison is `::date BETWEEN $1::date AND
+ * $2::date` — date against date, with no instant anywhere in it and nothing to
+ * cancel. `targets.ts` gets this for free by never leaving SQL at all
+ * (`BETWEEN rt.period_start AND rt.period_end`); this is the same comparison
+ * for a caller that has to.
+ *
+ * `the-last-day-a-closed-month-lost.test.ts` closes a month with the process
+ * moved into Africa/Lagos and asserts the last day is in the frozen figure. It
+ * passed before this change too — that is the point of it. It pins the
+ * coincidence so that whatever breaks it is a failing test rather than a short
+ * month.
+ */
+export type CalendarDay = string;
+
+const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Refuse anything that is not a bare calendar day.
+ *
+ * Typing the parameters `string` stops a `Date` being passed — that is a
+ * compile error, and it is the durable half. This is the other half, for what
+ * the type cannot see: a `String(someDate)` or a full ISO timestamp is a
+ * perfectly good string, and an instant in a position that must hold a day is
+ * how the bounds would quietly become instants again.
+ */
+function assertCalendarDay(value: string, which: string): void {
+  if (!CALENDAR_DAY.test(value)) {
+    throw badRequest(`${which} must be a calendar day as YYYY-MM-DD, not an instant.`);
+  }
+}
+
+/**
  * The label for a calendar month, derived once and stored.
  *
  * Stored rather than recomputed so a period can be quoted in a report without
@@ -53,7 +119,9 @@ export function monthLabel(start: Date): string {
 export async function listPeriods(db: Db, params: { limit?: number } = {}) {
   return query(
     db,
-    `SELECT p.id, p.label, p.period_start, p.period_end, p.status,
+    `SELECT p.id, p.label,
+            p.period_start::text AS period_start, p.period_end::text AS period_end,
+            p.status,
             p.closed_at, p.closing_note, p.reopened_at, p.reopen_reason,
             p.collected_kobo::text, p.settled_kobo::text, p.commission_kobo::text,
             p.transaction_count,
@@ -78,8 +146,8 @@ export async function listPeriods(db: Db, params: { limit?: number } = {}) {
  */
 export async function periodFigures(
   db: Db,
-  periodStart: Date,
-  periodEnd: Date,
+  periodStart: CalendarDay,
+  periodEnd: CalendarDay,
 ): Promise<{
   collected_kobo: string;
   settled_kobo: string;
@@ -88,6 +156,9 @@ export async function periodFigures(
   unreconciled: string;
   pending_payments: string;
 }> {
+  assertCalendarDay(periodStart, 'periodStart');
+  assertCalendarDay(periodEnd, 'periodEnd');
+
   const row = await queryOne<{
     collected_kobo: string;
     settled_kobo: string;
@@ -100,15 +171,15 @@ export async function periodFigures(
     `SELECT
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1 AND $2) AS collected_kobo,
+           AND created_at::date BETWEEN $1::date AND $2::date) AS collected_kobo,
        (SELECT COALESCE(SUM(received_amount_kobo),0)::text FROM settlements
-         WHERE settlement_date BETWEEN $1 AND $2) AS settled_kobo,
+         WHERE settlement_date BETWEEN $1::date AND $2::date) AS settled_kobo,
        (SELECT COALESCE(SUM(amount_kobo),0)::text FROM commissions
-         WHERE created_at::date BETWEEN $1 AND $2 AND status <> 'REVERSED')
+         WHERE created_at::date BETWEEN $1::date AND $2::date AND status <> 'REVERSED')
          AS commission_kobo,
        (SELECT count(*)::text FROM transactions
          WHERE status IN ${REVENUE_STATES_SQL}
-           AND created_at::date BETWEEN $1 AND $2) AS transaction_count,
+           AND created_at::date BETWEEN $1::date AND $2::date) AS transaction_count,
        /*
         * The two figures that say whether the month is ready to close.
         *
@@ -121,10 +192,10 @@ export async function periodFigures(
        (SELECT count(*)::text FROM reconciliation_records rr
          LEFT JOIN transactions t ON t.id = rr.transaction_id
         WHERE ${outstandingExceptionSql('rr')}
-          AND t.created_at::date BETWEEN $1 AND $2) AS unreconciled,
+          AND t.created_at::date BETWEEN $1::date AND $2::date) AS unreconciled,
        (SELECT count(*)::text FROM payments
          WHERE status IN ('INITIATED','PENDING')
-           AND initiated_at::date BETWEEN $1 AND $2) AS pending_payments`,
+           AND initiated_at::date BETWEEN $1::date AND $2::date) AS pending_payments`,
     [periodStart, periodEnd],
   );
   return row!;
@@ -196,12 +267,13 @@ export async function closePeriod(
     const period = await queryOne<{
       id: string;
       label: string;
-      period_start: Date;
-      period_end: Date;
+      period_start: CalendarDay;
+      period_end: CalendarDay;
       status: string;
     }>(
       client,
-      `SELECT id, label, period_start, period_end, status
+      `SELECT id, label, period_start::text AS period_start,
+              period_end::text AS period_end, status
          FROM financial_periods WHERE id = $1 FOR UPDATE`,
       [periodId],
     );

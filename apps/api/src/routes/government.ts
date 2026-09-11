@@ -3270,12 +3270,21 @@ governmentRouter.get(
   ),
 );
 
-/** What a period holds right now — the same query the close writes down. */
+/**
+ * What a period holds right now — the same query the close writes down.
+ *
+ * The bounds stay calendar days rather than becoming `Date`s. `z.coerce.date()`
+ * here read `2026-09-30` as midnight UTC while the close read the same day out
+ * of a DATE column as midnight LOCAL; those survive being an hour apart only
+ * because `pg` serialises the `Date` back in local time and the skew cancels.
+ * Relying on that is what changed, not the answer. See `CalendarDay` in
+ * services/periods.ts.
+ */
 governmentRouter.get(
   '/periods/figures',
   requirePermission('period:read'),
   validateQuery(
-    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    z.object({ periodStart: z.string().date(), periodEnd: z.string().date() }),
     async (_req, res, data) => {
       res.json(await periods.periodFigures(pool, data.periodStart, data.periodEnd));
     },
