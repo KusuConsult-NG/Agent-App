@@ -883,6 +883,11 @@ export interface TranslationDictionary {
   ofcOvWhatThatMeans: string;
   ofcOvWhatItDid: string;
   ofcOvNothingNeededDoing: string;
+  ofcOvRecord: string;
+  ofcOvNeverFailed: string;
+  ofcOvFailedOutOf: string;
+  ofcOvFailingIntermittently: string;
+  ofcInBody: string;
   ofcOvActor: string;
   ofcOvEntity: string;
   ofcOvResult: string;
@@ -4547,6 +4552,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvWhatThatMeans: "What that means",
     ofcOvWhatItDid: "What it did",
     ofcOvNothingNeededDoing: "Nothing needed doing",
+    ofcOvRecord: "Record",
+    ofcOvNeverFailed: "{{runs}} run(s), none failed",
+    ofcOvFailedOutOf: "{{failures}} of {{runs}} run(s) failed",
+    ofcOvFailingIntermittently: "Failing on and off. Last threw {{when}}.",
+    ofcInBody: "Detail",
     ofcOvActor: "Actor",
     ofcOvEntity: "Entity",
     ofcOvResult: "Result",
@@ -7972,6 +7982,11 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvWhatThatMeans: "Abin da hakan ke nufi",
     ofcOvWhatItDid: "Abin da ya yi",
     ofcOvNothingNeededDoing: "Babu abin da ya bukaci yi",
+    ofcOvRecord: "Tarihi",
+    ofcOvNeverFailed: "Gudu {{runs}}, babu wanda ya gaza",
+    ofcOvFailedOutOf: "{{failures}} cikin gudu {{runs}} sun gaza",
+    ofcOvFailingIntermittently: "Yana gazawa lokaci zuwa lokaci. Ya gaza {{when}} a karshe.",
+    ofcInBody: "Bayani",
     ofcOvActor: "Mai aikatawa",
     ofcOvEntity: "Abu",
     ofcOvResult: "Sakamako",

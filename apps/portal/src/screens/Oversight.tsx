@@ -450,6 +450,7 @@ interface JobReport {
   state: 'NEVER_RUN' | 'HEALTHY' | 'RUNNING' | 'OVERDUE' | 'FAILING' | 'STALLED';
   lastStartedAt: string | null;
   lastSucceededAt: string | null;
+  lastFailedAt: string | null;
   lastDetail: string | null;
   /**
    * Why the last run failed.
@@ -497,6 +498,18 @@ function jobState(row: JobReport, t: TranslationDictionary): string {
     default:
       return row.message;
   }
+}
+
+/**
+ * How far back "recently" reaches for a given job.
+ *
+ * Ten of its own intervals, floored at an hour and capped at a week. A job
+ * that runs every thirty seconds needs a window wider than five minutes before
+ * "it failed recently" means anything; one that runs twice a day should not
+ * still be called flappy a month later.
+ */
+function recentlyMeans(intervalMs: number): number {
+  return Math.min(Math.max(intervalMs * 10, 60 * 60_000), 7 * 24 * 60 * 60_000);
 }
 
 /** Every-30-seconds and every-6-hours both have to read at a glance. */
@@ -596,6 +609,65 @@ export function BackgroundWorkPanel() {
             render: (row: JobReport) =>
               row.lastDetail ??
               (row.lastSucceededAt ? t.ofcOvNothingNeededDoing : '\u2014'),
+          },
+          {
+            /*
+             * The failure this board could not report.
+             *
+             * `state` is FAILING only while `consecutiveFailures > 0`, and one
+             * success resets that counter to zero. A job that fails every other
+             * run therefore reads HEALTHY, `needingAttention` counts it as
+             * nothing, and the line above this table says every scheduled job
+             * has run on schedule — while `runsTotal` and `failuresTotal` sat
+             * in the payload, declared in the interface above, and no column
+             * drew them.
+             *
+             * For the reconciliation sweep that is money not reconciled, on a
+             * board whose entire purpose is to say whether unattended work is
+             * happening.
+             *
+             * Two readings, kept apart. The lifetime record is what it says:
+             * how this job has done overall, which a clean job should be proud
+             * of and a bad one cannot hide. Recently is the sharper one — a
+             * job with a recent success AND a recent failure is flapping now,
+             * whatever its state says, and that is the row to look at today.
+             *
+             * "Recent" is measured against the job's own interval, because
+             * every-30-seconds and every-6-hours mean different things by it.
+             */
+            key: 'record',
+            label: 'ofcOvRecord',
+            render: (row: JobReport) => {
+              if (row.runsTotal === 0) return '\u2014';
+              const clean = row.failuresTotal === 0;
+              const flapping =
+                row.state === 'HEALTHY' &&
+                row.lastFailedAt !== null &&
+                Date.now() - new Date(row.lastFailedAt).getTime() < recentlyMeans(row.intervalMs);
+              return (
+                <>
+                  <span>
+                    {clean
+                      ? t.ofcOvNeverFailed.replace('{{runs}}', String(row.runsTotal))
+                      : t.ofcOvFailedOutOf
+                          .replace('{{failures}}', String(row.failuresTotal))
+                          .replace('{{runs}}', String(row.runsTotal))}
+                  </span>
+                  {flapping && (
+                    <>
+                      <br />
+                      <span className="table__sub" role="status">
+                        {t.ofcOvFailingIntermittently.replace(
+                          '{{when}}',
+                          formatDateTime(row.lastFailedAt!),
+                        )}
+                        {row.lastError ? ` ${row.lastError}` : ''}
+                      </span>
+                    </>
+                  )}
+                </>
+              );
+            },
           },
           {
             /*

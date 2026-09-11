@@ -21,6 +21,7 @@ const job = (over: Partial<Record<string, unknown>> = {}) => ({
   state: 'HEALTHY',
   lastStartedAt: '2026-08-26T06:00:00.000Z',
   lastSucceededAt: '2026-08-26T06:00:00.000Z',
+  lastFailedAt: null,
   lastDetail: '4 reminder(s) sent',
   lastError: null,
   consecutiveFailures: 0,
@@ -159,5 +160,101 @@ describe('Unattended work', () => {
     for (const stopped of ['FAILING', 'STALLED', 'OVERDUE', 'NEVER_RUN']) {
       expect(statusSeverity(stopped)).toBe('danger');
     }
+  });
+});
+
+/**
+ * The failure this board could not report.
+ *
+ * `state` is FAILING only while `consecutiveFailures > 0`, and the SQL behind
+ * it reads `consecutive_failures = CASE WHEN $2 = 'FAILED' THEN
+ * consecutive_failures + 1 ELSE 0 END` — one success and the counter is zero
+ * again. So a job that fails every other run is HEALTHY, `needingAttention`
+ * counts it as nothing, and the line above the table says every scheduled job
+ * has run on schedule.
+ *
+ * `runsTotal` and `failuresTotal` have been in the payload all along and were
+ * declared in the panel's own row type with no column to draw them, exactly as
+ * `lastDetail` was before it. For the reconciliation sweep, a failure every
+ * other run is money not reconciled, on the one board whose purpose is to say
+ * whether unattended work is happening.
+ */
+describe('a job that fails and recovers and fails again', () => {
+  beforeEach(() => cleanup());
+  afterEach(() => vi.restoreAllMocks());
+
+  const serve = (body: unknown) =>
+    vi.spyOn(apiModule.api, 'get').mockResolvedValue(body as never);
+
+  /** Healthy by state, because the most recent run happened to succeed. */
+  const flapping = job({
+    name: 'reconciliation-sweep',
+    state: 'HEALTHY',
+    consecutiveFailures: 0,
+    runsTotal: 900,
+    failuresTotal: 446,
+    lastSucceededAt: '2026-08-26T06:00:00.000Z',
+    lastFailedAt: '2026-08-26T00:00:00.000Z',
+    lastError: 'Remita returned 503 for the statement.',
+  });
+
+  it('shows the lifetime record rather than only the last run', async () => {
+    serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
+
+    render(<BackgroundWorkPanel />);
+
+    expect(await screen.findByText(/446 of 900 run\(s\) failed/)).toBeTruthy();
+  });
+
+  it('says it is failing on and off, even though its state is healthy', async () => {
+    vi.setSystemTime(new Date('2026-08-26T07:00:00.000Z'));
+    serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
+
+    render(<BackgroundWorkPanel />);
+
+    expect(await screen.findByText(/Failing on and off/i)).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('says what the intermittent failure was', async () => {
+    /*
+     * The other half, and the reason `last_error` no longer clears on success.
+     * "Something went wrong at 00:00" is not something anybody can act on.
+     */
+    vi.setSystemTime(new Date('2026-08-26T07:00:00.000Z'));
+    serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
+
+    render(<BackgroundWorkPanel />);
+
+    expect(await screen.findByText(/Remita returned 503 for the statement/)).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('says nothing of the sort about a job that has never failed', async () => {
+    // The first control: a clean record must read as clean.
+    serve({ jobs: [job({ runsTotal: 900, failuresTotal: 0 })], healthy: true, needingAttention: 0 });
+
+    render(<BackgroundWorkPanel />);
+
+    expect(await screen.findByText(/900 run\(s\), none failed/)).toBeTruthy();
+    expect(screen.queryByText(/Failing on and off/i)).toBeNull();
+  });
+
+  it('says nothing of the sort about a failure that is long past', async () => {
+    /*
+     * The second control, and the one that stops this becoming noise. A job
+     * that failed a year ago and has been perfect since has a permanent mark
+     * on its lifetime record and is not flapping — the window is measured
+     * against the job's own interval, because every-30-seconds and
+     * every-6-hours mean different things by "recently".
+     */
+    vi.setSystemTime(new Date('2027-08-26T07:00:00.000Z'));
+    serve({ jobs: [flapping], healthy: true, needingAttention: 0 });
+
+    render(<BackgroundWorkPanel />);
+
+    expect(await screen.findByText(/446 of 900 run\(s\) failed/)).toBeTruthy();
+    expect(screen.queryByText(/Failing on and off/i)).toBeNull();
+    vi.useRealTimers();
   });
 });

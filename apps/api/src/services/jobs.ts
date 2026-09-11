@@ -260,6 +260,19 @@ async function recordFinish(
   detail: string | null,
   error: string | null,
 ): Promise<void> {
+  /*
+   * last_error holds the error from the LAST FAILURE, not from the last run.
+   *
+   * It used to clear on success, which loses the one thing that makes an
+   * intermittent failure actionable: a job that fails and then succeeds kept
+   * last_failed_at and threw away what it said, so the board could report that
+   * something went wrong at 14:03 and never what.
+   *
+   * Nothing that reads it changes. It is only read where consecutive_failures
+   * is above zero -- and there the last run WAS the failure, so the value is
+   * identical either way. What is new is that it survives for last_failed_at
+   * to be paired with.
+   */
   await pool.query(
     `UPDATE background_jobs SET
        last_finished_at = now(),
@@ -268,7 +281,8 @@ async function recordFinish(
        last_detail = $4,
        last_succeeded_at = CASE WHEN $2 = 'SUCCEEDED' THEN now() ELSE last_succeeded_at END,
        last_failed_at = CASE WHEN $2 = 'FAILED' THEN now() ELSE last_failed_at END,
-       last_error = CASE WHEN $2 = 'FAILED' THEN $5 ELSE NULL END,
+       -- The error from the LAST FAILURE, not from the last run. See above.
+       last_error = CASE WHEN $2 = 'FAILED' THEN $5 ELSE last_error END,
        failures_total = failures_total + CASE WHEN $2 = 'FAILED' THEN 1 ELSE 0 END,
        consecutive_failures = CASE WHEN $2 = 'FAILED' THEN consecutive_failures + 1 ELSE 0 END
      WHERE name = $1`,
@@ -292,6 +306,15 @@ export interface JobReport {
   lastStartedAt: Date | null;
   lastFinishedAt: Date | null;
   lastSucceededAt: Date | null;
+  /*
+   * When it last threw, which `state` cannot tell anybody.
+   *
+   * `state` is FAILING only while `consecutive_failures > 0`, and one success
+   * resets that to zero. So a job failing every other run reads HEALTHY, and
+   * the only surviving evidence that anything is wrong is this timestamp next
+   * to a recent `lastSucceededAt`.
+   */
+  lastFailedAt: Date | null;
   lastDetail: string | null;
   lastError: string | null;
   consecutiveFailures: number;
@@ -335,6 +358,7 @@ export async function jobHealth(now = new Date()): Promise<{
     last_outcome: string;
     last_detail: string | null;
     last_succeeded_at: Date | null;
+    last_failed_at: Date | null;
     last_error: string | null;
     consecutive_failures: number;
     runs_total: string;
@@ -355,6 +379,7 @@ export async function jobHealth(now = new Date()): Promise<{
         lastStartedAt: null,
         lastFinishedAt: null,
         lastSucceededAt: null,
+        lastFailedAt: null,
         lastDetail: null,
         lastError: null,
         consecutiveFailures: 0,
@@ -393,6 +418,7 @@ export async function jobHealth(now = new Date()): Promise<{
       lastStartedAt: row.last_started_at,
       lastFinishedAt: row.last_finished_at,
       lastSucceededAt: row.last_succeeded_at,
+      lastFailedAt: row.last_failed_at,
       lastDetail: row.last_detail,
       lastError: row.last_error,
       consecutiveFailures: row.consecutive_failures,

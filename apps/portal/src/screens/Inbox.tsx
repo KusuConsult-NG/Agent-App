@@ -220,6 +220,39 @@ export function InboxScreen({ navigate }: { navigate: (path: string) => void }) 
                   ),
               },
               {
+                /*
+                 * What the notification actually says, which was arriving and
+                 * being dropped.
+                 *
+                 * The only writer of `body` is `raiseSystemAlerts`, and it
+                 * puts the job's purpose, when it last succeeded, how many
+                 * times it has failed in a row and — the line that matters —
+                 * `Last error: ...` into it. This table declared the field and
+                 * drew four columns, none of them this one, so an
+                 * administrator woken by a CRITICAL alert saw the subject
+                 * ("reconciliation-sweep: Failed 3 times in a row") and had to
+                 * already know to go and look at the unattended-work board to
+                 * find out what it said.
+                 *
+                 * The server's words are kept for the same reason `lastDetail`
+                 * keeps them on that board: the sentence carries a different
+                 * error and different counts every time, so there is no code
+                 * to key a translation on.
+                 *
+                 * Composed with newlines, so it is rendered with them.
+                 */
+                key: 'body',
+                label: 'ofcInBody',
+                render: (row: Notification) =>
+                  row.body ? (
+                    <span className="table__sub" style={{ whiteSpace: 'pre-line' }}>
+                      {row.body}
+                    </span>
+                  ) : (
+                    '\u2014'
+                  ),
+              },
+              {
                 key: 'created_at',
                 label: 'ofcInWhen',
                 render: (row: Notification) => formatDateTime(row.created_at),
