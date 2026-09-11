@@ -2606,6 +2606,8 @@ export interface TranslationDictionary {
   colCheckPrinter: string;
   colPrintBluetooth: string;
   colReceiptCopied: string;
+  colCouldNotCopy: string;
+  colCouldNotCopyBody: string;
   colPreparingInvoice: string;
   colGiveInvoice: string;
   colInvoiceHint: string;
@@ -6179,6 +6181,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPrinter: "Check printer connection",
     colPrintBluetooth: "Print (Bluetooth)",
     colReceiptCopied: "Receipt details copied. You can paste them into a message.",
+    colCouldNotCopy: "The phone would not copy it",
+    colCouldNotCopyBody: "Read or type the receipt details below into your message. They are the same details the copy would have carried.",
     colPreparingInvoice: "Preparing the invoice…",
     colGiveInvoice: "Give the taxpayer an invoice",
     colInvoiceHint: "A printable demand notice with the invoice number, what it is for and how the amount was worked out",
@@ -9602,6 +9606,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     colCheckPrinter: "Ka duba hadin na’urar buga takarda",
     colPrintBluetooth: "Buga (Bluetooth)",
     colReceiptCopied: "An kwafi bayanan rasit. Za ka iya liko su cikin sako.",
+    colCouldNotCopy: "Wayar ba ta kwafa shi ba",
+    colCouldNotCopyBody: "Karanta ko rubuta bayanan rasit da ke kasa cikin sakonka. Su ne bayanan da kwafin zai dauka.",
     colPreparingInvoice: "Ana shirya takardar biya…",
     colGiveInvoice: "Ba mai biyan haraji takardar biya",
     colInvoiceHint: "Sanarwar biya da za a iya bugawa, dauke da lambar takardar biya, abin da ake biya da yadda aka lissafa kudin",

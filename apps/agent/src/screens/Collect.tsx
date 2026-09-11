@@ -735,6 +735,21 @@ export function TransactionScreen({
   const [invoicing, setInvoicing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * The receipt text, shown only when the handset would not take it.
+   *
+   * `navigator.clipboard.writeText` is refused on an insecure origin, without
+   * permission, and on some handsets outside the gesture that started the
+   * click — and the screen used to say "Receipt details copied" regardless.
+   * The agent then pastes whatever was in the clipboard before into the
+   * message they send the citizen: no receipt number and no verification
+   * code, on the only proof that citizen has that they paid.
+   *
+   * The recovery is the text itself. A failed copy puts it on the screen to
+   * be read out or typed, which is what an agent does anyway when the phone
+   * in their hand is not the phone they are sending from.
+   */
+  const [shareText, setShareText] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -915,6 +930,26 @@ export function TransactionScreen({
 
       <ErrorAlert error={error} />
       {notice && !error && <Alert kind="success">{notice}</Alert>}
+      {shareText && (
+        <Alert kind="warning" title={t.colCouldNotCopy}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colCouldNotCopyBody}</p>
+          <p
+            style={{
+              margin: 0,
+              padding: '0.5rem',
+              background: 'var(--surface-sunken, #f4f4f4)',
+              borderRadius: '4px',
+              // The whole point is that it can be read off the screen and
+              // typed, so it wraps rather than running off the side of a
+              // handset held in one hand.
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {shareText}
+          </p>
+        </Alert>
+      )}
 
       <div className="card">
         <KeyValue
@@ -1021,11 +1056,30 @@ export function TransactionScreen({
                 .replace('{{number}}', transaction.receipt_number ?? '')
                 .replace('{{name}}', name)
                 .replace('{{code}}', transaction.receipt_code ?? '');
+              setShareText(null);
               if (navigator.share) {
-                await navigator.share({ title: t.colShareTitle, text }).catch(() => undefined);
-              } else {
-                await navigator.clipboard.writeText(text).catch(() => undefined);
+                try {
+                  await navigator.share({ title: t.colShareTitle, text });
+                  return;
+                } catch (caught) {
+                  /*
+                   * Closing the share sheet is a decision, not a failure, and
+                   * it arrives here as an AbortError. Saying anything about it
+                   * would be telling the agent something went wrong when they
+                   * are the one who changed their mind.
+                   */
+                  if (caught instanceof Error && caught.name === 'AbortError') return;
+                  // Anything else and the sheet did not carry it. Fall through
+                  // to the clipboard, which is the route a handset without
+                  // `share` takes anyway.
+                }
+              }
+              try {
+                await navigator.clipboard.writeText(text);
                 setNotice(t.colReceiptCopied);
+              } catch {
+                setNotice(null);
+                setShareText(text);
               }
             }}
           >{t.colShareReceipt}</button>
