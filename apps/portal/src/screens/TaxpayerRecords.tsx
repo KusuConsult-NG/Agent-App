@@ -16,7 +16,18 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, KeyValue, Loading, Money, Stat, Table, formatDate } from '../ui';
+import {
+  Alert,
+  Badge,
+  ErrorAlert,
+  KeyValue,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -667,6 +678,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
               onChange={(event) => setReason(event.target.value)}
               placeholder={t.ofcTrSampleVehicle}
             />
+            <ReasonRule value={reason} minimum={5} />
           </div>
         )}
       </div>
@@ -825,6 +837,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
           onChange={(event) => setReason(event.target.value)}
           placeholder={t.ofcTrSampleClosure}
         />
+        <ReasonRule value={reason} minimum={10} />
       </div>
 
       <div className="button-row">

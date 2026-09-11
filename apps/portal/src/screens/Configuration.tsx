@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, Money, ReasonRule, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -567,6 +567,7 @@ function WithdrawItemForm({
             }
           />
         </label>
+        <ReasonRule value={reason} minimum={5} />
 
         {status === 'RETIRED' && (
           <Alert kind="warning">{t.ofcCfRetireWarning}</Alert>

@@ -25,7 +25,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { localName } from '@psirs/shared';
 
@@ -268,6 +268,7 @@ function LifecycleButton({
         placeholder={t.ofcCwWhy}
         onChange={(event) => setReason(event.target.value)}
       />
+      <ReasonRule value={reason} minimum={10} />
       <button
         type="button"
         disabled={busy || reason.trim().length < 10}
@@ -392,6 +393,7 @@ function PermissionEditor({
               {t.ofcRlGrantReason}
               <input value={reason} onChange={(event) => setReason(event.target.value)} />
             </label>
+            <ReasonRule value={reason} minimum={10} />
           </div>
         </>
       )}
@@ -571,6 +573,7 @@ function ExportLimitControl({
         placeholder={t.ofcCwWhy}
         onChange={(event) => setReason(event.target.value)}
       />{' '}
+      <ReasonRule value={reason} minimum={10} />
       <button
         type="button"
         className="small"

@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 interface SessionRow {
@@ -346,6 +346,7 @@ function BlockControl({
         placeholder={t.ofcCwWhy}
         onChange={(event) => setReason(event.target.value)}
       />{' '}
+      <ReasonRule value={reason} minimum={10} />
       <button
         type="button"
         className="small"

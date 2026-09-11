@@ -2309,6 +2309,7 @@ export interface TranslationDictionary {
   ofcCwNotYours: string;
   ofcCwAbout: string;
   ofcCwWhy: string;
+  ofcReasonAtLeastChars: string;
   ofcCwSubjectTooShort: string;
   ofcCwSampleSubject: string;
   ofcCwSampleDescription: string;
@@ -5783,6 +5784,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwNotYours: "This case is not assigned to you and you did not open it, so you may comment and nothing more.",
     ofcCwAbout: "About",
     ofcCwWhy: "Why",
+    ofcReasonAtLeastChars: "At least {{n}} characters.",
     ofcCwSubjectTooShort: "Give the case a subject of at least five characters.",
     ofcCwSampleSubject: "Collections trebled with no new taxpayers",
     ofcCwSampleDescription: "Say what you saw, where, and what you would like the other department to check.",
@@ -9093,6 +9095,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcCwNotYours: "Ba a ba ka wannan kara ba kuma ba kai ka bude ta ba, don haka za ka iya yin sharhi kadai.",
     ofcCwAbout: "Game da",
     ofcCwWhy: "Dalili",
+    ofcReasonAtLeastChars: "Akalla haruffa {{n}}.",
     ofcCwSubjectTooShort: "Ba karar batu na akalla haruffa biyar.",
     ofcCwSampleSubject: "Karbar kudi ta ninka sau uku ba tare da sabbin masu biyan haraji ba",
     ofcCwSampleDescription: "Fada abin da ka gani, a ina, da abin da kake so dayan sashen ya duba.",

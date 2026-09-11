@@ -278,6 +278,31 @@ export function Loading({ rows = 4 }: { rows?: number }) {
   );
 }
 
+/**
+ * The rule a reason box is holding a button to.
+ *
+ * Forty-odd buttons across this portal go dead until a typed reason reaches a
+ * minimum — suspending an agent, revoking somebody's access, reopening a
+ * closed period, rejecting an identity document. Two boxes said so in their
+ * label ("Reason (minimum 10 characters)"). The rest left the button grey and
+ * the rule unstated, so an officer who typed "Fraud" had nothing telling them
+ * what was wrong with it. Nothing was: it was five characters long.
+ *
+ * This sits with the BOX rather than with the button, because the rule belongs
+ * to what is typed and several buttons usually read the same box. It names the
+ * minimum while the box is short and disappears the moment the rule is met,
+ * which is also the only confirmation that the button has come alive.
+ */
+export function ReasonRule({ value, minimum }: { value: string; minimum: number }) {
+  const { t } = usePortalI18n();
+  if (value.trim().length >= minimum) return null;
+  return (
+    <p className="field__hint" role="status">
+      {t.ofcReasonAtLeastChars.replace('{{n}}', String(minimum))}
+    </p>
+  );
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="empty">{children}</p>;
 }

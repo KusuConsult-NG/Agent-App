@@ -10,7 +10,16 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -298,6 +307,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                   onChange={(event) => setDepartureReason(event.target.value)}
                   placeholder={t.ofcGpSampleEnded}
                 />
+                <ReasonRule value={departureReason} minimum={5} />
               </div>
             )}
           </div>

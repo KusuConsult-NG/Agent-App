@@ -24,7 +24,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import {
+  Alert,
+  Badge,
+  ErrorAlert,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -360,6 +370,7 @@ function WithdrawButton({
         placeholder={t.ofcTgWithdrawReason}
         onChange={(event) => setReason(event.target.value)}
       />
+      <ReasonRule value={reason} minimum={10} />
       <button
         type="button"
         disabled={busy || reason.trim().length < 10}

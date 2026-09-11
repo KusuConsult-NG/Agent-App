@@ -15,7 +15,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
 import { PostingPanel } from './Organisation';
 import { MyAccessScreen } from './MyAccess';
 import { usePortalI18n } from '../lib/i18n';
@@ -397,6 +397,7 @@ export function UserAccessScreen({ user }: { user: User }) {
               onChange={(event) => setStatusReason(event.target.value)}
               placeholder={t.ofcUaSampleLeft}
             />
+            <ReasonRule value={statusReason} minimum={10} />
           </div>
 
           {chosenStatus === 'CLOSED' && (
@@ -484,6 +485,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                   onChange={(event) => setCoverageReason(event.target.value)}
                   placeholder={t.ofcUaSampleTakingOver}
                 />
+                <ReasonRule value={coverageReason} minimum={10} />
               </div>
 
               {chosenTerritories.length === 0 && (

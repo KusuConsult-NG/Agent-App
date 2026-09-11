@@ -21,7 +21,19 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiRequestError, api, can, uploadFile, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 import { queryParams } from '../router';
@@ -1031,6 +1043,7 @@ function CaseControls({
               onChange={(event) => setEscalateReason(event.target.value)}
             />
           </label>
+          <ReasonRule value={escalateReason} minimum={10} />
           <button
             type="button"
             disabled={busy || escalateReason.trim().length < 10}

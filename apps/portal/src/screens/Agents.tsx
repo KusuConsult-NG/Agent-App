@@ -11,7 +11,18 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
 import { KycDocumentsCard } from './KycDocuments';
-import { Alert, Badge, Checklist, ErrorAlert, KeyValue, Loading, Stat, Table, formatDateTime } from '../ui';
+import {
+  Alert,
+  Badge,
+  Checklist,
+  ErrorAlert,
+  KeyValue,
+  Loading,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel, localName } from '@psirs/shared';
 
@@ -866,6 +877,7 @@ export function RefereesScreen() {
               onChange={(event) => setNote(event.target.value)}
               placeholder={t.ofcAgSampleRefereeNote}
             />
+            <ReasonRule value={note} minimum={10} />
           </div>
 
           <div className="button-row">

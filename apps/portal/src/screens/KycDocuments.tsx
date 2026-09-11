@@ -32,7 +32,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api, can, fetchFile, type ApiError } from '../lib/api';
-import { Alert, Badge, Empty, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -348,6 +357,7 @@ function DocumentViewer({
             maxLength={500}
             onChange={(event) => setReason(event.target.value)}
           />
+          <ReasonRule value={reason} minimum={4} />
           <div className="button-row">
             <button type="button" disabled={busy || reason.trim().length < 4} onClick={() => decide('ACCEPT')}>{t.ofcKycAccept}</button>
             <button

@@ -36,7 +36,17 @@ import {
   type ApiError,
   type User,
 } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import {
+  Alert,
+  Badge,
+  ErrorAlert,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 interface Period {
@@ -393,6 +403,7 @@ function CloseOrReopen({
               onChange={(event) => setReopenReason(event.target.value)}
             />
           </label>
+          <ReasonRule value={reopenReason} minimum={10} />
           <div className="button-row">
             <button
               type="button"
@@ -458,6 +469,7 @@ function CloseOrReopen({
             {t.ofcPeClosingNote}
             <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
           </label>
+          <ReasonRule value={note} minimum={10} />
 
           {needsReason && (
             <label>

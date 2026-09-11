@@ -51,7 +51,18 @@ import {
   type ApiError,
   type User,
 } from '../lib/api';
-import { Alert, Badge, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDate } from '../ui';
+import {
+  Alert,
+  Badge,
+  ErrorAlert,
+  ExportButtons,
+  Loading,
+  Money,
+  ReasonRule,
+  Stat,
+  Table,
+  formatDate,
+} from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
 interface SampleRow {
@@ -589,6 +600,7 @@ function SampleDetailPanel({
             placeholder={t.ofcCwWhy}
             onChange={(event) => setNote(event.target.value)}
           />{' '}
+          <ReasonRule value={note} minimum={10} />
           <button
             type="button"
             disabled={busy || note.trim().length < 10 || sample.pending > 0}
@@ -795,6 +807,7 @@ function ReportActions({
         placeholder={t.ofcCwWhy}
         onChange={(event) => setReason(event.target.value)}
       />{' '}
+      <ReasonRule value={reason} minimum={10} />
       <button
         type="button"
         className="small"
