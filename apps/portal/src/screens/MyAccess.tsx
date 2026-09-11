@@ -37,8 +37,22 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
+
+interface Activity {
+  officer: { id: string; full_name: string; role: string; status: string };
+  windowDays: number;
+  byDay: { day: string; times: string; refused: string }[];
+  mostRecent: {
+    created_at: string;
+    action: string;
+    entity_type: string | null;
+    entity_id: string | null;
+    result: string;
+    reason: string | null;
+  }[];
+}
 
 interface SessionRow {
   id: string;
@@ -112,6 +126,23 @@ export function MyAccessScreen({
    * question had not been answered.
    */
   const [loadError, setLoadError] = useState<ApiError | null>(null);
+  /*
+   * What this account has actually done.
+   *
+   * `/government/users/:id/activity` has existed, permissioned for an
+   * officer's own record with no permission at all and for somebody else's on
+   * `audit:read`, and nothing had ever called it — one of the reads recorded
+   * in READ_WITHOUT_A_SCREEN. So an administrator investigating an officer had
+   * the audit log, which is searchable across everybody, and no way to open
+   * one person's.
+   *
+   * It sits here because this screen already answers the other half of the
+   * same question and already takes an `officer`: where they are signed in,
+   * and on what. Both of the endpoint's access paths have a caller now —
+   * an officer reading their own, and an administrator reading somebody's.
+   */
+  const [activity, setActivity] = useState<Activity | null>(null);
+  const [activityError, setActivityError] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setLoadError(null);
@@ -133,9 +164,26 @@ export function MyAccessScreen({
     }
   }, [officer]);
 
+  const loadActivity = useCallback(async () => {
+    setActivityError(null);
+    try {
+      setActivity(
+        await api.get<Activity>(`/government/users/${officer ? officer.id : user.id}/activity`),
+      );
+    } catch (caught) {
+      if (caught instanceof ApiRequestError) setActivityError(caught.error);
+      else if (caught instanceof Error) {
+        setActivityError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
+      }
+      // Unknown, not empty, for the same reason as the two lists above.
+      setActivity(null);
+    }
+  }, [officer, user.id]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadActivity();
+  }, [load, loadActivity]);
 
   const mayManage = can('user:manage');
 
@@ -342,6 +390,99 @@ export function MyAccessScreen({
             ]}
             rows={devices}
             empty="ofcAcNoDevices"
+          />
+        )}
+      </div>
+
+      {/*
+        * The two figures are a sum over the window the endpoint used, rather
+        * than a fixed seven: the API clamps `days` and returns what it
+        * actually applied, so the label says the number that was measured.
+        */}
+      <div className="card card--flush">
+        <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__header">
+            <h2 className="card__title">
+              {officer ? t.ofcAcActivity : t.ofcAcActivityMine}
+            </h2>
+            <p className="card__hint">{t.ofcAcActivityHint}</p>
+          </div>
+          {/*
+            * Guarded on the shape, not just on presence.
+            *
+            * A body without `byDay` used to throw inside `reduce` and take
+            * the whole screen — including the sessions list, which had
+            * loaded perfectly well. Omitting the two figures is the right
+            * answer to a shape this does not recognise: inventing a nought
+            * from a missing array is the same false zero as everywhere else.
+            */}
+          {activity && Array.isArray(activity.byDay) && (
+            <div className="stat-grid">
+              <Stat
+                label={{
+                  text: t.ofcAcActedDays.replace('{{n}}', String(activity.windowDays)),
+                }}
+                value={String(
+                  activity.byDay.reduce((total, row) => total + Number(row.times), 0),
+                )}
+              />
+              <Stat
+                label={{
+                  text: t.ofcAcRefusedDays.replace('{{n}}', String(activity.windowDays)),
+                }}
+                value={String(
+                  activity.byDay.reduce((total, row) => total + Number(row.refused), 0),
+                )}
+                variant={
+                  activity.byDay.some((row) => Number(row.refused) > 0) ? 'alert' : undefined
+                }
+              />
+            </div>
+          )}
+        </div>
+        {activityError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={activityError} />
+            <button type="button" className="secondary" onClick={() => void loadActivity()}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !activity ? (
+          <Loading />
+        ) : (
+          <Table
+            columns={[
+              {
+                key: 'created_at',
+                label: 'ofcInWhen',
+                render: (row: Activity['mostRecent'][number]) => formatDateTime(row.created_at),
+              },
+              { key: 'action', label: 'ofcOvAction' },
+              {
+                key: 'entity_type',
+                label: 'ofcAcOnWhat',
+                render: (row: Activity['mostRecent'][number]) => row.entity_type ?? '\u2014',
+              },
+              {
+                key: 'result',
+                label: 'ofcAcOutcome',
+                render: (row: Activity['mostRecent'][number]) => (
+                  <>
+                    <Badge status={row.result} />
+                    {/*
+                      * The reason a refusal carries, which is the whole point
+                      * of keeping refusals: what somebody was stopped from
+                      * doing, and why.
+                      */}
+                    {row.reason && (
+                      <p className="table__sub" style={{ margin: '4px 0 0' }}>{row.reason}</p>
+                    )}
+                  </>
+                ),
+              },
+            ]}
+            rows={activity.mostRecent ?? []}
+            empty="ofcAcNoActivity"
           />
         )}
       </div>

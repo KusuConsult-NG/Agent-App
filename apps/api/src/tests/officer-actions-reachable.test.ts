@@ -489,11 +489,19 @@ const READ_WITHOUT_A_SCREEN = new Set([
    * it is no longer in the list below. An outage used to be discovered from a
    * queue that had stopped moving rather than from anywhere that said so.
    *
-   * The consequential ones remaining, in the order I would fix them:
+   * `/government/users/:id/activity` has joined the access screen, which
+   * already answers the other half of the same question and already takes an
+   * `officer`. Both of that endpoint's access paths have a caller now: an
+   * officer reading their own record, and an administrator reading somebody
+   * else's.
    *
-   *   `/government/users/:id/activity` — what an officer did. The audit log
-   *     exists and is searchable; this is the per-officer view of it, and an
-   *     administrator investigating somebody has no way to open it.
+   * An auditor holds `audit:read` and not `user:manage`, so they can open
+   * their own activity and not another officer's — the only screen that
+   * passes an `officer` is behind `user:manage`. Recorded rather than fixed
+   * here: the entry point an auditor would want is the audit log's own actor
+   * column, which is a change to a different screen.
+   *
+   * The consequential ones remaining, in the order I would fix them:
    *
    *   `/government/audit/reports/:id` — the recomputed checksum. The list now
    *     carries `checksumMatches` per row, so the fact reaches an auditor;
@@ -511,7 +519,6 @@ const READ_WITHOUT_A_SCREEN = new Set([
   '/government/commissions/by-place',
   '/government/transfers',
   '/government/audit/reports/:id',
-  '/government/users/:id/activity',
   '/government/tickets/:id',
   '/payments',
   '/payments/lookup',

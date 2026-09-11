@@ -1562,6 +1562,14 @@ export interface TranslationDictionary {
   ofcAcSessions: string;
   ofcAcSessionsHint: string;
   ofcAcDevices: string;
+  ofcAcActivity: string;
+  ofcAcActivityHint: string;
+  ofcAcActivityMine: string;
+  ofcAcActedDays: string;
+  ofcAcRefusedDays: string;
+  ofcAcOnWhat: string;
+  ofcAcOutcome: string;
+  ofcAcNoActivity: string;
   ofcAcDevicesHint: string;
   ofcAcDevice: string;
   ofcAcUnknownDevice: string;
@@ -5097,6 +5105,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAcSessions: "Sessions",
     ofcAcSessionsHint: "Every browser this account is signed in on. End any you do not recognise, then change your password.",
     ofcAcDevices: "Machines",
+    ofcAcActivity: "What they have done",
+    ofcAcActivityHint: "The last twenty-five things recorded against this account, newest first. A refusal is kept as well as a success — what somebody was stopped from doing is part of the record.",
+    ofcAcActivityMine: "What I have done",
+    ofcAcActedDays: "Actions in the last {{n}} days",
+    ofcAcRefusedDays: "Refused in the last {{n}} days",
+    ofcAcOnWhat: "On what",
+    ofcAcOutcome: "Outcome",
+    ofcAcNoActivity: "Nothing has been recorded against this account.",
     ofcAcDevicesHint: "Recorded the first time this account signs in from a machine. Blocking one ends every session it holds and stops it opening another.",
     ofcAcDevice: "Machine",
     ofcAcUnknownDevice: "Unknown machine",
@@ -8433,6 +8449,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcAcSessions: "Zaman shiga",
     ofcAcSessionsHint: "Kowane burauza da wannan asusun ya shiga a ciki. Ka kawo karshen duk wanda ba ka gane ba, sannan ka canza kalmar sirri.",
     ofcAcDevices: "Na\u2019urori",
+    ofcAcActivity: "Abin da suka yi",
+    ofcAcActivityHint: "Abubuwa ashirin da biyar na karshe da aka rubuta a kan wannan asusun, sabo tukuna. Ana ajiye kin amincewa kamar yadda ake ajiye nasara \u2014 abin da aka hana wani yi wani bangare ne na tarihin.",
+    ofcAcActivityMine: "Abin da na yi",
+    ofcAcActedDays: "Ayyuka a cikin kwanaki {{n}} da suka gabata",
+    ofcAcRefusedDays: "Wadanda aka ki a cikin kwanaki {{n}} da suka gabata",
+    ofcAcOnWhat: "A kan me",
+    ofcAcOutcome: "Sakamako",
+    ofcAcNoActivity: "Ba a rubuta komai a kan wannan asusun ba.",
     ofcAcDevicesHint: "Ana rubuta shi lokacin da asusun ya fara shiga daga na\u2019ura. Toshe daya yana kawo karshen kowane zaman da yake rike da shi kuma yana hana shi bude wani.",
     ofcAcDevice: "Na\u2019ura",
     ofcAcUnknownDevice: "Na\u2019urar da ba a sani ba",
