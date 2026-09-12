@@ -25,6 +25,7 @@
 
 import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { pool, query, withTransaction } from '../db/pool';
 import { queueNotification } from './notifications';
 import { citizenPortalUrl } from '../lib/public-urls';
@@ -118,6 +119,16 @@ async function processWindow(
       -- else. Ended records that still owe are worked from the
       -- ended-with-arrears queue instead, by a person rather than a sweep.
       AND t.status = 'ACTIVE'
+      -- And nothing the State has agreed not to pursue.
+      --
+      -- The same reasoning as the clause above, which stops the sweep chasing
+      -- an ended record: what stops is the chasing. An open objection suspends
+      -- enforcement, and an automated SMS demanding payment is the most direct
+      -- form of it there is — unsolicited, at scale, and arriving days after
+      -- the trader was told the objection had been received. If the objection
+      -- is dismissed the invoice becomes eligible again on its own, because
+      -- this is a predicate and not a flag.
+      AND NOT ${UNDER_OPEN_OBJECTION_SQL}
       AND i.expires_at IS NOT NULL
       AND i.expires_at > now() + INTERVAL '2 days'
       AND i.expires_at BETWEEN now() + ($1 || ' days')::INTERVAL

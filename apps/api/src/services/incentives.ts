@@ -16,6 +16,7 @@
 import type { PoolClient } from 'pg';
 import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, notFound } from '../lib/errors';
 import { endOfDay } from '../lib/calendar-day';
@@ -72,13 +73,7 @@ export async function computeComplianceScore(
         */
        COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
                   WHERE i.taxpayer_id = $1 AND i.status IN ('UNPAID','PARTIALLY_PAID')
-                    AND EXISTS (
-                          SELECT 1
-                            FROM presumptive_assessments pa
-                            JOIN assessment_objections ao
-                              ON ao.presumptive_assessment_id = pa.id AND ao.status = 'OPEN'
-                           WHERE pa.assessment_id = i.assessment_id
-                        )), 0)::text
+                    AND ${UNDER_OPEN_OBJECTION_SQL}), 0)::text
          AS disputed_kobo,
        /*
         * An assessment with no period label is still a period.

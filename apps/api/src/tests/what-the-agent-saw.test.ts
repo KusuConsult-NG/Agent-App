@@ -55,6 +55,7 @@ import {
   type Observations,
 } from '../services/presumptive';
 import { arrearsWorklist } from '../services/arrears';
+import { sendDueReminders } from '../services/reminders';
 import {
   createProgramme,
   evaluateEligibility,
@@ -2031,6 +2032,62 @@ describe('an objection costs the trader nothing while it is open', () => {
     assert.ok(
       !/contact your nearest PSIRS office or a revenue agent to pay/i.test(response.body.message),
       'the State must not press for money it has agreed not to press for',
+    );
+  });
+
+  it('does not send an objector an SMS demanding the money', async () => {
+    /*
+     * The most direct form of enforcement there is: unsolicited, automated,
+     * at scale, and arriving days after the trader was told their objection
+     * had been received.
+     *
+     * `processWindow` already stops chasing an ended taxpayer record and says
+     * why — "what stops is the chasing". An open objection stops it for the
+     * same reason, and the sweep did not know.
+     *
+     * Asserted on the window flag rather than on messages queued, so the test
+     * does not turn on which notification templates a previous file in the
+     * shard left ACTIVE: the sweep flags the invoice and then queues, so an
+     * invoice it considered carries the flag either way, and one it excluded
+     * does not.
+     */
+    const objector = await objectingTrader('Left Alone');
+    const quiet = await trader('Still Chased');
+    const observation = await observe(quiet);
+    await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    // Fourteen days out is squarely inside the two-week window (13-15 days).
+    const due = new Date(Date.now() + 14 * 86_400_000);
+    await query(
+      pool,
+      `UPDATE invoices SET expires_at = $2 WHERE taxpayer_id = ANY($1::uuid[])`,
+      [[objector, quiet], due],
+    );
+
+    await sendDueReminders(pool);
+
+    const flagged = async (taxpayerId: string) => {
+      const row = await queryOne<{ reminder_sent_2w: boolean }>(
+        pool,
+        'SELECT reminder_sent_2w FROM invoices WHERE taxpayer_id = $1',
+        [taxpayerId],
+      );
+      return row!.reminder_sent_2w;
+    };
+
+    assert.equal(
+      await flagged(objector),
+      false,
+      'an objector must not be chased for money the State has agreed not to pursue',
+    );
+    assert.equal(
+      await flagged(quiet),
+      true,
+      'and the sweep must still reach everybody who has not objected',
     );
   });
 
