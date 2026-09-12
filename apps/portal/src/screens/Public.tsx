@@ -17,6 +17,7 @@ import {
   VERIFICATION_TEXT,
   enumLabel,
   formatDateIn,
+  localName,
   formatNaira,
   type TranslationDictionary,
   type VerificationReason,
@@ -28,6 +29,7 @@ interface VerificationResult {
   documentNumber?: string;
   documentType?: string;
   revenueType?: string;
+  revenueTypeHa?: string | null;
   amountKobo?: string;
   issuedAt?: string;
   lga?: string;
@@ -40,7 +42,7 @@ interface VerificationResult {
 
 
 export function VerifyScreen({ code }: { code?: string }) {
-  const { t } = usePublicI18n();
+  const { t, lang } = usePublicI18n();
   const [input, setInput] = useState(code ?? '');
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -176,7 +178,25 @@ export function VerifyScreen({ code }: { code?: string }) {
               <KeyValue
                 items={[
                   [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
-                  [t.pubVerifyRevenueType, result.revenueType ?? result.documentType ?? '—'],
+                  /*
+                   * What the citizen paid for, in words a citizen uses.
+                   *
+                   * Two things were wrong on this one row. An acknowledgement
+                   * carries no revenue item, so the fallback put the column
+                   * value of `documents.document_type` on the page and a
+                   * citizen checking their paper read
+                   * `PAYMENT_ACKNOWLEDGEMENT`. And the revenue item arrives
+                   * with its Hausa name attached, which this page — which
+                   * offers Hausa — was throwing away.
+                   */
+                  [
+                    t.pubVerifyRevenueType,
+                    result.revenueType
+                      ? localName(lang, result.revenueType, result.revenueTypeHa)
+                      : result.documentType
+                        ? enumLabel(result.documentType, t, 'documents.document_type')
+                        : '—',
+                  ],
                   [t.pubVerifyAmount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
                   [t.pubVerifyIssued, formatDate(result.issuedAt)],
                   [t.pubVerifyLga, result.lga ?? '—'],
