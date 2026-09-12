@@ -23,7 +23,7 @@ verification run — describes the platform as it stood at that commit.
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 332 |
 | CHECK constraints | 194 *(report's figure)* | 300 |
-| API tests passing | 1,523 *(report's figure)* | 2,077 *(measured at `4b2c39f`)* |
+| API tests passing | 1,523 *(report's figure)* | 2,096 |
 | Officer portal tests | 140 *(report's figure)* | 653 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
