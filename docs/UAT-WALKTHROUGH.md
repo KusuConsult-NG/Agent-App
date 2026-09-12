@@ -36,8 +36,8 @@ That one command:
 1. drops and recreates the `psirs_uat` database — **it owns that database**, so
    nothing you are working on is touched, and the demonstration accounts, which
    share one published password, cannot land anywhere real;
-2. applies all 75 migrations and seeds the reference data: 17 LGAs, 187 wards,
-   9 revenue categories, 42 revenue items, 12 training modules, 33 notification
+2. applies all 78 migrations and seeds the reference data: 17 LGAs, 187 wards,
+   9 revenue categories, 42 revenue items, 12 training modules, 73 notification
    templates;
 3. seeds five demonstration officers and one field agent — the agent walks the
    **real clearance pipeline** (KYC, referee, training, bank, device, government
@@ -65,31 +65,65 @@ Logs are in `/tmp/psirs-uat/`. `scripts/uat/stack.sh down` stops everything.
   02. signed in as admin, revenue officer and finance officer
   03. the UAT handset is registered and approved
   04. reference data: 17 LGAs, 42 revenue items
-  05. registered 12 taxpayers (11 received a TIN immediately)
-  06. 8 collections confirmed and acknowledged, 4 left unconfirmed (receipts follow the settlement)
-  07. 4 vehicles captured, 3 renewals paid (particulars issued at settlement)
-  08. recorded a settlement of 44,225 naira covering 10 collections - this is what
+  05. registered 17 taxpayers (14 received a TIN immediately)
+  06.   one of them, Talatu Bawa, is registered in Jos South rather than Jos North
+        skipped Talatu Bawa: 400 INVALID_REQUEST "Hotel, Restaurant or Event
+        Centre Consumption Tax" does not apply to individual taxpayers.
+  07. 11 collections confirmed and acknowledged, 5 left unconfirmed (receipts follow the settlement)
+  08. 4 vehicles captured, 3 renewals paid (particulars issued at settlement)
+  09. imported the gateway's statement for the period: 20 line(s)
+  10. recorded a settlement of 61,100 naira covering 13 collections — this is what
       issues the receipts and particulars. 1 confirmed collection still awaits its
       bank credit
-  09. reconciliation: 10 matched, 0 exception(s), 0 unchecked
-  10. raised a support ticket from the field
+  11. reconciliation: 13 matched, 0 exception(s), 0 unchecked
+  12. raised a support ticket from the field
+  13. a second applicant is part way through clearance, with a referee still to answer
+  14. registered a cooperative whose leader has not yet confirmed its members
+  15. adopted a reading of the nano exemption, so an estimate can say who is outside it
+  16. classified 4 Local Governments A to D, fixed to 2029
+  17. published 36 rows of assumed turnover — 1% of which is the charge
+  18. gave the traders association a part in enumeration, so its leader may confirm a count
+  19. recorded 5 enumerations, three of them through the association
+  20. one count confirmed by the leader, one contradicted
+  21. raised 3 estimates, 1 of them recording an exemption
+  22. one estimate is under objection, so nothing chases the debt while it stands
+  23. an employer filed a July schedule for four staff, and the platform priced it
+  24. rebuilt the connection graph from the vehicle register
+  25. signed in as the auditor
+  26. a State target for the month and one apportioned to Jos North; the other 16 LGAs have none
+  27. opened a case with finance about the collection still awaiting its credit (CASE-2026-000001)
+  28. a sample drawn: 5 transactions, 3 examined, 2 still to look at
+  29. generated two audit reports and signed one of them under step-up
 ```
 
-Eight individuals and four businesses, assessed across a daily market levy, an
-annual shop rate, a development levy and a consumption tax charged as a
-percentage of a declared base.
+Step 06 is not a fault. The seed walks each taxpayer through the catalogue in
+turn, and tolerates a refusal where an item does not apply to that taxpayer's
+type — logging it by name rather than swallowing it. Which taxpayer meets the
+consumption tax is a function of the rotation rather than a scripted
+demonstration, so the name in that line will move; what it shows is the
+catalogue's taxpayer-type rule refusing an assessment that should not exist.
 
-Three deliberate states, so the officer screens show a real day rather than a
+Seventeen taxpayers, assessed across a daily market levy, an annual shop rate,
+a development levy and a consumption tax charged as a percentage of a declared
+base — and, from step 14 onward, the informal-sector programme: a cooperative,
+a published schedule of assumed turnovers, enumerations taken through an
+association, and an estimate somebody has objected to.
+
+Four deliberate states, so the officer screens show a real day rather than a
 tidy one:
 
-- **Four payments left unconfirmed.** The gateway has not said yes, so the app
+- **Five payments left unconfirmed.** The gateway has not said yes, so the app
   says so and nobody has a document.
 - **One confirmed collection left out of the settlement.** The gateway has
   confirmed it and the bank credit is not in yet, so the taxpayer holds an
   acknowledgement and there is no receipt. It appears under *money in transit*
   rather than as an exception, because nothing has gone wrong.
-- **Everything else settled.** Ten collections, their receipts, and the three
-  vehicle particulars the renewals paid for.
+- **One estimate under objection.** Enforcement is suspended while it stands:
+  the trader is off the arrears worklist, gets no reminder, is not counted as
+  in arrears against an incentive programme, and the citizen portal says their
+  assessment is under objection rather than that they owe.
+- **Everything else settled.** Thirteen collections, their receipts, and the
+  three vehicle particulars the renewals paid for.
 
 ---
 
@@ -277,3 +311,12 @@ npx playwright test tests/browser/uat.spec.ts --grep "Finance Officer"
 
 The screenshots are regenerated on every run, so a change that breaks a screen
 shows up as a failed test and a photograph of the failure.
+
+`reseed` is not `up` repeated. `up` drops the database first, so every step
+above answers 201. `reseed` adds to a stack that is already seeded, and the
+steps that publish once-only records — the presumptive schedule, the
+settlement — answer 409 instead: *"published 0 rows of assumed turnover"* and
+*"settlement refused: PAYMENT_ALREADY_SETTLED ... Recording it again would
+count the same money twice."* Both are the platform refusing to duplicate
+something, which is the behaviour wanted; neither is breakage. An observer who
+wants the numbers above should run `up`.
