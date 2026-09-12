@@ -17,7 +17,7 @@ Two things are in the image that are easy to leave out and fatal to omit:
 
 - **The migrations.** `migrate.ts` reads them from disk and verifies each
   applied file against a stored checksum, so the deployed copy must be
-  byte-identical to source control. `scripts/copy-assets.mjs` copies them into
+  byte-identical to source control. `apps/api/scripts/copy-assets.mjs` copies them into
   `dist` during the build and aborts the build if the count does not match.
 - **The PDF fonts.** Every receipt states an amount in naira and PDFKit's
   built-in faces have no glyph for `₦`. The same script copies them and the

@@ -22,7 +22,7 @@ verification code — but the citizen's copy is gone.
 | RPO — data loss window | ≤ 15 minutes | Continuous WAL archiving; see *Point-in-time recovery* |
 | RTO — time to serve again | ≤ 2 hours | Restore from the most recent dump, then replay WAL |
 | Backup retention | 35 days | Bucket lifecycle policy, not application logic |
-| Restore rehearsal | Quarterly | `scripts/restore.sh` into a scratch database |
+| Restore rehearsal | Quarterly | `apps/api/scripts/restore.sh` into a scratch database |
 
 These are the values the platform is built to. **They must be confirmed with
 Plateau State government IT before go-live** — an RPO is a business decision
@@ -32,7 +32,7 @@ about how much revenue data may be lost, not an engineering preference.
 
 | Asset | Mechanism | Frequency |
 |---|---|---|
-| PostgreSQL database | `scripts/backup.sh` (`pg_dump -Fc`) | Hourly |
+| PostgreSQL database | `apps/api/scripts/backup.sh` (`pg_dump -Fc`) | Hourly |
 | PostgreSQL WAL | `archive_command` to object storage | Continuous |
 | Receipt / KYC / renewal documents | Object storage versioning + cross-region replication | Continuous |
 | Configuration and secrets | Secret manager, versioned | On change |
@@ -129,7 +129,7 @@ takes to fill.
    deletion need point-in-time recovery to just before the event; hardware loss
    needs the latest backup.
 4. **Provision** a fresh PostgreSQL instance of the same major version.
-5. **Restore** with `scripts/restore.sh`, which verifies as it goes. Do not skip
+5. **Restore** with `apps/api/scripts/restore.sh`, which verifies as it goes. Do not skip
    its output: the trigger count and the control check are the acceptance
    criteria, not the exit code alone.
 6. **Replay WAL** to the chosen target time, if this is a point-in-time
