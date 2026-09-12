@@ -934,11 +934,24 @@ export async function searchTaxpayers(
  * vehicles (needed for renewals) and the work that agent facilitated. A revenue
  * officer or auditor sees everything. The response says which view was served,
  * so a client can never mistake a partial history for a complete one.
+ *
+ * `viewer` is required, and deliberately has no default.
+ *
+ * It defaulted to `{ role: 'revenue_officer' }` — the unrestricted view — so a
+ * caller who simply forgot the argument was served the taxpayer's whole
+ * financial life, and nothing anywhere would have said so. That is the same
+ * shape as the three report functions that defaulted `scope` to `STATEWIDE`,
+ * which `CERTIFICATION-GAP-SINCE-REV10.md` records: the failure mode of a
+ * defaulted access parameter is that omitting it widens access silently.
+ *
+ * Those three were pinned with tests because they have many call sites. This
+ * one has a single caller, so the stronger fix is available: with no default,
+ * a call that forgets the viewer does not compile.
  */
 export async function getTaxpayerProfile(
   db: Db,
   taxpayerId: string,
-  viewer: { role: string; agentId?: string | null } = { role: 'revenue_officer' },
+  viewer: { role: string; agentId?: string | null },
 ) {
   const taxpayer = await queryOne(
     db,
