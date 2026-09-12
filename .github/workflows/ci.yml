@@ -104,6 +104,13 @@ jobs:
         # the steps individually, so nothing was running it.
         run: npm run check:hausa-review
 
+      - name: Check no query filters on a value nothing writes
+        # A predicate naming an enum value the platform never writes matches
+        # nothing, and the column it computes reads as a business fact rather
+        # than a bug. It has happened twice to money figures; the script's
+        # header names both. Static, so it runs before the database exists.
+        run: npm run check:dead-predicates
+
       - name: Apply migrations
         run: npm run migrate
 
