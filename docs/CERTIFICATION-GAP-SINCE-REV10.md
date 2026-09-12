@@ -13,9 +13,9 @@ verification run — describes the platform as it stood at that commit.
 
 ## The size of the gap
 
-`fa8f454..HEAD` is **202 commits**.
+`fa8f454..HEAD` is **203 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`a227f5a`) |
+| | At `fa8f454` (Revision 10) | Now (`114332f`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 78 |
@@ -23,13 +23,13 @@ verification run — describes the platform as it stood at that commit.
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 332 |
 | CHECK constraints | 194 *(report's figure)* | 301 |
-| API tests passing | 1,523 *(report's figure)* | 2,107 |
+| API tests passing | 1,523 *(report's figure)* | 2,108 |
 | Officer portal tests | 140 *(report's figure)* | 655 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
 | Enum states written by the suite | 462 *(report's figure)* | 669 |
 
-Current figures are from a full local run at `a227f5a`: API 2,107 passing
+Current figures are from a full local run at `114332f`: API 2,108 passing
 across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
 typecheck clean across all five projects; 74 states documented as deliberately
 unreachable and 1 as not exercised by tests.
@@ -151,6 +151,21 @@ mechanism that has since changed.
    territory-scoped officer the names, phone numbers and addresses of citizens
    across Plateau State, and no test would have failed. Each now has a test
    with a territory-scoped supervisor and a subject in another LGA.
+
+   THE THREE ARE NOT THE EXTENT OF IT, and this paragraph read as though they
+   were. `scope: ReportScope = { kind: 'STATEWIDE' }` appears **26 times**
+   across eight service modules — `reports` (15), `enumeration` (3), `paye`
+   (2), `targets` (2), and one each in `arrears`, `connections`,
+   `investigation` and `taxpayers`. Three of the twenty-six carry the test
+   described above; the other twenty-three are defended only by every current
+   caller remembering to pass the argument.
+
+   That is a design decision a revision has to weigh rather than a defect
+   list: the default is convenient, most call sites are routes that do pass a
+   scope, and `STATEWIDE` is a meaningful value for a scheduled job with no
+   caller. What is not defensible is the number being unstated. A revision
+   should decide deliberately whether a report function may default its own
+   scope at all, and the count it is deciding over is twenty-six.
 
    The remaining lesson is the one the tool's own header already records about
    an earlier error in the opposite direction: a coverage number is only worth
