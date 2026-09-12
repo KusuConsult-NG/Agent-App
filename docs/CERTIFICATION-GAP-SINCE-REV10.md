@@ -13,9 +13,9 @@ verification run — describes the platform as it stood at that commit.
 
 ## The size of the gap
 
-`fa8f454..HEAD` is **196 commits**.
+`fa8f454..HEAD` is **202 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`26c1c5e`) |
+| | At `fa8f454` (Revision 10) | Now (`a227f5a`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 78 |
@@ -23,13 +23,13 @@ verification run — describes the platform as it stood at that commit.
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 332 |
 | CHECK constraints | 194 *(report's figure)* | 301 |
-| API tests passing | 1,523 *(report's figure)* | 2,105 |
+| API tests passing | 1,523 *(report's figure)* | 2,107 |
 | Officer portal tests | 140 *(report's figure)* | 655 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
 | Enum states written by the suite | 462 *(report's figure)* | 669 |
 
-Current figures are from a full local run at `26c1c5e`: API 2,105 passing
+Current figures are from a full local run at `a227f5a`: API 2,107 passing
 across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
 typecheck clean across all five projects; 74 states documented as deliberately
 unreachable and 1 as not exercised by tests.
@@ -168,6 +168,37 @@ mechanism that has since changed.
    subsystems.
 6. **The security and access-control section** reasons about a permission map
    held in code. Migration `059` made it data, editable at runtime and cached.
+
+   This is not only a stale citation. The gap between the two has since
+   produced two defects, both of the same shape: a check written against the
+   role's *name*, or against the map the deployment compiled in, rather than
+   against what `role_permissions` currently grants.
+
+   * `POST /drafts/sync` gated three offline capture types on
+     `taxpayer:create` where their online routes ask for `assessment:create`,
+     `paye:file` and `vehicle:renew`. Closed at `26c1c5e`.
+   * `GET /government/home` carried no permission guard at all and switched on
+     `req.auth.role`. Four of its branches are statewide reads and two return
+     taxpayer names and telephone numbers from anywhere in Plateau State, on
+     the justification — written into the report functions themselves — that
+     the role holds `report:read:all`. Withdrawing that grant over
+     `POST /government/roles/:name/revoke` narrowed every other report and
+     changed nothing here. Closed at `bd65954`.
+
+   A revision should treat "is this check asking the store, or asking the
+   shape of the deployment?" as a question to put to every access decision,
+   not as two isolated findings.
+
+   The adjacent family — a *defaulted* access parameter, recorded above
+   against `openObjections`, `coverageLeads` and
+   `premisesNotPayingConsumptionTax` — gained a fourth member and lost it
+   again. `getTaxpayerProfile` defaulted `viewer` to
+   `{ role: 'revenue_officer' }`, the unrestricted view, so a caller who
+   omitted it received the taxpayer's whole financial history. It had one
+   caller and that caller passed a viewer, so nothing was reachable; the
+   default is now deleted rather than pinned, because with a single call site
+   a missing argument can be made not to compile instead of merely to fail a
+   test. Closed at `a227f5a`.
 7. **The financial-integrity section** predates the closed-month control in
    `058`, which is now the mechanism by which a reported month is final.
 
