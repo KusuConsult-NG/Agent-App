@@ -3,7 +3,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ECONOMIC_SECTORS, draftRefusalSentence, roleHasPermission } from '@psirs/shared';
+import type { Permission } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
+import * as rbacStore from '../services/rbac-store';
 import {
   authenticate,
   requireActiveAgent,
@@ -742,6 +744,32 @@ draftRouter.use(authenticate);
  */
 const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE', 'BUSINESS_OBSERVATION'] as const;
 
+/**
+ * What each capture would need if it were done in front of an officer.
+ *
+ * The queue is a second entrance to three operations that each have a front
+ * door, and the two were gated differently: this route admits on
+ * `taxpayer:create`, while `POST /government/enumeration/observations` needs
+ * `assessment:create` or `paye:file` and `POST /vehicles` needs
+ * `vehicle:renew`. Two of the three were therefore wider at the back.
+ *
+ * Nobody could walk through. `agent` is the only role holding
+ * `taxpayer:create` and it holds the other two as well — which is a fact
+ * about migration 059, not a property of the design, and `role_permissions`
+ * exists so PSIRS can change that without a deployment. The same reasoning
+ * `a-permission-that-scoped-nothing` gives for the `:own` routes: they come
+ * apart the moment the permission is granted to a role not spelled `agent`,
+ * and when they come apart this one fails open.
+ *
+ * The sync door is also the one furthest from anybody watching — reached by a
+ * handset in a market, hours after the capture, with no officer present.
+ */
+const DRAFT_NEEDS: Record<(typeof DRAFT_TYPES)[number], Permission[]> = {
+  TAXPAYER_REGISTRATION: ['taxpayer:create'],
+  VEHICLE_CAPTURE: ['vehicle:renew'],
+  BUSINESS_OBSERVATION: ['assessment:create', 'paye:file'],
+};
+
 draftRouter.post(
   '/sync',
   requirePermission('taxpayer:create'),
@@ -791,6 +819,33 @@ draftRouter.post(
          * including its own storage. A draft that cannot even be stored is
          * refused by name, and the other forty-nine go through.
          */
+        /*
+         * The same question the front door asks, before anything is stored.
+         *
+         * Ahead of the store so a capture the caller may not make leaves no
+         * row behind, and per draft rather than per request so a caller
+         * entitled to queue a registration and not an observation still gets
+         * the registration through.
+         *
+         * Asked of `rbacStore` and not of `roleHasPermission`, for the reason
+         * `requirePermission` gives: the compiled map is what the platform
+         * shipped with, and `role_permissions` is what PSIRS has since
+         * granted. Written against the compiled map first, this check passed a
+         * capture whose permission had been withdrawn from the table — the
+         * test below caught it, which is the entire argument for asking the
+         * enforcement point's own source.
+         */
+        const held = await rbacStore.permissionsFor(req.auth!.role);
+        if (!DRAFT_NEEDS[draft.draftType].some((needed) => held.includes(needed))) {
+          results.push({
+            clientReference: draft.clientReference,
+            status: 'REJECTED',
+            code: 'DRAFT_NOT_PERMITTED',
+            message: draftRefusalSentence('DRAFT_NOT_PERMITTED', { type: draft.draftType }),
+          });
+          continue;
+        }
+
         let storedId: string | null = null;
 
         /*

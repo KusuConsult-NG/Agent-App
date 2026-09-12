@@ -3577,6 +3577,7 @@ export interface TranslationDictionary {
   errDraftInvalid: string;
   errDraftTypeUnsupported: string;
   errDraftNotProcessed: string;
+  errDraftNotPermitted: string;
   /*
    * What an agent and an officer are told after an action succeeds.
    *
@@ -7065,6 +7066,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       'This version of the app made a "{{type}}" capture that PSIRS cannot process yet. It has not been lost — update the app, or quote this reference to support.',
     errDraftNotProcessed:
       'PSIRS could not process this capture. It is still on your phone — quote reference {{reference}} to support.',
+    errDraftNotPermitted:
+      'Your account is not allowed to record this kind of capture. It has not been sent, and nothing else waiting on this phone was affected.',
     agVehFoundConfirmed: 'Vehicle found and confirmed against the vehicle authority record.',
     agVehFoundUnconfirmed:
       'Vehicle found on the platform. It has not been confirmed against the vehicle authority.',
@@ -10537,6 +10540,8 @@ export const translations: Record<Language, TranslationDictionary> = {
       'Wannan sigar manhajar ta yi shigarwa irin "{{type}}" wadda PSIRS ba ta iya sarrafawa tukuna. Ba a rasa ta ba — ka sabunta manhajar, ko ka ba da wannan lamba ga tallafi.',
     errDraftNotProcessed:
       'PSIRS ba ta iya sarrafa wannan shigarwa ba. Tana nan a wayarka — ka ba da lamba {{reference}} ga tallafi.',
+    errDraftNotPermitted:
+      'Ba a ba asusunka izinin rubuta wannan irin bayanin ba. Ba a aika shi ba, kuma babu wani abin da ke jiran a wayarka da ya shafa.',
     agVehFoundConfirmed: 'An sami motar kuma an tabbatar da ita a rajistar hukumar motoci.',
     agVehFoundUnconfirmed:
       'An sami motar a dandalin. Ba a tabbatar da ita a hukumar motoci ba tukuna.',

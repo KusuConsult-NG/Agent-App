@@ -29,6 +29,7 @@ import {
 } from '@psirs/shared';
 import {
   createGovernmentUser,
+  firstLgaId,
   loginAs,
   post,
   pool,
@@ -36,7 +37,8 @@ import {
   startTestServer,
   stopTestServer,
 } from './helpers';
-import { queryOne } from '../db/pool';
+import { query, queryOne } from '../db/pool';
+import * as rbacStore from '../services/rbac-store';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 import { adoptNanoPolicy, classifyLga, publishScheduleEntry } from '../services/presumptive';
@@ -275,5 +277,88 @@ describe('enumerating from a handset', () => {
       [result.entityId],
     );
     assert.equal(flagged!.count, '1', 'and the trader having been told otherwise is on record');
+  });
+
+  describe('the offline door is no wider than the online one', () => {
+    /*
+     * The queue is a second entrance to three operations that each have a front
+     * door of their own, gated on different permissions: `/drafts/sync` admits
+     * on `taxpayer:create`, while raising an observation online needs
+     * `assessment:create` or `paye:file`. Two of the three were wider at the
+     * back.
+     *
+     * Nobody could walk through, and only by coincidence: `agent` is the sole
+     * holder of `taxpayer:create` and holds the other two as well. That is a
+     * fact about migration 059, and `role_permissions` is a table PSIRS can
+     * change without a deployment — so the test takes the permission away and
+     * asks the door directly, rather than asserting a seed that is free to move.
+     */
+    it('refuses an observation from a caller who could not raise one online', async () => {
+      await query(
+        pool,
+        `DELETE FROM role_permissions WHERE role = 'agent' AND permission = ANY($1::text[])`,
+        [['assessment:create', 'paye:file']],
+      );
+      // The store caches the map for thirty seconds; without this the door
+      // would be asked about a grant that had not been withdrawn yet.
+      rbacStore.forget();
+
+      const response = await post(
+        '/drafts/sync',
+        {
+          drafts: [
+            {
+              clientReference: 'not-permitted-observation-0001',
+              draftType: 'BUSINESS_OBSERVATION',
+              capturedAt: new Date(Date.now() - 3_600_000).toISOString(),
+              payload: { taxpayerId, ...capture },
+            },
+            {
+              clientReference: 'still-allowed-registration-001',
+              draftType: 'TAXPAYER_REGISTRATION',
+              capturedAt: new Date(Date.now() - 3_600_000).toISOString(),
+              payload: {
+                taxpayerType: 'INDIVIDUAL',
+                firstName: 'Queued',
+                lastName: 'Registration',
+                phone: '+2348044499911',
+                address: '9 Market Road, Bokkos',
+                lgaId: await firstLgaId(),
+                consentGiven: true,
+                declarationAccepted: true,
+              },
+            },
+          ],
+        },
+        auth,
+      );
+
+      assert.equal(response.status, 200, JSON.stringify(response.body));
+      const results: { clientReference: string; status: string; code?: string }[] =
+        response.body.results;
+
+      const observation = results.find((r) => r.clientReference.startsWith('not-permitted'));
+      assert.equal(observation?.status, 'REJECTED', JSON.stringify(observation));
+      assert.equal(observation?.code, 'DRAFT_NOT_PERMITTED', JSON.stringify(observation));
+
+      /*
+       * And the rest of the batch goes through. A caller entitled to queue a
+       * registration and not an observation must not lose the registration:
+       * refusing the whole batch would strand work the caller is allowed to do,
+       * which is the same harm the file's own "one bad capture" comment is
+       * about.
+       */
+      const registration = results.find((r) => r.clientReference.startsWith('still-allowed'));
+      assert.equal(registration?.status, 'SYNCED', JSON.stringify(registration));
+
+      // Nothing was stored for the refused capture — the check runs before the
+      // write, so a capture the caller may not make leaves no row behind.
+      const stored = await queryOne<{ count: string }>(
+        pool,
+        `SELECT count(*)::text AS count FROM offline_drafts WHERE client_reference = $1`,
+        ['not-permitted-observation-0001'],
+      );
+      assert.equal(stored!.count, '0', 'a refused capture must leave no draft row');
+    });
   });
 });

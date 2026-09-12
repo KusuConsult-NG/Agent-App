@@ -59,6 +59,7 @@ const TRANSLATED_ERRORS: Record<string, keyof TranslationDictionary> = {
   DRAFT_INVALID: 'errDraftInvalid',
   DRAFT_TYPE_UNSUPPORTED: 'errDraftTypeUnsupported',
   DRAFT_NOT_PROCESSED: 'errDraftNotProcessed',
+  DRAFT_NOT_PERMITTED: 'errDraftNotPermitted',
   PAYMENT_UNCONFIRMED: 'errPaymentUnconfirmed',
   PAYMENT_PENDING_RECONCILIATION: 'errPaymentPendingReconciliation',
   PAYMENT_FAILED: 'errPaymentFailed',

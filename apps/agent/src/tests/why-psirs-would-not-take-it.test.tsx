@@ -134,9 +134,18 @@ describe('the record kept alongside', () => {
     }
   });
 
-  it('has a Hausa sentence for each of the three, and they differ from English', () => {
-    const keys = ['errDraftInvalid', 'errDraftTypeUnsupported', 'errDraftNotProcessed'] as const;
-    expect(DRAFT_REFUSALS.length).toBe(3);
+  it('has a Hausa sentence for every refusal, and they differ from English', () => {
+    const keys = [
+      'errDraftInvalid',
+      'errDraftTypeUnsupported',
+      'errDraftNotProcessed',
+      'errDraftNotPermitted',
+    ] as const;
+    /*
+     * The count is pinned so a refusal added without a Hausa sentence fails
+     * here rather than reaching an agent in English. It caught the fourth.
+     */
+    expect(DRAFT_REFUSALS.length).toBe(keys.length);
     for (const key of keys) {
       const e = (en as unknown as Record<string, string>)[key];
       const h = (ha as unknown as Record<string, string>)[key];

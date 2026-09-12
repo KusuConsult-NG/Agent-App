@@ -48,6 +48,25 @@ export const DRAFT_REFUSALS = [
    * the phone already knows.
    */
   'DRAFT_NOT_PROCESSED',
+  /**
+   * A capture of a kind this caller may not put through.
+   *
+   * The queue is a second entrance to three operations that each have a front
+   * door of their own, and the two were gated differently: `/drafts/sync`
+   * admits on `taxpayer:create`, while raising an observation online needs
+   * `assessment:create` or `paye:file` and capturing a vehicle needs
+   * `vehicle:renew`. Nobody can walk through today — `agent` is the only
+   * holder of `taxpayer:create` and holds the other two — but that is a fact
+   * about the seed and `role_permissions` is a table PSIRS can change without
+   * a deployment.
+   *
+   * So the queue now asks the same question the front door asks, per capture,
+   * and this is the answer when it comes back no. Refused one capture at a
+   * time rather than the whole batch: a caller entitled to queue a taxpayer
+   * registration and not an observation should have the registration go
+   * through.
+   */
+  'DRAFT_NOT_PERMITTED',
 ] as const;
 
 export type DraftRefusal = (typeof DRAFT_REFUSALS)[number];
@@ -67,6 +86,9 @@ export const DRAFT_REFUSAL_SENTENCES: Record<DraftRefusal, string> = {
   DRAFT_NOT_PROCESSED:
     'This capture could not be processed. It is still on your phone — quote reference ' +
     '{{reference}} to support.',
+  DRAFT_NOT_PERMITTED:
+    'Your account is not allowed to record a "{{type}}" capture. It has not been sent, and ' +
+    'nothing else in this batch was affected.',
 };
 
 /** The English sentence for a refusal, with whatever it carries filled in. */
