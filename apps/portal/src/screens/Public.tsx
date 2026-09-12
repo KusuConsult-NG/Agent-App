@@ -631,6 +631,8 @@ const STATUS_COLORS: Record<string, string> = {
   HAS_ARREARS: 'var(--danger, #c0392b)',
   NEEDS_ATTENTION: 'var(--warning, #b7651d)',
   NOT_ASSESSED: 'var(--muted)',
+  // Not a fault and not a clean bill — a matter the State is still deciding.
+  UNDER_OBJECTION: 'var(--info, #1f5c8b)',
 };
 
 interface AttestationMember {
@@ -1263,6 +1265,8 @@ function statusMessage(status: string | undefined, t: TranslationDictionary): st
       return t.pubCitizenMsgAttention;
     case 'NOT_ASSESSED':
       return t.pubCitizenMsgNotAssessed;
+    case 'UNDER_OBJECTION':
+      return t.pubCitizenMsgUnderObjection;
     default:
       return null;
   }
@@ -1427,6 +1431,7 @@ export function CitizenPortalScreen() {
                 {result.complianceStatus === 'COMPLIANT' ? `✓ ${t.pubCitizenCompliant}` :
                  result.complianceStatus === 'HAS_ARREARS' ? `⚠ ${t.pubCitizenArrears}` :
                  result.complianceStatus === 'NEEDS_ATTENTION' ? `! ${t.pubCitizenAttention}` :
+                 result.complianceStatus === 'UNDER_OBJECTION' ? t.pubCitizenUnderObjection :
                  t.pubCitizenNotAssessed}
               </p>
             </div>

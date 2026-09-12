@@ -55,6 +55,11 @@ import {
   type Observations,
 } from '../services/presumptive';
 import { arrearsWorklist } from '../services/arrears';
+import {
+  createProgramme,
+  evaluateEligibility,
+  syncTaxpayerComplianceAndIncentives,
+} from '../services/incentives';
 
 let auth: { token: string; deviceId: string };
 let officerId: string;
@@ -1892,5 +1897,176 @@ describe('the other cells of the schedule', () => {
       [observation.id],
     );
     assert.equal(stored!.group_id, association);
+  });
+});
+
+/*
+ * What objecting costs a trader, which must be nothing.
+ *
+ * An open objection suspends enforcement. `collectable` in the arrears
+ * worklist honours that and always has. Three other readers did not, because
+ * they all read `taxpayer_compliance.outstanding_amount_kobo`, which counted
+ * the disputed invoice like any other: the incentive arrears gate, the
+ * compliance score, and the public citizen portal.
+ *
+ * A price on objecting — unadvertised, and levied over a bill the objection
+ * may be about to overturn — is the one thing an objection window may not
+ * have.
+ */
+describe('an objection costs the trader nothing while it is open', () => {
+  async function objectingTrader(name: string) {
+    const taxpayer = await trader(name);
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'I have one machine, not two, and nobody works with me.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await syncTaxpayerComplianceAndIncentives(pool, taxpayer);
+    return taxpayer;
+  }
+
+  it('records the disputed part beside the total rather than instead of it', async () => {
+    const taxpayer = await objectingTrader('Books Straight');
+    const row = await queryOne<{
+      outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
+    }>(
+      pool,
+      `SELECT outstanding_amount_kobo, disputed_amount_kobo
+         FROM taxpayer_compliance WHERE taxpayer_id = $1`,
+      [taxpayer],
+    );
+
+    /*
+     * The gross figure must not move: the receivables report sums it per LGA
+     * to answer "what is the State owed", and disputed money is still owed
+     * until somebody decides the objection. Narrowing it would make a finance
+     * report understate the State's own book.
+     */
+    assert.equal(
+      row!.outstanding_amount_kobo,
+      '4800000',
+      'the receivable is unchanged by the objection',
+    );
+    assert.equal(
+      row!.disputed_amount_kobo,
+      '4800000',
+      'and all of it is recorded as suspended from enforcement',
+    );
+  });
+
+  it('does not disqualify the objector from a programme that requires no arrears', async () => {
+    const taxpayer = await objectingTrader('Fertiliser Wanted');
+
+    const { programmeId } = await createProgramme({
+      input: {
+        name: 'Dry Season Fertiliser Subsidy',
+        code: `FERT-${Date.now()}`,
+        benefitType: 'INPUT_SUBSIDY',
+        minimumScore: 0,
+        minimumCompliancePeriods: 0,
+        requiresNoArrears: true,
+        startDate: '2026-01-01',
+        approvalAuthority: 'Plateau State Executive Council',
+      },
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    // A programme is created DRAFT; only an ACTIVE one is evaluated on merit.
+    await query(pool, `UPDATE incentive_programmes SET status = 'ACTIVE' WHERE id = $1`, [
+      programmeId,
+    ]);
+
+    const verdict = await evaluateEligibility({ programmeId, taxpayerId: taxpayer });
+    assert.ok(
+      !verdict.reasons.includes('There are outstanding revenue obligations'),
+      `objecting must not cost an entitlement; reasons were ${JSON.stringify(verdict.reasons)}`,
+    );
+    assert.equal(
+      verdict.eligible,
+      true,
+      `and the programme must actually be granted; reasons were ${JSON.stringify(verdict.reasons)}`,
+    );
+  });
+
+  it('scores the trader on what is enforceable, not on what is disputed', async () => {
+    const taxpayer = await objectingTrader('Scored Fairly');
+    const row = await queryOne<{ score: number; score_breakdown: unknown }>(
+      pool,
+      'SELECT score, score_breakdown FROM taxpayer_compliance WHERE taxpayer_id = $1',
+      [taxpayer],
+    );
+    const components = row!.score_breakdown as { factor: string; points: number }[];
+    const liabilities = components.find((c) => c.factor.includes('outstanding liabilities'));
+    assert.ok(
+      liabilities && liabilities.points === 25,
+      `the 25 points must not be withheld over a disputed bill; breakdown was ${JSON.stringify(components)}`,
+    );
+  });
+
+  it('tells the citizen their assessment is under objection, not that they are in arrears', async () => {
+    const taxpayer = await objectingTrader('Asking Online');
+    const phone = await queryOne<{ phone: string }>(
+      pool,
+      'SELECT phone FROM taxpayers WHERE id = $1',
+      [taxpayer],
+    );
+
+    const response = await get(`/citizen-status?phone=${encodeURIComponent(phone!.phone)}`);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(
+      response.body.complianceStatus,
+      'UNDER_OBJECTION',
+      'neither HAS_ARREARS, which presses for suspended money, nor COMPLIANT, which is not true either',
+    );
+    assert.ok(
+      !/contact your nearest PSIRS office or a revenue agent to pay/i.test(response.body.message),
+      'the State must not press for money it has agreed not to press for',
+    );
+  });
+
+  /*
+   * The control. Without it every assertion above would also pass on a trader
+   * who simply owes nothing, and the suite would be measuring the fixture
+   * rather than the objection.
+   */
+  it('still calls an unobjected assessment arrears', async () => {
+    const taxpayer = await trader('No Complaint');
+    const observation = await observe(taxpayer);
+    await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await syncTaxpayerComplianceAndIncentives(pool, taxpayer);
+
+    const row = await queryOne<{
+      outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
+    }>(
+      pool,
+      `SELECT outstanding_amount_kobo, disputed_amount_kobo
+         FROM taxpayer_compliance WHERE taxpayer_id = $1`,
+      [taxpayer],
+    );
+    assert.equal(row!.outstanding_amount_kobo, '4800000');
+    assert.equal(row!.disputed_amount_kobo, '0', 'nothing is suspended without an objection');
+
+    const phone = await queryOne<{ phone: string }>(
+      pool,
+      'SELECT phone FROM taxpayers WHERE id = $1',
+      [taxpayer],
+    );
+    const response = await get(`/citizen-status?phone=${encodeURIComponent(phone!.phone)}`);
+    assert.equal(response.body.complianceStatus, 'HAS_ARREARS');
   });
 });

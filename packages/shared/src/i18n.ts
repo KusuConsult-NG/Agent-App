@@ -3632,10 +3632,12 @@ export interface TranslationDictionary {
   pubCitizenArrears: string;
   pubCitizenAttention: string;
   pubCitizenNotAssessed: string;
+  pubCitizenUnderObjection: string;
   pubCitizenMsgCompliant: string;
   pubCitizenMsgArrears: string;
   pubCitizenMsgAttention: string;
   pubCitizenMsgNotAssessed: string;
+  pubCitizenMsgUnderObjection: string;
   pubCitizenDetail: string;
   pubCitizenTinStatus: string;
   pubCitizenOutstanding: string;
@@ -7105,10 +7107,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenArrears: 'Has arrears',
     pubCitizenAttention: 'Needs attention',
     pubCitizenNotAssessed: 'Not yet assessed',
+    pubCitizenUnderObjection: 'Under objection',
     pubCitizenMsgCompliant: 'Your tax records are up to date. Keep paying on time to maintain your status.',
     pubCitizenMsgArrears: 'You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay.',
     pubCitizenMsgAttention: 'Your compliance score needs improvement. Paying your obligations on time will raise it.',
     pubCitizenMsgNotAssessed: 'Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment.',
+    pubCitizenMsgUnderObjection: 'An assessment against you is under objection, so nothing is being enforced while PSIRS decides it. You do not need to do anything, and you are not treated as being in arrears in the meantime.',
     pubCitizenDetail: 'For your TIN, your compliance score, what you owe and which support programmes you qualify for, visit any PSIRS office or an authorised revenue agent. They will confirm who you are first, which is why those details are not shown here.',
     pubCitizenTinStatus: 'TIN status',
     pubCitizenOutstanding: 'Outstanding obligations',
@@ -10575,10 +10579,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubCitizenArrears: 'Yana da bashin haraji',
     pubCitizenAttention: 'Yana bukatar kulawa',
     pubCitizenNotAssessed: 'Ba a kimanta ba tukuna',
+    pubCitizenUnderObjection: 'Ana kan kara',
     pubCitizenMsgCompliant: 'Bayanan harajinka sun cika. Ka ci gaba da biya a kan lokaci domin ka rike wannan matsayi.',
     pubCitizenMsgArrears: 'Kana da harajin da ake bin ka. Da fatan za ka tuntubi ofishin PSIRS mafi kusa da kai ko wakilin karbar haraji domin ka biya.',
     pubCitizenMsgAttention: 'Makin bin ka’idar harajinka yana bukatar gyara. Biyan harajin da ake bin ka a kan lokaci zai daga shi.',
     pubCitizenMsgNotAssessed: 'Ba a kimanta maka komai ba tukuna, don haka babu makin bin ka’ida da za a nuna. Wannan zai sabunta bayan kimantawarka ta farko.',
+    pubCitizenMsgUnderObjection: 'Ana kan karar wata kimantawa da aka yi maka, don haka ba a tilasta biya ba yayin da PSIRS ke duba ta. Ba sai ka yi komai ba, kuma ba a dauke ka a matsayin mai bashin haraji a wannan lokaci.',
     pubCitizenDetail: 'Domin sanin TIN dinka, makin bin ka’idarka, abin da ake bin ka da kuma shirye-shiryen tallafi da ka cancanta, ka ziyarci kowane ofishin PSIRS ko wakilin karbar haraji da izini. Za su fara tabbatar da ko wane ne kai, shi ya sa ba a nuna wadannan bayanai a nan ba.',
     pubCitizenTinStatus: 'Matsayin TIN',
     pubCitizenOutstanding: 'Harajin da ake bin ka',
