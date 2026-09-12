@@ -469,6 +469,43 @@ export async function assessFromObservation(
          * assessment, so what somebody was charged at is re-checkable.
          */
       });
+      /*
+       * The charge that was actually raised, against the figure this service
+       * is about to record and put in front of the trader.
+       *
+       * These are two different computations of one number and nothing made
+       * them agree. The trace explains one per cent of the schedule figure,
+       * computed here; the invoice is whatever the rate engine made of the
+       * catalogue row — a rate an officer can publish a new version of, with a
+       * statutory minimum and maximum this file knows nothing about, applied
+       * at whatever rate is in force on the day rather than the one written
+       * above. Measured with a 2% rate version published through the ordinary
+       * catalogue route: the assessment recorded 4,800,000 kobo and the trader
+       * was billed 9,600,001.
+       *
+       * Refusing is the only defensible answer. Recording the engine's figure
+       * would leave the trace explaining a rate nobody applied, and recording
+       * this one leaves the State collecting a sum its own notice contradicts.
+       * Either way somebody is being billed a number that is not the number
+       * they were shown, which is the accusation this whole regime exists to
+       * be able to answer. So nothing is issued, and the officer is told which
+       * two figures disagree.
+       *
+       * The throw is inside the transaction, so the assessment, the invoice
+       * and the observation's assessed state all roll back together.
+       */
+      if (raised.amountKobo !== BigInt(computation.annualTaxKobo)) {
+        throw conflict(
+          'PRESUMPTIVE_CHARGE_DISAGREES',
+          `This assessment would explain ${computation.annualTaxKobo} kobo and bill ` +
+            `${raised.amountKobo} kobo. The presumptive regime is one per cent of the ` +
+            `published assumed turnover, and the revenue catalogue is charging something ` +
+            'else, so no notice can be issued that is true about both.',
+          `Bring the PIT-PRESUMPTIVE-${computation.sizeBand} catalogue rate back into line ` +
+            'with the presumptive regulation, or amend the regulation.',
+        );
+      }
+
       assessmentId = raised.assessmentId;
       invoiceNumber = raised.invoiceNumber;
     }

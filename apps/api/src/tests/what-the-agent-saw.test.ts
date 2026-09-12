@@ -1163,6 +1163,128 @@ describe('the statutory rate is in one place', () => {
       'and the charge is that rate applied to the schedule figure',
     );
   });
+
+  /*
+   * The figure on the notice and the figure on the bill are two different
+   * computations, and until this they were only ever compared by eye.
+   *
+   * `annual_tax_kobo` is what the trace explains at the stall, what an
+   * objection is decided against, and what the arrears worklist reads. The
+   * money owed is whatever the rate engine made of the revenue catalogue when
+   * the invoice was raised. Nothing tied them together, and they came apart
+   * in two different ways.
+   */
+  it('records the same figure it bills, on a schedule that is not a whole naira', async () => {
+    /*
+     * `assumed_annual_turnover_kobo` is a BIGINT of kobo with no whole-naira
+     * constraint, so a published schedule may carry ...050. At that figure the
+     * service's own `(assumed * 100n) / 10_000n` truncated to 4,800,000 while
+     * `applyBasisPoints` — which the rate engine bills through — rounded to
+     * 4,800,001. The trader was shown one and billed the other.
+     *
+     * MEDIUM because the fixture publishes MICRO and SMALL, and a BUILDING
+     * floors the band there.
+     */
+    await publishScheduleEntry(pool, {
+      economicSector: 'ARTISAN_CRAFT',
+      sizeBand: 'MEDIUM',
+      lgaClass: 'A',
+      assumedAnnualTurnoverKobo: '480000050',
+      instrumentReference: 'Plateau State Revenue (Presumptive Assessment) Regulation 2026',
+      effectiveFrom: '2026-01-01',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const taxpayer = await trader('Half Kobo');
+    const observation = await observe(taxpayer, { premises: 'BUILDING' });
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(result.sizeBand, 'MEDIUM', 'the fixture must reach the unrounded schedule row');
+
+    const billed = await queryOne<{ amount_kobo: string }>(
+      pool,
+      `SELECT amount_kobo FROM assessments
+        WHERE id = (SELECT assessment_id FROM presumptive_assessments WHERE id = $1)`,
+      [result.id],
+    );
+
+    assert.equal(
+      billed!.amount_kobo,
+      result.annualTaxKobo,
+      'the invoice must bill exactly what the assessment says is owed',
+    );
+
+    // And the sentence the trader is read at the stall must carry that figure
+    // too, or the explanation is of a number nobody is charging.
+    const step = result.trace.find((entry) => entry.step.includes('1%'));
+    assert.equal(step?.amountKobo, billed!.amount_kobo, 'the trace must explain the sum billed');
+  });
+
+  it('refuses to assess at all when the catalogue is charging a different rate', async () => {
+    /*
+     * A rate version is publishable through the ordinary catalogue route, and
+     * carries a statutory minimum and maximum besides. None of that reaches
+     * `computePresumptive`, which explains one per cent from a constant. With
+     * a 2% version in force the notice said 4,800,000 kobo and the trader was
+     * billed 9,600,001 — double, with the notice in their hand saying
+     * otherwise.
+     *
+     * No rounding rule reconciles that, and neither figure may be quietly
+     * preferred: recording the engine's leaves the trace explaining a rate
+     * nobody applied, and recording the regime's leaves the State collecting a
+     * sum its own notice contradicts. So nothing is issued.
+     */
+    const item = await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM revenue_items WHERE code = 'PIT-PRESUMPTIVE-SMALL'`,
+      [],
+    );
+    const current = await queryOne<{ id: string; version: number }>(
+      pool,
+      `SELECT id, version FROM revenue_item_rates
+        WHERE revenue_item_id = $1 AND effective_to IS NULL AND lga_id IS NULL
+        ORDER BY version DESC LIMIT 1`,
+      [item!.id],
+    );
+    await query(pool, 'UPDATE revenue_item_rates SET effective_to = now() WHERE id = $1', [
+      current!.id,
+    ]);
+    await query(
+      pool,
+      `INSERT INTO revenue_item_rates
+         (revenue_item_id, lga_id, version, rate_type, rate_basis_points, effective_from, created_by)
+       VALUES ($1, NULL, $2, 'PERCENTAGE', 200, now(), $3)`,
+      [item!.id, current!.version + 1, officerId],
+    );
+
+    const taxpayer = await trader('Rate Adrift');
+    const observation = await observe(taxpayer);
+    await assert.rejects(
+      assessFromObservation(pool, {
+        observationId: observation.id,
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      (error: { code?: string }) => error.code === 'PRESUMPTIVE_CHARGE_DISAGREES',
+      'a notice that explains one figure and bills another must not be issued',
+    );
+
+    // And the refusal must take the invoice down with it. A rolled-back
+    // assessment that left a live bill behind would be the same defect with
+    // the paperwork missing.
+    const orphan = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM assessments a
+         JOIN taxpayers t ON t.id = a.taxpayer_id
+        WHERE t.id = $1`,
+      [taxpayer],
+    );
+    assert.equal(orphan!.count, '0', 'the refusal must leave no assessment behind');
+  });
 });
 
 describe('who may do what', () => {

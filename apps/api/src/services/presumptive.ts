@@ -45,13 +45,20 @@
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import type { Observations, SizeBand } from '@psirs/shared';
-import { bandFor } from '@psirs/shared';
+import { applyBasisPoints, bandFor } from '@psirs/shared';
 import { recordAudit } from './audit';
 import { badRequest, conflict, notFound } from '../lib/errors';
 
-/** One per cent of assumed turnover, per the presumptive regime. */
-const PRESUMPTIVE_BASIS_POINTS = 100n;
-const BASIS_POINT_DIVISOR = 10_000n;
+/**
+ * One per cent of assumed turnover, per the presumptive regime.
+ *
+ * This is the rate the trace explains at a stall. The charge the taxpayer is
+ * actually billed is computed by the rate engine from the catalogue, and
+ * `assessFromObservation` refuses to issue an assessment where the two
+ * disagree — because a notice that explains one figure and bills another is
+ * the one thing this regime cannot survive being caught doing.
+ */
+const PRESUMPTIVE_BASIS_POINTS = 100;
 
 export type LgaClass = 'A' | 'B' | 'C' | 'D';
 export type TaxTier = 'NANO' | 'PRESUMPTIVE' | 'BOOKS';
@@ -350,9 +357,18 @@ export async function computePresumptive(
    * plan's own invariant both turn on the difference between "exempt" and
    * "assessed at zero", and an officer looking at ₦0 cannot tell which they
    * are looking at.
+   *
+   * Anybody else's charge goes through the same primitive the rate engine
+   * bills with, rather than a second expression that happens to mean the same
+   * thing. It did not mean the same thing: `(assumed * 100n) / 10_000n`
+   * truncates where `applyBasisPoints` rounds half up, so a schedule figure
+   * that is not a whole naira — which the column permits, being a BIGINT of
+   * kobo — put the recorded figure a kobo below the invoice. Measured at an
+   * assumed turnover of 480,000,050 kobo: the trader was shown 4,800,000 and
+   * billed 4,800,001.
    */
   const annualTax =
-    decision.tier === 'NANO' ? 0n : (assumed * PRESUMPTIVE_BASIS_POINTS) / BASIS_POINT_DIVISOR;
+    decision.tier === 'NANO' ? 0n : applyBasisPoints(assumed, PRESUMPTIVE_BASIS_POINTS);
   const monthlyTax = annualTax / 12n;
 
   const trace: PresumptiveComputation['trace'] = [
