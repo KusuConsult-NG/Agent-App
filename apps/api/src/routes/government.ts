@@ -997,6 +997,43 @@ governmentRouter.get(
   asyncHandler(async (req, res) => {
     const role = req.auth!.role;
     /*
+     * Which blocks a caller gets is decided by what the role holds, not by
+     * what the role is called.
+     *
+     * Every block below is a statewide read, and four of the functions behind
+     * them say so outright: `revenueOfficerHome` is annotated "a home screen
+     * for a role that holds report:read:all", `auditorHome` "the audit trail
+     * is one trail, and an auditor holds report:read:all", and the two work
+     * queues are "scoped the same way". Two of those queues —
+     * `revenueOfficerWorkItems` and `auditorWorkItems` — return taxpayer
+     * names, phone numbers and amounts from anywhere in Plateau State.
+     *
+     * That justification was sound while the map lived in `rbac.ts`, because
+     * a role's permissions and a role's name could not come apart without a
+     * deployment. Migration 059 made the map data and
+     * `POST /government/roles/:name/revoke` is the lever: withdraw
+     * `report:read:all` from `revenue_officer` and every other report narrows
+     * correctly through `resolveReportScope`, while a switch on the role's
+     * name goes on serving the whole register — because it never asked.
+     *
+     * Asked of `rbacStore` rather than read from `req.auth.permissions`, for
+     * the reason `requirePermission` gives for doing the same: this is the
+     * enforcement point, and a later change to how `req.auth` is populated
+     * must not be able to widen it.
+     *
+     * A caller without the permission gets `{ role }` — the answer a
+     * supervisor already gets here, which the portal answers by falling back
+     * to the dashboard that scopes itself to their territory. Blank is the
+     * wrong outcome for an officer who should have the queue; it is the right
+     * outcome for one whose authority to see the whole state was withdrawn.
+     */
+    const held = await rbacStore.permissionsFor(role);
+    if (!held.includes('report:read:all')) {
+      res.json({ role });
+      return;
+    }
+
+    /*
      * Counts and the work behind them, together.
      *
      * A screen that says "3 agents awaiting clearance" and sends the officer
