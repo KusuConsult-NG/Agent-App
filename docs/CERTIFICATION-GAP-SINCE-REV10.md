@@ -13,26 +13,41 @@ verification run — describes the platform as it stood at that commit.
 
 ## The size of the gap
 
-`fa8f454..HEAD` is **189 commits**.
+`fa8f454..HEAD` is **196 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`4ee8cf8`) |
+| | At `fa8f454` (Revision 10) | Now (`26c1c5e`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
-| Database migrations | 54 | 76 |
+| Database migrations | 54 | 78 |
 | API test files | 139 | 177 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 332 |
-| CHECK constraints | 194 *(report's figure)* | 300 |
-| API tests passing | 1,523 *(report's figure)* | 2,096 |
-| Officer portal tests | 140 *(report's figure)* | 653 |
+| CHECK constraints | 194 *(report's figure)* | 301 |
+| API tests passing | 1,523 *(report's figure)* | 2,105 |
+| Officer portal tests | 140 *(report's figure)* | 655 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
 | Enum states written by the suite | 462 *(report's figure)* | 669 |
 
-Current figures are from a full local run at `c6c880a`: API 2,045 passing
-across four shards with 0 failing and 0 cancelled; portal 653; agent 342;
+Current figures are from a full local run at `26c1c5e`: API 2,105 passing
+across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
 typecheck clean across all five projects; 74 states documented as deliberately
 unreachable and 1 as not exercised by tests.
+
+This paragraph previously read 2,045 at `c6c880a` while the table two lines
+above it read 2,096 — the same quantity, twice, differing. Both were true when
+written and neither was wrong on its own; what was wrong is that nothing made
+them move together. They are now taken from one run at one commit.
+
+HOW THE SCHEMA FIGURES ARE COUNTED, so a later reader re-deriving them does
+not "correct" a right number into a wrong one. Tables are base tables in
+`public` (103) — not tables carrying triggers, which is 95 and a different
+question. Triggers are `pg_trigger` rows that are not internal (332); a
+trigger declared `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
+`information_schema.triggers`. CHECK constraints are `pg_constraint` rows with
+`contype = 'c'` across all schemas (301) — `information_schema` models every
+NOT NULL as a check constraint and answers 1,694, which is not what this row
+means.
 
 ## Seventeen service modules the report has never seen
 
@@ -145,11 +160,11 @@ mechanism that has since changed.
    slash.
 
 3. **"233 triggers across 77 tables, 194 CHECK constraints."** Now 332, 103
-   and 300.
+   and 301.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
    669 of 747, still with none unaccounted.
 5. **"140 tests across 18 files; 10 of 21 screens rendered under test"** for the
-   officer portal. Now 653 tests, and the screen count has moved with the new
+   officer portal. Now 655 tests, and the screen count has moved with the new
    subsystems.
 6. **The security and access-control section** reasons about a permission map
    held in code. Migration `059` made it data, editable at runtime and cached.
