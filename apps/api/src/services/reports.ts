@@ -1806,10 +1806,32 @@ export async function taxpayerAnalytics(
      */
     query(
       db,
+      /*
+       * Paid is asked of the transaction, as it is everywhere else here.
+       *
+       * This read `asm.status IN ('SETTLED')`. `assessments.status` allows
+       * SETTLED and nothing in the platform ever writes it: the single
+       * `UPDATE assessments SET status` sets EXPIRED, and `enum-coverage.ts`
+       * records the value as unreachable with the reason "settlement is
+       * recorded on the invoice and the transaction, which is what the
+       * reports read". This report read the assessment, so the column was
+       * zero in every category on every register — an officer asking which
+       * levies the base engages with was told nobody had ever paid any of
+       * them. Measured on the seeded stack: 0 against a true 12.
+       *
+       * The cohort and per-LGA queries above both ask
+       * `transactions.status IN REVENUE_STATES_SQL`. A report whose columns
+       * disagree about what paying means is the audit-workbench fault again,
+       * so this asks the same question through the assessment it was raised
+       * against.
+       */
       `SELECT rc.name AS category, rc.name_ha AS category_ha,
               count(DISTINCT asm.taxpayer_id)::text AS taxpayers,
               count(DISTINCT asm.taxpayer_id) FILTER (
-                WHERE asm.status IN ('SETTLED'))::text AS taxpayers_paid
+                WHERE EXISTS (
+                  SELECT 1 FROM transactions t
+                   WHERE t.assessment_id = asm.id
+                     AND t.status IN ${REVENUE_STATES_SQL}))::text AS taxpayers_paid
          FROM assessments asm
          JOIN taxpayers tp ON tp.id = asm.taxpayer_id
          JOIN revenue_items ri ON ri.id = asm.revenue_item_id

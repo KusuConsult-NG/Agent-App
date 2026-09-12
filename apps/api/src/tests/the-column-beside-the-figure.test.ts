@@ -456,6 +456,38 @@ describe('the taxpayer base as a population', () => {
     );
   });
 
+  /**
+   * The column that said nobody had ever paid anything.
+   *
+   * `byCategory` counted `taxpayers_paid` with
+   * `FILTER (WHERE asm.status IN ('SETTLED'))`. `assessments.status` allows
+   * SETTLED and nothing writes it — the one `UPDATE assessments SET status`
+   * sets EXPIRED, and `enum-coverage.ts` carries the value as unreachable
+   * with the reason "settlement is recorded on the invoice and the
+   * transaction, which is what the reports read". This report read the
+   * assessment, so the column was zero for every category on every register.
+   *
+   * `collect()` drives a real taxpayer through assessment, initiation and a
+   * successful gateway outcome, so by the time this asserts, the platform
+   * itself has put the transaction into a revenue-recognised state. The
+   * control beside it is the `taxpayers` count in the same row: if the
+   * category did not appear at all, a zero here would prove nothing.
+   */
+  it('counts a taxpayer who has paid as having paid', async () => {
+    await collect('17');
+
+    const analytics = await get('/government/taxpayers/analytics', auth());
+    assert.equal(analytics.status, 200, JSON.stringify(analytics.body));
+
+    const rows = analytics.body.byCategory as Record<string, string>[];
+    const engaged = rows.filter((row) => Number(row.taxpayers) > 0);
+    assert.ok(engaged.length > 0, 'the control is broken: no category has any taxpayer at all');
+    assert.ok(
+      engaged.some((row) => Number(row.taxpayers_paid) > 0),
+      `every category reports nobody has paid: ${JSON.stringify(engaged)}`,
+    );
+  });
+
   it('gives each LGA its register, its active share and what it is owed', async () => {
     await collect('16');
     const analytics = await get('/government/taxpayers/analytics', auth());
