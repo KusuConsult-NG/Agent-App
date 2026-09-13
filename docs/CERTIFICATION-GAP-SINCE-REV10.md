@@ -504,6 +504,45 @@ PSIRS — it touches the runbook people are trained on and the scheduling that
 has yet to be set up (`DISASTER-RECOVERY.md` records that `backup.sh` "is not
 yet on a timer anywhere").
 
+## A fourth thing, read but not run: four security headers on three locations
+
+Recorded separately from everything above because it is the one finding in
+this document that was not measured. No nginx is available in the environment
+these notes were written in, so this is a reading of the configuration against
+the documented behaviour of the directive, and it should be confirmed with
+`curl -I` against a running stack before anybody acts on it.
+
+`Dockerfile.agent` and `Dockerfile.portal` each embed an nginx server that
+sets four headers at server level:
+
+```
+add_header X-Frame-Options "DENY" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
+```
+
+and then three `location` blocks that set `Cache-Control` with `add_header` of
+their own: `= /sw.js`, the `\.(manifest|webmanifest|svg|png|ico)$` regex, and
+`/assets/`. nginx's headers module inherits `add_header` from the enclosing
+level *only when the current level defines none of its own*, and `always`
+governs whether a header is added to error responses rather than whether it is
+inherited. On that reading those three locations serve their responses without
+any of the four.
+
+What that costs is smaller than it first looks, which is why it is recorded
+rather than changed. `location /` defines no `add_header`, so it inherits all
+four, and `location /` is what serves `index.html` — the document, and the only
+thing framing a page can attack. The clickjacking case is covered. What is lost
+is `nosniff` on `/assets/*.js`, `/sw.js` and the icons, which is defence in
+depth behind a `script-src 'self'` CSP and correct MIME types from nginx's own
+`mime.types`.
+
+Two things a revision should do with this. Confirm it, with a running
+container. Then, if confirmed, repeat the four lines in each of the three
+blocks — the remedy is mechanical, and the reason it is worth doing is not the
+exposure but that the file states a site-wide policy it does not have.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

@@ -86,7 +86,10 @@ export function errorHandler(
       log.error('request failed', {
         requestId: req.requestId,
         component: 'http',
-        code: error.code,
+        // `errorCode`, not `code`: the redactor catches any key containing
+        // "code" so that a collection code cannot be logged, and this field —
+        // the one an operator filters on — was being removed by it.
+        errorCode: error.code,
         path: req.path,
         error,
       });
