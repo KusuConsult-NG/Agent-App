@@ -296,7 +296,12 @@ export function errorHandler(
     component: 'http',
     context: { method: req.method, path: req.path, role: req.auth?.role ?? null },
   });
-  res.status(500).json(internal(req.requestId).toJSON());
+  /*
+   * The path and method decide what this may claim about money. See
+   * `internal` — an exception nobody anticipated cannot assert that nothing
+   * happened, and on a write under /payments it must say so out loud.
+   */
+  res.status(500).json(internal(req.requestId, { method: req.method, path: req.path }).toJSON());
 }
 
 export function notFoundHandler(req: Request, res: Response): void {

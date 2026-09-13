@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`fb08bdd`) |
+| | At `fa8f454` (Revision 10) | Now (`ad858f6`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 188 |
+| API test files | 139 | 189 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,161 |
+| API tests passing | 1,523 *(report's figure)* | 2,168 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `fb08bdd` plus the working tree:
-API 2,161 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `ad858f6` plus the working tree:
+API 2,168 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,56 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## The one error nobody anticipated, spoken with the most confidence
+
+Every unhandled exception in this API is answered by `internal()`. It said:
+
+> The request could not be completed because of a problem on our side. **No
+> financial record has been changed.** Quote the reference below to support.
+>
+> `moneyStatus: NOT_DEBITED`
+
+`MoneyStatus` defines NOT_DEBITED as "No payment was attempted; nothing has
+been debited". An exception nobody anticipated can be thrown after a
+transaction has committed, after a gateway has accepted a payment, after a
+receipt has been issued — and the error handler that calls this says exactly
+that, four lines above the call:
+
+> on a revenue platform an unhandled exception is a taxpayer who paid and has
+> no receipt
+
+What the agent sees makes it concrete. `ui.tsx` renders NOT_DEBITED as **"No
+money has been taken from the taxpayer"** — "Ba a karbi kudi daga mai biyan
+haraji ba" — in plain error styling, not the warning styling it reserves for
+UNCONFIRMED's "Do not collect again." So at the moment the platform knew least,
+it spoke with the most confidence, to the person standing in front of somebody
+who had just handed over cash. PRD §60 is the requirement this violates in
+spirit while satisfying its letter: the error is specific, and specifically
+wrong.
+
+THE RULE IS THE CLIENT'S OWN, AND THE SERVER NOW MIRRORS IT.
+`apps/agent/src/lib/api.ts` already decides this correctly for a request that
+never got an answer at all:
+
+> A read that never arrived moves no money whether it arrived or not. A write
+> under `/payments` that never got an answer is a write whose effect is unknown
+> — which is exactly what UNCONFIRMED means, and it is why the agent is told
+> not to collect again rather than told nothing. Every other write says
+> NOT_APPLICABLE, because telling an agent their taxpayer may have been debited
+> by a failed support ticket is its own kind of wrong.
+
+A 500 is that situation with a status line attached. The one thing no branch
+does any more is claim that nothing happened.
+
+**The control that matters most** is that a NOT_DEBITED the platform can prove
+must survive. `paymentFailed` says it because the gateway said so, and it is
+the one message that lets an agent collect again in good conscience; a fix that
+swept every NOT_DEBITED out of the codebase would have cost them it. Restoring
+the old assertion fails five of seven with both controls holding — more than
+the three predicted, because the old text said NOT_DEBITED on every path
+including reads — and making the payment branch never escalate fails exactly
+the one test about a payment write.
 
 ## A control cached in each process, with nothing to tell the others
 
