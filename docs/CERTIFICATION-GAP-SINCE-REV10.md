@@ -2128,6 +2128,37 @@ down — arithmetic that fails quietly towards the citizen's loss.
 The summary is now counted in whole hundredths, which is what the column
 actually stores.
 
+### The class, swept — and it has exactly one home
+
+A defect like this is only worth fixing once if the same arithmetic is not
+happening elsewhere, so the schema was swept rather than the instance patched
+and forgotten.
+
+| | |
+| --- | --- |
+| Money columns stored as `BIGINT` (integer kobo) | **50** |
+| Money columns in any fractional type (`NUMERIC`, `DECIMAL`, `REAL`, `FLOAT`) | **0** |
+| Fractional columns in the entire schema | **7** |
+
+Of those seven: three are the allocation quantities fixed above
+(`total_quantity`, `quantity_per_beneficiary`, `quantity`); two are `latitude`
+and `longitude`, where a float is the correct type and no one is counted by
+dividing them; and two — `round_total` and `already` — are not columns at all
+but local variables inside the `enforce_round_quantity` trigger, where the
+arithmetic is Postgres `NUMERIC` and therefore exact by construction.
+
+So every naira this platform handles is an integer number of kobo. Receipts,
+commissions, settlements, reconciliation and every published total are immune
+to what bit the allocation summary, because none of them ever becomes a
+double. The goods quantities were the single exception, and they were the one
+place a person was counted by dividing one fractional value by another.
+
+Worth recording because the finding reads more alarming than it is. This was
+not a systemic arithmetic fault; it was one endpoint, and the design decision
+that contained it — money as integer minor units — was made correctly
+everywhere else and is the reason the blast radius was a distribution queue
+rather than the revenue ledger.
+
 ### Why the existing test could not see it
 
 `groups-and-allocations.test.ts` already covered this endpoint, and asserted
