@@ -13,23 +13,23 @@ verification run — describes the platform as it stood at that commit.
 
 ## The size of the gap
 
-`fa8f454..HEAD` is **203 commits**.
+`fa8f454..HEAD` is **211 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`114332f`) |
+| | At `fa8f454` (Revision 10) | Now (`e3f5345`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 78 |
 | API test files | 139 | 177 |
 | Tables | 77 *(report's figure)* | 103 |
-| Triggers | 233 *(report's figure)* | 332 |
+| Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 |
-| API tests passing | 1,523 *(report's figure)* | 2,108 |
+| API tests passing | 1,523 *(report's figure)* | 2,111 |
 | Officer portal tests | 140 *(report's figure)* | 655 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
 | Enum states written by the suite | 462 *(report's figure)* | 669 |
 
-Current figures are from a full local run at `114332f`: API 2,108 passing
+Current figures are from a full local run at `e3f5345`: API 2,111 passing
 across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
 typecheck clean across all five projects; 74 states documented as deliberately
 unreachable and 1 as not exercised by tests.
@@ -42,9 +42,25 @@ them move together. They are now taken from one run at one commit.
 HOW THE SCHEMA FIGURES ARE COUNTED, so a later reader re-deriving them does
 not "correct" a right number into a wrong one. Tables are base tables in
 `public` (103) — not tables carrying triggers, which is 95 and a different
-question. Triggers are `pg_trigger` rows that are not internal (332); a
-trigger declared `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
-`information_schema.triggers`. CHECK constraints are `pg_constraint` rows with
+question. Triggers are `pg_trigger` rows that are not internal
+**and not test instrumentation** (156); a trigger declared
+`BEFORE INSERT OR UPDATE` is one trigger here and two rows in
+`information_schema.triggers`.
+
+THIS ROW WAS WRONG UNTIL NOW, AND THE WAY IT WAS WRONG IS THE POINT. It read
+332, measured against `psirs_test`. The suite's enum-coverage harness
+(`apps/api/src/tests/enum-observation.ts`) attaches `observe_enum_ins` and
+`observe_enum_upd` to every table it watches — 176 triggers across 88 tables —
+so more than half of that 332 was instrumentation that exists in no deployed
+database. A database built fresh from the 78 migrations carries 156. The
+paragraph above this one is a careful note about *how* to count triggers, and
+it was attached to a count taken from the wrong database; getting the method
+right does not help if the subject is wrong.
+
+The instrumentation already existed at `fa8f454`, so the report's 233 may be
+inflated the same way. A revision should re-measure both against a database
+built only from migrations rather than treat 233 and any later figure as
+comparable. CHECK constraints are `pg_constraint` rows with
 `contype = 'c'` across all schemas (301) — `information_schema` models every
 NOT NULL as a check constraint and answers 1,694, which is not what this row
 means.
@@ -174,8 +190,10 @@ mechanism that has since changed.
    `${apiBaseUrl()}` and the tool reads string literals that begin with a
    slash.
 
-3. **"233 triggers across 77 tables, 194 CHECK constraints."** Now 332, 103
-   and 301.
+3. **"233 triggers across 77 tables, 194 CHECK constraints."** Now 156, 103
+   and 301 — but see the counting note above before comparing the trigger
+   figures: 233 was taken while the same test instrumentation existed, and 156
+   deliberately excludes it.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
    669 of 747, still with none unaccounted.
 5. **"140 tests across 18 files; 10 of 21 screens rendered under test"** for the
