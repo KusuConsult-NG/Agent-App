@@ -124,7 +124,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `commission:payout:approve` | Approve | finance_officer | `POST /government/commissions/payouts/:id/approve` |
 | `report:read:own` | View | agent | — |
 | `report:read:territory` | View | supervisor | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 15 more |
-| `report:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 22 more |
+| `report:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 21 more |
 | `report:financial` | View | finance_officer, auditor | `GET /government/reconciliation/awaiting-settlement`<br>`GET /government/settlements`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
 | `dashboard:executive` | View | revenue_officer, finance_officer, admin | `GET /government/dashboard`<br>`GET /government/revenue/by-category` |
 | `fraud:read` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/leakage`<br>`GET /government/fraud/flags`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
@@ -151,7 +151,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `approval:request` | Other | agent, revenue_officer, admin | `POST /government/approvals` |
 | `approval:review` | Approve | supervisor, revenue_officer, finance_officer | `GET /agents/bank-changes`<br>`GET /government/enumeration/objections`<br>`POST /government/enumeration/objections/:id/decide`<br>`GET /government/approvals`<br>…and 2 more |
 | `approval:authorise` | Approve | supervisor, finance_officer | `GET /government/approvals`<br>`POST /government/approvals/:id/decide`<br>decided in `services/cases.ts` |
-| `system:configure` | Configure | admin | `POST /agents/app-version`<br>`GET /agents/app-version/history`<br>`POST /government/intelligence/rebuild`<br>`POST /government/presumptive/nano-policy`<br>…and 1 more |
+| `system:configure` | Configure | admin | `POST /agents/app-version`<br>`GET /agents/app-version/history`<br>`POST /government/intelligence/rebuild`<br>`POST /government/presumptive/nano-policy`<br>…and 2 more |
 | `user:manage` | Edit | admin | `GET /government/users`<br>`POST /government/users/:id/role`<br>`POST /government/users/:id/status`<br>`GET /government/users/:id/territories`<br>…and 18 more |
 
 ## C. Actions that need a second factor

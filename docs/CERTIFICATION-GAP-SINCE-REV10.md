@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`ad858f6`) |
+| | At `fa8f454` (Revision 10) | Now (`95fa6e0`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 189 |
+| API test files | 139 | 190 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,168 |
+| API tests passing | 1,523 *(report's figure)* | 2,170 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `ad858f6` plus the working tree:
-API 2,168 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `95fa6e0` plus the working tree:
+API 2,170 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,55 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A check named in `verify`, absent from CI, and failing
+
+The root `package.json` has a `verify` script, and it is the closest thing this
+repository has to a statement of what "verified" means:
+
+```
+npm run typecheck && npm run check:hausa-review && npm run check:action-matrix
+  && npm run check:dead-predicates && npm run test && npm run test:concurrency
+```
+
+`ci.yml` runs those steps individually rather than calling `verify`, and it ran
+five of the six. **`check:action-matrix` was not there, and it was failing.**
+
+`docs/ROLE-ACTION-MATRIX.md` is generated from the permissions the route files
+actually name — the table a government reads to answer who may do what. Two
+counts in it were wrong:
+
+```
+report:read:all     …and 22 more   ->   …and 21 more
+system:configure    …and  1 more   ->   …and  2 more
+```
+
+**That drift is this document's own fault, and worth naming as such.** It is
+exactly commit `54e9f5c` — the read-only-permission finding recorded above,
+which moved `POST /usage/expire` off `report:read:all` and onto
+`system:configure`. That commit reported CI green and cited it. CI *was* green,
+and the document that tells a government an auditor cannot reach that route had
+stopped being true, because the check that says so is the one CI does not run.
+
+THE GAP HAD BEEN FOUND ONCE AND HALF CLOSED. The step immediately above the
+hole says so, in a comment written when the Hausa sheet was added:
+
+> This was in `npm run verify` and CI runs the steps individually, so nothing
+> was running it.
+
+Nobody asked whether a sibling had the same problem. One did.
+
+So the fix is the property, not the instance:
+`apps/api/src/tests/a-check-that-nothing-runs.test.ts` parses the `verify`
+chain and the workflow and fails on any script named in the first and not
+invoked by the second. Adding a check to `verify` and forgetting the workflow
+is now a failing test. It reads `run:` lines only and has a second test proving
+it — `ci.yml` explains several steps in comments that name their script, and a
+checker that searched the whole file would have passed on the very gap it
+exists for.
+
+    the step removed again                   names check:action-matrix
+    a new check added to `verify` only       names check:something-new
 
 ## The one error nobody anticipated, spoken with the most confidence
 
