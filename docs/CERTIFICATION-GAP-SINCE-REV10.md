@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`505e801`) |
+| | At `fa8f454` (Revision 10) | Now (`f249435`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 186 |
+| API test files | 139 | 187 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,151 |
+| API tests passing | 1,523 *(report's figure)* | 2,156 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `505e801` plus the working tree:
-API 2,151 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `f249435` plus the working tree:
+API 2,156 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,41 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A storage key that walks out of the storage directory
+
+Recorded small, because it is small. `LocalStorageDriver.resolve` states its
+own purpose — "Reject traversal outright rather than sanitising: a key that
+tries to escape the root is a bug or an attack, never a legitimate document" —
+and enforced it with `target.startsWith(this.root)`. A prefix match is not a
+boundary. With a root of `/app/storage`:
+
+```
+../etc/passwd               -> /app/etc/passwd           rejected
+../storage-evil/x.pdf       -> /app/storage-evil/x.pdf   ACCEPTED
+../storage/../storage-x/z   -> /app/storage-x/z          ACCEPTED
+```
+
+Every sibling directory whose name merely begins with the root's is inside the
+check. `put` creates the directories it writes into, so an escaping key would
+land a document beside the mounted volume rather than in it — readable until
+the container is replaced, then gone, with the document row still pointing at
+it.
+
+WHAT IT IS NOT. Nothing reachable produces such a key: every one is built by
+`storageKey` from a document number or a uuid, no request body reaches it, and
+`config.ts` refuses to boot in production while this driver is selected at all.
+This is a latent defect in a development driver. It is fixed because the check
+claims to reject traversal and rejected only some of it, and it is written up
+here at its actual size rather than dressed as an exposure.
+
+The boundary is now `target === root || target.startsWith(root + sep)`, and the
+root has trailing separators stripped — because that check builds `root + sep`,
+and a configured root of `/app/storage/` would make it `//`, which no
+normalised path starts with, so every key would be refused and nothing could be
+stored at all. Both halves are held: restoring the prefix match fails the two
+sibling-directory tests, and removing the trailing-separator strip fails
+exactly the test for it.
 
 ## A fraud rule that could not fire
 
