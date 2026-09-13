@@ -8036,7 +8036,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "Ma’amaloli {{n}}",
     ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
     ofcOvIntact: "Rajistar bincike ba ta lalace ba",
-    ofcOvChainIntact: "Ba ta lalace ba: an sake duba shigarwa {{count}}, babu wanda aka canza ko ya ɓace, har zuwa shigarwa {{sequence}}.",
+    ofcOvChainIntact: "Ba ta lalace ba: an sake duba shigarwa {{count}}, babu wanda aka canza ko ya bata, har zuwa shigarwa {{sequence}}.",
     ofcOvChainGenesisRemoved:
       "An karye a shigarwa {{sequence}}: shigarwa mafi tsufa tana nuni da wanda ya gabace ta amma ba ya nan, don haka an cire farkon rajistar.",
     ofcOvChainLinkMismatch:

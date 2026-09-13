@@ -131,14 +131,27 @@ FORBIDDEN="$(psql_target --command "
     pay payments%ROWTYPE;
   BEGIN
     -- A real payment, so the foreign keys are satisfied and cannot be what
-    -- refuses the row. It must also have no receipt yet: \`receipts\` carries a
-    -- UNIQUE on payment_id, and on the first attempt at this the oldest payment
-    -- already had one, so the row was refused by that constraint before the
-    -- trigger ran — the same mistake as the random UUIDs, one layer further in.
+    -- refuses the row. One without a receipt is preferred because it gives the
+    -- cleanest signal, but any payment will do, and the fallback matters: an
+    -- earlier version of this insisted on an unreceipted one and failed a
+    -- perfectly good restore whose payments had all been receipted.
+    --
+    -- Using a receipted payment is sound because \`receipts_require_verified_payment\`
+    -- is a BEFORE INSERT trigger: it runs before the UNIQUE on payment_id is
+    -- evaluated. A healthy control therefore raises restrict_violation first,
+    -- and reaching the unique violation at all proves the trigger passed the
+    -- row — which is why unique_violation is classified below as the control
+    -- failing rather than as an inconclusive result.
     SELECT * INTO pay FROM payments p
       WHERE p.transaction_id IS NOT NULL AND p.amount_kobo IS NOT NULL
         AND NOT EXISTS (SELECT 1 FROM receipts r WHERE r.payment_id = p.id)
       ORDER BY p.created_at LIMIT 1;
+
+    IF NOT FOUND THEN
+      SELECT * INTO pay FROM payments p
+        WHERE p.transaction_id IS NOT NULL AND p.amount_kobo IS NOT NULL
+        ORDER BY p.created_at LIMIT 1;
+    END IF;
 
     IF NOT FOUND THEN
       RAISE EXCEPTION 'NO_PAYMENT_TO_TEST_WITH';
@@ -153,6 +166,11 @@ FORBIDDEN="$(psql_target --command "
   EXCEPTION
     WHEN restrict_violation THEN
       RAISE NOTICE 'control fired';
+    WHEN unique_violation THEN
+      -- The trigger is BEFORE INSERT, so getting as far as the UNIQUE on
+      -- payment_id means it allowed a receipt whose amount disagrees with its
+      -- payment. That is the control failing, not an inconclusive run.
+      RAISE NOTICE 'CONTROL_DID_NOT_FIRE';
     WHEN foreign_key_violation THEN
       -- The row never reached the trigger, so this proves nothing.
       RAISE NOTICE 'CONTROL_NOT_REACHED';
@@ -173,7 +191,7 @@ if grep -q 'NO_PAYMENT_TO_TEST_WITH' <<<"$FORBIDDEN"; then
   # demonstrated. Reporting this as success is what the old check effectively
   # did; reporting it as breakage would send an operator hunting a fault that
   # is not there.
-  fail "the receipt control trigger is present and enabled, but every payment in the restored database already has a receipt, so the control could not be demonstrated" 3
+  fail "the receipt control trigger is present and enabled, but the restored database has no payment to attempt a forbidden receipt against, so the control could not be demonstrated" 3
 fi
 if grep -q 'CONTROL_NOT_REACHED' <<<"$FORBIDDEN"; then
   fail "the forbidden insert was refused before reaching the receipt control, so nothing was proved" 3
