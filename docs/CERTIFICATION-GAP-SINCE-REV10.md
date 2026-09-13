@@ -1387,6 +1387,54 @@ correction to a tool with no findings is not evidence, it is sunk cost.
 None of the three produced a defect. That is the result, and it is the useful
 one: the home screen was not the tip of anything either.
 
+## A rate of 150%, published to a government
+
+`kpis()` answers PRD §91 with three percentages. Two are formed so that they
+cannot be wrong: the numerator is a `FILTER` over the same rows as the
+denominator, so it is a subset by construction.
+
+    count(*) FILTER (WHERE status = 'VERIFIED') / count(*)   FROM payments
+    count(*) FILTER (WHERE status = 'MATCHED')  / count(*)   FROM reconciliation_records
+
+The third was not.
+
+    (SELECT count(*) FROM receipts) / count(*)
+      FROM transactions WHERE status IN (revenue states)
+
+Every receipt the platform has ever issued, over the transactions that are in a
+revenue state *now*. Two quantities that move independently, and a reversal is
+what separates them: the transaction leaves the revenue states and so leaves
+the denominator, while the receipt row stays. It has to stay — `receipts`
+carries a `prevent_delete` trigger, and reversing a collection sets the
+receipt's status to REVERSED rather than removing it.
+
+Measured, not reasoned about. On a database holding one settled collection and
+its receipt, reversing that transaction leaves a numerator of 1 over a
+denominator of 0, so the zero branch answers **0%** — no receipts are being
+generated, about a platform that generated one for every collection it took.
+Three settled and one reversed answers **133.33%**. The mutation test reports
+the three-and-one case as *"a rate of 150% is not a rate"*.
+
+It is wrong in both directions and which way depends on the mix of reversals,
+which is the worst property a published indicator can have: it is plausible
+either way, so nobody checks it.
+
+This is the fourth instance this document records of one shape — a figure
+measured against a wider subject than the one it names. The others were the
+enum coverage ratio, the performance figures that did not say what they were a
+total of, and the trigger count that included test instrumentation.
+
+Three tests, and the third is a control rather than a discriminator, which is
+worth saying out loud. Two collections settled and one confirmed-but-unsettled
+answers 66.67 under both the old query and the new one. It earns its place
+anyway: the other two cases both assert 100, and a "fix" that returned a
+constant 100 would satisfy them. Producing that case needed a fixture the
+repository did not have — every seeded collection was driven all the way to
+settlement — so `seedOneCollection` now takes an option to stop before it.
+RECONCILIATION_PENDING with no receipt is a real and common state, the money
+confirmed and the receipt waiting on a bank statement, and until now nothing
+could test a figure that distinguishes collected from receipted.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in

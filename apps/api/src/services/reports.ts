@@ -862,9 +862,39 @@ export async function kpis(db: Db) {
        (SELECT CASE WHEN count(*) = 0 THEN '0'
                ELSE ROUND(100.0 * count(*) FILTER (WHERE status = 'MATCHED') / count(*), 2)::text END
           FROM reconciliation_records) AS reconciliation_rate_percent,
+       /*
+        * A FILTER over the same rows as the denominator, like the two above.
+        *
+        * No backticks in this comment: it sits inside a template literal, so
+        * one would end the string. Found by the compiler, immediately.
+        *
+        * This read: 100.0 * (SELECT count(*) FROM receipts) / count(*). Every
+        * receipt ever issued, over the transactions in a revenue state now.
+        * The numerator was not a subset of the denominator and the two move
+        * independently.
+        *
+        * A reversal separates them. The transaction leaves the revenue states
+        * and so leaves the denominator; the receipt row stays -- receipts
+        * carries a prevent_delete trigger, and reversal only sets its status
+        * to REVERSED -- and an unfiltered count still counts it. Measured on a
+        * database holding one settled collection and its receipt, reversing
+        * that transaction leaves a numerator of 1 over a denominator of 0, so
+        * the zero branch answers "0": no receipts are being generated, about a
+        * platform that generated one for every collection it took. Three
+        * settled and one reversed answers 133.33%. Wrong in both directions,
+        * and which way depends on the mix.
+        *
+        * Any receipt row counts, not only a VALID one: the indicator asks
+        * whether collections are getting receipts, and one later voided was
+        * still generated. That is a choice, so it is written down rather than
+        * left to be inferred from the absence of a filter.
+        */
        (SELECT CASE WHEN count(*) = 0 THEN '0'
-               ELSE ROUND(100.0 * (SELECT count(*) FROM receipts) / count(*), 2)::text END
-          FROM transactions WHERE status IN ${REVENUE_STATES_SQL}) AS receipt_generation_rate_percent,
+               ELSE ROUND(100.0 * count(*) FILTER (
+                      WHERE EXISTS (SELECT 1 FROM receipts r WHERE r.transaction_id = t.id)
+                    ) / count(*), 2)::text END
+          FROM transactions t WHERE t.status IN ${REVENUE_STATES_SQL})
+         AS receipt_generation_rate_percent,
        (SELECT count(*)::text FROM transactions WHERE status = 'RECONCILIATION_PENDING')
          AS unreconciled_transactions,
        (SELECT count(*)::text FROM transactions WHERE status IN ('REVERSED','REFUNDED')) AS reversals,
