@@ -305,16 +305,44 @@ mechanism that has since changed.
 Not a defect, and not something changed here. A measurement, recorded because
 it is a decision nobody has written down.
 
-Thirty money queries across `reports.ts` (23), `periods.ts` (5) and `targets.ts`
-(2) put a transaction in a day with a bare `created_at::date`. That resolves in
-the database session's zone, which is `Etc/UTC`. Two other modules ask the same
-kind of question and name the zone outright — `officer-inbox.ts` uses
-`date_trunc('day', created_at AT TIME ZONE 'Africa/Lagos')` and `fraud.ts`
-extracts the hour the same way, with a comment saying why: "the question is what
-time it was for the person".
+Thirty expressions across `reports.ts` (23), `periods.ts` (5) and `targets.ts`
+(2) put a transaction in a day by casting the instant — `created_at::date`,
+and in one case `initiated_at::date`. That resolves in the database session's
+zone, which is `Etc/UTC`. They sit in ten SQL statements, not thirty: the five
+in `periods.ts` are scalar subqueries of one `SELECT`, and `reports.ts` spreads
+its twenty-three across seven. A previous revision of this document called them
+thirty queries, which overstates the number of statements by three times while
+getting the number of places right, and a reader re-deriving either figure gets
+a different number from the one printed.
 
-Plateau State is UTC+1, so the two do not agree about the first hour of every
-day. Measured directly:
+A SECOND SYNTAX, THE SAME ANSWER, AND TWO MODULES THIS SURVEY LEFT OUT. Casting
+is not the only way the platform buckets an instant into a UTC day. Two further
+modules bound a half-open range instead — `created_at >= $from::date AND
+created_at < ($to::date + interval '1 day')` — which resolves the boundary in
+the same session zone and therefore gives the same answer as the cast, as the
+measurement below shows.
+
+`audit-workbench.ts` writes that bound in three places — the sampling
+population, a `window()` helper, and the drawn-sample listing — reaching
+eleven query branches, which is every figure in a *signed* audit report.
+`payment-history.ts` writes it in three queries, which is the date filter on
+what a citizen is shown of their own payments.
+
+So the surface is five modules, not three, and the two this survey previously
+omitted are the signed report and the citizen's own statement. That matters for
+scoping rather than for correctness: a revision that moved `reports.ts`,
+`periods.ts` and `targets.ts` to `Africa/Lagos` on the strength of this
+inventory would leave the audit report of those figures, and the citizen's
+history of them, still answering in UTC — an internal disagreement where there
+is currently none.
+
+Two modules ask the same kind of question and name the zone outright —
+`officer-inbox.ts` uses `date_trunc('day', created_at AT TIME ZONE
+'Africa/Lagos')` and `fraud.ts` extracts the hour the same way, with a comment
+saying why: "the question is what time it was for the person".
+
+Plateau State is UTC+1, so the two answers do not agree about the first hour of
+every day, and the two UTC syntaxes agree with each other. Measured directly:
 
 ```
  the_instant                  | 2026-08-31 23:30:00+00
@@ -323,6 +351,7 @@ day. Measured directly:
  date_it_happened_in_plateau  | 2026-09-01
  counted_in_august            | t
  counted_in_september         | f
+ in_a_september_range_bound   | f      <- the half-open form, same verdict
 ```
 
 Money taken at half past midnight on 1 September, Plateau time, is counted in
@@ -343,7 +372,8 @@ honest fix and says it is "worth doing deliberately, not as a side effect".
 Deliberately is the point. Changing it would move every reported figure at every
 month boundary, so it is a decision for PSIRS rather than a change to make while
 passing. What is recorded here is that the platform currently answers "which
-day" in two different ways depending on which module is asked, and that nothing
+day" in two different ways depending on which module is asked — UTC in five
+modules, written in two syntaxes, and Plateau time in two — and that nothing
 says which one a financial month is supposed to use.
 
 ## A second open question: what the chain cannot see
