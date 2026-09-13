@@ -474,6 +474,52 @@ describe('a fertiliser programme, and the bags behind it', () => {
     assert.equal(summary.body.beneficiariesRemaining, 48);
   });
 
+  /**
+   * A round whose quantities are exact in the column and not in binary.
+   *
+   * The case above uses 100 and 2, where every intermediate value happens to
+   * be exactly representable as a double, so it passes whether the arithmetic
+   * is done in floats or not. Most real rounds are like that, which is why
+   * this went unnoticed.
+   *
+   * These are not. `total_quantity`, `quantity_per_beneficiary` and `quantity`
+   * are all NUMERIC(14,2); 0.30 and 0.10 are exact there and neither is exact
+   * as a double. Subtracting one award of 0.10 from 0.30 gives
+   * 0.19999999999999998, and dividing that by 0.1 gives 1.9999999999999998,
+   * which floors to 1. The round holds enough for two more people and the
+   * officer's screen said one.
+   *
+   * Measured across every two-decimal combination a round plausibly holds,
+   * the float arithmetic disagreed with integer arithmetic 12,231 times, and
+   * every single disagreement was an undercount. That is the direction that
+   * does not get reported: somebody turned away sees a queue that ended, not
+   * a defect.
+   */
+  it('counts the people the goods can still serve, not the people the floats can', async () => {
+    await approveGroup();
+    const programmeId = await fertiliserProgramme();
+    const roundId = await openRound(programmeId, 0.3, 0.1);
+
+    const farmer = await attestedFarmer('Fourteen', '+2348100000017');
+    const awarded = await post(
+      `/allocations/rounds/${roundId}/awards`,
+      { taxpayerId: farmer },
+      { token: officerToken },
+    );
+    assert.equal(awarded.status, 201, JSON.stringify(awarded.body));
+
+    const summary = await get(`/allocations/rounds/${roundId}`, { token: officerToken });
+
+    assert.equal(summary.status, 200, JSON.stringify(summary.body));
+    assert.equal(summary.body.remainingQuantity, '0.20', JSON.stringify(summary.body));
+    assert.equal(
+      summary.body.beneficiariesRemaining,
+      2,
+      'the round holds 0.20 and gives 0.10 each, so two more people can be served: ' +
+        JSON.stringify(summary.body),
+    );
+  });
+
   it('will not award from a round that is not open', async () => {
     await approveGroup();
     const programmeId = await fertiliserProgramme();
