@@ -1858,6 +1858,100 @@ container. Then, if confirmed, repeat the four lines in each of the three
 blocks — the remedy is mechanical, and the reason it is worth doing is not the
 exposure but that the file states a site-wide policy it does not have.
 
+## The first line of the recovery runbook, and a cadence nobody keeps
+
+Two defects in `docs/DISASTER-RECOVERY-PLAN.md`, found while re-reading the
+procedure that is followed when the platform is down. Neither touches the
+question of which of the two disaster-recovery procedures is authoritative,
+recorded above and still PSIRS's to settle — both are ways in which this
+document was wrong on its own terms.
+
+### `cd /Users/mac/Agent-App`
+
+That was the first line of Scenario A, the standalone restoration. It is a
+directory on one person's laptop, and it is load-bearing: the restore two lines
+below it is invoked by the relative path `deploy/backup/restore.sh`, which
+resolves only from the repository checkout.
+
+Run verbatim from a shell that is not on that laptop, the three commands in
+order gave — and these are set out in prose rather than in a block because the
+guard described below refuses a personal path inside a fenced one, including
+this one:
+
+1. `cd /Users/mac/Agent-App` → `bash: cd: /Users/mac/Agent-App: No such file or
+   directory`, exit 1.
+2. `sha256sum -c /var/backups/psirs/psirs_backup_20260913_201919Z.sha256` →
+   `…psirs_backup_20260913_201919Z.dump: OK`, exit 0.
+3. `bash deploy/backup/restore.sh …dump psirs` → `bash:
+   deploy/backup/restore.sh: No such file or directory`, **exit 127**.
+
+The checksum step survives because `backup.sh` records an absolute path in the
+`.sha256` file, so it is the one line that does not care where the shell is.
+That is what makes this worse rather than better: the operator's first command
+fails, the second succeeds, and the reassurance arrives between the two errors.
+
+The restore script is not the problem. Given the same archive from the
+checkout it exits 0 and reports all eight financial tables — 23 transactions,
+20 payments, 13 receipts, 14 commissions, 198 audit rows, 17 taxpayers, 2
+agents, 23 invoices. The entire distance between an operator and a recovered
+database was a directory name that belonged to somebody else's machine.
+
+Step 0 now reads `cd "${PSIRS_REPO:?…}"`, which refuses to be empty and says
+what to set. The failure stays at step 0, where it is a typo, instead of
+arriving at step 2, where it is an outage.
+
+### A daily snapshot at 02:00 UTC, run by nothing
+
+§2.1 stated four things as established practice. Measured against the
+repository:
+
+| §2.1 said | Actually |
+| --- | --- |
+| Base snapshot daily at `02:00 UTC` via `deploy/backup/backup.sh` | **Nothing schedules it.** No crontab, no `.timer`, no `OnCalendar`, no scheduled workflow. The only `cron:` entries are Dependabot and the nightly integration check, and neither takes a backup |
+| Continuous WAL archiving to isolated storage | **Nothing.** No `archive_command` is configured anywhere in the repository |
+| A companion `.sha256` per backup | True, and `restore.sh` checks it |
+| 30 days primary, 365 days immutable Glacier | 30 days is real — `RETENTION_DAYS` prunes it. The Glacier vault is a bucket lifecycle policy that does not exist |
+
+The sibling document has always been straight about exactly these gaps:
+"`backup.sh` is not yet on a timer anywhere… Until those three are done the RPO
+is 'whenever someone last ran the script', which is not a number anyone should
+accept." One document said the schedule was in place and the other said it was
+not, and the one that said it was is the one carrying a document ID and a
+target SLA in its header — the one that reads like a signed deliverable.
+
+A fifth thing was wrong on its own terms rather than against the repository:
+§2.1 gave the WAL archive timeout as fifteen minutes, which is the RPO itself.
+A timeout equal to the budget spends all of it before the segment has started
+moving. `DISASTER-RECOVERY.md` configures `archive_timeout = 300` and says why;
+§2.1 now says the same.
+
+§2.1 is now a table of what the repository does against what the deployment
+must still supply, and it ends by saying plainly that until the timer and the
+`archive_command` exist the RPO is not fifteen minutes. The 15-minute figure
+stays where it belongs: as the target in the header and the requirement §1
+reads out of PRD §88, neither of which describes the deployment today.
+
+### What now holds it
+
+`what-the-recovery-runbook-tells-an-operator-to-type.test.ts`, three cases. No
+Markdown file in the repository may put a path inside a personal home directory
+into a fenced code block — the sweep is over every `.md`, because pasting a
+command out of a working shell is not a disaster-recovery habit. No runbook may
+cite a `.sh` that is not in the repository. And the schedule claim is bound to
+the repository in both directions: the test fails if anything starts scheduling
+a backup *and* fails if §2.1 stops saying that nothing does. Whichever way the
+two drift apart, the failure names the paragraph to fix.
+
+Mutation-checked, one failing case each: the laptop path restored to the code
+block, the sentence about nothing scheduling it replaced with a claim that
+something does, a cited script renamed by one letter, and a scheduled workflow
+added that runs `backup.sh`.
+
+What the guard cannot do is check that the commands, run in order, recover
+anything. That is what the restoration test in `DISASTER-RECOVERY.md` and
+`deploy/backup/verify-backup.sh` are for, and saying so here is the point — a
+guard that implied otherwise would be the same defect one level up.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

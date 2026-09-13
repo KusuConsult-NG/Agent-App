@@ -31,10 +31,24 @@ The platform processes statutory government revenue and issues immutable digital
 ```
 
 ### 2.1 Backup Cadence
-- **Base Snapshot (`pg_dump` compressed custom format):** Daily at `02:00 UTC` via `deploy/backup/backup.sh`.
-- **Continuous WAL Archiving (`archive_command`):** Every completed WAL segment (~16MB) or 15-minute archive timeout is streamed to isolated storage.
-- **Cryptographic Hashing:** Every backup produces a companion `.sha256` checksum file to guarantee that images cannot be altered at rest.
-- **Retention:** 30 days rolling on primary storage; 365 days rolling in immutable S3 Glacier / Compliance vault.
+
+The diagram above is the target architecture. This section says which parts of
+it this repository actually delivers, because a cadence stated as fact is read
+as a cadence someone is keeping.
+
+| Mechanism | What this repository does | What the deployment must still supply |
+| :--- | :--- | :--- |
+| **Base snapshot** (`pg_dump` compressed custom format) | `deploy/backup/backup.sh` takes one on demand and verifies it. The deploy workflow takes one before every migration, using the `apps/api/scripts` pair. | **A timer: daily at `02:00 UTC`.** Nothing here schedules one — no cron entry, no systemd timer, no scheduled workflow anywhere in the repository. |
+| **Continuous WAL archiving** (`archive_command`) | Nothing. | `archive_command` on the production instance, with `archive_timeout = 300`, so a completed 16MB segment or five idle minutes reaches isolated storage. Five minutes, not fifteen: an archive timeout equal to the RPO spends the whole budget before the segment has moved. |
+| **Cryptographic hashing** | Every snapshot writes a companion `.sha256`; `restore.sh` refuses a mismatch and says so out loud when the file is absent. | — |
+| **Retention** | 30 days rolling on primary storage, pruned by `RETENTION_DAYS` in `backup.sh`. | 365 days in an immutable Glacier / compliance vault, as a **bucket lifecycle policy** — a compromised application host must not be able to delete history. |
+
+**Until the timer and the `archive_command` exist, the RPO is not 15 minutes.**
+It is however long ago somebody last ran the script by hand. The figure in this
+document's header is the target the platform is built to and §1's reading of
+PRD §88 is the requirement it has to meet; neither describes the deployment as
+it stands. `DISASTER-RECOVERY.md` records the same three gaps in the same
+terms.
 
 ### 2.2 What an archive taken before migration 079 contains
 
@@ -79,8 +93,11 @@ does automatically as part of `npm run migrate`.
 To restore the latest daily snapshot onto a freshly provisioned database instance:
 
 ```bash
+# 0. Work from the repository checkout on THIS host. Every script path below
+#    is relative to it, so this step is not optional.
+cd "${PSIRS_REPO:?set PSIRS_REPO to the repository checkout on this host}"
+
 # 1. Transfer backup and verify checksum
-cd /Users/mac/Agent-App
 sha256sum -c /var/backups/psirs/psirs_backup_YYYYMMDD_HHMMSSZ.sha256
 
 # 2. Run automated restore script
@@ -92,6 +109,16 @@ npm run migrate --workspace @psirs/api
 # 4. Start the backend API engine
 npm run dev:api # or docker compose up -d api
 ```
+
+Step 0 read `cd /Users/mac/Agent-App` — a path that exists on one laptop.
+Pasted on a recovery host it fails, the operator reads one "No such file or
+directory" and moves on, and step 2 then fails with another: `bash:
+deploy/backup/restore.sh: No such file or directory`, exit 127. Measured. The
+restore script itself is fine — run from the checkout it restored the seeded
+database and reported all eight financial tables — so the entire distance
+between an operator and a working database was a directory name. Naming the
+checkout in a variable that refuses to be empty is what keeps the failure at
+step 0, where it is a typo, rather than at step 2, where it is an outage.
 
 ### Scenario B: Point-in-Time Recovery (PITR) to a Specific Minute
 When recovering from an accidental administrative table drop or point-in-time corruption:
