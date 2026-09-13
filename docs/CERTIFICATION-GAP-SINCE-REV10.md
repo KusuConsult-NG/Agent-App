@@ -1689,9 +1689,45 @@ Against that, the defects found in the same period fall into two piles and only
 two. Three were on a single officer screen that no test had ever *clicked*. The
 rest were in prose — an API reference, a finance SOP, a readiness assessment.
 
-The risk in this platform is not spread evenly through the code. It is
-concentrated where nothing executes: in buttons no test presses, and in
-sentences no check reads.
+### How wide the untested-button seam actually is: one screen
+
+The sentence that first stood here said the risk was "in buttons no test
+presses", and generalised from RoleHome to a seam worth working through screen
+by screen. That was measured afterwards and is **wrong**, so it is corrected
+rather than quietly dropped.
+
+Of every screen in the officer portal that makes a write call, **RoleHome was
+the only one whose importing tests fired no events at all.** Every other screen
+is clicked. `Periods` looked like the worst case on a first count — four write
+sites, none of them asserted — and its test presses the close button and
+asserts the sentence that appears afterwards; a throw of the kind that killed
+RoleHome's six buttons would fail it. The same holds for `UserAccess`,
+`Roles` and `Allocations`.
+
+The metric that produced the alarming list counted whether a test **asserts the
+request path**, and that is not the same question as whether a button is
+pressed. Conflating the two overstated the exposure across a dozen screens on
+the strength of one real instance.
+
+What the unasserted paths do leave open is narrower: a test that clicks and
+then checks a message catches a throw, but not a request sent to the wrong path
+or with the wrong body. That class was swept across both workspaces — 115
+inline-object write calls against 113 route schemas — and yielded exactly one
+instance, already fixed.
+
+So the honest statement is the narrow one. RoleHome was a singleton, and three
+defects accumulated there precisely because it was. The seam is not open
+elsewhere; it was open in one place, and that place is now closed.
+
+A separate sweep looked for the *mechanism* rather than the consequence: 198
+complete-statement hook calls across 81 client files, checked for the
+misindentation that made RoleHome's visible. None. That is weak evidence rather
+than proof — a hook moved into a callback with correct indentation would not
+show up — but it is the only mechanical check available without a parser, and
+it agrees with the click evidence.
+
+The remaining concentration is the other pile, and that one stands: sentences
+no check reads.
 
 ## A fourth thing, read but not run: four security headers on three locations
 
