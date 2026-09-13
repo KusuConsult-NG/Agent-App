@@ -70,6 +70,25 @@ comparable. CHECK constraints are `pg_constraint` rows with
 NOT NULL as a check constraint and answers 1,694, which is not what this row
 means.
 
+WHAT EACH FIGURE IS MEASURED AGAINST. Two of the numbers in the table above
+were wrong for the same reason — measured against a database that is not the
+platform — so this says, for each one, what the subject is. The counting rules
+are one thing and the subject is another, and getting the first right does not
+save you from the second.
+
+| figure | subject |
+| --- | --- |
+| tables, CHECK constraints, declared states | any migrated database; verified identical in `psirs_uat` and `psirs_test` |
+| triggers | a database built **only** from migrations (`psirs_uat`), because the suite adds 176 observation triggers to `psirs_test` |
+| enum states written by the suite | the four shard databases after a full run, counted over the declared set only |
+| API / portal / agent tests | one full local run at the commit named above |
+| service modules, migrations, test files | files on disk at that commit |
+| routes exercised | `route-coverage.mjs` at that commit |
+
+A figure whose subject is not written down is a figure somebody will re-derive
+against whatever database they happen to have open, which is how both errors
+were made and how the 233 in the report may have been made too.
+
 ## Seventeen service modules the report has never seen
 
 `arrears`, `audit-workbench`, `cases`, `connections`, `enumeration`, `export`,
