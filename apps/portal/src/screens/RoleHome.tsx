@@ -27,7 +27,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError, type User } from '../lib/api';
+import { withJustification } from '../lib/justify';
 import { Alert, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -82,7 +83,17 @@ function useAction(reload: () => void) {
 
   const act = useCallback(
     async (key: string, run: () => Promise<unknown>, said: string) => {
-  const { t } = usePortalI18n();
+      /*
+       * No `usePortalI18n()` here, and nothing else that starts with `use`.
+       *
+       * The i18n pass of 30 August left `const { t } = usePortalI18n();` on
+       * this line, unindented and unused -- nothing below reads `t`. It calls
+       * `useState` and `useEffect`, so from inside this callback it called a
+       * React hook outside render and threw. The throw is above the `try`, so
+       * the `catch` that turns a failure into an `ErrorAlert` never saw it and
+       * `setBusy` had not run: all six buttons on this screen did nothing at
+       * all, said nothing at all, and did it for a fortnight.
+       */
       setBusy(key);
       setError(null);
       setDone(null);
@@ -99,7 +110,7 @@ function useAction(reload: () => void) {
     [reload],
   );
 
-  return { act, busy, error, done };
+  return { act, busy, error, done, setError, setDone };
 }
 
 function Worked({ error, done }: { error: ApiError | null; done: string | null }) {
@@ -681,14 +692,45 @@ export function RoleHomeScreen({
                       className="small"
                       disabled={action.busy !== null}
                       onClick={() =>
-                        action.act(
-                          row.id!,
-                          async () => {
-                            await stepUp('commission.payout.approve', user.phone);
-                            await api.post(`/government/commissions/payouts/${row.id}/approve`, {});
+                        void withJustification({
+                          /*
+                           * The same call `CommissionsScreen` makes, through
+                           * the same helper, because this button is that
+                           * button moved to the home screen -- and it had
+                           * drifted from it in both directions that matter.
+                           *
+                           * It posted `{}`. The route requires a reason of at
+                           * least five characters, so every approval from
+                           * here was a 422.
+                           *
+                           * And it asked for a step-up code named
+                           * `commission.payout.approve`, which is not in
+                           * `STEP_UP_ACTIONS` -- `POST /auth/step-up` refuses
+                           * it. So the officer was sent an SMS, typed the
+                           * code, and was refused before the approval was
+                           * even attempted. The route asks for no step-up and
+                           * the screen this was copied from does not either;
+                           * whether approving a payout should need a code is
+                           * PSIRS's call, and one screen quietly disagreeing
+                           * with the other is not how it gets made.
+                           */
+                          question: t.ofcFnReasonForApprovingThis,
+                          minimum: 5,
+                          tooShort: t.ofcFnApprovePayoutTooShort,
+                          run: async (reason) => {
+                            await api.post(
+                              `/government/commissions/payouts/${row.id}/approve`,
+                              { reason },
+                            );
+                            load();
                           },
-                          t.ofcRhPayoutApproved.replace('{{reference}}', row.payout_reference),
-                        )
+                          onSuccess: t.ofcRhPayoutApproved.replace(
+                            '{{reference}}',
+                            row.payout_reference!,
+                          ),
+                          setError: action.setError,
+                          setMessage: action.setDone,
+                        })
                       }
                     >{t.ofcRhApprove}</button>
                   ),
