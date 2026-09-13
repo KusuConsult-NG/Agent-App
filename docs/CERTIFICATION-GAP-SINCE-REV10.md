@@ -1631,6 +1631,68 @@ whoever writes it. Replacing them with labels invented from a reading of the
 code would have been worse than leaving a known-imperfect reference to a
 control that does exist.
 
+## Four money paths read end to end, and all four hold
+
+After the documentation findings, four paths were read against the code rather
+than scanned. None of them yielded anything, and the pattern in that is the
+point of recording it.
+
+**A reversed receipt, verified publicly.** `verifyPublicly` checks
+`receipts.status` before anything else and answers REVERSED with a reason
+rather than VALID, verifies the stored document's checksum, and discloses
+receipt number, revenue type, amount, date and LGA — never the taxpayer's name.
+The reversal writes the receipt and the transaction inside one transaction, so
+the two cannot drift. The obvious hole was already found and closed by somebody
+else: the code's own comment records that `documents.status` had never been
+written by any path, so a reversed receipt looked up *by document number* went
+on reporting "a genuine government document" — "§95 in reverse: a reversed
+transaction must not still be able to appear successful".
+
+**The reference data the platform ships with.** All seventeen Plateau LGAs are
+present, correctly named, correctly placed in the three senatorial zones — six
+North, five Central, six South — with accurate headquarters, including the ones
+that are easy to get wrong: Jos East at Angware, Jos South at Bukuru, Kanam at
+Dengi, Kanke at Kwal, Langtang South at Mabudi, Mikang at Tunkus, Qua'an Pan at
+Baap.
+
+**A sync retried on a flaky connection**, which is the normal case in the field
+rather than an edge one. `/drafts/sync` carries no idempotency middleware and
+does not need it: each draft carries a `clientReference`, the table is unique on
+`(agent_id, client_reference)`, and the handler looks the draft up before
+storing and answers DUPLICATE — or REJECTED, with the stored reason — instead
+of inserting again. Each draft is handled inside its own try/catch, so one
+corrupt capture cannot hold an agent's whole queue shut, and the permission is
+re-checked per draft against `rbacStore` rather than the compiled map. The
+select-then-insert is not atomic, but the unique constraint holds the invariant
+and a genuine race costs one spurious per-draft refusal that the next sync
+clears.
+
+**Commission on a collection that is later charged back.** The commission is
+reversed, and where it had already been *paid* the amount is recorded as a
+clawback. That figure is not merely reported: the next payout nets it off, marks
+those rows `recovered_at` so it cannot be deducted twice — with a partial index
+making that structural rather than hopeful — and refuses outright, naming both
+figures in naira, when the clawback exceeds what is eligible. Two other paths
+set `recovered_at` back to NULL, so a payout that fails puts the debt back on
+the books instead of forgiving it. The code's comment records that it used to
+be otherwise: "the wallet showed it, the reversal reported a clawback figure,
+and the next payout handed over the full amount anyway".
+
+### What the clean sweeps are saying
+
+Counting this stretch, a dozen sweeps have now come back clean — every SUM that
+can be taken over nothing, every division, every ratio, the webhook's status
+codes, every client call resolving to a route, interaction coverage across both
+React workspaces, tests that assert nothing, and the four above.
+
+Against that, the defects found in the same period fall into two piles and only
+two. Three were on a single officer screen that no test had ever *clicked*. The
+rest were in prose — an API reference, a finance SOP, a readiness assessment.
+
+The risk in this platform is not spread evenly through the code. It is
+concentrated where nothing executes: in buttons no test presses, and in
+sentences no check reads.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in
