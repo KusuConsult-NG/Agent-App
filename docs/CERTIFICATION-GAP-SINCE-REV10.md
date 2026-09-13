@@ -22,7 +22,7 @@ verification run — describes the platform as it stood at that commit.
 | API test files | 139 | 177 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
-| CHECK constraints | 194 *(report's figure)* | 301 |
+| CHECK constraints | 194 *(report's figure)* | 299 |
 | API tests passing | 1,523 *(report's figure)* | 2,112 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
@@ -50,7 +50,8 @@ not "correct" a right number into a wrong one. Tables are base tables in
 question. Triggers are `pg_trigger` rows that are not internal
 **and not test instrumentation** (156); a trigger declared
 `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
-`information_schema.triggers`.
+`information_schema.triggers`. CHECK constraints are `pg_constraint` rows of
+type `c` **on a relation in `public`** (299).
 
 THIS ROW WAS WRONG UNTIL NOW, AND THE WAY IT WAS WRONG IS THE POINT. It read
 332, measured against `psirs_test`. The suite's enum-coverage harness
@@ -65,10 +66,32 @@ right does not help if the subject is wrong.
 The instrumentation already existed at `fa8f454`, so the report's 233 may be
 inflated the same way. A revision should re-measure both against a database
 built only from migrations rather than treat 233 and any later figure as
-comparable. CHECK constraints are `pg_constraint` rows with
-`contype = 'c'` across all schemas (301) — `information_schema` models every
-NOT NULL as a check constraint and answers 1,694, which is not what this row
-means.
+comparable.
+
+AND THE PARAGRAPH THAT SAID SO GOT ITS OWN SUBJECT WRONG, TWICE. It read:
+"CHECK constraints are `pg_constraint` rows with `contype = 'c'` across all
+schemas (301) — `information_schema` models every NOT NULL as a check
+constraint and answers 1,694, which is not what this row means."
+
+Both figures in that sentence are measured against something wider than the
+platform, and the sentence is about not doing that.
+
+`across all schemas` admits two constraints PostgreSQL creates in the
+`information_schema` of every database that has ever existed —
+`cardinal_number_domain_check` and `yes_or_no_check`. They are no more part of
+this platform than the observation triggers were, and by the standard the
+trigger row above sets — instrumentation "that exists in no deployed database"
+— they belong outside the count for the same reason. Narrowed to relations in
+`public`, which is how tables are already counted, the figure is 299. This is
+a change of rule rather than the correction of an error: 301 was consistent
+with the method printed beside it, and a reader who re-derives it should know
+why it moved.
+
+`1,694` was measured against `psirs_test`. On `psirs_uat` the same query
+answers 1,691, and the three between them are the NOT NULL columns of
+`psirs_test_observations.enum_writes` — the enum-coverage harness again, in the
+very sentence warning that the harness inflates a count. The illustration still
+holds and the number is now the platform's.
 
 WHAT EACH FIGURE IS MEASURED AGAINST. Two of the numbers in the table above
 were wrong for the same reason — measured against a database that is not the
@@ -78,7 +101,7 @@ save you from the second.
 
 | figure | subject |
 | --- | --- |
-| tables, CHECK constraints, declared states | any migrated database; verified identical in `psirs_uat` and `psirs_test`. Declared states are the CHECK sets of every column except the five named in `NOT_STATE_COLUMNS`, which hold a language tag rather than a state |
+| tables, CHECK constraints, declared states | relations in `public` of any migrated database; verified identical in `psirs_uat` and `psirs_test`. Declared states are the CHECK sets of every column except the five named in `NOT_STATE_COLUMNS`, which hold a language tag rather than a state |
 | triggers | a database built **only** from migrations (`psirs_uat`), because the suite adds 176 observation triggers to `psirs_test` |
 | enum states written by the suite | the four shard databases after a full run, counted over the declared set only |
 | API / portal / agent tests | one full local run at the commit named above |
@@ -503,6 +526,52 @@ plainly which is authoritative and why the other is kept, is a decision for
 PSIRS — it touches the runbook people are trained on and the scheduling that
 has yet to be set up (`DISASTER-RECOVERY.md` records that `backup.sh` "is not
 yet on a timer anywhere").
+
+## Seven migrations the test databases hold and the repository does not
+
+Closed at the commit this section was written for, and recorded because the
+shape recurs: `migrate.ts` enforced half of what its header promised.
+
+It holds an applied migration to its *contents* — change the file and the
+checksum no longer matches and the run refuses, "applied migrations are
+immutable". Nothing held one to *existing*. The loop walks the files on disk,
+so a row in `schema_migrations` naming a file that has been deleted or renamed
+was never visited and never mentioned. Measured on a scratch database: insert a
+row for a filename nobody has, run again, and the answer is "schema is up to
+date" and exit 0.
+
+It was not hypothetical here.
+
+```
+psirs_uat         78 applied, 78 on disk
+psirs_test        85 applied, 78 on disk
+psirs_test_s1..4  85 applied, 78 on disk
+```
+
+Seven migrations were renumbered from 055-061 to 068-074, presumably when
+another branch took those ordinals first. Both halves of that were silent: the
+old rows name files nobody can produce, and the same SQL under its new name
+looked unapplied and was applied a second time in every database that had the
+old names.
+
+Nothing was damaged, and the reason is worth naming because it is not a
+control. Those seven files are `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX
+IF NOT EXISTS` throughout, so the second application did nothing. Had any of
+them been a bare `CREATE TABLE` or an `ALTER TABLE ... ADD COLUMN`, the second
+run would have failed — loudly, which is better, or in the middle of a
+deployment, which is worse. `psirs_uat` and `psirs_test` still agree at 103
+tables and 299 CHECK constraints.
+
+What it costs while it is silent is the ability to rebuild a database from the
+repository and get the one that is deployed. A row nobody can produce is a
+schema change nobody can review, reproduce or roll back — and that is the only
+reason to keep the table at all.
+
+The runner now compares the applied names against the files after loading
+both, and refuses on any it cannot find. The seven real renames are recorded in
+a `RENAMED` map in the same file, each verified to point at a file that is
+still there, so an existing database keeps working and the history is written
+down rather than made every holder's problem.
 
 ## A fourth thing, read but not run: four security headers on three locations
 
