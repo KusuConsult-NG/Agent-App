@@ -525,7 +525,14 @@ function BlockControl({
           setBusy(true);
           setError(null);
           try {
-            await stepUp('user.role.change', user.phone);
+            /*
+             * The code names what it is for. Asking for `user.role.change` to
+             * unblock a laptop -- which is what this did -- put a role change
+             * an officer never made into the audit log, and left a live
+             * role-change authorisation open for ten minutes every time
+             * somebody did routine handset admin.
+             */
+            await stepUp(device.status === 'BLOCKED' ? 'device.unblock' : 'device.block', user.phone);
             /*
              * Both paths spelled out. `officer-actions-reachable.test.ts` reads
              * this file to check every officer endpoint has a way in, and a

@@ -4224,17 +4224,26 @@ governmentRouter.get(
 );
 
 /*
- * Blocking a machine, and lifting it. Both step-up.
+ * Blocking a machine, and lifting it. Both step-up, and each under its own
+ * name.
  *
  * A block ends every session the device holds and stops it opening another --
  * enforced on the row by migration 063, because the case it exists for is a
  * laptop already in somebody else's hands. That is the same size of decision
  * as changing an officer's role, and gets the same extra verification.
+ *
+ * It used to get it under the same *name*: both routes asked for
+ * `user.role.change`. Size and name are different things, and the name is
+ * what gets written down. `grantStepUp` audits the grant, so blocking a stolen
+ * laptop recorded an `auth.step_up_granted` for a role change that never
+ * happened; the refusal told the officer to step up for a role change; and for
+ * the window's ten minutes either code opened either door. See the note beside
+ * `device.block` in `STEP_UP_ACTIONS`.
  */
 governmentRouter.post(
   '/devices/:id/block',
   requirePermission('user:manage'),
-  requireStepUp('user.role.change'),
+  requireStepUp('device.block'),
   validateBody(
     z.object({ reason: z.string().trim().min(10).max(500) }),
     async (req, res, data) => {
@@ -4252,7 +4261,7 @@ governmentRouter.post(
 governmentRouter.post(
   '/devices/:id/unblock',
   requirePermission('user:manage'),
-  requireStepUp('user.role.change'),
+  requireStepUp('device.unblock'),
   validateBody(
     z.object({ reason: z.string().trim().min(10).max(500) }),
     async (req, res, data) => {

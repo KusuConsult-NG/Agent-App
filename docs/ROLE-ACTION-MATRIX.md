@@ -168,6 +168,8 @@ Holding the permission is not enough for these: the officer confirms a one-time 
 - `financial.period.close`
 - `financial.period.reopen`
 - `audit.report.sign`
+- `device.block`
+- `device.unblock`
 
 <!-- END:GENERATED -->
 

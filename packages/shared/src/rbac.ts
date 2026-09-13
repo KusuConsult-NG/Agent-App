@@ -535,6 +535,32 @@ export const STEP_UP_ACTIONS = [
    * should be one click from a session left open on a desk.
    */
   'audit.report.sign',
+  /*
+   * Taking a machine away from whoever is holding it, and giving it back.
+   *
+   * These were `user.role.change` until they were given their own names, on
+   * the reasoning that blocking a laptop is "the same size of decision as
+   * changing an officer's role". The size was right and the name was not, and
+   * a step-up action is a name before it is a size.
+   *
+   * Three things went wrong while they shared one. `grantStepUp` audits the
+   * grant it writes, so an officer who blocked a stolen laptop left an
+   * `auth.step_up_granted` row saying they had authenticated a role change --
+   * an authentication event naming an action that did not happen, in the one
+   * table whose whole value is that it does not do that. The refusal told
+   * them, in `nextStep`, to step up for a role change. And for the ten minutes
+   * of the window the two were interchangeable: a code minted for routine
+   * handset admin would also promote an account to admin, and a code minted to
+   * block a machine somebody else is holding would hand it straight back.
+   *
+   * Split in two for the same reason `financial.period.close` and
+   * `.reopen` are: the risk runs one way. Blocking is the defensive move and
+   * the urgent one; unblocking restores access to a machine that was taken
+   * away for a reason. A code obtained for the first should not spend on the
+   * second.
+   */
+  'device.block',
+  'device.unblock',
 ] as const;
 
 export type StepUpAction = (typeof STEP_UP_ACTIONS)[number];
