@@ -1729,6 +1729,47 @@ it agrees with the click evidence.
 The remaining concentration is the other pile, and that one stands: sentences
 no check reads.
 
+## A figure in the acceptance walkthrough that this branch made wrong
+
+`docs/UAT-WALKTHROUGH.md` is what somebody follows to accept this platform. Its
+second step says the harness "applies all N migrations and seeds the reference
+data: 17 LGAs, 187 wards, 9 revenue categories, 42 revenue items, 12 training
+modules, 73 notification templates". Seven figures, every one a count of what a
+fresh install produces, and nothing held any of them to it.
+
+They were checked against a database created for the purpose — dropped,
+created, migrated from nothing and seeded. **Six were right.** LGAs, wards,
+categories, items, training modules and templates all match exactly.
+
+The migration count did not. It said 78; the repository ships 80 — and the two
+that made the difference, 079 and 080, were added **by this branch**, for the
+notification work earlier today. The document was accurate until this session
+made it wrong and did not look back at it. It is the second time that figure
+has drifted.
+
+### A guard scoped to what can honestly be checked
+
+The first version of the check read all seven figures out of the prose and
+counted the matching tables. It failed, and it was right to: asked of a suite
+database it answered **87 migrations and 74 notification templates**. Neither
+is a fact about the platform. Both are facts about a database that has been
+used — the suite's databases live across runs, `resetDatabase` truncates the
+transactional tables and leaves reference data behind, and `schema_migrations`
+keeps every row it has ever had.
+
+A guard reporting those would fail for reasons that are not defects, and a
+guard that cries wolf is deleted by the third person it interrupts. So the six
+seeded counts are verified by hand, once, against a database built for it, and
+recorded here as verified. The one that actually drifts is held mechanically
+against the migration files, which needs no database and cannot fail for a
+reason that is not real.
+
+It also found a fault in itself on the way: the walkthrough's sentence wraps,
+so the source reads `73 notification\n   templates`, and a literal space
+between the two words matched nothing. A guard discovering that about itself
+before a person discovers it about the guard is the whole argument for running
+one before trusting it.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in
