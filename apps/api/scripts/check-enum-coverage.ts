@@ -51,7 +51,11 @@
  */
 
 import { Pool } from 'pg';
-import { DELIBERATELY_UNREACHABLE, NOT_EXERCISED_BY_TESTS } from '../src/tests/enum-coverage';
+import {
+  DELIBERATELY_UNREACHABLE,
+  NOT_EXERCISED_BY_TESTS,
+  NOT_STATE_COLUMNS,
+} from '../src/tests/enum-coverage';
 import { TRANSACTIONAL_TABLES } from '../src/tests/transactional-tables';
 
 const OBSERVATION_SCHEMA = 'psirs_test_observations';
@@ -93,7 +97,7 @@ async function readShard(url: string) {
 
     const defaults = await pool.query<{ key: string; value: string }>(
       `SELECT table_name || '.' || column_name AS key,
-              substring(column_default from '''([A-Z][A-Z0-9_]*)''::text') AS value
+              substring(column_default from '''([A-Za-z][A-Za-z0-9_]*)''::text') AS value
          FROM information_schema.columns
         WHERE table_schema = 'public' AND column_default IS NOT NULL`,
     );
@@ -137,26 +141,22 @@ async function readShard(url: string) {
       /*
        * Only the values this report is about.
        *
-       * The denominator below extracts upper-case values alone, matching the
-       * decision recorded in `enum-observation.ts`: "lower-case sets —
-       * `usage_events.language` is 'en' and 'ha' — are values of a different
-       * kind, not states anything transitions to." The observer honours that
-       * and never watches those columns.
-       *
-       * This read did not. It took whatever a reference column happened to
-       * hold, so `notification_templates.language: en`, `: ha` and
-       * `users.preferred_language: en` were added to the observed set —
-       * three states the denominator cannot contain, because it excludes them
-       * on purpose. The printed ratio was therefore 669 of 747 with a
-       * numerator drawn from a wider universe than its denominator; over the
-       * report's own scope it is 666.
+       * The denominator below counts the state columns and no others, the set
+       * named by `NOT_STATE_COLUMNS`. This read did not. It took whatever a
+       * reference column happened to hold, so `notification_templates.language:
+       * en`, `: ha` and `users.preferred_language: en` were added to the
+       * observed set — three values the denominator cannot contain, because it
+       * excludes them on purpose. The printed ratio was therefore 669 of 747
+       * with a numerator drawn from a wider universe than its denominator;
+       * over the report's own scope it was 666.
        *
        * The accounting is unaffected and always was: the loop that finds
        * unwritten states iterates `declared`, so a value outside it was never
        * matched against anything. Only the headline figure was wrong.
        */
+      if (`${row.table_name}.${column[1]}` in NOT_STATE_COLUMNS) continue;
       const states = new Set(
-        [...row.definition.matchAll(/'([A-Z][A-Z0-9_]*)'::text/g)].map((m) => m[1]),
+        [...row.definition.matchAll(/'([A-Za-z][A-Za-z0-9_]*)'::text/g)].map((m) => m[1]),
       );
       if (states.size === 0) continue;
       const { rows } = await pool.query<{ value: string }>(
@@ -197,8 +197,12 @@ async function main() {
     for (const row of shard.declared) {
       const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
       if (!column) continue;
-      const values = [...row.definition.matchAll(/'([A-Z][A-Z0-9_]*)'::text/g)].map((m) => m[1]);
-      if (values.length > 0) declared.set(`${row.table_name}.${column[1]}`, values);
+      const key = `${row.table_name}.${column[1]}`;
+      if (key in NOT_STATE_COLUMNS) continue;
+      const values = [...row.definition.matchAll(/'([A-Za-z][A-Za-z0-9_]*)'::text/g)].map(
+        (m) => m[1],
+      );
+      if (values.length > 0) declared.set(key, values);
     }
   }
 

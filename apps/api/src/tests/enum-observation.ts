@@ -33,6 +33,7 @@
  */
 
 import { pool } from '../db/pool';
+import { NOT_STATE_COLUMNS } from './enum-coverage';
 
 export const OBSERVATION_SCHEMA = 'psirs_test_observations';
 
@@ -56,33 +57,15 @@ export async function enumColumns(db = pool): Promise<EnumColumn[]> {
   const found: EnumColumn[] = [];
   for (const row of rows) {
     const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
-    // Lower-case sets — `usage_events.language` is 'en' and 'ha' — are values
-    // of a different kind, not states anything transitions to.
-    const hasStates = /'[A-Z][A-Z0-9_]*'::text/.test(row.definition);
-    if (column && hasStates) found.push({ table: row.table_name, column: column[1] });
+    if (!column) continue;
+    // The columns that hold something other than a state are named in
+    // `NOT_STATE_COLUMNS`, with the reason each one is not. This used to be
+    // decided by letter case, which excluded `cases.department` along with the
+    // language tags it was aimed at.
+    if (`${row.table_name}.${column[1]}` in NOT_STATE_COLUMNS) continue;
+    found.push({ table: row.table_name, column: column[1] });
   }
   return found;
-}
-
-/** Which values each enum column allows, keyed `table.column`. */
-export async function declaredValues(db = pool): Promise<Map<string, string[]>> {
-  const { rows } = await db.query<{ table_name: string; definition: string }>(
-    `SELECT c.relname AS table_name, pg_get_constraintdef(con.oid) AS definition
-       FROM pg_constraint con
-       JOIN pg_class c ON c.oid = con.conrelid
-       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE con.contype = 'c' AND n.nspname = 'public'
-        AND pg_get_constraintdef(con.oid) LIKE '%ANY (ARRAY%'`,
-  );
-
-  const declared = new Map<string, string[]>();
-  for (const row of rows) {
-    const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
-    if (!column) continue;
-    const values = [...row.definition.matchAll(/'([A-Z][A-Z0-9_]*)'::text/g)].map((m) => m[1]);
-    if (values.length > 0) declared.set(`${row.table_name}.${column[1]}`, values);
-  }
-  return declared;
 }
 
 /**
@@ -172,18 +155,4 @@ export async function installEnumObservers(): Promise<void> {
   await pool.query(
     `COMMENT ON TABLE ${OBSERVATION_SCHEMA}.enum_writes IS '${fingerprint.replace(/'/g, "''")}'`,
   );
-}
-
-/** What this database saw written, keyed `table.column`. */
-export async function observedValues(db = pool): Promise<Map<string, Set<string>>> {
-  const { rows } = await db.query<{ table_name: string; column_name: string; value: string }>(
-    `SELECT table_name, column_name, value FROM ${OBSERVATION_SCHEMA}.enum_writes`,
-  );
-  const observed = new Map<string, Set<string>>();
-  for (const row of rows) {
-    const key = `${row.table_name}.${row.column_name}`;
-    if (!observed.has(key)) observed.set(key, new Set());
-    observed.get(key)!.add(row.value);
-  }
-  return observed;
 }
