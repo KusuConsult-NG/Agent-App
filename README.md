@@ -107,8 +107,21 @@ seed fails rather than handing you an agent that could not exist in production.
 
 ```bash
 createdb psirs_test
-npm test        # 353 tests: API (318) + agent PWA offline, session and refresh (35)
+npm run verify   # everything CI gates on: typecheck, all suites, contention
 ```
+
+`npm run verify` is the one to run before pushing. `npm test` alone is a
+narrower thing — it runs the three workspace suites and **not** the contention
+job, which CI runs separately and which has caught a regression that `npm test`
+was blind to. If a command is going to be treated as the gate, it has to be the
+same gate CI applies.
+
+| Command | Runs |
+|---|---|
+| `npm run verify` | `typecheck` + `test` + `test:concurrency` — what CI gates on |
+| `npm test` | The three workspace suites (API, agent PWA, officer portal) |
+| `npm run test:concurrency` | Several confirmations of one payment arriving at once |
+| `npm run uat` | The whole stack in a browser, with screenshots |
 
 The integration suites run against a real PostgreSQL database and the real HTTP
 surface. They do not mock the repository layer, because the guarantees under
@@ -130,7 +143,8 @@ against a real PostgreSQL 16 service container. In order:
 | `npm run migrate` | Migrations apply to an empty database |
 | `npm run migrate` again | Migrations are idempotent, and no applied migration was edited in place (the runner compares checksums and refuses) |
 | `npm run seed -- --demo` | Reference data and the PSIRS catalogue load |
-| `npm test` | All 340 tests — every database-level integrity control, and the PWA offline capture queue |
+| `npm test` | Every database-level integrity control, and the PWA offline capture queue |
+| `npm run test:concurrency` | One payment, many simultaneous confirmations: exactly one acknowledgement, and exactly one receipt when it settles |
 | `npm run build` | All four workspaces compile, including both front-ends, and the SQL migrations are copied into the API's output |
 | Start the built artefact | `node dist/server.js` boots, applies migrations and answers `/health` — the suite runs the *source* through `tsx`, so nothing else checks that what gets deployed can start |
 | Dirty-tree check | No build artefact is tracked |

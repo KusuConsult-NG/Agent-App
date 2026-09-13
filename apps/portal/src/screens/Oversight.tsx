@@ -1,9 +1,13 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
+import { usePortalI18n } from '../lib/i18n';
+import { useFilters } from '../lib/filters';
+import { CHAIN_TEXT, enumLabel, localName } from '@psirs/shared';
+import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
  * The evidence behind a signal, in a form an officer can act on.
@@ -19,28 +23,29 @@ import { withJustification } from '../lib/justify';
  * when escalating, but they are not what they reason with.
  */
 function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
+  const { t } = usePortalI18n();
   if (!detail || typeof detail !== 'object') return <span>—</span>;
 
   const entries = Object.entries(detail);
   if (entries.length === 0) return <span>—</span>;
 
-  const readable = entries.filter(([key]) => !key.endsWith('Id'));
-  const identifiers = entries.filter(([key]) => key.endsWith('Id'));
+  const readable = entries.filter(([key]) => !key.endsWith(t.ofcOvId));
+  const identifiers = entries.filter(([key]) => key.endsWith(t.ofcOvId));
 
   return (
     <div className="signal-detail">
       {(readable.length > 0 ? readable : identifiers).map(([key, value]) => (
         <div key={key}>
-          <span className="signal-detail__key">{humanise(key)}</span>{' '}
+          <span className="signal-detail__key">{humanise(key, t)}</span>{' '}
           <span className="signal-detail__value">{formatValue(value)}</span>
         </div>
       ))}
       {readable.length > 0 && identifiers.length > 0 && (
         <details className="signal-detail__ids">
-          <summary>identifiers</summary>
+          <summary>{t.ofcOvIdentifiers}</summary>
           {identifiers.map(([key, value]) => (
             <div key={key} className="mono">
-              {humanise(key)} {formatValue(value)}
+              {humanise(key, t)} {formatValue(value)}
             </div>
           ))}
         </details>
@@ -49,8 +54,32 @@ function SignalDetail({ detail }: { detail: Record<string, unknown> | null }) {
   );
 }
 
-/** `agentAssignedTo` → `Agent assigned to`. */
-function humanise(key: string): string {
+/**
+ * What a fraud signal's evidence is called, in the language being read.
+ *
+ * The keys come from the detection code's own `detail` object, so this is a
+ * map rather than an enumeration: a new signal can attach a new key without a
+ * migration, and the fallback below — the key spaced out — is what it will
+ * show until somebody names it. That is the right trade for diagnostic
+ * evidence and the wrong one for a status, which is why statuses go through
+ * `enumLabel` and are checked against the schema.
+ */
+const SIGNAL_KEYS: Record<string, keyof TranslationDictionary> = {
+  count: 'ofcOvSignalCount',
+  windowSeconds: 'ofcOvSignalWindowSeconds',
+  threshold: 'ofcOvSignalThreshold',
+  reason: 'ofcOvSignalReason',
+  agentsSupported: 'ofcOvSignalAgentsSupported',
+  agentAssignedTo: 'ofcOvSignalAgentAssignedTo',
+  collectedIn: 'ofcOvSignalCollectedIn',
+  agentTerritoryLgaId: 'ofcOvSignalAgentTerritory',
+  transactionLgaId: 'ofcOvSignalTransactionArea',
+};
+
+/** `agentAssignedTo` → `Agent assigned to`, when nothing has named it. */
+function humanise(key: string, t: TranslationDictionary): string {
+  const named = SIGNAL_KEYS[key];
+  if (named) return t[named];
   const spaced = key.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
   return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase();
 }
@@ -62,11 +91,28 @@ function formatValue(value: unknown): string {
 }
 
 export function FraudScreen() {
+  const { t } = usePortalI18n();
   const [leakage, setLeakage] = useState<any | null>(null);
   const [flags, setFlags] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('OPEN');
+  /*
+   * Two reads, two failures, both kept away from the action error.
+   *
+   * The flags catch was already fixed once, for the half of this that
+   * mattered most: it leaves `flags` at null rather than writing `[]`, so an
+   * unread queue cannot read as a queue with nothing in it. But `!flags`
+   * renders the skeleton, so what an officer actually saw was a refusal at the
+   * top of the screen and four grey bars where the queue belongs — and the
+   * leakage figures, on the same shared `error`, simply were not drawn at all.
+   *
+   * Separately, because they answer different questions: the figures say how
+   * much money is unaccounted for, the queue says who is suspected of taking
+   * it, and an officer needs to know which of the two they are missing.
+   */
+  const [flagsError, setFlagsError] = useState<ApiError | null>(null);
+  const [leakageError, setLeakageError] = useState<ApiError | null>(null);
   const [sweeping, setSweeping] = useState(false);
   const [sweepResult, setSweepResult] = useState<string | null>(null);
 
@@ -81,17 +127,29 @@ export function FraudScreen() {
   const load = useCallback(() => {
     api
       .get('/government/leakage')
-      .then(setLeakage)
+      .then((loaded) => {
+        setLeakage(loaded);
+        setLeakageError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLeakageError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
     if (statusFilter) params.set('status', statusFilter);
     api
       .get<any[]>(`/government/fraud/flags?${params.toString()}`)
-      .then(setFlags)
-      .catch(() => setFlags([]));
+      .then((loaded) => {
+        setFlags(loaded);
+        setFlagsError(null);
+      })
+      // A fraud queue that could not be read is not a queue with no flags in
+      // it, and "no flags" is the reading an officer will take from an empty
+      // table. The refusal reaches the screen instead — in the queue's own
+      // place, rather than above a skeleton that never resolves.
+      .catch((caught) => {
+        setFlagsError(asApiError(caught));
+      });
   }, [statusFilter]);
 
   useEffect(() => {
@@ -100,18 +158,17 @@ export function FraudScreen() {
 
   async function review(id: string, decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED') {
     await withJustification({
-      question: 'Record what you found (at least 10 characters):',
+      question: t.ofcOvRecordWhatYouFound,
       minimum: 10,
-      tooShort:
-        'Record what you found, in at least 10 characters. It is the only account of why this flag was settled the way it was.',
+      tooShort: t.ofcOvFlagNoteTooShort,
       run: async (note) => {
         await api.post(`/government/fraud/flags/${id}/review`, { decision, note });
         load();
       },
       onSuccess:
         decision === 'CONFIRMED'
-          ? 'Flag confirmed. The agent\u2019s commission has been placed on hold pending resolution.'
-          : `Flag marked ${decision.toLowerCase().replace(/_/g, ' ')}.`,
+          ? t.ofcOvFlagConfirmed
+          : t.ofcOvFlagMarked.replace('{{decision}}', enumLabel(decision, t)),
       setError,
       setMessage,
     });
@@ -120,19 +177,11 @@ export function FraudScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Revenue leakage monitoring</h2>
-        <p className="card__hint">
-          Signals are raised for review, never acted on automatically. No transaction is deleted or
-          blocked by a heuristic.
-        </p>
+        <h2 className="card__title">{t.ofcOvLeakageTitle}</h2>
+        <p className="card__hint">{t.ofcOvSignalsBody}</p>
         {canSweep && (
           <>
-            <p className="card__hint" style={{ marginTop: 12 }}>
-              The sweep re-runs every heuristic over the current data and raises what it finds. It
-              raises flags for a person to judge and changes no transaction, so running it is
-              safe — but it is a deliberate act rather than something that happens quietly, which
-              is why it is a button.
-            </p>
+            <p className="card__hint" style={{ marginTop: 12 }}>{t.ofcOvSweepBody}</p>
             <div className="button-row">
               <button
                 type="button"
@@ -149,18 +198,18 @@ export function FraudScreen() {
                     const raised = result.flagsRaised ?? result.raised ?? 0;
                     setSweepResult(
                       raised === 0
-                        ? 'Sweep complete. Nothing new was flagged.'
-                        : `Sweep complete. ${raised} flag(s) raised for review.`,
+                        ? t.ofcOvSweepCompleteNothingNew
+                        : t.ofcOvSweepRaised.replace('{{count}}', String(raised)),
                     );
                     load();
                   } catch (caught) {
-                    if (caught instanceof ApiRequestError) setError(caught.error);
+                    setError(asApiError(caught));
                   } finally {
                     setSweeping(false);
                   }
                 }}
               >
-                {sweeping ? 'Sweeping…' : 'Run a fraud sweep now'}
+                {sweeping ? t.ofcOvSweeping : t.ofcOvRunAFraudSweep}
               </button>
             </div>
             {sweepResult && <Alert kind="success">{sweepResult}</Alert>}
@@ -168,24 +217,46 @@ export function FraudScreen() {
         )}
       </div>
 
+      {/*
+        Where the figures would have been. Without this the grid is simply
+        absent, and a screen that is missing a section looks like a screen
+        that has nothing to report.
+      */}
+      {leakageError && (
+        <div className="card">
+          <ErrorAlert error={leakageError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
       {leakage && (
         <div className="stat-grid">
           <Stat
-            label="Unreconciled over 48h"
+            label="ofcOvUnreconciled48h"
             value={<Money kobo={leakage.unreconciledOver48Hours.amount_kobo} />}
-            hint={`${leakage.unreconciledOver48Hours.count} transaction(s)`}
+            hint={{
+              text: t.ofcOvTransactionCount.replace(
+                '{{n}}',
+                String(leakage.unreconciledOver48Hours.count),
+              ),
+            }}
             variant={Number(leakage.unreconciledOver48Hours.count) > 0 ? 'alert' : undefined}
           />
           <Stat
-            label="Settlement shortfall"
+            label="ofcOvSettlementShortfall"
             value={<Money kobo={leakage.settlementsOutstanding.variance_kobo} />}
-            hint={`${leakage.settlementsOutstanding.count} settlement(s) outstanding`}
+            hint={{
+              text: t.ofcOvSettlementsOutstanding.replace(
+                '{{n}}',
+                String(leakage.settlementsOutstanding.count),
+              ),
+            }}
           />
-          <Stat label="Duplicate payments" value={leakage.duplicatePayments.count} />
+          <Stat label="ofcOvDuplicatePayments" value={leakage.duplicatePayments.count} />
           <Stat
-            label="Failed receipt verifications"
+            label="ofcOvFailedVerifications"
             value={leakage.failedReceiptVerifications.count}
-            hint="Public checks that found no valid receipt"
+            hint="ofcOvNoValidReceipt"
           />
         </div>
       )}
@@ -195,17 +266,17 @@ export function FraudScreen() {
 
       {leakage && leakage.highRiskAgents.length > 0 && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Agents with open flags</h2>
+          <div className="card__pad">
+            <h2 className="card__title">{t.ofcOvAgentsWithFlags}</h2>
           </div>
           <Table
             columns={[
-              { key: 'agent_code', label: 'Agent' },
-              { key: 'full_name', label: 'Name' },
-              { key: 'flag_count', label: 'Open flags', numeric: true },
+              { key: 'agent_code', label: 'ofcRhAgent' },
+              { key: 'full_name', label: 'tpName' },
+              { key: 'flag_count', label: 'ofcOvOpenFlags', numeric: true },
               {
                 key: 'highest_severity',
-                label: 'Highest severity',
+                label: 'ofcOvHighestSeverity',
                 render: (row) => <Badge status={row.highest_severity} />,
               },
             ]}
@@ -215,52 +286,57 @@ export function FraudScreen() {
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
             <div>
-              <h2 className="card__title">Fraud signals</h2>
+              <h2 className="card__title">{t.ofcOvFraudSignals}</h2>
             </div>
             <div className="field" style={{ marginBottom: 0, minWidth: 160 }}>
-              <label htmlFor="flag-status">Status</label>
+              <label htmlFor="flag-status">{t.appStatus}</label>
               <select
                 id="flag-status"
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value)}
               >
-                <option value="">All</option>
-                <option value="OPEN">Open</option>
-                <option value="UNDER_REVIEW">Under review</option>
-                <option value="CONFIRMED">Confirmed</option>
-                <option value="DISMISSED">Dismissed</option>
+                <option value="">{t.ofcAgAll}</option>
+                <option value="OPEN">{t.ofcRhOpen}</option>
+                <option value="UNDER_REVIEW">{t.ofcOvUnderReview}</option>
+                <option value="CONFIRMED">{t.moreBankCheckConfirmed}</option>
+                <option value="DISMISSED">{t.ofcOvDismissed}</option>
               </select>
             </div>
           </div>
         </div>
-        {!flags ? (
+        {flagsError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={flagsError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !flags ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
         ) : (
           <Table
             columns={[
-              { key: 'rule', label: 'Signal', render: (row) => <Badge status={row.rule} /> },
-              { key: 'severity', label: 'Severity', render: (row) => <Badge status={row.severity} /> },
-              { key: 'entity_type', label: 'Subject' },
-              { key: 'agent_name', label: 'Agent', render: (row) => row.agent_name ?? '—' },
+              { key: 'rule', label: 'ofcAgSignal', render: (row) => <Badge status={row.rule} /> },
+              { key: 'severity', label: 'ofcAgSeverity', render: (row) => <Badge status={row.severity} /> },
+              { key: 'entity_type', label: 'ofcSpSubject' },
+              { key: 'agent_name', label: 'ofcRhAgent', render: (row) => row.agent_name ?? '—' },
               {
                 key: 'transaction_reference',
-                label: 'Transaction',
+                label: 'supTransactionLabel',
                 render: (row) => <span className="mono">{row.transaction_reference ?? '—'}</span>,
               },
               {
                 key: 'detail',
-                label: 'Detail',
+                label: 'ofcAgDetail',
                 render: (row) => <SignalDetail detail={row.detail} />,
               },
-              { key: 'created_at', label: 'Raised', render: (row) => formatDateTime(row.created_at) },
+              { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) =>
                   can('fraud:manage') && ['OPEN', 'UNDER_REVIEW'].includes(row.status) ? (
                     <div className="button-row">
@@ -268,16 +344,12 @@ export function FraudScreen() {
                         type="button"
                         className="small danger"
                         onClick={() => review(row.id, 'CONFIRMED')}
-                      >
-                        Confirm
-                      </button>
+                      >{t.ofcOvConfirm}</button>
                       <button
                         type="button"
                         className="small secondary"
                         onClick={() => review(row.id, 'DISMISSED')}
-                      >
-                        Dismiss
-                      </button>
+                      >{t.ofcOvDismiss}</button>
                     </div>
                   ) : (
                     <Badge status={row.status} />
@@ -285,7 +357,7 @@ export function FraudScreen() {
               },
             ]}
             rows={flags}
-            empty="No fraud signals match this filter."
+            empty="ofcNoneFraudSignalsMatchFilter"
           />
         )}
       </div>
@@ -310,12 +382,28 @@ export function FraudScreen() {
  */
 interface AuditQuery {
   key: string;
-  label: string;
+  /*
+   * A dictionary key, not a sentence.
+   *
+   * Typed as one so it cannot be anything else. It was `string`, and the five
+   * entries below all hold keys, and the button drew `{query.label}` straight
+   * out — so an auditor opening this screen was offered five buttons labelled
+   * `ofcOvReversedAfterPayment` and the like, in whichever language they had
+   * chosen, since a key is the same identifier in both.
+   *
+   * `prompt` below was already `keyof TranslationDictionary` and already drawn
+   * through `t[...]`, which is what the label needed and did not have. Nothing
+   * caught it: a key is not English prose, so the English-literal lint has no
+   * quarrel with it; these keys do exist in the dictionary, so the Hausa
+   * coverage guard counts them as translated; and no test had ever rendered
+   * this card.
+   */
+  label: keyof TranslationDictionary;
   path: string;
   /** What must be picked first. Absent means the question can be asked as it is. */
   parameter?: {
     name: string;
-    prompt: string;
+    prompt: keyof TranslationDictionary;
     /** Where the options come from, and how to label them. */
     source: 'agents' | 'revenueItems' | 'taxpayerSearch';
   };
@@ -326,97 +414,432 @@ interface AuditQuery {
 const AUDIT_QUERIES: AuditQuery[] = [
   {
     key: 'reversed',
-    label: 'Transactions reversed after successful payment',
+    label: 'ofcOvReversedAfterPayment',
     path: '/government/audit/queries/reversed-after-success',
   },
   {
     key: 'rates',
-    label: 'All changes made to revenue rates',
+    label: 'ofcOvAllRateChanges',
     path: '/government/audit/queries/rate-changes',
   },
   {
     key: 'agent-transactions',
-    label: 'Everything one agent collected',
+    label: 'ofcOvOneAgentCollected',
     path: '/government/audit/queries/agent-transactions',
-    parameter: { name: 'agentId', prompt: 'Which agent?', source: 'agents' },
+    parameter: { name: 'agentId', prompt: 'ofcOvWhichAgent', source: 'agents' },
     period: true,
   },
   {
     key: 'receipts-by-item',
-    label: 'Receipts issued under one revenue item',
+    label: 'ofcOvReceiptsOneItem',
     path: '/government/audit/queries/receipts-by-item',
-    parameter: { name: 'revenueItemCode', prompt: 'Which revenue item?', source: 'revenueItems' },
+    parameter: { name: 'revenueItemCode', prompt: 'ofcOvWhichRevenueItem', source: 'revenueItems' },
   },
   {
     key: 'taxpayer-access',
-    label: 'Who has looked at one taxpayer’s record',
+    label: 'ofcOvWhoLookedAtRecord',
     path: '/government/audit/queries/taxpayer-access',
-    parameter: { name: 'taxpayerId', prompt: 'Which taxpayer?', source: 'taxpayerSearch' },
+    parameter: { name: 'taxpayerId', prompt: 'ofcOvWhichTaxpayer', source: 'taxpayerSearch' },
   },
 ];
 
-export function AuditScreen() {
-  const [entries, setEntries] = useState<any[] | null>(null);
+/**
+ * Whether the unattended work is actually running.
+ *
+ * Nine jobs run on timers with nobody watching them, and until this existed
+ * eight of them left no trace at all — a sweep that ran and found nothing to do
+ * wrote exactly as many rows as a sweep that never ran. That absence is the
+ * thing this panel exists to remove, so it is deliberately loudest about the
+ * states that have no other evidence anywhere: a job that has never run once,
+ * and a job whose timer has stopped. Both look like silence everywhere else in
+ * the platform.
+ *
+ * It sits on the audit screen rather than a settings page because whether the
+ * reconciliation sweep operated is an audit fact — the auditor checking that
+ * the State's money was proved against the gateway statement should not have to
+ * take the platform's word for it that the check ran.
+ */
+interface JobReport {
+  name: string;
+  purpose: string;
+  intervalMs: number;
+  state: 'NEVER_RUN' | 'HEALTHY' | 'RUNNING' | 'OVERDUE' | 'FAILING' | 'STALLED';
+  lastStartedAt: string | null;
+  lastSucceededAt: string | null;
+  lastFailedAt: string | null;
+  /*
+   * Failing on and off right now, computed by the API.
+   *
+   * This screen worked it out for itself to begin with, from `lastFailedAt`
+   * and the interval. That put the same rule in two places, and the other
+   * place is the one that decides whether an administrator is told — a board
+   * and an inbox that disagree about which jobs are flapping are worse than
+   * either alone, because the reader cannot tell which is stale.
+   */
+  flapping: boolean;
+  lastDetail: string | null;
+  /**
+   * Why the last run failed.
+   *
+   * `jobHealth()` has always sent this; the interface here simply never
+   * declared it, so the one detail that makes a FAILING row actionable was
+   * arriving and being dropped on the floor.
+   */
+  lastError: string | null;
+  consecutiveFailures: number;
+  runsTotal: number;
+  failuresTotal: number;
+  message: string;
+}
+
+/**
+ * How the six states read to somebody deciding what to do about them.
+ *
+ * `describeState` composed these in `apps/api` and this column printed them,
+ * while the column beside it rendered the same `state` as a translated badge.
+ * Every value they are built from was already here: the enum, the count of
+ * consecutive failures, and the error from the last run.
+ *
+ * OVERDUE and STALLED are the pair worth keeping apart. A job that has not
+ * started means the schedule may have stopped; a job that started and never
+ * returned means an instance died holding it. Both show as "not working" and
+ * they are looked into differently.
+ */
+function jobState(row: JobReport, t: TranslationDictionary): string {
+  switch (row.state) {
+    case 'HEALTHY':
+      return t.ofcOvJobHealthy;
+    case 'RUNNING':
+      return t.ofcOvJobRunning;
+    case 'OVERDUE':
+      return t.ofcOvJobOverdue;
+    case 'STALLED':
+      return t.ofcOvJobStalled;
+    case 'FAILING':
+      return t.ofcOvJobFailing
+        .replace('{{count}}', String(row.consecutiveFailures))
+        .replace('{{error}}', row.lastError ?? t.ofcOvJobNoReason);
+    case 'NEVER_RUN':
+      return t.ofcOvJobNeverRun;
+    default:
+      return row.message;
+  }
+}
+
+/** Every-30-seconds and every-6-hours both have to read at a glance. */
+function readInterval(ms: number, t: TranslationDictionary): string {
+  if (ms < 60_000)
+    return t.ofcOvEverySeconds.replace('{{n}}', String(Math.round(ms / 1000)));
+  if (ms < 60 * 60_000)
+    return t.ofcOvEveryMinutes.replace('{{n}}', String(Math.round(ms / 60_000)));
+  return t.ofcOvEveryHours.replace('{{n}}', String(Math.round(ms / (60 * 60_000))));
+}
+
+export function BackgroundWorkPanel() {
+  const { t } = usePortalI18n();
+  const [health, setHealth] = useState<{
+    jobs: JobReport[];
+    healthy: boolean;
+    needingAttention: number;
+  } | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
-  const [verification, setVerification] = useState<{ valid: boolean; message: string; entriesChecked: number } | null>(null);
-  const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
-  const [pending, setPending] = useState<AuditQuery | null>(null);
-  const [filters, setFilters] = useState({ action: '', entityType: '' });
 
   useEffect(() => {
-    const params = new URLSearchParams({ limit: '150' });
-    if (filters.action) params.set('action', filters.action);
-    if (filters.entityType) params.set('entityType', filters.entityType);
+    api
+      .get<{ jobs: JobReport[]; healthy: boolean; needingAttention: number }>('/government/workers')
+      .then(setHealth)
+      .catch((caught) => {
+        setError(asApiError(caught));
+      });
+  }, []);
+
+  if (error) return <ErrorAlert error={error} />;
+  if (!health) return <Loading rows={3} />;
+
+  return (
+    <div className="card">
+      <h2 className="card__title">{t.ofcOvUnattendedWork}</h2>
+      <p className="card__hint">
+        {health.healthy
+          ? t.ofcOvEveryScheduledJobHas
+          : t.ofcOvJobsNeedAttention
+              .replace('{{count}}', String(health.needingAttention))
+              .replace('{{total}}', String(health.jobs.length))}
+      </p>
+      <Table
+        columns={[
+          {
+            key: 'name',
+            label: 'ofcOvJob',
+            render: (row: JobReport) => (
+              <>
+                <strong>{row.name.replace(/-/g, ' ')}</strong>
+                <br />
+                <span className="table__sub">{row.purpose}</span>
+              </>
+            ),
+          },
+          {
+            key: 'intervalMs',
+            label: 'ofcOvRuns',
+            render: (row: JobReport) => readInterval(row.intervalMs, t),
+          },
+          {
+            key: 'state',
+            label: 'ofcOsState',
+            render: (row: JobReport) => <Badge status={row.state} />,
+          },
+          {
+            key: 'lastSucceededAt',
+            // Not "last run". A job throwing since Tuesday has a recent run and
+            // no recent success, and that is the distinction worth a column.
+            label: 'ofcOvLastSucceeded',
+            render: (row: JobReport) =>
+              row.lastSucceededAt ? formatDateTime(row.lastSucceededAt) : t.ofcArNeverPaid,
+          },
+          {
+            /*
+             * What the last run actually did, which was arriving and being
+             * dropped.
+             *
+             * `jobHealth` has always sent `lastDetail` — "4 reminder(s)
+             * sent", "promoted 12 commission(s) to eligible" — and this
+             * interface declared it and no column drew it. So a HEALTHY row
+             * said the job ran and nothing about whether it found anything,
+             * which is the difference between a reminder sweep working and a
+             * reminder sweep running over an empty queue because the query
+             * behind it broke.
+             *
+             * The server's words are kept, as `nextStep` on a `conflict()` is:
+             * this sentence carries different counts every run, so there is no
+             * code to key a translation on.
+             *
+             * The three cases are kept apart. A succeeded run with no detail
+             * is "nothing needed doing", which is an answer; a job that has
+             * never succeeded gets a dash, and the state column says why.
+             */
+            key: 'whatItDid',
+            label: 'ofcOvWhatItDid',
+            render: (row: JobReport) =>
+              row.lastDetail ??
+              (row.lastSucceededAt ? t.ofcOvNothingNeededDoing : '\u2014'),
+          },
+          {
+            /*
+             * The failure this board could not report.
+             *
+             * `state` is FAILING only while `consecutiveFailures > 0`, and one
+             * success resets that counter to zero. A job that fails every other
+             * run therefore reads HEALTHY, `needingAttention` counts it as
+             * nothing, and the line above this table says every scheduled job
+             * has run on schedule — while `runsTotal` and `failuresTotal` sat
+             * in the payload, declared in the interface above, and no column
+             * drew them.
+             *
+             * For the reconciliation sweep that is money not reconciled, on a
+             * board whose entire purpose is to say whether unattended work is
+             * happening.
+             *
+             * Two readings, kept apart. The lifetime record is what it says:
+             * how this job has done overall, which a clean job should be proud
+             * of and a bad one cannot hide. Recently is the sharper one — a
+             * job with a recent success AND a recent failure is flapping now,
+             * whatever its state says, and that is the row to look at today.
+             *
+             * "Recent" is measured against the job's own interval, because
+             * every-30-seconds and every-6-hours mean different things by it.
+             */
+            key: 'record',
+            label: 'ofcOvRecord',
+            render: (row: JobReport) => {
+              if (row.runsTotal === 0) return '\u2014';
+              const clean = row.failuresTotal === 0;
+              return (
+                <>
+                  <span>
+                    {clean
+                      ? t.ofcOvNeverFailed.replace('{{runs}}', String(row.runsTotal))
+                      : t.ofcOvFailedOutOf
+                          .replace('{{failures}}', String(row.failuresTotal))
+                          .replace('{{runs}}', String(row.runsTotal))}
+                  </span>
+                  {row.flapping && (
+                    <>
+                      <br />
+                      <span className="table__sub" role="status">
+                        {t.ofcOvFailingIntermittently.replace(
+                          '{{when}}',
+                          formatDateTime(row.lastFailedAt!),
+                        )}
+                        {row.lastError ? ` ${row.lastError}` : ''}
+                      </span>
+                    </>
+                  )}
+                </>
+              );
+            },
+          },
+          {
+            /*
+             * Named for what the column shows, not for the field it used to
+             * print. `Table` reads `key` for data only when there is no
+             * `render`, so if this render is ever dropped the column shows a
+             * dash rather than quietly going back to the API's English.
+             */
+            key: 'whatThatMeans',
+            label: 'ofcOvWhatThatMeans',
+            render: (row: JobReport) => jobState(row, t),
+          },
+        ]}
+        rows={health.jobs}
+        empty="ofcNoneBackgroundJobsDeclared"
+      />
+    </div>
+  );
+}
+
+/** Exactly what `GET /government/audit/verify` answers with. */
+interface ChainAnswer {
+  valid: boolean;
+  entriesChecked: number;
+  brokenAtSequence?: number;
+  verdict: ChainVerdict;
+  /** How far the replay reached. The intact sentence names it; see audit.ts. */
+  highestSequence?: number;
+  /** The server's English, kept for a build that meets an outcome it does not know. */
+  message: string;
+}
+
+/**
+ * The verdict as a sentence, with its number filled in.
+ *
+ * A verdict this build has never met keeps the server's English rather than
+ * showing nothing: an auditor told the chain is broken and given no reason is
+ * worse off than one given a reason in the wrong language.
+ */
+function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
+  const key = CHAIN_TEXT[answer.verdict];
+  if (!key) return answer.message;
+  return (t[key] as string)
+    .replace('{{count}}', String(answer.entriesChecked))
+    /*
+     * The break, or how far it got.
+     *
+     * A broken chain names the entry it failed at; an intact one names the last
+     * entry it reached, because that is the number an auditor records to notice
+     * a log that has been shortened since.
+     */
+    .replace('{{sequence}}', String(answer.brokenAtSequence ?? answer.highestSequence ?? 0));
+}
+
+export function AuditScreen() {
+  const { t } = usePortalI18n();
+  const [entries, setEntries] = useState<any[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [verification, setVerification] = useState<ChainAnswer | null>(null);
+  const [queryResult, setQueryResult] = useState<{
+    label: keyof TranslationDictionary;
+    rows: any[];
+  } | null>(null);
+  const [pending, setPending] = useState<AuditQuery | null>(null);
+  /*
+   * Kept in the URL and in this session. An auditor who filtered to one action,
+   * opened the transaction it named and came back used to get the whole log.
+   */
+  const [filters, setFilters] = useFilters('audit', '/audit', { action: '', entityType: '' });
+
+  /*
+   * One builder for the screen and the export.
+   *
+   * They were separate, and drifted: the screen read 150 entries and the
+   * export sent 500 with the same two filters written out again. An officer
+   * exporting what they were looking at should get what they were looking at,
+   * filtered the same way -- so the only difference is how many rows, which is
+   * the one difference that is deliberate.
+   */
+  const auditQuery = useCallback(
+    (limit: number) => {
+      const params = new URLSearchParams({ limit: String(limit) });
+      if (filters.action) params.set('action', filters.action);
+      if (filters.entityType) params.set('entityType', filters.entityType);
+      return params;
+    },
+    [filters],
+  );
+
+  useEffect(() => {
+    const params = auditQuery(150);
 
     setEntries(null);
     api
       .get<any[]>(`/government/audit?${params.toString()}`)
       .then(setEntries)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
-  }, [filters]);
+  }, [auditQuery]);
 
   return (
     <>
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Audit trail</h2>
-            <p className="card__hint">
-              Every entry is chained to the one before it. Editing or removing any historical entry
-              breaks the chain and is detected by the check below.
-            </p>
+            <h2 className="card__title">{t.ofcOvAuditTrail}</h2>
+            <p className="card__hint">{t.ofcOvChainBody}</p>
           </div>
           <button
             type="button"
             className="secondary"
             onClick={async () => {
-              const result = await api.get<{ valid: boolean; message: string; entriesChecked: number }>(
-                '/government/audit/verify',
-              );
-              setVerification(result);
+              // The one control this role exists to operate. It was the only
+              // request on this screen with nothing to catch it: a refusal or
+              // an outage left the auditor pressing a button that did nothing
+              // and saying nothing — which reads exactly like a trail that has
+              // no answer, rather than a check that did not run.
+              setError(null);
+              setVerification(null);
+              try {
+                setVerification(await api.get<ChainAnswer>('/government/audit/verify'));
+              } catch (caught) {
+                if (caught instanceof ApiRequestError) setError(caught.error);
+                else
+                  setError({
+                    code: 'VERIFICATION_UNAVAILABLE',
+                    message:
+                      t.ofcOvTheAuditTrailCould,
+                  } as ApiError);
+              }
             }}
-          >
-            Verify chain integrity
-          </button>
+          >{t.ofcOvVerifyChain}</button>
         </div>
 
         {verification && (
           <Alert
             kind={verification.valid ? 'success' : 'error'}
-            title={verification.valid ? 'Audit trail intact' : 'Audit trail has been tampered with'}
+            title={verification.valid ? 'ofcOvIntact' : 'ofcOvTampered'}
           >
-            <p style={{ margin: 0 }}>{verification.message}</p>
+            {/*
+              * Which of the four, in the language the heading above is in.
+              *
+              * The heading was already translated and the sentence under it
+              * was the API's English, so an officer reading Hausa was told
+              * "An taba rajistar bincike" and then, in English, what had
+              * actually been done to it. That sentence is the whole answer:
+              * a log whose head was cut off, an entry missing from the
+              * middle, and a row edited after the fact are three different
+              * events, and which one it is decides what the auditor does
+              * next.
+              */}
+            <p style={{ margin: 0 }}>{chainAnswer(verification, t)}</p>
           </Alert>
         )}
       </div>
 
+      <BackgroundWorkPanel />
+
       <div className="card">
-        <h2 className="card__title">Standard audit questions</h2>
-        <p className="card__hint">
-          Answerable without querying production tables directly.
-        </p>
+        <h2 className="card__title">{t.ofcOvStandardQuestions}</h2>
+        <p className="card__hint">{t.ofcOvStandardQuestionsBody}</p>
         <div className="button-row">
           {AUDIT_QUERIES.map((query) => (
             <button
@@ -434,11 +857,11 @@ export function AuditScreen() {
                   const rows = await api.get<any[]>(query.path);
                   setQueryResult({ label: query.label, rows });
                 } catch (caught) {
-                  if (caught instanceof ApiRequestError) setError(caught.error);
+                  setError(asApiError(caught));
                 }
               }}
             >
-              {query.label}
+              {t[query.label]}
             </button>
           ))}
         </div>
@@ -458,18 +881,17 @@ export function AuditScreen() {
 
       {queryResult && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
-              <h2 className="card__title">{queryResult.label}</h2>
-              <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>
-                Close
-              </button>
+              <h2 className="card__title">{t[queryResult.label]}</h2>
+              <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
           <Table
-            columns={Object.keys(queryResult.rows[0] ?? { result: 'No rows' }).map((key) => ({
+            columns={Object.keys(queryResult.rows[0] ?? { result: t.ofcOvNoRows }).map((key) => ({
               key,
-              label: key.replace(/_/g, ' '),
+              // A column named by whatever the query returned: data, not a label.
+              label: { text: key.replace(/_/g, ' ') },
               render: (row: any) =>
                 typeof row[key] === 'object' && row[key] !== null ? (
                   <span className="mono">{JSON.stringify(row[key])}</span>
@@ -478,7 +900,7 @@ export function AuditScreen() {
                 ),
             }))}
             rows={queryResult.rows}
-            empty="No records match this query."
+            empty="ofcNoneRecordsMatchQuery"
           />
         </div>
       )}
@@ -486,39 +908,30 @@ export function AuditScreen() {
       <ErrorAlert error={error} />
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="filters">
             <div className="field">
-              <label htmlFor="entity">Entity type</label>
+              <label htmlFor="entity">{t.ofcOvEntityType}</label>
               <input
                 id="entity"
                 value={filters.entityType}
-                onChange={(event) => setFilters({ ...filters, entityType: event.target.value })}
-                placeholder="payment, agent, taxpayer…"
+                onChange={(event) => setFilters({ entityType: event.target.value })}
+                placeholder={t.ofcOvEntityPlaceholder}
               />
             </div>
             <div className="field">
-              <label htmlFor="action">Action</label>
+              <label htmlFor="action">{t.ofcOvAction}</label>
               <input
                 id="action"
                 value={filters.action}
-                onChange={(event) => setFilters({ ...filters, action: event.target.value })}
-                placeholder="payment.verified"
+                onChange={(event) => setFilters({ action: event.target.value })}
+                placeholder={t.ofcOvActionPlaceholder}
               />
             </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={async () => {
-                const params = new URLSearchParams({ limit: '500', format: 'csv' });
-                if (filters.action) params.set('action', filters.action);
-                if (filters.entityType) params.set('entityType', filters.entityType);
-                const csv = await api.get<string>(`/government/audit?${params.toString()}`);
-                downloadCsv(`plateau-audit-${new Date().toISOString().slice(0, 10)}.csv`, csv);
-              }}
-            >
-              Export CSV
-            </button>
+            <ExportButtons
+              path={`/government/audit?${auditQuery(500).toString()}`}
+              filename={`plateau-audit-${new Date().toISOString().slice(0, 10)}`}
+            />
           </div>
         </div>
 
@@ -529,22 +942,38 @@ export function AuditScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'sequence_no', label: '#', numeric: true },
-              { key: 'created_at', label: 'When', render: (row) => formatDateTime(row.created_at) },
-              { key: 'actor_name', label: 'Actor', render: (row) => row.actor_name ?? 'System' },
-              { key: 'actor_role', label: 'Role' },
-              { key: 'action', label: 'Action', render: (row) => <span className="mono">{row.action}</span> },
-              { key: 'entity_type', label: 'Entity' },
-              { key: 'result', label: 'Result', render: (row) => <Badge status={row.result} /> },
-              { key: 'reason', label: 'Reason', render: (row) => row.reason ?? '—' },
+              { key: 'sequence_no', label: { text: '#' }, numeric: true },
+              { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
+              { key: 'actor_name', label: 'ofcOvActor', render: (row) => row.actor_name ?? t.ofcOvSystem },
+              { key: 'actor_role', label: 'ofcRhRole' },
+              { key: 'action', label: 'ofcOvAction', render: (row) => <span className="mono">{row.action}</span> },
+              { key: 'entity_type', label: 'ofcOvEntity' },
+              { key: 'result', label: 'ofcOvResult', render: (row) => <Badge status={row.result} /> },
+              { key: 'reason', label: 'ofcAgReason', render: (row) => row.reason ?? '—' },
+              {
+                /*
+                 * What the action actually changed.
+                 *
+                 * The columns to the left say who did what, and until now that
+                 * was the whole of this screen: an auditor who wanted to know
+                 * what an action *did* opened Transaction 360, which only
+                 * helps if you already know which transaction. The diff is
+                 * rendered here rather than both sides in full, because a
+                 * reader asked to spot which of fourteen fields moved does not
+                 * spot it.
+                 */
+                key: 'change',
+                label: 'ofcOvChange',
+                render: (row) => <BeforeAfter before={row.old_value} after={row.new_value} />,
+              },
               {
                 key: 'hash',
-                label: 'Hash',
+                label: 'ofcOvHash',
                 render: (row) => <span className="mono">{String(row.hash).slice(0, 10)}…</span>,
               },
             ]}
             rows={entries}
-            empty="No audit entries match these filters."
+            empty="ofcNoneAuditEntriesMatchThese"
           />
         )}
       </div>
@@ -560,6 +989,23 @@ export function AuditScreen() {
  * taxpayer:read:all, so none of these selects can present a choice the query
  * would then refuse.
  */
+/**
+ * The most agents this picker can offer, which is the endpoint's own ceiling.
+ *
+ * `/agents` clamps to 200 and orders by `created_at DESC`, so the select holds
+ * the 200 most recently registered. An agent who joined before them cannot be
+ * chosen — and for an audit that is the wrong 200 to keep, because the subject
+ * of an investigation is more often a long-serving agent than last month's
+ * intake.
+ *
+ * Taxpayers on this same screen are searched rather than listed, for the
+ * reason given below: there are more of them than any select should hold.
+ * Agents were judged few enough to list, and at some point PSIRS stops being
+ * an organisation where that is true. Until the picker can be searched or
+ * filtered by LGA, saying so is the honest half of the fix.
+ */
+const AGENT_OPTION_LIMIT = 200;
+
 function AuditQueryParameters({
   query,
   onCancel,
@@ -571,6 +1017,7 @@ function AuditQueryParameters({
   onRan: (rows: any[]) => void;
   onError: (error: ApiError) => void;
 }) {
+  const { lang, t } = usePortalI18n();
   const [options, setOptions] = useState<{ value: string; label: string }[] | null>(null);
   const [value, setValue] = useState('');
   const [search, setSearch] = useState('');
@@ -583,6 +1030,14 @@ function AuditQueryParameters({
    * searched to do the thing they have already done.
    */
   const [searched, setSearched] = useState(false);
+  /*
+   * And whether the list could not be read at all, which the select used to
+   * render as "Nothing to choose from" with the control disabled. An auditor
+   * opening an audit on an agent was told PSIRS has no agents — and the one
+   * thing they could do about it, ask again, was not on the screen.
+   */
+  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState(() => {
     const to = new Date();
@@ -596,9 +1051,10 @@ function AuditQueryParameters({
     setOptions(null);
     setValue('');
     setSearched(false);
+    setOptionsFailed(false);
     if (source === 'agents') {
       api
-        .get<{ agents: any[] } | any[]>('/agents?limit=200')
+        .get<{ agents: any[] } | any[]>(`/agents?limit=${AGENT_OPTION_LIMIT}`)
         .then((data) => {
           const list = Array.isArray(data) ? data : data.agents;
           setOptions(
@@ -608,7 +1064,10 @@ function AuditQueryParameters({
             })),
           );
         })
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else if (source === 'revenueItems') {
       api
         .get<any[]>('/revenue/items')
@@ -616,17 +1075,20 @@ function AuditQueryParameters({
           setOptions(
             (Array.isArray(list) ? list : []).map((item: any) => ({
               value: item.code,
-              label: `${item.name} (${item.code})`,
+              label: `${localName(lang, item.name, item.name_ha)} (${item.code})`,
             })),
           ),
         )
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else {
       // Taxpayers are searched rather than listed: there are more of them than
       // any select should hold, and an auditor arrives knowing a name or number.
       setOptions([]);
     }
-  }, [source]);
+  }, [source, attempt]);
 
   async function runSearch() {
     if (!search.trim()) return;
@@ -644,7 +1106,7 @@ function AuditQueryParameters({
       );
       setSearched(true);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -660,7 +1122,7 @@ function AuditQueryParameters({
       }
       onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -669,34 +1131,30 @@ function AuditQueryParameters({
   return (
     <div className="card">
       <div className="card__header">
-        <h2 className="card__title">{query.label}</h2>
-        <button type="button" className="small secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <h2 className="card__title">{t[query.label]}</h2>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
       {source === 'taxpayerSearch' && (
         <div className="filters">
           <div className="field">
-            <label htmlFor="taxpayer-search">Find the taxpayer</label>
+            <label htmlFor="taxpayer-search">{t.ofcOvFindTheTaxpayer}</label>
             <input
               id="taxpayer-search"
               value={search}
-              placeholder="Name, phone or TIN"
+              placeholder={t.colNamePhoneTin}
               onChange={(event) => setSearch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void runSearch();
               }}
             />
           </div>
-          <button type="button" className="secondary" disabled={busy} onClick={() => void runSearch()}>
-            Search
-          </button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => void runSearch()}>{t.search}</button>
         </div>
       )}
 
       <div className="field">
-        <label htmlFor="audit-parameter">{query.parameter!.prompt}</label>
+        <label htmlFor="audit-parameter">{t[query.parameter!.prompt]}</label>
         <select
           id="audit-parameter"
           value={value}
@@ -705,14 +1163,16 @@ function AuditQueryParameters({
         >
           <option value="">
             {!options
-              ? 'Loading…'
+              ? t.ofcOvLoading
               : options.length === 0
                 ? source === 'taxpayerSearch'
                   ? searched
-                    ? 'No taxpayer matched that search'
-                    : 'Search for a taxpayer first'
-                  : 'Nothing to choose from'
-                : 'Select one'}
+                    ? t.ofcOvNoTaxpayerMatchedThat
+                    : t.ofcOvSearchForATaxpayer
+                  : optionsFailed
+                    ? t.ofcListCouldNotLoad
+                    : t.ofcOvNothingToChooseFrom
+                : t.ofcOvSelectOne}
           </option>
           {(options ?? []).map((option) => (
             <option key={option.value} value={option.value}>
@@ -720,12 +1180,20 @@ function AuditQueryParameters({
             </option>
           ))}
         </select>
+        <ReferenceListFailure
+          list={{ failed: optionsFailed, reload: () => setAttempt((n) => n + 1) }}
+        />
+        {source === 'agents' && options && options.length >= AGENT_OPTION_LIMIT && (
+          <Alert kind="info">
+            {t.ofcOvAgentListIsCapped.replace('{{n}}', String(options.length))}
+          </Alert>
+        )}
       </div>
 
       {query.period && (
         <div className="filters">
           <div className="field">
-            <label htmlFor="audit-from">From</label>
+            <label htmlFor="audit-from">{t.ofcFrom}</label>
             <input
               id="audit-from"
               type="date"
@@ -734,7 +1202,7 @@ function AuditQueryParameters({
             />
           </div>
           <div className="field">
-            <label htmlFor="audit-to">To</label>
+            <label htmlFor="audit-to">{t.ofcTo}</label>
             <input
               id="audit-to"
               type="date"
@@ -746,7 +1214,7 @@ function AuditQueryParameters({
       )}
 
       <button type="button" disabled={busy || !value} onClick={() => void run()}>
-        {busy ? 'Running…' : 'Run this query'}
+        {busy ? t.ofcOvRunning : t.ofcOvRunThisQuery}
       </button>
     </div>
   );

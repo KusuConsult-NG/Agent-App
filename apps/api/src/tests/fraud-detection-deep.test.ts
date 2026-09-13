@@ -20,6 +20,7 @@ import {
   post,
   pool,
   resetDatabase,
+  settleTransaction,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -137,9 +138,15 @@ async function createSettledTransaction(taxpayerId: string): Promise<{ transacti
   const confirmRes = await post(`/payments/${paymentId}/confirm`, {}, { token: agentToken, deviceId: agentDeviceId });
   assert.equal(confirmRes.status, 200, JSON.stringify(confirmRes.body));
 
-  // Mark transaction settled and move settled_at back past hold period (72 hours default policy)
+  // Settle it the way production does — the bank credit recorded against the
+  // gateway's own statement — rather than by writing the status. Migration 053
+  // refuses a transaction that reaches SETTLED with nothing having settled it,
+  // and a fixture that can only exist by breaking that rule is describing a
+  // state the platform cannot reach. Only the clock is then moved by hand, to
+  // put the 72-hour hold period behind it.
+  await settleTransaction(transactionId);
   await pool.query(
-    `UPDATE transactions SET status = 'SETTLED', settled_at = now() - interval '100 hours' WHERE id = $1`,
+    `UPDATE transactions SET settled_at = now() - interval '100 hours' WHERE id = $1`,
     [transactionId],
   );
 

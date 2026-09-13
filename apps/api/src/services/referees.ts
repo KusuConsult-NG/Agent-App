@@ -7,14 +7,21 @@
  *   * they respond through a tokenised link and never need an account (§10);
  *   * a replaced referee is superseded, never overwritten (§29).
  *
- * Invitation tokens are stored only as hashes (§37): the plaintext exists once,
- * in the message sent to the referee.
+ * Invitation tokens are stored only as hashes (§37). That was true of
+ * `referee_invitations` and false of the database as a whole: the SMS carrying
+ * the link was rendered in full into `notifications.message`, which nothing
+ * has ever deleted, so the plaintext sat beside its own hash indefinitely. A
+ * join on the hash of the substring pulled out of the body resolved the
+ * invitation it opens — in the UAT database, one still SENT and a fortnight
+ * from expiry. The queued body is now masked and the deliverable one is
+ * cleared as the gateway takes it; see `secretVariables` in
+ * services/notifications.ts.
  */
 
 import type { PoolClient } from 'pg';
 import type { RefereeCategory } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { generateToken, hashIdentityNumber, maskIdentityNumber, sha256 } from '../lib/crypto';
 import { badRequest, conflict, notFound, AppError } from '../lib/errors';
 import { nextRefereeCode } from '../lib/references';
@@ -40,7 +47,12 @@ export interface RefereeInput {
 export interface NominationResult {
   refereeId: string;
   referenceCode: string;
-  /** Returned once so the API can deliver it; never stored in plaintext. */
+  /**
+   * Returned once so the API can deliver it.
+   *
+   * Not retained anywhere afterwards — not in `referee_invitations`, which
+   * holds sha256(token), and no longer in the notification queue either.
+   */
   invitationToken: string;
   invitationUrl: string;
   expiresAt: Date;
@@ -164,18 +176,35 @@ export async function nominateReferee(params: {
         link: invitationUrl,
         expiry: expiresAt.toISOString().slice(0, 10),
       },
+      // The link is the credential — the whole of this route's authorisation
+      // is the token in it. Stored, it would have put back in plaintext the
+      // thing the row above deliberately keeps only as a hash.
+      secretVariables: ['link'],
       entityType: 'referee',
       entityId: referee!.id,
     });
 
     await client.query(
+      /*
+       * A replacement is a different event from a first nomination. §29 keeps
+       * the superseded referee rather than overwriting them, precisely so the
+       * substitution is visible; journalling both as REFEREE_INVITED with only
+       * the reason text to tell them apart threw that away, and an applicant
+       * cycling through referees until one cleared looked like an applicant
+       * who nominated once.
+       */
       `INSERT INTO agent_clearance_events (agent_id, event_type, reason, actor_id, metadata)
-       VALUES ($1,'REFEREE_INVITED',$2,$3,$4)`,
+       VALUES ($1,$2,$3,$4,$5)`,
       [
         params.agentId,
+        params.replacesRefereeId ? 'REFEREE_REPLACED' : 'REFEREE_INVITED',
         params.replacesRefereeId ? 'Replacement referee nominated' : 'Referee nominated',
         params.actorId,
-        JSON.stringify({ referenceCode, category: input.category }),
+        JSON.stringify({
+          referenceCode,
+          category: input.category,
+          replaces: params.replacesRefereeId ?? null,
+        }),
       ],
     );
 
@@ -350,6 +379,39 @@ function assertInvitationOpen(invitation: { status: string; expires_at: Date }):
   }
 }
 
+/**
+ * Check a referee's identity, outside any transaction.
+ *
+ * Resolves the referee from the invitation token with a plain read, because
+ * the provider needs a name and a phone number and nothing else. The caller's
+ * transaction re-reads the invitation under a lock and decides what to do; a
+ * token that resolves to nothing here simply means no check was run, and the
+ * response lands as UNDER_REVIEW exactly as an unreachable provider would.
+ */
+async function verifyRefereeIdentity(
+  token: string,
+  identityType: string,
+  identityNumber: string,
+) {
+  const referee = await queryOne<{ referee_name: string; referee_phone: string }>(
+    pool,
+    `SELECT r.full_name AS referee_name, r.phone AS referee_phone
+       FROM referee_invitations i JOIN referees r ON r.id = i.referee_id
+      WHERE i.invitation_token_hash = $1`,
+    [sha256(token)],
+  );
+  if (!referee) return null;
+
+  const nameParts = referee.referee_name.trim().split(/\s+/);
+  return kycProvider.verify({
+    identityType,
+    identityNumber,
+    firstName: nameParts[0] ?? referee.referee_name,
+    lastName: nameParts[nameParts.length - 1] ?? referee.referee_name,
+    phone: referee.referee_phone,
+  });
+}
+
 export async function submitRefereeResponse(params: {
   token: string;
   input: RefereeResponseInput;
@@ -368,6 +430,27 @@ export async function submitRefereeResponse(params: {
         'If you cannot confirm them, decline the request instead.',
     );
   }
+
+  /*
+   * Ask the identity provider before the transaction opens.
+   *
+   * The call used to sit between marking the invitation spent and recording
+   * what the provider said, so a referee filling in a form held a pooled
+   * connection and a lock on their invitation row for as long as the provider
+   * took to answer.
+   *
+   * It needs only the referee's name and phone, which the token already
+   * identifies, so it is resolved here against a read that takes no lock. The
+   * transaction below still selects `FOR UPDATE` and re-checks everything —
+   * this read decides nothing. Its one cost is a wasted provider call when an
+   * invitation turns out to be spent or expired in between, which is rare and
+   * harmless; the alternative was holding the row while a third party thought
+   * about it.
+   */
+  const identity =
+    input.identityNumber && input.identityType
+      ? await verifyRefereeIdentity(params.token, input.identityType!, input.identityNumber!)
+      : null;
 
   return withTransaction(async (client) => {
     const invitation = await queryOne<{
@@ -409,15 +492,10 @@ export async function submitRefereeResponse(params: {
     let failureReason: string | null = null;
     let reference: string | null = null;
 
-    if (input.identityNumber && input.identityType) {
-      const nameParts = invitation.referee_name.trim().split(/\s+/);
-      const result = await kycProvider.verify({
-        identityType: input.identityType,
-        identityNumber: input.identityNumber,
-        firstName: nameParts[0] ?? invitation.referee_name,
-        lastName: nameParts[nameParts.length - 1] ?? invitation.referee_name,
-        phone: invitation.referee_phone,
-      });
+    // The same condition as before; `identity` simply carries the answer the
+    // provider already gave, outside the transaction.
+    if (identity && input.identityNumber && input.identityType) {
+      const result = identity;
 
       // An UNAVAILABLE provider goes to UNDER_REVIEW, not FAILED. Unlike an
       // agent's own KYC, this is not rolled back: the referee has filled the
@@ -472,12 +550,33 @@ export async function submitRefereeResponse(params: {
       );
     }
 
-    const refereeStatus =
+    let refereeStatus =
       verificationStatus === 'CLEARED'
         ? 'CLEARED'
         : verificationStatus === 'FAILED'
           ? 'FAILED'
           : 'UNDER_REVIEW';
+
+    /*
+     * A flag an officer has upheld holds the response back from clearing on
+     * its own.
+     *
+     * The referee's identity matching is not an answer to the pattern the flag
+     * is about, and this is the path that would otherwise walk round the check
+     * on the officer's decision entirely: a confirmed flag, and then a
+     * matching NIN clears the referee that afternoon with nobody deciding
+     * anything. So it lands with the officers instead, carrying the reason,
+     * and the referee is neither cleared nor accused.
+     */
+    if (refereeStatus === 'CLEARED') {
+      const upheld = await upheldRiskFlag(client, invitation.referee_id);
+      if (upheld) {
+        refereeStatus = 'UNDER_REVIEW';
+        failureReason =
+          `Identity confirmed, but a risk flag against this referee has been upheld ` +
+          `(${ruleInWords(upheld)}). A government officer must decide.`;
+      }
+    }
 
     await client.query(
       `UPDATE referees
@@ -576,6 +675,85 @@ export async function declineInvitation(params: {
   });
 }
 
+/**
+ * The rule of an upheld flag against this referee, if there is one.
+ *
+ * Both places a referee can become CLEARED consult it, and they have to: a
+ * check that lived only on the officer's decision would be walked round by the
+ * ordinary path, where a matching identity number clears the referee by
+ * itself. An identity that matches is not an answer to "four of the six people
+ * he vouched for have never met him".
+ */
+async function upheldRiskFlag(client: PoolClient, refereeId: string): Promise<string | null> {
+  const flag = await queryOne<{ rule: string }>(
+    client,
+    `SELECT rule FROM referee_risk_flags
+      WHERE referee_id = $1 AND status = 'CONFIRMED' LIMIT 1`,
+    [refereeId],
+  );
+  return flag?.rule ?? null;
+}
+
+/** The rule name as it reads in a sentence to an officer or a referee. */
+const ruleInWords = (rule: string) => rule.replace(/_/g, ' ').toLowerCase();
+
+/**
+ * An officer's triage of a referee risk flag (Addendum §30, §46).
+ *
+ * The flags were raised and nothing could ever move them. Every one of the
+ * four rules writes OPEN, the referee dashboard lists OPEN and UNDER_REVIEW,
+ * and there was no path to any other status — so the queue only ever grew,
+ * which is how a queue stops being read. An officer who looked into a pattern
+ * and found it innocent had no way to say so, and the flag they had cleared
+ * sat above the next one for ever.
+ *
+ * CONFIRMED is not merely a note. A referee with an upheld flag against them
+ * cannot be cleared until the flag is dealt with — see `reviewReferee` — so
+ * upholding one is a decision with a consequence rather than a tidy-up.
+ */
+export async function reviewRefereeRiskFlag(params: {
+  flagId: string;
+  decision: 'UNDER_REVIEW' | 'CONFIRMED' | 'DISMISSED';
+  note: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ refereeId: string; refereeStatus: string }> {
+  return withTransaction(async (client) => {
+    const flag = await queryOne<{ id: string; status: string; referee_id: string }>(
+      client,
+      'SELECT id, status, referee_id FROM referee_risk_flags WHERE id = $1 FOR UPDATE',
+      [params.flagId],
+    );
+    if (!flag) throw notFound('That referee risk flag');
+
+    await client.query(
+      `UPDATE referee_risk_flags
+          SET status = $2, resolution_note = $3, reviewed_by = $4, reviewed_at = now()
+        WHERE id = $1`,
+      [params.flagId, params.decision, params.note, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'referee.risk_flag_reviewed',
+      entityType: 'referee_risk_flag',
+      entityId: params.flagId,
+      oldValue: { status: flag.status },
+      newValue: { status: params.decision },
+      reason: params.note,
+    });
+
+    const referee = await queryOne<{ status: string }>(
+      client,
+      'SELECT status FROM referees WHERE id = $1',
+      [flag.referee_id],
+    );
+
+    return { refereeId: flag.referee_id, refereeStatus: referee?.status ?? 'UNKNOWN' };
+  });
+}
+
 /** Officer decision on a referee under review (§13, §15). */
 export async function reviewReferee(params: {
   refereeId: string;
@@ -595,6 +773,29 @@ export async function reviewReferee(params: {
       [params.refereeId],
     );
     if (!referee) throw notFound('That referee');
+
+    /*
+     * An upheld risk flag has to be dealt with before the referee it is about
+     * can be cleared.
+     *
+     * Otherwise confirming a flag is a note in a file: one officer upholds
+     * "this person has vouched for nine applicants" and another clears the
+     * referee that afternoon without ever seeing it. Dismissing the flag is
+     * still open — that is the officer saying, on the record and with a
+     * reason, that the pattern does not disqualify this referee — and only
+     * then does the clearance go through.
+     */
+    if (params.decision === 'CLEAR') {
+      const upheld = await upheldRiskFlag(client, params.refereeId);
+      if (upheld) {
+        throw conflict(
+          'REFEREE_RISK_FLAG_UPHELD',
+          `A risk flag against this referee has been upheld (${ruleInWords(upheld)}), ` +
+            'so they cannot be cleared while it stands.',
+          'Dismiss the flag with your findings if it does not disqualify them, then clear the referee.',
+        );
+      }
+    }
 
     await client.query(
       `UPDATE referees

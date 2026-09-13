@@ -14,6 +14,7 @@ import { signWebhookPayload } from '../lib/crypto';
 import { config } from '../config';
 import {
   authenticate,
+  identifyIfSignedIn,
   requireActiveAgent,
   requirePermission,
   requireSupportedAppVersion,
@@ -21,7 +22,7 @@ import {
 import { idempotent } from '../middleware/idempotency';
 import { rateLimit } from '../middleware/security';
 import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
-import { assertOwnRecord, callerAgentId, seesEverything } from '../lib/ownership';
+import { assertOwnRecord, callerAgentId, listScopeAgentId, seesEverything } from '../lib/ownership';
 import { notFound, forbidden, badRequest } from '../lib/errors';
 import * as payments from '../services/payments';
 import * as receipts from '../services/receipts';
@@ -264,14 +265,34 @@ receiptRouter.get(
       limit: z.coerce.number().int().min(1).max(200).default(50),
     }),
     async (req, res, data) => {
-      // Agents see receipts for transactions they facilitated; officers see all.
-      const agentScoped = req.auth!.role === 'agent';
+      /*
+       * Narrowed by the permission, not by the role's name.
+       *
+       * This read `req.auth!.role === 'agent'` and passed `null` for anything
+       * else — so the scope was decided by a string while the gate above was
+       * decided by a permission, and the two can come apart. `role_permissions`
+       * is a table PSIRS edits without a deployment, precisely so delegation
+       * can change; grant `receipt:read:own` to a role not spelled `agent` and
+       * this route admitted them on the narrow permission and then applied no
+       * narrowing, returning every receipt in the state with the taxpayer names
+       * and TINs attached.
+       *
+       * Its two siblings below — the receipt by id, and the document behind it
+       * — already ask `seesEverything(req, 'receipt:read:all')` and fail closed.
+       * This one asked something else and failed open, which is the asymmetry
+       * `ownership.ts` was written to stop: "six hand-rolled versions is how
+       * five of them end up subtly different and one ends up missing."
+       *
+       * No behaviour changes today. `receipt:read:own` is held by `agent`
+       * alone, so the two tests agree on every session that currently exists.
+       */
+      const scopeToAgent = listScopeAgentId(req, 'receipt:read:all');
       res.json(
         await query(
           pool,
           `SELECT r.id, r.receipt_number, r.amount_kobo, r.issued_at, r.status,
                   r.verification_code, r.document_id,
-                  t.transaction_reference, ri.name AS revenue_item,
+                  t.transaction_reference, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
                   COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name
              FROM receipts r
              JOIN transactions t ON t.id = r.transaction_id
@@ -280,7 +301,7 @@ receiptRouter.get(
             WHERE ($1::uuid IS NULL OR r.taxpayer_id = $1)
               AND ($2::uuid IS NULL OR t.agent_id = $2)
             ORDER BY r.issued_at DESC LIMIT $3`,
-          [data.taxpayerId ?? null, agentScoped ? (req.auth!.agentId ?? null) : null, data.limit],
+          [data.taxpayerId ?? null, scopeToAgent, data.limit],
         ),
       );
     },
@@ -289,7 +310,7 @@ receiptRouter.get(
 
 const RECEIPT_DETAIL_SQL = `
   SELECT r.*, t.transaction_reference, t.agent_id AS collected_by_agent_id,
-         ri.name AS revenue_item,
+         ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
          p.gateway_reference, p.payment_method, p.paid_at
     FROM receipts r
     JOIN transactions t ON t.id = r.transaction_id
@@ -365,6 +386,17 @@ export const documentRouter = Router();
  */
 documentRouter.get(
   '/:id/download',
+  /*
+   * Names the caller when they are signed in, admits them either way.
+   *
+   * The log line below reads `req.auth?.userId`, and without this nothing ever
+   * put `req.auth` on this request — so every download was recorded as by
+   * nobody, and the fraud rule that counts retrievals per person could not
+   * fire. A citizen opening their receipt from an SMS still has no session and
+   * is still recorded anonymously, which is correct: the rule is about staff
+   * pulling one citizen's document over and over, not about citizens.
+   */
+  identifyIfSignedIn,
   validateQuery(
     z.object({ expires: z.string(), signature: z.string() }),
     async (req, res, data) => {
@@ -431,12 +463,20 @@ documentRouter.get(
                 WHEN d.entity_type = 'invoice' THEN inv.agent_id
                 WHEN d.entity_type = 'receipt' THEN rt.agent_id
                 WHEN d.entity_type = 'vehicle_renewal' THEN vr.agent_id
+                WHEN d.entity_type = 'transaction' THEN txn.agent_id
               END AS issued_for_agent_id
          FROM documents d
          LEFT JOIN invoices inv ON d.entity_type = 'invoice' AND inv.id = d.entity_id
          LEFT JOIN receipts rc ON d.entity_type = 'receipt' AND rc.id = d.entity_id
          LEFT JOIN transactions rt ON rt.id = rc.transaction_id
          LEFT JOIN vehicle_renewals vr ON d.entity_type = 'vehicle_renewal' AND vr.id = d.entity_id
+         /*
+          * An acknowledgement of payment hangs off the transaction itself, not
+          * off a receipt that does not exist yet. Without this branch the agent
+          * who took the money is refused the one document they have to show the
+          * taxpayer standing in front of them.
+          */
+         LEFT JOIN transactions txn ON d.entity_type = 'transaction' AND txn.id = d.entity_id
         WHERE d.id = $1`,
       [req.params.id],
     );

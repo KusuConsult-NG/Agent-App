@@ -2,7 +2,7 @@
  * Asking for a justification before an action that cannot be undone quietly.
  */
 
-import { ApiRequestError, type ApiError } from './api';
+import { asApiError, type ApiError } from './api';
 
 /**
  * Ask for a justification, then do the thing — and say what happened either way.
@@ -50,10 +50,7 @@ export async function withJustification(params: {
     await params.run(typed.trim());
     params.setMessage(params.onSuccess);
   } catch (caught) {
-    if (caught instanceof ApiRequestError) params.setError(caught.error);
-    else if (caught instanceof Error) {
-      params.setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-    }
+    params.setError(asApiError(caught));
   }
 }
 

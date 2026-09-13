@@ -86,8 +86,11 @@ beforeEach(async () => {
   const agentBRecord = agentBRow.rows[0];
   agentBDeviceId = 'agent-b-device-001';
   await pool.query(
+    // ACTIVE, not APPROVED. This fixture reached for a status the schema
+    // allowed and nothing in the platform ever wrote — which is how the state
+    // looked legitimate for as long as it did.
     `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, registered_at, approved_at)
-     VALUES ($1, $2, 'Agent B Device', 'APPROVED', now(), now())`,
+     VALUES ($1, $2, 'Agent B Device', 'ACTIVE', now(), now())`,
     [agentBRecord.id, agentBDeviceId],
   );
 

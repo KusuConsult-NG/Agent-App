@@ -14,6 +14,8 @@
  *   reference   — the transaction/payment reference to quote to support
  */
 
+import { blockerSentence, type AgentBlocker } from '@psirs/shared';
+
 export type MoneyStatus =
   /** No payment was attempted; nothing has been debited. */
   | 'NOT_DEBITED'
@@ -27,6 +29,15 @@ export type MoneyStatus =
 export interface ErrorDetail {
   field?: string;
   issue: string;
+  /**
+   * A stable name for what this detail is, where one exists.
+   *
+   * `issue` is prose, and prose composed here is prose in English. A client
+   * that knows the code can say the same thing in the reader's language;
+   * one that does not still has `issue` to fall back on, which is why both
+   * travel rather than the code replacing the sentence.
+   */
+  code?: string;
 }
 
 export class AppError extends Error {
@@ -170,28 +181,86 @@ export function tooManyRequests(retryAfterSeconds: number): AppError {
   });
 }
 
-export function internal(reference?: string): AppError {
+/**
+ * A capability this deployment has not been configured with.
+ *
+ * Distinct from `internal`: nothing has gone wrong, and the caller is not
+ * asked to quote a reference to support. Something has not been set up, and
+ * saying which setting is what turns a silent outage into a checklist item.
+ */
+export function serviceUnavailable(message: string, nextStep?: string): AppError {
+  return new AppError({
+    statusCode: 503,
+    code: 'NOT_CONFIGURED',
+    message,
+    nextStep,
+    moneyStatus: 'NOT_APPLICABLE',
+  });
+}
+
+/**
+ * The answer to an unhandled exception — the one error nobody anticipated.
+ *
+ * IT USED TO SAY "No financial record has been changed", with `moneyStatus:
+ * NOT_DEBITED`. That is an assertion this path cannot make. `MoneyStatus`
+ * defines NOT_DEBITED as "No payment was attempted", and an exception nobody
+ * anticipated can be thrown after a transaction committed, after a gateway
+ * accepted a payment, after a receipt was issued. The error handler that calls
+ * this says so four lines above the call: "on a revenue platform an unhandled
+ * exception is a taxpayer who paid and has no receipt."
+ *
+ * The agent application renders NOT_DEBITED as "No money has been taken from
+ * the taxpayer" — in Hausa too — in plain error styling, not the warning
+ * styling it reserves for "Do not collect again". So the one moment the
+ * platform knows least was the moment it spoke with most confidence, to the
+ * person standing in front of somebody who has just handed over cash.
+ *
+ * THE RULE BELOW IS THE CLIENT'S OWN, mirrored. `apps/agent/src/lib/api.ts`
+ * already decides this correctly for a request that never got an answer at
+ * all: "A read that never arrived moves no money whether it arrived or not. A
+ * write under `/payments` that never got an answer is a write whose effect is
+ * unknown — which is exactly what UNCONFIRMED means... Every other write says
+ * NOT_APPLICABLE, because telling an agent their taxpayer may have been
+ * debited by a failed support ticket is its own kind of wrong."
+ *
+ * A 500 is the same situation with a status line attached, so it gets the same
+ * answer. What no branch does any more is claim nothing happened.
+ */
+export function internal(
+  reference?: string,
+  request?: { method: string; path: string },
+): AppError {
+  const write = (request?.method ?? 'GET').toUpperCase() !== 'GET';
+  const money = write && (request?.path ?? '').startsWith('/payments');
+
   return new AppError({
     statusCode: 500,
     code: 'INTERNAL_ERROR',
-    message:
-      'The request could not be completed because of a problem on our side. ' +
-      'No financial record has been changed. Quote the reference below to support.',
-    moneyStatus: 'NOT_DEBITED',
+    message: money
+      ? 'The request could not be completed because of a problem on our side, and whether ' +
+        'the payment went through is not known. Quote the reference below to support.'
+      : 'The request could not be completed because of a problem on our side. ' +
+        'Quote the reference below to support.',
+    moneyStatus: money ? 'UNCONFIRMED' : 'NOT_APPLICABLE',
     reference,
+    nextStep: money
+      ? 'Check the transaction before collecting anything again.'
+      : undefined,
     expose: false,
   });
 }
 
 /** Raised when the agent is not cleared to perform revenue work (Addendum §26). */
-export function notCleared(blockers: string[]): AppError {
+export function notCleared(blockers: readonly AgentBlocker[]): AppError {
   return new AppError({
     statusCode: 403,
     code: 'AGENT_NOT_CLEARED',
     message:
       'You are not yet cleared to carry out revenue collection. ' +
       'Your application must be completed and approved first.',
-    details: blockers.map((issue) => ({ issue })),
+    // Both, deliberately: the agent PWA reads the code and says it in Hausa,
+    // and anything else reading this response still gets a sentence.
+    details: blockers.map((code) => ({ code, issue: blockerSentence(code) })),
     nextStep: 'Open "My Application" to see what is still outstanding.',
   });
 }

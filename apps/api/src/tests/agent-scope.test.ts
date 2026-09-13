@@ -21,6 +21,7 @@ import {
   loginAs,
   pool,
   post,
+  settleTransaction,
   resetDatabase,
   revenueItemByCode,
   startTestServer,
@@ -202,6 +203,9 @@ before(async () => {
     { gatewayReference: payment.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
     { token: other.token, deviceId: 'scope-device-000000000002' },
   );
+
+  // A receipt exists once the money has reached a government account.
+  await settleTransaction(assessment.body.transactionId);
 
   // Our agent registers their own taxpayer.
   const own = await post(

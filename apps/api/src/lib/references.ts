@@ -70,6 +70,10 @@ export async function nextPayoutReference(db: Db): Promise<string> {
   return `PAY-${currentYear()}-${pad(await nextValue(db, 'payout_reference_seq'))}`;
 }
 
+export async function nextCaseNumber(db: Db): Promise<string> {
+  return `CASE-${currentYear()}-${pad(await nextValue(db, 'case_number_seq'))}`;
+}
+
 export async function nextGroupCode(db: Db): Promise<string> {
   return `GRP-${currentYear()}-${pad(await nextValue(db, 'group_code_seq'))}`;
 }

@@ -17,7 +17,7 @@ Two things are in the image that are easy to leave out and fatal to omit:
 
 - **The migrations.** `migrate.ts` reads them from disk and verifies each
   applied file against a stored checksum, so the deployed copy must be
-  byte-identical to source control. `scripts/copy-assets.mjs` copies them into
+  byte-identical to source control. `apps/api/scripts/copy-assets.mjs` copies them into
   `dist` during the build and aborts the build if the count does not match.
 - **The PDF fonts.** Every receipt states an amount in naira and PDFKit's
   built-in faces have no glyph for `₦`. The same script copies them and the
@@ -57,6 +57,33 @@ boot rather than at the first taxpayer:
 | `ERROR_REPORTING` + URL | still `mock`, or named without a URL |
 | `METRICS_TOKEN` | missing — `/metrics` would be unauthenticated |
 | `REMITA_*` | `PAYMENT_GATEWAY=remita` with credentials missing or the demo base URL |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | one set without the other |
+
+### Web push keys
+
+Push is optional. With both keys blank the channel is off, the key endpoint
+answers 503 saying so, and the citizen's receipt still goes by SMS — which is
+the copy that matters, because a taxpayer holds no account here.
+
+With one key set and not the other the server refuses to start, because that
+deployment would serve no key, accept no subscription and send nothing, while
+looking configured.
+
+**Generate them once and keep them.** A browser binds its subscription to the
+application server key permanently, so replacing these unsubscribes every
+handset in the fleet — silently, because nothing on either side reports it.
+Treat them like `JWT_SECRET`: in the secret manager, never regenerated on a
+whim.
+
+```
+npx web-push generate-vapid-keys
+```
+
+`VAPID_PUBLIC_KEY` must be a P-256 public key; the raw point that browsers
+accept is served to them whichever encoding is configured.
+`VAPID_PRIVATE_KEY` may be the raw scalar, DER or PEM. `VAPID_SUBJECT` is the
+contact the push services use to reach the operator. `PUSH_PROXY_URL` (falling
+back to `HTTPS_PROXY`) routes outbound pushes where egress is not direct.
 
 Set `RUN_MIGRATIONS_ON_BOOT=false` in production. The pipeline owns migrations.
 
@@ -140,11 +167,14 @@ and all three were fixed for it:
   racing and crash-looping.
 - **Sessions** are database-backed, so any instance can serve any request.
 
-One thing is still per-instance: **rate limiting** keeps its buckets in process
-memory, so the effective limit is N times the configured maximum. The impact is
-bounded because account lockout — the control that actually stops credential
-stuffing — is database-backed. A shared store is the remaining work; see
-`docs/SECURITY.md`.
+- **Rate limiting** shares its buckets through PostgreSQL, so N instances
+  enforce one limit rather than N times the configured maximum. Set
+  `RATE_LIMIT_STORE=postgres`; production refuses to start without it, because
+  a per-process limiter advertises a cap in `x-ratelimit-limit` that the
+  deployment does not hold. A caller already over their limit is refused from
+  memory for the rest of their window, so a flood costs one round trip rather
+  than one per request, and the store fails open — a bookkeeping table being
+  unreachable must not stop collection statewide.
 
 Recommended shape:
 

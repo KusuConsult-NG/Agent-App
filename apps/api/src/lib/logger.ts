@@ -67,9 +67,42 @@ const SECRET_KEYS = [
 
 const REDACTED = '[redacted]';
 
+/**
+ * Keys that contain one of those words and are not secret, matched whole.
+ *
+ * The rule above is deliberately broad — it catches `otpCode`,
+ * `collectionCode` and `verification_code` with one entry, and being broad in
+ * this direction is the safe way to be wrong. But it was broad enough to
+ * redact the field that says *why* a request failed: `code` matched the key
+ * spelled exactly `code`, which is what the error handler passes for an
+ * `AppError` code and what the pool passes for a SQLSTATE. Every failed
+ * request reached the aggregator as
+ *
+ *   {"requestId":"…","component":"http","code":"[redacted]","path":"/payments/x"}
+ *
+ * and every transaction-conflict retry lost `40001` the same way. A redactor
+ * that removes the diagnosis is not cautious, it is just broken, and nothing
+ * said so because a redacted field looks exactly like a protected one.
+ *
+ * An exception per key rather than a narrower rule. `code` is load-bearing: a
+ * beneficiary's collection code is the secret that lets somebody collect goods
+ * in their name, so a future `{ code: collectionCode }` must still be caught,
+ * and it is. What is listed here is named, and adding to it is a decision
+ * somebody makes rather than a side effect of choosing a field name.
+ */
+const NOT_SECRET_KEYS = [
+  // middleware/error-handler.ts — 'PAYMENT_UNCONFIRMED', not a credential.
+  'errorcode',
+];
+
+function normalise(key: string): string {
+  return key.toLowerCase().replace(/[^a-z_]/g, '');
+}
+
 function isSecretKey(key: string): boolean {
-  const normalised = key.toLowerCase().replace(/[^a-z_]/g, '');
-  return SECRET_KEYS.some((secret) => normalised.includes(secret.replace(/[^a-z_]/g, '')));
+  const normalised = normalise(key);
+  if (NOT_SECRET_KEYS.includes(normalised)) return false;
+  return SECRET_KEYS.some((secret) => normalised.includes(normalise(secret)));
 }
 
 /**

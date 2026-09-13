@@ -23,6 +23,10 @@ export const pool = new Pool({
   connectionString: config.database.url,
   max: config.database.poolSize,
   statement_timeout: config.database.statementTimeoutMs,
+  // A backstop, not a licence: several services still call an external
+  // provider with a transaction open, and this is what stops one that never
+  // answers from holding its row locks indefinitely.
+  idle_in_transaction_session_timeout: config.database.idleInTransactionTimeoutMs,
   application_name: 'psirs-revenue-platform',
 });
 
@@ -117,7 +121,9 @@ export async function withTransaction<T>(
       log.warn('transaction conflict, retrying', {
         component: 'db',
         attempt,
-        code: String((error as { code?: unknown }).code),
+        // `sqlState` rather than `code`, for the reason in `logger.ts`: this
+        // is 40001, and a key spelled `code` reached the log as [redacted].
+        sqlState: String((error as { code?: unknown }).code),
       });
       // Back off with jitter, so two transactions that just collided do not
       // wake together and collide again.

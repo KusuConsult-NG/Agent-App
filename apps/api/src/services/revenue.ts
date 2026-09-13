@@ -14,7 +14,7 @@
 import type { PoolClient } from 'pg';
 import { parseKobo, formatNaira, assertTransactionTransition, type Kobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
 import {
@@ -28,7 +28,7 @@ import { recordAudit } from './audit';
 export async function listCategories(db: Db, options: { authorityId?: string } = {}) {
   return query(
     db,
-    `SELECT rc.id, rc.name, rc.code, rc.description, ra.name AS authority_name, ra.tier,
+    `SELECT rc.id, rc.name, rc.name_ha, rc.code, rc.description, ra.name AS authority_name, ra.name_ha AS authority_name_ha, ra.tier,
             (SELECT count(*) FROM revenue_items ri
               WHERE ri.category_id = rc.id AND ri.status = 'ACTIVE') AS item_count
        FROM revenue_categories rc
@@ -46,19 +46,40 @@ export async function listCategories(db: Db, options: { authorityId?: string } =
  * Filtering by taxpayer type and LGA here is what stops an agent from being
  * offered, say, a hotel consumption tax for an individual farmer — the
  * catalogue decides what is applicable, not the agent (PRD §9).
+ *
+ * ACTIVE items only, because everybody who calls this is deciding what can be
+ * sold. `includeWithdrawn` is for the one screen that needs the rest — the
+ * officer configuring the catalogue, who cannot restore a suspended item they
+ * are unable to see.
  */
 export async function listItems(
   db: Db,
-  options: { categoryId?: string; taxpayerType?: string; lgaId?: string; search?: string } = {},
+  options: {
+    categoryId?: string;
+    /*
+     * Which arm of government the item's revenue belongs to.
+     *
+     * Mirrors the filter `listCategories` has always had. The row already
+     * carries `authority_name`; what it did not carry was the id, so nothing
+     * could ask for one tier's catalogue without matching on a display name.
+     */
+    authorityId?: string;
+    taxpayerType?: string;
+    lgaId?: string;
+    search?: string;
+    includeWithdrawn?: boolean;
+  } = {},
 ) {
   return query(
     db,
-    `SELECT ri.id, ri.code, ri.name, ri.description, ri.frequency, ri.self_assessable,
+    `SELECT ri.id, ri.code, ri.name, ri.name_ha, ri.description, ri.frequency, ri.self_assessable,
             ri.required_documents, ri.assessment_rules, ri.commission_eligible,
-            rc.name AS category_name, rc.id AS category_id,
-            m.name AS mda_name, ra.name AS authority_name,
+            rc.name AS category_name, rc.name_ha AS category_name_ha, rc.id AS category_id,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
+            ra.id AS authority_id, ra.name AS authority_name, ra.name_ha AS authority_name_ha, ra.tier,
             r.id AS rate_id, r.rate_type, r.fixed_amount_kobo, r.rate_basis_points,
-            r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version
+            r.tiers, r.formula, r.minimum_amount_kobo, r.maximum_amount_kobo, r.version,
+            ri.status, ri.status_reason, ri.status_changed_at
        FROM revenue_items ri
        JOIN revenue_categories rc ON rc.id = ri.category_id
        JOIN revenue_authorities ra ON ra.id = rc.authority_id
@@ -70,18 +91,21 @@ export async function listItems(
             AND (rr.effective_to IS NULL OR rr.effective_to > now())
           ORDER BY rr.effective_from DESC LIMIT 1
        ) r ON true
-      WHERE ri.status = 'ACTIVE'
+      WHERE ($5::boolean OR ri.status = 'ACTIVE')
         AND ($1::uuid IS NULL OR ri.category_id = $1)
         AND ($2::text IS NULL OR $2 = ANY(ri.applicable_taxpayer_types))
         AND ($3::uuid IS NULL OR cardinality(ri.applicable_lga_ids) = 0
              OR $3 = ANY(ri.applicable_lga_ids))
         AND ($4::text IS NULL OR ri.name ILIKE '%' || $4 || '%' OR ri.code ILIKE '%' || $4 || '%')
-      ORDER BY rc.name, ri.name`,
+        AND ($6::uuid IS NULL OR rc.authority_id = $6)
+      ORDER BY ra.tier, rc.name, ri.name`,
     [
       options.categoryId ?? null,
       options.taxpayerType ?? null,
       options.lgaId ?? null,
       options.search ?? null,
+      options.includeWithdrawn ?? false,
+      options.authorityId ?? null,
     ],
   );
 }
@@ -140,7 +164,9 @@ export async function resolveRate(
 export interface QuoteResult {
   revenueItemId: string;
   revenueItemName: string;
+  revenueItemNameHa: string | null;
   categoryName: string;
+  categoryNameHa: string | null;
   rateVersionId: string;
   rateVersion: number;
   amountKobo: Kobo;
@@ -163,11 +189,13 @@ export async function quote(
   const item = await queryOne<{
     id: string;
     name: string;
+    name_ha: string | null;
     category_name: string;
+    category_name_ha: string | null;
     assessment_rules: { serviceChargeKobo?: string } | null;
   }>(
     db,
-    `SELECT ri.id, ri.name, rc.name AS category_name, ri.assessment_rules
+    `SELECT ri.id, ri.name, ri.name_ha, rc.name AS category_name, rc.name_ha AS category_name_ha, ri.assessment_rules
        FROM revenue_items ri JOIN revenue_categories rc ON rc.id = ri.category_id
       WHERE ri.id = $1 AND ri.status = 'ACTIVE'`,
     [params.revenueItemId],
@@ -185,7 +213,9 @@ export async function quote(
   return {
     revenueItemId: item.id,
     revenueItemName: item.name,
+    revenueItemNameHa: item.name_ha,
     categoryName: item.category_name,
+    categoryNameHa: item.category_name_ha,
     rateVersionId: rate.id,
     rateVersion: rate.version,
     amountKobo: computation.amountKobo,
@@ -213,6 +243,24 @@ export interface CreateAssessmentParams {
   channel?: 'AGENT_PWA' | 'OFFICER' | 'API';
   invoiceValidityDays?: number;
   ipAddress?: string | null;
+  /*
+   * An amount this platform worked out for itself, for the one case the rate
+   * engine cannot express: a liability that is the sum of many computations
+   * rather than one. PAYE is that case — an employer owes the total of what
+   * was deducted from thirty named people, and taxing the payroll as a single
+   * salary would push the whole of it into the top band.
+   *
+   * This is emphatically not a way for a caller to name a price. No route
+   * passes it; only server code that has already computed the figure from
+   * stored evidence does. And the discipline is not what holds it: migration
+   * 056 refuses a PAYE filing whose assessment amount is not exactly the
+   * schedule total, and that total is itself refused unless it equals the sum
+   * of the schedule's lines. A service that invented a number here would be
+   * caught by the database before the transaction committed.
+   */
+  precomputedAmountKobo?: Kobo;
+  /** Why that figure, recorded on the assessment's trace for an auditor. */
+  precomputedReason?: string;
 }
 
 export interface AssessmentResult {
@@ -233,12 +281,34 @@ export interface AssessmentResult {
 /**
  * Create assessment, invoice and transaction as one atomic obligation.
  *
- * The amount comes from `computeAmount` and nothing else: there is no
- * parameter on this function through which a caller can supply an amount
- * (PRD §31 "No agent-created amounts").
+ * The amount comes from `computeAmount` and nothing a caller sent (PRD §31,
+ * "No agent-created amounts"). The single exception is `precomputedAmountKobo`,
+ * which no route passes and which only server code that has already derived
+ * the figure from stored evidence may use — see its own comment, and migration
+ * 056, which refuses the one liability that uses it unless the assessment
+ * matches the schedule it was computed from.
  */
 export async function createAssessment(params: CreateAssessmentParams): Promise<AssessmentResult> {
-  return withTransaction(async (client) => {
+  return withTransaction((client) => createAssessmentIn(client, params));
+}
+
+/**
+ * The same thing, on a caller's transaction.
+ *
+ * Exists for the one case where an assessment is part of a larger indivisible
+ * act: a PAYE return, where the schedule, its employee lines and the
+ * assessment are one filing. Raising the assessment on its own connection
+ * would commit it independently, so a schedule that then failed to insert
+ * would leave an employer holding an invoice with nothing behind it — a bill
+ * nobody could explain, for a liability the platform has no record of.
+ *
+ * Callers with nothing to join should use `createAssessment` above.
+ */
+export async function createAssessmentIn(
+  client: PoolClient,
+  params: CreateAssessmentParams,
+): Promise<AssessmentResult> {
+  {
     const taxpayer = await queryOne<{
       id: string;
       taxpayer_type: string;
@@ -293,7 +363,32 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
     }
 
     const rate = await resolveRate(client, params.revenueItemId, new Date(), taxpayer.lga_id);
-    const computation = computeAmount(rate, params.inputs);
+    /*
+     * The rate version is resolved either way, so a precomputed assessment
+     * still records which bands were in force when it was made and can be
+     * re-checked years later against them.
+     */
+    const computation =
+      params.precomputedAmountKobo === undefined
+        ? computeAmount(rate, params.inputs)
+        : {
+            amountKobo: params.precomputedAmountKobo,
+            declaredBaseKobo: null,
+            trace: [
+              {
+                step: 'Computed from a filed schedule',
+                detail:
+                  params.precomputedReason ??
+                  'Sum of per-person amounts computed by the platform from a filed return',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+              {
+                step: 'Payable',
+                detail: 'Amount payable to government',
+                amount: params.precomputedAmountKobo.toString(),
+              },
+            ],
+          };
 
     if (computation.amountKobo <= 0n) {
       /*
@@ -465,7 +560,7 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
       expiresAt,
       trace: computation.trace,
     };
-  });
+  }
 }
 
 /**
@@ -474,6 +569,95 @@ export async function createAssessment(params: CreateAssessmentParams): Promise<
  * Every state change in the platform goes through here so the legality check
  * and the event journal can never be skipped independently.
  */
+/**
+ * Retire invoices whose deadline has passed (PRD §14).
+ *
+ * Every invoice carries an `expires_at`, and the payment path honours it: an
+ * attempt to pay a lapsed invoice is refused with INVOICE_EXPIRED. Nothing
+ * acted on it anywhere else. `invoices.status` allows EXPIRED,
+ * `assessments.status` allows EXPIRED, and `INVOICE_GENERATED -> EXPIRED` is a
+ * legal transaction move — three states, all legal, none ever written. A
+ * lapsed invoice stayed UNPAID for the life of the deployment, and everything
+ * reading UNPAID believed it: the State's outstanding revenue figure climbed by
+ * every invoice that was never going to be paid, the taxpayer's own list showed
+ * a bill the platform would refuse to take, and their compliance score — which
+ * decides incentive eligibility — went on counting it against them.
+ *
+ * The sweep is the enforcement, not the deadline itself. Nothing here decides
+ * whether an invoice may be paid; that is settled at the payment path against
+ * `expires_at`, exactly as before. What this does is make the record agree with
+ * the answer the payment path was already giving.
+ *
+ * PARTIALLY_PAID is left alone. Money has been taken against it, and what
+ * happens to a part-paid bill that lapses is a decision about somebody's money
+ * — a refund of the part, or an extension — and not one a sweep should take at
+ * three in the morning.
+ */
+export async function expireLapsedInvoices(params: {
+  actorId: string | null;
+  actorRole: string;
+  limit?: number;
+}): Promise<{ expired: number }> {
+  const lapsed = await query<{ id: string; assessment_id: string; invoice_number: string }>(
+    pool,
+    `SELECT id, assessment_id, invoice_number FROM invoices
+      WHERE status = 'UNPAID' AND expires_at IS NOT NULL AND expires_at < now()
+      ORDER BY expires_at
+      LIMIT $1`,
+    [params.limit ?? 500],
+  );
+
+  let expired = 0;
+  for (const invoice of lapsed) {
+    await withTransaction(async (client) => {
+      // Re-read under the lock: a payment may have landed between the scan and
+      // now, and an invoice that has just been paid is not lapsed.
+      const current = await queryOne<{ status: string }>(
+        client,
+        'SELECT status FROM invoices WHERE id = $1 FOR UPDATE',
+        [invoice.id],
+      );
+      if (!current || current.status !== 'UNPAID') return;
+
+      await client.query(`UPDATE invoices SET status = 'EXPIRED' WHERE id = $1`, [invoice.id]);
+      await client.query(
+        `UPDATE assessments SET status = 'EXPIRED' WHERE id = $1 AND status IN ('ACTIVE','INVOICED')`,
+        [invoice.assessment_id],
+      );
+
+      const transactions = await query<{ id: string }>(
+        client,
+        `SELECT id FROM transactions
+          WHERE invoice_id = $1 AND status IN ('ASSESSMENT_CREATED','INVOICE_GENERATED')`,
+        [invoice.id],
+      );
+      for (const transaction of transactions) {
+        await transitionTransaction(client, {
+          transactionId: transaction.id,
+          to: 'EXPIRED',
+          reason: `Invoice ${invoice.invoice_number} passed its payment deadline`,
+          actorId: params.actorId,
+          source: 'SYSTEM',
+        });
+      }
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'invoice.expired',
+        entityType: 'invoice',
+        entityId: invoice.id,
+        oldValue: { status: 'UNPAID' },
+        newValue: { status: 'EXPIRED' },
+        reason: `Payment deadline passed without payment (${invoice.invoice_number})`,
+      });
+      expired += 1;
+    });
+  }
+
+  return { expired };
+}
+
 export async function transitionTransaction(
   client: PoolClient,
   params: {
@@ -530,7 +714,8 @@ export async function getObligations(db: Db, taxpayerId: string) {
     `SELECT i.id AS invoice_id, i.invoice_number, i.total_amount_kobo, i.amount_paid_kobo,
             i.status, i.expires_at, i.issued_at,
             a.assessment_number, a.period_label,
-            ri.name AS revenue_item, rc.name AS revenue_category,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             t.id AS transaction_id, t.transaction_reference, t.status AS transaction_status
        FROM invoices i
        JOIN assessments a ON a.id = i.assessment_id
@@ -541,4 +726,86 @@ export async function getObligations(db: Db, taxpayerId: string) {
       ORDER BY i.issued_at DESC`,
     [taxpayerId],
   );
+}
+
+/**
+ * Withdraw a revenue item from the catalogue, or put it back (PRD §8).
+ *
+ * The catalogue is the legal basis for collection: an agent may take money for
+ * an item because the state says that item is collectable. `revenue_items`
+ * has always declared four statuses and every reader already honours them —
+ * `listItems` and `getItem` both require ACTIVE, and `createAssessment` reads
+ * through `getItem`, so a non-ACTIVE item cannot be assessed against. Nothing
+ * wrote them. An item created in error, a levy a court struck down, a fee the
+ * House repealed: all of them stayed collectable for as long as the platform
+ * ran, because the only status the code could produce was the ACTIVE it was
+ * inserted with.
+ *
+ * Withdrawal is forward-looking, deliberately. Invoices already raised stay
+ * payable and receipts already issued stay valid — the money was owed under
+ * the rule in force when it was assessed, and cancelling those is a separate
+ * decision an officer makes invoice by invoice. What stops is *new* liability.
+ *
+ * SUSPENDED and RETIRED differ in whether anyone expects to come back:
+ * suspension is a pause pending an answer, retirement is the end of the item.
+ * Retirement is therefore terminal — a levy brought back after being retired
+ * is a new levy, with its own code, its own rate and its own authority.
+ */
+export async function setRevenueItemStatus(params: {
+  itemId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'RETIRED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ code: string; name: string; from: string; to: string }> {
+  return withTransaction(async (client) => {
+    const item = await queryOne<{ code: string; name: string; status: string }>(
+      client,
+      'SELECT code, name, status FROM revenue_items WHERE id = $1 FOR UPDATE',
+      [params.itemId],
+    );
+    if (!item) throw notFound('That revenue item');
+
+    if (item.status === params.status) {
+      throw conflict(
+        'ITEM_STATUS_UNCHANGED',
+        `${item.name} is already ${params.status.toLowerCase()}.`,
+      );
+    }
+
+    if (item.status === 'RETIRED') {
+      throw conflict(
+        'ITEM_RETIRED',
+        `${item.name} has been retired and cannot be brought back. Publish a new revenue item ` +
+          'with its own code and rate if the charge is being reintroduced.',
+      );
+    }
+
+    if (item.status === 'DRAFT' && params.status !== 'ACTIVE') {
+      throw conflict(
+        'ITEM_NOT_PUBLISHED',
+        `${item.name} has never been published, so there is nothing to withdraw.`,
+      );
+    }
+
+    await client.query(
+      `UPDATE revenue_items
+          SET status = $2, status_reason = $3, status_changed_at = now(),
+              status_changed_by = $4, updated_at = now()
+        WHERE id = $1`,
+      [params.itemId, params.status, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: params.status === 'ACTIVE' ? 'catalogue.item_restored' : 'catalogue.item_withdrawn',
+      entityType: 'revenue_item',
+      entityId: params.itemId,
+      oldValue: { status: item.status },
+      newValue: { status: params.status, reason: params.reason },
+    });
+
+    return { code: item.code, name: item.name, from: item.status, to: params.status };
+  });
 }

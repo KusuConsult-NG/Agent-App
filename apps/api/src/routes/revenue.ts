@@ -27,7 +27,7 @@ revenueRouter.get(
     res.json(
       await query(
         pool,
-        `SELECT id, name, code, tier FROM revenue_authorities WHERE status = 'ACTIVE' ORDER BY tier, name`,
+        `SELECT id, name, name_ha, code, tier FROM revenue_authorities WHERE status = 'ACTIVE' ORDER BY tier, name`,
       ),
     );
   }),
@@ -47,12 +47,18 @@ revenueRouter.get(
   validateQuery(
     z.object({
       categoryId: uuidSchema.optional(),
+      authorityId: uuidSchema.optional(),
       taxpayerType: z.enum(['INDIVIDUAL', 'BUSINESS']).optional(),
       lgaId: uuidSchema.optional(),
       search: z.string().optional(),
+      includeWithdrawn: z.coerce.boolean().optional(),
     }),
-    async (_req, res, data) => {
-      res.json(await revenue.listItems(pool, data));
+    async (req, res, data) => {
+      // Seeing what has been withdrawn is part of configuring the catalogue,
+      // not part of reading it: an agent asking for the withdrawn items gets
+      // the catalogue they can actually sell from.
+      const includeWithdrawn = data.includeWithdrawn === true && req.auth!.permissions.includes('catalogue:configure');
+      res.json(await revenue.listItems(pool, { ...data, includeWithdrawn }));
     },
   ),
 );
@@ -106,7 +112,68 @@ revenueRouter.post(
        * default for it to reach.
        */
       lgaId: uuidSchema.optional(),
-    }),
+    })
+      /*
+       * The parameters have to match the type, and the officer has to be told
+       * which one is missing.
+       *
+       * `rate_definition_present` and `rate_band_valid` on the table already
+       * refuse most of this, and they should — a rule about money belongs
+       * where the money is. What an officer got back was the generic
+       * constraint answer: "This action was blocked by a financial integrity
+       * rule. Nothing has been changed. Contact support." For a field they
+       * left blank on the form in front of them, that is a dead end dressed as
+       * an incident, and the fix is one they could have made in five seconds
+       * if anything had named it.
+       *
+       * One case the table cannot see at all. `tiers` is a JSON column, so a
+       * band list of `{"tiers": []}` is not null and satisfies the constraint.
+       * That rate goes live on its effective date and then throws in the
+       * field: the agent standing in front of a citizen is told the item "has
+       * no rate bands configured", which is true, is about our configuration,
+       * and is not something they can do anything about.
+       */
+      .superRefine((data, ctx) => {
+        const required = {
+          FIXED: ['fixedAmountKobo', 'A fixed rate needs the amount payable'],
+          PERCENTAGE: ['rateBasisPoints', 'A percentage rate needs the percentage, in basis points'],
+          TIERED: ['tiers', 'A tiered rate needs its bands'],
+          FORMULA: ['formula', 'A formula rate needs the formula'],
+        } as const;
+
+        const [field, message] = required[data.rateType];
+        if (data[field] === undefined || data[field] === null || data[field] === '') {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message });
+        }
+
+        if (data.rateType === 'TIERED' && data.tiers !== undefined) {
+          const raw = data.tiers as { tiers?: unknown[] } | unknown[];
+          const bands = Array.isArray(raw) ? raw : Array.isArray(raw?.tiers) ? raw.tiers : null;
+          if (bands === null || bands.length === 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['tiers'],
+              message:
+                'A tiered rate needs at least one band. A rate with none is accepted here and ' +
+                'then cannot be assessed in the field.',
+            });
+          }
+        }
+
+        if (
+          data.minimumAmountKobo !== undefined &&
+          data.maximumAmountKobo !== undefined &&
+          data.minimumAmountKobo > data.maximumAmountKobo
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['minimumAmountKobo'],
+            message:
+              'The minimum is above the maximum. Charging applies the minimum and then the ' +
+              'maximum, so the maximum would win and the minimum would do nothing.',
+          });
+        }
+      }),
     async (req, res, data) => {
       const effectiveFrom = new Date(data.effectiveFrom);
       if (effectiveFrom.getTime() < Date.now() - 60_000) {
@@ -355,7 +422,8 @@ revenueRouter.get(
   asyncHandler(async (req, res) => {
     const assessment = await queryOne(
       pool,
-      `SELECT a.*, ri.name AS revenue_item, rc.name AS revenue_category,
+      `SELECT a.*, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
               i.invoice_number, i.status AS invoice_status, i.expires_at
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
@@ -382,7 +450,8 @@ revenueRouter.get(
     const invoice = await queryOne(
       pool,
       `SELECT i.*, a.assessment_number, a.period_label, a.computation_trace,
-              ri.name AS revenue_item, rc.name AS revenue_category,
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
               t.transaction_reference, t.status AS transaction_status
          FROM invoices i
          JOIN assessments a ON a.id = i.assessment_id
@@ -409,7 +478,9 @@ revenueRouter.post(
         `SELECT i.id, i.invoice_number, i.amount_kobo, i.service_charge_kobo, i.total_amount_kobo,
                 i.verification_code, i.issued_at, i.expires_at, i.taxpayer_id,
                 a.assessment_number, a.period_label, a.computation_trace,
-                ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
+                ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+                rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+                m.name AS mda_name, m.name_ha AS mda_name_ha,
                 l.name AS lga_name, ag.agent_code, i.agent_id,
                 tp.first_name, tp.last_name, tp.business_name, tp.tin
            FROM invoices i
@@ -493,4 +564,44 @@ revenueRouter.get(
   asyncHandler(async (req, res) => {
     res.json(await revenue.getObligations(pool, req.params.id));
   }),
+);
+
+/**
+ * Withdraw a revenue item from the catalogue, or put it back (PRD §8).
+ *
+ * `catalogue:configure` rather than a new permission: whoever may publish an
+ * item is the person who may withdraw it, and splitting the two would leave
+ * the catalogue in the hands of somebody who can only add to it.
+ */
+revenueRouter.post(
+  '/items/:itemId/status',
+  requirePermission('catalogue:configure'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'RETIRED']),
+      reason: z
+        .string()
+        .min(5, 'Say why the item is being withdrawn, or what changed before restoring it'),
+    }),
+    async (req, res, data) => {
+      const result = await revenue.setRevenueItemStatus({
+        itemId: req.params.itemId,
+        status: data.status,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        ...result,
+        message:
+          data.status === 'ACTIVE'
+            ? `${result.name} is back in the catalogue and can be assessed again.`
+            : data.status === 'SUSPENDED'
+              ? `${result.name} is suspended. No new assessment can be raised against it; ` +
+                'invoices already issued stay payable.'
+              : `${result.name} has been retired. Invoices already issued stay payable, and the ` +
+                'item cannot be brought back.',
+      });
+    },
+  ),
 );

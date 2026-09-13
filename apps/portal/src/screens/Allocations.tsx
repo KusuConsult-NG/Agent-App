@@ -25,8 +25,11 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { withJustification } from '../lib/justify';
 import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface Round {
   id: string;
@@ -39,7 +42,16 @@ interface Round {
   opens_at: string;
   closes_at: string | null;
   programme_name?: string;
+  programme_name_ha?: string | null;
+  /** Both come back on every row of `listRounds`; both were being dropped. */
   awarded_count?: string;
+  awarded_quantity?: string;
+}
+
+interface Programme {
+  id: string;
+  name: string;
+  name_ha: string | null;
 }
 
 interface Award {
@@ -50,23 +62,40 @@ interface Award {
   collected_at: string | null;
 }
 
-/** The units a round can be measured in, as the API accepts them. */
-const UNITS = [
-  ['BAG_50KG', '50kg bag'],
-  ['BAG_25KG', '25kg bag'],
-  ['LITRE', 'Litre'],
-  ['KILOGRAM', 'Kilogram'],
-  ['TRACTOR_DAY', 'Tractor day'],
-  ['SEEDLING', 'Seedling'],
-  ['UNIT', 'Unit'],
-] as const;
-
-const UNIT_LABEL = Object.fromEntries(UNITS) as Record<string, string>;
+/**
+ * The units a round can be measured in, as the API accepts them.
+ *
+ * Values only. Every one of them is already in the shared enum table, so the
+ * label comes from `enumLabel` at render time rather than being written out
+ * here — which is how two of them stayed English while the rest were keyed.
+ */
+const UNITS = ['BAG_50KG', 'BAG_25KG', 'LITRE', 'KILOGRAM', 'TRACTOR_DAY', 'SEEDLING', 'UNIT'] as const;
 
 export function AllocationsScreen() {
+  const { lang, t } = usePortalI18n();
   const [rounds, setRounds] = useState<Round[] | null>(null);
-  const [programmes, setProgrammes] = useState<{ id: string; name: string }[]>([]);
+  const [programmes, setProgrammes] = useState<Programme[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * Three lists, three failures, kept rather than flattened into an empty
+   * array.
+   *
+   * Every read on this screen used to answer a refusal by writing `[]` into
+   * the state the screen renders from, and each of the three then stated as
+   * fact something it did not know. The worst was the programme list: with
+   * nothing in it the create form says "No programme exists yet. One has to
+   * be created under Social incentives before a round can distribute under
+   * it." — so an officer whose request was refused was sent to create a
+   * programme that may well already exist, and blocked from the round they
+   * came to make. The awards drawer said nobody had been awarded, and the
+   * rounds table said no round had been created.
+   *
+   * `null` is "not known yet", `[]` is "read, and empty", and an error is
+   * "asked, and refused". They are three different things to tell somebody.
+   */
+  const [roundsError, setRoundsError] = useState<ApiError | null>(null);
+  const [programmesError, setProgrammesError] = useState<ApiError | null>(null);
+  const [awardsError, setAwardsError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -87,15 +116,22 @@ export function AllocationsScreen() {
   const load = useCallback(() => {
     api
       .get<{ rounds: Round[] }>('/allocations/rounds?limit=100')
-      .then((data) => setRounds(data.rounds))
+      .then((data) => {
+        setRounds(data.rounds);
+        setRoundsError(null);
+      })
       .catch((caught) => {
-        setRounds([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setRoundsError(asApiError(caught));
       });
     api
       .get<any[]>('/government/programmes')
-      .then((data) => setProgrammes(data.map((p) => ({ id: p.id, name: p.name }))))
-      .catch(() => setProgrammes([]));
+      .then((data) => {
+        setProgrammes(data.map((p) => ({ id: p.id, name: p.name, name_ha: p.name_ha ?? null })));
+        setProgrammesError(null);
+      })
+      .catch((caught) => {
+        setProgrammesError(asApiError(caught));
+      });
   }, []);
 
   useEffect(load, [load]);
@@ -109,7 +145,7 @@ export function AllocationsScreen() {
       setMessage(said);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
@@ -118,27 +154,58 @@ export function AllocationsScreen() {
   async function openAwards(round: Round) {
     setAwardsFor(round);
     setAwards(null);
+    setAwardsError(null);
     try {
       const data = await api.get<{ awards: Award[] }>(`/allocations/rounds/${round.id}/awards`);
       setAwards(data.awards);
     } catch (caught) {
-      setAwards([]);
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      // In the drawer rather than at the top of the screen: that is where the
+      // question was asked and where the answer is being looked for.
+      setAwardsError(asApiError(caught));
     }
+  }
+
+  /**
+   * Release a share nobody came for, back into the round.
+   *
+   * A reason is required and recorded: this is public property being taken off
+   * one person's name and put back on the shelf for somebody else, and the
+   * round's arithmetic changes as a result. Refusals — an award already
+   * collected, most of all — reach the officer rather than dying silently,
+   * which is what `withJustification` exists for.
+   */
+  async function release(round: Round, awardRow: Award) {
+    await withJustification({
+      question: t.ofcAlForfeitWhy
+        .replace('{{name}}', awardRow.taxpayer_name ?? t.ofcAlThisBeneficiary)
+        .replace('{{quantity}}', String(awardRow.quantity)),
+      minimum: 10,
+      tooShort: t.ofcAlForfeitTooShort,
+      run: async (reason) => {
+        await api.post(`/allocations/awards/${awardRow.id}/forfeit`, { reason });
+      },
+      onSuccess: t.ofcAlReleased
+        .replace('{{quantity}}', String(awardRow.quantity))
+        .replace('{{round}}', round.name),
+      setError,
+      setMessage,
+    });
+    await openAwards(round);
+    load();
   }
 
   /** What is stopping this being created, in the words the officer needs. */
   const blockedBecause = ((): string | null => {
-    if (!form.programmeId) return 'Choose the programme this round distributes under.';
-    if (form.name.trim().length < 3) return 'Give the round a name people will recognise.';
+    if (!form.programmeId) return t.ofcAlChooseTheProgrammeThis;
+    if (form.name.trim().length < 3) return t.ofcAlGiveTheRoundA;
     const total = Number(form.totalQuantity);
     const each = Number(form.quantityPerBeneficiary);
-    if (!Number.isFinite(total) || total <= 0) return 'How much is there to distribute in total?';
-    if (!Number.isFinite(each) || each <= 0) return 'How much does each beneficiary receive?';
-    if (each > total) return 'One beneficiary cannot receive more than the whole round holds.';
-    if (!form.opensAt) return 'When does collection open?';
+    if (!Number.isFinite(total) || total <= 0) return t.ofcAlHowMuchIsThere;
+    if (!Number.isFinite(each) || each <= 0) return t.ofcAlHowMuchDoesEach;
+    if (each > total) return t.ofcAlOneBeneficiaryCannotReceive;
+    if (!form.opensAt) return t.ofcAlWhenDoesCollectionOpen;
     if (form.closesAt && form.closesAt <= form.opensAt) {
-      return 'A round cannot close before it opens.';
+      return t.ofcAlRoundCannotCloseBeforeOpen;
     }
     return null;
   })();
@@ -148,19 +215,20 @@ export function AllocationsScreen() {
       ? Math.floor(Number(form.totalQuantity) / Number(form.quantityPerBeneficiary))
       : null;
 
-  if (!rounds) return <Loading rows={5} />;
+  /*
+   * Only while it is genuinely in flight. A refused list is answered below,
+   * beside the table, so that the create form stays reachable — making a
+   * round does not depend on being able to list them.
+   */
+  if (!rounds && !roundsError) return <Loading rows={5} />;
 
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Distribution rounds</h2>
-        <p className="card__hint">
-          A programme decides who is eligible; a round is one actual distribution. Awards accrue
-          only while a round is open, which is what stops a programme distributing on paper what
-          is not at the collection point.
-        </p>
+        <h2 className="card__title">{t.ofcNavAllocations}</h2>
+        <p className="card__hint">{t.ofcAlIntro}</p>
         <button type="button" onClick={() => setCreating((c) => !c)}>
-          {creating ? 'Cancel' : 'Create a round'}
+          {creating ? t.camCancel : t.ofcAlCreateARound}
         </button>
       </div>
 
@@ -169,57 +237,56 @@ export function AllocationsScreen() {
 
       {creating && (
         <div className="card">
-          <h2 className="card__title">New round</h2>
+          <h2 className="card__title">{t.ofcAlNewRound}</h2>
 
           <div className="field">
-            <label htmlFor="programme">Programme</label>
+            <label htmlFor="programme">{t.ofcAlProgramme}</label>
             <select
               id="programme"
               value={form.programmeId}
               onChange={(e) => setForm({ ...form, programmeId: e.target.value })}
             >
-              <option value="">Select a programme</option>
-              {programmes.map((p) => (
+              <option value="">{t.ofcAlSelectProgramme}</option>
+              {(programmes ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {localName(lang, p.name, p.name_ha)}
                 </option>
               ))}
             </select>
-            {programmes.length === 0 && (
-              <p className="field__hint">
-                No programme exists yet. One has to be created under Social incentives before a
-                round can distribute under it.
-              </p>
-            )}
+            {programmesError ? (
+              <ErrorAlert error={programmesError} />
+            ) : programmes !== null && programmes.length === 0 ? (
+              <p className="field__hint">{t.ofcAlNoProgramme}</p>
+            ) : null}
           </div>
 
           <div className="field">
-            <label htmlFor="round-name">What this round is called</label>
+            <label htmlFor="round-name">{t.ofcAlRoundName}</label>
             <input
               id="round-name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Dry season fertiliser, Jos North"
+              placeholder={t.ofcAlSampleRound}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="unit">Measured in</label>
+            <label htmlFor="unit">{t.ofcAlMeasuredIn}</label>
             <select
               id="unit"
               value={form.unit}
               onChange={(e) => setForm({ ...form, unit: e.target.value })}
             >
-              {UNITS.map(([value, label]) => (
+              {UNITS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {enumLabel(value, t)}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="field">
-            <label htmlFor="total">Total to distribute</label>
+            <label htmlFor="total">{t.ofcAlTotalToDistribute}</label>
             <input
               id="total"
               inputMode="numeric"
@@ -230,7 +297,7 @@ export function AllocationsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="each">Each beneficiary receives</label>
+            <label htmlFor="each">{t.ofcAlEachReceives}</label>
             <input
               id="each"
               inputMode="numeric"
@@ -239,24 +306,22 @@ export function AllocationsScreen() {
               placeholder="2"
             />
             {beneficiaries !== null && (
-              <p className="field__hint">
-                Enough for <strong>{beneficiaries}</strong> beneficiaries.
-              </p>
+              <p className="field__hint">{t.ofcAlEnoughFor}<strong>{beneficiaries}</strong>{t.ofcAlBeneficiariesWord}</p>
             )}
           </div>
 
           <div className="field">
-            <label htmlFor="point">Collection point</label>
+            <label htmlFor="point">{t.ofcAlCollectionPoint}</label>
             <input
               id="point"
               value={form.collectionPoint}
               onChange={(e) => setForm({ ...form, collectionPoint: e.target.value })}
-              placeholder="Terminus Market store, Jos North"
+              placeholder={t.ofcAlSamplePoint}
             />
           </div>
 
           <div className="field">
-            <label htmlFor="opens">Opens</label>
+            <label htmlFor="opens">{t.ofcAlOpens}</label>
             <input
               id="opens"
               type="datetime-local"
@@ -266,7 +331,7 @@ export function AllocationsScreen() {
           </div>
 
           <div className="field">
-            <label htmlFor="closes">Closes (optional)</label>
+            <label htmlFor="closes">{t.ofcAlClosesOptional}</label>
             <input
               id="closes"
               type="datetime-local"
@@ -302,11 +367,11 @@ export function AllocationsScreen() {
                     setCreating(false);
                     setForm({ ...form, name: '', totalQuantity: '', quantityPerBeneficiary: '' });
                   },
-                  'Round created. It awards nothing until you open it.',
+                  t.ofcAlRoundCreatedItAwards,
                 )
               }
             >
-              {busy === 'create' ? 'Creating…' : 'Create round'}
+              {busy === 'create' ? t.ofcAlCreating : t.ofcAlCreateRound}
             </button>
           </div>
         </div>
@@ -314,64 +379,123 @@ export function AllocationsScreen() {
 
       {awardsFor && (
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            Awards — {awardsFor.name}
+          <h2 className="card__title card__pad--tight">
+            {t.ofcAlAwardsFor.replace('{{name}}', awardsFor.name)}
           </h2>
-          <p className="card__hint" style={{ padding: '0 18px' }}>
-            Who has been awarded under this round, and who has collected.{' '}
-            <button type="button" className="link" onClick={() => setAwardsFor(null)}>
-              Close
-            </button>
+          <p className="card__hint card__pad--sides">
+            {t.ofcAlAwardsIntro}{' '}
+            <button type="button" className="link" onClick={() => setAwardsFor(null)}>{t.ofcKycClose}</button>
           </p>
-          {!awards ? (
+          {awardsError ? (
+            <div style={{ padding: 18 }}>
+              <ErrorAlert error={awardsError} />
+            </div>
+          ) : !awards ? (
             <div style={{ padding: 18 }}>
               <Loading rows={3} />
             </div>
           ) : (
             <Table
               columns={[
-                { key: 'taxpayer_name', label: 'Beneficiary' },
-                { key: 'quantity', label: 'Quantity' },
+                { key: 'taxpayer_name', label: 'ofcAlBeneficiary' },
+                { key: 'quantity', label: 'ofcAlQuantity' },
                 {
                   key: 'status',
-                  label: 'Status',
+                  label: 'appStatus',
                   render: (row: Award) => <Badge status={row.status} />,
                 },
                 {
                   key: 'collected_at',
-                  label: 'Collected',
+                  label: 'ofcPfCollected',
                   render: (row: Award) =>
-                    row.collected_at ? formatDateTime(row.collected_at) : 'Not yet',
+                    row.collected_at ? formatDateTime(row.collected_at) : t.ofcAlNotYet,
+                },
+                {
+                  key: 'release',
+                  label: { text: '' },
+                  render: (row: Award) =>
+                    row.status === 'AWARDED' ? (
+                      <button
+                        type="button"
+                        className="link"
+                        onClick={() => release(awardsFor, row)}
+                      >{t.ofcAlRelease}</button>
+                    ) : null,
                 },
               ]}
               rows={awards}
-              empty="Nobody has been awarded under this round yet."
+              empty="ofcNoneNobodyAwardedRound2"
             />
           )}
         </div>
       )}
 
+      {/*
+        A list that could not be read, said as that rather than as "no
+        distribution round has been created" — which is what the table's own
+        empty text says, and is a different and untrue thing.
+      */}
+      {roundsError && (
+        <div className="card">
+          <ErrorAlert error={roundsError} />
+        </div>
+      )}
+
+      {!roundsError && (
       <div className="card card--flush">
         <Table
           columns={[
-            { key: 'name', label: 'Round' },
-            { key: 'programme_name', label: 'Programme' },
+            { key: 'name', label: 'ofcAlRound' },
+            { key: 'programme_name', label: 'ofcAlProgramme', render: (row: Round) => localName(lang, row.programme_name ?? '', row.programme_name_ha) },
             {
               key: 'quantity',
-              label: 'Distributing',
+              label: 'ofcAlDistributing',
               render: (row: Round) =>
-                `${row.total_quantity} × ${UNIT_LABEL[row.unit] ?? row.unit}, ${row.quantity_per_beneficiary} each`,
+                /*
+                 * What is being handed out, and how much of it has gone.
+                 *
+                 * `awarded_quantity` and `awarded_count` come back on every
+                 * row of this list and neither was rendered — `awarded_count`
+                 * was even declared on the type and then dropped. So the
+                 * screen showed what a round is for and not how far through
+                 * it is, which is the number an officer closes a round on.
+                 */
+                `${t.ofcAlRoundQuantity
+                  .replace('{{total}}', row.total_quantity)
+                  .replace('{{unit}}', enumLabel(row.unit, t))
+                  .replace('{{per}}', row.quantity_per_beneficiary)} · ` +
+                t.ofcAlAwardedLeft
+                  .replace('{{awarded}}', row.awarded_quantity ?? '0')
+                  .replace(
+                    '{{left}}',
+                    String(Number(row.total_quantity) - Number(row.awarded_quantity ?? 0)),
+                  ),
             },
-            { key: 'collection_point', label: 'Collection point' },
+            { key: 'collection_point', label: 'ofcAlCollectionPoint' },
             {
               key: 'opens_at',
-              label: 'Opens',
+              label: 'ofcAlOpens',
               render: (row: Round) => formatDateTime(row.opens_at),
             },
-            { key: 'status', label: 'Status', render: (row: Round) => <Badge status={row.status} /> },
+            {
+              /*
+               * And when it closes, which is the half that makes it a window.
+               *
+               * The table gave an opening date and no ending one, so an
+               * officer planning a distribution could see that a round had
+               * started and not whether it had days left or weeks. A round
+               * with no closing date stays open until somebody closes it,
+               * which is a real state and says so rather than showing a blank.
+               */
+              key: 'closes_at',
+              label: 'ofcAlCloses',
+              render: (row: Round) =>
+                row.closes_at ? formatDateTime(row.closes_at) : t.ofcAlNoClosingDate,
+            },
+            { key: 'status', label: 'appStatus', render: (row: Round) => <Badge status={row.status} /> },
             {
               key: 'act',
-              label: '',
+              label: { text: '' },
               render: (row: Round) => (
                 <>
                   {row.status === 'DRAFT' && (
@@ -383,12 +507,10 @@ export function AllocationsScreen() {
                         act(
                           row.id,
                           () => api.post(`/allocations/rounds/${row.id}/status`, { status: 'OPEN' }),
-                          `${row.name} is open. Awards can now be made.`,
+                          t.ofcAlRoundOpened.replace('{{name}}', row.name),
                         )
                       }
-                    >
-                      Open
-                    </button>
+                    >{t.ofcRhOpen}</button>
                   )}
                   {row.status === 'OPEN' && (
                     <button
@@ -400,24 +522,21 @@ export function AllocationsScreen() {
                           row.id,
                           () =>
                             api.post(`/allocations/rounds/${row.id}/status`, { status: 'CLOSED' }),
-                          `${row.name} is closed. No further awards.`,
+                          t.ofcAlRoundClosed.replace('{{name}}', row.name),
                         )
                       }
-                    >
-                      Close
-                    </button>
+                    >{t.ofcKycClose}</button>
                   )}{' '}
-                  <button type="button" className="small secondary" onClick={() => openAwards(row)}>
-                    Awards
-                  </button>
+                  <button type="button" className="small secondary" onClick={() => openAwards(row)}>{t.ofcAlAwards}</button>
                 </>
               ),
             },
           ]}
-          rows={rounds}
-          empty="No distribution round has been created."
+          rows={rounds ?? []}
+          empty="ofcNoneDistributionRoundCreated"
         />
       </div>
+      )}
     </>
   );
 }

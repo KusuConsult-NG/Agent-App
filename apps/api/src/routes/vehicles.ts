@@ -232,3 +232,39 @@ vehicleRouter.get(
     });
   }),
 );
+
+/**
+ * Take a vehicle out of service, or put it back (PRD §21).
+ *
+ * One endpoint rather than /suspend and /archive, because the officer is
+ * choosing between three states rather than pulling one of two levers, and the
+ * refusals — already in that state — read better said once.
+ */
+vehicleRouter.post(
+  '/:vehicleId/status',
+  requirePermission('vehicle:manage'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']),
+      reason: z.string().min(5, 'Say why the vehicle is being taken out of service, or brought back'),
+    }),
+    async (req, res, data) => {
+      const result = await vehicles.setVehicleStatus({
+        vehicleId: req.params.vehicleId,
+        status: data.status,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        ...result,
+        message:
+          data.status === 'ACTIVE'
+            ? `${result.registrationNumber} is back in service and its particulars can be renewed.`
+            : data.status === 'SUSPENDED'
+              ? `${result.registrationNumber} is suspended. Renewals are refused until it is lifted.`
+              : `${result.registrationNumber} has been taken off the register. Renewals are refused.`,
+      });
+    },
+  ),
+);

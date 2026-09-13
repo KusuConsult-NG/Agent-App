@@ -1,0 +1,158 @@
+/**
+ * Watching which states the platform actually writes.
+ *
+ * `a-state-nothing-writes.test.ts` reads source text, so it proves absence of
+ * the *name*, not absence of a write. A value the code compares against is
+ * mentioned, and therefore passes — which is exactly what
+ * `settlements.RECONCILED`, `commission_payouts.FAILED` and
+ * `agent_devices.APPROVED` all were: read by a query, written by nothing,
+ * invisible to the check. Three ways of closing that from source were tried
+ * and each either drowned in false positives or re-masked the case it was
+ * built for.
+ *
+ * This closes it from the other end. Instead of asking what the code says, ask
+ * the database what happened: record every value written to every enum column
+ * while the suite runs, and compare that against what the schema allows.
+ *
+ * WHY TRIGGERS AND NOT A SCAN AT REST. The obvious cheap version — read the
+ * distinct values in each column before each truncate — misses the states that
+ * matter most. A transaction goes INITIATED, PAYMENT_INITIATED, PAYMENT_VERIFIED,
+ * SETTLED inside one test; by the time anybody looks, only SETTLED is there.
+ * The intermediate states are precisely the ones a reader would want proof of,
+ * so the observation has to happen at the moment of the write.
+ *
+ * WHY A SEPARATE SCHEMA. `schema-audit.test.ts` fails when a table in `public`
+ * is neither delete-protected nor classified as deliberately mutable, and it
+ * is right to. This table is test scaffolding that must never exist in
+ * production, so listing it as a decision about the production schema would be
+ * a lie. Out of `public`, it is invisible to that audit and to `pg_dump` of
+ * the application schema.
+ *
+ * Statement-level triggers with transition tables, so the cost is one extra
+ * statement per modifying statement rather than one per row.
+ */
+
+import { pool } from '../db/pool';
+import { NOT_STATE_COLUMNS } from './enum-coverage';
+
+export const OBSERVATION_SCHEMA = 'psirs_test_observations';
+
+interface EnumColumn {
+  table: string;
+  column: string;
+}
+
+/** Every enum column the live schema declares, from its CHECK constraints. */
+export async function enumColumns(db = pool): Promise<EnumColumn[]> {
+  const { rows } = await db.query<{ table_name: string; definition: string }>(
+    `SELECT c.relname AS table_name, pg_get_constraintdef(con.oid) AS definition
+       FROM pg_constraint con
+       JOIN pg_class c ON c.oid = con.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE con.contype = 'c' AND n.nspname = 'public'
+        AND pg_get_constraintdef(con.oid) LIKE '%ANY (ARRAY%'
+      ORDER BY c.relname, con.conname`,
+  );
+
+  const found: EnumColumn[] = [];
+  for (const row of rows) {
+    const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
+    if (!column) continue;
+    // The columns that hold something other than a state are named in
+    // `NOT_STATE_COLUMNS`, with the reason each one is not. This used to be
+    // decided by letter case, which excluded `cases.department` along with the
+    // language tags it was aimed at.
+    if (`${row.table_name}.${column[1]}` in NOT_STATE_COLUMNS) continue;
+    found.push({ table: row.table_name, column: column[1] });
+  }
+  return found;
+}
+
+/**
+ * Put the observers in place, once per database — and again when the schema
+ * they observe has changed underneath them.
+ *
+ * Every test file calls `startTestServer`, and a shard's files all share one
+ * database, so this runs about thirty times against a database that only needs
+ * it once. Something has to make the repeats cheap.
+ *
+ * WHY THE CHEAP CHECK IS A FINGERPRINT AND NOT A COUNT.
+ *
+ * It counted triggers and returned early when there were two per table. Shard
+ * databases outlive a run, so adding an enum column to a table that already
+ * had one left the count unchanged, the observers stale, and the new column
+ * unobserved — and `check-enum-coverage` then reported its values as states
+ * nothing wrote. That is the worst shape a guard-rail can fail in: it accused
+ * the platform of a gap that was really its own, and the accusation looks
+ * exactly like the real thing it exists to catch. Caught by migration 060
+ * adding `band_at_capture` to a table with observers already on it.
+ *
+ * So the recorded fingerprint is the full set of observed columns. Any change
+ * to it — a new column, a new table, a column dropped — regenerates.
+ */
+export async function installEnumObservers(): Promise<void> {
+  const columns = await enumColumns();
+  const tables = [...new Set(columns.map((c) => c.table))];
+  const fingerprint = columns
+    .map((c) => `${c.table}.${c.column}`)
+    .sort()
+    .join(',');
+
+  const { rows: existing } = await pool.query<{ fingerprint: string }>(
+    `SELECT obj_description(c.oid) AS fingerprint
+       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = $1 AND c.relname = 'enum_writes'`,
+    [OBSERVATION_SCHEMA],
+  );
+  if (existing[0]?.fingerprint === fingerprint) return;
+
+  await pool.query(`CREATE SCHEMA IF NOT EXISTS ${OBSERVATION_SCHEMA}`);
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS ${OBSERVATION_SCHEMA}.enum_writes (
+       table_name  text NOT NULL,
+       column_name text NOT NULL,
+       value       text NOT NULL,
+       PRIMARY KEY (table_name, column_name, value)
+     )`,
+  );
+
+  for (const table of tables) {
+    const mine = columns.filter((c) => c.table === table);
+    const branches = mine
+      .map(
+        (c) =>
+          `SELECT '${table}', '${c.column}', "${c.column}"::text
+             FROM new_rows WHERE "${c.column}" IS NOT NULL`,
+      )
+      .join(' UNION ');
+
+    // A separate function per table, generated with static SQL: a transition
+    // table cannot be reached from dynamic SQL, and generating once is faster
+    // than deciding on every statement.
+    await pool.query(
+      `CREATE OR REPLACE FUNCTION ${OBSERVATION_SCHEMA}.observe_${table}()
+         RETURNS trigger LANGUAGE plpgsql AS $observer$
+       BEGIN
+         INSERT INTO ${OBSERVATION_SCHEMA}.enum_writes (table_name, column_name, value)
+         ${branches}
+         ON CONFLICT DO NOTHING;
+         RETURN NULL;
+       END $observer$`,
+    );
+
+    for (const [suffix, event] of [['ins', 'INSERT'], ['upd', 'UPDATE']] as const) {
+      await pool.query(`DROP TRIGGER IF EXISTS observe_enum_${suffix} ON ${table}`);
+      await pool.query(
+        `CREATE TRIGGER observe_enum_${suffix} AFTER ${event} ON ${table}
+           REFERENCING NEW TABLE AS new_rows
+           FOR EACH STATEMENT EXECUTE FUNCTION ${OBSERVATION_SCHEMA}.observe_${table}()`,
+      );
+    }
+  }
+
+  // Stamped last, so an install interrupted half way through is repeated
+  // rather than recorded as done.
+  await pool.query(
+    `COMMENT ON TABLE ${OBSERVATION_SCHEMA}.enum_writes IS '${fingerprint.replace(/'/g, "''")}'`,
+  );
+}

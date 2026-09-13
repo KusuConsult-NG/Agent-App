@@ -27,6 +27,7 @@ import { advisoryLock, LOCK_NAMESPACE, query, queryOne, withTransaction } from '
 import { conflict, notFound, forbidden } from '../lib/errors';
 import { nextPayoutReference } from '../lib/references';
 import { recordAudit } from './audit';
+import { queueNotification } from './notifications';
 
 interface CommissionPolicyRow {
   id: string;
@@ -54,6 +55,7 @@ export async function accrueCommission(
 
   const transaction = await queryOne<{
     id: string;
+    transaction_reference: string;
     agent_id: string | null;
     amount_kobo: string;
     status: string;
@@ -63,7 +65,9 @@ export async function accrueCommission(
     commission_policy_id: string | null;
   }>(
     client,
-    `SELECT t.id, t.agent_id, t.amount_kobo, t.status, t.revenue_item_id,
+    // The reference, not the id: it is what the agent sees on the receipt and
+    // what they would quote to support. A UUID tells them nothing.
+    `SELECT t.id, t.transaction_reference, t.agent_id, t.amount_kobo, t.status, t.revenue_item_id,
             ri.category_id, ri.commission_eligible, a.commission_policy_id
        FROM transactions t
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -150,6 +154,30 @@ export async function accrueCommission(
     },
   });
 
+  /*
+   * And tell the agent, on the channel that does not cost a message.
+   *
+   * This event was seeded and never raised. An SMS for every collection would
+   * be a real cost per message and would bury the payout notifications, so it
+   * goes out by push — free, immediate, and what the handset is for.
+   *
+   * The commission is PENDING here: the gateway has confirmed but PSIRS does
+   * not hold the settlement yet, and a reversal can still take it back. The
+   * template says so. Telling an agent they have earned money that might be
+   * withdrawn is the overstatement this platform is organised against, one
+   * ledger down from the citizen's receipt.
+   */
+  await queueNotification(client, {
+    event: 'COMMISSION_EARNED',
+    agentId: transaction.agent_id,
+    variables: {
+      amount: formatNaira(amount),
+      reference: transaction.transaction_reference,
+    },
+    entityType: 'commission',
+    entityId: row!.id,
+  });
+
   return { commissionId: row!.id, amountKobo: amount };
 }
 
@@ -219,11 +247,33 @@ export async function promoteEligibleCommissions(options: { now?: Date } = {}): 
           AND t.status = 'SETTLED'
           AND t.settled_at IS NOT NULL
           AND t.settled_at + make_interval(hours => p.hold_period_hours) <= $1
-          -- An open fraud investigation freezes the incentive (PRD §28).
+          -- A fraud investigation freezes the incentive (PRD §28).
+          --
+          -- CONFIRMED counts. It used to read OPEN and UNDER_REVIEW only, so
+          -- the strongest signal the platform has — an investigation that was
+          -- carried out and upheld — was the one state no guard tested for.
+          -- The protection rested entirely on the hold placed at the moment of
+          -- confirmation, and that hold only catches the PENDING and ELIGIBLE
+          -- rows existing at that instant: commission earned afterwards was
+          -- new PENDING, and this query made it payable.
+          --
+          -- There is no resolution state between CONFIRMED and DISMISSED, so
+          -- treating CONFIRMED as blocking is what the lifecycle already
+          -- means: held until an officer clears it.
+          --
+          -- Matched on agent_id rather than entity_type = 'AGENT'. Every rule
+          -- populates that column, and DEVICE_VELOCITY — one handset past
+          -- forty transactions in an hour, the signal most likely to mean a
+          -- phone is being run by somebody it was not issued to — is raised
+          -- against the DEVICE, so it never reached this guard at all.
           AND NOT EXISTS (
             SELECT 1 FROM fraud_flags f
-             WHERE f.status IN ('OPEN', 'UNDER_REVIEW')
-               AND (f.transaction_id = t.id OR (f.entity_type = 'AGENT' AND f.entity_id = c.agent_id))
+             WHERE f.status IN ('OPEN', 'UNDER_REVIEW', 'CONFIRMED')
+               AND (
+                 f.transaction_id = t.id
+                 OR f.agent_id = c.agent_id
+                 OR (f.entity_type = 'AGENT' AND f.entity_id = c.agent_id)
+               )
                AND f.severity IN ('HIGH', 'CRITICAL')
           )
         FOR UPDATE OF c`,
@@ -452,17 +502,26 @@ export async function requestPayout(params: {
       );
     }
 
+    /*
+     * The same rule as `promoteEligibleCommissions`, and for the same reasons:
+     * CONFIRMED is a blocking state, and a flag is this agent's if it names
+     * them in `agent_id` — not only if its entity happens to be the agent.
+     */
     const fraudHold = await queryOne<{ count: string }>(
       client,
       `SELECT count(*)::text AS count FROM fraud_flags
-        WHERE entity_type = 'AGENT' AND entity_id = $1
-          AND status IN ('OPEN','UNDER_REVIEW') AND severity IN ('HIGH','CRITICAL')`,
+        WHERE (agent_id = $1 OR (entity_type = 'AGENT' AND entity_id = $1))
+          AND status IN ('OPEN','UNDER_REVIEW','CONFIRMED')
+          AND severity IN ('HIGH','CRITICAL')`,
       [params.agentId],
     );
     if (Number.parseInt(fraudHold?.count ?? '0', 10) > 0) {
+      // Worded to be true whether the review is outstanding or has been
+      // upheld. Which of the two it is, is not the agent's to read off an
+      // error message.
       throw conflict(
         'FRAUD_HOLD_ACTIVE',
-        'Commission payout is on hold while a review of your account is completed.',
+        'Commission payout is on hold pending a review of your account.',
         'Your supervisor can tell you more.',
       );
     }
@@ -601,6 +660,221 @@ export async function requestPayout(params: {
 }
 
 /**
+ * Undo everything a payout request did, because it was refused.
+ *
+ * `requestPayout` does a great deal before anybody has agreed to pay: it moves
+ * every eligible commission to APPROVED against the payout, and marks any
+ * commission that was paid and later reversed as recovered, netting the
+ * agent's debt off the amount requested. All of that is right on the way to
+ * being paid, and all of it has to come back if the payment is refused.
+ *
+ * Nothing did. The approval was marked REJECTED and the rest was left standing,
+ * which went wrong in both directions at once: the commissions stayed APPROVED
+ * where `requestPayout` — which selects only ELIGIBLE — could never pick them
+ * up again, so the agent could not be paid what they had earned; and the
+ * clawback stayed written off, so money the agent held and did not own stopped
+ * being recoverable.
+ */
+export async function refusePayout(
+  client: PoolClient,
+  params: { payoutId: string; actorId: string; actorRole: string; reason: string },
+): Promise<{ returnedToEligible: number; clawbackRestored: number }> {
+  const payout = await queryOne<{ id: string; status: string; agent_id: string }>(
+    client,
+    'SELECT id, status, agent_id FROM commission_payouts WHERE id = $1 FOR UPDATE',
+    [params.payoutId],
+  );
+  if (!payout) throw notFound('That payout');
+  if (payout.status !== 'REQUESTED') {
+    throw conflict(
+      'PAYOUT_NOT_REFUSABLE',
+      `This payout is already ${payout.status.toLowerCase()} and cannot be refused.`,
+    );
+  }
+
+  const refused = await queryOne<{ payout_reference: string }>(
+    client,
+    `UPDATE commission_payouts SET status = 'REJECTED' WHERE id = $1
+      RETURNING payout_reference`,
+    [params.payoutId],
+  );
+  const refusedReference = refused!.payout_reference;
+
+  const included = await query<{ id: string }>(
+    client,
+    `SELECT id FROM commissions WHERE payout_id = $1 AND status = 'APPROVED' FOR UPDATE`,
+    [params.payoutId],
+  );
+  for (const commission of included) {
+    await transitionCommission(client, {
+      commissionId: commission.id,
+      to: 'ELIGIBLE',
+      reason: `Payout refused: ${params.reason}`,
+      actorId: params.actorId,
+    });
+  }
+  // The payout is no longer the one this commission belongs to. Left set, the
+  // wallet and the payout listing both go on associating money with a refusal.
+  await client.query(
+    `UPDATE commissions SET payout_id = NULL, approved_at = NULL, approved_by = NULL
+      WHERE payout_id = $1 AND status = 'ELIGIBLE'`,
+    [params.payoutId],
+  );
+
+  const restored = await query<{ id: string }>(
+    client,
+    `UPDATE commissions SET recovered_at = NULL, recovered_by_payout_id = NULL
+      WHERE recovered_by_payout_id = $1
+      RETURNING id`,
+    [params.payoutId],
+  );
+
+  await recordAudit(client, {
+    actorId: params.actorId,
+    actorRole: params.actorRole,
+    action: 'commission.payout_refused',
+    entityType: 'commission_payout',
+    entityId: params.payoutId,
+    newValue: {
+      returnedToEligible: included.length,
+      clawbackRestored: restored.length,
+    },
+    reason: params.reason,
+  });
+
+  /*
+   * A refusal the agent is never told about is not a decision they can respond
+   * to. The money stays in their available balance, so the message says that
+   * too — the request was declined, not the earnings.
+   */
+  await queueNotification(client, {
+    event: 'COMMISSION_PAYOUT_REFUSED',
+    agentId: payout.agent_id,
+    variables: { reference: refusedReference, reason: params.reason },
+    entityType: 'commission_payout',
+    entityId: params.payoutId,
+  });
+
+  return { returnedToEligible: included.length, clawbackRestored: restored.length };
+}
+
+/**
+ * Record that the bank did not make an approved transfer.
+ *
+ * `commission_payouts.status` allows FAILED and PROCESSING, and nothing wrote
+ * either. `completePayout` took a bank reference and marked the payout PAID,
+ * so an approved payout the bank refused — a closed account, a name mismatch,
+ * a rejected batch — had exactly two homes: left APPROVED for good, where the
+ * commissions in it stay APPROVED and `requestPayout`, which selects only
+ * ELIGIBLE, can never pick them up again; or marked PAID, which says a bank
+ * transfer happened when it did not.
+ *
+ * Neither is acceptable, and the second is the one somebody under pressure
+ * would choose. So a refused transfer says so: the payout is FAILED with the
+ * bank's reason on it, and the commissions go back to ELIGIBLE with any
+ * clawback restored, exactly as a payout an officer refused does. What the
+ * agent earned is payable again, and what they owe is owed again.
+ *
+ * PROCESSING stays unwritten, and deliberately: it describes a transfer handed
+ * to a bank and not yet confirmed, and this platform has no payout integration
+ * to hand one to. An officer makes the transfer and records the reference. A
+ * state for a machine that does not exist would be a state nothing could ever
+ * move out of.
+ */
+export async function failPayout(params: {
+  payoutId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ returnedToEligible: number; clawbackRestored: number }> {
+  return withTransaction(async (client) => {
+    const payout = await queryOne<{ id: string; status: string }>(
+      client,
+      'SELECT id, status FROM commission_payouts WHERE id = $1 FOR UPDATE',
+      [params.payoutId],
+    );
+    if (!payout) throw notFound('That payout');
+    if (payout.status !== 'APPROVED') {
+      throw conflict(
+        'PAYOUT_NOT_IN_FLIGHT',
+        `This payout is ${payout.status.toLowerCase()}, so there is no transfer to have failed.`,
+        payout.status === 'PAID'
+          ? 'A payout that was paid and then reversed by the bank is a reversal, not a failure.'
+          : undefined,
+      );
+    }
+
+    const failed = await queryOne<{ agent_id: string; payout_reference: string }>(
+      client,
+      `UPDATE commission_payouts SET status = 'FAILED', failure_reason = $2 WHERE id = $1
+        RETURNING agent_id, payout_reference`,
+      [params.payoutId, params.reason],
+    );
+
+    const included = await query<{ id: string }>(
+      client,
+      `SELECT id FROM commissions WHERE payout_id = $1 AND status = 'APPROVED' FOR UPDATE`,
+      [params.payoutId],
+    );
+    for (const commission of included) {
+      await transitionCommission(client, {
+        commissionId: commission.id,
+        to: 'ELIGIBLE',
+        reason: `Bank transfer failed: ${params.reason}`,
+        actorId: params.actorId,
+      });
+    }
+    await client.query(
+      `UPDATE commissions SET payout_id = NULL, approved_at = NULL, approved_by = NULL
+        WHERE payout_id = $1 AND status = 'ELIGIBLE'`,
+      [params.payoutId],
+    );
+
+    const restored = await query<{ id: string }>(
+      client,
+      `UPDATE commissions SET recovered_at = NULL, recovered_by_payout_id = NULL
+        WHERE recovered_by_payout_id = $1
+        RETURNING id`,
+      [params.payoutId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'commission.payout_failed',
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
+      oldValue: { status: 'APPROVED' },
+      newValue: {
+        status: 'FAILED',
+        returnedToEligible: included.length,
+        clawbackRestored: restored.length,
+      },
+      reason: params.reason,
+    });
+
+    /*
+     * The message that matters more than the successful one.
+     *
+     * A bounced transfer is almost always wrong account details, which only the
+     * agent can correct — and until somebody tells them, "the bank refused my
+     * account" is indistinguishable from "PSIRS did not pay me". The money went
+     * back to ELIGIBLE a few lines above, so the notification says so: an agent
+     * told only that their payout failed reasonably concludes it is gone.
+     */
+    await queueNotification(client, {
+      event: 'COMMISSION_PAYOUT_FAILED',
+      agentId: failed!.agent_id,
+      variables: { reference: failed!.payout_reference, reason: params.reason },
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
+    });
+
+    return { returnedToEligible: included.length, clawbackRestored: restored.length };
+  });
+}
+
+/**
  * Complete an approved payout by recording the bank transfer reference.
  * PRD §28: no commission is marked paid without one.
  */
@@ -611,25 +885,70 @@ export async function completePayout(params: {
   actorRole: string;
 }): Promise<void> {
   await withTransaction(async (client) => {
-    const payout = await queryOne<{ id: string; status: string; approval_id: string | null }>(
+    const payout = await queryOne<{
+      id: string;
+      status: string;
+      approval_id: string | null;
+      bank_reference: string | null;
+    }>(
       client,
-      'SELECT id, status, approval_id FROM commission_payouts WHERE id = $1 FOR UPDATE',
+      `SELECT id, status, approval_id, bank_reference
+         FROM commission_payouts WHERE id = $1 FOR UPDATE`,
       [params.payoutId],
     );
     if (!payout) throw notFound('That payout');
 
-    if (payout.status !== 'APPROVED') {
+    /*
+     * Already paid is not "not yet approved", and this said the second.
+     *
+     * One sentence covered all five refusable states: "This payout is
+     * ${status} and cannot be marked as paid. It must be approved first."
+     * A payout only reaches APPROVED from REQUESTED — `approvePayout`
+     * refuses anything else — so that instruction is true for exactly one
+     * of the five, and for PAID it reads:
+     *
+     *   "This payout is paid and cannot be marked as paid. It must be
+     *    approved first."
+     *
+     * The first clause contradicts itself and the second sends an officer to
+     * do something impossible. The reading it invites is the dangerous one:
+     * that the payment did not register. An officer who believes that raises
+     * the payout again, and an agent is paid their commission twice.
+     *
+     * Which is not a remote case. It is what a double-click does, and what a
+     * lost reply on a slow connection does — the two moments this sentence
+     * exists for. The other three transitions in this file already say it
+     * properly ("This payout is already X and cannot be refused"); only this
+     * one welded on a next step that does not hold.
+     *
+     * The bank reference goes with it, because the officer's actual question
+     * is "did my payment register?" and the recorded reference answers it.
+     */
+    if (payout.status === 'PAID') {
       throw conflict(
-        'PAYOUT_NOT_APPROVED',
-        `This payout is ${payout.status.toLowerCase()} and cannot be marked as paid. ` +
-          'It must be approved first.',
+        'PAYOUT_ALREADY_PAID',
+        payout.bank_reference
+          ? `This payout was already marked as paid, against bank reference ${payout.bank_reference}.`
+          : 'This payout was already marked as paid.',
+        'Nothing further is needed. Do not raise it again.',
       );
     }
 
-    await client.query(
+    if (payout.status !== 'APPROVED') {
+      throw conflict(
+        'PAYOUT_NOT_APPROVED',
+        `This payout is ${payout.status.toLowerCase()} and cannot be marked as paid.`,
+        // Only from REQUESTED, which is the one state approval accepts.
+        payout.status === 'REQUESTED' ? 'It must be approved first.' : undefined,
+      );
+    }
+
+    const paid = await queryOne<{ agent_id: string; amount_kobo: string }>(
+      client,
       `UPDATE commission_payouts
           SET status = 'PAID', bank_reference = $2, paid_at = now()
-        WHERE id = $1`,
+        WHERE id = $1
+        RETURNING agent_id, amount_kobo::text AS amount_kobo`,
       [params.payoutId, params.bankReference],
     );
 
@@ -655,6 +974,25 @@ export async function completePayout(params: {
       entityType: 'commission_payout',
       entityId: params.payoutId,
       newValue: { bankReference: params.bankReference, commissionCount: commissions.length },
+    });
+
+    /*
+     * And tell the agent, which nothing in this file used to do.
+     *
+     * A `COMMISSION_PAID` template has been seeded since the beginning and
+     * nothing ever queued it, so an agent learned their payout had arrived by
+     * checking their bank. The audit entry above records the same fact for
+     * somebody who will never read it on the agent's behalf.
+     */
+    await queueNotification(client, {
+      event: 'COMMISSION_PAID',
+      agentId: paid!.agent_id,
+      variables: {
+        amount: formatNaira(BigInt(paid!.amount_kobo)),
+        reference: params.bankReference,
+      },
+      entityType: 'commission_payout',
+      entityId: params.payoutId,
     });
   });
 }

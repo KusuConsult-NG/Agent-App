@@ -14,8 +14,12 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
+import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
+import { PostingPanel } from './Organisation';
+import { MyAccessScreen } from './MyAccess';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel, localName, type TranslationDictionary } from '@psirs/shared';
 
 interface PortalUser {
   id: string;
@@ -28,27 +32,35 @@ interface PortalUser {
 }
 
 /**
- * What each role is for, in one line.
+ * What each role is for, in one line, in the language being read.
  *
  * Deliberately about responsibilities rather than permission names: the
  * administrator choosing a role is deciding what somebody's job is, and
  * `approval:authorise` is not a job.
+ *
+ * This was a module-level object of English sentences, which is a shape no
+ * pattern in the translation check looks at — so it stayed English through
+ * two sweeps while the labels around it were translated.
  */
-const ROLE_SUMMARY: Record<string, string> = {
-  admin: 'Administers agents, users and the revenue catalogue. Cannot authorise payouts.',
-  supervisor: 'Authorises approvals and oversees agents in their territory.',
-  revenue_officer: 'Registers and corrects taxpayer records, and reviews approvals.',
-  finance_officer: 'Reconciles settlements and authorises commission payouts.',
-  auditor: 'Reads everything and changes nothing.',
-};
+function roleSummary(t: TranslationDictionary, role: string): string {
+  const summaries: Record<string, string> = {
+    admin: t.ofcUaRoleAdmin,
+    supervisor: t.ofcUaRoleSupervisor,
+    revenue_officer: t.ofcUaRoleRevenueOfficer,
+    finance_officer: t.ofcUaRoleFinanceOfficer,
+    auditor: t.ofcUaRoleAuditor,
+  };
+  return summaries[role] ?? '';
+}
 
 const ASSIGNABLE = ['admin', 'supervisor', 'revenue_officer', 'finance_officer', 'auditor'];
 
-const readable = (role: string) => role.replace(/_/g, ' ');
+type AccountStatus = 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
 
 interface Territory {
   id: string;
   name: string;
+  name_ha: string | null;
   code: string;
   lga_name: string;
 }
@@ -64,7 +76,9 @@ interface Territory {
 const TERRITORY_SCOPED_ROLES = ['supervisor'];
 
 export function UserAccessScreen({ user }: { user: User }) {
+  const { lang, t } = usePortalI18n();
   const [users, setUsers] = useState<PortalUser[] | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<PortalUser | null>(null);
@@ -78,27 +92,42 @@ export function UserAccessScreen({ user }: { user: User }) {
   } | null>(null);
   const [chosenTerritories, setChosenTerritories] = useState<string[]>([]);
   const [coverageReason, setCoverageReason] = useState('');
+  const [closing, setClosing] = useState<PortalUser | null>(null);
+  // Whose sessions and devices are being looked at, if not the caller's.
+  const [viewingAccess, setViewingAccess] = useState<PortalUser | null>(null);
+  const [chosenStatus, setChosenStatus] = useState<AccountStatus>('SUSPENDED');
+  const [statusReason, setStatusReason] = useState('');
 
   const load = useCallback(() => {
     api
       .get<{ users: PortalUser[] }>('/government/users')
-      .then((data) => setUsers(data.users))
+      .then((data) => {
+        setUsers(data.users);
+        setLoadError(null);
+      })
+      /*
+       * A register that could not be read, kept apart from an action that was
+       * refused. The catch used to write `[]`, and an empty table prints "No
+       * officers are recorded." — on the screen that answers who can sign in
+       * to this platform at all. An administrator checking whether a departed
+       * colleague still has access was one failed request away from being
+       * told nobody does.
+       */
       .catch((caught) => {
-        setUsers([]);
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
   useEffect(load, [load]);
 
   const blockedBecause = ((): string | null => {
-    if (!chosenRole) return 'Choose the role this officer should hold.';
+    if (!chosenRole) return t.ofcUaChooseRoleFirst;
     if (editing && chosenRole === editing.role) {
-      return `${editing.full_name} already holds the ${readable(chosenRole)} role.`;
+      return t.ofcUaAlreadyHolds
+        .replace('{{name}}', editing.full_name)
+        .replace('{{role}}', enumLabel(chosenRole, t));
     }
-    if (reason.trim().length < 10) {
-      return 'Say why this access is changing, in at least 10 characters. It is the only record of why.';
-    }
+    if (reason.trim().length < 10) return t.ofcUaSayWhy;
     return null;
   })();
 
@@ -112,20 +141,79 @@ export function UserAccessScreen({ user }: { user: User }) {
       // into any level of access at all, so it needs a fresh code and not
       // merely a live session.
       await stepUp('user.role.change', user.phone);
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ newRole: string; sessionsEnded: number }>(
         `/government/users/${editing.id}/role`,
         { role: chosenRole, reason: reason.trim() },
       );
-      setMessage(result.message);
+      /*
+       * Composed here, from what the endpoint returns.
+       *
+       * The server sends a `message` and this screen rendered it: an English
+       * sentence, on a screen offering Hausa, naming the new role as
+       * `finance officer` — the code with its underscores swapped for spaces.
+       * This screen's own premise is that "an access decision made from a
+       * label alone is a guess", and then its confirmation showed something
+       * that is not even the label.
+       *
+       * `enumLabel` is what the rest of the screen already uses for a role,
+       * so the sentence an administrator reads afterwards names it the same
+       * way the control they just used did.
+       */
+      setMessage(
+        `${t.ofcUaNowRole
+          .replace('{{name}}', editing.full_name)
+          .replace('{{role}}', enumLabel(result.newRole, t))} ` +
+          (result.sessionsEnded > 0
+            ? t.ofcUaSessionsEnded.replace('{{n}}', String(result.sessionsEnded))
+            : t.ofcUaNoOpenSessions),
+      );
       setEditing(null);
       setChosenRole('');
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Closing an account, which is the half a role change could never cover.
+   *
+   * Every role can still sign in, so moving a departed officer to auditor left
+   * them reading taxpayer records for as long as they kept the password. This
+   * is the control that stops the sign-in itself, and it asks for the same
+   * fresh code a role change does.
+   */
+  async function submitStatus() {
+    if (!closing || statusReason.trim().length < 10) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await stepUp('user.role.change', user.phone);
+      const result = await api.post<{ status: AccountStatus; sessionsEnded: number }>(
+        `/government/users/${closing.id}/status`,
+        { status: chosenStatus, reason: statusReason.trim() },
+      );
+      // Same correction as the role change above; the status was arriving as
+      // `suspended`, the enum lowercased, rather than as its label.
+      setMessage(
+        result.status === 'ACTIVE'
+          ? t.ofcUaCanSignInAgain.replace('{{name}}', closing.full_name)
+          : `${t.ofcUaAccountIsNow
+              .replace('{{name}}', closing.full_name)
+              .replace('{{status}}', enumLabel(result.status, t))} ` +
+            (result.sessionsEnded > 0
+              ? t.ofcUaSessionsEndedNow.replace('{{n}}', String(result.sessionsEnded))
+              : t.ofcUaNoOpenSessions),
+      );
+      setClosing(null);
+      setStatusReason('');
+      load();
+    } catch (caught) {
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -145,7 +233,7 @@ export function UserAccessScreen({ user }: { user: User }) {
         setChosenTerritories(data.assigned.map((t) => t.id));
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }
 
@@ -155,72 +243,96 @@ export function UserAccessScreen({ user }: { user: User }) {
     setError(null);
     setMessage(null);
     try {
-      const result = await api.post<{ message: string }>(
+      const result = await api.post<{ covers: number }>(
         `/government/users/${coverage.id}/territories`,
         { territoryIds: chosenTerritories, reason: coverageReason.trim() },
       );
-      setMessage(result.message);
+      setMessage(
+        result.covers === 0
+          ? t.ofcUaCoversNothing.replace('{{name}}', coverage.full_name)
+          : t.ofcUaCoversTerritories
+              .replace('{{name}}', coverage.full_name)
+              .replace('{{n}}', String(result.covers)),
+      );
       setCoverage(null);
       setTerritories(null);
       setCoverageReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
   }
 
-  if (!users) return <Loading rows={5} />;
+  if (!users && !loadError) return <Loading rows={5} />;
 
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Officer access</h2>
-        <p className="card__hint">
-          Changing a role signs the officer out of every device immediately, because their
-          current access travels in the session they are holding. They sign in again with the
-          new role. Agents are not listed: their access follows the clearance pipeline, not a
-          role.
-        </p>
+        <h2 className="card__title">{t.ofcNavUsers}</h2>
+        <p className="card__hint">{t.ofcUaRoleChangeIntro}</p>
       </div>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
+      {/*
+        * An administrator looking at somebody else's sessions and devices.
+        *
+        * `GET /government/users/:id/sessions` has been permissioned and
+        * documented since it was written, and nothing called it. Blocking a
+        * machine is the control that needs it — its own comment gives the case
+        * as "a laptop already in somebody else's hands" — and until this the
+        * only devices ever loaded were the administrator's own.
+        */}
+      {viewingAccess && (
+        <>
+          <div className="card">
+            <button type="button" className="small secondary" onClick={() => setViewingAccess(null)}>
+              {t.ofcUaBackToMine}
+            </button>
+          </div>
+          <MyAccessScreen user={user} officer={viewingAccess} />
+        </>
+      )}
+
       {editing && (
         <div className="card">
-          <h2 className="card__title">Change access — {editing.full_name}</h2>
+          <h2 className="card__title">
+            {t.ofcUaChangeAccessFor.replace('{{name}}', editing.full_name)}
+          </h2>
           <p className="card__hint">
-            Currently {readable(editing.role)}. {ROLE_SUMMARY[editing.role] ?? ''}
+            {t.ofcUaCurrentlyRole.replace('{{role}}', enumLabel(editing.role, t))}{' '}
+            {roleSummary(t, editing.role)}
           </p>
 
           <div className="field">
-            <label htmlFor="new-role">New role</label>
+            <label htmlFor="new-role">{t.ofcUaNewRole}</label>
             <select
               id="new-role"
               value={chosenRole}
               onChange={(event) => setChosenRole(event.target.value)}
             >
-              <option value="">Select a role</option>
+              <option value="">{t.ofcUaSelectRole}</option>
               {ASSIGNABLE.map((role) => (
                 <option key={role} value={role}>
-                  {readable(role)}
+                  {enumLabel(role, t)}
                 </option>
               ))}
             </select>
             {chosenRole && (
-              <p className="field__hint">{ROLE_SUMMARY[chosenRole] ?? ''}</p>
+              <p className="field__hint">{roleSummary(t, chosenRole)}</p>
             )}
           </div>
 
           <div className="field">
-            <label htmlFor="role-reason">Why this is changing</label>
+            <label htmlFor="role-reason">{t.ofcUaWhyChanging}</label>
             <textarea
               id="role-reason"
               value={reason}
               rows={3}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Transferred to the audit office from 1 September."
+              placeholder={t.ofcUaSampleTransferred}
             />
           </div>
 
@@ -232,7 +344,7 @@ export function UserAccessScreen({ user }: { user: User }) {
 
           <div className="button-row">
             <button type="button" disabled={busy || blockedBecause !== null} onClick={submit}>
-              {busy ? 'Changing…' : 'Change access and sign them out'}
+              {busy ? t.ofcUaChanging : t.ofcUaChangeAccessAndSign}
             </button>
             <button
               type="button"
@@ -242,32 +354,92 @@ export function UserAccessScreen({ user }: { user: User }) {
                 setChosenRole('');
                 setReason('');
               }}
+            >{t.camCancel}</button>
+          </div>
+        </div>
+      )}
+
+      {closing && (
+        <div className="card">
+          <h2 className="card__title">
+            {t.ofcUaAccountFor.replace('{{name}}', closing.full_name)}
+          </h2>
+          <p className="card__hint">{t.ofcUaSuspendOrCloseBody}</p>
+
+          <div className="field">
+            <label htmlFor="new-status">{t.ofcUaNewAccountStatus}</label>
+            <select
+              id="new-status"
+              value={chosenStatus}
+              onChange={(event) => setChosenStatus(event.target.value as AccountStatus)}
             >
-              Cancel
+              <option value="SUSPENDED">{t.ofcUaSuspendedPending}</option>
+              <option value="CLOSED">{t.ofcUaClosedLeft}</option>
+              <option value="ACTIVE">{t.ofcUaActiveLift}</option>
+            </select>
+          </div>
+
+          <div className="field">
+            <label htmlFor="status-reason">{t.ofcUaWhyChanging}</label>
+            <textarea
+              id="status-reason"
+              value={statusReason}
+              rows={3}
+              onChange={(event) => setStatusReason(event.target.value)}
+              placeholder={t.ofcUaSampleLeft}
+            />
+            <ReasonRule value={statusReason} minimum={10} />
+          </div>
+
+          {chosenStatus === 'CLOSED' && (
+            <Alert kind="warning" title="ofcUaCannotBeUndone">
+              <p style={{ margin: 0 }}>
+                {t.ofcUaCannotReopenBody.replace('{{name}}', closing.full_name)}
+              </p>
+            </Alert>
+          )}
+
+          <div className="button-row">
+            <button
+              type="button"
+              disabled={busy || statusReason.trim().length < 10}
+              onClick={submitStatus}
+            >
+              {busy
+                ? t.agEnSaving
+                : chosenStatus === 'ACTIVE'
+                  ? t.ofcUaLetThemSignIn
+                  : t.ofcUaSignThemOutAnd}
             </button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => {
+                setClosing(null);
+                setStatusReason('');
+              }}
+            >{t.camCancel}</button>
           </div>
         </div>
       )}
 
       {coverage && (
         <div className="card">
-          <h2 className="card__title">Territories — {coverage.full_name}</h2>
-          <p className="card__hint">
-            A supervisor sees revenue for the territories assigned here and no others. With none
-            assigned they see nothing at all — which is deliberate, so an account nobody has
-            finished setting up is the least revealing one rather than the most.
-          </p>
+          <h2 className="card__title">
+            {t.ofcUaTerritoriesFor.replace('{{name}}', coverage.full_name)}
+          </h2>
+          <p className="card__hint">{t.ofcUaTerritoryIntro}</p>
 
           {!territories ? (
             <Loading rows={3} />
           ) : (
             <>
               <div className="field">
-                <span className="field__label">Territories covered</span>
+                <span className="field__label">{t.ofcUaTerritoriesCovered}</span>
                 {territories.available.length === 0 ? (
-                  <p className="field__hint">No active territory has been created yet.</p>
+                  <p className="field__hint">{t.ofcUaNoTerritory}</p>
                 ) : (
-                  <ul className="list" style={{ maxHeight: 260, overflowY: 'auto' }}>
+                  <ul className="list list--rows" style={{ maxHeight: 260, overflowY: 'auto' }}>
                     {territories.available.map((territory) => (
                       <li key={territory.id}>
                         <label className="list__item" style={{ cursor: 'pointer' }}>
@@ -283,7 +455,7 @@ export function UserAccessScreen({ user }: { user: User }) {
                             }
                           />
                           <div className="list__body">
-                            <p className="list__title">{territory.name}</p>
+                            <p className="list__title">{localName(lang, territory.name, territory.name_ha)}</p>
                             <p className="list__meta">
                               {territory.lga_name} · {territory.code}
                             </p>
@@ -296,21 +468,21 @@ export function UserAccessScreen({ user }: { user: User }) {
               </div>
 
               <div className="field">
-                <label htmlFor="coverage-reason">Why this is changing</label>
+                <label htmlFor="coverage-reason">{t.ofcUaWhyChanging}</label>
                 <textarea
                   id="coverage-reason"
                   value={coverageReason}
                   rows={3}
                   onChange={(event) => setCoverageReason(event.target.value)}
-                  placeholder="Taking over the Jos North market round from 1 September."
+                  placeholder={t.ofcUaSampleTakingOver}
                 />
+                <ReasonRule value={coverageReason} minimum={10} />
               </div>
 
               {chosenTerritories.length === 0 && (
-                <Alert kind="warning" title="This will leave them covering nothing">
+                <Alert kind="warning" title="ofcUaWillCoverNothing">
                   <p style={{ margin: 0 }}>
-                    {coverage.full_name} will see no revenue figures at all until a territory is
-                    assigned.
+                    {t.ofcUaCoverNothingBody.replace('{{name}}', coverage.full_name)}
                   </p>
                 </Alert>
               )}
@@ -321,47 +493,70 @@ export function UserAccessScreen({ user }: { user: User }) {
                   disabled={busy || coverageReason.trim().length < 10}
                   onClick={submitCoverage}
                 >
-                  {busy ? 'Saving…' : 'Save territories'}
+                  {busy ? t.agEnSaving : t.ofcUaSaveTerritories}
                 </button>
-                <button type="button" className="secondary" onClick={() => setCoverage(null)}>
-                  Cancel
-                </button>
+                <button type="button" className="secondary" onClick={() => setCoverage(null)}>{t.camCancel}</button>
               </div>
             </>
           )}
         </div>
       )}
 
+      {/*
+        * Where this officer is posted, and the dated record of every move.
+        *
+        * Beside the territory panel because an administrator opening one
+        * usually wants the other: territories are what an officer may see, a
+        * posting is who they work with and who answers for them, and moving
+        * somebody normally means both.
+        */}
+      {coverage && (
+        <PostingPanel
+          officerId={coverage.id}
+          onChanged={async () => {
+            await load();
+          }}
+        />
+      )}
+
+      {loadError && (
+        <div className="card">
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </div>
+      )}
+
+      {!loadError && (
       <div className="card card--flush">
         <Table
           columns={[
-            { key: 'full_name', label: 'Officer' },
-            { key: 'phone', label: 'Phone' },
+            { key: 'full_name', label: 'ofcRhOfficer' },
+            { key: 'phone', label: 'tpPhone' },
             {
               key: 'role',
-              label: 'Role',
+              label: 'ofcRhRole',
               render: (row) => (
                 <>
                   <Badge status={row.role.toUpperCase()} />{' '}
-                  <span className="list__meta">{ROLE_SUMMARY[row.role] ?? ''}</span>
+                  <span className="list__meta">{roleSummary(t, row.role)}</span>
                 </>
               ),
             },
-            { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+            { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
             {
               key: 'last_login_at',
-              label: 'Last signed in',
-              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : 'Never'),
+              label: 'ofcUaLastSignedIn',
+              render: (row) => (row.last_login_at ? formatDateTime(row.last_login_at) : t.ofcArNeverPaid),
             },
             {
               key: 'action',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 row.isSelf ? (
                   // Greyed rather than hidden: an administrator looking for
                   // their own row should find it and see why it cannot be
                   // changed, instead of wondering where it went.
-                  <span className="list__meta">Your own access</span>
+                  <span className="list__meta">{t.ofcUaYourOwnAccess}</span>
                 ) : (
                   <>
                     <button
@@ -373,26 +568,43 @@ export function UserAccessScreen({ user }: { user: User }) {
                         setReason('');
                         setMessage(null);
                       }}
-                    >
-                      Change access
-                    </button>{' '}
+                    >{t.ofcUaChangeAccess}</button>{' '}
+                    <button
+                      type="button"
+                      className="small secondary"
+                      onClick={() => {
+                        setViewingAccess(row as PortalUser);
+                        setMessage(null);
+                      }}
+                    >{t.ofcUaTheirAccess}</button>{' '}
                     {TERRITORY_SCOPED_ROLES.includes(row.role) && (
                       <button
                         type="button"
                         className="small secondary"
                         onClick={() => openCoverage(row as PortalUser)}
-                      >
-                        Territories
-                      </button>
+                      >{t.ofcUaTerritories}</button>
+                    )}{' '}
+                    {row.status !== 'CLOSED' && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => {
+                          setClosing(row as PortalUser);
+                          setChosenStatus(row.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED');
+                          setStatusReason('');
+                          setMessage(null);
+                        }}
+                      >{t.ofcUaAccount}</button>
                     )}
                   </>
                 ),
             },
           ]}
-          rows={users}
-          empty="No officers are recorded."
+          rows={users ?? []}
+          empty="ofcNoneOfficersRecorded"
         />
       </div>
+      )}
     </>
   );
 }

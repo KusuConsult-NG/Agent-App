@@ -9,8 +9,19 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Empty, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel, localName } from '@psirs/shared';
 
 interface RoundRow {
   id: string;
@@ -19,6 +30,7 @@ interface RoundRow {
   total_quantity: string;
   status: string;
   programme_name: string;
+  programme_name_ha: string | null;
   awarded_quantity: string;
   awarded_count: string;
   collected_count: string;
@@ -35,33 +47,76 @@ interface GroupRow {
   leader_name: string;
   leader_phone: string;
   attested_members: string;
+  tax_role: string;
 }
 
-const readable = (value: string | null) =>
-  value ? value.replace(/_/g, ' ').toLowerCase() : '—';
+/**
+ * The one place a value needs different words from the enum dictionary.
+ *
+ * That dictionary is keyed by value, not by column, on the reasoning that the
+ * same word means the same thing wherever it appears — and it says that where
+ * a value ever needs two readings, the exception should be written down where
+ * it is visible. This is that exception. NONE is a premises on an enumeration
+ * observation ("No fixed premises") and a part in enumeration on a group, and
+ * a group with no part in enumeration has no premises to speak of.
+ */
+function taxRoleLabel(taxRole: string, t: ReturnType<typeof usePortalI18n>['t']): string {
+  if (taxRole === 'NONE') return t.ofcGpTaxRoleNone;
+  return enumLabel(taxRole, t);
+}
+
+interface MemberRow {
+  id: string;
+  member_name: string | null;
+  tin: string | null;
+  status: string;
+  attested_at: string | null;
+  rejection_reason: string | null;
+  left_at: string | null;
+  left_reason: string | null;
+}
+
 
 export function GroupsScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { lang, t } = usePortalI18n();
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const [rounds, setRounds] = useState<RoundRow[] | null>(null);
+  const [roundsError, setRoundsError] = useState<ApiError | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [reason, setReason] = useState('');
   const [attestationLink, setAttestationLink] = useState<{ name: string; url: string } | null>(null);
+  const [members, setMembers] = useState<{ group: GroupRow; rows: MemberRow[] } | null>(null);
+  const [departureReason, setDepartureReason] = useState('');
 
   const load = useCallback(() => {
     api
       .get<{ groups: GroupRow[] }>(`/groups${status ? `?status=${status}` : ''}`)
       .then((result) => setGroups(result.groups))
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
+    /*
+     * An empty rounds list has two causes and only one is silent.
+     *
+     * Without `allocation:read:all` the list is never fetched and the section
+     * is not drawn — correct, and why the else branch below sets `[]`. With
+     * the permission and a failed read it used to set `[]` too, and the
+     * section printed "No distributions have been set up yet." An officer
+     * told that sets one up, and a second distribution round against the same
+     * programme is not a duplicate row: it is fertiliser awarded twice.
+     */
     if (can('allocation:read:all')) {
+      setRoundsError(null);
       api
         .get<{ rounds: RoundRow[] }>('/allocations/rounds')
         .then((result) => setRounds(result.rounds))
-        .catch(() => setRounds([]));
+        .catch((caught) => {
+          setRoundsError(asApiError(caught));
+          setRounds([]);
+        });
     } else {
       setRounds([]);
     }
@@ -69,15 +124,17 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
   useEffect(load, [load]);
 
-  async function act(fn: () => Promise<string>) {
+  async function act(fn: () => Promise<string | null>) {
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      setMessage(await fn());
+      const note = await fn();
+      // Opening a panel is not news; only say something when something changed.
+      if (note) setMessage(note);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -91,22 +148,19 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
     <>
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Done">
+        <Alert kind="success" title="ofcSpDone">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
 
       {attestationLink && (
-        <Alert kind="info" title={`Confirmation link for ${attestationLink.name}`}>
-          <p style={{ margin: '0 0 8px' }}>
-            Send this to the group leader. It is shown once — PSIRS stores only a hash of it, so
-            it cannot be read back later. Request another if it is lost.
-          </p>
+        <Alert kind="info" title={{ text: t.ofcGpConfirmationLinkFor.replace('{{group}}', attestationLink.name) }}>
+          <p style={{ margin: '0 0 8px' }}>{t.ofcGpLeaderCodeOnce}</p>
           <code
             style={{
               display: 'block',
               wordBreak: 'break-all',
-              fontSize: '0.78rem',
+              fontSize: 'var(--text-sm)',
               background: 'var(--surface-2, #f3f4f6)',
               padding: '8px 10px',
               borderRadius: 8,
@@ -119,33 +173,30 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
 
       {pending.length > 0 && can('group:manage') && (
         <div className="card">
-          <h2 className="card__title">Waiting for a decision</h2>
-          <p className="card__hint">
-            An agent has recorded these groups in the field. Members cannot be added until a group
-            is approved, so nothing else happens while they sit here.
-          </p>
+          <h2 className="card__title">{t.ofcGpWaitingDecision}</h2>
+          <p className="card__hint">{t.ofcGpWaitingIntro}</p>
 
           <div className="field">
-            <label htmlFor="group-reason">Reason (minimum 10 characters)</label>
+            <label htmlFor="group-reason">{t.ofcAgReasonMinimum}</label>
             <textarea
               id="group-reason"
               rows={2}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
-              placeholder="Checked against the ministry register of cooperatives."
+              placeholder={t.ofcGpSampleNote}
             />
           </div>
 
           <Table
             columns={[
-              { key: 'code', label: 'Code' },
-              { key: 'name', label: 'Group' },
-              { key: 'group_type', label: 'Type', render: (row) => readable(row.group_type) },
-              { key: 'lga_name', label: 'LGA' },
-              { key: 'leader_name', label: 'Leader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
+              { key: 'code', label: 'ofcAgCode' },
+              { key: 'name', label: 'pubAttestGroup' },
+              { key: 'group_type', label: 'tpType', render: (row) => enumLabel(row.group_type, t) },
+              { key: 'lga_name', label: 'tpLgaShort' },
+              { key: 'leader_name', label: 'grpLeader', render: (row) => `${row.leader_name} · ${row.leader_phone}` },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                     <button
@@ -158,12 +209,10 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'APPROVE',
                             reason,
                           });
-                          return `${row.name} approved. Members can now be recorded.`;
+                          return t.ofcGrApproved.replace('{{name}}', row.name);
                         })
                       }
-                    >
-                      Approve
-                    </button>
+                    >{t.ofcRhApprove}</button>
                     <button
                       type="button"
                       className="small danger"
@@ -174,102 +223,244 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                             decision: 'SUSPEND',
                             reason,
                           });
-                          return `${row.name} suspended.`;
+                          return t.ofcGrGroupSuspended.replace('{{name}}', row.name);
                         })
                       }
-                    >
-                      Suspend
-                    </button>
+                    >{t.ofcAgSuspend}</button>
                   </div>
                 ),
               },
             ]}
             rows={pending}
-            empty="Nothing waiting."
+            empty="ofcNoneNothingWaiting"
           />
         </div>
       )}
 
       {can('allocation:read:all') && rounds !== null && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Distributions</h2>
-            <p className="card__hint">
-              Fertiliser, seed and other allocations with a fixed quantity behind them. Open one to
-              see who has been awarded and who has actually collected.
-            </p>
+          <div className="card__pad">
+            <h2 className="card__title">{t.ofcGpDistributions}</h2>
+            <p className="card__hint">{t.ofcGpDistributionsIntro}</p>
           </div>
+          {roundsError ? (
+            <div className="card__pad">
+              <ErrorAlert error={roundsError} />
+              <button type="button" className="secondary" onClick={load}>
+                {t.actionTryAgain}
+              </button>
+            </div>
+          ) : (
           <Table
             columns={[
-              { key: 'name', label: 'Round' },
-              { key: 'programme_name', label: 'Programme' },
+              { key: 'name', label: 'ofcAlRound' },
+              { key: 'programme_name', label: 'ofcAlProgramme', render: (row: RoundRow) => localName(lang, row.programme_name, row.programme_name_ha) },
               {
                 key: 'total_quantity',
-                label: 'Total',
-                render: (row) => `${row.total_quantity} ${readable(row.unit)}`,
+                label: 'ofcGpTotal',
+                render: (row) => `${row.total_quantity} ${enumLabel(row.unit, t)}`,
               },
               {
                 key: 'awarded_quantity',
-                label: 'Awarded',
-                render: (row) => `${row.awarded_quantity} (${row.awarded_count} people)`,
+                label: 'ofcGpAwarded',
+                render: (row) =>
+                  t.ofcGrQuantityPeople
+                    .replace('{{quantity}}', row.awarded_quantity)
+                    .replace('{{n}}', row.awarded_count),
               },
-              { key: 'collected_count', label: 'Collected' },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'collected_count', label: 'ofcPfCollected' },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'open',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <button
                     type="button"
                     className="small secondary"
                     onClick={() => navigate(`/allocations/${row.id}`)}
-                  >
-                    Open
-                  </button>
+                  >{t.ofcRhOpen}</button>
                 ),
               },
             ]}
             rows={rounds}
-            empty="No distributions have been set up yet."
+            empty="ofcNoneDistributionsSetUp"
           />
+          )}
         </div>
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Registered groups</h2>
-          <p className="card__hint">
-            Cooperatives, market associations and unions. The member count is confirmed
-            membership only — what an agent recorded but the leader has not yet confirmed does not
-            count towards anything.
-          </p>
+        <div className="card__pad">
+          <h2 className="card__title">{t.ofcGpRegisteredGroups}</h2>
+          <p className="card__hint">{t.ofcGpGroupsIntro}</p>
           <div className="field" style={{ maxWidth: 260 }}>
-            <label htmlFor="group-status">Status</label>
+            <label htmlFor="group-status">{t.appStatus}</label>
             <select
               id="group-status"
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="">All</option>
-              <option value="PENDING">Pending</option>
-              <option value="ACTIVE">Active</option>
-              <option value="SUSPENDED">Suspended</option>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="PENDING">{t.ofcAgPending}</option>
+              <option value="ACTIVE">{t.ofcAgActive}</option>
+              <option value="SUSPENDED">{t.ofcAgSuspendedStatus}</option>
             </select>
           </div>
         </div>
 
+      {members && (
+        <div className="card card--flush">
+          <div className="card__pad">
+            <div className="card__header">
+              <div>
+                <h2 className="card__title">
+                  {t.ofcGpMembersFor.replace('{{name}}', members.group.name)}
+                </h2>
+                <p className="card__hint">{t.ofcGpMembersIntro}</p>
+              </div>
+              <button type="button" className="small secondary" onClick={() => setMembers(null)}>{t.ofcKycClose}</button>
+            </div>
+
+            {can('group:manage') && (
+              <div className="field">
+                <label htmlFor="departure-reason">{t.ofcGpMembershipEnded}</label>
+                <textarea
+                  id="departure-reason"
+                  rows={2}
+                  value={departureReason}
+                  onChange={(event) => setDepartureReason(event.target.value)}
+                  placeholder={t.ofcGpSampleEnded}
+                />
+                <ReasonRule value={departureReason} minimum={5} />
+              </div>
+            )}
+          </div>
+
+          <Table
+            columns={[
+              { key: 'member_name', label: 'pubAttestYes', render: (row) => row.member_name ?? '—' },
+              { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+              {
+                key: 'left_reason',
+                label: 'ofcGpNote',
+                render: (row) => row.left_reason ?? row.rejection_reason ?? '—',
+              },
+              {
+                key: 'action',
+                label: { text: '' },
+                render: (row) =>
+                  can('group:manage') && (row.status === 'ATTESTED' || row.status === 'PENDING_ATTESTATION') ? (
+                    <button
+                      type="button"
+                      className="small danger"
+                      disabled={busy || departureReason.trim().length < 5}
+                      onClick={() =>
+                        act(async () => {
+                          await api.post<{ message: string }>(
+                            `/groups/${members.group.id}/members/${row.id}/departure`,
+                            { reason: departureReason },
+                          );
+                          const refreshed = await api.get<MemberRow[]>(
+                            `/groups/${members.group.id}/members`,
+                          );
+                          setMembers({ group: members.group, rows: refreshed });
+                          setDepartureReason('');
+                          /*
+                           * Both names are already on this screen — it is the
+                           * row the officer just acted on, in the group they
+                           * opened — so nothing has to be read back to say
+                           * what happened.
+                           */
+                          return t.ofcGpMemberLeft
+                            .replace('{{member}}', row.member_name ?? '')
+                            .replace('{{group}}', members.group.name);
+                        })
+                      }
+                    >
+                      {t.ofcGpRecordDeparture}
+                    </button>
+                  ) : null,
+              },
+            ]}
+            rows={members.rows}
+            empty="ofcNoneNobodyRecordedGroup"
+          />
+        </div>
+      )}
+
         <Table
           columns={[
-            { key: 'code', label: 'Code' },
-            { key: 'name', label: 'Group' },
-            { key: 'group_type', label: 'Type', render: (row) => readable(row.group_type) },
-            { key: 'economic_sector', label: 'Sector', render: (row) => readable(row.economic_sector) },
-            { key: 'lga_name', label: 'LGA' },
-            { key: 'attested_members', label: 'Confirmed members' },
-            { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+            { key: 'code', label: 'ofcAgCode' },
+            { key: 'name', label: 'pubAttestGroup' },
+            { key: 'group_type', label: 'tpType', render: (row) => enumLabel(row.group_type, t) },
+            { key: 'economic_sector', label: 'ofcGpSector', render: (row) => enumLabel(row.economic_sector, t) },
+            { key: 'lga_name', label: 'tpLgaShort' },
+            { key: 'attested_members', label: 'ofcGpConfirmedMembers' },
+            { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+            {
+              key: 'members',
+              label: { text: '' },
+              render: (row) =>
+                can('group:read:all') || can('group:read:own') ? (
+                  <button
+                    type="button"
+                    className="small secondary"
+                    onClick={() =>
+                      act(async () => {
+                        const rows = await api.get<MemberRow[]>(`/groups/${row.id}/members`);
+                        setMembers({ group: row, rows });
+                        return null;
+                      })
+                    }
+                  >{t.ofcGpMembers}</button>
+                ) : null,
+            },
+            {
+              /*
+               * What part this group plays in enumeration, and the control to
+               * change it.
+               *
+               * Shown as a column rather than buried in a detail screen
+               * because it is the answer to a question an officer asks about
+               * the list — which of these associations can contradict an
+               * agent's count — and a list that shows every group identically
+               * cannot answer it.
+               */
+              key: 'tax_role',
+              label: 'ofcGpTaxRole',
+              render: (row) =>
+                row.status === 'ACTIVE' && can('group:manage') ? (
+                  <select
+                    aria-label={`${t.ofcGpTaxRole} — ${row.name}`}
+                    value={row.tax_role}
+                    disabled={busy || reason.trim().length < 10}
+                    title={reason.trim().length < 10 ? t.ofcGpTaxRoleNeedsReason : undefined}
+                    onChange={(event) => {
+                      const taxRole = event.target.value;
+                      void act(async () => {
+                        await api.post(`/groups/${row.id}/tax-role`, { taxRole, reason });
+                        setGroups(
+                          (current) =>
+                            current?.map((g) =>
+                              g.id === row.id ? { ...g, tax_role: taxRole } : g,
+                            ) ?? current,
+                        );
+                        return `${row.name}: ${taxRoleLabel(taxRole, t)}`;
+                      });
+                    }}
+                  >
+                    <option value="NONE">{t.ofcGpTaxRoleNone}</option>
+                    <option value="ATTESTATION">{t.enumAttestation}</option>
+                    <option value="ENUMERATION">{t.enumEnumeration}</option>
+                  </select>
+                ) : (
+                  <span>{taxRoleLabel(row.tax_role, t)}</span>
+                ),
+            },
             {
               key: 'attest',
-              label: '',
+              label: { text: '' },
               render: (row) =>
                 row.status === 'ACTIVE' && can('group:manage') ? (
                   <button
@@ -282,17 +473,15 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
                           `/groups/${row.id}/attestation-request`,
                         );
                         setAttestationLink({ name: row.name, url: result.invitationUrl });
-                        return 'Confirmation link created.';
+                        return t.ofcGpConfirmationLinkCreated;
                       })
                     }
-                  >
-                    Ask the leader
-                  </button>
+                  >{t.ofcGpAskLeader}</button>
                 ) : null,
             },
           ]}
           rows={groups}
-          empty="No groups have been registered yet."
+          empty="ofcNoneGroupsRegistered"
         />
       </div>
     </>
@@ -321,7 +510,6 @@ interface AwardRow {
   id: string;
   status: string;
   quantity: string;
-  collection_code: string;
   compliance_score: number | null;
   awarded_at: string;
   collected_at: string | null;
@@ -339,9 +527,25 @@ interface AwardRow {
  * exist, and both are worth knowing before the next round is planned.
  */
 export function AllocationRoundScreen({ roundId }: { roundId: string }) {
+  const { t } = usePortalI18n();
   const [round, setRound] = useState<RoundSummary | null>(null);
   const [awards, setAwards] = useState<AwardRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The awards list keeps its own failure, apart from the round's.
+   *
+   * It used to keep none: `.catch(() => undefined)` left `awards` at null,
+   * and null renders the skeleton. An officer whose request was refused, or
+   * whose connection dropped, watched three grey bars for as long as they
+   * cared to wait. The round summary above managed the same trick differently
+   * — its catch stored the server's sentence, and the `if (!round)` guard
+   * returned the skeleton before the `ErrorAlert` that would have shown it.
+   *
+   * Two lists, two reasons, so two states: which one failed is the difference
+   * between "this round could not be read" and "who was awarded could not be
+   * read", and an officer chasing an undistributed round needs to know which.
+   */
+  const [awardsError, setAwardsError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -350,17 +554,23 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       .get<RoundSummary>(`/allocations/rounds/${roundId}`)
       .then(setRound)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
     api
       .get<{ awards: AwardRow[] }>(`/allocations/rounds/${roundId}/awards`)
-      .then((result) => setAwards(result.awards))
-      .catch(() => undefined);
+      .then((result) => {
+        setAwards(result.awards);
+        setAwardsError(null);
+      })
+      .catch((caught) => {
+        setAwardsError(asApiError(caught));
+      });
   }, [roundId]);
 
   useEffect(load, [load]);
 
-  if (!round) return <Loading rows={5} />;
+  // The reason, when there is one, rather than a skeleton that never resolves.
+  if (!round) return error ? <ErrorAlert error={error} /> : <Loading rows={5} />;
 
   const collectionRate =
     round.awardedCount > 0 ? Math.round((round.collectedCount / round.awardedCount) * 100) : 0;
@@ -369,83 +579,104 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
     <>
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Done">
+        <Alert kind="success" title="ofcSpDone">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
 
       <div className="stat-grid">
         <div className="stat">
-          <p className="stat__label">Total</p>
+          <p className="stat__label">{t.ofcGpTotal}</p>
           <p className="stat__value">
-            {round.total_quantity} <span style={{ fontSize: '0.7em' }}>{readable(round.unit)}</span>
+            {round.total_quantity} <span style={{ fontSize: '0.7em' }}>{enumLabel(round.unit, t)}</span>
           </p>
         </div>
         <div className="stat">
-          <p className="stat__label">Awarded</p>
+          <p className="stat__label">{t.ofcGpAwarded}</p>
           <p className="stat__value">{round.awardedQuantity}</p>
-          <p className="stat__hint">{round.awardedCount} beneficiaries</p>
-        </div>
-        <div className="stat">
-          <p className="stat__label">Collected</p>
-          <p className="stat__value">{round.collectedQuantity}</p>
           <p className="stat__hint">
-            {round.collectedCount} of {round.awardedCount} ({collectionRate}%)
+            {t.ofcGpBeneficiaryCount.replace('{{count}}', String(round.awardedCount))}
           </p>
         </div>
         <div className="stat">
-          <p className="stat__label">Remaining</p>
+          <p className="stat__label">{t.ofcPfCollected}</p>
+          <p className="stat__value">{round.collectedQuantity}</p>
+          {/*
+            * The whole phrase, not three fragments round two numbers.
+            * "{{collected}} of {{awarded}}" cannot be built by concatenation
+            * in a language that does not order those parts as English does.
+            */}
+          <p className="stat__hint">
+            {t.ofcGpCollectedOfAwarded
+              .replace('{{collected}}', String(round.collectedCount))
+              .replace('{{awarded}}', String(round.awardedCount))
+              .replace('{{rate}}', String(collectionRate))}
+          </p>
+        </div>
+        <div className="stat">
+          <p className="stat__label">{t.ofcGpRemaining}</p>
           <p className="stat__value">{round.remainingQuantity}</p>
-          <p className="stat__hint">enough for {round.beneficiariesRemaining} more</p>
+          <p className="stat__hint">
+            {t.ofcGpEnoughForMore.replace('{{n}}', String(round.beneficiariesRemaining))}
+          </p>
         </div>
       </div>
 
       {round.awardedCount > 0 && collectionRate < 60 && (
-        <Alert kind="warning" title="Most of this round has not been collected">
+        <Alert kind="warning" title="ofcGpMostNotCollected">
           <p style={{ margin: 0 }}>
-            {round.awardedCount - round.collectedCount} beneficiaries were awarded and have not
-            turned up. That is either a distribution that is not reaching people, or names on a
-            list that do not correspond to anybody — worth establishing which before the next
-            round.
+            {t.ofcGpAwardedNotCollected.replace(
+              '{{n}}',
+              String(round.awardedCount - round.collectedCount),
+            )}
           </p>
         </Alert>
       )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <h2 className="card__title">{round.name}</h2>
           <p className="card__hint">
-            {round.quantity_per_beneficiary} {readable(round.unit)} each
-            {round.collection_point ? ` · collected at ${round.collection_point}` : ''} ·{' '}
+            {t.ofcGpEachBeneficiaryGets
+              .replace('{{quantity}}', round.quantity_per_beneficiary)
+              .replace('{{unit}}', enumLabel(round.unit, t))}
+            {round.collection_point
+              ? t.ofcGrCollectedAt.replace('{{place}}', round.collection_point)
+              : ''}{' '}
+            ·{' '}
             <Badge status={round.status} />
           </p>
         </div>
 
-        {awards === null ? (
+        {awardsError ? (
+          <div className="card__pad">
+            <ErrorAlert error={awardsError} />
+          </div>
+        ) : awards === null ? (
           <Loading rows={3} />
         ) : awards.length === 0 ? (
-          <Empty>Nobody has been awarded from this round yet.</Empty>
+          <Empty>{t.ofcNoneNobodyAwardedRound}</Empty>
         ) : (
           <Table
             columns={[
-              { key: 'taxpayer_name', label: 'Beneficiary' },
-              { key: 'tin', label: 'TIN', render: (row) => row.tin ?? '—' },
-              { key: 'group_name', label: 'Group', render: (row) => row.group_name ?? '—' },
-              { key: 'quantity', label: 'Quantity' },
+              { key: 'taxpayer_name', label: 'ofcAlBeneficiary' },
+              { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
+              { key: 'group_name', label: 'pubAttestGroup', render: (row) => row.group_name ?? '—' },
+              { key: 'quantity', label: 'ofcAlQuantity' },
               {
                 key: 'compliance_score',
-                label: 'Score at award',
+                label: 'ofcGpScoreAtAward',
                 render: (row) => (row.compliance_score === null ? '—' : String(row.compliance_score)),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'collected_at',
-                label: 'Collected',
+                label: 'ofcPfCollected',
                 render: (row) => (row.collected_at ? formatDateTime(row.collected_at) : '—'),
               },
             ]}
             rows={awards}
-            empty="Nobody has been awarded from this round yet."
+            empty="ofcNoneNobodyAwardedRound"
           />
         )}
       </div>

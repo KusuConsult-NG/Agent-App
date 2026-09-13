@@ -20,11 +20,13 @@ import {
   grantStepUp,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
   startTestServer,
   stopTestServer,
+  importStatementFor,
 } from './helpers';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -231,47 +233,50 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(payment!.verified_by_source, 'WEBHOOK', 'confirmed by the gateway callback');
     assert.ok(payment!.verification_response, 'the gateway evidence must be kept');
 
-    // ---- 7. Receipt and its PDF ------------------------------------------
-    const receipt = await queryOne<{
-      receipt_number: string;
-      verification_code: string;
-      document_id: string | null;
-      amount_kobo: string;
-      status: string;
-      taxpayer_id: string;
-    }>(
+    // ---- 7. An acknowledgement, and deliberately not a receipt -----------
+    // The gateway holding the money is not the State having been paid. What
+    // the citizen gets now says exactly that, and says so on its face.
+    const noReceiptYet = await queryOne<{ n: string }>(
       pool,
-      `SELECT receipt_number, verification_code, document_id, amount_kobo, status, taxpayer_id
-         FROM receipts WHERE transaction_id = $1`,
+      'SELECT count(*)::text AS n FROM receipts WHERE transaction_id = $1',
       [transactionId],
     );
-    assert.ok(receipt, 'a receipt must exist');
-    assert.equal(receipt!.status, 'VALID');
-    assert.equal(receipt!.taxpayer_id, taxpayerId);
-    assert.equal(receipt!.amount_kobo, invoice!.total_amount_kobo);
-    assert.ok(receipt!.document_id, 'the receipt must have a generated document');
+    assert.equal(noReceiptYet!.n, '0', 'no receipt may exist before the money reaches government');
 
-    const document = await queryOne<{
-      document_type: string;
+    const acknowledgement = await queryOne<{
+      document_number: string;
+      verification_code: string;
       storage_reference: string;
       content_type: string;
-      checksum: string | null;
+      status: string;
     }>(
       pool,
-      'SELECT document_type, storage_reference, content_type, checksum FROM documents WHERE id = $1',
-      [receipt!.document_id],
+      `SELECT document_number, verification_code, storage_reference, content_type, status
+         FROM documents
+        WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT'
+          AND entity_type = 'transaction' AND entity_id = $1`,
+      [transactionId],
     );
-    assert.equal(document!.document_type, 'RECEIPT');
-    assert.equal(document!.content_type, 'application/pdf');
-    assert.ok(document!.storage_reference, 'the PDF must be stored');
+    assert.ok(acknowledgement, 'the citizen must be given something verifiable straight away');
+    assert.equal(acknowledgement!.content_type, 'application/pdf');
+    assert.ok(acknowledgement!.storage_reference, 'the acknowledgement PDF must be stored');
+    assert.ok(
+      acknowledgement!.document_number.startsWith('PSIRS-ACK'),
+      'an acknowledgement is numbered as one, so it can never be read as a receipt',
+    );
 
-    // ---- 8. Public QR verification ---------------------------------------
-    const publicCheck = await get(`/verify/${receipt!.verification_code}`);
-    assert.equal(publicCheck.status, 200);
-    assert.equal(publicCheck.body.status, 'VALID');
-    assert.equal(publicCheck.body.receiptNumber, receipt!.receipt_number);
+    const awaitingMoney = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM transactions WHERE id = $1',
+      [transactionId],
+    );
+    assert.equal(
+      awaitingMoney!.status,
+      'RECONCILIATION_PENDING',
+      'a gateway-confirmed collection is awaiting settlement, not complete',
+    );
 
-    // ---- 9. Commission ----------------------------------------------------
+    // ---- 8. Commission, accrued and held ----------------------------------------------------
     const commission = await queryOne<{
       amount_kobo: string;
       rate_basis_points: number;
@@ -314,7 +319,7 @@ describe('E2E — one complete revenue collection, verified record by record', (
     );
     assert.equal(stillHeld!.status, 'PENDING', 'even a year later, an unsettled transaction pays nothing');
 
-    // ---- 10. Reconciliation ----------------------------------------------
+    // ---- 9. Reconciliation ----------------------------------------------
     const reconcile = await post(
       '/government/reconciliation/run',
       {
@@ -349,7 +354,10 @@ describe('E2E — one complete revenue collection, verified record by record', (
       `before settlement the line must be PENDING_SETTLEMENT, got ${record!.status}`,
     );
 
-    // ---- 10b. Government is actually paid --------------------------------
+    // ---- 10. Government is actually paid --------------------------------
+    // The gateway's own statement has to confirm the reference before an
+    // officer can bank it; runReconciliation imports these in production.
+    await importStatementFor([payment!.gateway_reference!]);
     const settlement = await post(
       '/government/settlements',
       {
@@ -370,7 +378,48 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(settled!.status, 'SETTLED', 'the transaction must settle once money is received');
     assert.ok(settled!.settled_at, 'settlement must be timestamped');
 
-    // ---- 10c. Only now may the commission be released --------------------
+    // ---- 11. The receipt, and its PDF -----------------------------------
+    // Only now: the receipt is the State's word that it holds the money.
+    const receipt = await queryOne<{
+      receipt_number: string;
+      verification_code: string;
+      document_id: string | null;
+      amount_kobo: string;
+      status: string;
+      taxpayer_id: string;
+    }>(
+      pool,
+      `SELECT receipt_number, verification_code, document_id, amount_kobo, status, taxpayer_id
+         FROM receipts WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    assert.ok(receipt, 'a receipt must exist');
+    assert.equal(receipt!.status, 'VALID');
+    assert.equal(receipt!.taxpayer_id, taxpayerId);
+    assert.equal(receipt!.amount_kobo, invoice!.total_amount_kobo);
+    assert.ok(receipt!.document_id, 'the receipt must have a generated document');
+
+    const document = await queryOne<{
+      document_type: string;
+      storage_reference: string;
+      content_type: string;
+      checksum: string | null;
+    }>(
+      pool,
+      'SELECT document_type, storage_reference, content_type, checksum FROM documents WHERE id = $1',
+      [receipt!.document_id],
+    );
+    assert.equal(document!.document_type, 'RECEIPT');
+    assert.equal(document!.content_type, 'application/pdf');
+    assert.ok(document!.storage_reference, 'the PDF must be stored');
+
+    // ---- 12. Public QR verification -------------------------------------
+    const publicCheck = await get(`/verify/${receipt!.verification_code}`);
+    assert.equal(publicCheck.status, 200);
+    assert.equal(publicCheck.body.status, 'VALID');
+    assert.equal(publicCheck.body.receiptNumber, receipt!.receipt_number);
+
+    // ---- 13. Only now may the commission be released --------------------
     const releasable = await promoteEligibleCommissions({
       now: new Date(Date.now() + 365 * 24 * 60 * 60_000),
     });
@@ -384,7 +433,7 @@ describe('E2E — one complete revenue collection, verified record by record', (
     assert.equal(released!.status, 'ELIGIBLE');
     assert.ok(released!.eligible_at, 'eligibility must be timestamped');
 
-    // ---- 11. The audit trail behind all of it ----------------------------
+    // ---- 14. The audit trail behind all of it ----------------------------
     const audit = await query<{ action: string; actor_role: string; entity_type: string }>(
       pool,
       'SELECT action, actor_role, entity_type FROM audit_logs ORDER BY created_at',
@@ -545,19 +594,97 @@ describe('RBAC — every role checked against the API, not the UI', () => {
     assert.equal(attempt.status, 403, 'admin must be refused the reversal endpoint');
   });
 
+  /**
+   * The auditor changes nothing about the record, and writes their own findings.
+   *
+   * This used to test the *spelling* of the auditor's permissions — anything
+   * matching `:manage`, `:configure`, `:approve`, `:suspend` or `reverse` was
+   * a write. That is the heuristic `apps/portal/src/lib/permissions.ts` rejects
+   * by name and for good reason: `payment:reconcile` and `taxpayer:tin_sync`
+   * are writes that do not look like it, and `report:financial` looks like one
+   * and is not. The pattern happened to be right until casework arrived, and
+   * then failed on `case:manage` — an auditor opening their own audit case,
+   * which is the opposite of a control problem.
+   *
+   * So it asks the API instead, which is what the heading of this section
+   * promises. Sight of everything: the audit log, the money, the register.
+   * Control of nothing: every endpoint that moves money or alters a record
+   * refuses them, whatever the permission behind it is called.
+   *
+   * The casework permissions are named explicitly rather than pattern-matched,
+   * because a future permission called `case:something` that *did* change the
+   * record must not inherit this exemption by its prefix.
+   */
   it('gives the auditor sight of everything and control of nothing', async () => {
     const tokens = await seedOfficers();
-    const auditorPermissions = permissionsForRole('auditor');
 
-    for (const permission of auditorPermissions) {
-      assert.ok(
-        !/(:manage|:configure|:approve|:suspend|reverse)/.test(permission),
-        `auditor should not hold the mutating permission ${permission}`,
-      );
+    // Sight: the three reads an independent examiner cannot work without.
+    for (const path of ['/government/audit', '/government/transactions', '/government/dashboard']) {
+      const read = await get(path, { token: tokens.auditor });
+      assert.equal(read.status, 200, `the auditor must be able to read ${path}: ${JSON.stringify(read.body)}`);
     }
 
-    const read = await get('/government/audit', { token: tokens.auditor });
-    assert.equal(read.status, 200, `the auditor must be able to read the audit log: ${JSON.stringify(read.body)}`);
+    // Control: refused by the API, not merely unlinked in a menu.
+    for (const path of [
+      '/government/reconciliation/run',
+      '/government/fraud/sweep',
+      '/government/commissions/promote',
+      '/government/reminders/send-due',
+    ]) {
+      const attempt = await post(path, {}, { token: tokens.auditor });
+      assert.equal(attempt.status, 403, `auditor must be refused ${path} (got ${attempt.status})`);
+    }
+
+    /*
+     * And what they may write is their own file, and only that.
+     *
+     * `case:read:all` is a read and is not listed; the six below are the whole
+     * of the auditor's write surface. If a mutating permission is ever added
+     * to the role, this is where it shows up as an unexplained seventh.
+     *
+     * The workbench three joined casework for the reason casework was allowed
+     * in the first place, and the reason is a line rather than a category: an
+     * auditor's writes land in the auditor's own record. A sample says which
+     * transactions were examined, a report freezes figures that were already
+     * readable, a signature puts a name to them. None of the six changes what
+     * a taxpayer owes, what an agent earned, what a rate is, or what a receipt
+     * says -- which is what the refusals above actually test, and what makes
+     * the role read-only in the sense it exists to be.
+     *
+     * `audit:sign` is the one worth arguing about, because a signature carries
+     * weight outside the audit file. It belongs here: what it commits is the
+     * examiner's own opinion, and an auditor who cannot sign their own report
+     * has not been kept independent, only kept quiet.
+     */
+    const OWN_RECORD = [
+      'case:create',
+      'case:contribute',
+      'case:manage',
+      'audit:sample',
+      'audit:report',
+      'audit:sign',
+    ];
+    /*
+     * `data:export` is not a write and is not exempt for free.
+     *
+     * It changes nothing about the record, which is what this assertion is
+     * about; what it does is take a copy out of the platform's control, and
+     * that is governed by its own permission, a per-role row cap and an audit
+     * entry naming the filters and the count -- see `services/export.ts` and
+     * `READ_ONLY_PERMISSIONS` in the portal, which classify it the same way
+     * and for the same stated reason.
+     */
+    const writes = permissionsForRole('auditor').filter(
+      (permission) =>
+        !/:read(:|$)|^report:|^dashboard:|^audit:read$|^catalogue:read$|^data:export$/.test(
+          permission,
+        ),
+    );
+    assert.deepEqual(
+      [...writes].sort(),
+      [...OWN_RECORD].sort(),
+      `the auditor's write surface should be their own record alone, and is: ${writes.join(', ')}`,
+    );
   });
 });
 
@@ -607,6 +734,9 @@ describe('Reversal — government takes money back, and everything follows', () 
     );
 
     const transactionId = assessment.body.transactionId as string;
+    // Nothing to reverse until the State has actually been paid.
+    await settleTransaction(transactionId);
+
     const before = await queryOne<{ receipt_status: string; commission_status: string }>(
       pool,
       `SELECT r.status AS receipt_status, c.status AS commission_status

@@ -14,12 +14,14 @@
 import { config } from '../../config';
 import { HttpMessageProvider } from './http';
 import { MockMessageProvider } from './mock';
+import { WebPushProvider } from './push';
 import { WhatsAppHttpProvider, WhatsAppMockProvider } from './whatsapp';
 import type { DeliveryRequest, DeliveryResult, MessageProvider } from './types';
 
 export * from './types';
 export { HttpMessageProvider } from './http';
 export { MockMessageProvider } from './mock';
+export { WebPushProvider } from './push';
 export { WhatsAppHttpProvider, WhatsAppMockProvider } from './whatsapp';
 
 const mock = new MockMessageProvider();
@@ -48,17 +50,21 @@ export const whatsappProvider: MessageProvider =
     ? new WhatsAppHttpProvider({ url: waUrl, apiKey: waKey, senderNumber: waSender })
     : new WhatsAppMockProvider();
 
+export const pushProvider: MessageProvider = new WebPushProvider();
+
 /**
  * Route a message to the provider that owns its channel.
  *
- * PUSH is refused rather than defaulted. No push template is seeded, so nothing
- * queues one today — but falling back to the SMS gateway would mean that the
- * day someone adds a push template, a browser push subscription gets posted to
- * an SMS provider as though it were a phone number. It would fail obscurely at
- * the vendor, or worse, be accepted and billed.
+ * PUSH used to throw, and that was right while there was no adapter: falling
+ * back to the SMS gateway would have posted a browser subscription to a
+ * telephone vendor as though it were a number, to fail obscurely at the vendor
+ * or, worse, be accepted and billed.
  *
- * Web push needs its own adapter (VAPID keys, per-device subscriptions, an
- * entirely different payload). Until that exists, this says so.
+ * It has its own adapter now — VAPID identity, per-device subscriptions, an
+ * encrypted payload — reporting the same three outcomes as every other channel.
+ * A deployment with no VAPID keys answers UNAVAILABLE rather than a refusal, so
+ * a missing setting is retried once somebody fixes it instead of marking every
+ * citizen permanently unreachable.
  */
 export function providerFor(channel: DeliveryRequest['channel']): MessageProvider {
   switch (channel) {
@@ -69,10 +75,7 @@ export function providerFor(channel: DeliveryRequest['channel']): MessageProvide
     case 'WHATSAPP':
       return whatsappProvider;
     case 'PUSH':
-      throw new Error(
-        'Web push delivery is not implemented. A PUSH notification was queued, which no ' +
-          'template should currently produce — add a push adapter before seeding one.',
-      );
+      return pushProvider;
   }
 }
 

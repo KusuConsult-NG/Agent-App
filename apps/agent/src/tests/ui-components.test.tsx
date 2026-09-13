@@ -12,7 +12,9 @@ import { LoginScreen, ApplyScreen } from '../screens/Auth';
 import { HomeScreen } from '../screens/Home';
 import { VerifyScreen } from '../screens/Verify';
 import { api } from '../lib/api';
-import { getTranslation } from '@psirs/shared';
+import { Badge } from '../ui';
+import { setAppLanguage } from '../lib/i18n';
+import { getTranslation, translations } from '@psirs/shared';
 
 describe('1. Authentication UI Screens (Login & Application)', () => {
   beforeEach(() => {
@@ -125,5 +127,71 @@ describe('4. Grassroots Localisation (Hausa & English i18n)', () => {
     expect(en.receiptNumber).toBe('Receipt Number');
     expect(en.taxpayerTin).toBe('Tax Identification Number (TIN)');
     expect(en.verify).toBe('Verify Receipt');
+  });
+});
+
+/**
+ * The status chip on the handset of the person collecting the money.
+ *
+ * This app carried its own copy of the portal's classifier and its own copy
+ * of the portal's bug: the colour was chosen by asking whether the status
+ * *contained* a good-news word, so INACTIVE contained ACTIVE and UNPAID
+ * contained PAID. An agent looking at an unpaid invoice saw the colour the
+ * app uses for a settled one.
+ *
+ * Both now go through `statusSeverity` in @psirs/shared, which matches whole
+ * words. This holds the agent's end of it — the property itself is tested
+ * once, with the function, in the portal suite.
+ */
+describe('5. A status chip in the colour of what happened', () => {
+  beforeEach(() => cleanup());
+
+  /*
+   * The chip is found by the word the dictionary gives it, not by the status
+   * the database holds. That is the second thing this test now proves: a
+   * badge used to print `PENDING_SYNC` with the underscore taken out, which
+   * is English on the handset of an agent working in Hausa, and it was the
+   * one part of the screen that stayed English however the app was set.
+   */
+  const word = (status: keyof typeof translations.en) => translations.en[status];
+
+  it('does not render a negated status as its own opposite', () => {
+    render(
+      <>
+        <Badge status="UNPAID" />
+        <Badge status="INACTIVE" />
+        <Badge status="UNVERIFIED" />
+      </>,
+    );
+
+    expect(screen.getByText(word('enumUnpaid')).className).toContain('badge--pending');
+    expect(screen.getByText(word('enumInactive')).className).toContain('badge--danger');
+    expect(screen.getByText(word('enumUnverified')).className).toContain('badge--danger');
+  });
+
+  it('still renders the good news as good news', () => {
+    render(
+      <>
+        <Badge status="PAID" />
+        <Badge status="SYNCED" />
+        <Badge status="PENDING_SYNC" />
+      </>,
+    );
+
+    expect(screen.getByText(word('enumPaid')).className).toContain('badge--success');
+    expect(screen.getByText(word('enumSynced')).className).toContain('badge--success');
+    expect(screen.getByText(word('enumPendingSync')).className).toContain('badge--pending');
+  });
+
+  it('says the status in the language the agent is reading', () => {
+    // The colour is only half of it. A chip in the right colour with the
+    // wrong language is still a chip an agent has to guess at.
+    setAppLanguage('ha');
+    try {
+      render(<Badge status="PENDING_SYNC" />);
+      expect(screen.getByText(translations.ha.enumPendingSync)).toBeTruthy();
+    } finally {
+      setAppLanguage('en');
+    }
   });
 });

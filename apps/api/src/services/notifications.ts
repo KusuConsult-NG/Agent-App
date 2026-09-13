@@ -28,6 +28,18 @@ export type NotificationEvent =
   | 'DOCUMENT_READY'
   | 'COMMISSION_EARNED'
   | 'COMMISSION_PAID'
+  /*
+   * The two ways an agent's payout does not arrive.
+   *
+   * `COMMISSION_PAID` was seeded and never queued; these two did not exist at
+   * all. There was no event for a transfer the bank bounced or a payout an
+   * officer declined, so the agent's own money could stop moving and the only
+   * record was an audit entry they cannot read. A bounced transfer is usually
+   * wrong account details — a thing only the agent can fix, and only if
+   * somebody tells them there is something to fix.
+   */
+  | 'COMMISSION_PAYOUT_FAILED'
+  | 'COMMISSION_PAYOUT_REFUSED'
   | 'SECURITY_ALERT'
   | 'AGENT_APPROVED'
   | 'AGENT_REJECTED'
@@ -39,6 +51,18 @@ export type NotificationEvent =
   | 'AGENT_BANK_CHANGE_REQUESTED'
   | 'AGENT_BANK_CHANGE_APPLIED'
   | 'AGENT_BANK_CHANGE_REFUSED'
+  /*
+   * The two nobody was ever sent.
+   *
+   * There is an event for a payment that succeeded, one for a payment that
+   * failed, and three for an agent whose bank account somebody asked to
+   * change — and there was none for the money the State took, reversed, and
+   * either did or did not give back. A citizen's receipt was voided and their
+   * transaction marked reversed with nothing sent to them at all; they found
+   * out when a verification told them their receipt was no good.
+   */
+  | 'PAYMENT_REVERSED'
+  | 'REFUND_COMPLETED'
   | 'TAXPAYER_RECORD_CORRECTED'
   | 'USER_ROLE_CHANGED'
   | 'SUPPORT_TICKET_UPDATED'
@@ -61,6 +85,14 @@ function render(template: string, variables: Record<string, string>): string {
   });
 }
 
+/**
+ * The mask that stands in for a credential in the retained body.
+ *
+ * Deliberately not the right length: a support officer reading the queue
+ * should see that something was withheld, not how many characters it had.
+ */
+const WITHHELD = '\u2588\u2588\u2588\u2588\u2588\u2588';
+
 export interface QueueNotificationParams {
   event: NotificationEvent;
   userId?: string | null;
@@ -69,6 +101,23 @@ export interface QueueNotificationParams {
   recipientOverride?: string | null;
   channels?: ('SMS' | 'EMAIL' | 'PUSH')[];
   variables?: Record<string, string>;
+  /**
+   * Variables whose value is a credential, and must not survive delivery.
+   *
+   * `otp_codes` keeps only sha256(code) and `referee_invitations` only
+   * sha256(token) — both on purpose. Rendering the same code, and the same
+   * link, into `notifications.message` put the plaintext back in the database
+   * beside the hash, where nothing ever deleted it: a join from the queued
+   * body to either table, hashing the substring out of the SMS, resolved the
+   * row the credential opens. In the UAT database that returned a referee
+   * invitation still SENT and a fortnight from expiring.
+   *
+   * Naming a variable here splits the row in two. The deliverable body goes to
+   * `secret_message`, which the dispatcher reads once and clears as the row
+   * becomes SENT or FAILED; `message` keeps the same sentence with the value
+   * masked, which is what a support officer needs and all they need.
+   */
+  secretVariables?: string[];
   entityType?: string;
   entityId?: string;
 }
@@ -137,40 +186,129 @@ export async function queueNotification(
     }
   }
 
+  /*
+   * The language this person reads.
+   *
+   * Resolved from the recipient rather than passed in: a caller queueing a
+   * receipt knows the transaction, not what the taxpayer speaks, and making it
+   * an argument would mean every one of the eighteen call sites getting it
+   * right. Defaults to English, which is also what an unrecorded preference
+   * means.
+   */
+  const language =
+    (
+      await queryOne<{ preferred_language: string }>(
+        client,
+        `SELECT COALESCE(
+                  (SELECT preferred_language FROM taxpayers WHERE id = $1),
+                  (SELECT preferred_language FROM users WHERE id = $2),
+                  'en') AS preferred_language`,
+        [params.taxpayerId ?? null, userId],
+      )
+    )?.preferred_language ?? 'en';
+
+  /*
+   * One row per channel, in the recipient's language where there is one.
+   *
+   * DISTINCT ON with the language ordered first picks the translation when it
+   * exists and the English when it does not — so a channel is never sent twice,
+   * once per language, and an English-only template still reaches somebody who
+   * reads Hausa. Silence would be the worse failure: a receipt in the wrong
+   * language can still be checked, and a receipt that never arrives cannot.
+   */
   const templates = await query<{
     channel: 'SMS' | 'EMAIL' | 'PUSH';
     subject: string | null;
     body: string;
+    language: string;
   }>(
     client,
-    `SELECT channel, subject, body FROM notification_templates
+    `SELECT DISTINCT ON (channel) channel, subject, body, language
+       FROM notification_templates
       WHERE event = $1 AND status = 'ACTIVE'
-        AND ($2::text[] IS NULL OR channel = ANY($2))`,
-    [params.event, params.channels ?? null],
+        AND ($2::text[] IS NULL OR channel = ANY($2))
+        AND language IN ($3, 'en')
+      ORDER BY channel, (language = $3) DESC`,
+    [params.event, params.channels ?? null, language],
   );
+
+  /*
+   * The credential, held for exactly as long as it takes to hand it over.
+   *
+   * Empty for all but the two events that carry one, and then `retained` and
+   * `deliverable` below are the same string and `secret_message` is NULL.
+   */
+  const secretVariables = (params.secretVariables ?? []).filter((key) => key in variables);
+  const maskedVariables: Record<string, string> = { ...variables };
+  for (const key of secretVariables) maskedVariables[key] = WITHHELD;
 
   let queued = 0;
 
   for (const template of templates) {
+    /*
+     * A push is delivered to a person's devices, so its recipient is a user id.
+     *
+     * This read "EMAIL ? email : phone", which addressed a PUSH row to a
+     * telephone number. The adapter looks subscriptions up by user id and
+     * refuses anything else, so every push would have been permanently
+     * rejected — with a message blaming whoever wrote the template. Nobody had
+     * noticed because no PUSH template was seeded, which is its own problem
+     * and not a defence.
+     *
+     * `userId` is null for a taxpayer, who holds no account here. Then there is
+     * nothing to push to and the row is skipped, which is the right answer:
+     * their receipt goes by SMS, and that is the copy that matters.
+     */
     const recipient =
-      template.channel === 'EMAIL'
-        ? recipientEmail
-        : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
+      template.channel === 'PUSH'
+        ? userId
+        : template.channel === 'EMAIL'
+          ? recipientEmail
+          : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
     if (!recipient) continue;
+
+    /*
+     * Two renders of the same body when a credential is in it.
+     *
+     * `deliverable` is what the gateway is handed. `retained` is the same
+     * sentence with the named variables masked, and is what stays in the
+     * database once the row is terminal. Masking is a second render rather
+     * than a search-and-replace over the first, so a code that happens to
+     * appear elsewhere in the text — a reference number, a date — is not
+     * blanked along with it.
+     *
+     * The subject is masked in both. A subject is a preview: it is what shows
+     * on a locked handset, in an inbox list and in a push banner, which is why
+     * every template that carries a code puts it in the body. A test beside
+     * this file fails any ACTIVE template whose subject names `{{code}}` or
+     * `{{link}}`, so this line is the floor under a rule caught earlier.
+     */
+    const subject = template.subject ? render(template.subject, maskedVariables) : null;
+    const deliverable = render(template.body, variables);
+    const retained = secretVariables.length ? render(template.body, maskedVariables) : deliverable;
 
     await client.query(
       `INSERT INTO notifications
-         (user_id, recipient, event, channel, subject, message, entity_type, entity_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+         (user_id, recipient, event, channel, subject, message, secret_message,
+          entity_type, entity_id, language)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         userId,
         recipient,
         params.event,
         template.channel,
-        template.subject ? render(template.subject, variables) : null,
-        render(template.body, variables),
+        subject,
+        retained,
+        // NULL unless this template actually rendered a credential, so the
+        // column stays empty for every event that does not carry one — and
+        // for a named variable the template never used.
+        deliverable === retained ? null : deliverable,
         params.entityType ?? null,
         params.entityId ?? null,
+        // The language it was actually rendered in, not the one asked for:
+        // the fallback means those differ, and a support officer reading the
+        // queue has to see which one the citizen received.
+        template.language,
       ],
     );
     queued += 1;
@@ -215,7 +353,11 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
     attempts: number;
   }>(
     db,
-    `SELECT id, channel, recipient, subject, message, attempts
+    // `secret_message` where there is one: `message` has the credential masked
+    // and is the copy that stays. The two are the same string for every event
+    // that carries no credential, which is all but two of them.
+    `SELECT id, channel, recipient, subject,
+            COALESCE(secret_message, message) AS message, attempts
        FROM notifications
       WHERE status = 'QUEUED' AND attempts < 5
       ORDER BY created_at LIMIT $1`,
@@ -240,7 +382,8 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
       await query(
         db,
         `UPDATE notifications
-            SET status = 'FAILED', attempts = attempts + 1, failure_reason = $2
+            SET status = 'FAILED', attempts = attempts + 1, failure_reason = $2,
+                secret_message = NULL
           WHERE id = $1`,
         [notification.id, error instanceof Error ? error.message : 'Unknown delivery error'],
       );
@@ -252,7 +395,8 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
         db,
         `UPDATE notifications
             SET status = 'SENT', sent_at = now(), attempts = attempts + 1,
-                provider = $3, provider_reference = $2, failure_reason = NULL
+                provider = $3, provider_reference = $2, failure_reason = NULL,
+                secret_message = NULL
           WHERE id = $1`,
         [notification.id, result.reference || null, result.provider],
       );
@@ -265,7 +409,7 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
         db,
         `UPDATE notifications
             SET status = 'FAILED', attempts = attempts + 1,
-                provider = $3, failure_reason = $2
+                provider = $3, failure_reason = $2, secret_message = NULL
           WHERE id = $1`,
         [notification.id, result.reason ?? 'The provider refused the message', result.provider],
       );

@@ -22,7 +22,7 @@
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
-import { generateVerificationCode } from '../lib/crypto';
+import { generateVerificationCode, normaliseVerificationCode } from '../lib/crypto';
 import { recordAudit } from './audit';
 import { evaluateEligibility } from './incentives';
 
@@ -49,6 +49,23 @@ export async function createRound(params: {
       [params.input.programmeId],
     );
     if (!programme) throw notFound('That programme');
+
+    /*
+     * The status was already being selected here, and read by nothing.
+     *
+     * Eligibility refuses every award whose programme is not ACTIVE, so a round
+     * built on a draft or closed programme is not merely untidy: it can be
+     * created, opened, stocked and staffed, and then every farmer who reaches
+     * the front of the queue is turned away. The check belongs at the point
+     * where the mistake is cheap to correct.
+     */
+    if (programme.status !== 'ACTIVE') {
+      throw conflict(
+        'PROGRAMME_NOT_ACTIVE',
+        `That programme is ${programme.status.toLowerCase()}, so no award from this round could be made.`,
+        'Activate the programme first, then create the round.',
+      );
+    }
 
     const round = await queryOne<{ id: string }>(
       client,
@@ -264,9 +281,12 @@ export async function recordCollection(params: {
          FROM incentive_awards a
          JOIN incentive_allocation_rounds r ON r.id = a.round_id
          JOIN taxpayers t ON t.id = a.taxpayer_id
-        WHERE a.collection_code = $1
+        WHERE replace(upper(a.collection_code), '-', '') = $1
         FOR UPDATE OF a`,
-      [params.collectionCode.trim().toUpperCase()],
+      // Upper-casing alone left the separator significant, so a farmer who
+      // wrote their code down without the dash was told there was no such
+      // code. Every other code in the platform is matched this way.
+      [normaliseVerificationCode(params.collectionCode)],
     );
     if (!award) throw notFound('That collection code');
 
@@ -303,6 +323,82 @@ export async function recordCollection(params: {
       taxpayerName: award.taxpayer_name,
       quantity: award.quantity,
       unit: award.unit,
+    };
+  });
+}
+
+/**
+ * Release a share that was awarded and never collected.
+ *
+ * FORFEITED was a status `recordCollection` refuses to hand goods against, the
+ * round-quantity trigger excludes from its running total, both summary queries
+ * filter on, and the awards route offers as a filter. Five places accounted for
+ * it and nothing produced it — so a farmer who never came for their two bags
+ * held them out of the round for good, the store showed fewer bags than it
+ * contained, and the next farmer in the queue could not be given them.
+ *
+ * A reason is required because this is public property being reassigned, and
+ * the round's own arithmetic changes as a result. Only an award that has not
+ * been collected can be released; once the bags have left the store there is
+ * nothing to return to the pool.
+ */
+export async function forfeitAward(params: {
+  awardId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ awardId: string; quantity: string; unit: string; returnedToRound: boolean }> {
+  return withTransaction(async (client) => {
+    const award = await queryOne<{
+      id: string;
+      status: string;
+      quantity: string;
+      unit: string;
+      round_id: string;
+    }>(
+      client,
+      `SELECT a.id, a.status, a.quantity, r.unit, a.round_id
+         FROM incentive_awards a
+         JOIN incentive_allocation_rounds r ON r.id = a.round_id
+        WHERE a.id = $1
+        FOR UPDATE OF a`,
+      [params.awardId],
+    );
+    if (!award) throw notFound('That award');
+
+    if (award.status === 'COLLECTED') {
+      throw conflict(
+        'ALREADY_COLLECTED',
+        'This allocation has already been collected and cannot be forfeited.',
+        'The goods have left the store; there is nothing to return to the round.',
+      );
+    }
+    if (award.status === 'FORFEITED') {
+      throw conflict('ALREADY_FORFEITED', 'This allocation has already been forfeited.');
+    }
+
+    await client.query(
+      `UPDATE incentive_awards
+          SET status = 'FORFEITED', forfeited_reason = $2
+        WHERE id = $1`,
+      [award.id, params.reason],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'allocation.forfeited',
+      entityType: 'allocation_award',
+      entityId: award.id,
+      oldValue: { status: award.status },
+      newValue: { status: 'FORFEITED', reason: params.reason, quantity: award.quantity },
+    });
+
+    return {
+      awardId: award.id,
+      quantity: award.quantity,
+      unit: award.unit,
+      returnedToRound: true,
     };
   });
 }
@@ -374,7 +470,7 @@ export async function listRounds(db: Db, options: { programmeId?: string; limit?
     db,
     `SELECT r.id, r.name, r.unit, r.total_quantity, r.quantity_per_beneficiary,
             r.status, r.collection_point, r.opens_at, r.closes_at,
-            p.name AS programme_name,
+            p.name AS programme_name, p.name_ha AS programme_name_ha,
             COALESCE(SUM(a.quantity) FILTER (WHERE a.status <> 'FORFEITED'), 0)::text AS awarded_quantity,
             count(a.id) FILTER (WHERE a.status = 'COLLECTED')::text AS collected_count,
             count(a.id) FILTER (WHERE a.status <> 'FORFEITED')::text AS awarded_count
@@ -382,7 +478,7 @@ export async function listRounds(db: Db, options: { programmeId?: string; limit?
        JOIN incentive_programmes p ON p.id = r.programme_id
        LEFT JOIN incentive_awards a ON a.round_id = r.id
       WHERE ($1::uuid IS NULL OR r.programme_id = $1)
-      GROUP BY r.id, p.name
+      GROUP BY r.id, p.name, p.name_ha
       ORDER BY r.created_at DESC
       LIMIT $2`,
     [options.programmeId ?? null, options.limit ?? 100],
@@ -396,7 +492,27 @@ export async function listAwards(
 ) {
   return query(
     db,
-    `SELECT a.id, a.status, a.quantity, a.collection_code, a.compliance_score,
+    /*
+     * `collection_code` is deliberately absent.
+     *
+     * It is not a reference. It is the credential: `recordCollection` matches
+     * on it alone — "against the code the beneficiary presents" — and the only
+     * other check is that it has not already been used. Anyone holding a code
+     * can collect that person's allocation.
+     *
+     * This query sent up to 500 of them at a time to every holder of
+     * `allocation:read:all`. Nothing consumed them: the portal declared the
+     * field on its row type and never rendered it, which was the right call —
+     * a list of every beneficiary's credential on one screen would let an
+     * officer collect on anybody's behalf without them present. The only
+     * reader of a collection code anywhere sends one a beneficiary has
+     * handed over.
+     *
+     * So the screen not showing it was a control, and this query quietly
+     * undid it for anyone who opened the network tab. The officer is still
+     * told the code once, when they award it and have to pass it on.
+     */
+    `SELECT a.id, a.status, a.quantity, a.compliance_score,
             a.awarded_at, a.collected_at,
             COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name,'')) AS taxpayer_name,
             t.tin, g.name AS group_name

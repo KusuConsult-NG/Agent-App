@@ -117,7 +117,9 @@ describe('a TIN written the way people write it', () => {
     // point: an agent does not get to assert a TIN.
     const response = await registerWithTin('nonsense-tin');
     assert.equal(response.status, 400);
-    assert.equal(response.body.error.code, 'INVALID_REQUEST');
+    // Its own code: a client has to be able to tell "no such TIN" from any
+    // other refusal, because the two are acted on differently.
+    assert.equal(response.body.error.code, 'TIN_NOT_FOUND');
   });
 });
 

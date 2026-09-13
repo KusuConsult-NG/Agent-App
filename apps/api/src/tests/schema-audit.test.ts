@@ -90,6 +90,21 @@ const MUST_BE_APPEND_ONLY = [
  * citizen.
  */
 const DELIBERATELY_MUTABLE = new Set([
+  /*
+   * Taking a permission away from a role deletes the row that granted it.
+   *
+   * That is the whole of the feature migration 059 added: the map moved into
+   * the database so PSIRS can change their delegation of authority without a
+   * deployment, and a revocation is a DELETE. Protecting this table would mean
+   * an authority could be granted and never withdrawn.
+   *
+   * Nothing is lost by it. Every grant and revoke writes `rbac.grant` or
+   * `rbac.revoke` to `audit_logs` with the actor, the permission and the
+   * reason, and that record is hash-chained and append-only — so who held what,
+   * and when it changed, is evidence even though the current state is a table
+   * somebody can delete from.
+   */
+  'role_permissions',
   'programme_eligibility',
   'taxpayer_compliance',
   'taxpayer_duplicate_checks',
@@ -120,6 +135,31 @@ const DELIBERATELY_MUTABLE = new Set([
    */
   'usage_events',
   /*
+   * Current state of the machinery, not evidence about the money.
+   *
+   * One row per background job, overwritten on every run — it is a reading, not
+   * a record, which is the opposite of `reconciliation_runs` beside it in this
+   * work. And deleting from it fails safe in the direction that matters: a job
+   * whose row is gone reads as NEVER RUN, the loudest state on the board, so
+   * removal cannot be used to make a stopped control look like a running one.
+   * It can only raise an alarm, never silence it.
+   */
+  'background_jobs',
+  /*
+   * One row per subscribed device — current state, not evidence.
+   *
+   * A citizen's handset unsubscribes, the browser rotates the endpoint, the
+   * push service reports one gone: all ordinary, all of which change what the
+   * row says rather than adding to a history. Expiry is a column rather than a
+   * delete for the same reason, so a resubscribing device is one row with a
+   * history and a sudden mass expiry is visible.
+   *
+   * Deleting from it fails safe: a subscription that is gone means a device
+   * stops receiving pushes, which is the direction that loses a notification
+   * rather than the one that fabricates one.
+   */
+  'push_subscriptions',
+  /*
    * An assignment, not a record. Changing which territories an officer covers
    * replaces the rows wholesale, so the table always states current coverage
    * and nothing else. The history that matters — who widened whose view of the
@@ -129,6 +169,23 @@ const DELIBERATELY_MUTABLE = new Set([
    * see", and the wrong one would be the one a query found first.
    */
   'user_territories',
+  /*
+   * A counter for the current minute, not a record of anything.
+   *
+   * One row per key per window, and deletion is how the table stays finite —
+   * the `rate-limit-sweep` job removes windows that have ended, and the upsert
+   * restarts a live one in place. Protecting it from deletion would make a
+   * table that exists to be discarded grow for ever, which is the failure mode
+   * rather than the safeguard.
+   *
+   * Deleting from it fails safe in the direction that matters: a bucket that
+   * is gone starts the count again from zero, so removal can only give a
+   * caller more budget in the current minute, never fabricate a refusal or
+   * erase evidence. Nothing here says what anyone did — the record of what a
+   * caller was refused is the request log, and what they achieved is in
+   * `audit_logs`, which is hash-chained and protected.
+   */
+  'rate_limit_buckets',
   // Reference and configuration data, edited by officers through the portal.
   'lgas',
   'wards',

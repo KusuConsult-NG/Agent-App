@@ -22,6 +22,7 @@ import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import { App } from '../App';
 import { api, ApiRequestError } from '../lib/api';
 import * as drafts from '../lib/drafts';
+import { translations } from '@psirs/shared';
 
 // App renders the home screen behind whatever else is on the page; it needs a
 // shaped payload, not an empty object, or it fails for a reason unrelated to
@@ -73,7 +74,16 @@ describe('a sync the server refuses', () => {
     await waitFor(() => {
       expect(screen.getByText(/Saved records could not be sent/i)).toBeTruthy();
     });
-    expect(screen.getByText(/not registered to your agent account/i)).toBeTruthy();
+    /*
+     * The dictionary's sentence, not the server's.
+     *
+     * This asserted the server's own wording — "your agent account" — and so
+     * pinned the very thing that was wrong: the banner printed the `ApiError`
+     * raw and never reached `TRANSLATED_ERRORS`. The two sentences differ by
+     * a word in English, which is why nobody noticed, and by a whole language
+     * in Hausa, which is the test below.
+     */
+    expect(screen.getByText(translations.en.errDeviceNotRegistered)).toBeTruthy();
     // The next step names a screen the app actually has.
     expect(screen.getByText(/View my application and clearance/i)).toBeTruthy();
     // And the agent is told the capture survives, or they will write it on paper.

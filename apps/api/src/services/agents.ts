@@ -18,6 +18,8 @@
 import type { PoolClient } from 'pg';
 import {
   activationBlockers,
+  blockerSentence,
+  compareVersions,
   deriveAccessStage,
   deriveApplicationState,
   TRAINING_MODULES,
@@ -26,7 +28,8 @@ import {
   type ApplicationState,
 } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { query, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
+import { config } from '../config';
 import { hashIdentityNumber, hashPassword, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { nextAgentCode, nextApplicationNumber } from '../lib/references';
@@ -230,7 +233,7 @@ async function refreshClearance(
        EXISTS (SELECT 1 FROM agent_agreements WHERE agent_id = $1)
          AS agreement_accepted,
        EXISTS (SELECT 1 FROM agent_devices
-                WHERE agent_id = $1 AND status IN ('APPROVED','ACTIVE'))
+                WHERE agent_id = $1 AND status = 'ACTIVE')
          AS device_registered`,
     [agentId],
   );
@@ -456,27 +459,78 @@ export async function submitKyc(params: {
   selfieDocumentId?: string | null;
   ipAddress?: string | null;
 }): Promise<{ status: string; applicationState: ApplicationState; failureReason?: string }> {
-  return withTransaction(async (client) => {
-    const agent = await queryOne<{
-      id: string;
-      full_name: string;
-      phone: string;
-      date_of_birth: Date | null;
-      kyc_status: string;
-    }>(
-      client,
-      `SELECT a.id, u.full_name, u.phone, a.date_of_birth, a.kyc_status
-         FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
-      [params.agentId],
+  /*
+   * Ask first, write once.
+   *
+   * The provider call used to sit in the middle of this transaction, between
+   * superseding the previous attempt and recording the new one — so an
+   * applicant's KYC submission held a pooled connection for as long as the
+   * identity provider took, which is the slowest external call the platform
+   * makes.
+   *
+   * The guarantee the old shape leaned on survives by a shorter route. It
+   * superseded the last attempt and then relied on a throw to roll that back
+   * when the provider could not be reached; now nothing is written until there
+   * is an answer to write, so an unreachable provider leaves the applicant's
+   * record untouched because it was never touched.
+   */
+  const agent = await queryOne<{
+    id: string;
+    full_name: string;
+    phone: string;
+    date_of_birth: Date | null;
+    kyc_status: string;
+  }>(
+    pool,
+    `SELECT a.id, u.full_name, u.phone, a.date_of_birth, a.kyc_status
+       FROM agents a JOIN users u ON u.id = a.user_id WHERE a.id = $1`,
+    [params.agentId],
+  );
+  if (!agent) throw notFound('That agent');
+
+  if (agent.kyc_status === 'CLEARED') {
+    throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
+  }
+
+  let selfieChecksum: string | null = null;
+  if (params.selfieDocumentId) {
+    const doc = await queryOne<{ checksum: string }>(
+      pool,
+      'SELECT checksum FROM kyc_documents WHERE id = $1 AND agent_id = $2',
+      [params.selfieDocumentId, params.agentId],
     );
-    if (!agent) throw notFound('That agent');
+    selfieChecksum = doc?.checksum ?? null;
+  }
 
-    if (agent.kyc_status === 'CLEARED') {
-      throw conflict('KYC_ALREADY_CLEARED', 'Your identity verification has already been completed.');
-    }
+  const nameParts = agent.full_name.trim().split(/\s+/);
+  const verification = await kycProvider.verify({
+    identityType: params.identityType,
+    identityNumber: params.identityNumber,
+    firstName: nameParts[0] ?? agent.full_name,
+    lastName: nameParts[nameParts.length - 1] ?? agent.full_name,
+    dateOfBirth: agent.date_of_birth?.toISOString().slice(0, 10) ?? null,
+    phone: agent.phone,
+    selfieChecksum,
+  });
 
+  if (verification.status === 'UNAVAILABLE') {
+    // Nothing has been written, so there is nothing to undo: the applicant's
+    // existing submission is untouched because it was never superseded.
+    throw new AppError({
+      statusCode: 503,
+      code: 'KYC_PROVIDER_UNAVAILABLE',
+      message:
+        'Your identity could not be checked because the verification service could not be ' +
+        'reached. This is not a problem with your details and nothing has been recorded ' +
+        'against your application.',
+      nextStep: 'Try again in a few minutes. Your application is unchanged.',
+    });
+  }
+
+  return withTransaction(async (client) => {
     // Resubmission supersedes rather than overwrites, so a failed attempt stays
-    // in the record (Addendum §28).
+    // in the record (Addendum §28). Numbered in the same transaction that
+    // supersedes, so two submissions racing cannot claim one attempt number.
     await client.query(
       `UPDATE agent_kyc SET superseded_at = now() WHERE agent_id = $1 AND superseded_at IS NULL`,
       [params.agentId],
@@ -487,42 +541,6 @@ export async function submitKyc(params: {
       `SELECT (COALESCE(MAX(attempt_number),0) + 1)::text AS next FROM agent_kyc WHERE agent_id = $1`,
       [params.agentId],
     );
-
-    let selfieChecksum: string | null = null;
-    if (params.selfieDocumentId) {
-      const doc = await queryOne<{ checksum: string }>(
-        client,
-        'SELECT checksum FROM kyc_documents WHERE id = $1 AND agent_id = $2',
-        [params.selfieDocumentId, params.agentId],
-      );
-      selfieChecksum = doc?.checksum ?? null;
-    }
-
-    const nameParts = agent.full_name.trim().split(/\s+/);
-    const verification = await kycProvider.verify({
-      identityType: params.identityType,
-      identityNumber: params.identityNumber,
-      firstName: nameParts[0] ?? agent.full_name,
-      lastName: nameParts[nameParts.length - 1] ?? agent.full_name,
-      dateOfBirth: agent.date_of_birth?.toISOString().slice(0, 10) ?? null,
-      phone: agent.phone,
-      selfieChecksum,
-    });
-
-    if (verification.status === 'UNAVAILABLE') {
-      // Nothing is recorded and nothing is decided. Throwing here rolls the
-      // supersede back with it, so the applicant's existing submission — if
-      // they had one — survives untouched.
-      throw new AppError({
-        statusCode: 503,
-        code: 'KYC_PROVIDER_UNAVAILABLE',
-        message:
-          'Your identity could not be checked because the verification service could not be ' +
-          'reached. This is not a problem with your details and nothing has been recorded ' +
-          'against your application.',
-        nextStep: 'Try again in a few minutes. Your application is unchanged.',
-      });
-    }
 
     await client.query(
       `INSERT INTO agent_kyc
@@ -560,7 +578,17 @@ export async function submitKyc(params: {
           ? 'KYC_CLEARED'
           : verification.status === 'FAILED'
             ? 'KYC_FAILED'
-            : 'KYC_SUBMITTED',
+            : /*
+               * "Send a clearer photograph" is not "you failed identity
+               * checks". VERIFICATION_REQUIRED came out of this branch as
+               * KYC_SUBMITTED, so the journal said the applicant had simply
+               * submitted and gone quiet, while the notification told them
+               * action was required. An officer reading the journal could not
+               * see that the platform was waiting on the applicant.
+               */
+              verification.status === 'VERIFICATION_REQUIRED'
+              ? 'KYC_INFO_REQUIRED'
+              : 'KYC_SUBMITTED',
       reason: verification.failureReason ?? null,
       actorId: params.actorId,
       metadata: { provider: verification.provider, reference: verification.reference },
@@ -612,16 +640,32 @@ export async function completeTrainingModule(params: {
   score?: number;
   actorId: string;
 }): Promise<{ status: string; trainingCompleted: boolean }> {
-  return withTransaction(async (client) => {
-    const module = await queryOne<{ id: string; assessed: boolean; pass_mark: number; title: string }>(
-      client,
-      `SELECT id, assessed, pass_mark, title FROM training_modules
-        WHERE code = $1 AND status = 'ACTIVE'`,
-      [params.moduleCode],
-    );
-    if (!module) throw notFound('That training module');
+  const module = await queryOne<{ id: string; assessed: boolean; pass_mark: number; title: string }>(
+    pool,
+    `SELECT id, assessed, pass_mark, title FROM training_modules
+      WHERE code = $1 AND status = 'ACTIVE'`,
+    [params.moduleCode],
+  );
+  if (!module) throw notFound('That training module');
 
-    if (module.assessed && (params.score === undefined || params.score < module.pass_mark)) {
+  /*
+   * A failed attempt is recorded, and then the applicant is told.
+   *
+   * Both halves used to sit inside one transaction: the FAILED row was
+   * written and `badRequest` was thrown immediately after it, so the throw
+   * rolled the row straight back out again. Nothing was ever recorded. The
+   * `attempts` counter this table keeps could not leave nought, and
+   * `refreshClearance` derives `agents.training_status` from the presence of
+   * any progress row — so an applicant who had sat an assessed module three
+   * times and failed it three times appeared on the officer's list as one who
+   * had never opened it. That is the applicant most worth seeing.
+   *
+   * So the attempt is committed in a transaction of its own, and the refusal
+   * is raised afterwards, outside it, where it can no longer undo the record
+   * of what happened.
+   */
+  if (module.assessed && (params.score === undefined || params.score < module.pass_mark)) {
+    await withTransaction(async (client) => {
       await client.query(
         `INSERT INTO agent_training_progress (agent_id, module_id, status, score, attempts, started_at)
          VALUES ($1,$2,'FAILED',$3,1,now())
@@ -629,12 +673,37 @@ export async function completeTrainingModule(params: {
            SET status = 'FAILED', score = EXCLUDED.score, attempts = agent_training_progress.attempts + 1`,
         [params.agentId, module.id, params.score ?? null],
       );
-      throw badRequest(
-        `You scored ${params.score ?? 0}% on "${module.title}". ` +
-          `You need at least ${module.pass_mark}% to pass. Review the module and try again.`,
-      );
-    }
+      await refreshClearance(client, params.agentId);
+    });
 
+    /*
+     * Coded, so it can be read in Hausa.
+     *
+     * This was a `badRequest`, which means INVALID_REQUEST — the code the
+     * agent application deliberately does NOT translate, because a validation
+     * message names a field and is generated from the schema, so a guessed
+     * Hausa sentence would be worse than the English one.
+     *
+     * That reasoning does not apply here. This sentence has one fixed
+     * meaning, an agent meets it every time they sit the same test, and it is
+     * the one telling them why they cannot yet be cleared to collect. The
+     * code carries the two numbers so the screen can compose it.
+     */
+    throw new AppError({
+      statusCode: 400,
+      code: 'TRAINING_SCORE_BELOW_PASS_MARK',
+      message:
+        `You scored ${params.score ?? 0}% on "${module.title}". ` +
+        `You need at least ${module.pass_mark}% to pass. Review the module and try again.`,
+      details: [
+        { field: 'score', issue: String(params.score ?? 0) },
+        { field: 'passMark', issue: String(module.pass_mark) },
+        { field: 'module', issue: module.title },
+      ],
+    });
+  }
+
+  return withTransaction(async (client) => {
     await client.query(
       `INSERT INTO agent_training_progress
          (agent_id, module_id, status, score, attempts, started_at, completed_at)
@@ -744,23 +813,21 @@ export interface BankVerificationResult {
  * redirecting a payout cannot supply — so it has to be obtained while the
  * proposal is still a proposal, not after it is in use.
  */
-async function verifyAccountRow(
-  client: PoolClient,
-  params: { accountId: string; agentId: string; actorId: string },
-): Promise<BankVerificationResult> {
-  const account = await queryOne<{
-    id: string;
-    bank_code: string | null;
-    account_number: string;
-    account_name: string;
-  }>(
-    client,
-    `SELECT id, bank_code, account_number, account_name FROM bank_accounts WHERE id = $1`,
-    [params.accountId],
-  );
-  if (!account) throw notFound('That bank account');
-
-  if (!account.bank_code) {
+/**
+ * Ask the bank, outside any transaction.
+ *
+ * Split from the recording below so the network call never happens with a
+ * transaction open. Every caller has the three things a bank needs — the
+ * code, the number and the name it is expected to resolve to — before it
+ * opens one: two read them from an existing row, and the third is proposing
+ * the account and has them in the request.
+ */
+async function askTheBank(account: {
+  bankCode: string | null;
+  accountNumber: string;
+  accountName: string;
+}) {
+  if (!account.bankCode) {
     // Our own data is incomplete; there is nothing to ask the bank yet. Say
     // so before making a call that could only fail confusingly.
     throw badRequest(
@@ -770,12 +837,37 @@ async function verifyAccountRow(
     );
   }
 
-  const result = await bankVerification.verify({
-    bankCode: account.bank_code,
-    accountNumber: account.account_number,
-    expectedName: account.account_name,
+  return bankVerification.verify({
+    bankCode: account.bankCode,
+    accountNumber: account.accountNumber,
+    expectedName: account.accountName,
   });
+}
 
+/**
+ * Record what the bank said about one account row.
+ *
+ * The resolved account name is the strongest control in the change flow — the
+ * one thing somebody redirecting a payout cannot supply — so it is written in
+ * the same transaction as whatever decision depends on it.
+ */
+async function recordBankAnswer(
+  client: PoolClient,
+  params: {
+    accountId: string;
+    agentId: string;
+    actorId: string;
+    result: Awaited<ReturnType<typeof askTheBank>>;
+  },
+): Promise<BankVerificationResult> {
+  const account = await queryOne<{ id: string }>(
+    client,
+    `SELECT id FROM bank_accounts WHERE id = $1`,
+    [params.accountId],
+  );
+  if (!account) throw notFound('That bank account');
+
+  const result = params.result;
   const verified = result.outcome === 'VERIFIED';
   const status = verified ? 'VERIFIED' : result.outcome === 'UNAVAILABLE' ? 'PENDING' : 'FAILED';
 
@@ -836,25 +928,32 @@ export async function verifyBankAccount(params: {
   agentId: string;
   actorId: string;
 }): Promise<BankVerificationResult> {
-  return withTransaction(async (client) => {
-    const account = await queryOne<{
-      id: string;
-      bank_code: string | null;
-      account_number: string;
-      account_name: string;
-    }>(
-      client,
-      `SELECT b.id, b.bank_code, b.account_number, b.account_name
-         FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id
-        WHERE a.id = $1 AND b.status = 'ACTIVE'`,
-      [params.agentId],
-    );
-    if (!account) throw notFound('A bank account for this agent');
+  const account = await queryOne<{
+    id: string;
+    bank_code: string | null;
+    account_number: string;
+    account_name: string;
+  }>(
+    pool,
+    `SELECT b.id, b.bank_code, b.account_number, b.account_name
+       FROM agents a JOIN bank_accounts b ON b.id = a.bank_account_id
+      WHERE a.id = $1 AND b.status = 'ACTIVE'`,
+    [params.agentId],
+  );
+  if (!account) throw notFound('A bank account for this agent');
 
-    const result = await verifyAccountRow(client, {
+  const answer = await askTheBank({
+    bankCode: account.bank_code,
+    accountNumber: account.account_number,
+    accountName: account.account_name,
+  });
+
+  return withTransaction(async (client) => {
+    const result = await recordBankAnswer(client, {
       accountId: account.id,
       agentId: params.agentId,
       actorId: params.actorId,
+      result: answer,
     });
     await refreshClearance(client, params.agentId);
     return result;
@@ -870,6 +969,8 @@ export async function registerDevice(params: {
   pwaVersion?: string | null;
   actorId: string;
   ipAddress?: string | null;
+  /** Overrides `config.security.deviceAutoApprove`; only a test passes it. */
+  autoApprove?: boolean;
 }): Promise<{ deviceId: string; status: string }> {
   return withTransaction(async (client) => {
     const axes = await loadAxes(client, params.agentId);
@@ -877,10 +978,12 @@ export async function registerDevice(params: {
     // Addendum §26 stage 3: device registration opens only after government
     // approval, so an unvetted applicant cannot bind devices.
     if (!axes.flags.governmentApproved) {
-      throw forbidden(
-        'Devices can only be registered after your application has been approved by PSIRS.',
-        'You will be notified when the review is complete.',
-      );
+      throw new AppError({
+        statusCode: 403,
+        code: 'DEVICE_BEFORE_APPROVAL',
+        message: 'Devices can only be registered after your application has been approved by PSIRS.',
+        nextStep: 'You will be notified when the review is complete.',
+      });
     }
 
     const existing = await queryOne<{ id: string; status: string }>(
@@ -891,23 +994,57 @@ export async function registerDevice(params: {
 
     if (existing) {
       if (existing.status === 'REVOKED') {
-        throw forbidden(
-          'This device has been revoked and cannot be registered again. Use a different device.',
-        );
+        throw new AppError({
+          statusCode: 403,
+          code: 'DEVICE_REVOKED_CANNOT_REREGISTER',
+          message:
+            'This device has been revoked and cannot be registered again. Use a different device.',
+        });
       }
       return { deviceId: existing.id, status: existing.status };
     }
 
-    // The first device of an approved agent is auto-approved so onboarding can
-    // complete; every subsequent device starts PENDING and needs an officer
-    // (Addendum §21).
+    /*
+     * The first device of an approved agent is auto-approved so onboarding can
+     * complete; every subsequent device starts PENDING and needs an officer
+     * (Addendum §21).
+     *
+     * "First" has to mean the agent has never had one, not that they have none
+     * right now. This counted only devices that were approved or active, and a
+     * revoked device is neither — so an agent whose only handset had just been
+     * revoked *for cause* counted as having none, their replacement was treated
+     * as their first, and it was collecting revenue before anybody had looked
+     * at it. Revocation kills the device, ends its sessions and refuses to let
+     * the same handset back; and then the next one let the agent straight back
+     * in. The officer's decision lasted as long as it took to register another
+     * phone.
+     *
+     * Onboarding and replacement look identical to a count and are opposite
+     * situations. Only one of them means nobody has ever had a reason to look.
+     */
     const priorDevices = await queryOne<{ count: string }>(
       client,
-      `SELECT count(*)::text AS count FROM agent_devices
-        WHERE agent_id = $1 AND status IN ('APPROVED','ACTIVE')`,
+      'SELECT count(*)::text AS count FROM agent_devices WHERE agent_id = $1',
       [params.agentId],
     );
     const isFirst = Number.parseInt(priorDevices?.count ?? '0', 10) === 0;
+
+    /*
+     * A development or test deployment approves every handset on the spot.
+     *
+     * Not a relaxation of the rule above, which stands: it is a statement that
+     * on a laptop there is no stolen phone, no agent to protect and no revenue
+     * to lose, and that needing two people to open one screen is what stops a
+     * demonstration or a local trial from happening at all. `config.ts` forces
+     * this false in production and refuses to boot if anybody sets it there, so
+     * the only deployments that can reach it are the ones where the decision
+     * costs nothing.
+     *
+     * Passed in rather than only read from config so a test can exercise both
+     * answers without setting a process-wide environment variable that every
+     * other suite sharing the process would then inherit.
+     */
+    const approveNow = isFirst || (params.autoApprove ?? config.security.deviceAutoApprove);
 
     const device = await queryOne<{ id: string; status: string }>(
       client,
@@ -923,9 +1060,9 @@ export async function registerDevice(params: {
         params.browser ?? null,
         params.operatingSystem ?? null,
         params.pwaVersion ?? null,
-        isFirst ? 'ACTIVE' : 'PENDING',
-        isFirst ? new Date() : null,
-        isFirst ? params.actorId : null,
+        approveNow ? 'ACTIVE' : 'PENDING',
+        approveNow ? new Date() : null,
+        approveNow ? params.actorId : null,
       ],
     );
 
@@ -934,7 +1071,17 @@ export async function registerDevice(params: {
       agentId: params.agentId,
       eventType: 'DEVICE_REGISTERED',
       actorId: params.actorId,
-      metadata: { deviceIdentifier: params.deviceIdentifier, autoApproved: isFirst },
+      /*
+       * `autoApproved` records that no officer looked, and `firstDevice`
+       * records why. An approval nobody can account for afterwards is worse
+       * than the delay it saved, and the two reasons are not the same thing:
+       * one is the onboarding rule, the other is a deployment setting.
+       */
+      metadata: {
+        deviceIdentifier: params.deviceIdentifier,
+        autoApproved: approveNow,
+        firstDevice: isFirst,
+      },
     });
 
     await recordAudit(client, {
@@ -952,6 +1099,202 @@ export async function registerDevice(params: {
 }
 
 /** Immediate device revocation (PRD §34, Addendum §21). */
+/**
+ * Let a handset start collecting government revenue (Addendum §21).
+ *
+ * The mirror of `revokeDevice`, and it had been written as neither a mirror
+ * nor a service: the route updated the row and returned, and that was all.
+ * Two things were missing because of it.
+ *
+ * The agent stayed locked out. `agent_clearance.device_registered` is what
+ * `requireActiveAgent` reads, and it is derived — revoking refreshes it, and
+ * registering refreshes it, and approving did not. So an officer could approve
+ * a replacement handset, see the device go ACTIVE, and the agent would still be
+ * told "You are not yet cleared to carry out revenue collection — no approved
+ * device has been registered", with nothing on either screen to explain the
+ * disagreement.
+ *
+ * And it left no trail. Revoking a device is on the audit log; letting one in
+ * was not, though only one of the two starts money being taken in somebody's
+ * name.
+ */
+export async function approveDevice(params: {
+  deviceId: string;
+  actorId: string;
+  actorRole: string;
+  ipAddress?: string | null;
+}): Promise<{ agentId: string }> {
+  return withTransaction(async (client) => {
+    const device = await queryOne<{
+      id: string;
+      status: string;
+      agent_id: string;
+      device_identifier: string;
+    }>(
+      client,
+      'SELECT id, status, agent_id, device_identifier FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status === 'REVOKED') {
+      throw forbidden('A revoked device cannot be approved again.');
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'ACTIVE', approved_at = now(), approved_by = $2
+        WHERE id = $1`,
+      [params.deviceId, params.actorId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await journal(client, {
+      agentId: device.agent_id,
+      eventType: 'DEVICE_REGISTERED',
+      actorId: params.actorId,
+      metadata: { deviceIdentifier: device.device_identifier, approved: true },
+    });
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_approved',
+      entityType: 'agent_device',
+      entityId: device.id,
+      oldValue: { status: device.status },
+      newValue: {
+        status: 'ACTIVE',
+        agentId: device.agent_id,
+        deviceIdentifier: device.device_identifier,
+      },
+      ipAddress: params.ipAddress ?? null,
+    });
+
+    return { agentId: device.agent_id };
+  });
+}
+
+/**
+ * Stop a handset without ending it (Addendum §21).
+ *
+ * Revocation was the only lever, and it is final in both directions: the
+ * device dies, its sessions end, and that handset can never be registered to
+ * that agent again. Right for a stolen phone; wrong for most of the reasons an
+ * officer reaches for it. A handset mislaid for a week, a DEVICE_VELOCITY flag
+ * somebody wants to look at before collection continues, a phone in for
+ * repair — in all of those the choice was to ban a working handset for good or
+ * do nothing, and the cost of the first falls on the agent, so in practice the
+ * answer tended to be nothing.
+ *
+ * A suspension stops collection exactly as hard: sessions end at once, the
+ * clearance flag drops, and `requireActiveAgent` refuses. What it does not do
+ * is decide anything permanently.
+ *
+ * Reversible by one officer, deliberately. The lever that needs no undo is the
+ * one next to it, and making the common case — a phone that turned up — take
+ * two people would push officers back to using neither.
+ */
+export async function suspendDevice(params: {
+  deviceId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<void> {
+  await withTransaction(async (client) => {
+    const device = await queryOne<{ id: string; status: string; agent_id: string }>(
+      client,
+      'SELECT id, status, agent_id FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status === 'REVOKED') {
+      throw conflict(
+        'DEVICE_ALREADY_REVOKED',
+        'This device has been revoked. There is nothing left to suspend.',
+      );
+    }
+    if (device.status === 'SUSPENDED') {
+      throw conflict('DEVICE_ALREADY_SUSPENDED', 'This device is already suspended.');
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'SUSPENDED', revocation_reason = $2 WHERE id = $1`,
+      [params.deviceId, params.reason],
+    );
+
+    // The same immediacy revocation has. A pause that waits for a token to
+    // expire is not a pause.
+    await client.query(
+      `UPDATE sessions SET revoked_at = now(), revoked_reason = 'Device suspended'
+        WHERE device_id = $1 AND revoked_at IS NULL`,
+      [params.deviceId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_suspended',
+      entityType: 'agent_device',
+      entityId: params.deviceId,
+      oldValue: { status: device.status },
+      newValue: { status: 'SUSPENDED' },
+      reason: params.reason,
+    });
+  });
+}
+
+/**
+ * Put a suspended handset back to work.
+ *
+ * Only from SUSPENDED. A revoked device is not restored here or anywhere: the
+ * whole point of the two levers being different is that one of them cannot be
+ * walked back, and an officer who wants that outcome undone is asking for a
+ * decision somebody else made to be reversed by a route rather than by them.
+ */
+export async function restoreDevice(params: {
+  deviceId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<void> {
+  await withTransaction(async (client) => {
+    const device = await queryOne<{ id: string; status: string; agent_id: string }>(
+      client,
+      'SELECT id, status, agent_id FROM agent_devices WHERE id = $1 FOR UPDATE',
+      [params.deviceId],
+    );
+    if (!device) throw notFound('That device');
+    if (device.status !== 'SUSPENDED') {
+      throw conflict(
+        'DEVICE_NOT_SUSPENDED',
+        device.status === 'REVOKED'
+          ? 'This device was revoked, not suspended, and a revoked device cannot be brought back.'
+          : `This device is ${device.status.toLowerCase()}, so there is nothing to restore.`,
+        device.status === 'REVOKED'
+          ? 'The agent registers a replacement handset, which an officer then approves.'
+          : undefined,
+      );
+    }
+
+    await client.query(
+      `UPDATE agent_devices SET status = 'ACTIVE', revocation_reason = NULL WHERE id = $1`,
+      [params.deviceId],
+    );
+
+    await refreshClearance(client, device.agent_id);
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'agent.device_restored',
+      entityType: 'agent_device',
+      entityId: params.deviceId,
+      oldValue: { status: 'SUSPENDED' },
+      newValue: { status: 'ACTIVE' },
+      reason: params.reason,
+    });
+  });
+}
+
 export async function revokeDevice(params: {
   deviceId: string;
   reason: string;
@@ -1125,7 +1468,7 @@ export async function activate(params: {
       if (!params.overrideApprovalId) {
         throw conflict(
           'ACTIVATION_BLOCKED',
-          `This agent cannot be activated yet: ${blockers.join('; ')}.`,
+          `This agent cannot be activated yet: ${blockers.map(blockerSentence).join('; ')}.`,
           'Complete the outstanding clearance requirements, or raise a government override request.',
         );
       }
@@ -1153,19 +1496,41 @@ export async function activate(params: {
             SET override_approval_id = $2,
                 override_reason = $3
           WHERE agent_id = $1`,
-        [params.agentId, params.overrideApprovalId, `Activated with outstanding: ${blockers.join('; ')}`],
+        [
+          params.agentId,
+          params.overrideApprovalId,
+          `Activated with outstanding: ${blockers.map(blockerSentence).join('; ')}`,
+        ],
       );
       await client.query(`UPDATE approvals SET status = 'EXECUTED', executed_at = now() WHERE id = $1`, [
         params.overrideApprovalId,
       ]);
     }
 
-    const agent = await queryOne<{ agent_code: string | null; territory_id: string | null }>(
+    const agent = await queryOne<{
+      agent_code: string | null;
+      territory_id: string | null;
+      operational_status: string;
+      activated_at: Date | null;
+    }>(
       client,
-      'SELECT agent_code, territory_id FROM agents WHERE id = $1',
+      'SELECT agent_code, territory_id, operational_status, activated_at FROM agents WHERE id = $1',
       [params.agentId],
     );
     if (!agent) throw notFound('That agent');
+
+    /*
+     * Coming back is not the same as arriving.
+     *
+     * This function does both jobs — it activates a cleared applicant, and it
+     * is also the only way a suspended agent is put back to work, because the
+     * UPDATE below clears `suspended_at` and `suspension_reason`. Both wrote
+     * ACTIVATED into the clearance journal, so an agent suspended in March and
+     * restored in April showed two entries an officer could not tell apart,
+     * and the journal is the record they read to decide whether to trust this
+     * agent with a territory.
+     */
+    const returning = agent.operational_status === 'SUSPENDED' || agent.activated_at !== null;
 
     const territoryId = params.territoryId ?? agent.territory_id;
     if (!territoryId) {
@@ -1192,10 +1557,17 @@ export async function activate(params: {
 
     await journal(client, {
       agentId: params.agentId,
-      eventType: params.overrideApprovalId ? 'OVERRIDE_APPLIED' : 'ACTIVATED',
+      eventType: returning ? 'REINSTATED' : params.overrideApprovalId ? 'OVERRIDE_APPLIED' : 'ACTIVATED',
       toState: after,
       actorId: params.actorId,
-      metadata: { agentCode, territoryId, blockersAtActivation: blockers },
+      metadata: {
+        agentCode,
+        territoryId,
+        blockersAtActivation: blockers,
+        // Kept on the reinstatement too, so naming the event after the return
+        // does not lose the fact that an override carried it.
+        overrideApprovalId: params.overrideApprovalId ?? null,
+      },
     });
 
     await recordAudit(client, {
@@ -1242,7 +1614,7 @@ export async function suspend(params: {
     );
     await client.query(
       `UPDATE agent_devices SET status = 'SUSPENDED'
-        WHERE agent_id = $1 AND status IN ('ACTIVE','APPROVED','PENDING')`,
+        WHERE agent_id = $1 AND status IN ('ACTIVE','PENDING')`,
       [params.agentId],
     );
 
@@ -1280,7 +1652,20 @@ export async function kycDashboard(db: Db, filters: { lgaId?: string; reviewerId
     db,
     `SELECT
        count(*) FILTER (WHERE a.application_submitted_at IS NOT NULL)::text AS applications_received,
-       count(*) FILTER (WHERE a.kyc_status IN ('NOT_STARTED','SUBMITTED','UNDER_REVIEW'))::text AS kyc_pending,
+       /*
+        * VERIFICATION_REQUIRED belongs here, and was in none of these three.
+        *
+        * It is the outcome that says the provider needs something more from
+        * the applicant — a clearer photograph of the document, usually — and
+        * it was left out of pending, cleared and failed alike. So an applicant
+        * waiting to be chased was counted nowhere on the officer's dashboard,
+        * and the three figures did not add up to the applications received.
+        * It gets a count of its own as well, because "waiting on us" and
+        * "waiting on them" are different queues of work.
+        */
+       count(*) FILTER (WHERE a.kyc_status IN
+         ('NOT_STARTED','SUBMITTED','UNDER_REVIEW','VERIFICATION_REQUIRED'))::text AS kyc_pending,
+       count(*) FILTER (WHERE a.kyc_status = 'VERIFICATION_REQUIRED')::text AS kyc_action_required,
        count(*) FILTER (WHERE a.kyc_status = 'CLEARED')::text AS kyc_cleared,
        count(*) FILTER (WHERE a.kyc_status = 'FAILED')::text AS kyc_failed,
        count(*) FILTER (WHERE a.referee_status = 'PENDING')::text AS referee_pending,
@@ -1424,6 +1809,26 @@ export async function requestBankAccountChange(params: {
   accountNumber: string;
   reason: string;
 }): Promise<BankAccountChange> {
+  /*
+   * Ask the bank before the transaction, not inside it.
+   *
+   * The three things a bank needs to resolve a name are all in the request, so
+   * nothing is lost by asking first — and asking inside meant a change request
+   * held a pooled connection and a lock on the agent's account row while a
+   * bank thought about it.
+   *
+   * The order does change one thing: the bank is now asked before the
+   * validation below rules the request out, so an invalid request can cost one
+   * wasted enquiry. That is acceptable here in a way it is not for a TIN — a
+   * name enquiry reads, and creates nothing that has to be lived with
+   * afterwards.
+   */
+  const answer = await askTheBank({
+    bankCode: params.bankCode.trim(),
+    accountNumber: params.accountNumber.trim(),
+    accountName: params.accountName.trim(),
+  });
+
   return withTransaction(async (client) => {
     const agent = await queryOne<{
       id: string;
@@ -1475,10 +1880,13 @@ export async function requestBankAccountChange(params: {
         )
       : null;
     if (!current) {
-      throw badRequest(
-        'This agent has no bank account on record yet, so there is nothing to change. ' +
+      throw new AppError({
+        statusCode: 400,
+        code: 'NO_BANK_ACCOUNT_ON_RECORD',
+        message:
+          'This agent has no bank account on record yet, so there is nothing to change. ' +
           'The account is captured on the application.',
-      );
+      });
     }
 
     const accountNumber = params.accountNumber.trim();
@@ -1486,10 +1894,12 @@ export async function requestBankAccountChange(params: {
       accountNumber === current.account_number &&
       params.bankName.trim() === current.bank_name
     ) {
-      throw badRequest(
-        'Those are the details already on record. Nothing would change.',
-        [{ field: 'accountNumber', issue: 'Same as the account already in use' }],
-      );
+      throw new AppError({
+        statusCode: 400,
+        code: 'BANK_DETAILS_UNCHANGED',
+        message: 'Those are the details already on record. Nothing would change.',
+        details: [{ field: 'accountNumber', issue: 'Same as the account already in use' }],
+      });
     }
 
     const proposed = await queryOne<{ id: string }>(
@@ -1537,12 +1947,15 @@ export async function requestBankAccountChange(params: {
       approval!.id,
     ]);
 
-    // Ask the bank now, while it is still only a proposal. An officer should
-    // never be the first person to find out the name does not match.
-    const verification = await verifyAccountRow(client, {
+    // Recorded now, while it is still only a proposal. An officer should never
+    // be the first person to find out the name does not match, and the
+    // resolved name lands in the same transaction as the approval that will
+    // be judged against it.
+    const verification = await recordBankAnswer(client, {
       accountId: proposed!.id,
       agentId: params.agentId,
       actorId: params.actorId,
+      result: answer,
     });
 
     await recordAudit(client, {
@@ -1782,25 +2195,41 @@ export async function reverifyProposedAccount(params: {
   approvalId: string;
   actorId: string;
 }): Promise<BankVerificationResult> {
-  return withTransaction(async (client) => {
-    const proposed = await queryOne<{ id: string; owner_id: string; status: string }>(
-      client,
-      `SELECT id, owner_id, status FROM bank_accounts WHERE change_approval_id = $1`,
-      [params.approvalId],
+  const proposed = await queryOne<{
+    id: string;
+    owner_id: string;
+    status: string;
+    bank_code: string | null;
+    account_number: string;
+    account_name: string;
+  }>(
+    pool,
+    `SELECT id, owner_id, status, bank_code, account_number, account_name
+       FROM bank_accounts WHERE change_approval_id = $1`,
+    [params.approvalId],
+  );
+  if (!proposed) throw notFound('The account this approval refers to');
+  if (proposed.status !== 'PROPOSED') {
+    throw conflict(
+      'BANK_CHANGE_ALREADY_SETTLED',
+      `This change has already been ${proposed.status.toLowerCase()}.`,
     );
-    if (!proposed) throw notFound('The account this approval refers to');
-    if (proposed.status !== 'PROPOSED') {
-      throw conflict(
-        'BANK_CHANGE_ALREADY_SETTLED',
-        `This change has already been ${proposed.status.toLowerCase()}.`,
-      );
-    }
-    return verifyAccountRow(client, {
+  }
+
+  const answer = await askTheBank({
+    bankCode: proposed.bank_code,
+    accountNumber: proposed.account_number,
+    accountName: proposed.account_name,
+  });
+
+  return withTransaction(async (client) =>
+    recordBankAnswer(client, {
       accountId: proposed.id,
       agentId: proposed.owner_id,
       actorId: params.actorId,
-    });
-  });
+      result: answer,
+    }),
+  );
 }
 
 /** The proposal outstanding for one agent, if there is one. */
@@ -1889,4 +2318,224 @@ export async function pendingBankAccountChanges(db: Db): Promise<
         }
       : null,
   }));
+}
+
+// ---------------------------------------------------------------------------
+// The version gate an administrator can actually move
+// ---------------------------------------------------------------------------
+
+/**
+ * Publish a new minimum and recommended version for the field application.
+ *
+ * `requireSupportedAppVersion` refuses a collection from a build below the
+ * minimum, answering 426 with `moneyStatus: NOT_DEBITED` — it is the lever for
+ * a release found to be getting money wrong. It reads the newest `app_versions`
+ * row and falls back to config only when there is none, and the seed inserts a
+ * row only when the table is empty. So on the first deploy config decided the
+ * minimum, and from that moment nothing could change it: raising
+ * `PWA_MINIMUM_AGENT_VERSION` in the environment had no effect on a database
+ * that already had a row, and no endpoint wrote a second one. A gate whose
+ * threshold is frozen at whatever shipped on day one cannot lock out the build
+ * it exists to lock out.
+ *
+ * Appended rather than updated, because `app_versions` is ordered by
+ * `effective_from` and read newest-first: the history of what was required
+ * when is worth keeping, and a row that has already refused somebody's
+ * collection should not be editable afterwards.
+ *
+ * WHAT IT REFUSES, AND WHAT IT ONLY WARNS ABOUT. A minimum above the
+ * recommended version is refused: it would lock out every handset including
+ * one that had just updated to the newest build, which is never what anybody
+ * means. Locking out handsets that exist is *not* refused — that is the whole
+ * purpose when a release is miscomputing money — but the count comes back with
+ * the answer, so the administrator finds out from the platform rather than
+ * from a market.
+ */
+export async function publishAppVersion(params: {
+  minimumVersion: string;
+  recommendedVersion: string;
+  notes: string;
+  effectiveFrom?: Date | null;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  minimumVersion: string;
+  recommendedVersion: string;
+  effectiveFrom: Date;
+  previousMinimum: string;
+  devicesLockedOut: number;
+  activeDevices: number;
+  message: string;
+}> {
+  if (compareVersions(params.minimumVersion, params.recommendedVersion) > 0) {
+    throw badRequest(
+      `A minimum of ${params.minimumVersion} is above the recommended ${params.recommendedVersion}, ` +
+        'so even a handset on the newest build would be refused.',
+    );
+  }
+
+  return withTransaction(async (client) => {
+    const current = await queryOne<{ minimum_version: string; effective_from: Date }>(
+      client,
+      `SELECT minimum_version, effective_from FROM app_versions
+        WHERE app = 'AGENT_PWA' ORDER BY effective_from DESC LIMIT 1`,
+    );
+    const previousMinimum = current?.minimum_version ?? config.pwa.minimumAgentVersion;
+    const effectiveFrom = params.effectiveFrom ?? new Date();
+
+    /*
+     * A row the gate would never read is not a publication.
+     *
+     * The gate takes the newest row with `effective_from <= now()`. Dating a
+     * new one at or before the row already in force means it is never
+     * selected, and the call would answer as though the threshold had moved
+     * when nothing had — the quietest possible way for a safety control to be
+     * left where it was.
+     */
+    if (current && effectiveFrom <= current.effective_from) {
+      throw conflict(
+        'APP_VERSION_NOT_LATER',
+        'That effective date is not after the version currently in force, so the gate would ' +
+          'never read it and the minimum would not change.',
+        'Publish it with a later date, or leave the date out to take effect now.',
+      );
+    }
+
+    await client.query(
+      `INSERT INTO app_versions
+         (app, minimum_version, recommended_version, notes, effective_from, created_by)
+       VALUES ('AGENT_PWA', $1, $2, $3, $4, $5)`,
+      [
+        params.minimumVersion,
+        params.recommendedVersion,
+        params.notes,
+        effectiveFrom,
+        params.actorId,
+      ],
+    );
+
+    /*
+     * How many handsets this stops, counted rather than estimated.
+     *
+     * Compared in TypeScript because the comparison is semantic, not
+     * lexicographic — '1.10.0' is above '1.9.0' and a text comparison in SQL
+     * says the opposite, which would under-report exactly the case where the
+     * count matters. A device that has never reported a version counts as
+     * locked out, because the gate treats a missing version as unsupported.
+     */
+    const devices = await query<{ pwa_version: string | null }>(
+      client,
+      `SELECT pwa_version FROM agent_devices WHERE status = 'ACTIVE'`,
+    );
+    const devicesLockedOut = devices.filter(
+      (device) =>
+        !device.pwa_version || compareVersions(device.pwa_version, params.minimumVersion) < 0,
+    ).length;
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'app_version.published',
+      entityType: 'app_version',
+      entityId: 'AGENT_PWA',
+      oldValue: { minimumVersion: previousMinimum },
+      newValue: {
+        minimumVersion: params.minimumVersion,
+        recommendedVersion: params.recommendedVersion,
+        effectiveFrom: effectiveFrom.toISOString(),
+        devicesLockedOut,
+      },
+      reason: params.notes,
+    });
+
+    return {
+      minimumVersion: params.minimumVersion,
+      recommendedVersion: params.recommendedVersion,
+      effectiveFrom,
+      previousMinimum,
+      devicesLockedOut,
+      activeDevices: devices.length,
+      message:
+        devicesLockedOut === 0
+          ? `Minimum version is now ${params.minimumVersion}. No active handset is below it.`
+          : `Minimum version is now ${params.minimumVersion}. ${devicesLockedOut} of ` +
+            `${devices.length} active handset${devices.length === 1 ? '' : 's'} cannot collect ` +
+            'until they update.',
+    };
+  });
+}
+
+/**
+ * What has been required of the field application, and what is out there now.
+ *
+ * The decision the administrator is about to make is "how many handsets does
+ * this stop", and the only honest way to answer it before publishing is to show
+ * the fleet as it stands. Counted with the same comparison the publish path
+ * uses, so the screen and the answer cannot disagree; a handset that has never
+ * reported a version is listed under `null` rather than dropped, because it is
+ * the one the gate refuses outright.
+ */
+export async function appVersionHistory(): Promise<{
+  minimumVersion: string;
+  recommendedVersion: string;
+  published: Array<{
+    minimumVersion: string;
+    recommendedVersion: string;
+    notes: string | null;
+    effectiveFrom: Date;
+    inForce: boolean;
+    publishedBy: string | null;
+  }>;
+  fleet: Array<{ version: string | null; devices: number; belowMinimum: boolean }>;
+  activeDevices: number;
+}> {
+  const rows = await query<{
+    minimum_version: string;
+    recommended_version: string;
+    notes: string | null;
+    effective_from: Date;
+    published_by: string | null;
+  }>(
+    pool,
+    `SELECT v.minimum_version, v.recommended_version, v.notes, v.effective_from,
+            u.full_name AS published_by
+       FROM app_versions v
+       LEFT JOIN users u ON u.id = v.created_by
+      WHERE v.app = 'AGENT_PWA'
+      ORDER BY v.effective_from DESC`,
+  );
+
+  // The row the gate reads: newest already in effect. A future-dated row is
+  // shown but is not in force, which is the distinction a screen listing them
+  // all in date order would otherwise lose.
+  const now = new Date();
+  const inForce = rows.find((row) => row.effective_from <= now);
+  const minimumVersion = inForce?.minimum_version ?? config.pwa.minimumAgentVersion;
+
+  const devices = await query<{ pwa_version: string | null; devices: string }>(
+    pool,
+    `SELECT pwa_version, COUNT(*)::text AS devices FROM agent_devices
+      WHERE status = 'ACTIVE' GROUP BY pwa_version`,
+  );
+
+  return {
+    minimumVersion,
+    recommendedVersion: inForce?.recommended_version ?? config.pwa.recommendedAgentVersion,
+    published: rows.map((row) => ({
+      minimumVersion: row.minimum_version,
+      recommendedVersion: row.recommended_version,
+      notes: row.notes,
+      effectiveFrom: row.effective_from,
+      inForce: row === inForce,
+      publishedBy: row.published_by,
+    })),
+    fleet: devices
+      .map((row) => ({
+        version: row.pwa_version,
+        devices: Number(row.devices),
+        belowMinimum: !row.pwa_version || compareVersions(row.pwa_version, minimumVersion) < 0,
+      }))
+      .sort((a, b) => compareVersions(a.version ?? '0', b.version ?? '0')),
+    activeDevices: devices.reduce((total, row) => total + Number(row.devices), 0),
+  };
 }

@@ -39,6 +39,7 @@ import {
   stopTestServer,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
+import * as rbacStore from '../services/rbac-store';
 import { seedReferenceData } from '../db/seed';
 
 interface Totals {
@@ -280,6 +281,62 @@ describe('an unconfigured supervisor', () => {
     );
   });
 
+  /*
+   * The exceptions block was exempt from all of this.
+   *
+   * `executiveDashboard` scopes its revenue, its counts, its LGA and agent
+   * breakdowns, its trend and its fraud flags — and then answers three
+   * questions statewide regardless of scope. Two of those are defensible: a
+   * supervisor holds approval:review and support:read:all, so the approval
+   * queue and the ticket queue really are theirs to see whole.
+   *
+   * Reconciliation is not. A supervisor holds no reconciliation permission at
+   * all, so the figure was both unscoped and un-actionable — a statewide
+   * number sitting in a block whose siblings are territorial, on a dashboard
+   * that names the scope it is showing. And an unassigned supervisor, whose
+   * whole dashboard is zeros by design, was shown a live count.
+   */
+  it('counts only the reconciliation exceptions its own territory produced', async () => {
+    const exceptionOn = async (reference: string) => {
+      await pool.query(
+        `INSERT INTO reconciliation_records
+           (run_id, transaction_id, expected_amount_kobo, received_amount_kobo,
+            variance_kobo, status)
+         SELECT gen_random_uuid(), t.id, t.amount_kobo, 0, t.amount_kobo, 'MISSING_PAYMENT'
+           FROM transactions t WHERE t.transaction_reference = $1`,
+        [reference],
+      );
+    };
+    await exceptionOn('SCOPE-INSIDE-00001');
+    await exceptionOn('SCOPE-OUTSIDE-00002');
+
+    const supervisor = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: scopedSupervisorToken },
+    );
+    assert.equal(
+      supervisor.body.exceptions.reconciliation_exceptions,
+      '1',
+      'a supervisor was shown exceptions from a territory they do not hold',
+    );
+
+    const unassigned = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: unassignedSupervisorToken },
+    );
+    assert.equal(
+      unassigned.body.exceptions.reconciliation_exceptions,
+      '0',
+      'the account nobody has configured must see nothing here either',
+    );
+
+    const admin = await get<Totals & { exceptions: Record<string, string> }>(
+      '/government/dashboard',
+      { token: adminToken },
+    );
+    assert.equal(admin.body.exceptions.reconciliation_exceptions, '2', 'the state still sees both');
+  });
+
   it('gets no geography either', async () => {
     const response = await get<GeoRow[]>('/government/intelligence/geography', {
       token: unassignedSupervisorToken,
@@ -400,5 +457,117 @@ describe('an administrator can actually assign a territory', () => {
       token: unassignedSupervisorToken,
     });
     assert.equal(still.body.collections.total_kobo, INSIDE_KOBO.toString());
+  });
+});
+
+/**
+ * The home screen, which asked what the role was called and not what it held.
+ *
+ * `revenueOfficerHome` and its work queue carry an `@statewide` annotation
+ * whose stated justification is "a home screen for a role that holds
+ * `report:read:all`". That was a safe thing to assume while the permission map
+ * lived in `rbac.ts`, where a role's name and a role's authority could not come
+ * apart without a deployment.
+ *
+ * Migration 059 made the map data and `POST /government/roles/:name/revoke`
+ * handed an administrator the lever. `GET /government/home` carried no
+ * permission guard at all and switched on `req.auth.role`, so withdrawing
+ * `report:read:all` from `revenue_officer` narrowed every report that goes
+ * through `resolveReportScope` and changed nothing here: the queue went on
+ * returning the name, phone number and TIN failure of every taxpayer in
+ * Plateau State.
+ *
+ * The revocation signing the officer out is not a mitigation. They sign back
+ * in, the new session carries the narrowed grants, and a switch on the role's
+ * name still cannot see them — which is what the second test walks.
+ */
+describe('withdrawing report:read:all from a role', () => {
+  const officerPhone = '+2348095300001';
+  const traderPhone = '+2348095300002';
+  let officerToken: string;
+  let adminId: string;
+
+  interface HomePayload {
+    role: string;
+    revenue?: Record<string, string>;
+    work?: Record<string, Record<string, string>[]>;
+  }
+
+  before(async () => {
+    adminId = (await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM users WHERE role = 'admin' LIMIT 1`,
+    ))!.id;
+
+    await createGovernmentUser({
+      fullName: 'Home Screen Officer',
+      phone: officerPhone,
+      role: 'revenue_officer',
+    });
+    officerToken = (await loginAs(officerPhone)).accessToken;
+
+    /*
+     * A taxpayer in the LGA on the far side of the state, in the one condition
+     * the revenue officer's queue surfaces by name and telephone number.
+     */
+    await query(
+      pool,
+      `INSERT INTO taxpayers
+         (taxpayer_type, first_name, last_name, phone, address, lga_id, status, source, tin_status)
+       VALUES ('INDIVIDUAL','Faraway','Trader',$1,'9 Far Road',$2,'ACTIVE','AGENT','FAILED')`,
+      [traderPhone, outsideLga.id],
+    );
+  });
+
+  it('serves the statewide queue while the role still holds it', async () => {
+    const response = await get<HomePayload>('/government/home', { token: officerToken });
+    assert.equal(response.status, 200);
+    assert.ok(
+      response.body.revenue,
+      'the control is broken: a revenue officer holding report:read:all got no counts',
+    );
+    assert.ok(
+      response.body.work?.failedTins?.some((row) => row.phone === traderPhone),
+      'the control is broken: the queue under test never carried the taxpayer',
+    );
+  });
+
+  it('stops serving it to a role that no longer holds it', async () => {
+    const { sessionsEnded } = await rbacStore.revoke(
+      { userId: adminId, role: 'admin' },
+      {
+        role: 'revenue_officer',
+        permission: 'report:read:all',
+        reason: 'Narrowing the register to a territory',
+      },
+    );
+    assert.ok(sessionsEnded > 0, 'revocation did not end the officer session');
+    rbacStore.forget();
+
+    // Signed out by the revocation, and back in. The new session carries the
+    // narrowed grants, which is exactly the path that made this reachable.
+    const fresh = (await loginAs(officerPhone)).accessToken;
+    const response = await get<HomePayload>('/government/home', { token: fresh });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.role, 'revenue_officer');
+    assert.equal(response.body.revenue, undefined);
+    assert.equal(response.body.work, undefined);
+    assert.ok(
+      !JSON.stringify(response.body).includes(traderPhone),
+      'a taxpayer this officer may no longer reach is still in the payload',
+    );
+  });
+
+  after(async () => {
+    await rbacStore.grant(
+      { userId: adminId, role: 'admin' },
+      {
+        role: 'revenue_officer',
+        permission: 'report:read:all',
+        reason: 'Restoring the grant this fixture withdrew',
+      },
+    );
+    rbacStore.forget();
   });
 });

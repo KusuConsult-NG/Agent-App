@@ -12,7 +12,7 @@
  * it can be re-run against an existing database without duplicating anything.
  */
 
-import { PLATEAU_LGAS, TRAINING_MODULES, nairaToKobo } from '@psirs/shared';
+import { PLATEAU_LGAS, ROLES, TRAINING_MODULES, nairaToKobo, permissionsForRole } from '@psirs/shared';
 import { pool, queryOne, withTransaction, closePool } from './pool';
 import { config } from '../config';
 import { describeDatabase } from '../env';
@@ -51,10 +51,12 @@ const WARDS: Record<string, string[]> = {
  */
 const STATE_CATALOGUE: {
   category: string;
+  categoryHa: string;
   code: string;
   items: {
     code: string;
     name: string;
+    nameHa: string;
     rateType: 'FIXED' | 'PERCENTAGE' | 'TIERED' | 'FORMULA';
     fixedNaira?: string;
     basisPoints?: number;
@@ -103,6 +105,7 @@ const STATE_CATALOGUE: {
 }[] = [
   {
     category: 'Personal Income Tax',
+    categoryHa: 'Harajin Samun Kudin Shiga',
     code: 'PIT',
     items: [
       /*
@@ -125,28 +128,45 @@ const STATE_CATALOGUE: {
        * with no rate in force until somebody with the Schedule enters it.
        */
       {
+        /*
+         * One per cent of turnover, per section 29 of the Nigeria Tax Act 2025.
+         *
+         * These three carried no rate at all until the presumptive schedule
+         * existed, on the reasoning that the figure was PSIRS's to set. That
+         * conflated two different things: the *rate* is statutory and is this,
+         * while what PSIRS sets is the assumed turnover it applies to — which
+         * now lives in `presumptive_schedules` and is versioned there.
+         *
+         * Keeping the rate here rather than as a constant in the assessment
+         * path means the percentage an assessment was computed at is recorded
+         * on the assessment, and can be re-checked years later against the
+         * version in force at the time.
+         */
         code: 'PIT-PRESUMPTIVE-MICRO',
         name: 'Presumptive Income Tax (micro enterprise)',
-        rateType: 'FIXED',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (kananan sana\'a)',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-SMALL',
         name: 'Presumptive Income Tax (small enterprise)',
-        rateType: 'FIXED',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (karamar sana\'a)',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       {
         code: 'PIT-PRESUMPTIVE-MEDIUM',
         name: 'Presumptive Income Tax (medium enterprise)',
-        rateType: 'FIXED',
+        nameHa: 'Harajin Samun Kudin Shiga na Kiyasi (matsakaiciyar sana\'a)',
+        rateType: 'PERCENTAGE',
+        basisPoints: 100,
         frequency: 'ANNUAL',
         taxpayerTypes: ['INDIVIDUAL'],
-        awaitingSchedule: true,
       },
       /*
        * The Fourth Schedule to the Nigeria Tax Act, 2025, in force since
@@ -174,6 +194,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-DIRECT',
         name: 'Direct Assessment / Self-Assessment',
+        nameHa: 'Tantance Kai / Kididdigar Kai',
         rateType: 'TIERED',
         tiers: {
           tiers: [
@@ -192,6 +213,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-PAYE',
         name: 'Pay As You Earn (PAYE)',
+        nameHa: 'Biyan Haraji Daga Albashi (PAYE)',
         rateType: 'TIERED',
         // The same schedule: PAYE is this tax collected at source, not a
         // different one. It sat at a flat 7%, which was wrong before the
@@ -213,6 +235,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-WHT',
         name: 'Withholding Tax (individuals)',
+        nameHa: 'Harajin Cire Daga Tushe (mutane)',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
         /*
@@ -229,6 +252,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-CGT',
         name: 'Capital Gains Tax (individuals)',
+        nameHa: 'Harajin Ribar Jari (mutane)',
         rateType: 'TIERED',
         /*
          * The Nigeria Tax Act, 2025 repealed the flat 10% of the Capital
@@ -252,6 +276,7 @@ const STATE_CATALOGUE: {
       {
         code: 'PIT-STAMP',
         name: 'Stamp Duties on instruments executed by individuals',
+        nameHa: 'Kudin Hatimi kan takardun mutane',
         rateType: 'PERCENTAGE',
         frequency: 'ONE_OFF',
         /*
@@ -268,12 +293,14 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Business Premises and Development',
+    categoryHa: 'Wuraren Kasuwanci da Raya Kasa',
     code: 'BPD',
     items: [
       {
         code: 'BP-REG-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (urban)',
+        nameHa: 'Rajista Wurin Kasuwanci (birni)',
         rateType: 'FIXED',
         fixedNaira: '10000',
         frequency: 'ONE_OFF',
@@ -283,6 +310,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (urban)',
+        nameHa: 'Sabunta Wurin Kasuwanci (birni)',
         rateType: 'FIXED',
         fixedNaira: '5000',
         frequency: 'ANNUAL',
@@ -301,6 +329,7 @@ const STATE_CATALOGUE: {
         code: 'BP-REG-SEMI-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (semi-urban)',
+        nameHa: 'Rajista Wurin Kasuwanci (matsakaicin birni)',
         rateType: 'FIXED',
         frequency: 'ONE_OFF',
         taxpayerTypes: ['BUSINESS'],
@@ -310,6 +339,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-SEMI-URBAN',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (semi-urban)',
+        nameHa: 'Sabunta Wurin Kasuwanci (matsakaicin birni)',
         rateType: 'FIXED',
         frequency: 'ANNUAL',
         taxpayerTypes: ['BUSINESS'],
@@ -319,6 +349,7 @@ const STATE_CATALOGUE: {
         code: 'BP-REG-RURAL',
         mda: 'MDA-LANDS',
         name: 'Business Premises Registration (rural)',
+        nameHa: 'Rajista Wurin Kasuwanci (karkara)',
         rateType: 'FIXED',
         fixedNaira: '2000',
         frequency: 'ONE_OFF',
@@ -328,6 +359,7 @@ const STATE_CATALOGUE: {
         code: 'BP-RENEW-RURAL',
         mda: 'MDA-LANDS',
         name: 'Business Premises Renewal (rural)',
+        nameHa: 'Sabunta Wurin Kasuwanci (karkara)',
         rateType: 'FIXED',
         fixedNaira: '1000',
         frequency: 'ANNUAL',
@@ -336,6 +368,7 @@ const STATE_CATALOGUE: {
       {
         code: 'DEV-LEVY',
         name: 'Development Levy',
+        nameHa: 'Kudin Raya Kasa',
         rateType: 'FIXED',
         fixedNaira: '2000',
         frequency: 'ANNUAL',
@@ -344,6 +377,7 @@ const STATE_CATALOGUE: {
       {
         code: 'ECON-DEV-LEVY',
         name: 'Economic Development Levy',
+        nameHa: 'Kudin Raya Tattalin Arziki',
         rateType: 'FIXED',
         fixedNaira: '5000',
         frequency: 'ANNUAL',
@@ -353,6 +387,7 @@ const STATE_CATALOGUE: {
         code: 'SOCIAL-SVC-LEVY',
         mda: 'MDA-EDU',
         name: 'Social Services Contribution Levy',
+        nameHa: 'Kudin Gudummawar Ayyukan Zamantakewa',
         rateType: 'PERCENTAGE',
         basisPoints: 50,
         minimumNaira: '1000',
@@ -362,12 +397,14 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Road Taxes and Vehicle Services',
+    categoryHa: 'Harajin Hanya da Ayyukan Motoci',
     code: 'ROAD',
     items: [
       {
         code: 'VEH-RENEW-PRIVATE',
         mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (private)',
+        nameHa: 'Sabunta Takardun Mota (mai zaman kansa)',
         rateType: 'FORMULA',
         // Monthly rate scaled by the requested period. renewalPeriodMonths is
         // supplied by the renewal flow, never typed as an amount by an agent.
@@ -379,6 +416,7 @@ const STATE_CATALOGUE: {
         code: 'VEH-RENEW-COMMERCIAL',
         mda: 'MDA-TRANS',
         name: 'Vehicle Particulars Renewal (commercial)',
+        nameHa: 'Sabunta Takardun Mota (kasuwanci)',
         rateType: 'FORMULA',
         formula: '1250 * renewalPeriodMonths * 100',
         minimumNaira: '7500',
@@ -387,7 +425,8 @@ const STATE_CATALOGUE: {
       {
         code: 'ROAD-TAX',
         mda: 'MDA-TRANS',
-        name: 'Road Taxes',
+        name: 'Road Tax',
+        nameHa: 'Harajin Hanya',
         rateType: 'FIXED',
         fixedNaira: '7500',
         frequency: 'ANNUAL',
@@ -396,48 +435,53 @@ const STATE_CATALOGUE: {
   },
   {
     category: 'Land, Property and Occupancy',
+    categoryHa: 'Filaye, Kadarori da Zama',
     code: 'LAND',
     items: [
-      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
-      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
-      { code: 'PROPERTY-TAX', name: 'Property Tax', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
-      { code: 'STREET-NAMING', name: 'Naming of Street Registration Fees', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
-      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Charge/Levy', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'RIGHT-OCCUPANCY', name: 'Right of Occupancy Fees', nameHa: 'Kudin Hakkin Zama', rateType: 'FIXED', fixedNaira: '50000', frequency: 'ONE_OFF', perLga: true, mda: 'MDA-LANDS', },
+      { code: 'LAND-USE-CHARGE', name: 'Land Use Charge', nameHa: 'Kudin Amfani da Fili', rateType: 'PERCENTAGE', basisPoints: 50, minimumNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'PROPERTY-TAX', name: 'Property Tax', nameHa: 'Harajin Kadarori', rateType: 'PERCENTAGE', basisPoints: 100, minimumNaira: '10000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
+      { code: 'STREET-NAMING', name: 'Street Naming Registration Fees', nameHa: 'Kudin Rajista Sunan Titi', rateType: 'FIXED', fixedNaira: '25000', frequency: 'ONE_OFF', perLga: true, excludeLgas: ['Jos North', 'Jos South'], mda: 'MDA-LANDS', },
+      { code: 'INFRA-LEVY', name: 'Infrastructure Maintenance Levy', nameHa: 'Kudin Kula da Kayayyakin More Rayuwa', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-LANDS', },
     ],
   },
   {
     category: 'Trade, Markets and Produce',
+    categoryHa: 'Ciniki, Kasuwanni da Kayayyaki',
     code: 'TRADE',
     items: [
-      { code: 'MARKET-LEVY', name: 'Market Taxes and Levies', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
-      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
-      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
-      { code: 'ABATTOIR-FEE', name: 'Slaughter / Abattoir Fees', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
+      { code: 'MARKET-LEVY', name: 'Market Tax and Levy', nameHa: 'Harajin Kasuwa', rateType: 'FIXED', fixedNaira: '200', frequency: 'DAILY', perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'ANIMAL-TRADE-TAX', name: 'Animal Trade Tax', nameHa: 'Harajin Cinikin Dabbobi', rateType: 'FIXED', fixedNaira: '1500', frequency: 'ONE_OFF', mda: 'MDA-HEALTH', },
+      { code: 'PRODUCE-SALES-TAX', name: 'Produce Sales Tax', nameHa: 'Harajin Sayar da Kayayyaki', rateType: 'PERCENTAGE', basisPoints: 200, minimumNaira: '500', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'ABATTOIR-FEE', name: 'Slaughter/Abattoir Fees', nameHa: 'Kudin Mahauta / Wurin Yanka', rateType: 'FIXED', fixedNaira: '1000', frequency: 'DAILY', perLga: true, mda: 'MDA-HEALTH', },
     ],
   },
   {
     category: 'Hospitality, Entertainment and Gaming',
+    categoryHa: 'Masaukai, Nishaɗi da Caca',
     code: 'HOSP',
     items: [
-      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
-      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
-      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
+      { code: 'CONSUMPTION-TAX', name: 'Hotel, Restaurant or Event Centre Consumption Tax', nameHa: 'Harajin Amfani da Otal, Gidan Abinci ko Wurin Biki', rateType: 'PERCENTAGE', basisPoints: 500, frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
+      { code: 'ENTERTAINMENT-TAX', name: 'Entertainment Tax', nameHa: 'Harajin Nishaɗi', rateType: 'PERCENTAGE', basisPoints: 500, minimumNaira: '2000', frequency: 'ONE_OFF', mda: 'MDA-COMMERCE', },
+      { code: 'GAMING-TAX', name: 'Pool, Betting, Lottery, Gaming and Casino Taxes', nameHa: 'Harajin Caca da Toto', rateType: 'PERCENTAGE', basisPoints: 1000, minimumNaira: '10000', frequency: 'MONTHLY', taxpayerTypes: ['BUSINESS'], mda: 'MDA-COMMERCE', },
     ],
   },
   {
     category: 'Environment, Mining and Safety',
+    categoryHa: 'Muhalli, Hakar Ma\'adinai da Tsaro',
     code: 'ENV',
     items: [
-      { code: 'ECOLOGICAL-FEE', name: 'Environmental / Ecological Fees', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
-      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
-      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'ECOLOGICAL-FEE', name: 'Environmental/Ecological Fees', nameHa: 'Kudin Kare Muhalli', rateType: 'FIXED', fixedNaira: '5000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
+      { code: 'MINING-FEE', name: 'Mining, Milling and Quarrying Fees', nameHa: 'Kudin Hakar Ma\'adinai da Dutse', rateType: 'FIXED', fixedNaira: '150000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], mda: 'MDA-ENV', },
+      { code: 'FIRE-SERVICE-CHARGE', name: 'Fire Service Charge', nameHa: 'Kudin Kashe Gobara', rateType: 'FIXED', fixedNaira: '3000', frequency: 'ANNUAL', mda: 'MDA-ENV', },
     ],
   },
   {
     category: 'Advertising and Signage',
+    categoryHa: 'Talla da Alamu',
     code: 'ADVERT',
     items: [
-      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, mda: 'MDA-COMMERCE', },
+      { code: 'SIGNAGE-FEE', name: 'Signage and Mobile Advertisement', nameHa: 'Alamun Talla da Mota', rateType: 'FIXED', fixedNaira: '15000', frequency: 'ANNUAL', taxpayerTypes: ['BUSINESS'], perLga: true, mda: 'MDA-COMMERCE', },
     ],
   },
 ];
@@ -445,14 +489,15 @@ const STATE_CATALOGUE: {
 /** Local-government revenue heads PSIRS identifies separately (PRD §8). */
 const LOCAL_GOVERNMENT_CATALOGUE = {
   category: 'Local Government Rates and Fees',
+  categoryHa: 'Kudade da Haraji na Kananan Hukumomi',
   code: 'LGR',
   items: [
-    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
-    { code: 'TENEMENT-RATES', name: 'Tenement Rates', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
-    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
-    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levies', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
-    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
-    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
+    { code: 'SHOPS-KIOSKS', name: 'Shops and Kiosks Rates', nameHa: 'Kudin Shaguna da Rumfuna', rateType: 'FIXED' as const, fixedNaira: '3000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-COMMERCE', },
+    { code: 'TENEMENT-RATES', name: 'Tenement Rates', nameHa: 'Kudin Gidaje', rateType: 'FIXED' as const, fixedNaira: '5000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-LANDS', },
+    { code: 'SLAUGHTER-SLAB', name: 'Slaughter Slab Fees', nameHa: 'Kudin Wurin Yanka', rateType: 'FIXED' as const, fixedNaira: '500', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MOTOR-PARK-LEVY', name: 'Motor Park Levy', nameHa: 'Kudin Tasha', rateType: 'FIXED' as const, fixedNaira: '300', frequency: 'DAILY' as const, perLga: true, mda: 'MDA-TRANS', },
+    { code: 'DOMESTIC-ANIMAL-LICENCE', name: 'Domestic Animal Licence Fees', nameHa: 'Kudin Lasisin Dabbobin Gida', rateType: 'FIXED' as const, fixedNaira: '1000', frequency: 'ANNUAL' as const, perLga: true, mda: 'MDA-HEALTH', },
+    { code: 'MARRIAGE-REGISTRATION', name: 'Marriage, Birth and Death Registration Fees', nameHa: 'Kudin Rajista Aure, Haihuwa da Mutuwa', rateType: 'FIXED' as const, fixedNaira: '2000', frequency: 'ONE_OFF' as const, perLga: true, mda: 'MDA-LG', },
   ],
 };
 
@@ -486,6 +531,7 @@ const LOCAL_GOVERNMENT_CATALOGUE = {
 const INCENTIVE_PROGRAMMES = [
   {
     name: 'Plateau State Health Insurance Scheme',
+    nameHa: 'Shirin Inshorar Lafiya na Jihar Filato',
     code: 'PLASHIA',
     description:
       'Subsidised health insurance cover for registered taxpayers and their immediate ' +
@@ -512,7 +558,69 @@ const INCENTIVE_PROGRAMMES = [
     linkageMode: 'ADDITIVE_BENEFIT',
   },
   {
+    name: 'Government Palliative (Humanitarian Support)',
+    nameHa: 'Tallafin Gwamnati (Taimakon Jin Kai)',
+    code: 'HUMANITARIAN-PALLIATIVE',
+    description:
+      'Relief distributed by the Plateau State Ministry of Humanitarian Affairs and Poverty ' +
+      'Alleviation. Registered taxpayers receive the base entitlement; sustained tax ' +
+      'compliance raises it to the full one.',
+    benefitType: 'HUMANITARIAN_PALLIATIVE',
+    benefitDescription:
+      'Food and essential-item support distributed through the Ministry of Humanitarian ' +
+      'Affairs. The Ministry decides need; this platform certifies tax standing only.',
+    eligibilityRules: {
+      requires_tin: true,
+      min_score: 90,
+      /*
+       * Ninety across three assessed periods, not ninety today.
+       *
+       * A snapshot score is trivially high for somebody assessed once last
+       * week and perfectly meaningless: paying a single levy on time scores
+       * full marks on punctuality, coverage and arrears at once. Beneficiary
+       * selection off that figure rewards being new to the register rather
+       * than being compliant, and the first year of any scheme is exactly when
+       * that is most common.
+       *
+       * Three assessed periods is the shortest window in which the score is
+       * measuring a habit. It is the same reasoning the score's own
+       * proportional components rest on — what the state asked of this person,
+       * over time — carried into who is chosen.
+       */
+      min_periods: 3,
+      sustained: true,
+    },
+    minimumScore: 90,
+    minimumCompliancePeriods: 3,
+    /*
+     * ADDITIVE, AND THIS IS NOT A DETAIL.
+     *
+     * PRD §40, which migration 017 exists to enforce: the platform must not
+     * automatically deny an essential public service because somebody is not
+     * tax-compliant. A humanitarian palliative is the strongest case of that
+     * rule there is. Relief exists for people in hardship, and the people in
+     * hardship are the least likely to be tax-compliant — so a 90% gate would
+     * withhold food support from the poorest, and withhold it precisely
+     * because they are poor. That is not a strict scheme, it is an inverted
+     * one, and it would be the platform doing it rather than any policy
+     * anybody signed.
+     *
+     * So the threshold is honoured where it belongs. Ninety per cent across
+     * three periods is the line between the base entitlement and the full one
+     * — a reward for paying, which is what a tax incentive is — and nobody
+     * registered is refused relief by this platform's arithmetic.
+     *
+     * `requires_no_arrears` is false for the same reason: owing money is a
+     * debt to recover, not a reason to go without food.
+     */
+    requiresNoArrears: false,
+    approvalAuthority:
+      'Plateau State Ministry of Humanitarian Affairs and Poverty Alleviation',
+    linkageMode: 'ADDITIVE_BENEFIT',
+  },
+  {
     name: 'Input Fertilizer Distribution Programme',
+    nameHa: 'Shirin Rabon Takin Zamani',
     code: 'FERTILIZER-SUBSIDY',
     description:
       'Subsidised agricultural inputs (fertilizer, seed, pesticide) distributed through ' +
@@ -538,6 +646,7 @@ const INCENTIVE_PROGRAMMES = [
   },
   {
     name: 'State Housing Fund (Low-Income Subsidy)',
+    nameHa: 'Asusun Gidaje na Jiha (Tallafin Masu Karamin Kudin Shiga)',
     code: 'STATE-HOUSING-FUND',
     description:
       'Access to the Plateau State Housing Corporation low-income loan scheme for ' +
@@ -557,6 +666,7 @@ const INCENTIVE_PROGRAMMES = [
   },
   {
     name: 'Scholarship and Bursary Scheme',
+    nameHa: 'Shirin Tallafin Karatu da Guraben Karatu',
     code: 'SCHOLARSHIP-BURSARY',
     description:
       'Annual bursary for children and dependants of compliant taxpayers, awarded ' +
@@ -576,14 +686,64 @@ const INCENTIVE_PROGRAMMES = [
   },
 ] as const;
 
-const NOTIFICATION_TEMPLATES = [
+export const NOTIFICATION_TEMPLATES = [
+  /*
+   * The agent's own money, on the three occasions it moves.
+   *
+   * `COMMISSION_PAID` was here from the beginning and nothing queued it, so an
+   * agent learned their payout had arrived by checking their bank — and learned
+   * a transfer had bounced by not finding it there, which is indistinguishable
+   * from PSIRS not having paid them. That is the belief that becomes a support
+   * ticket, or an agent who starts asking citizens for cash.
+   */
+  { code: 'COMMISSION_PAYOUT_FAILED_SMS', event: 'COMMISSION_PAYOUT_FAILED', channel: 'SMS', body: 'PSIRS: Your commission payout {{reference}} could not be paid into your account: {{reason}}. The money has not been lost — it returns to your available balance and will go out again once the account details are correct. Check your bank details in the app.' },
+  { code: 'COMMISSION_PAYOUT_REFUSED_SMS', event: 'COMMISSION_PAYOUT_REFUSED', channel: 'SMS', body: 'PSIRS: Your commission payout request {{reference}} was not approved: {{reason}}. The money has not been lost — it stays in your available balance and you can request it again.' },
+  /*
+   * Push, for the messages an agent needs while they are in the field.
+   *
+   * Additive: every one of these still goes by SMS, because an agent may have
+   * declined the browser prompt or replaced the handset, and suspension is
+   * exactly the message they must not miss. Push is free and immediate; the
+   * SMS is the one that always arrives.
+   *
+   * Only events that resolve to a user account. A taxpayer holds none, so a
+   * push template on a taxpayer-facing event would queue nothing.
+   */
+  { code: 'AGENT_SUSPENDED_PUSH', event: 'AGENT_SUSPENDED', channel: 'PUSH', subject: 'You have been suspended', body: 'Stop collecting now. Reason: {{reason}}. Open the app for what happens next.' },
+  { code: 'AGENT_APPROVED_PUSH', event: 'AGENT_APPROVED', channel: 'PUSH', subject: 'You are cleared to collect', body: 'Your application has been approved. Open the app to register your device and begin.' },
+  { code: 'KYC_ACTION_REQUIRED_PUSH', event: 'KYC_ACTION_REQUIRED', channel: 'PUSH', subject: 'Your application needs something', body: '{{reason}}' },
+  { code: 'COMMISSION_PAID_PUSH', event: 'COMMISSION_PAID', channel: 'PUSH', subject: 'Commission paid', body: 'Your payout {{reference}} has been sent to your bank.' },
+  { code: 'COMMISSION_PAYOUT_FAILED_PUSH', event: 'COMMISSION_PAYOUT_FAILED', channel: 'PUSH', subject: 'Payout could not be paid', body: '{{reason}}. The money is still yours — check your bank details in the app.' },
   { code: 'TIN_CREATED_SMS', event: 'TIN_CREATED', channel: 'SMS', body: 'PSIRS: Your Taxpayer Identification Number is {{tin}}. Keep it safe — you will need it for every government payment.' },
   { code: 'INVOICE_SMS', event: 'INVOICE_GENERATED', channel: 'SMS', body: 'PSIRS: Invoice {{reference}} for {{amount}} has been raised. Pay only through approved government channels.' },
-  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} has been confirmed. Receipt: {{receiptNumber}}. Verify it at any time using the receipt number.' },
-  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed — receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been received and confirmed. Your official receipt number is {{receiptNumber}} (transaction {{reference}}).\n\nYou can verify this receipt at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // Confirmation gives the taxpayer an acknowledgement, not a receipt, and this
+  // is the only channel that reaches a citizen who holds no account. Migration
+  // 042 carries the same wording to deployments that already have these rows —
+  // templates are inserted ON CONFLICT DO NOTHING, so editing here alone would
+  // fix it only for installations that do not exist yet.
+  { code: 'PAYMENT_SUCCESS_SMS', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', body: 'PSIRS: Your payment of {{amount}} is confirmed. This is your acknowledgement {{receiptNumber}} - it is NOT a receipt. Your government receipt follows once the money reaches the government account. Check it at any time with this number.' },
+  { code: 'PAYMENT_SUCCESS_EMAIL', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', subject: 'Payment confirmed - acknowledgement {{receiptNumber}}', body: 'Dear {{name}},\n\nYour payment of {{amount}} has been confirmed by the payment system (transaction {{reference}}).\n\nThis message is your ACKNOWLEDGEMENT OF PAYMENT, number {{receiptNumber}}. It is not a government receipt. The money reaches the Plateau State Government account shortly, and your official receipt is issued automatically when it does - we will send you its number.\n\nYou can check this acknowledgement at any time without signing in.\n\nPlateau State Internal Revenue Service' },
+  // And the message for the moment the money actually arrives, which had no
+  // template and no event: the receipt was issued and nobody told the taxpayer.
+  { code: 'RECEIPT_GENERATED_SMS', event: 'RECEIPT_GENERATED', channel: 'SMS', body: 'PSIRS: Government has received your payment of {{amount}}. Your official receipt is {{receiptNumber}} (transaction {{reference}}). Check it at any time with this number.' },
+  { code: 'RECEIPT_GENERATED_EMAIL', event: 'RECEIPT_GENERATED', channel: 'EMAIL', subject: 'Your government receipt {{receiptNumber}}', body: 'Dear {{name}},\n\nThe Plateau State Government has now received your payment of {{amount}} (transaction {{reference}}).\n\nYour official receipt number is {{receiptNumber}}. This replaces the acknowledgement you were sent earlier and is your evidence of payment.\n\nYou can verify it at any time without signing in.\n\nPlateau State Internal Revenue Service' },
   { code: 'PAYMENT_FAILED_SMS', event: 'PAYMENT_FAILED', channel: 'SMS', body: 'PSIRS: Payment for {{reference}} did not go through. No money has been taken. You can try again.' },
   { code: 'VEHICLE_RENEWAL_SMS', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', body: 'PSIRS: Vehicle {{registration}} has been renewed and is valid until {{expiry}}. Download your document from the portal.' },
-  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  /*
+   * Told by push, and not by SMS.
+   *
+   * An agent collects many times a day. An SMS for each costs real money per
+   * message and would drown the payout notifications beside it, which is why
+   * this event was seeded and then never raised by anything. Push costs nothing
+   * and is what a handset notification is for.
+   *
+   * The SMS row stays on the record, switched off rather than deleted: a
+   * template that vanishes makes the notification history unreadable, and
+   * INACTIVE is one UPDATE away from being reversed if PSIRS decides the
+   * message was worth its cost after all.
+   */
+  { code: 'COMMISSION_EARNED_SMS', event: 'COMMISSION_EARNED', channel: 'SMS', status: 'INACTIVE', body: 'PSIRS: You earned {{amount}} commission on transaction {{reference}}. It becomes payable after settlement.' },
+  { code: 'COMMISSION_EARNED_PUSH', event: 'COMMISSION_EARNED', channel: 'PUSH', subject: 'Commission recorded', body: '{{amount}} on {{reference}}. It becomes payable after settlement.' },
   { code: 'COMMISSION_PAID_SMS', event: 'COMMISSION_PAID', channel: 'SMS', body: 'PSIRS: Commission of {{amount}} has been paid to your verified bank account. Reference {{reference}}.' },
   { code: 'AGENT_APPROVED_SMS', event: 'AGENT_APPROVED', channel: 'SMS', body: 'PSIRS: Your agent application has been approved. Complete training and register your device to begin work.' },
   { code: 'AGENT_REJECTED_SMS', event: 'AGENT_REJECTED', channel: 'SMS', body: 'PSIRS: Your agent application was not approved. Reason: {{reason}}' },
@@ -602,6 +762,51 @@ const NOTIFICATION_TEMPLATES = [
   // asked for is noticed by the person it was made to.
   { code: 'TAXPAYER_RECORD_CORRECTED_SMS', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', body: 'PSIRS: {{fields}} on your taxpayer record has been corrected by a revenue officer. If you did not ask for this, visit any PSIRS office.' },
   { code: 'USER_ROLE_CHANGED_SMS', event: 'USER_ROLE_CHANGED', channel: 'SMS', body: 'PSIRS: Your access has been changed from {{previousRole}} to {{newRole}}. You have been signed out and must sign in again. If this was not expected, contact your administrator now.' },
+
+  // ---------------------------------------------------------------------
+  // The same thirty, in Hausa.
+  //
+  // A taxpayer holds no account here, so an SMS is the only copy of their
+  // receipt they will ever have — and a receipt somebody cannot read is a
+  // receipt they cannot check, which is PRD §95 undone at the last step.
+  //
+  // Held fixed while translating: every placeholder and every code an eye
+  // reads and a hand types back; every negation, each carried by ba, bai,
+  // babu or kada; and the glossary the agent application already uses —
+  // rasit, kwamishan, asusu, kudi, tabbatar, mai biyan haraji.
+  //
+  // NOT YET READ BY A NATIVE SPEAKER. docs/HAUSA-REVIEW.md carries them.
+  // ---------------------------------------------------------------------
+  { code: 'COMMISSION_PAYOUT_FAILED_SMS_HA', event: 'COMMISSION_PAYOUT_FAILED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a iya tura kwamishan dinka {{reference}} zuwa asusunka ba: {{reason}}. Kudin bai bata ba — ya koma cikin kudin da ake bin ka, kuma za a sake turawa idan an gyara bayanan asusun. Duba bayanan bankinka a cikin manhajar." },
+  { code: 'COMMISSION_PAYOUT_REFUSED_SMS_HA', event: 'COMMISSION_PAYOUT_REFUSED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatarka ta biyan kwamishan {{reference}} ba: {{reason}}. Kudin bai bata ba — ya kasance cikin kudin da ake bin ka kuma kana iya sake nema." },
+  { code: 'AGENT_SUSPENDED_PUSH_HA', event: 'AGENT_SUSPENDED', channel: 'PUSH', language: 'ha', subject: "An dakatar da kai", body: "Ka daina karbar kudi yanzu. Dalili: {{reason}}. Bude manhajar don ka ga abin da zai biyo baya." },
+  { code: 'AGENT_APPROVED_PUSH_HA', event: 'AGENT_APPROVED', channel: 'PUSH', language: 'ha', subject: "An amince ka fara karba", body: "An amince da bukatarka. Bude manhajar don ka yi rajistar na’urarka ka fara aiki." },
+  { code: 'KYC_ACTION_REQUIRED_PUSH_HA', event: 'KYC_ACTION_REQUIRED', channel: 'PUSH', language: 'ha', subject: "Bukatarka na bukatar wani abu", body: "Tabbatar da shaidarka bai cika ba: {{reason}}. Bude manhajar don ka sake turawa." },
+  { code: 'COMMISSION_PAID_PUSH_HA', event: 'COMMISSION_PAID', channel: 'PUSH', language: 'ha', subject: "An biya kwamishan", body: "An tura kwamishan dinka {{reference}} zuwa bankinka." },
+  { code: 'COMMISSION_PAYOUT_FAILED_PUSH_HA', event: 'COMMISSION_PAYOUT_FAILED', channel: 'PUSH', language: 'ha', subject: "Ba a iya biyan kwamishan ba", body: "{{reason}}. Kudin naka ne har yanzu — duba bayanan bankinka a cikin manhajar." },
+  { code: 'TIN_CREATED_SMS_HA', event: 'TIN_CREATED', channel: 'SMS', language: 'ha', body: "PSIRS: Lambar Shaidar Biyan Haraji taka ita ce {{tin}}. Ka adana ta — za ka bukace ta a duk biyan kudi na gwamnati." },
+  { code: 'INVOICE_SMS_HA', event: 'INVOICE_GENERATED', channel: 'SMS', language: 'ha', body: "PSIRS: An bayar da takardar biya {{reference}} na {{amount}}. Ka biya ta hanyoyin gwamnati da aka amince da su kadai." },
+  { code: 'PAYMENT_SUCCESS_SMS_HA', event: 'PAYMENT_SUCCESSFUL', channel: 'SMS', language: 'ha', body: "PSIRS: An tabbatar da biyan kudin ka na {{amount}}. Wannan shaidar karba ce {{receiptNumber}} — BA rasit ba ne. Rasit din gwamnati zai zo bayan kudin ya isa asusun gwamnati. Kana iya duba shi a kowane lokaci da wannan lambar." },
+  { code: 'PAYMENT_SUCCESS_EMAIL_HA', event: 'PAYMENT_SUCCESSFUL', channel: 'EMAIL', language: 'ha', body: "Ranka ya dade {{name}},\n\nAn tabbatar da biyan kudin ka na {{amount}} ta tsarin biyan kudi (ma’amala {{reference}}).\n\nWannan sakon SHAIDAR KARBA ce, lamba {{receiptNumber}}. BA rasit din gwamnati ba ne. Kudin zai isa asusun Gwamnatin Jihar Plateau nan ba da jimawa ba, kuma za a bayar da rasit din ka kai tsaye idan ya isa — za mu tura maka lambarsa.\n\nKana iya duba wannan shaidar karba a kowane lokaci ba tare da shiga asusu ba.\n\nHukumar Haraji ta Jihar Plateau" },
+  { code: 'RECEIPT_GENERATED_SMS_HA', event: 'RECEIPT_GENERATED', channel: 'SMS', language: 'ha', body: "PSIRS: Gwamnati ta karbi biyan kudin ka na {{amount}}. Rasit din ka na gwamnati shi ne {{receiptNumber}} (ma’amala {{reference}}). Kana iya duba shi a kowane lokaci da wannan lambar." },
+  { code: 'RECEIPT_GENERATED_EMAIL_HA', event: 'RECEIPT_GENERATED', channel: 'EMAIL', language: 'ha', body: "Ranka ya dade {{name}},\n\nGwamnatin Jihar Plateau ta karbi biyan kudin ka na {{amount}} (ma’amala {{reference}}).\n\nLambar rasit din ka ta gwamnati ita ce {{receiptNumber}}. Wannan ya maye gurbin shaidar karba da aka tura maka a baya, kuma shi ne shaidar biyan kudin ka.\n\nKana iya tabbatar da shi a kowane lokaci ba tare da shiga asusu ba.\n\nHukumar Haraji ta Jihar Plateau" },
+  { code: 'PAYMENT_FAILED_SMS_HA', event: 'PAYMENT_FAILED', channel: 'SMS', language: 'ha', body: "PSIRS: Biyan kudi na {{reference}} bai yi nasara ba. Ba a karbi kudi ba. Kana iya sake gwadawa." },
+  { code: 'VEHICLE_RENEWAL_SMS_HA', event: 'VEHICLE_RENEWAL_COMPLETED', channel: 'SMS', language: 'ha', body: "PSIRS: An sabunta motar {{registration}}, tana aiki har zuwa {{expiry}}. Sauke takardarka daga shafin." },
+  { code: 'COMMISSION_EARNED_SMS_HA', event: 'COMMISSION_EARNED', channel: 'SMS', language: 'ha', status: 'INACTIVE', body: "PSIRS: Ka samu kwamishan {{amount}} a kan ma’amala {{reference}}. Za a iya biyan sa bayan an sasanta kudin." },
+  { code: 'COMMISSION_EARNED_PUSH_HA', event: 'COMMISSION_EARNED', channel: 'PUSH', language: 'ha', subject: "An rubuta kwamishan", body: "{{amount}} a kan {{reference}}. Za a iya biyan sa bayan an sasanta kudin." },
+  { code: 'COMMISSION_PAID_SMS_HA', event: 'COMMISSION_PAID', channel: 'SMS', language: 'ha', body: "PSIRS: An biya kwamishan {{amount}} zuwa asusun bankin ka da aka tabbatar. Lamba {{reference}}." },
+  { code: 'AGENT_APPROVED_SMS_HA', event: 'AGENT_APPROVED', channel: 'SMS', language: 'ha', body: "PSIRS: An amince da bukatarka ta zama wakili. Ka kammala horo ka yi rajistar na’urarka don fara aiki." },
+  { code: 'AGENT_REJECTED_SMS_HA', event: 'AGENT_REJECTED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatarka ta zama wakili ba. Dalili: {{reason}}" },
+  { code: 'AGENT_SUSPENDED_SMS_HA', event: 'AGENT_SUSPENDED', channel: 'SMS', language: 'ha', body: "PSIRS: An dakatar da asusun wakilcin ka. Dalili: {{reason}}. Ka tuntubi shugabanka." },
+  { code: 'REFEREE_INVITATION_SMS_HA', event: 'REFEREE_INVITATION', channel: 'SMS', language: 'ha', body: "PSIRS: {{applicant}} ya sa ka a matsayin mai shaida a kan bukatar zama wakilin karbar haraji ({{reference}}). Ka tabbatar a {{link}} kafin {{expiry}}." },
+  { code: 'KYC_ACTION_SMS_HA', event: 'KYC_ACTION_REQUIRED', channel: 'SMS', language: 'ha', body: "PSIRS: Tabbatar da shaidarka na bukatar kulawa. {{reason}}. Bude manhajar don ka sake turawa." },
+  { code: 'SUPPORT_REPLY_SMS_HA', event: 'SUPPORT_TICKET_UPDATED', channel: 'SMS', language: 'ha', body: "PSIRS: An amsa takardar korafinka {{ticketNumber}}. Bude manhajar don ka karanta." },
+  { code: 'SECURITY_OTP_SMS_HA', event: 'SECURITY_ALERT', channel: 'SMS', language: 'ha', body: "PSIRS: Lambar tabbatarwarka ita ce {{code}}. Za ta kare cikin mintuna {{minutes}}. Kada ka fada wa kowa, hatta ma’aikatan PSIRS." },
+  { code: 'AGENT_BANK_CHANGE_REQUESTED_SMS_HA', event: 'AGENT_BANK_CHANGE_REQUESTED', channel: 'SMS', language: 'ha', body: "PSIRS: An nemi a rika biyan kwamishan dinka a {{bank}} {{account}}. Babu abin da ya canza tukuna. Idan ba kai ba ne, ka tuntubi shugabanka yanzu." },
+  { code: 'AGENT_BANK_CHANGE_APPLIED_SMS_HA', event: 'AGENT_BANK_CHANGE_APPLIED', channel: 'SMS', language: 'ha', body: "PSIRS: Yanzu za a rika biyan kwamishan dinka a {{bank}} {{account}}. Idan ba kai ba ne, ka tuntubi shugabanka yanzu." },
+  { code: 'AGENT_BANK_CHANGE_REFUSED_SMS_HA', event: 'AGENT_BANK_CHANGE_REFUSED', channel: 'SMS', language: 'ha', body: "PSIRS: Ba a amince da bukatar canza asusun kwamishan dinka ba. Dalili: {{reason}}. Asusun ka na yanzu bai canza ba." },
+  { code: 'TAXPAYER_RECORD_CORRECTED_SMS_HA', event: 'TAXPAYER_RECORD_CORRECTED', channel: 'SMS', language: 'ha', body: "PSIRS: An gyara {{fields}} a kan bayananka na mai biyan haraji ta hannun jami’in haraji. Idan ba kai ka nema ba, ka je kowane ofishin PSIRS." },
+  { code: 'USER_ROLE_CHANGED_SMS_HA', event: 'USER_ROLE_CHANGED', channel: 'SMS', language: 'ha', body: "PSIRS: An canza matsayinka daga {{previousRole}} zuwa {{newRole}}. An fitar da kai, dole ka sake shiga. Idan ba a sa ran haka ba, ka tuntubi mai gudanarwarka yanzu." },
 ];
 
 const AGENT_AGREEMENT = `PLATEAU STATE INTERNAL REVENUE SERVICE
@@ -662,7 +867,101 @@ your authority.
 By accepting, you confirm that you have read and understood this agreement and
 that the information in your application is true.`;
 
+/**
+ * The roles, and the permissions each starts with.
+ *
+ * Migration 059 moved the role-to-permission map out of `rbac.ts` and into the
+ * database, and seeded it. This is here for the two cases the migration cannot
+ * cover: a database created after that migration and then emptied — which is
+ * every test shard between files — and a role added to the compiled list in a
+ * later release.
+ *
+ * IT NEVER OVERWRITES A GRANT SOMEBODY MADE.
+ *
+ * A role that already has grants is left exactly as it is. Re-applying the
+ * compiled map on every seed would silently undo an administrator's
+ * delegation — which is the entire capability this table exists to provide, so
+ * quietly reverting it would be worse than never having built it.
+ */
+async function seedRoles(): Promise<void> {
+  console.log('  seeding roles and permissions...');
+  const PORTAL: readonly string[] = [
+    'supervisor',
+    'revenue_officer',
+    'finance_officer',
+    'auditor',
+    'admin',
+  ];
+  const LABELS: Record<string, [string, string]> = {
+    agent: ['Field agent', 'Wakilin filin aiki'],
+    supervisor: ['Supervisor', 'Mai kula'],
+    revenue_officer: ['Revenue officer', 'Jami’in haraji'],
+    finance_officer: ['Finance officer', 'Jami’in kudi'],
+    auditor: ['Auditor', 'Mai bincike'],
+    admin: ['Administrator', 'Mai gudanarwa'],
+    // No `taxpayer`. Migration 007 removed it from the role list and
+    // `integration.test.ts` asserts the database still refuses such a row — a
+    // citizen never signs in, so there is no credential to phish.
+  };
+
+  /*
+   * How many rows each shipped role may export.
+   *
+   * Seeded rather than left to the column default, because the default is the
+   * floor a role PSIRS creates gets and these six are decisions: the auditor
+   * needs the whole population or an examination is not one; the field agent
+   * takes nothing out at all.
+   *
+   * Only applied when the row is created. An administrator who has raised a
+   * limit has made a decision, and a re-seed must not quietly put it back --
+   * which is the same rule the permission grants below follow.
+   */
+  const EXPORT_LIMITS: Record<string, number> = {
+    agent: 0,
+    supervisor: 20_000,
+    revenue_officer: 20_000,
+    finance_officer: 50_000,
+    auditor: 100_000,
+    admin: 50_000,
+  };
+
+  await withTransaction(async (client) => {
+    for (const [name, [label, labelHa]] of Object.entries(LABELS)) {
+      await client.query(
+        `INSERT INTO roles (name, label, label_ha, is_system, is_portal, export_row_limit)
+         VALUES ($1,$2,$3,TRUE,$4,$5)
+         ON CONFLICT (name) DO UPDATE SET label = EXCLUDED.label,
+                                          label_ha = EXCLUDED.label_ha`,
+        [name, label, labelHa, PORTAL.includes(name), EXPORT_LIMITS[name] ?? 5000],
+      );
+    }
+
+    for (const role of ROLES) {
+      const held = await queryOne<{ count: string }>(
+        client,
+        'SELECT count(*)::text FROM role_permissions WHERE role = $1',
+        [role],
+      );
+      // Already configured — including deliberately configured down to nothing
+      // is not possible here, because a role with no grants is indistinguishable
+      // from an unseeded one. That ambiguity is accepted: a role stripped to
+      // zero permissions is not a state anybody wants to preserve.
+      if (Number(held!.count) > 0) continue;
+
+      for (const permission of permissionsForRole(role)) {
+        await client.query(
+          `INSERT INTO role_permissions (role, permission, reason)
+           VALUES ($1,$2,'Seeded from the compiled map')
+           ON CONFLICT DO NOTHING`,
+          [role, permission],
+        );
+      }
+    }
+  });
+}
+
 async function seedReferenceData(): Promise<void> {
+  await seedRoles();
   console.log('  seeding geography...');
   await withTransaction(async (client) => {
     for (const lga of PLATEAU_LGAS) {
@@ -684,9 +983,9 @@ async function seedReferenceData(): Promise<void> {
 
       // One default territory per LGA so agents can be assigned immediately.
       await client.query(
-        `INSERT INTO territories (name, code, lga_id) VALUES ($1,$2,$3)
-         ON CONFLICT (code) DO NOTHING`,
-        [`${lga.name} Territory`, `TER-${lga.code}`, row!.id],
+        `INSERT INTO territories (name, name_ha, code, lga_id) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (code) DO UPDATE SET name_ha = EXCLUDED.name_ha`,
+        [`${lga.name} Territory`, `Yankin ${lga.name}`, `TER-${lga.code}`, row!.id],
       );
     }
   });
@@ -695,24 +994,25 @@ async function seedReferenceData(): Promise<void> {
   await withTransaction(async (client) => {
     const stateAuthority = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO revenue_authorities (name, code, tier)
-       VALUES ($1,'PSIRS','STATE')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [config.branding.agencyName],
+      `INSERT INTO revenue_authorities (name, name_ha, code, tier)
+       VALUES ($1,$2,'PSIRS','STATE')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      [config.branding.agencyName, 'Hukumar Haraji ta Cikin Gida ta Jihar Filato'],
     );
 
     const lgAuthority = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO revenue_authorities (name, code, tier)
-       VALUES ('Plateau State Local Governments','PLG','LOCAL_GOVERNMENT')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+      `INSERT INTO revenue_authorities (name, name_ha, code, tier)
+       VALUES ('Plateau State Local Governments',$1,'PLG','LOCAL_GOVERNMENT')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      ['Kananan Hukumomin Jihar Filato'],
     );
 
     const mda = await queryOne<{ id: string }>(
       client,
-      `INSERT INTO mdas (authority_id, name, code) VALUES ($1,$2,'PSIRS-HQ')
-       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [stateAuthority!.id, config.branding.agencyName],
+      `INSERT INTO mdas (authority_id, name, name_ha, code) VALUES ($1,$2,$3,'PSIRS-HQ')
+       ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+      [stateAuthority!.id, config.branding.agencyName, 'Hukumar Haraji ta Cikin Gida ta Jihar Filato'],
     );
 
     /*
@@ -732,36 +1032,36 @@ async function seedReferenceData(): Promise<void> {
      * exists to show a zero against.
      */
     const MDAS = [
-      { code: 'MDA-EDU', name: 'Ministry of Education' },
-      { code: 'MDA-LANDS', name: 'Ministry of Lands, Survey and Town Planning' },
-      { code: 'MDA-TRANS', name: 'Ministry of Transport' },
-      { code: 'MDA-HEALTH', name: 'Ministry of Health' },
-      { code: 'MDA-WATER', name: 'Ministry of Water Resources and Energy' },
-      { code: 'MDA-ENV', name: 'Ministry of Environment' },
-      { code: 'MDA-COMMERCE', name: 'Ministry of Commerce and Industry' },
-      { code: 'MDA-LG', name: 'Local Government Councils' },
+      { code: 'MDA-EDU', name: 'Ministry of Education', nameHa: 'Ma\'aikatar Ilimi' },
+      { code: 'MDA-LANDS', name: 'Ministry of Lands, Survey and Town Planning', nameHa: 'Ma\'aikatar Filaye da Tsara Gari' },
+      { code: 'MDA-TRANS', name: 'Ministry of Transport', nameHa: 'Ma\'aikatar Sufuri' },
+      { code: 'MDA-HEALTH', name: 'Ministry of Health', nameHa: 'Ma\'aikatar Lafiya' },
+      { code: 'MDA-WATER', name: 'Ministry of Water Resources and Energy', nameHa: 'Ma\'aikatar Ruwa da Makamashi' },
+      { code: 'MDA-ENV', name: 'Ministry of Environment', nameHa: 'Ma\'aikatar Muhalli' },
+      { code: 'MDA-COMMERCE', name: 'Ministry of Commerce and Industry', nameHa: 'Ma\'aikatar Kasuwanci da Masana\'antu' },
+      { code: 'MDA-LG', name: 'Local Government Councils', nameHa: 'Kananan Hukumomi' },
     ] as const;
 
     const mdaByCode = new Map<string, string>([['PSIRS-HQ', mda!.id]]);
     for (const entry of MDAS) {
       const row = await queryOne<{ id: string }>(
         client,
-        `INSERT INTO mdas (authority_id, name, code) VALUES ($1,$2,$3)
-         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-        [entry.code === 'MDA-LG' ? lgAuthority!.id : stateAuthority!.id, entry.name, entry.code],
+        `INSERT INTO mdas (authority_id, name, name_ha, code) VALUES ($1,$2,$3,$4)
+         ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+        [entry.code === 'MDA-LG' ? lgAuthority!.id : stateAuthority!.id, entry.name, entry.nameHa, entry.code],
       );
       mdaByCode.set(entry.code, row!.id);
     }
 
     const seedCategory = async (
       authorityId: string,
-      definition: { category: string; code: string; items: unknown[] },
+      definition: { category: string; categoryHa: string; code: string; items: unknown[] },
     ) => {
       const category = await queryOne<{ id: string }>(
         client,
-        `INSERT INTO revenue_categories (authority_id, name, code)
-         VALUES ($1,$2,$3) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-        [authorityId, definition.category, definition.code],
+        `INSERT INTO revenue_categories (authority_id, name, name_ha, code)
+         VALUES ($1,$2,$3,$4) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, name_ha = EXCLUDED.name_ha RETURNING id`,
+        [authorityId, definition.category, definition.categoryHa, definition.code],
       );
       return category!.id;
     };
@@ -771,6 +1071,7 @@ async function seedReferenceData(): Promise<void> {
       item: {
         code: string;
         name: string;
+        nameHa: string;
         rateType: 'FIXED' | 'PERCENTAGE' | 'TIERED' | 'FORMULA';
         fixedNaira?: string;
         basisPoints?: number;
@@ -816,14 +1117,15 @@ async function seedReferenceData(): Promise<void> {
       const row = await queryOne<{ id: string }>(
         client,
         `INSERT INTO revenue_items
-           (category_id, mda_id, code, name, applicable_taxpayer_types, frequency,
+           (category_id, mda_id, code, name, name_ha, applicable_taxpayer_types, frequency,
             self_assessable, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'ACTIVE') RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'ACTIVE') RETURNING id`,
         [
           categoryId,
           mdaByCode.get(item.mda ?? 'PSIRS-HQ') ?? mda!.id,
           item.code,
           item.name,
+          item.nameHa,
           item.taxpayerTypes ?? ['INDIVIDUAL', 'BUSINESS'],
           item.frequency ?? 'ANNUAL',
           item.selfAssessable ?? false,
@@ -905,7 +1207,7 @@ async function seedReferenceData(): Promise<void> {
       `INSERT INTO commission_policies
          (name, code, rate_basis_points, hold_period_hours, settlement_schedule,
           requires_settlement_confirmation, effective_from)
-       VALUES ('Standard grassroots agent incentive','STANDARD',$1,$2,'WEEKLY',true, now())
+       VALUES ('Standard Grassroots Agent Incentive','STANDARD',$1,$2,'WEEKLY',true, now())
        ON CONFLICT (code) DO NOTHING`,
       [config.commission.defaultBasisPoints, config.commission.defaultHoldPeriodHours],
     );
@@ -929,9 +1231,23 @@ async function seedReferenceData(): Promise<void> {
 
     for (const template of NOTIFICATION_TEMPLATES) {
       await client.query(
-        `INSERT INTO notification_templates (code, event, channel, subject, body)
-         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
-        [template.code, template.event, template.channel, template.subject ?? null, template.body],
+        `INSERT INTO notification_templates (code, event, channel, subject, body, status, language)
+         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (code) DO NOTHING`,
+        [
+          template.code,
+          template.event,
+          template.channel,
+          template.subject ?? null,
+          template.body,
+          // A template can be seeded switched off. Migrations run before this
+          // on a fresh database, so a migration that deactivates a row would
+          // run before the row existed — the status has to be seeded, not
+          // patched afterwards.
+          ('status' in template ? template.status : null) ?? 'ACTIVE',
+          // English unless the row says otherwise. Selection prefers the
+          // recipient's own language and falls back to this.
+          ('language' in template ? template.language : null) ?? 'en',
+        ],
       );
     }
 
@@ -962,13 +1278,14 @@ async function seedReferenceData(): Promise<void> {
     for (const programme of INCENTIVE_PROGRAMMES) {
       await client.query(
         `INSERT INTO incentive_programmes
-           (name, code, description, benefit_type, benefit_description, eligibility_rules,
+           (name, name_ha, code, description, benefit_type, benefit_description, eligibility_rules,
             minimum_score, minimum_compliance_periods, requires_no_arrears,
             start_date, approval_authority, status, linkage_mode)
-         VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,CURRENT_DATE,$10,'DRAFT',$11)
-         ON CONFLICT (code) DO NOTHING`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,CURRENT_DATE,$11,'DRAFT',$12)
+         ON CONFLICT (code) DO UPDATE SET name_ha = EXCLUDED.name_ha`,
         [
           programme.name,
+          programme.nameHa,
           programme.code,
           programme.description,
           programme.benefitType,
@@ -1018,6 +1335,17 @@ async function seedDemoUsers(): Promise<void> {
     { name: 'Finance Officer', phone: '+2348000000003', email: 'finance@psirs.demo', role: 'finance_officer' },
     { name: 'Agent Supervisor', phone: '+2348000000004', email: 'supervisor@psirs.demo', role: 'supervisor' },
     { name: 'State Auditor', phone: '+2348000000005', email: 'auditor@psirs.demo', role: 'auditor' },
+    /*
+     * A second finance officer, because several of the money controls require
+     * two of them and one is therefore not a working finance office.
+     *
+     * Closing a disputed settlement releases the commission on every collection
+     * in the batch, so the officer who recorded it may not be the one to close
+     * it. With a single seeded finance officer that path cannot be walked at
+     * all — not in a demonstration, not in UAT, and not by anyone checking that
+     * the separation actually holds.
+     */
+    { name: 'Finance Officer (Second)', phone: '+2348000000006', email: 'finance2@psirs.demo', role: 'finance_officer' },
   ];
 
   const passwordHash = await hashPassword('Password123');
@@ -1031,6 +1359,33 @@ async function seedDemoUsers(): Promise<void> {
         [user.name, user.phone, user.email, passwordHash, user.role],
       );
     }
+
+    /*
+     * The supervisor gets the territory they supervise.
+     *
+     * A supervisor's reports are bounded to the territories they hold, and
+     * this one held none — so every scoped screen answered "Your account has
+     * no territory assigned, so there is no area to list taxpayers for."
+     * That message is correct, and it is the right one for a half-configured
+     * account, which is exactly what this was: a demonstration of the role
+     * showed a supervisor who could see nothing, and somebody watching cannot
+     * tell that from a supervisor who is not allowed to.
+     *
+     * Jos North, for the same reason the demonstration agent works there: it
+     * is where the seeded taxpayers and collections are.
+     */
+    await client.query(
+      `INSERT INTO user_territories (user_id, territory_id)
+       SELECT u.id, t.id
+         FROM users u
+         JOIN territories t ON t.lga_id = (
+           SELECT id FROM lgas ORDER BY (name = 'Jos North') DESC, name LIMIT 1
+         )
+        WHERE u.phone = $1
+        LIMIT 1
+       ON CONFLICT DO NOTHING`,
+      ['+2348000000004'],
+    );
   });
 
   console.log('\n  Demonstration sign-in details (development only):');

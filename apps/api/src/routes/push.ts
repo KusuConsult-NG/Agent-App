@@ -4,15 +4,45 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { getVapidPublicKey, removeSubscription, saveSubscription } from '../services/push';
+import {
+  getVapidPublicKey,
+  isAllowedPushEndpoint,
+  removeSubscription,
+  saveSubscription,
+} from '../services/push';
 import { authenticate } from '../middleware/auth';
 import { validateBody } from '../middleware/validate';
+import { serviceUnavailable } from '../lib/errors';
 
 export const pushRouter = Router();
 
+/*
+ * `z.string().url()` was the whole of it, and a URL is not an address this
+ * server should open a connection to.
+ *
+ * The endpoint is chosen by the browser but arrives in a request body, so it is
+ * caller-supplied text that the delivery path later dials. Any authenticated
+ * agent could name `169.254.169.254`, `127.0.0.1:4000` or their own collector,
+ * then fire the request themselves by collecting a levy — the seeded
+ * `COMMISSION_EARNED_PUSH` template sends on a real earning. `isAllowedPushEndpoint`
+ * holds it to the push services a browser can actually have been given.
+ *
+ * The refusal names no internal address back to the caller: a probe of one host
+ * and a probe of another get the same sentence, so this cannot be used to map
+ * what the server can reach.
+ */
+const pushEndpoint = z
+  .string()
+  .url()
+  .refine(isAllowedPushEndpoint, {
+    message:
+      'That is not a push service this platform delivers to. A subscription must name the ' +
+      'endpoint your browser was given.',
+  });
+
 const subscriptionSchema = z.object({
   subscription: z.object({
-    endpoint: z.string().url(),
+    endpoint: pushEndpoint,
     keys: z
       .object({
         p256dh: z.string().optional(),
@@ -22,14 +52,32 @@ const subscriptionSchema = z.object({
   }),
 });
 
+// Unsubscribe takes the same shape. It does not dial anything, but accepting an
+// address here that subscribe would refuse invites a row nothing can act on.
 const unsubscribeSchema = z.object({
-  endpoint: z.string().url(),
+  endpoint: pushEndpoint,
 });
 
-// The VAPID public key is public by definition and the browser needs it before
-// it can subscribe, so this one stays open.
+/*
+ * The VAPID public key is public by definition and the browser needs it before
+ * it can subscribe, so this one stays open.
+ *
+ * When none is configured this answers 503 rather than a key. It used to serve
+ * one generated at startup, which a browser binds to permanently and which the
+ * next restart throws away — a fleet that stops receiving anything, with
+ * nothing anywhere to say why. An honest refusal here is a deployment checklist
+ * item; the alternative was a silent outage.
+ */
 pushRouter.get('/vapid-key', (_req, res) => {
-  res.json({ publicKey: getVapidPublicKey() });
+  const publicKey = getVapidPublicKey();
+  if (!publicKey) {
+    throw serviceUnavailable(
+      'Push notifications are not configured on this server, so there is no key to subscribe ' +
+        'with.',
+      'An administrator must set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.',
+    );
+  }
+  res.json({ publicKey });
 });
 
 /*
@@ -54,7 +102,7 @@ pushRouter.use(authenticate);
 pushRouter.post(
   '/subscribe',
   validateBody(subscriptionSchema, async (req, res, data) => {
-    saveSubscription(data.subscription, {
+    await saveSubscription(data.subscription, {
       userId: req.auth!.userId,
       agentId: req.auth!.agentId,
     });
@@ -67,7 +115,7 @@ pushRouter.post(
   validateBody(unsubscribeSchema, async (req, res, data) => {
     // Only your own device. An endpoint is long and random, but "hard to guess"
     // is not the same as "checked".
-    removeSubscription(data.endpoint, { userId: req.auth!.userId });
+    await removeSubscription(data.endpoint, { userId: req.auth!.userId });
     res.json({ status: 'unsubscribed' });
   }),
 );

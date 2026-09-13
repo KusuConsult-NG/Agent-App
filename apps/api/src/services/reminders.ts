@@ -25,11 +25,35 @@
 
 import { formatNaira } from '@psirs/shared';
 import type { Db } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { pool, query, withTransaction } from '../db/pool';
 import { queueNotification } from './notifications';
+import { citizenPortalUrl } from '../lib/public-urls';
 import type { NotificationEvent } from './notifications';
 
-const PORTAL_URL = process.env.PUBLIC_PORTAL_URL ?? 'https://psirs.plateaustate.gov.ng/citizen';
+/*
+ * The portal link is built by `lib/public-urls.ts` rather than here.
+ *
+ * This line used to be its own hand-rolled URL with no hash on it, which is
+ * the mistake that module exists to prevent — and this is the only public link
+ * a taxpayer receives without having asked for it.
+ */
+
+/**
+ * Nigeria keeps West Africa Time all year — UTC+1, no daylight saving.
+ *
+ * The due date was rendered with `toLocaleDateString('en-NG')` and no zone,
+ * which uses whichever zone the process runs in. Every container in this repo
+ * runs UTC, so an invoice expiring in the first hour of a Lagos day was
+ * announced to the taxpayer as the day before. The taxpayer is in Plateau
+ * State; the date they are given has to be theirs.
+ */
+const NIGERIAN_DATE = new Intl.DateTimeFormat('en-NG', {
+  timeZone: 'Africa/Lagos',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 
 interface ReminderWindow {
   event: NotificationEvent;
@@ -48,6 +72,7 @@ interface DueInvoice {
   id: string;
   taxpayer_id: string;
   revenue_item_name: string;
+  revenue_item_name_ha: string | null;
   total_amount_kobo: string;
   expires_at: Date;
   tin: string | null;
@@ -79,6 +104,7 @@ async function processWindow(
        i.id,
        i.taxpayer_id,
        ri.name AS revenue_item_name,
+       ri.name_ha AS revenue_item_name_ha,
        i.total_amount_kobo::text,
        i.expires_at,
        t.tin
@@ -87,6 +113,22 @@ async function processWindow(
      JOIN revenue_items ri ON ri.id = a.revenue_item_id
      JOIN taxpayers t ON t.id = i.taxpayer_id
     WHERE i.status IN ('UNPAID', 'PARTIALLY_PAID')
+      -- Not a record somebody took off the register. The debt stays owed and
+      -- stays in every total; what stops is the chasing, because the business
+      -- has shut or the person has died and the number now belongs to somebody
+      -- else. Ended records that still owe are worked from the
+      -- ended-with-arrears queue instead, by a person rather than a sweep.
+      AND t.status = 'ACTIVE'
+      -- And nothing the State has agreed not to pursue.
+      --
+      -- The same reasoning as the clause above, which stops the sweep chasing
+      -- an ended record: what stops is the chasing. An open objection suspends
+      -- enforcement, and an automated SMS demanding payment is the most direct
+      -- form of it there is — unsolicited, at scale, and arriving days after
+      -- the trader was told the objection had been received. If the objection
+      -- is dismissed the invoice becomes eligible again on its own, because
+      -- this is a predicate and not a flag.
+      AND NOT ${UNDER_OPEN_OBJECTION_SQL}
       AND i.expires_at IS NOT NULL
       AND i.expires_at > now() + INTERVAL '2 days'
       AND i.expires_at BETWEEN now() + ($1 || ' days')::INTERVAL
@@ -96,6 +138,29 @@ async function processWindow(
     LIMIT 500`,
     [window.minDays, window.maxDays],
   );
+
+  if (invoices.length === 0) return { sent: 0, skipped: 0 };
+
+  /*
+   * One question asked once, rather than the same rollback five hundred times.
+   *
+   * If the wording for this window is out of service, every invoice below
+   * would set its flag, queue nothing and roll back. That is handled — but it
+   * is worth saying plainly and in one place, because the operational fact is
+   * about the template, not about five hundred taxpayers.
+   */
+  const active = await query<{ channel: string }>(
+    db,
+    `SELECT channel FROM notification_templates WHERE event = $1 AND status = 'ACTIVE'`,
+    [window.event],
+  );
+  if (active.length === 0) {
+    console.error(
+      `[reminders:${window.event}] no active notification template; ` +
+        `${invoices.length} invoice(s) not reminded and left for the next sweep`,
+    );
+    return { sent: 0, skipped: invoices.length };
+  }
 
   let sent = 0;
   let skipped = 0;
@@ -110,25 +175,39 @@ async function processWindow(
           [invoice.id],
         );
 
-        const dueDate = invoice.expires_at.toLocaleDateString('en-NG', {
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        });
+        const dueDate = NIGERIAN_DATE.format(invoice.expires_at);
 
-        await queueNotification(client, {
+        const queued = await queueNotification(client, {
           event: window.event,
           taxpayerId: invoice.taxpayer_id,
           variables: {
             dueDate,
             amount: invoice.total_amount_kobo,
             revenueItem: invoice.revenue_item_name,
+            revenueItemHa: invoice.revenue_item_name_ha ?? invoice.revenue_item_name,
             tinNumber: invoice.tin ?? 'Pending',
-            portalUrl: PORTAL_URL,
+            portalUrl: citizenPortalUrl(),
           },
           entityType: 'invoice',
           entityId: invoice.id,
         });
+
+        /*
+         * The flag above is what stops a second reminder, so setting it for a
+         * message that was never queued costs this taxpayer the window
+         * permanently. queueNotification returns zero when no ACTIVE template
+         * exists for the event — which is not a fault but an intended
+         * operation, the reason templates carry a status column at all.
+         *
+         * Throwing rolls the flag back with the rest of the transaction and
+         * lands in the catch below, so the invoice is counted as skipped and
+         * is picked up again by the next sweep.
+         */
+        if (queued === 0) {
+          throw new Error(
+            `no active notification template for ${window.event}; nothing was queued`,
+          );
+        }
       });
       sent++;
     } catch (error) {

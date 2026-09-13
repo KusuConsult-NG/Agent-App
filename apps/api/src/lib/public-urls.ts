@@ -26,6 +26,7 @@ import { config } from '../config';
 export const verifyPath = 'verify';
 export const refereePath = 'referee';
 export const groupAttestationPath = 'group-attestation';
+export const citizenPath = 'citizen';
 
 /**
  * The portal origin, however VERIFICATION_BASE_URL happens to be written.
@@ -62,4 +63,31 @@ export function refereeInvitationUrl(token: string): string {
  */
 export function groupAttestationUrl(token: string): string {
   return `${portalOrigin()}/#/${groupAttestationPath}/${encodeURIComponent(token)}`;
+}
+
+/**
+ * Where a taxpayer is sent to see what they owe.
+ *
+ * Fourth of its kind, and the first one a citizen receives without asking:
+ * the reminder that an invoice is coming due carries this link by SMS.
+ * `reminders.ts` built it by hand — `https://.../citizen`, no hash — so the
+ * one channel aimed at ordinary taxpayers rather than at agents or officers
+ * landed them on the government staff sign-in form.
+ *
+ * `PUBLIC_PORTAL_URL` is still honoured for a deployment that serves the
+ * citizen screen from somewhere else, but a value written without a hash route
+ * is corrected rather than passed on, because the portal cannot route it.
+ */
+export function citizenPortalUrl(): string {
+  const configured = process.env.PUBLIC_PORTAL_URL?.trim();
+  if (configured) {
+    if (configured.includes('/#/')) return configured;
+    const origin = configured
+      .replace(/#.*$/, '')
+      .replace(/\/+$/, '')
+      .replace(new RegExp(`/${citizenPath}$`), '')
+      .replace(/\/+$/, '');
+    return `${origin}/#/${citizenPath}`;
+  }
+  return `${portalOrigin()}/#/${citizenPath}`;
 }

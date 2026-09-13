@@ -15,6 +15,19 @@ export interface PushSubscriptionState {
   isSubscribed: boolean;
 }
 
+/**
+ * This handset or browser has no push at all.
+ *
+ * No message: `More.tsx` renders `t.morePushUnsupported`. It threw an English
+ * sentence, and `err.message || t.morePushFailed` meant the English won.
+ */
+export class PushUnsupported extends Error {
+  constructor() {
+    super('push unsupported');
+    this.name = 'PushUnsupported';
+  }
+}
+
 export class PushNotificationManager {
   public isSupported(): boolean {
     return (
@@ -32,7 +45,7 @@ export class PushNotificationManager {
 
   public async subscribe(): Promise<boolean> {
     if (!this.isSupported()) {
-      throw new Error('Push notifications are not supported on this device/browser.');
+      throw new PushUnsupported();
     }
 
     // 1. Request user permission
@@ -47,7 +60,7 @@ export class PushNotificationManager {
     // 3. Fetch public VAPID key from backend
     const { publicKey } = await api.get<{ publicKey: string }>('/push/vapid-key');
     if (!publicKey) {
-      throw new Error('VAPID public key not configured on server.');
+      throw new Error('vapid key missing from server response');
     }
 
     // 4. Subscribe with PushManager

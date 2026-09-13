@@ -2,13 +2,12 @@
 
 import express, { Router, type Request } from 'express';
 import { z } from 'zod';
-import { REFEREE_CATEGORIES, formatNaira, serialiseKobo } from '@psirs/shared';
+import { REFEREE_CATEGORIES, compareVersions, formatNaira, serialiseKobo } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { config } from '../config';
 import {
   authenticate,
-  compareVersions,
   requireActiveAgent,
   requirePermission,
   requireStepUp,
@@ -512,13 +511,83 @@ agentRouter.post(
       });
       res.status(201).json({
         ...result,
+        /*
+         * Registering a handset the platform already holds returns the row it
+         * has, whatever state it is in — so an already-suspended handset was
+         * being reported as "registered and active", which is the one thing it
+         * is not.
+         */
         message:
           result.status === 'PENDING'
             ? 'Device registered and awaiting approval by your supervisor.'
-            : 'Device registered and active.',
+            : result.status === 'SUSPENDED'
+              ? 'This device is registered but suspended. Your supervisor can restore it.'
+              : 'Device registered and active.',
       });
     },
   ),
+);
+
+/**
+ * Move the version gate.
+ *
+ * `system:configure`, which only an administrator holds: this decides whether
+ * a handset in a market can collect money at all, and getting it wrong stops
+ * every agent in the state. Deliberately not `agent:manage` — suspending one
+ * agent and stopping all of them are different sizes of decision.
+ *
+ * Declared before `/app-version` reads it, and before the parametrised
+ * routes, so the path is not read as an agent id.
+ */
+agentRouter.post(
+  '/app-version',
+  requirePermission('system:configure'),
+  validateBody(
+    z.object({
+      minimumVersion: z
+        .string()
+        .trim()
+        .regex(/^\d+(\.\d+){0,3}$/, 'A version is digits separated by dots, like 1.4.0'),
+      recommendedVersion: z
+        .string()
+        .trim()
+        .regex(/^\d+(\.\d+){0,3}$/, 'A version is digits separated by dots, like 1.4.0'),
+      notes: z
+        .string()
+        .trim()
+        .min(10, 'Say why the minimum is moving — it is what an agent locked out will be shown'),
+      effectiveFrom: z.string().datetime().optional(),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await agents.publishAppVersion({
+          minimumVersion: data.minimumVersion,
+          recommendedVersion: data.recommendedVersion,
+          notes: data.notes,
+          effectiveFrom: data.effectiveFrom ? new Date(data.effectiveFrom) : null,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+/**
+ * What the gate has been set to, and what the fleet is running.
+ *
+ * Separate from the agent-facing `/app-version` above, which answers "may this
+ * handset collect" and is deliberately readable by anyone signed in. This one
+ * shows the whole record and the fleet spread, so an administrator can see how
+ * many handsets a new minimum would stop before publishing it rather than
+ * after.
+ */
+agentRouter.get(
+  '/app-version/history',
+  requirePermission('system:configure'),
+  asyncHandler(async (_req, res) => {
+    res.json(await agents.appVersionHistory());
+  }),
 );
 
 /** PWA version gate (Addendum §43). Callable before any transaction. */
@@ -575,7 +644,7 @@ agentRouter.get(
         await query(
           pool,
           `SELECT t.transaction_reference, t.amount_kobo, t.status, t.created_at, t.verified_at,
-                  ri.name AS revenue_item,
+                  ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
                   COALESCE(tp.business_name, tp.first_name || ' ' || tp.last_name) AS taxpayer_name,
                   tp.tin, r.receipt_number, r.id AS receipt_id
              FROM transactions t
@@ -605,7 +674,8 @@ agentRouter.get(
         pool,
         `SELECT c.id, c.amount_kobo, c.rate_basis_points, c.basis_amount_kobo, c.status,
                 c.eligible_at, c.paid_at, c.reversal_reason,
-                t.transaction_reference, ri.name AS revenue_item, t.created_at
+                t.transaction_reference, ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+                t.created_at
            FROM commissions c
            JOIN transactions t ON t.id = c.transaction_id
            JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -672,7 +742,8 @@ agentRouter.get(
           `SELECT a.id, a.agent_code, a.application_number, u.full_name, u.phone, u.email,
                   a.account_status, a.kyc_status, a.referee_status, a.training_status,
                   a.clearance_status, a.operational_status, l.name AS lga,
-                  ter.name AS territory, a.activated_at, a.created_at
+                  ter.name AS territory, ter.name_ha AS territory_ha,
+                  a.activated_at, a.created_at
              FROM agents a
              JOIN users u ON u.id = a.user_id
              LEFT JOIN lgas l ON l.id = a.lga_id
@@ -843,26 +914,100 @@ agentRouter.post(
   ),
 );
 
+/**
+ * Let a handset start collecting government revenue (Addendum §21).
+ *
+ * Revoking a device was on the audit trail and approving one was not, though
+ * only one of the two starts money being taken in somebody's name. The row
+ * carried `approved_by`, which answers the question if you already know to ask
+ * it about this device; the trail is where an auditor looks when they do not.
+ */
+/**
+ * Stop a handset, and start it again (Addendum §21).
+ *
+ * The reversible half of the pair. Revoking is for a handset that must never
+ * work again; suspending is for one that must not work now — mislaid, in for
+ * repair, or under a fraud flag somebody wants to look at before collection
+ * continues. Both stop collection at once; only one of them is a decision.
+ */
+agentRouter.post(
+  '/devices/:deviceId/suspend',
+  requirePermission('device:manage', 'agent:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(5, 'Give a reason for suspending the device') }),
+    async (req, res, data) => {
+      await agents.suspendDevice({
+        deviceId: req.params.deviceId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        suspended: true,
+        message: 'The device is suspended and its sessions have ended. It can be restored.',
+      });
+    },
+  ),
+);
+
+agentRouter.post(
+  '/devices/:deviceId/restore',
+  requirePermission('device:manage', 'agent:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(5, 'Say what changed before restoring the device') }),
+    async (req, res, data) => {
+      await agents.restoreDevice({
+        deviceId: req.params.deviceId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({ restored: true, message: 'The device is active again.' });
+    },
+  ),
+);
+
 agentRouter.post(
   '/devices/:deviceId/approve',
   requirePermission('device:manage', 'agent:manage'),
   asyncHandler(async (req, res) => {
-    const device = await queryOne<{ id: string; status: string }>(
-      pool,
-      'SELECT id, status FROM agent_devices WHERE id = $1',
-      [req.params.deviceId],
-    );
-    if (!device) throw notFound('That device');
-    if (device.status === 'REVOKED') {
-      throw forbidden('A revoked device cannot be approved again.');
-    }
-
-    await pool.query(
-      `UPDATE agent_devices SET status = 'ACTIVE', approved_at = now(), approved_by = $2 WHERE id = $1`,
-      [req.params.deviceId, req.auth!.userId],
-    );
+    await agents.approveDevice({
+      deviceId: req.params.deviceId,
+      actorId: req.auth!.userId,
+      actorRole: req.auth!.role,
+      ipAddress: req.clientIp,
+    });
     res.json({ approved: true });
   }),
+);
+
+/**
+ * Triage of a referee risk flag.
+ *
+ * `fraud:manage` rather than `agent:approve`: this is the same act as
+ * reviewing a fraud flag and belongs to the same people, and it deliberately
+ * is not the officer who clears referees — upholding a flag and clearing the
+ * referee it is about should not be one person's afternoon.
+ */
+agentRouter.post(
+  '/referees/flags/:id/review',
+  requirePermission('fraud:manage'),
+  validateBody(
+    z.object({
+      decision: z.enum(['UNDER_REVIEW', 'CONFIRMED', 'DISMISSED']),
+      note: z.string().min(10, 'Record what was found'),
+    }),
+    async (req, res, data) => {
+      const result = await referees.reviewRefereeRiskFlag({
+        flagId: req.params.id,
+        decision: data.decision,
+        note: data.note,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({ reviewed: true, ...result });
+    },
+  ),
 );
 
 agentRouter.post(

@@ -39,6 +39,7 @@ import {
 } from '../services/obligations';
 import { getTaxpayerIncentives } from '../services/incentives';
 import { firstLgaId, pool, resetDatabase, startTestServer, stopTestServer } from './helpers';
+import { query, queryOne, withTransaction } from '../db/pool';
 
 let lgaId = '';
 
@@ -376,5 +377,59 @@ describe('Social incentives follow the TIN', () => {
         );
       }
     }
+  });
+});
+
+describe('An obligation written inside somebody else\'s transaction', () => {
+  it('is rolled back when that transaction fails', async () => {
+    /*
+     * `upsertObligations` opened its own transaction on its own connection.
+     * That is right when it is the whole operation and wrong when it is a step
+     * inside one: registering a taxpayer writes the obligations, evaluates
+     * registration risk, queues a TIN notification and syncs compliance
+     * together — and if a later step threw, the outer transaction rolled back
+     * while the obligations stayed committed beside it. A taxpayer record that
+     * does not exist, carrying obligations that do.
+     */
+    const taxpayerId = await createTaxpayer({ sector: 'AGRICULTURE', type: 'INDIVIDUAL' });
+    const items = await query<{ id: string }>(
+      pool,
+      `SELECT id FROM revenue_items WHERE status = 'ACTIVE' LIMIT 1`,
+    );
+    assert.ok(items[0], 'a revenue item is needed to have an obligation at all');
+
+    const before = await queryOne<{ n: string }>(
+      pool,
+      'SELECT count(*)::text AS n FROM taxpayer_tax_obligations WHERE taxpayer_id = $1',
+      [taxpayerId],
+    );
+
+    await assert.rejects(
+      () =>
+        withTransaction(async (client) => {
+          await upsertObligations(
+            taxpayerId,
+            [items[0]!.id],
+            'OFFICER_REVIEW',
+            null,
+            { role: 'revenue_officer', mayWaive: true },
+            client,
+          );
+          // Whatever comes after, failing.
+          throw new Error('the step after the obligations');
+        }),
+      /the step after the obligations/,
+    );
+
+    const after = await queryOne<{ n: string }>(
+      pool,
+      'SELECT count(*)::text AS n FROM taxpayer_tax_obligations WHERE taxpayer_id = $1',
+      [taxpayerId],
+    );
+    assert.equal(
+      after!.n,
+      before!.n,
+      'an obligation written inside a failed transaction must not survive it',
+    );
   });
 });

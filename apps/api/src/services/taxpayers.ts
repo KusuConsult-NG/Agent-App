@@ -10,13 +10,14 @@
  */
 
 import type { PoolClient } from 'pg';
-import type { TaxpayerType } from '@psirs/shared';
+import { duplicateReasonSentence, type DuplicateReason, type TaxpayerType } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { hashIdentityNumber, maskIdentityNumber } from '../lib/crypto';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
+import { scopeParams, type ReportScope } from './report-scope';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -43,6 +44,14 @@ export interface TaxpayerInput {
   identityNumber?: string;
   consentGiven: boolean;
   declarationAccepted: boolean;
+  /**
+   * The language this person reads.
+   *
+   * Everything the platform sends them is chosen with it, and for a taxpayer
+   * that is one SMS carrying the only copy of their receipt. Optional, and
+   * absent means English — the same as the column default.
+   */
+  preferredLanguage?: 'en' | 'ha';
   existingTin?: string;
 }
 
@@ -52,7 +61,7 @@ export interface DuplicateMatch {
   tin: string | null;
   phone: string;
   score: number;
-  reasons: string[];
+  reasons: DuplicateReason[];
 }
 
 /**
@@ -110,12 +119,12 @@ export async function findPotentialDuplicates(
   const matches: DuplicateMatch[] = [];
 
   for (const row of rows) {
-    const reasons: string[] = [];
+    const reasons: DuplicateReason[] = [];
     let score = 0;
 
     if (identityHash && row.identity_hash === identityHash) {
       score = Math.max(score, 100);
-      reasons.push('The same identification number is already registered');
+      reasons.push('IDENTITY_NUMBER');
     }
 
     const namesMatch =
@@ -129,18 +138,18 @@ export async function findPotentialDuplicates(
 
     if (row.phone === input.phone && (namesMatch || businessMatch)) {
       score = Math.max(score, 85);
-      reasons.push('Same phone number and same name');
+      reasons.push('PHONE_AND_NAME');
     } else if (row.phone === input.phone) {
       score = Math.max(score, 60);
-      reasons.push('This phone number is already registered to another taxpayer');
+      reasons.push('PHONE');
     }
 
     if (businessMatch && row.lga_id === input.lgaId) {
       score = Math.max(score, 70);
-      reasons.push('A business with this name is already registered in this LGA');
+      reasons.push('BUSINESS_NAME_IN_LGA');
     } else if (namesMatch && row.lga_id === input.lgaId) {
       score = Math.max(score, 55);
-      reasons.push('A taxpayer with this name is already registered in this LGA');
+      reasons.push('NAME_IN_LGA');
     }
 
     if (score > 0) {
@@ -233,157 +242,184 @@ export async function registerTaxpayer(params: {
     );
   }
 
-  return withTransaction(async (client) => {
-    /*
-     * A ward has to be in the LGA it is filed under.
-     *
-     * The column took any ward id the caller sent. A foreign key made it a real
-     * ward, and nothing made it a ward of this taxpayer's LGA — so a stale
-     * selection left over from a changed LGA would file the registration, and
-     * every subsequent collection, in the wrong place on the State → LGA →
-     * Ward drill-down. Revenue attributed confidently to the wrong ward is
-     * worse than the nothing that tier showed before.
-     */
-    if (input.wardId) {
-      const ward = await queryOne<{ lga_id: string; name: string }>(
-        client,
-        'SELECT lga_id, name FROM wards WHERE id = $1',
-        [input.wardId],
-      );
-      if (!ward) {
-        throw badRequest('That ward does not exist.', [
-          { field: 'wardId', issue: 'Unknown ward' },
-        ]);
-      }
-      if (ward.lga_id !== input.lgaId) {
-        throw badRequest(
-          `${ward.name} is not a ward of the selected Local Government Area. ` +
-            'Choose the ward again after changing the LGA.',
-          [{ field: 'wardId', issue: 'Ward belongs to a different LGA' }],
-        );
-      }
-    }
-
-    const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
-    const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
-
-    let tin: string | null = null;
-    let tinStatus = 'NOT_REQUESTED';
-    let tinReference: string | null = null;
-    let tinReason: string | null = null;
-
-    if (input.existingTin) {
-      /*
-       * Normalise before looking it up.
-       *
-       * PSIRS prints a TIN with separators and people write them as they read
-       * them — `12345678-0001`, `1234 5678 90`. Sent to the register exactly
-       * as typed, those matched nothing and came back NOT_FOUND, so a
-       * taxpayer holding a perfectly good TIN could not be registered against
-       * it and the agent was told the number could not be found when the
-       * number was fine.
-       *
-       * Only punctuation and spacing are removed. Nothing here decides what a
-       * TIN looks like — that is the register's job, and inventing a format
-       * check would refuse valid numbers the register would have accepted.
-       */
-      const normalisedTin = input.existingTin.replace(/[\s-]/g, '').toUpperCase();
-
-      // An agent supplying an existing TIN does not get to assert it: it is
-      // checked against the authoritative service first (PRD §11, §82).
-      const lookup = await tinService.lookup(normalisedTin);
-
-      if (lookup.outcome === 'UNAVAILABLE') {
-        // The old message told the agent to "register the taxpayer as a new TIN
-        // applicant" — advice that mints a duplicate TIN for someone who
-        // already has one. During an outage that would happen to every existing
-        // taxpayer an agent touched, and a duplicate in a UNIQUE column on an
-        // undeletable row is permanent. So this stops instead.
-        throw new AppError({
-          statusCode: 503,
-          code: 'TIN_SERVICE_UNAVAILABLE',
-          message:
-            'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. ' +
-            'Nothing has been registered.',
-          nextStep:
-            'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — ' +
-            'that would create a second TIN for someone who already has one.',
-        });
-      }
-
-      if (lookup.outcome === 'NOT_FOUND') {
-        /*
-         * The advice here used to be "Check the number, or register the
-         * taxpayer as a new TIN applicant" — which is the instruction that
-         * mints a second TIN for somebody who already has one, and the exact
-         * outcome the UNAVAILABLE branch above goes out of its way to
-         * prevent. A duplicate in a UNIQUE column on an undeletable row is
-         * permanent.
-         *
-         * The order matters: check the number first, because a mistyped digit
-         * is far likelier than a taxpayer who has a TIN nobody has heard of.
-         * Registering as new stays reachable, and is named as the answer only
-         * to the question it actually answers.
-         */
-        throw new AppError({
-          statusCode: 400,
-          code: 'INVALID_REQUEST',
-          message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
-          nextStep:
-            'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
-            'the usual cause. Only if they have never had a TIN, go back and register them ' +
-            'without one; the platform will apply for a new TIN for them.',
-          details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
-        });
-      }
-
-      tin = lookup.tin ?? null;
-      tinStatus = 'EXISTING';
-    } else {
-      const lgaRow = await queryOne<{ name: string }>(client, 'SELECT name FROM lgas WHERE id = $1', [
-        input.lgaId,
+  /*
+   * Everything that has to be settled before a row is written.
+   *
+   * Validating the ward, and resolving the TIN with the authoritative service,
+   * both used to happen inside the transaction that inserts the taxpayer — so
+   * the busiest write path on the platform held a pooled connection open for
+   * as long as the PSIRS TIN service took to answer. An agent registering
+   * somebody in a market was holding a database connection hostage to a third
+   * party's latency, and a queue of agents doing the same is how a pool runs
+   * dry.
+   *
+   * The order is load-bearing and unchanged: the ward is checked first,
+   * because a TIN minted for a registration that then fails validation is a
+   * duplicate in a UNIQUE column on a row nobody can delete. Read-only work,
+   * so it needs no transaction of its own — and the insert below is a single
+   * statement, which is atomic without one being held open across the call.
+   */
+  /*
+   * A ward has to be in the LGA it is filed under.
+   *
+   * The column took any ward id the caller sent. A foreign key made it a real
+   * ward, and nothing made it a ward of this taxpayer's LGA — so a stale
+   * selection left over from a changed LGA would file the registration, and
+   * every subsequent collection, in the wrong place on the State → LGA →
+   * Ward drill-down. Revenue attributed confidently to the wrong ward is
+   * worse than the nothing that tier showed before.
+   */
+  if (input.wardId) {
+    const ward = await queryOne<{ lga_id: string; name: string }>(
+      pool,
+      'SELECT lga_id, name FROM wards WHERE id = $1',
+      [input.wardId],
+    );
+    if (!ward) {
+      throw badRequest('That ward does not exist.', [
+        { field: 'wardId', issue: 'Unknown ward' },
       ]);
-      if (!lgaRow) throw badRequest('The selected Local Government Area is not valid.');
+    }
+    if (ward.lga_id !== input.lgaId) {
+      throw badRequest(
+        `${ward.name} is not a ward of the selected Local Government Area. ` +
+          'Choose the ward again after changing the LGA.',
+        [{ field: 'wardId', issue: 'Ward belongs to a different LGA' }],
+      );
+    }
+  }
 
-      const registration = await tinService.register({
-        taxpayerType: input.taxpayerType,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        businessName: input.businessName,
-        phone: input.phone,
-        email: input.email ?? null,
-        dateOfBirth: input.dateOfBirth ?? null,
-        address: input.address,
-        lgaName: lgaRow.name,
-        identityType: input.identityType ?? null,
-        identityNumber: input.identityNumber ?? null,
+  const identityHash = input.identityNumber ? hashIdentityNumber(input.identityNumber) : null;
+  const identityMasked = input.identityNumber ? maskIdentityNumber(input.identityNumber) : null;
+
+  let tin: string | null = null;
+  let tinStatus = 'NOT_REQUESTED';
+  let tinReference: string | null = null;
+  let tinReason: string | null = null;
+
+  if (input.existingTin) {
+    /*
+     * Normalise before looking it up.
+     *
+     * PSIRS prints a TIN with separators and people write them as they read
+     * them — `12345678-0001`, `1234 5678 90`. Sent to the register exactly
+     * as typed, those matched nothing and came back NOT_FOUND, so a
+     * taxpayer holding a perfectly good TIN could not be registered against
+     * it and the agent was told the number could not be found when the
+     * number was fine.
+     *
+     * Only punctuation and spacing are removed. Nothing here decides what a
+     * TIN looks like — that is the register's job, and inventing a format
+     * check would refuse valid numbers the register would have accepted.
+     */
+    const normalisedTin = input.existingTin.replace(/[\s-]/g, '').toUpperCase();
+
+    // An agent supplying an existing TIN does not get to assert it: it is
+    // checked against the authoritative service first (PRD §11, §82).
+    const lookup = await tinService.lookup(normalisedTin);
+
+    if (lookup.outcome === 'UNAVAILABLE') {
+      // The old message told the agent to "register the taxpayer as a new TIN
+      // applicant" — advice that mints a duplicate TIN for someone who
+      // already has one. During an outage that would happen to every existing
+      // taxpayer an agent touched, and a duplicate in a UNIQUE column on an
+      // undeletable row is permanent. So this stops instead.
+      throw new AppError({
+        statusCode: 503,
+        code: 'TIN_SERVICE_UNAVAILABLE',
+        message:
+          'The PSIRS TIN service could not be reached, so this TIN cannot be confirmed. ' +
+          'Nothing has been registered.',
+        nextStep:
+          'Try again in a few minutes. Do NOT register this taxpayer as a new TIN applicant — ' +
+          'that would create a second TIN for someone who already has one.',
       });
-
-      tinReference = registration.reference || null;
-      tinReason = registration.message;
-
-      // The registration itself is not blocked by an unreachable TIN service.
-      // The taxpayer is real, the agent is standing in front of them, and the
-      // taxpayer record is a fact this platform owns — unlike the TIN. An
-      // assessment does not require a TIN, so they can be served today and the
-      // number chased afterwards by `retryOutstandingTins`.
-      //
-      // What matters is that an outage lands in REQUESTED and not FAILED:
-      // FAILED means the service considered this applicant and declined, which
-      // is a dead end nothing retries.
-      switch (registration.outcome) {
-        case 'ASSIGNED':
-          tin = registration.tin ?? null;
-          tinStatus = tin ? 'ASSIGNED' : 'REQUESTED';
-          break;
-        case 'REJECTED':
-          tinStatus = 'FAILED';
-          break;
-        default:
-          tinStatus = 'REQUESTED';
-      }
     }
 
+    if (lookup.outcome === 'NOT_FOUND') {
+      /*
+       * The advice here used to be "Check the number, or register the
+       * taxpayer as a new TIN applicant" — which is the instruction that
+       * mints a second TIN for somebody who already has one, and the exact
+       * outcome the UNAVAILABLE branch above goes out of its way to
+       * prevent. A duplicate in a UNIQUE column on an undeletable row is
+       * permanent.
+       *
+       * The order matters: check the number first, because a mistyped digit
+       * is far likelier than a taxpayer who has a TIN nobody has heard of.
+       * Registering as new stays reachable, and is named as the answer only
+       * to the question it actually answers.
+       */
+      throw new AppError({
+        statusCode: 400,
+        /*
+         * Its own code, not the catch-all.
+         *
+         * `INVALID_REQUEST` is what `badRequest()` raises for anything a
+         * schema refused, so a client could not tell this from a malformed
+         * field — and the next step below is advice about a specific
+         * decision, not about a malformed request. It is also the reason the
+         * advice could not be translated: a code that means something
+         * different every time it is raised cannot carry one instruction.
+         */
+        code: 'TIN_NOT_FOUND',
+        message: `TIN ${input.existingTin} could not be found in the PSIRS TIN service.`,
+        nextStep:
+          'Check the number against the taxpayer’s own document first — a mistyped digit is ' +
+          'the usual cause. Only if they have never had a TIN, go back and register them ' +
+          'without one; the platform will apply for a new TIN for them.',
+        details: [{ field: 'existingTin', issue: 'Not found in the authoritative TIN register' }],
+      });
+    }
+
+    tin = lookup.tin ?? null;
+    tinStatus = 'EXISTING';
+  } else {
+    const lgaRow = await queryOne<{ name: string }>(pool, 'SELECT name FROM lgas WHERE id = $1', [
+      input.lgaId,
+    ]);
+    if (!lgaRow) throw badRequest('The selected Local Government Area is not valid.');
+
+    const registration = await tinService.register({
+      taxpayerType: input.taxpayerType,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      businessName: input.businessName,
+      phone: input.phone,
+      email: input.email ?? null,
+      dateOfBirth: input.dateOfBirth ?? null,
+      address: input.address,
+      lgaName: lgaRow.name,
+      identityType: input.identityType ?? null,
+      identityNumber: input.identityNumber ?? null,
+    });
+
+    tinReference = registration.reference || null;
+    tinReason = registration.message;
+
+    // The registration itself is not blocked by an unreachable TIN service.
+    // The taxpayer is real, the agent is standing in front of them, and the
+    // taxpayer record is a fact this platform owns — unlike the TIN. An
+    // assessment does not require a TIN, so they can be served today and the
+    // number chased afterwards by `retryOutstandingTins`.
+    //
+    // What matters is that an outage lands in REQUESTED and not FAILED:
+    // FAILED means the service considered this applicant and declined, which
+    // is a dead end nothing retries.
+    switch (registration.outcome) {
+      case 'ASSIGNED':
+        tin = registration.tin ?? null;
+        tinStatus = tin ? 'ASSIGNED' : 'REQUESTED';
+        break;
+      case 'REJECTED':
+        tinStatus = 'FAILED';
+        break;
+      default:
+        tinStatus = 'REQUESTED';
+    }
+  }
+
+  return withTransaction(async (client) => {
     const taxpayer = await queryOne<{ id: string }>(
       client,
       `INSERT INTO taxpayers (
@@ -393,7 +429,7 @@ export async function registerTaxpayer(params: {
          phone, alternate_phone, email, address, lga_id, ward_id, community,
          occupation, business_activity, identity_type, identity_hash, identity_masked,
          consent_given, consent_at, declaration_accepted,
-         registered_by_agent_id, source, tin_reason, tin_attempts
+         registered_by_agent_id, source, tin_reason, tin_attempts, preferred_language
        ) VALUES (
          $1,$2,$3, now(), $4, $5,
          $6,$7,$8,$9,$10,
@@ -401,7 +437,7 @@ export async function registerTaxpayer(params: {
          $15,$16,$17,$18,$19,$20,$21,
          $22,$23,$24,$25,$26,
          $27, now(), $28,
-         $29,$30,$31,$32
+         $29,$30,$31,$32,$33
        ) RETURNING id`,
       [
         input.taxpayerType,
@@ -436,6 +472,8 @@ export async function registerTaxpayer(params: {
         params.source ?? 'AGENT',
         tinReason,
         tinStatus === 'NOT_REQUESTED' || tinStatus === 'EXISTING' ? 0 : 1,
+        // English when the agent did not ask, which is also the column default.
+        input.preferredLanguage ?? 'en',
       ],
     );
 
@@ -507,7 +545,8 @@ async function recordDuplicateCheck(
       }),
       top?.taxpayerId ?? null,
       top?.score ?? 0,
-      params.duplicates.flatMap((match) => match.reasons),
+      // The record keeps the sentence; only the screen gets the code.
+      params.duplicates.flatMap((match) => match.reasons.map(duplicateReasonSentence)),
       params.decision,
       params.createdTaxpayerId,
       params.actorId,
@@ -525,45 +564,90 @@ export async function requestTin(params: {
   actorId: string | null;
   actorRole: string;
 }): Promise<{ tin: string | null; tinStatus: string }> {
+  /*
+   * Read, ask, then write — in that order, with nothing held open in between.
+   *
+   * All three used to happen inside one transaction, so every TIN request held
+   * a pooled connection for as long as the PSIRS TIN service took to answer.
+   * Splitting it opens a window in which somebody else could assign this
+   * taxpayer a TIN: `retryOutstandingTins` sweeps in the background and calls
+   * straight back into here. The write below re-reads `FOR UPDATE` and refuses
+   * to overwrite a TIN that arrived while we were asking — which is a
+   * guarantee the single transaction never actually made, because its read
+   * took no lock either.
+   */
+  const taxpayer = await queryOne<{
+    id: string;
+    tin: string | null;
+    tin_status: string;
+    taxpayer_type: TaxpayerType;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string | null;
+    phone: string;
+    email: string | null;
+    date_of_birth: Date | null;
+    address: string;
+    lga_name: string;
+  }>(
+    pool,
+    `SELECT t.id, t.tin, t.tin_status, t.taxpayer_type, t.first_name, t.last_name,
+            t.business_name, t.phone, t.email, t.date_of_birth, t.address, l.name AS lga_name
+       FROM taxpayers t JOIN lgas l ON l.id = t.lga_id
+      WHERE t.id = $1`,
+    [params.taxpayerId],
+  );
+
+  if (!taxpayer) throw notFound('That taxpayer');
+  if (taxpayer.tin) {
+    return { tin: taxpayer.tin, tinStatus: taxpayer.tin_status };
+  }
+
+  const registration = await tinService.register({
+    taxpayerType: taxpayer.taxpayer_type,
+    firstName: taxpayer.first_name ?? undefined,
+    lastName: taxpayer.last_name ?? undefined,
+    businessName: taxpayer.business_name ?? undefined,
+    phone: taxpayer.phone,
+    email: taxpayer.email,
+    dateOfBirth: taxpayer.date_of_birth?.toISOString().slice(0, 10) ?? null,
+    address: taxpayer.address,
+    lgaName: taxpayer.lga_name,
+  });
+
   return withTransaction(async (client) => {
-    const taxpayer = await queryOne<{
-      id: string;
-      tin: string | null;
-      tin_status: string;
-      taxpayer_type: TaxpayerType;
-      first_name: string | null;
-      last_name: string | null;
-      business_name: string | null;
-      phone: string;
-      email: string | null;
-      date_of_birth: Date | null;
-      address: string;
-      lga_name: string;
-    }>(
+    /*
+     * Somebody may have got there while we were asking.
+     *
+     * The TIN column can only ever be filled from the authoritative service,
+     * and it is a UNIQUE column — so overwriting one that arrived in the
+     * meantime would either lose a real number or fail on the constraint. The
+     * number we were just handed is recorded in the audit entry instead, so it
+     * can be reconciled with the register rather than quietly dropped.
+     */
+    const current = await queryOne<{ tin: string | null; tin_status: string }>(
       client,
-      `SELECT t.id, t.tin, t.tin_status, t.taxpayer_type, t.first_name, t.last_name,
-              t.business_name, t.phone, t.email, t.date_of_birth, t.address, l.name AS lga_name
-         FROM taxpayers t JOIN lgas l ON l.id = t.lga_id
-        WHERE t.id = $1`,
+      'SELECT tin, tin_status FROM taxpayers WHERE id = $1 FOR UPDATE',
       [params.taxpayerId],
     );
+    if (!current) throw notFound('That taxpayer');
 
-    if (!taxpayer) throw notFound('That taxpayer');
-    if (taxpayer.tin) {
-      return { tin: taxpayer.tin, tinStatus: taxpayer.tin_status };
+    if (current.tin) {
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'taxpayer.tin_request_superseded',
+        entityType: 'taxpayer',
+        entityId: params.taxpayerId,
+        oldValue: { tin: current.tin },
+        newValue: {
+          discardedOutcome: registration.outcome,
+          discardedReference: registration.reference || null,
+          provider: registration.provider,
+        },
+      });
+      return { tin: current.tin, tinStatus: current.tin_status };
     }
-
-    const registration = await tinService.register({
-      taxpayerType: taxpayer.taxpayer_type,
-      firstName: taxpayer.first_name ?? undefined,
-      lastName: taxpayer.last_name ?? undefined,
-      businessName: taxpayer.business_name ?? undefined,
-      phone: taxpayer.phone,
-      email: taxpayer.email,
-      dateOfBirth: taxpayer.date_of_birth?.toISOString().slice(0, 10) ?? null,
-      address: taxpayer.address,
-      lgaName: taxpayer.lga_name,
-    });
 
     // Only a REJECTED registration is a dead end. An unreachable service — and
     // an "assigned" reply carrying no usable number — stay REQUESTED, so
@@ -684,6 +768,20 @@ export interface TaxpayerSearchParams {
   receiptNumber?: string;
   transactionReference?: string;
   lgaId?: string;
+  /**
+   * Everyone who has ever been assessed under this revenue item, or anything in
+   * this category (PRD §13).
+   *
+   * "Show me who is registered under Development Levy" is a question an officer
+   * asks constantly and could not ask here: the search took a name, a phone, a
+   * TIN, a plate and a reference, all of which identify one person you already
+   * know about. What an officer planning a collection round or chasing a
+   * category of defaulters needs is the opposite — the set, not the individual.
+   */
+  revenueItemId?: string;
+  categoryId?: string;
+  /** Only those with something unpaid, which is what makes it a defaulter list. */
+  outstandingOnly?: boolean;
   limit?: number;
 }
 
@@ -691,7 +789,11 @@ export interface TaxpayerSearchParams {
  * Taxpayer search (PRD §13). Every branch is a parameterised query — a search
  * box on a government system is the last place to build SQL by concatenation.
  */
-export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
+export async function searchTaxpayers(
+  db: Db,
+  params: TaxpayerSearchParams,
+  scope: ReportScope = { kind: 'STATEWIDE' },
+) {
   const limit = Math.min(params.limit ?? 25, 100);
   const conditions: string[] = ["t.status IN ('ACTIVE','DRAFT')"];
   const values: unknown[] = [];
@@ -720,6 +822,61 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
       params.transactionReference.trim(),
     );
   }
+
+  /*
+   * Registered under an item means assessed under it, which is the only record
+   * of the relationship this platform keeps. There is no separate enrolment: a
+   * trader is on Market Levy because Market Levy has been assessed against
+   * them, and that is what an officer means by the question.
+   */
+  if (params.revenueItemId) {
+    add(
+      't.id IN (SELECT taxpayer_id FROM transactions WHERE revenue_item_id = $$)',
+      params.revenueItemId,
+    );
+  }
+  if (params.categoryId) {
+    add(
+      `t.id IN (SELECT tx.taxpayer_id FROM transactions tx
+                  JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                 WHERE ri.category_id = $$)`,
+      params.categoryId,
+    );
+  }
+
+  /*
+   * Outstanding means an invoice with money still on it. Scoped to the same
+   * item or category when one was given, so "defaulters on Market Levy" does
+   * not return somebody who is square on Market Levy and behind on a shop rate.
+   */
+  if (params.outstandingOnly) {
+    if (params.revenueItemId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND tx.revenue_item_id = $$)`,
+        params.revenueItemId,
+      );
+    } else if (params.categoryId) {
+      add(
+        `t.id IN (SELECT i.taxpayer_id FROM invoices i
+                    JOIN transactions tx ON tx.invoice_id = i.id
+                    JOIN revenue_items ri ON ri.id = tx.revenue_item_id
+                   WHERE i.status IN ('UNPAID','PARTIALLY_PAID')
+                     AND i.total_amount_kobo > i.amount_paid_kobo
+                     AND ri.category_id = $$)`,
+        params.categoryId,
+      );
+    } else {
+      conditions.push(
+        `t.id IN (SELECT taxpayer_id FROM invoices
+                   WHERE status IN ('UNPAID','PARTIALLY_PAID')
+                     AND total_amount_kobo > amount_paid_kobo)`,
+      );
+    }
+  }
   if (params.q) {
     const term = `%${params.q.trim().toLowerCase()}%`;
     values.push(term);
@@ -729,6 +886,23 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
         ` OR t.phone LIKE $${values.length} OR t.tin LIKE $${values.length})`,
     );
   }
+
+  /*
+   * Where the caller works, on the taxpayer's own Local Government Area.
+   *
+   * Taxpayers are held by LGA and territories carry one, which is the join
+   * `report-scope.ts` already makes for every scoped report. Applied last and
+   * from the caller's identity rather than from a query parameter, so no
+   * combination of filters can widen it.
+   *
+   * The caller decides whether to pass a scope at all: an exact identifier —
+   * a TIN, a phone number, a receipt, a plate — is something a citizen hands
+   * over, and it has to keep working across every LGA, because a trader
+   * registered in one buys their levy in the market next door.
+   */
+  const { statewide, lgaIds } = scopeParams(scope);
+  values.push(statewide, lgaIds);
+  conditions.push(`($${values.length - 1} OR t.lga_id = ANY($${values.length}::uuid[]))`);
 
   values.push(limit);
 
@@ -760,11 +934,24 @@ export async function searchTaxpayers(db: Db, params: TaxpayerSearchParams) {
  * vehicles (needed for renewals) and the work that agent facilitated. A revenue
  * officer or auditor sees everything. The response says which view was served,
  * so a client can never mistake a partial history for a complete one.
+ *
+ * `viewer` is required, and deliberately has no default.
+ *
+ * It defaulted to `{ role: 'revenue_officer' }` — the unrestricted view — so a
+ * caller who simply forgot the argument was served the taxpayer's whole
+ * financial life, and nothing anywhere would have said so. That is the same
+ * shape as the three report functions that defaulted `scope` to `STATEWIDE`,
+ * which `CERTIFICATION-GAP-SINCE-REV10.md` records: the failure mode of a
+ * defaulted access parameter is that omitting it widens access silently.
+ *
+ * Those three were pinned with tests because they have many call sites. This
+ * one has a single caller, so the stronger fix is available: with no default,
+ * a call that forgets the viewer does not compile.
  */
 export async function getTaxpayerProfile(
   db: Db,
   taxpayerId: string,
-  viewer: { role: string; agentId?: string | null } = { role: 'revenue_officer' },
+  viewer: { role: string; agentId?: string | null },
 ) {
   const taxpayer = await queryOne(
     db,
@@ -787,7 +974,8 @@ export async function getTaxpayerProfile(
     query(
       db,
       `SELECT a.id, a.assessment_number, a.amount_kobo, a.status, a.period_label, a.created_at,
-              ri.name AS revenue_item, rc.name AS revenue_category
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+              rc.name AS revenue_category, rc.name_ha AS revenue_category_ha
          FROM assessments a
          JOIN revenue_items ri ON ri.id = a.revenue_item_id
          JOIN revenue_categories rc ON rc.id = ri.category_id
@@ -799,7 +987,7 @@ export async function getTaxpayerProfile(
     query(
       db,
       `SELECT tr.id, tr.transaction_reference, tr.amount_kobo, tr.status, tr.created_at,
-              ri.name AS revenue_item
+              ri.name AS revenue_item, ri.name_ha AS revenue_item_ha
          FROM transactions tr
          JOIN revenue_items ri ON ri.id = tr.revenue_item_id
         WHERE tr.taxpayer_id = $1
@@ -835,7 +1023,8 @@ export async function getTaxpayerProfile(
       ? Promise.resolve([])
       : query(
           db,
-          `SELECT p.id, p.name, p.benefit_type, p.benefit_description, e.eligible, e.reasons
+          `SELECT p.id, p.name, p.name_ha, p.benefit_type, p.benefit_description, p.linkage_mode,
+                  e.eligible, e.reasons, e.benefit_tier
              FROM programme_eligibility e
              JOIN incentive_programmes p ON p.id = e.programme_id
             WHERE e.taxpayer_id = $1 AND p.status = 'ACTIVE'`,
@@ -1074,4 +1263,149 @@ export async function changeTaxpayerIdentity(input: IdentityChangeInput): Promis
           : `${changed.length} details on this taxpayer record have been corrected. The change is on the audit trail.`,
     };
   });
+}
+
+/**
+ * Ending, pausing or reopening a taxpayer record (migration 038).
+ *
+ * The one thing this must not become is a write-off. An invoice raised before
+ * the record closed is still owed and still counted in what the State is due;
+ * closing stops the future, not the past. So nothing here touches an invoice,
+ * a transaction or a balance, and the check below is deliberately absent:
+ * closing a record with arrears is *allowed*, because refusing it would mean a
+ * deceased taxpayer's record can never be closed at all. What stops that being
+ * a quiet way to park a debt is `taxpayersEndedWithArrears`, which puts every
+ * such record in front of an officer.
+ *
+ * Reversible in both directions, unlike closing an officer's account. A closed
+ * account is replaced by making another one; a taxpayer record cannot be,
+ * because the TIN is UNIQUE, duplicate detection refuses a second record for
+ * the same person, and the compliance history that gates fertiliser and seed
+ * eligibility lives on the row. Terminal here would mean closing in error
+ * forces a duplicate — the outcome the rest of this platform works hardest to
+ * prevent.
+ */
+export async function setTaxpayerStatus(params: {
+  taxpayerId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{
+  status: string;
+  previousStatus: string;
+  outstandingKobo: string;
+  message: string;
+}> {
+  return withTransaction(async (client) => {
+    const taxpayer = await queryOne<{
+      id: string;
+      status: string;
+      display_name: string;
+    }>(
+      client,
+      `SELECT id, status,
+              COALESCE(business_name, first_name || ' ' || COALESCE(last_name, '')) AS display_name
+         FROM taxpayers WHERE id = $1 FOR UPDATE`,
+      [params.taxpayerId],
+    );
+    if (!taxpayer) throw notFound('That taxpayer record');
+
+    if (taxpayer.status === 'MERGED') {
+      throw conflict(
+        'TAXPAYER_MERGED',
+        'This record was merged into another one, so its status follows the record it was merged into.',
+      );
+    }
+    if (taxpayer.status === params.status) {
+      throw badRequest(`This record is already ${params.status.toLowerCase()}.`);
+    }
+
+    await client.query(
+      `UPDATE taxpayers
+          SET status = $2,
+              status_reason = $3,
+              status_changed_at = now(),
+              status_changed_by = $4
+        WHERE id = $1`,
+      [params.taxpayerId, params.status, params.reason, params.actorId],
+    );
+
+    // Read rather than decided: what is still owed is a fact about the
+    // invoices, and it is reported back so the officer closing a record sees
+    // the debt they are leaving behind at the moment they leave it.
+    const owed = await queryOne<{ outstanding: string }>(
+      client,
+      `SELECT COALESCE(SUM(i.total_amount_kobo - i.amount_paid_kobo), 0)::text AS outstanding
+         FROM invoices i
+        WHERE i.taxpayer_id = $1 AND i.status IN ('UNPAID', 'PARTIALLY_PAID')`,
+      [params.taxpayerId],
+    );
+    const outstandingKobo = owed?.outstanding ?? '0';
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'taxpayer.status_changed',
+      entityType: 'taxpayer',
+      entityId: params.taxpayerId,
+      oldValue: { status: taxpayer.status },
+      newValue: { status: params.status, outstandingKobo },
+      reason: params.reason,
+    });
+
+    const stillOwed = BigInt(outstandingKobo) > 0n;
+
+    return {
+      status: params.status,
+      previousStatus: taxpayer.status,
+      outstandingKobo,
+      message:
+        params.status === 'ACTIVE'
+          ? `${taxpayer.display_name.trim()} is on the register again and can be assessed.`
+          : `${taxpayer.display_name.trim()} is ${params.status.toLowerCase()}. No new assessment can be ` +
+            'raised and reminders stop. ' +
+            (stillOwed
+              ? 'What is already owed remains owed, and this record now appears in the queue of ' +
+                'ended records with arrears.'
+              : 'Nothing was outstanding.'),
+    };
+  });
+}
+
+/**
+ * Records taken off the register while they still owed something.
+ *
+ * The counterpart to allowing a record to be closed with arrears. Without this
+ * the debt is still on the books and in every total, but it is nobody's job —
+ * and a debt that is nobody's job is indistinguishable from one that was
+ * written off by somebody who had no authority to write anything off.
+ */
+export async function taxpayersEndedWithArrears(db: Db, limit = 100) {
+  return query(
+    db,
+    `SELECT t.id, t.tin, t.status, t.status_reason, t.status_changed_at,
+            COALESCE(t.business_name, t.first_name || ' ' || COALESCE(t.last_name, '')) AS name,
+            t.phone, l.name AS lga_name,
+            u.full_name AS ended_by,
+            SUM(i.total_amount_kobo - i.amount_paid_kobo)::text AS outstanding_kobo,
+            count(i.id)::int AS unpaid_invoices
+       FROM taxpayers t
+       -- An inner join, and that is what selects the queue: a record with no
+       -- unpaid invoice has no row to join to and never appears. A HAVING
+       -- clause on the same sum stood here as well and could not change the
+       -- result of any query this platform can produce — an invoice's status
+       -- and its paid amount are written in one statement, so UNPAID with
+       -- nothing left to pay does not occur. It went, rather than staying as a
+       -- guard nobody could reach: an unreachable branch in a report is where
+       -- a wrong belief about the report hides.
+       JOIN invoices i ON i.taxpayer_id = t.id AND i.status IN ('UNPAID', 'PARTIALLY_PAID')
+       LEFT JOIN lgas l ON l.id = t.lga_id
+       LEFT JOIN users u ON u.id = t.status_changed_by
+      WHERE t.status IN ('SUSPENDED', 'CLOSED')
+      GROUP BY t.id, l.name, u.full_name
+      ORDER BY SUM(i.total_amount_kobo - i.amount_paid_kobo) DESC
+      LIMIT $1`,
+    [limit],
+  );
 }

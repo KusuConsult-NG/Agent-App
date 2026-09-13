@@ -24,7 +24,7 @@ import { join } from 'node:path';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
 import { nextDocumentNumber } from '../lib/references';
-import { storage } from './storage';
+import { storage, storageKey } from './storage';
 
 const COLOURS = {
   ink: '#12211a',
@@ -205,9 +205,36 @@ export interface ReceiptPdfData {
   paidAt: Date;
   issuedAt: Date;
   periodLabel: string | null;
+  periodStart: Date | string | null;
+  periodEnd: Date | string | null;
   agentCode: string | null;
   lgaName: string;
   verificationCode: string;
+}
+
+/**
+ * The assessment period as a receipt should state it.
+ *
+ * Dates when the assessment carries them, because that is the period; the
+ * label when it only has a name for one, such as a tax year. "Not period-based"
+ * stays for the levies that genuinely are not — a market trader paying for a
+ * day is not paying for a period, and saying so is the honest answer.
+ *
+ * A vehicle renewal used to reach this as the words "12 month vehicle renewal".
+ * It records real dates now, so a receipt says which twelve months, which is
+ * what the motorist holding the paper needs when they are stopped.
+ */
+function assessmentPeriod(data: {
+  periodLabel: string | null;
+  periodStart?: Date | string | null;
+  periodEnd?: Date | string | null;
+}): string {
+  if (data.periodStart && data.periodEnd) {
+    const day = (value: Date | string) =>
+      (value instanceof Date ? value : new Date(value)).toISOString().slice(0, 10);
+    return `${day(data.periodStart)} to ${day(data.periodEnd)}`;
+  }
+  return data.periodLabel ?? 'Not period-based';
 }
 
 /** PRD §19 — the official government receipt. */
@@ -231,7 +258,7 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
       ['Revenue category', data.revenueCategory],
       ['Revenue item', data.revenueItem],
       ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
-      ['Assessment period', data.periodLabel ?? 'Not period-based'],
+      ['Assessment period', assessmentPeriod(data)],
       ['Local Government Area', data.lgaName],
     ]);
 
@@ -290,6 +317,128 @@ export async function renderReceiptPdf(data: ReceiptPdfData): Promise<Buffer> {
       verificationUrl,
       'This receipt is generated automatically by the Plateau State revenue platform after ' +
         'independent confirmation of payment. It is only valid if it verifies successfully.',
+    );
+  });
+}
+
+/**
+ * An acknowledgement of payment — deliberately not a receipt.
+ *
+ * Issued when the gateway confirms, which means the gateway holds the money and
+ * the State does not yet. Every word on it is chosen so a citizen cannot mistake
+ * it for the receipt that follows: the title says ACKNOWLEDGEMENT, the amount
+ * box says what was paid to the *gateway* rather than to government, and the
+ * standing notice says in plain terms that PSIRS has not yet received it and
+ * what happens next.
+ *
+ * It carries a verification code and a QR like any other document, because the
+ * point of giving the citizen something is that it can be checked. Public
+ * verification reports it as an acknowledgement, never as a receipt.
+ */
+export async function renderAcknowledgementPdf(data: ReceiptPdfData): Promise<Buffer> {
+  const verificationUrl = publicVerificationUrl(data.verificationCode);
+  const qr = await qrDataUrl(verificationUrl);
+
+  return renderPdf((doc) => {
+    header(
+      doc,
+      'ACKNOWLEDGEMENT OF PAYMENT',
+      'Not a government receipt — the payment has not yet reached a government account',
+    );
+
+    doc
+      .fontSize(20)
+      .font(BOLD_FONT)
+      .fillColor(COLOURS.accent)
+      .text(data.receiptNumber, { align: 'center' });
+    doc.moveDown(0.9);
+
+    /*
+     * The notice comes before the figures rather than after them.
+     *
+     * A caveat under the amount is read after the reader has already decided
+     * what they are holding. This is the one thing that must not be missed, so
+     * nothing is above it.
+     */
+    const noticeTop = doc.y;
+    const noticeWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc
+      .roundedRect(doc.page.margins.left, noticeTop, noticeWidth, 62, 4)
+      .fillAndStroke('#fdf4e3', '#94651a');
+    doc
+      .fillColor('#7a520f')
+      .fontSize(9.5)
+      .font(BOLD_FONT)
+      .text('THIS IS NOT A RECEIPT', doc.page.margins.left + 14, noticeTop + 10, {
+        width: noticeWidth - 28,
+      });
+    doc
+      .fillColor('#7a520f')
+      .fontSize(9)
+      .font(BODY_FONT)
+      .text(
+        'Your payment has been confirmed by the payment gateway. It has not yet reached the ' +
+          'Plateau State Government account. Your official receipt is issued once it has, ' +
+          'normally within two working days, and can be downloaded with the code below. ' +
+          'Keep this document until then.',
+        doc.page.margins.left + 14,
+        noticeTop + 25,
+        { width: noticeWidth - 28 },
+      );
+    doc.y = noticeTop + 74;
+
+    fieldTable(doc, [
+      ['Taxpayer', data.taxpayerName],
+      ['Taxpayer Identification Number', data.tin ?? 'Not yet assigned'],
+      ['Revenue category', data.revenueCategory],
+      ['Revenue item', data.revenueItem],
+      ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
+      ['Local Government Area', data.lgaName],
+    ]);
+
+    doc.moveDown(0.5);
+    const boxTop = doc.y;
+    const boxWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    doc
+      .roundedRect(doc.page.margins.left, boxTop, boxWidth, 54, 4)
+      .fillAndStroke('#f5f6f5', COLOURS.muted);
+    doc
+      .fillColor(COLOURS.muted)
+      .fontSize(9)
+      .font(BODY_FONT)
+      .text('AMOUNT CONFIRMED BY THE GATEWAY', doc.page.margins.left + 14, boxTop + 10);
+    doc
+      .fillColor(COLOURS.ink)
+      .fontSize(22)
+      .font(BOLD_FONT)
+      .text(formatNaira(data.amountKobo), doc.page.margins.left + 14, boxTop + 23);
+    doc.y = boxTop + 66;
+
+    fieldTable(doc, [
+      ['Transaction reference', data.transactionReference],
+      ['Payment reference', data.paymentReference],
+      ['Gateway reference', data.gatewayReference],
+      ['Payment method', data.paymentMethod ?? 'Not recorded'],
+      ['Payment date', data.paidAt.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'],
+      ['Acknowledged', data.issuedAt.toISOString().replace('T', ' ').slice(0, 19) + ' UTC'],
+      ['Facilitating agent', data.agentCode ?? 'Not agent-assisted'],
+      ['Verification code', data.verificationCode],
+    ]);
+
+    const qrX = doc.page.width - doc.page.margins.right - 110;
+    const qrY = doc.page.height - doc.page.margins.bottom - 175;
+    doc.image(qr, qrX, qrY, { width: 110 });
+    doc
+      .fontSize(7)
+      .fillColor(COLOURS.muted)
+      .text('Scan to check', qrX, qrY + 114, { width: 110, align: 'center' });
+
+    footer(
+      doc,
+      verificationUrl,
+      'An acknowledgement records that the payment gateway confirmed this payment. It is not ' +
+        'evidence that the Plateau State Government has received the money, and it does not ' +
+        'discharge the obligation it was paid against until the receipt is issued.',
     );
   });
 }
@@ -404,7 +553,7 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
       ['Revenue category', data.revenueCategory],
       ['Revenue item', data.revenueItem],
       ['Collecting MDA', data.mdaName ?? config.branding.agencyName],
-      ['Period', data.periodLabel ?? 'Not period-based'],
+      ['Period', assessmentPeriod(data)],
       ['Local Government Area', data.lgaName],
       ['Issued', data.issuedAt.toISOString().slice(0, 10)],
       ['Valid until', data.expiresAt ? data.expiresAt.toISOString().slice(0, 10) : 'No expiry'],
@@ -447,7 +596,14 @@ export async function renderInvoicePdf(data: InvoicePdfData): Promise<Buffer> {
 }
 
 export interface RegisterDocumentParams {
-  documentType: 'RECEIPT' | 'INVOICE' | 'ASSESSMENT' | 'VEHICLE_RENEWAL' | 'TIN_CONFIRMATION' | 'PAYMENT_EVIDENCE';
+  documentType:
+    | 'RECEIPT'
+    | 'INVOICE'
+    | 'ASSESSMENT'
+    | 'VEHICLE_RENEWAL'
+    | 'TIN_CONFIRMATION'
+    | 'PAYMENT_EVIDENCE'
+    | 'PAYMENT_ACKNOWLEDGEMENT';
   ownerType: 'TAXPAYER' | 'AGENT' | 'VEHICLE';
   ownerId: string;
   entityType?: string;
@@ -465,10 +621,11 @@ export async function registerDocument(
 ): Promise<{ documentId: string; documentNumber: string; verificationCode: string; checksum: string }> {
   const documentNumber = await nextDocumentNumber(client, params.numberPrefix);
   const verificationCode = params.verificationCode ?? generateVerificationCode();
-  const key = `${params.documentType.toLowerCase()}/${new Date().getUTCFullYear()}/${documentNumber.replace(
-    /[/]/g,
-    '-',
-  )}.pdf`;
+  const key = storageKey(
+    params.documentType.toLowerCase(),
+    String(new Date().getUTCFullYear()),
+    `${documentNumber.replace(/[/]/g, '-')}.pdf`,
+  );
 
   const stored = await storage.put(key, params.bytes, 'application/pdf');
 
@@ -504,18 +661,32 @@ export async function registerDocument(
   };
 }
 
+/** What a checksum comparison can honestly conclude. */
+export type IntegrityOutcome = 'MATCHED' | 'MISMATCHED' | 'UNAVAILABLE';
+
 /**
  * Confirm a stored document still matches the checksum recorded at issuance.
  * A mismatch means the bytes were changed after issue (PRD §23).
+ *
+ * Three outcomes, not two. This returned a boolean, and the storage driver
+ * throws when a bucket is unreachable exactly as readily as when a file has
+ * been altered — so every failure to *reach* the bytes was reported as a
+ * failure to *match* them. A storage outage told every citizen in the state
+ * that their genuine receipt did not match its fingerprint and to report it to
+ * PSIRS. UNAVAILABLE is not a lesser MISMATCHED; it is the absence of a
+ * comparison, and the caller has to say so rather than allege one.
  */
 export async function verifyDocumentIntegrity(
   storageReference: string,
   expectedChecksum: string,
-): Promise<boolean> {
+): Promise<IntegrityOutcome> {
+  let bytes: Buffer;
   try {
-    const bytes = await storage.get(storageReference);
-    return createHash('sha256').update(bytes).digest('hex') === expectedChecksum;
+    bytes = await storage.get(storageReference);
   } catch {
-    return false;
+    return 'UNAVAILABLE';
   }
+  return createHash('sha256').update(bytes).digest('hex') === expectedChecksum
+    ? 'MATCHED'
+    : 'MISMATCHED';
 }

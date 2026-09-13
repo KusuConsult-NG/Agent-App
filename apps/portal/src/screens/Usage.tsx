@@ -14,10 +14,12 @@
  * their keystrokes on top of that would be a different product.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { USAGE_MIN_GROUP_SIZE } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Loading, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Funnel {
   event: string;
@@ -37,12 +39,19 @@ interface Overview {
   screens: { surface: string; screen: string; views: string }[];
 }
 
-const FLOW_LABEL: Record<string, string> = {
-  'taxpayer.registration': 'Registering a taxpayer',
-  collection: 'Taking a collection',
-  'agent.application': 'Applying to become an agent',
-  'vehicle.capture': 'Capturing a vehicle',
+/** Keys rather than words, because this table is built before there is a reader. */
+const FLOW_LABEL: Record<string, keyof TranslationDictionary> = {
+  'taxpayer.registration': 'ofcUsRegisteringATaxpayer',
+  collection: 'ofcUsTakingACollection',
+  'agent.application': 'ofcUsApplyingToBecomeAn',
+  'vehicle.capture': 'ofcUsCapturingAVehicle',
 };
+
+/** The event's own name where the platform has no friendlier one for it. */
+function flowLabel(event: string, t: TranslationDictionary): string {
+  const key = FLOW_LABEL[event];
+  return key ? t[key] : event;
+}
 
 const percent = (part: string, whole: string) => {
   const total = Number(whole);
@@ -57,19 +66,42 @@ const seconds = (ms: string) => {
 };
 
 export function UsageScreen() {
+  const { t } = usePortalI18n();
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setError(null);
     api
       .get<Overview>('/usage/overview')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, []);
 
-  if (error) return <ErrorAlert error={error} />;
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /*
+   * A refusal with nothing to press is a screen an officer leaves.
+   *
+   * This returned the alert alone, so the only way to ask again was reloading
+   * the page — and nothing said so. See `Revenue.tsx`.
+   */
+  if (error) {
+    return (
+      <div className="card">
+        <ErrorAlert error={error} />
+        <button type="button" className="secondary" onClick={load}>
+          {t.actionTryAgain}
+        </button>
+      </div>
+    );
+  }
   if (!data) return <Loading rows={6} />;
 
   const registration = data.funnels.find((f) => f.event === 'taxpayer.registration');
@@ -79,180 +111,173 @@ export function UsageScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Product usage — last 30 days</h2>
+        <h2 className="card__title">{t.ofcUsTitle}</h2>
         <p className="card__hint">
-          How the software is being used, not who is using it. These figures carry no identity:
-          no officer, agent or taxpayer is named in them, and groups smaller than{' '}
-          {USAGE_MIN_GROUP_SIZE} are withheld rather than shown, because a small enough count
-          singles somebody out even without a name. For an individual agent's work, see{' '}
-          <strong>Agent performance</strong>, which reports collections.
-        </p>
+          {t.ofcUsPrivacyBody.replace('{{n}}', String(USAGE_MIN_GROUP_SIZE))}{' '}
+          <strong>{t.ofcNavPerformance}</strong>{t.ofcUsReportsCollections}</p>
       </div>
 
       {nothingYet && (
-        <Alert kind="info" title="Nothing has been reported yet">
-          <p style={{ margin: 0 }}>
-            Usage is reported by the agent application and this portal as they are used. An empty
-            page here means no version carrying the reporting has been deployed yet, or nobody has
-            opened one since it was.
-          </p>
+        <Alert kind="info" title="ofcUsNothingReported">
+          <p style={{ margin: 0 }}>{t.ofcUsIntro}</p>
         </Alert>
       )}
 
       <div className="stat-grid">
         <Stat
-          label="Registrations completed"
+          label="ofcUsRegistrationsCompleted"
           value={registration ? percent(registration.completed, registration.started) : '—'}
           variant="accent"
-          hint={registration ? `${registration.started} started` : 'No attempts recorded'}
+          hint={
+            registration
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(registration.started)) }
+              : 'ofcUsNoAttempts'
+          }
         />
         <Stat
-          label="Collections completed"
+          label="ofcUsCollectionsCompleted"
           value={collection ? percent(collection.completed, collection.started) : '—'}
-          hint={collection ? `${collection.started} started` : 'No attempts recorded'}
+          hint={
+            collection
+              ? { text: t.ofcUsStartedCount.replace('{{n}}', String(collection.started)) }
+              : 'ofcUsNoAttempts'
+          }
         />
         <Stat
-          label="Median registration"
+          label="ofcUsMedianRegistration"
           value={registration ? seconds(registration.median_completion_ms) : '—'}
-          hint="Start to finish, on the device"
+          hint="ofcUsStartToFinish"
         />
         <Stat
-          label="Median collection"
+          label="ofcUsMedianCollection"
           value={collection ? seconds(collection.median_completion_ms) : '—'}
-          hint="Until payment is handed off"
+          hint="ofcUsUntilHandedOff"
         />
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Every flow
-        </h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsEveryFlow}</h2>
         <Table
           columns={[
             {
               key: 'event',
-              label: 'Flow',
-              render: (row: Funnel) => FLOW_LABEL[row.event] ?? row.event,
+              label: 'ofcUsFlow',
+              render: (row: Funnel) => flowLabel(row.event, t),
             },
-            { key: 'started', label: 'Started' },
-            { key: 'completed', label: 'Completed' },
+            { key: 'started', label: 'ofcUsStarted' },
+            { key: 'completed', label: 'ofcUsCompleted' },
             {
               key: 'rate',
-              label: 'Completion',
+              label: 'ofcUsCompletion',
               render: (row: Funnel) => percent(row.completed, row.started),
             },
-            { key: 'abandoned', label: 'Given up' },
-            { key: 'failed', label: 'Failed' },
+            { key: 'abandoned', label: 'ofcUsGivenUp' },
+            { key: 'failed', label: 'ofcPfFailed' },
             {
               key: 'median_completion_ms',
-              label: 'Median time',
+              label: 'ofcUsMedianTime',
               render: (row: Funnel) => seconds(row.median_completion_ms),
             },
           ]}
           rows={data.funnels}
-          empty="No flows have been attempted in this period."
+          empty="ofcNoneFlowsAttemptedPeriod"
         />
       </div>
 
+      {/*
+        * Where people stop, and where they are not starting at all. Two
+        * readings of the same reach question, and each is a short table — side
+        * by side they compare, stacked they read as separate reports.
+        */}
+      <div className="grid-2">
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Where people give up
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          The last step an abandoned attempt reached. This is the screen to go and look at — an
-          abandoned registration creates no taxpayer, so nothing else in the platform records that
-          it happened.
-        </p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsWhereGiveUp}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsWhereGiveUpBody}</p>
         <Table
           columns={[
             {
               key: 'event',
-              label: 'Flow',
-              render: (row: { event: string }) => FLOW_LABEL[row.event] ?? row.event,
+              label: 'ofcUsFlow',
+              render: (row: { event: string }) => flowLabel(row.event, t),
             },
-            { key: 'step', label: 'Last step reached' },
-            { key: 'abandoned_here', label: 'Attempts' },
+            { key: 'step', label: 'ofcUsLastStepReached' },
+            { key: 'abandoned_here', label: 'ofcOsAttempts' },
           ]}
           rows={data.abandonment}
-          empty={`No abandonment point reached ${USAGE_MIN_GROUP_SIZE} attempts.`}
+          empty={{ text: t.ofcUsNoAbandonment.replace('{{n}}', String(USAGE_MIN_GROUP_SIZE)) }}
         />
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Reach beyond Jos
-        </h2>
-        <p className="card__hint" style={{ padding: '0 18px' }}>
-          Whether the platform works as well in the rural LGAs as in the capital. A completion rate
-          that is fine statewide and poor here is the difference between serving the grassroots and
-          serving Jos.
-        </p>
+        <h2 className="card__title card__pad--tight">{t.ofcUsReachBeyondJos}</h2>
+        <p className="card__hint card__pad--sides">{t.ofcUsReachBody}</p>
         <Table
           columns={[
-            { key: 'lga', label: 'LGA' },
-            { key: 'zone', label: 'Zone' },
-            { key: 'started', label: 'Started' },
-            { key: 'completed', label: 'Completed' },
+            { key: 'lga', label: 'tpLgaShort' },
+            { key: 'zone', label: 'ofcUsZone' },
+            { key: 'started', label: 'ofcUsStarted' },
+            { key: 'completed', label: 'ofcUsCompleted' },
             {
               key: 'rate',
-              label: 'Completion',
+              label: 'ofcUsCompletion',
               render: (row: { completed: string; started: string }) =>
                 percent(row.completed, row.started),
             },
           ]}
           rows={data.reach}
-          empty="No LGA has enough activity to report without singling somebody out."
+          empty="ofcNoneLgaEnoughActivityReport"
         />
       </div>
+      </div>
 
-      <div className="two-column">
+      {/*
+        * `two-column` was never a class. It is not in the stylesheet and never
+        * was, so these two cards have been stacking full width while reading
+        * as though somebody had put them side by side. `grid-2` is the one the
+        * portal actually has.
+        */}
+      <div className="grid-2">
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            The offline queue
-          </h2>
+          <h2 className="card__title card__pad--tight">{t.ofcUsOfflineQueue}</h2>
           <Table
             columns={[
-              { key: 'event', label: 'Event' },
-              { key: 'events', label: 'Count' },
+              { key: 'event', label: 'ofcAgEvent' },
+              { key: 'events', label: 'ofcUsCount' },
               {
                 key: 'median_delay_seconds',
-                label: 'Median delay',
+                label: 'ofcUsMedianDelay',
                 render: (row: { median_delay_seconds: string }) =>
                   seconds(String(Number(row.median_delay_seconds) * 1000)),
               },
             ]}
             rows={data.offline}
-            empty="The offline queue has not been used in this period."
+            empty="ofcNoneOfflineQueueUsedPeriod"
           />
         </div>
 
         <div className="card card--flush">
-          <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-            Language
-          </h2>
+          <h2 className="card__title card__pad--tight">{t.pubLanguage}</h2>
           <Table
             columns={[
-              { key: 'language', label: 'Language' },
-              { key: 'events', label: 'Events' },
+              { key: 'language', label: 'pubLanguage' },
+              { key: 'events', label: 'ofcUsEvents' },
             ]}
             rows={data.language}
-            empty="No language use has been reported."
+            empty="ofcNoneLanguageUseReported"
           />
         </div>
       </div>
 
       <div className="card card--flush">
-        <h2 className="card__title" style={{ padding: '14px 18px 0' }}>
-          Screens reached
-        </h2>
+        <h2 className="card__title card__pad--tight">{t.ofcUsScreensReached}</h2>
         <Table
           columns={[
-            { key: 'surface', label: 'Application' },
-            { key: 'screen', label: 'Screen' },
-            { key: 'views', label: 'Views' },
+            { key: 'surface', label: 'ofcAgApplication' },
+            { key: 'screen', label: 'ofcUsScreen' },
+            { key: 'views', label: 'ofcUsViews' },
           ]}
           rows={data.screens}
-          empty="No screens have been reported."
+          empty="ofcNoneScreensReported"
         />
       </div>
     </>

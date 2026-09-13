@@ -38,6 +38,25 @@ export function maskIdentityNumber(identityNumber: string): string {
   return `${'*'.repeat(normalised.length - 4)}${normalised.slice(-4)}`;
 }
 
+/**
+ * Display form of a telephone number for a surface a stranger can reach.
+ *
+ * Three digits, which is the rule the agent application already applies to the
+ * number a one-time code was sent to: "enough to recognise, not to publish".
+ * Three is the figure that matters here too — the attestation screen exists so
+ * a cooperative's leader can tell one Nanribet from another, and in a village
+ * of a few hundred people three digits settle that. A stranger holding a
+ * forwarded link gets a name they cannot dial.
+ *
+ * Not for an authenticated officer surface, where the number is the point: a
+ * support officer ringing an agent back needs the number, and they signed in.
+ */
+export function maskPhone(phone: string): string {
+  const normalised = phone.trim();
+  if (normalised.length <= 3) return '*'.repeat(normalised.length);
+  return `${'*'.repeat(normalised.length - 3)}${normalised.slice(-3)}`;
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, config.auth.bcryptRounds);
 }

@@ -24,7 +24,7 @@
 import type { PoolClient } from 'pg';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, forbidden, notFound, conflict } from '../lib/errors';
-import { storage } from './storage';
+import { storage, storageKey } from './storage';
 import { recordAudit } from './audit';
 
 /** What a document can be. Kept small: each one is asked for by name. */
@@ -49,7 +49,19 @@ export type CaptureSource = (typeof CAPTURE_SOURCES)[number];
  * someone storing a payload behind a reviewer's image viewer, and neither is
  * a file this platform should keep.
  */
-const ACCEPTED: { contentType: string; extension: string; matches: (bytes: Buffer) => boolean }[] = [
+export interface FileSignature {
+  contentType: string;
+  extension: string;
+  matches: (bytes: Buffer) => boolean;
+}
+
+/*
+ * Exported because case evidence has the same problem and must not grow a
+ * second, drifting list of what a file is allowed to be. What differs between
+ * the two is the size cap and where the bytes are filed, not which formats the
+ * platform will keep.
+ */
+export const ACCEPTED: FileSignature[] = [
   {
     contentType: 'image/jpeg',
     extension: 'jpg',
@@ -140,7 +152,12 @@ export async function storeKycDocument(params: {
     );
   }
 
-  const key = `kyc/${owner.column === 'agent_id' ? 'agents' : 'referees'}/${owner.id}/${params.documentType.toLowerCase()}-${Date.now()}.${declared.extension}`;
+  const key = storageKey(
+    'kyc',
+    owner.column === 'agent_id' ? 'agents' : 'referees',
+    owner.id,
+    `${params.documentType.toLowerCase()}-${Date.now()}.${declared.extension}`,
+  );
   // Throws if the bytes are not durably stored, so no row is written for a
   // document that cannot be opened.
   const stored = await storage.put(key, params.bytes, declared.contentType);

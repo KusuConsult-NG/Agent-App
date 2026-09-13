@@ -22,6 +22,7 @@
  *     it — and the UI is built to match rather than to hold a code around.
  */
 
+import type { StepUpAction } from '@psirs/shared';
 import { api, getUser } from './api';
 
 /** How long the code is good for, as the server reported it. */
@@ -43,9 +44,23 @@ export function stepUpDestination(): string | null {
   return getUser()?.phone ?? null;
 }
 
+/**
+ * Step-up cannot start, because there is nobody to send a code to.
+ *
+ * Carries no message: `StepUp.tsx` renders `t.stepUpSignInAgain`. It used to
+ * throw an English sentence, and the screen preferred that sentence to the
+ * translated fallback beside it.
+ */
+export class StepUpUnavailable extends Error {
+  constructor() {
+    super('step-up unavailable: no destination');
+    this.name = 'StepUpUnavailable';
+  }
+}
+
 export async function requestStepUpCode(): Promise<CodeRequest> {
   const destination = stepUpDestination();
-  if (!destination) throw new Error('Sign in again to request a code.');
+  if (!destination) throw new StepUpUnavailable();
 
   const result = await api.post<{
     expiresInSeconds: number;
@@ -68,9 +83,9 @@ export async function requestStepUpCode(): Promise<CodeRequest> {
  * failure. The agent needs to know which of those it was: one means try again,
  * the other means request a new code.
  */
-export async function grantStepUp(action: string, code: string): Promise<void> {
+export async function grantStepUp(action: StepUpAction, code: string): Promise<void> {
   const destination = stepUpDestination();
-  if (!destination) throw new Error('Sign in again to request a code.');
+  if (!destination) throw new StepUpUnavailable();
 
   await api.post('/auth/step-up', { action, destination, code });
 }
