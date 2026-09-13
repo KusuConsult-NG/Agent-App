@@ -547,7 +547,47 @@ export async function restoreSession(): Promise<Session | null> {
   }
 }
 
+/**
+ * Give the handset's push subscription back.
+ *
+ * A subscription belongs to the browser, not to the login, and nothing used to
+ * let go of it when an agent signed out. Agents share handsets — this
+ * application has device registration and clearance precisely because they do
+ * — so `push_subscriptions` went on pointing at whoever had just handed the
+ * phone over, and two things followed.
+ *
+ * The next agent received the last one's notifications. The seeded templates
+ * are a commission amount and its reference, a payout, a KYC refusal, and
+ * "You have been suspended. Stop collecting now. Reason: …" — which the person
+ * holding the phone reads as being about themselves, while it discloses
+ * somebody else's suspension.
+ *
+ * And the next agent could not turn push on at all. `subscribeToPush` refuses
+ * to move an endpoint to a different user, deliberately and rightly, while a
+ * browser hands back the same endpoint for the same key. The refusal was
+ * permanent for that handset short of clearing site data.
+ *
+ * Written here rather than called from `lib/push.ts` because that module
+ * imports this one; inlining the two calls keeps every sign-out path covered
+ * without a cycle. Either half is enough on its own: once the browser has
+ * unsubscribed the endpoint is dead, and the next send expires the row.
+ */
+async function releasePushSubscription(): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager?.getSubscription();
+    if (!subscription) return;
+    await subscription.unsubscribe();
+    await api.post('/push/unsubscribe', { endpoint: subscription.endpoint });
+  } catch {
+    // Signing out must not be blocked by the push service or the network.
+  }
+}
+
 export async function logout(): Promise<void> {
+  // Before the session goes, so the server half is still authenticated.
+  await releasePushSubscription();
   try {
     await api.post('/auth/logout');
   } catch {
