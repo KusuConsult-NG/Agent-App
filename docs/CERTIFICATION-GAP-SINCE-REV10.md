@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`38db5c0`) |
+| | At `fa8f454` (Revision 10) | Now (`505e801`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 185 |
+| API test files | 139 | 186 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,146 |
+| API tests passing | 1,523 *(report's figure)* | 2,151 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `38db5c0` plus the working tree:
-API 2,146 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `505e801` plus the working tree:
+API 2,151 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,53 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A fraud rule that could not fire
+
+`REPEATED_RECEIPT_REGENERATION` is one of the sweep's rules, and its own
+comment says exactly what it is for:
+
+> A receipt a hundred citizens verify is a receipt doing its job; the same
+> officer fetching one document twelve times in a day is the signal.
+
+It counts rows in `document_access_logs` `WHERE accessed_by IS NOT NULL`.
+
+The only writer of that table is `GET /documents/:id/download`, which sits
+outside `authenticate` deliberately — a taxpayer opens their receipt from an
+SMS with no account, and the signed link is the authorisation. It records
+`req.auth?.userId ?? null`, and nothing had ever put `req.auth` on that
+request. So `accessed_by` was NULL on every row ever written, the rule's own
+filter excluded all of them, and **it could not fire**. Not inferred; a
+download carrying a valid officer bearer token recorded:
+
+```json
+[ { "access_type": "DOWNLOAD", "accessed_by": null, "ip_address": "127.0.0.1" } ]
+```
+
+`identifyIfSignedIn` now reads the token when one is offered. It changes who is
+*named*, never who is *admitted*: the signature still decides that, and a
+citizen with no session downloads exactly as before and is recorded
+anonymously — which is correct, because the rule is about staff pulling one
+citizen's document repeatedly, not about citizens. It reuses `authenticate`
+rather than decoding the token itself, so a revoked session or a suspended
+officer is not credited with a retrieval.
+
+Both halves are held, and the mutation run separates them: removing the
+middleware fails the two tests about naming and firing while the three controls
+hold; making an unusable token *refuse* the download instead of naming nobody
+fails exactly the test that a stale token in a browser tab must not turn a
+valid receipt link into a 401. A fix that made the rule fire by requiring a
+session would have locked every taxpayer out of their own receipt, which is
+worse than the dead rule.
+
+TWO THINGS THIS LEAVES OPEN, for PSIRS rather than for this repository. The
+`access_type` column admits DOWNLOAD, VIEW, VERIFY and SHARE; only DOWNLOAD is
+ever written, so the rule's `IN ('DOWNLOAD','SHARE')` is half a filter over a
+vocabulary three quarters unused. And an officer who downloads through a link
+they forwarded to themselves outside the portal still arrives without a token,
+so the rule sees volume by person only where the person's client sends its
+session — which is the portal and the agent application, and is where the
+behaviour it describes would happen.
 
 ## What the traceability table cites, and what it said about the audit chain
 

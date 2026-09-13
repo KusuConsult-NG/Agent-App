@@ -14,6 +14,7 @@ import { signWebhookPayload } from '../lib/crypto';
 import { config } from '../config';
 import {
   authenticate,
+  identifyIfSignedIn,
   requireActiveAgent,
   requirePermission,
   requireSupportedAppVersion,
@@ -385,6 +386,17 @@ export const documentRouter = Router();
  */
 documentRouter.get(
   '/:id/download',
+  /*
+   * Names the caller when they are signed in, admits them either way.
+   *
+   * The log line below reads `req.auth?.userId`, and without this nothing ever
+   * put `req.auth` on this request — so every download was recorded as by
+   * nobody, and the fraud rule that counts retrievals per person could not
+   * fire. A citizen opening their receipt from an SMS still has no session and
+   * is still recorded anonymously, which is correct: the rule is about staff
+   * pulling one citizen's document over and over, not about citizens.
+   */
+  identifyIfSignedIn,
   validateQuery(
     z.object({ expires: z.string(), signature: z.string() }),
     async (req, res, data) => {

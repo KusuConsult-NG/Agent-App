@@ -125,6 +125,41 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 }
 
+/**
+ * Name the caller if they are signed in, and let them through either way.
+ *
+ * For a route whose authorisation is something other than a session — today
+ * only `GET /documents/:id/download`, where a signed, expiring link lets a
+ * taxpayer open their receipt on a phone with no account at all.
+ *
+ * That route recorded `req.auth?.userId ?? null` into `document_access_logs`,
+ * and nothing had ever put `req.auth` there, so every row was written with no
+ * actor. The fraud rule REPEATED_RECEIPT_REGENERATION counts those rows
+ * `WHERE accessed_by IS NOT NULL` — "the same officer fetching one document
+ * twelve times in a day is the signal" — so it could not fire, ever. A
+ * download carrying a perfectly valid officer token recorded nobody.
+ *
+ * This changes who is *named*, never who is *admitted*: the signature still
+ * decides that, and a missing, expired, revoked or suspended token means the
+ * download proceeds anonymously exactly as a citizen's does. It reuses
+ * `authenticate` rather than decoding the token itself, so a revoked session
+ * or a suspended officer is not credited with a retrieval — the checks that
+ * make "force logout" immediate apply here too.
+ */
+export async function identifyIfSignedIn(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.header('authorization')?.startsWith('Bearer ')) return next();
+  await authenticate(req, res, () => {
+    // Whatever `authenticate` decided, this route continues. On any failure it
+    // never reached the assignment, so `req.auth` is still undefined and the
+    // row is written anonymously.
+    next();
+  });
+}
+
 export function requirePermission(...permissions: Permission[]) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) return next(unauthorised());
