@@ -134,11 +134,37 @@ async function readShard(url: string) {
       if (!referenceTables.includes(row.table_name)) continue;
       const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(row.definition);
       if (!column) continue;
+      /*
+       * Only the values this report is about.
+       *
+       * The denominator below extracts upper-case values alone, matching the
+       * decision recorded in `enum-observation.ts`: "lower-case sets —
+       * `usage_events.language` is 'en' and 'ha' — are values of a different
+       * kind, not states anything transitions to." The observer honours that
+       * and never watches those columns.
+       *
+       * This read did not. It took whatever a reference column happened to
+       * hold, so `notification_templates.language: en`, `: ha` and
+       * `users.preferred_language: en` were added to the observed set —
+       * three states the denominator cannot contain, because it excludes them
+       * on purpose. The printed ratio was therefore 669 of 747 with a
+       * numerator drawn from a wider universe than its denominator; over the
+       * report's own scope it is 666.
+       *
+       * The accounting is unaffected and always was: the loop that finds
+       * unwritten states iterates `declared`, so a value outside it was never
+       * matched against anything. Only the headline figure was wrong.
+       */
+      const states = new Set(
+        [...row.definition.matchAll(/'([A-Z][A-Z0-9_]*)'::text/g)].map((m) => m[1]),
+      );
+      if (states.size === 0) continue;
       const { rows } = await pool.query<{ value: string }>(
         `SELECT DISTINCT "${column[1]}"::text AS value
            FROM "${row.table_name}" WHERE "${column[1]}" IS NOT NULL`,
       );
       for (const found of rows) {
+        if (!states.has(found.value)) continue;
         standing.push({ key: `${row.table_name}.${column[1]}`, value: found.value });
       }
     }

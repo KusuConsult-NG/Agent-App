@@ -27,12 +27,17 @@ verification run — describes the platform as it stood at that commit.
 | Officer portal tests | 140 *(report's figure)* | 655 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
 | Declared enum states | 537 *(report's figure)* | 747 |
-| Enum states written by the suite | 462 *(report's figure)* | 669 |
+| Enum states written by the suite | 462 *(report's figure)* | 666 |
 
 Current figures are from a full local run at `e3f5345`: API 2,111 passing
 across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
-typecheck clean across all five projects; 74 states documented as deliberately
-unreachable and 1 as not exercised by tests.
+typecheck clean across all five projects. The 81 declared states the suite did
+not write break down as 74 documented as deliberately unreachable, 1 as not
+exercised by tests, and 6 that are a column's default — the database writes
+those on any insert that omits the column, so no row taking one means the
+column is always specified rather than the state being unreachable, and the
+script skips them with that reasoning. 74 + 1 alone does not balance against
+747 - 666, which is why the third category is named here.
 
 This paragraph previously read 2,045 at `c6c880a` while the table two lines
 above it read 2,096 — the same quantity, twice, differing. Both were true when
@@ -195,7 +200,30 @@ mechanism that has since changed.
    figures: 233 was taken while the same test instrumentation existed, and 156
    deliberately excludes it.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
-   669 of 747, still with none unaccounted.
+   666 of 747, still with none unaccounted.
+
+   That numerator read 669 until this revision of the document, and the three
+   it lost are worth a sentence because of what they were. The denominator
+   counts upper-case values only, deliberately: `enum-observation.ts` records
+   that "lower-case sets — `usage_events.language` is 'en' and 'ha' — are
+   values of a different kind, not states anything transitions to", and the
+   observer never watches those columns. The coverage script's separate read
+   of standing reference data did not apply the same rule, so
+   `notification_templates.language: en`, `: ha` and
+   `users.preferred_language: en` were counted as written — three states the
+   denominator excludes on purpose. A ratio whose numerator is drawn from a
+   wider universe than its denominator is not a ratio.
+
+   The accounting was never affected: the loop that finds unwritten states
+   iterates the declared set, so a value outside it was never compared to
+   anything. Only the headline figure moved.
+
+   Fifteen enum-ish values sit outside this report entirely and always have —
+   ten language codes across five columns, and the five role names on
+   `cases.department`. The language ones are the deliberate exclusion above.
+   The `cases.department` ones are role names written in lower case, and
+   whether they belong in a states report is a question this document raises
+   rather than answers.
 5. **"140 tests across 18 files; 10 of 21 screens rendered under test"** for the
    officer portal. Now 655 tests, and the screen count has moved with the new
    subsystems.
