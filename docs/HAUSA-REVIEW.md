@@ -1209,7 +1209,7 @@ instructions — but they are what an agent reads all day.
 | `ofcOvTransactionCount` | {{n}} transaction(s) | Ma’amaloli {{n}} | ☐ | |
 | `ofcOvSettlementsOutstanding` | {{n}} settlement(s) outstanding | Turawar kudi {{n}} da ta rage | ☐ | |
 | `ofcOvIntact` | Audit trail intact | Rajistar bincike ba ta lalace ba | ☐ | |
-| `ofcOvChainIntact` | Verified over {{count}} entries. No tampering detected. | An tantance shigarwa {{count}}. Ba a sami wata alamar taba ba. | ☐ | |
+| `ofcOvChainIntact` | Intact: {{count}} entries replayed, none altered or missing, up to entry {{sequence}}. | Ba ta lalace ba: an sake duba shigarwa {{count}}, babu wanda aka canza ko ya ɓace, har zuwa shigarwa {{sequence}}. | ☐ | |
 | `ofcOvChainGenesisRemoved` | Broken at entry {{sequence}}: the oldest entry names a predecessor that is not there, so the beginning of the log has been removed. | An karye a shigarwa {{sequence}}: shigarwa mafi tsufa tana nuni da wanda ya gabace ta amma ba ya nan, don haka an cire farkon rajistar. | ☐ | |
 | `ofcOvChainLinkMismatch` | Broken at entry {{sequence}}: an entry is missing, or was inserted out of order. | An karye a shigarwa {{sequence}}: akwai shigarwa da ta bata, ko kuma an sanya ta ba bisa tsari ba. | ☐ | |
 | `ofcOvChainContentModified` | Broken at entry {{sequence}}: the entry's content does not match its recorded hash, so the row was changed after it was written. | An karye a shigarwa {{sequence}}: abin da ke cikin shigarwar bai yi daidai da hash da aka ajiye ba, don haka an canza layin bayan an rubuta shi. | ☐ | |

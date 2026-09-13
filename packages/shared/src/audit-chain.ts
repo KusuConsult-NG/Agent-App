@@ -51,8 +51,26 @@ export type ChainVerdict = (typeof CHAIN_VERDICTS)[number];
  * an empty panel.
  */
 export const CHAIN_SENTENCES: Record<ChainVerdict, string> = {
+  /*
+   * What was established, and not a word more.
+   *
+   * This read "Audit chain verified over {{count}} entries. No tampering
+   * detected." A replay of the log against itself detects an entry that was
+   * rewritten and an entry removed from the middle. It cannot detect entries
+   * removed from the end: what remains is a shorter chain that verifies
+   * perfectly, and nothing in the platform records how long the log was
+   * supposed to be. Measured on a copy of the seeded stack — deleting the five
+   * most recent entries produced "valid: 193 entries replayed end to end".
+   *
+   * "No tampering detected" is therefore a stronger claim than the check
+   * supports, made on the one screen whose purpose is that government does not
+   * have to take integrity on trust. It now says how many entries were
+   * replayed, that none was altered or missing among them, and how far it got —
+   * the number an auditor records so that a shortened log is visible next time.
+   */
   INTACT:
-    'Audit chain verified over {{count}} entries. No tampering detected.',
+    'Audit chain intact: {{count}} entries replayed, none altered or missing, ' +
+    'up to entry {{sequence}}.',
   GENESIS_REMOVED:
     'Audit chain broken at entry {{sequence}}: the oldest entry in the log names a ' +
     'predecessor that is not there, so the beginning of the chain has been removed.',

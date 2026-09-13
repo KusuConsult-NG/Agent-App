@@ -41,6 +41,7 @@ import {
 import { queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
 import { computeHash, recordAuditStandalone, verifyAuditChain } from '../services/audit';
+import { chainSentence } from '@psirs/shared';
 
 let officerId = '';
 
@@ -159,6 +160,77 @@ describe('The chain notices the row being rewritten', () => {
      * doing its job from the loop coincidentally tripping over the same row.
      */
     assert.equal(result.verdict, 'GENESIS_REMOVED');
+  });
+
+  /**
+   * The one tampering a replay cannot see, and the number that makes it visible.
+   *
+   * Rewrite an entry and the recomputed hash disagrees. Remove one from the
+   * middle and the next entry names a predecessor that is not there. Remove the
+   * *most recent* entries and what is left is a shorter chain that links to
+   * itself perfectly — there is nothing inside the log that says how long the
+   * log was supposed to be.
+   *
+   * Measured on a copy of the seeded stack before this was written: deleting
+   * the five newest of 198 entries produced "valid: 193 entries replayed end to
+   * end", and the screen told the auditor "No tampering detected."
+   *
+   * That claim is now gone, and the answer carries `highestSequence` instead —
+   * the number an auditor records so that a log which has been shortened since
+   * is visible the next time they look. This pins both halves: the limitation
+   * is real and deliberate, and the signal that exposes it must not regress.
+   */
+  it('cannot see a truncated tail, and says how far it got so somebody can', async () => {
+    await recordAuditStandalone({
+      actorId: officerId,
+      actorRole: 'admin',
+      action: 'taxpayer.corrected',
+      entityType: 'taxpayer',
+      entityId: 'before-truncation',
+      reason: 'An entry somebody might prefer was not there',
+    });
+
+    const before = await verifyAuditChain(pool);
+    assert.equal(before.verdict, 'INTACT', JSON.stringify(before));
+    const head = await queryOne<{ max: string }>(
+      pool,
+      'SELECT COALESCE(max(sequence_no), 0)::text AS max FROM audit_logs',
+    );
+    assert.equal(
+      before.highestSequence,
+      Number.parseInt(head!.max, 10),
+      'the answer must name the last entry it actually reached',
+    );
+    assert.ok(before.highestSequence > 1, 'the control is broken: too short a chain to truncate');
+
+    await pool.query('ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_no_delete');
+    try {
+      await pool.query('DELETE FROM audit_logs WHERE sequence_no = $1', [before.highestSequence]);
+    } finally {
+      await pool.query('ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_no_delete');
+    }
+
+    const after = await verifyAuditChain(pool);
+    assert.equal(
+      after.verdict,
+      'INTACT',
+      'a replay of the log against itself cannot see its own tail cut off — if this ' +
+        'ever fails, the limitation has been closed and this test should say so',
+    );
+    assert.equal(
+      after.highestSequence,
+      before.highestSequence - 1,
+      'and the number that would tell an auditor has to move when the log shortens',
+    );
+  });
+
+  it('the intact sentence does not claim more than the replay establishes', () => {
+    const sentence = chainSentence('INTACT', { count: 198, sequence: 198 });
+    assert.ok(
+      !/no tampering/i.test(sentence),
+      `the replay cannot establish that nothing was tampered with: ${sentence}`,
+    );
+    assert.match(sentence, /198/, 'and it must name how far it reached');
   });
 
   it('verifies a chain that spans the change of algorithm', async () => {

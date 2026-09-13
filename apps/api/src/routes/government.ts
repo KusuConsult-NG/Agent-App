@@ -2322,7 +2322,8 @@ governmentRouter.get(
         ...result,
         message: chainSentence(result.verdict, {
           count: result.entriesChecked,
-          sequence: result.brokenAtSequence,
+          // The break, or — when there is none — how far the replay reached.
+          sequence: result.brokenAtSequence ?? result.highestSequence,
         }),
       });
     },

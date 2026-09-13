@@ -121,22 +121,60 @@ describe('what an auditor is told about the chain', () => {
     expect(screen.queryByText(ha.ofcOvChainLinkMismatch.replace('{{sequence}}', '41'))).toBeNull();
   });
 
-  it('reports a clean replay with the number of entries it covered', async () => {
+  /*
+   * The intact answer now carries two numbers, not one.
+   *
+   * A replay cannot see entries cut from the end of the log — what remains is a
+   * shorter chain that verifies perfectly — so the sentence no longer says "No
+   * tampering detected". It says how many entries it replayed and how far it
+   * reached, the latter being the number an auditor records to notice a log
+   * that has been shortened since.
+   */
+  it('reports a clean replay, how far it reached, and no more than that', async () => {
     answering({
       valid: true,
       entriesChecked: 12045,
+      highestSequence: 12045,
       verdict: 'INTACT',
-      message: 'Audit chain verified over 12045 entries. No tampering detected.',
+      message:
+        'Audit chain intact: 12045 entries replayed, none altered or missing, up to entry 12045.',
     });
 
     await renderSettled();
     await pressVerify();
 
-    await waitFor(() =>
-      expect(screen.getByText(ha.ofcOvChainIntact.replace('{{count}}', '12045'))).toBeTruthy(),
-    );
+    const intact = ha.ofcOvChainIntact
+      .replace('{{count}}', '12045')
+      .replace('{{sequence}}', '12045');
+    await waitFor(() => expect(screen.getByText(intact)).toBeTruthy());
     // The heading says intact, not tampered.
     expect(screen.getByText(ha.ofcOvIntact)).toBeTruthy();
+    // And every placeholder was filled: a raw {{...}} on an auditor's screen is a bug.
+    expect(intact).not.toContain('{{');
+  });
+
+  /*
+   * The window is not the log.
+   *
+   * `entriesChecked` is how many rows this replay covered, which for a paged or
+   * `fromSequence`-bounded call is a window size rather than the length of the
+   * log. `highestSequence` is where it stopped. An auditor recording the wrong
+   * one of those would compare a window against a log.
+   */
+  it('names where the replay stopped, not merely how many rows it saw', async () => {
+    answering({
+      valid: true,
+      entriesChecked: 500,
+      highestSequence: 12045,
+      verdict: 'INTACT',
+      message: 'Audit chain intact: 500 entries replayed, none altered or missing, up to entry 12045.',
+    });
+
+    await renderSettled();
+    await pressVerify();
+
+    const windowed = ha.ofcOvChainIntact.replace('{{count}}', '500').replace('{{sequence}}', '12045');
+    await waitFor(() => expect(screen.getByText(windowed)).toBeTruthy());
   });
 
   /*

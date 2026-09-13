@@ -704,6 +704,8 @@ interface ChainAnswer {
   entriesChecked: number;
   brokenAtSequence?: number;
   verdict: ChainVerdict;
+  /** How far the replay reached. The intact sentence names it; see audit.ts. */
+  highestSequence?: number;
   /** The server's English, kept for a build that meets an outcome it does not know. */
   message: string;
 }
@@ -720,7 +722,14 @@ function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
   if (!key) return answer.message;
   return (t[key] as string)
     .replace('{{count}}', String(answer.entriesChecked))
-    .replace('{{sequence}}', String(answer.brokenAtSequence ?? 0));
+    /*
+     * The break, or how far it got.
+     *
+     * A broken chain names the entry it failed at; an intact one names the last
+     * entry it reached, because that is the number an auditor records to notice
+     * a log that has been shortened since.
+     */
+    .replace('{{sequence}}', String(answer.brokenAtSequence ?? answer.highestSequence ?? 0));
 }
 
 export function AuditScreen() {

@@ -843,7 +843,11 @@ export interface TranslationDictionary {
   /*
    * The four answers chain verification can give, each carrying its number.
    *
-   * `ofcOvChainIntact` takes {{count}}; the three breaks take {{sequence}}.
+   * `ofcOvChainIntact` takes {{count}} and {{sequence}} — the latter being how
+   * far the replay reached, not a fault. The three breaks take {{sequence}} as
+   * the entry the chain failed at. A replay cannot see entries cut from the end
+   * of the log, so the intact sentence says how far it got rather than claiming
+   * no tampering; see `CHAIN_SENTENCES.INTACT` in `audit-chain.ts`.
    * They are distinct sentences rather than one "tampered with" because what
    * an auditor does next depends on which of the three it is.
    */
@@ -4559,7 +4563,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "{{n}} transaction(s)",
     ofcOvSettlementsOutstanding: "{{n}} settlement(s) outstanding",
     ofcOvIntact: "Audit trail intact",
-    ofcOvChainIntact: "Verified over {{count}} entries. No tampering detected.",
+    ofcOvChainIntact: "Intact: {{count}} entries replayed, none altered or missing, up to entry {{sequence}}.",
     ofcOvChainGenesisRemoved:
       "Broken at entry {{sequence}}: the oldest entry names a predecessor that is not there, so the beginning of the log has been removed.",
     ofcOvChainLinkMismatch:
@@ -8032,7 +8036,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcOvTransactionCount: "Ma’amaloli {{n}}",
     ofcOvSettlementsOutstanding: "Turawar kudi {{n}} da ta rage",
     ofcOvIntact: "Rajistar bincike ba ta lalace ba",
-    ofcOvChainIntact: "An tantance shigarwa {{count}}. Ba a sami wata alamar taba ba.",
+    ofcOvChainIntact: "Ba ta lalace ba: an sake duba shigarwa {{count}}, babu wanda aka canza ko ya ɓace, har zuwa shigarwa {{sequence}}.",
     ofcOvChainGenesisRemoved:
       "An karye a shigarwa {{sequence}}: shigarwa mafi tsufa tana nuni da wanda ya gabace ta amma ba ya nan, don haka an cire farkon rajistar.",
     ofcOvChainLinkMismatch:

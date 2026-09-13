@@ -263,6 +263,54 @@ passing. What is recorded here is that the platform currently answers "which
 day" in two different ways depending on which module is asked, and that nothing
 says which one a financial month is supposed to use.
 
+## A second open question: what the chain cannot see
+
+Not a defect, and not something changed here beyond the sentence that
+overstated it. A measurement, recorded for the same reason as the one above:
+it is a decision nobody has written down.
+
+`audit_logs` is hash-chained and the database refuses `UPDATE` and `DELETE` on
+it outright. The chain exists for the case where those refusals are bypassed —
+an operator with rights over the database, which is the adversary a
+tamper-evident log is for. Measured against a copy of the seeded stack, with
+the triggers disabled first:
+
+```
+rewrite the reason on entry 120     BROKEN at 120: the entry's content does
+                                    not match its recorded hash
+delete entry 120 from the middle    BROKEN at 121: an entry is missing or was
+                                    inserted out of order
+delete the five most recent (194+)  intact: 193 entries replayed, none altered
+                                    or missing, up to sequence 193
+```
+
+The third is not a fault in the implementation. A chain proves that the entries
+present are unaltered and consecutive; entries cut from the *end* leave a
+shorter chain that is perfectly self-consistent, and nothing inside a log can
+say how long the log was supposed to be. Detecting that needs an anchor kept
+outside it.
+
+**There is no such anchor.** `audit_reports.checksum` covers the report's own
+payload, not the chain. No column in any other table records a chain head:
+searching the schema for `chain`, `sequence` or `_head` outside `audit_logs`
+returns `training_modules.sequence_no`, `transaction_events.sequence` and
+`case_events.sequence_no`, none of which is one.
+
+What has been changed is the claim. The verdict an auditor was shown read
+"Verified over {{count}} entries. **No tampering detected**", which is a
+stronger statement than the replay supports, on the one screen whose purpose is
+that integrity is not taken on trust. It now reports how many entries were
+replayed, that none was altered or missing among them, and the sequence it
+reached — so an auditor who records that number can see a shortened log next
+time. `audit-chain-covers-the-row.test.ts` pins both halves: the truncation
+blindness as a deliberate property, and the number that exposes it.
+
+What a revision has to settle is whether that is enough. Anchoring options —
+periodic signed head receipts, shipping the head off the box, writing it into
+the signed audit reports that already exist — differ in cost and in who has to
+be trusted, and choosing among them is PSIRS's decision rather than one to make
+while passing.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say
