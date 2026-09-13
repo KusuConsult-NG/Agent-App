@@ -38,7 +38,19 @@ import { join } from 'node:path';
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
 const PACKAGE_JSON = join(REPO_ROOT, 'package.json');
-const CI = join(REPO_ROOT, '.github', 'workflows', 'ci.yml');
+/**
+ * Both paths a commit can travel, and both must run the whole chain.
+ *
+ * `ci.yml` guards the branch. `deploy.yml` is what actually ships, and it ran
+ * two of the six — typecheck and `npm test` — so the release was verified less
+ * thoroughly than the commit had been. Nothing gates a tag on CI having passed
+ * either: no `workflow_run` trigger, no status check. "CI already ran it" was
+ * not a guarantee, so the release path needed the checks itself.
+ */
+const WORKFLOWS = [
+  join(REPO_ROOT, '.github', 'workflows', 'ci.yml'),
+  join(REPO_ROOT, '.github', 'workflows', 'deploy.yml'),
+];
 
 /** The scripts `verify` chains together, in the order it runs them. */
 function verifyChain(): string[] {
@@ -55,36 +67,46 @@ function verifyChain(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * What a workflow actually runs, as opposed to what it talks about.
+ *
+ * Comment lines are dropped, and that is the point rather than tidiness: both
+ * workflows explain steps in comments that name their script, so a checker
+ * reading the whole file would have passed on the very gap this exists for.
+ */
+function commandsIn(path: string): string {
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('#'))
+    .join('\n');
+}
+
+function missingFrom(path: string, named: string[]): string[] {
+  const runnable = commandsIn(path);
+  return named.filter((script) => {
+    const asRun = new RegExp(`npm run ${script}(\\s|$)`, 'm');
+    const asBare = new RegExp(`npm ${script}(\\s|$)`, 'm');
+    return !asRun.test(runnable) && !asBare.test(runnable);
+  });
+}
+
 describe('the checks `verify` names', () => {
-  it('are all invoked by the CI workflow', () => {
+  it('are all invoked by every workflow that gates a release', () => {
     const named = verifyChain();
     assert.ok(named.length >= 6, `expected the verify chain, parsed ${named.length}`);
 
-    const workflow = readFileSync(CI, 'utf8');
-    // Only `run:` lines: a script mentioned in a comment is not a script that
-    // runs, which is the whole subject of this file.
-    const commands = workflow
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith('run:') || line.startsWith('- run:'))
-      .join('\n');
-    // A `run: |` block puts its commands on following lines; take those too.
-    const runnable = `${commands}\n${workflow
-      .split('\n')
-      .filter((line) => /npm (run )?[a-z:]+/.test(line) && !line.trim().startsWith('#'))
-      .join('\n')}`;
-
-    const missing = named.filter((script) => {
-      const asRun = new RegExp(`npm run ${script.replace(/:/g, ':')}(\\s|$)`);
-      const asBare = new RegExp(`npm ${script}(\\s|$)`);
-      return !asRun.test(runnable) && !asBare.test(runnable);
-    });
+    const missing: string[] = [];
+    for (const workflow of WORKFLOWS) {
+      for (const script of missingFrom(workflow, named)) {
+        missing.push(`${workflow.split('/').pop()}: npm run ${script}`);
+      }
+    }
 
     assert.deepEqual(
       missing,
       [],
-      'named in `verify` and never run by ci.yml:\n' +
-        missing.map((script) => `  npm run ${script}`).join('\n'),
+      'named in `verify` and never run by the workflow that ships it:\n' +
+        missing.map((entry) => `  ${entry}`).join('\n'),
     );
   });
 
@@ -95,14 +117,15 @@ describe('the checks `verify` names', () => {
      * would have passed on the very gap this file exists for — the same
      * mistake as a citation checker reading its own prose.
      */
-    const workflow = readFileSync(CI, 'utf8');
-    const commented = workflow
-      .split('\n')
-      .filter((line) => line.trim().startsWith('#') && /npm run [a-z:]+/.test(line));
+    const commented = WORKFLOWS.flatMap((workflow) =>
+      readFileSync(workflow, 'utf8')
+        .split('\n')
+        .filter((line) => line.trim().startsWith('#') && /npm run [a-z:]+/.test(line)),
+    );
     assert.ok(
       commented.length > 0,
-      'expected ci.yml to mention scripts in comments; if it no longer does, ' +
-        'this test has stopped proving anything and should be rewritten',
+      'expected the workflows to mention scripts in comments; if they no longer ' +
+        'do, this test has stopped proving anything and should be rewritten',
     );
   });
 });

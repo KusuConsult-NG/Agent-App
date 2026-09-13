@@ -15,7 +15,7 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`95fa6e0`) |
+| | At `fa8f454` (Revision 10) | Now (`83a1169`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
@@ -29,7 +29,7 @@ verification run — describes the platform as it stood at that commit.
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `95fa6e0` plus the working tree:
+Current figures are from a full local run at `83a1169` plus the working tree:
 API 2,170 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
@@ -644,6 +644,59 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## The release path verified less than the branch path, and gated on nothing
+
+Found by following the previous finding one file over. `deploy.yml` is what
+actually ships, and its verification job ran **two of the six** checks the root
+`verify` script names: `typecheck` and `npm test`. Absent were the four that
+exist because something went wrong once:
+
+| missing from the release path | why it exists |
+| --- | --- |
+| `test:concurrency` | the money path under contention — a whole CI job |
+| `check:dead-predicates` | its own comment: "It has happened twice to money figures" |
+| `check:action-matrix` | the who-may-do-what table a government reads, found stale above |
+| `check:hausa-review` | what a native speaker reads before any of this reaches an agent |
+
+**And "CI already ran it" is not a guarantee.** Nothing gates a tag on CI
+having passed — no `workflow_run` trigger, no status check, nothing. A tag
+pushed at a commit whose CI was red, cancelled, or never ran deploys exactly
+the same way. So the release path needed those checks itself, and now has them.
+
+A second, smaller thing in the same job: it ran `npm test` and then
+`npm run test --workspace @psirs/agent`, which reads as extra assurance and is
+the same suite again — `npm test` is the shared build plus all three. The
+duplicate is gone and the remaining step says what it covers.
+
+ONE SILENT BRANCH IN THE ROLLOUT, made loud. The rollback step is conditioned
+on `steps.current.outputs.previous != ''`, and `previous` comes from
+`DEPLOY_DESCRIBE_COMMAND || echo ''`. When that command fails there is nothing
+to revert to and the rollback is skipped **in silence**: the job fails on the
+health check, and nobody is told that the rollout which just failed is still
+the one serving traffic. A step now runs on exactly that condition and says so.
+
+The rest of the pipeline is sound and worth recording as such: it backs up
+before migrating, runs migrations from the image being deployed so they are
+byte-identical to the ones the new containers check against, gates on readiness
+rather than liveness with a five-minute retry, and reverts automatically when
+the rollout does not come up.
+
+The guard from the previous finding now covers both workflows, so the two
+cannot drift apart: dropping a check from either is a failing test that names
+the file and the script.
+
+A NOTE ON A TRANSIENT, recorded rather than smoothed over. The first full run
+after this change reported 2,163 of 2,170 with **0 failed and 7 cancelled** —
+one file whose `before` hook died, taking its seven tests with it. The cause
+was not an assertion: `enum-observation.ts`'s `enumColumns()` hit
+`statement_timeout` (57014) installing the observation triggers, on a database
+that had been restarted cold minutes earlier with four shards warming it at
+once. The re-run was 2,170 of 2,170. It is worth writing down because the
+harness runs that catalogue query — `pg_get_constraintdef` across every CHECK
+constraint in `public`, now 301 of them — once per test file, roughly 190 times
+a run, against a fifteen-second timeout. Nothing is wrong with it today and it
+is the kind of setup cost that gets slower as the schema grows.
 
 ## A check named in `verify`, absent from CI, and failing
 
