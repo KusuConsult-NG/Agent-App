@@ -47,6 +47,7 @@ revenueRouter.get(
   validateQuery(
     z.object({
       categoryId: uuidSchema.optional(),
+      authorityId: uuidSchema.optional(),
       taxpayerType: z.enum(['INDIVIDUAL', 'BUSINESS']).optional(),
       lgaId: uuidSchema.optional(),
       search: z.string().optional(),

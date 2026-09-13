@@ -20,7 +20,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, within } from '@testing-library/react';
 import { ArrearsScreen } from '../screens/Arrears';
 import * as apiModule from '../lib/api';
 
@@ -212,5 +212,63 @@ describe('narrowing the list', () => {
       const latest = new URLSearchParams(asks[asks.length - 1]!.split('?')[1]);
       expect(latest.get('minimumNaira')).toBe('5000');
     });
+  });
+});
+
+/**
+ * How long they have owed it.
+ *
+ * The worklist drew `daysUntilLapse` — "do I ring this one today" — and not
+ * `oldestDaysOutstanding`, which says how long this has been going on. They
+ * are different questions, and for a debt with no expiry the first has no
+ * answer at all: the column reads "No deadline" and the table then said
+ * nothing about age whatsoever.
+ *
+ * So a taxpayer who has owed money for four hundred days on an invoice that
+ * never lapses sat in the list looking exactly like one billed last week. The
+ * ordering is `SUM(owed_kobo) DESC, MIN(expires_at) ASC NULLS LAST`, so
+ * nothing else surfaced them either — a small ancient debt sinks below a large
+ * fresh one and has no visible reason to be picked out.
+ *
+ * The fixture above has carried `oldestDaysOutstanding: 24` and `9` all along,
+ * for a value nothing rendered.
+ */
+describe('how long the debt has been running', () => {
+  beforeEach(() => cleanup());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('says how long each taxpayer has owed it', async () => {
+    stubApi();
+    render(<ArrearsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Amina Danladi')).toBeTruthy());
+    expect(screen.getByText('24 day(s)')).toBeTruthy();
+    expect(screen.getByText('9 day(s)')).toBeTruthy();
+  });
+
+  it('says it for the debt that has no deadline, which had no age at all', async () => {
+    /*
+     * The row that mattered. `Plateau Motors Ltd` has `daysUntilLapse: null`,
+     * so its urgency column reads "No deadline" — and that was the whole of
+     * what the table said about time for that row.
+     */
+    stubApi();
+    render(<ArrearsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Plateau Motors Ltd')).toBeTruthy());
+    const row = screen.getByText('Plateau Motors Ltd').closest('tr')!;
+    expect(within(row).getByText(/No deadline/i)).toBeTruthy();
+    expect(within(row).getByText('9 day(s)')).toBeTruthy();
+  });
+
+  it('still answers the deadline question, which is a different one', async () => {
+    // The control: the urgency column must not have been replaced by the age.
+    stubApi();
+    render(<ArrearsScreen />);
+
+    await waitFor(() => expect(screen.getByText('Amina Danladi')).toBeTruthy());
+    const row = screen.getByText('Amina Danladi').closest('tr')!;
+    expect(within(row).getByText('6')).toBeTruthy();
+    expect(within(row).getByText('24 day(s)')).toBeTruthy();
   });
 });

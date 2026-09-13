@@ -26,8 +26,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { Alert, Badge, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 
 interface Lga {
@@ -68,13 +69,13 @@ interface Worklist {
 
 export function ArrearsScreen() {
   const { t } = usePortalI18n();
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
   const [filters, setFilters] = useState({ lgaId: '', minimumNaira: '', lapsingWithinDays: '' });
   const [worklist, setWorklist] = useState<Worklist | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => {
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   const load = useCallback(() => {
@@ -90,7 +91,7 @@ export function ArrearsScreen() {
       .get<Worklist>(`/government/arrears?${params.toString()}`)
       .then(setWorklist)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setWorklist({
           summary: {
             taxpayers: 0,
@@ -132,6 +133,7 @@ export function ArrearsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">
@@ -243,6 +245,29 @@ export function ArrearsScreen() {
                    */
                   render: (row: ArrearsRow) =>
                     row.daysUntilLapse === null ? t.ofcArNoDeadline : String(row.daysUntilLapse),
+                },
+                {
+                  /*
+                   * How long they have owed it, which is not the same question
+                   * as how long is left to pay.
+                   *
+                   * `daysUntilLapse` answers urgency by deadline and is null
+                   * for a debt with no expiry — and for those rows the column
+                   * beside this one reads "No deadline" and the table then
+                   * said nothing about age at all. So a taxpayer who has owed
+                   * ₦50,000 for four hundred days sat in the worklist looking
+                   * exactly like one billed last week, and the ordering is by
+                   * amount, so nothing else surfaced them either.
+                   *
+                   * `oldestDaysOutstanding` has been computed and sent all
+                   * along. It is the oldest unpaid invoice, not the newest,
+                   * because the question is how long this has been going on.
+                   */
+                  key: 'oldestDaysOutstanding',
+                  label: 'ofcArOwingFor',
+                  numeric: true,
+                  render: (row: ArrearsRow) =>
+                    t.ofcArOwingForDays.replace('{{days}}', String(row.oldestDaysOutstanding)),
                 },
                 {
                   key: 'lastPaymentAt',

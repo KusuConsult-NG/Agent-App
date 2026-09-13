@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -96,7 +96,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       .get<{ groups: GroupRow[] }>(`/groups${status ? `?status=${status}` : ''}`)
       .then((result) => setGroups(result.groups))
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
     /*
      * An empty rounds list has two causes and only one is silent.
@@ -114,10 +114,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
         .get<{ rounds: RoundRow[] }>('/allocations/rounds')
         .then((result) => setRounds(result.rounds))
         .catch((caught) => {
-          if (caught instanceof ApiRequestError) setRoundsError(caught.error);
-          else if (caught instanceof Error) {
-            setRoundsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-          }
+          setRoundsError(asApiError(caught));
           setRounds([]);
         });
     } else {
@@ -137,7 +134,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       if (note) setMessage(note);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -557,7 +554,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
       .get<RoundSummary>(`/allocations/rounds/${roundId}`)
       .then(setRound)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
     api
       .get<{ awards: AwardRow[] }>(`/allocations/rounds/${roundId}/awards`)
@@ -566,10 +563,7 @@ export function AllocationRoundScreen({ roundId }: { roundId: string }) {
         setAwardsError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setAwardsError(caught.error);
-        else if (caught instanceof Error) {
-          setAwardsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setAwardsError(asApiError(caught));
       });
   }, [roundId]);
 

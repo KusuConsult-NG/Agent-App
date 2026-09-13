@@ -1,14 +1,7 @@
 /** Vehicles, receipts, commission wallet and profile. */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiRequestError,
-  APP_VERSION,
-  api,
-  isConnectivityFailure,
-  newIdempotencyKey,
-  type ApiError,
-} from '../lib/api';
+import { APP_VERSION, ApiRequestError, api, asApiError, isConnectivityFailure, newIdempotencyKey, type ApiError } from '../lib/api';
 import { formatNaira, parseKobo, type TranslationDictionary } from '@psirs/shared';
 import { describeDevice } from '../lib/device';
 import { listDrafts, submitOrQueue, type Draft } from '../lib/drafts';
@@ -111,7 +104,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
         await api.get<VehicleLookup>(`/vehicles/lookup/${encodeURIComponent(registration.trim())}`),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
       // Offline, the lookup cannot happen at all — the authority is only
       // reachable from the server. The agent captures what they can see on the
       // vehicle instead, and the authority is consulted when the draft syncs.
@@ -149,7 +142,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       setCapturedOffline(true);
       if (outcome.sent) setOfflineCapture(false);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -188,7 +181,7 @@ export function VehiclesScreen({ navigate }: { navigate: (path: string) => void 
       await api.post('/payments/initiate', { transactionId: renewal.transactionId }, newIdempotencyKey('payment'));
       navigate(`/transactions/${renewal.transactionReference}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -406,7 +399,7 @@ export function ReceiptsScreen() {
       .get<ReceiptRow[]>('/receipts')
       .then(setReceipts)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -453,14 +446,7 @@ export function ReceiptsScreen() {
                       );
                       window.open(detail.downloadUrl, '_blank', 'noopener');
                     } catch (caught) {
-                      if (caught instanceof ApiRequestError) setError(caught.error);
-                      else if (caught instanceof Error) {
-                        setError({
-                          code: 'CLIENT',
-                          message: caught.message,
-                          moneyStatus: 'NOT_APPLICABLE',
-                        });
-                      }
+                      setError(asApiError(caught));
                     }
                   }}
                 >
@@ -468,6 +454,17 @@ export function ReceiptsScreen() {
                     <p className="list__title">{receipt.receipt_number}</p>
                     <p className="list__meta">
                       {receipt.taxpayer_name} · {localName(lang, receipt.revenue_item, receipt.revenue_item_ha)}
+                      {/*
+                        * When it was issued, which is how an agent finds one.
+                        *
+                        * "The receipt I gave that man this morning" is the
+                        * question this list answers, and it showed the number,
+                        * the name and the amount — so two collections from the
+                        * same taxpayer for the same item were one row repeated,
+                        * with nothing to tell them apart.
+                        */}
+                      {' · '}
+                      {formatDateTimeIn(receipt.issued_at, t)}
                     </p>
                   </div>
                   <span className="list__amount">
@@ -524,7 +521,7 @@ export function CommissionScreen() {
       .get<Wallet>('/agents/me/commission')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
   useEffect(() => {
@@ -573,7 +570,7 @@ export function CommissionScreen() {
       );
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
       setAuthorising(false);
     } finally {
       setBusy(false);
@@ -1054,10 +1051,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
         setLoadError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -1102,10 +1096,7 @@ export function BankAccountScreen({ navigate }: { navigate: (path: string) => vo
       setForm({ bankName: '', bankCode: '', accountName: '', accountNumber: '', reason: '' });
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
       setAuthorising(false);

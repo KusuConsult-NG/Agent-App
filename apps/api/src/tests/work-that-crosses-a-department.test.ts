@@ -31,6 +31,7 @@ import {
   stopTestServer,
 } from './helpers';
 import { query, queryOne } from '../db/pool';
+import { CASE_DEPARTMENTS } from '../services/cases';
 import { seedReferenceData } from '../db/seed';
 
 const OFFICERS = {
@@ -638,5 +639,75 @@ describe('my work', () => {
     assert.deepEqual(auditor.body.approvals, []);
     // And does hold fraud:read.
     assert.ok(Array.isArray(auditor.body.flags));
+  });
+});
+
+// ===========================================================================
+describe('every department a case can be addressed to', () => {
+  /*
+   * The list, rather than three of it.
+   *
+   * `CASE_DEPARTMENTS` has five role names and the suite routed to three:
+   * auditor, finance_officer, revenue_officer. Nothing anywhere addressed a
+   * case to supervisor or admin, and no check could say so — the runtime
+   * coverage report decided what counted as a state by letter case, and
+   * `cases.department` holds lower-case role names, so the column sat outside
+   * the report in both directions.
+   *
+   * Naming the two would close today and rot tomorrow, so this walks the list
+   * itself. A sixth department added to `CASE_DEPARTMENTS` without a queue to
+   * read it fails on the first assertion.
+   *
+   * The property is the one the relay above calls the thing email does not
+   * have: a case addressed to a department is in front of that department
+   * because of where it was sent. Its other half matters just as much and is
+   * easier to lose — it is in front of nobody else.
+   */
+  it('puts a case in front of that department and in front of no other', async () => {
+    const supervisor = {
+      fullName: 'Supervisor Dalyop',
+      phone: '+2348072000001',
+      role: 'supervisor',
+    };
+    await createGovernmentUser(supervisor);
+
+    const queues: Record<string, string> = {
+      supervisor: (await loginAs(supervisor.phone)).accessToken,
+      revenue_officer: tokens.revenue,
+      finance_officer: tokens.finance,
+      auditor: tokens.auditor,
+      admin: tokens.admin,
+    };
+    assert.deepEqual(
+      Object.keys(queues).sort(),
+      [...CASE_DEPARTMENTS].sort(),
+      'a department a case can be addressed to has no officer here to read its queue',
+    );
+
+    // One case each, all raised by the same officer, so the only thing that
+    // differs between them is where they were sent.
+    const addressed: Record<string, string> = {};
+    for (const department of CASE_DEPARTMENTS) {
+      addressed[department] = (await openCase('admin', { department })).caseNumber;
+    }
+
+    for (const department of CASE_DEPARTMENTS) {
+      const work = await get('/government/my-work', { token: queues[department]! });
+      assert.equal(work.status, 200, `a ${department} could not read their own work`);
+      const waiting = (work.body.unassigned as { case_number: string }[]).map(
+        (row) => row.case_number,
+      );
+      assert.ok(
+        waiting.includes(addressed[department]!),
+        `${addressed[department]} was addressed to ${department} and is not in their queue`,
+      );
+      for (const other of CASE_DEPARTMENTS) {
+        if (other === department) continue;
+        assert.ok(
+          !waiting.includes(addressed[other]!),
+          `${addressed[other]} was addressed to ${other} and is sitting in the ${department} queue`,
+        );
+      }
+    }
   });
 });

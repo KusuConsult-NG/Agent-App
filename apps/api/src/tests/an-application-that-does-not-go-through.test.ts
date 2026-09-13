@@ -204,6 +204,29 @@ describe('An applicant who fails an assessed module', () => {
     assert.equal(failed.status, 400, JSON.stringify(failed.body));
     assert.match(failed.body.error.message, /You scored 40%/);
 
+    /*
+     * And a code the agent application can key a Hausa sentence on.
+     *
+     * This was a `badRequest`, which means INVALID_REQUEST — the one code
+     * the PWA's error map deliberately does NOT translate, because a
+     * validation message names a field and is generated from the schema. So
+     * the sentence telling an applicant why they are not yet cleared to
+     * collect reached them in English, in an application that has offered
+     * Hausa since it was built.
+     *
+     * The figures travel as details rather than being parsed back out of the
+     * English, which would break silently the moment somebody improved the
+     * wording.
+     */
+    assert.equal(failed.body.error.code, 'TRAINING_SCORE_BELOW_PASS_MARK');
+    const detail = (field: string) =>
+      (failed.body.error.details as { field: string; issue: string }[]).find(
+        (d) => d.field === field,
+      )?.issue;
+    assert.equal(detail('score'), '40');
+    assert.equal(detail('passMark'), '70');
+    assert.ok(detail('module'), 'the module is named, because an applicant sits several');
+
     const first = await queryOne<{ status: string; score: number; attempts: number }>(
       pool,
       `SELECT p.status, p.score, p.attempts FROM agent_training_progress p

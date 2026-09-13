@@ -9,7 +9,7 @@ import {
   getTranslation,
   statusSeverity,
 } from '@psirs/shared';
-import { ApiRequestError, downloadExport, type ApiError } from './lib/api';
+import { ApiRequestError, asApiError, downloadExport, type ApiError } from './lib/api';
 import { getPortalLanguage, usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -539,6 +539,31 @@ export function LanguageToggle({ align = 'flex-end' }: { align?: 'flex-end' | 'f
  * narrow the period, or ask for the limit to be raised -- and which a silent
  * failure would turn into "the button does nothing".
  */
+/**
+ * "This list could not be loaded", and a way to ask again.
+ *
+ * The shape is the one `Cases.tsx` arrived at independently — a field hint
+ * with `role="status"` so a screen reader announces it when it appears, and
+ * the retry as a link rather than a button so it does not compete with the
+ * form's own action. Factored out here because seventeen selects need it and
+ * seventeen hand-written copies is how the last class grew back.
+ *
+ * Renders nothing when the list arrived. A list that is genuinely empty is a
+ * real answer and this must not speak over it.
+ */
+export function ReferenceListFailure({ list }: { list: { failed: boolean; reload: () => void } }) {
+  const { t } = usePortalI18n();
+  if (!list.failed) return null;
+  return (
+    <p className="field__hint" role="status">
+      {t.ofcListCouldNotLoad}{' '}
+      <button type="button" className="link" onClick={list.reload}>
+        {t.actionTryAgain}
+      </button>
+    </p>
+  );
+}
+
 export function ExportButtons({
   path,
   filename,
@@ -574,7 +599,7 @@ export function ExportButtons({
             try {
               await downloadExport(path, format, filename);
             } catch (caught) {
-              setError(caught instanceof ApiRequestError ? caught.error : null);
+              setError(asApiError(caught));
             } finally {
               setBusy(null);
             }

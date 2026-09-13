@@ -236,7 +236,7 @@ describe('a machine an officer signs in from', () => {
     );
     assert.ok(device);
 
-    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
     const blocked = await post(
       `/government/devices/${device!.id}/block`,
       { reason: 'The officer reported this laptop stolen from the office.' },
@@ -285,14 +285,14 @@ describe('a machine an officer signs in from', () => {
       [ids.officer],
     );
 
-    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.block');
     await post(
       `/government/devices/${device!.id}/block`,
       { reason: 'Blocked the wrong machine by mistake.' },
       auth('admin'),
     );
 
-    await grantStepUp(tokens.admin, PHONES.admin, 'user.role.change');
+    await grantStepUp(tokens.admin, PHONES.admin, 'device.unblock');
     const unblocked = await post(
       `/government/devices/${device!.id}/unblock`,
       { reason: 'Wrong machine; the officer still needs this one.' },

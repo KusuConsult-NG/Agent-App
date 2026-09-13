@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -100,7 +100,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
     try {
       setResults(await api.get<FoundTaxpayer[]>(`/taxpayers/search?q=${encodeURIComponent(search.trim())}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -154,10 +154,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
       setResults(null);
       setSearch('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -330,6 +327,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
 
       {chosen && can('taxpayer:obligation:waive') && <Obligations taxpayerId={chosen.id} />}
 
+      {chosen && can('incentive:read:all') && <Entitlements taxpayerId={chosen.id} />}
       {chosen && can('vehicle:read:all') && <VehicleRegister taxpayerId={chosen.id} />}
     </>
   );
@@ -396,7 +394,7 @@ function PaymentHistory({ taxpayerId }: { taxpayerId: string }) {
       )
       .then(setHistory)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId, from, to]);
 
@@ -510,7 +508,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       .get<ObligationRow[]>(`/taxpayers/${taxpayerId}/obligations`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -538,10 +536,7 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -588,6 +583,126 @@ function Obligations({ taxpayerId }: { taxpayerId: string }) {
 }
 
 
+/**
+ * What a taxpayer is actually entitled to, which nothing had shown anybody.
+ *
+ * `/taxpayers/:id/incentives` has existed on `incentive:read:all` and had no
+ * caller — one of the reads recorded in READ_WITHOUT_A_SCREEN. Programmes
+ * grant entitlement, an officer sitting with a taxpayer is the person asked
+ * about it, and the answer was not on any screen.
+ *
+ * THE DISTINCTION THE ENDPOINT WAS BUILT TO CARRY
+ *
+ * `benefit_tier` is BASE or FULL, and the service's own comment says why it
+ * matters: it was "computed, stored and unit-tested since the additive mode
+ * was added, and returned to nobody: a citizen on an additive programme was
+ * told eligible, which is what a gated programme says too, and the difference
+ * between them is the entire PRD 40 safeguard." It reaches a reader here.
+ *
+ * A programme nobody has evaluated this taxpayer against is its own answer
+ * and not a refusal — `eligible` is null there, and null is not false.
+ */
+interface ProgrammeStanding {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  benefit_type: string;
+  benefit_description: string | null;
+  eligible: boolean | null;
+  reasons: string[] | null;
+  benefit_tier: 'BASE' | 'FULL' | null;
+}
+
+function Entitlements({ taxpayerId }: { taxpayerId: string }) {
+  const { lang, t } = usePortalI18n();
+  const [rows, setRows] = useState<ProgrammeStanding[] | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api
+      .get<{ programmes: ProgrammeStanding[] }>(`/taxpayers/${taxpayerId}/incentives`)
+      .then((result) => setRows(result.programmes ?? []))
+      .catch((caught) => {
+        setError(asApiError(caught));
+        setRows(null);
+      });
+  }, [taxpayerId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const standing = (row: ProgrammeStanding): string => {
+    if (row.eligible === null || row.eligible === undefined) return t.ofcTrNotEvaluated;
+    if (!row.eligible) return t.ofcTrNotEligible;
+    return row.benefit_tier === 'BASE' ? t.ofcTrBaseOnly : t.ofcTrFullBenefit;
+  };
+
+  return (
+    <div className="card card--flush">
+      <div className="card__pad">
+        <h2 className="card__title">{t.ofcTrEntitledTo}</h2>
+        <p className="card__hint">{t.ofcTrEntitledBody}</p>
+      </div>
+
+      {error ? (
+        <div className="card__pad">
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !rows ? (
+        <div className="card__pad">
+          <Loading rows={3} />
+        </div>
+      ) : (
+        <Table
+          columns={[
+            {
+              key: 'name',
+              label: 'ofcTrProgramme',
+              render: (row: ProgrammeStanding) => localName(lang, row.name, row.name_ha),
+            },
+            {
+              key: 'benefit_type',
+              label: 'ofcTrBenefit',
+              render: (row: ProgrammeStanding) => (
+                <>
+                  <Badge status={row.benefit_type} />
+                  {row.benefit_description && (
+                    <p className="table__sub" style={{ margin: '4px 0 0' }}>
+                      {row.benefit_description}
+                    </p>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: 'eligible',
+              label: 'ofcTrEntitlement',
+              render: (row: ProgrammeStanding) => <span>{standing(row)}</span>,
+            },
+            {
+              /*
+               * The reasons an evaluation recorded, which is the only thing
+               * an officer can act on when somebody asks why not.
+               */
+              key: 'reasons',
+              label: 'ofcTrWhyNot',
+              render: (row: ProgrammeStanding) =>
+                row.reasons && row.reasons.length > 0 ? row.reasons.join('; ') : '\u2014',
+            },
+          ]}
+          rows={rows}
+          empty="ofcNoneProgrammesRunning"
+        />
+      )}
+    </div>
+  );
+}
+
 interface VehicleRow {
   id: string;
   registration_number: string;
@@ -621,7 +736,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
       .get<VehicleRow[]>(`/vehicles?taxpayerId=${taxpayerId}`)
       .then(setVehicles)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayerId]);
 
@@ -651,10 +766,7 @@ function VehicleRegister({ taxpayerId }: { taxpayerId: string }) {
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -797,7 +909,7 @@ function RegisterStatus({ taxpayerId, name }: { taxpayerId: string; name: string
       );
       setReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

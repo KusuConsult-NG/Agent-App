@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, downloadCsv, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Growth, Loading, Money, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -51,6 +51,13 @@ interface AgentRow {
   categories_processed: string;
 }
 
+/**
+ * The endpoint's own ceiling: `limit` is `z.coerce.number().int().max(200)`,
+ * so 200 is not a choice this screen makes, it is every row the report can
+ * return. Asking for more is refused, and there is no offset to page with.
+ */
+const AGENT_LIMIT = 200;
+
 export function PerformanceScreen({ navigate }: { navigate: (path: string) => void }) {
   const { t } = usePortalI18n();
   /*
@@ -72,10 +79,10 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
 
   const load = useCallback(() => {
     api
-      .get<AgentRow[]>('/agents/performance?limit=200')
+      .get<AgentRow[]>(`/agents/performance?limit=${AGENT_LIMIT}`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setRows('unreadable');
       });
   }, []);
@@ -112,6 +119,27 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
             {t.ofcPfFlagIsQuestion}{' '}
             {flagged.map((row) => row.full_name).join(', ')}.
           </p>
+        </Alert>
+      )}
+
+      {/*
+        * What the four figures below are actually a total of.
+        *
+        * They are summed from `read`, and `read` is at most the endpoint's
+        * own ceiling of 200 rows, ordered by collections descending. So on an
+        * agency with more agents than that, "Collected by agents" is the sum
+        * over the top 200, "Open fraud flags" counts only theirs, and the
+        * worked-of figure reports 200 as the size of the agency.
+        *
+        * The agents cut off are the LOWEST collectors, which is where an idle,
+        * absconded or suspect agent sits — so the figure most distorted by the
+        * truncation is the one about fraud. The fraud queue answers that
+        * properly; this says so rather than leaving the number to be read as
+        * the whole picture.
+        */}
+      {read && read.length >= AGENT_LIMIT && (
+        <Alert kind="info">
+          {t.ofcPfFiguresCoverTopAgents.replace('{{n}}', String(read.length))}
         </Alert>
       )}
 

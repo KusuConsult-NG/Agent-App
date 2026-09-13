@@ -23,7 +23,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -34,7 +34,9 @@ import {
   Stat,
   Table,
   formatDate,
+  ReferenceListFailure,
 } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 
@@ -142,7 +144,7 @@ export function TargetsScreen({ user }: { user: User }) {
       setForecast(projection);
       setRollup(roll);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [periodKind, includeInactive]);
 
@@ -382,7 +384,7 @@ function WithdrawButton({
             setOpen(false);
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -481,8 +483,10 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
    * changed.
    */
   const [periodError, setPeriodError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
-  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
+  const categoryList = useReferenceList<{ id: string; name: string }>('/revenue/categories');
+  const categories = categoryList.items;
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -497,23 +501,9 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
       })
       .catch((caught) => {
         setPeriod(null);
-        if (caught instanceof ApiRequestError) setPeriodError(caught.error);
-        else if (caught instanceof Error) {
-          setPeriodError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setPeriodError(asApiError(caught));
       });
   }, [form.periodKind]);
-
-  useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-    api
-      .get<{ id: string; name: string }[]>('/revenue/categories')
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
 
   async function submit() {
     if (!period) return;
@@ -535,7 +525,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
       });
       await onDone(t.ofcCwSaved);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -594,6 +584,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </label>
         )}
 
@@ -611,6 +602,7 @@ function SetTargetForm({ onDone }: { onDone: (message: string) => Promise<void> 
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={categoryList} />
           </label>
         )}
 

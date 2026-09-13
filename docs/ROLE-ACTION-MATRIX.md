@@ -73,18 +73,18 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | --- | --- | --- | --- |
 | `taxpayer:read:assigned` | View | agent, supervisor | `GET /revenue/taxpayers/:id/obligations`<br>`GET /taxpayers/search`<br>`GET /taxpayers/:id`<br>`GET /taxpayers/:id/obligations` |
 | `taxpayer:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /government/revenue/defaulters`<br>`GET /government/taxpayers/analytics`<br>`GET /taxpayers/ended-with-arrears`<br>`GET /taxpayers/search`<br>…and 3 more |
-| `taxpayer:create` | Create | agent | `POST /taxpayers/duplicate-check`<br>`POST /taxpayers/`<br>`POST /taxpayers/:id/tin`<br>`POST /drafts/sync` |
+| `taxpayer:create` | Create | agent | `POST /taxpayers/duplicate-check`<br>`POST /taxpayers`<br>`POST /taxpayers/:id/tin`<br>`POST /drafts/sync` |
 | `taxpayer:update` | Edit | agent, revenue_officer | `POST /taxpayers/:id/tin`<br>`PUT /taxpayers/:id/obligations` |
 | `taxpayer:manage` | Edit | admin | `PUT /taxpayers/:id/obligations` |
 | `taxpayer:correct` | Edit | revenue_officer, admin | `POST /government/intelligence/connections/:id/decision`<br>`POST /taxpayers/:id/identity`<br>`POST /taxpayers/:id/status` |
-| `taxpayer:obligation:waive` | Other | revenue_officer, admin | `POST /taxpayers/`<br>`PUT /taxpayers/:id/obligations` |
-| `group:register` | Create | agent | `POST /groups/`<br>`POST /groups/:id/members`<br>`POST /groups/:id/attestation-request` |
-| `group:read:all` | View | revenue_officer, admin | `GET /groups/`<br>`GET /groups/:id`<br>`GET /groups/:id/members` |
-| `group:read:own` | View | agent | `GET /groups/`<br>`GET /groups/:id`<br>`GET /groups/:id/members` |
-| `group:manage` | Edit | revenue_officer, admin | `POST /government/enumeration/observations/:id/attest`<br>`POST /groups/`<br>`POST /groups/:id/review`<br>`POST /groups/:id/tax-role`<br>…and 3 more |
-| `allocation:read:all` | View | revenue_officer, admin | `GET /rounds`<br>`GET /rounds/:id`<br>`GET /rounds/:id/awards` |
-| `allocation:manage` | Edit | revenue_officer, admin | `POST /rounds`<br>`POST /rounds/:id/status`<br>`POST /rounds/:id/awards`<br>`POST /awards/:id/forfeit`<br>…and 1 more |
-| `allocation:collect` | Other | agent | `GET /rounds`<br>`GET /rounds/:id`<br>`POST /collections` |
+| `taxpayer:obligation:waive` | Other | revenue_officer, admin | `POST /taxpayers`<br>`PUT /taxpayers/:id/obligations` |
+| `group:register` | Create | agent | `POST /groups`<br>`POST /groups/:id/members`<br>`POST /groups/:id/attestation-request` |
+| `group:read:all` | View | revenue_officer, admin | `GET /groups`<br>`GET /groups/:id`<br>`GET /groups/:id/members` |
+| `group:read:own` | View | agent | `GET /groups`<br>`GET /groups/:id`<br>`GET /groups/:id/members` |
+| `group:manage` | Edit | revenue_officer, admin | `POST /government/enumeration/observations/:id/attest`<br>`POST /groups`<br>`POST /groups/:id/review`<br>`POST /groups/:id/tax-role`<br>…and 3 more |
+| `allocation:read:all` | View | revenue_officer, admin | `GET /allocations/rounds`<br>`GET /allocations/rounds/:id`<br>`GET /allocations/rounds/:id/awards` |
+| `allocation:manage` | Edit | revenue_officer, admin | `POST /allocations/rounds`<br>`POST /allocations/rounds/:id/status`<br>`POST /allocations/rounds/:id/awards`<br>`POST /allocations/awards/:id/forfeit`<br>…and 1 more |
+| `allocation:collect` | Other | agent | `GET /allocations/rounds`<br>`GET /allocations/rounds/:id`<br>`POST /allocations/collections` |
 | `taxpayer:tin_sync` | Edit | revenue_officer, admin | `GET /taxpayers/tin-outstanding`<br>`POST /taxpayers/tin-retry` |
 | `catalogue:read` | View | agent, supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/presumptive/schedule`<br>`POST /government/presumptive/preview`<br>`POST /government/presumptive/band`<br>`GET /government/search`<br>…and 4 more |
 | `catalogue:configure` | Configure | revenue_officer, admin | `POST /government/presumptive/lga-classes`<br>`POST /government/presumptive/schedule`<br>`GET /government/audit/queries/rate-changes`<br>`GET /revenue/items`<br>…and 3 more |
@@ -101,17 +101,17 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `payment:reconcile` | Configure | finance_officer | `POST /government/reconciliation/run`<br>`POST /government/reconciliation/recover`<br>`GET /government/reconciliation/awaiting-settlement`<br>`GET /government/reconciliation/exceptions`<br>…and 6 more |
 | `payment:reverse:request` | Reverse | revenue_officer, finance_officer | `POST /government/approvals` |
 | `payment:reverse:approve` | Approve | finance_officer | `POST /government/approvals/:id/execute-reversal` |
-| `receipt:read:own` | View | agent | `GET /`<br>`GET /lookup`<br>`GET /:id` |
-| `receipt:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /`<br>`GET /lookup`<br>`GET /:id`<br>decided in `services/investigation.ts` |
-| `document:read:own` | View | agent | `GET /:id` |
-| `document:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /:id`<br>decided in `services/cases.ts` |
-| `vehicle:read:all` | View | agent, supervisor, revenue_officer, finance_officer, auditor, admin | `GET /vehicles/lookup/:registrationNumber`<br>`GET /vehicles/`<br>`POST /vehicles/renewals/:renewalId/document`<br>`GET /vehicles/renewals/:renewalId` |
-| `vehicle:renew` | Create | agent | `POST /vehicles/`<br>`POST /vehicles/:id/renew`<br>`POST /vehicles/renewals/:renewalId/document` |
+| `receipt:read:own` | View | agent | `GET /receipts`<br>`GET /receipts/lookup`<br>`GET /receipts/:id` |
+| `receipt:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /receipts`<br>`GET /receipts/lookup`<br>`GET /receipts/:id`<br>decided in `services/investigation.ts` |
+| `document:read:own` | View | agent | `GET /documents/:id` |
+| `document:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /documents/:id`<br>decided in `services/cases.ts` |
+| `vehicle:read:all` | View | agent, supervisor, revenue_officer, finance_officer, auditor, admin | `GET /vehicles/lookup/:registrationNumber`<br>`GET /vehicles`<br>`POST /vehicles/renewals/:renewalId/document`<br>`GET /vehicles/renewals/:renewalId` |
+| `vehicle:renew` | Create | agent | `POST /vehicles`<br>`POST /vehicles/:id/renew`<br>`POST /vehicles/renewals/:renewalId/document` |
 | `vehicle:authority_sync` | Other | revenue_officer, finance_officer, admin | `GET /vehicles/renewals/authority-outstanding`<br>`POST /vehicles/renewals/authority-retry` |
 | `vehicle:manage` | Edit | revenue_officer, admin | `POST /vehicles/:vehicleId/status` |
 | `agent:read:own` | View | agent | — |
-| `agent:read:assigned` | View | supervisor | `GET /agents/`<br>`GET /agents/:id`<br>`GET /government/reference/territories` |
-| `agent:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/:id/kyc/documents`<br>`GET /agents/kyc/documents/:id/file`<br>`GET /agents/bank-changes`<br>`GET /agents/`<br>…and 4 more |
+| `agent:read:assigned` | View | supervisor | `GET /agents`<br>`GET /agents/:id`<br>`GET /government/reference/territories` |
+| `agent:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/:id/kyc/documents`<br>`GET /agents/kyc/documents/:id/file`<br>`GET /agents/bank-changes`<br>`GET /agents`<br>…and 4 more |
 | `agent:manage` | Edit | admin | `POST /agents/:agentId/bank/change`<br>`POST /agents/bank-changes/:approvalId/verify`<br>`POST /agents/:id/review`<br>`POST /agents/:id/activate`<br>…and 5 more |
 | `agent:approve` | Approve | admin | `POST /agents/kyc/documents/:id/review`<br>`POST /agents/:id/review`<br>`POST /agents/:id/activate`<br>`POST /agents/referees/:refereeId/review` |
 | `agent:suspend` | Configure | supervisor, revenue_officer, admin | `POST /agents/:id/suspend` |
@@ -124,7 +124,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `commission:payout:approve` | Approve | finance_officer | `POST /government/commissions/payouts/:id/approve` |
 | `report:read:own` | View | agent | — |
 | `report:read:territory` | View | supervisor | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 15 more |
-| `report:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 22 more |
+| `report:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 21 more |
 | `report:financial` | View | finance_officer, auditor | `GET /government/reconciliation/awaiting-settlement`<br>`GET /government/settlements`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
 | `dashboard:executive` | View | revenue_officer, finance_officer, admin | `GET /government/dashboard`<br>`GET /government/revenue/by-category` |
 | `fraud:read` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/leakage`<br>`GET /government/fraud/flags`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
@@ -151,7 +151,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `approval:request` | Other | agent, revenue_officer, admin | `POST /government/approvals` |
 | `approval:review` | Approve | supervisor, revenue_officer, finance_officer | `GET /agents/bank-changes`<br>`GET /government/enumeration/objections`<br>`POST /government/enumeration/objections/:id/decide`<br>`GET /government/approvals`<br>…and 2 more |
 | `approval:authorise` | Approve | supervisor, finance_officer | `GET /government/approvals`<br>`POST /government/approvals/:id/decide`<br>decided in `services/cases.ts` |
-| `system:configure` | Configure | admin | `POST /agents/app-version`<br>`GET /agents/app-version/history`<br>`POST /government/intelligence/rebuild`<br>`POST /government/presumptive/nano-policy`<br>…and 1 more |
+| `system:configure` | Configure | admin | `POST /agents/app-version`<br>`GET /agents/app-version/history`<br>`POST /government/intelligence/rebuild`<br>`POST /government/presumptive/nano-policy`<br>…and 2 more |
 | `user:manage` | Edit | admin | `GET /government/users`<br>`POST /government/users/:id/role`<br>`POST /government/users/:id/status`<br>`GET /government/users/:id/territories`<br>…and 18 more |
 
 ## C. Actions that need a second factor
@@ -168,6 +168,8 @@ Holding the permission is not enough for these: the officer confirms a one-time 
 - `financial.period.close`
 - `financial.period.reopen`
 - `audit.report.sign`
+- `device.block`
+- `device.unblock`
 
 <!-- END:GENERATED -->
 

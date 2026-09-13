@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -77,10 +77,7 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
       .get<TicketSummary[]>('/support/tickets')
       .then(setTickets)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -119,6 +116,28 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                       {ticket.ticket_number} · {categoryLabel(ticket.category, t)}
                       {ticket.message_count > 0 &&
                         ` · ${t.supRepliesCount.replace('{{n}}', String(ticket.message_count))}`}
+                      {/*
+                        * When anything last happened on it.
+                        *
+                        * The reply count above includes the agent's OWN
+                        * messages, so "2 replies" may be two things they wrote
+                        * and nothing back. It cannot answer the only question
+                        * somebody has about their own complaint — has this
+                        * moved — and `last_message_at`, which was declared
+                        * here and drawn by nothing, is what does.
+                        *
+                        * Worded as the last message rather than the last
+                        * reply, because the field says when the newest message
+                        * was posted and not who posted it. Claiming PSIRS had
+                        * answered would be reading more into it than it holds.
+                        */}
+                      {' · '}
+                      {ticket.last_message_at
+                        ? t.supLastMessage.replace(
+                            '{{when}}',
+                            formatDateTimeIn(ticket.last_message_at, t),
+                          )
+                        : t.supNoMessagesYet}
                     </p>
                   </div>
                   <Badge status={ticket.status} />
@@ -163,7 +182,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       });
       navigate(`/support/${created.id}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -279,7 +298,9 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -299,7 +320,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       if (result.reopened) setNotice(t.supReopenedNotice);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

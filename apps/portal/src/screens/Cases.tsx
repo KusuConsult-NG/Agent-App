@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ApiRequestError, api, can, uploadFile, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, uploadFile, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -157,7 +157,7 @@ function CaseQueue({
     try {
       setRows(await api.get<CaseRow[]>(`/government/cases?${params.toString()}`));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [filters]);
 
@@ -313,6 +313,21 @@ function CaseQueue({
                   row.transaction_reference ?? row.agent_code ?? row.taxpayer_name ?? '—',
               },
               {
+                /*
+                 * Whether there is anything to decide on.
+                 *
+                 * A case with no evidence attached cannot be concluded, and
+                 * looked exactly like one with ten files behind it. The count
+                 * was computed and drawn nowhere. Zero is the reading that
+                 * matters, so it is said rather than left as a blank.
+                 */
+                key: 'evidence_count',
+                label: 'ofcCwEvidence',
+                numeric: true,
+                render: (row: CaseRow) =>
+                  Number(row.evidence_count) > 0 ? row.evidence_count : t.ofcCwNoEvidence,
+              },
+              {
                 key: 'due_at',
                 label: 'ofcCwDue',
                 render: (row: CaseRow) =>
@@ -381,7 +396,7 @@ function OpenCaseForm({
       });
       onOpened(created.id);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -561,7 +576,7 @@ function CaseDetail({
     try {
       setDetail(await api.get<CaseDetailBody>(`/government/cases/${caseId}`));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, [caseId]);
 
@@ -816,7 +831,7 @@ function CaseControls({
       await action();
       await onDone(message);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1165,7 +1180,7 @@ export function MyWorkScreen({ user }: { user: User }) {
       .get<MyWork>('/government/my-work')
       .then(setWork)
       .catch((caught) =>
-        setError(caught instanceof ApiRequestError ? caught.error : null),
+        setError(asApiError(caught)),
       );
   }, []);
 
@@ -1449,7 +1464,7 @@ function EvidenceUpload({
               setProvenance('');
               await onUploaded(t.ofcCwSaved);
             } catch (caught) {
-              setError(caught instanceof ApiRequestError ? caught.error : null);
+              setError(asApiError(caught));
             } finally {
               setBusy(false);
             }

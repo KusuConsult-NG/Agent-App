@@ -4,6 +4,11 @@
  * Phone/password plus OTP, device binding for agents, and step-up grants for
  * high-risk actions. Refresh tokens and OTPs are stored only as hashes, and a
  * refresh rotates its token so a stolen one is usable at most once.
+ *
+ * "Stored only as hashes" was true of `otp_codes` and false of the database:
+ * the SMS carrying the code was kept in full in `notifications.message`, which
+ * nothing deletes, so the plaintext sat beside its own hash permanently. See
+ * `secretVariables` in services/notifications.ts and migration 079.
  */
 
 import type { PoolClient } from 'pg';
@@ -713,6 +718,10 @@ export async function requestOtp(params: {
       recipientOverride: params.destination,
       channels: ['SMS'],
       variables: { code, purpose: params.purpose, minutes: String(config.auth.otpTtlSeconds / 60) },
+      // `otp_codes` above stores sha256(code) and not the code. Rendering it
+      // into the retained SMS body put it back, unhashed, in the same
+      // database — and nothing has ever deleted a notification.
+      secretVariables: ['code'],
     });
   });
 

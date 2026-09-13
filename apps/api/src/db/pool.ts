@@ -121,7 +121,9 @@ export async function withTransaction<T>(
       log.warn('transaction conflict, retrying', {
         component: 'db',
         attempt,
-        code: String((error as { code?: unknown }).code),
+        // `sqlState` rather than `code`, for the reason in `logger.ts`: this
+        // is 40001, and a key spelled `code` reached the log as [redacted].
+        sqlState: String((error as { code?: unknown }).code),
       });
       // Back off with jitter, so two transactions that just collided do not
       // wake together and collide again.

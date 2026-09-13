@@ -90,6 +90,24 @@ export interface RecordObservationParams {
    * another, and this is what lets somebody answer them.
    */
   bandAtCapture?: SizeBand | null;
+  /**
+   * When the agent stood in front of the business, where that is not now.
+   *
+   * An officer recording an observation is looking at the stall as they type,
+   * so the column's `now()` default is the truth and this is left unset. A
+   * capture taken without a signal is not: it reaches the platform whenever
+   * the handset next finds one, which in a market town is days.
+   *
+   * `observed_at` is not decoration. `disagreements` decides which of two
+   * observations the State believes by comparing them — a second visit is a
+   * second row and the later one stands — so dating a capture at the moment
+   * it arrived rather than the moment it was taken reorders the visits. A
+   * Monday capture synced on Friday superseded an officer's own Wednesday
+   * visit, and the trader's band was set from the older of the two. The
+   * recording moment is not lost by this; `created_at` is it, and the pair is
+   * what the two columns are for.
+   */
+  observedAt?: Date;
 }
 
 export interface Observation {
@@ -126,6 +144,31 @@ export async function recordObservation(
   if (params.equipmentCount < 0 || params.peopleWorking < 0) {
     throw badRequest('An observation cannot be a negative number.');
   }
+
+  /*
+   * A capture cannot have been taken later than it arrived.
+   *
+   * The only date this accepts comes off a handset, and a handset's clock is
+   * whatever the person carrying it last set. Most wrong values here are
+   * merely untidy — a capture dated too early is superseded by the next one,
+   * which is what would have happened anyway. One is not. A date in the
+   * future sorts ahead of every observation anybody makes until it passes, so
+   * a single fast phone would pin a trader's band to one visit and leave
+   * every later one unable to displace it, including an officer's, standing
+   * in the shop.
+   *
+   * Taken as now rather than refused, because a refusal costs an agent the
+   * capture's journey and this costs nothing: arrival is what the platform
+   * recorded for every offline capture before this, so the worst case is the
+   * behaviour that was there already. What the handset claimed is not lost —
+   * `offline_drafts.captured_at` holds it, unedited, next to the draft it
+   * came on. That is the same arrangement `band_at_capture` makes for the
+   * size the handset showed: the platform concludes, the handset's answer
+   * stays beside it, and a disagreement is on the record rather than
+   * discovered later by somebody who was told one thing.
+   */
+  const observedAt =
+    params.observedAt && params.observedAt.getTime() <= Date.now() ? params.observedAt : null;
 
   return withTransaction(async (client) => {
     const taxpayer = await queryOne<{ id: string; lga_id: string; status: string }>(
@@ -169,8 +212,8 @@ export async function recordObservation(
       `INSERT INTO presumptive_observations
          (taxpayer_id, premises, equipment_count, people_working, economic_sector,
           lga_id, observed_by, agent_id, latitude, longitude, group_id, attestation_state,
-          band_at_capture)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+          band_at_capture, observed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,COALESCE($14, now()))
        RETURNING id, observed_at`,
       [
         params.taxpayerId,
@@ -186,6 +229,7 @@ export async function recordObservation(
         params.groupId ?? null,
         params.groupId ? 'PENDING' : 'NOT_SOUGHT',
         params.bandAtCapture ?? null,
+        observedAt,
       ],
     );
 
@@ -469,6 +513,43 @@ export async function assessFromObservation(
          * assessment, so what somebody was charged at is re-checkable.
          */
       });
+      /*
+       * The charge that was actually raised, against the figure this service
+       * is about to record and put in front of the trader.
+       *
+       * These are two different computations of one number and nothing made
+       * them agree. The trace explains one per cent of the schedule figure,
+       * computed here; the invoice is whatever the rate engine made of the
+       * catalogue row — a rate an officer can publish a new version of, with a
+       * statutory minimum and maximum this file knows nothing about, applied
+       * at whatever rate is in force on the day rather than the one written
+       * above. Measured with a 2% rate version published through the ordinary
+       * catalogue route: the assessment recorded 4,800,000 kobo and the trader
+       * was billed 9,600,001.
+       *
+       * Refusing is the only defensible answer. Recording the engine's figure
+       * would leave the trace explaining a rate nobody applied, and recording
+       * this one leaves the State collecting a sum its own notice contradicts.
+       * Either way somebody is being billed a number that is not the number
+       * they were shown, which is the accusation this whole regime exists to
+       * be able to answer. So nothing is issued, and the officer is told which
+       * two figures disagree.
+       *
+       * The throw is inside the transaction, so the assessment, the invoice
+       * and the observation's assessed state all roll back together.
+       */
+      if (raised.amountKobo !== BigInt(computation.annualTaxKobo)) {
+        throw conflict(
+          'PRESUMPTIVE_CHARGE_DISAGREES',
+          `This assessment would explain ${computation.annualTaxKobo} kobo and bill ` +
+            `${raised.amountKobo} kobo. The presumptive regime is one per cent of the ` +
+            `published assumed turnover, and the revenue catalogue is charging something ` +
+            'else, so no notice can be issued that is true about both.',
+          `Bring the PIT-PRESUMPTIVE-${computation.sizeBand} catalogue rate back into line ` +
+            'with the presumptive regulation, or amend the regulation.',
+        );
+      }
+
       assessmentId = raised.assessmentId;
       invoiceNumber = raised.invoiceNumber;
     }

@@ -1,7 +1,7 @@
 /** Agent home screen (PRD §29, §56). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
@@ -64,7 +64,7 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
         setError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, []);

@@ -30,12 +30,80 @@ function required(name: string, fallback?: string): string {
 }
 
 /**
+ * Every secret value this repository publishes, which production must refuse.
+ *
+ * The header above has always promised that production "refuses to start if a
+ * security-critical secret is missing **or left at a development default**".
+ * Only the first half was implemented: `secret()` asked whether the value was
+ * at least 32 characters and nothing else, and every placeholder below is
+ * padded past 32 characters precisely so that it passes.
+ *
+ * `docker-compose.yml` set `NODE_ENV: production` and supplied three of them
+ * as `${VAR:-<placeholder>}` defaults, so `docker compose up` with no `.env`
+ * started a production-mode platform whose JWT signing key is printed in this
+ * file's own repository. A known signing key is not a weak one: it mints an
+ * access token for any role, for anybody who can read a public git history.
+ *
+ * An exact list rather than a cleverer rule. "Looks like a placeholder" would
+ * one day refuse a real, correctly generated secret at three in the morning
+ * during a recovery, and a check that cries wolf gets switched off.
+ * `a-secret-this-repository-publishes.test.ts` reads the files below and fails
+ * if any of them grows a value that is not here, which is what keeps an exact
+ * list from rotting.
+ */
+export const PUBLISHED_SECRETS: ReadonlySet<string> = new Set([
+  /*
+   * Formerly the `${VAR:-...}` defaults in docker-compose.yml, which now
+   * refuses to start rather than supplying one. Kept, and kept first, because
+   * removing them from that file does not unpublish them: they are in this
+   * repository's history, and in the `.env` of anybody who copied the file
+   * while they were there. A value that has been public once stays on this
+   * list.
+   */
+  'psirs_development_secret_key_minimum_32_characters_long_12345',
+  'psirs_identity_hash_secret_minimum_32_chars_12345',
+  'psirs_payment_webhook_secret_minimum_32_chars',
+  // .env.production.example
+  'GENERATE_STRONG_RANDOM_SECRET_KEY_MIN_32_CHARS_A1B2C3D4E5F6',
+  'GENERATE_LONG_LIVED_HMAC_SECRET_FOR_NIN_HASHING_123456789',
+  'REMITA_OR_GATEWAY_WEBHOOK_HMAC_SECRET_SIGNING_KEY_32CHARS',
+  // scripts/uat/stack.sh
+  'uat-jwt-secret-value-long-enough-for-32ch',
+  'uat-identity-secret-long-enough-for-32ch',
+  'uat-webhook-secret-long-enough-for-32chars',
+  // scripts/browser-test.sh
+  'browser-test-jwt-secret-value-long-enough-32',
+  'browser-test-identity-secret-long-enough-32',
+  'browser-test-webhook-secret-long-enough-32',
+  // .github/workflows/ci.yml and deploy.yml
+  'ci-jwt-secret-value-that-is-long-enough-32',
+  'ci-identity-hash-secret-long-enough-32',
+  'ci-payment-webhook-secret-long-enough-32',
+  // .github/workflows/integration-verification.yml
+  'verification-run-jwt-secret-long-enough-32',
+  'verification-run-identity-secret-long-32',
+  'verification-run-webhook-secret-long-32',
+]);
+
+/**
  * Secrets get a random per-process value outside production so local runs and
  * tests work without setup, while production demands a real, explicitly
  * provisioned value.
  */
 function secret(name: string): string {
   const value = process.env[name];
+  /*
+   * Checked only in production, so that the UAT stack and the browser tests —
+   * which set these on purpose, under NODE_ENV=development — keep the value
+   * they chose rather than silently getting a fresh random one per process.
+   */
+  if (isProduction && value && PUBLISHED_SECRETS.has(value)) {
+    throw new Error(
+      `Configuration error: ${name} is set to a placeholder that is published in this ` +
+        'repository, so it is known to anyone who can read it. Generate a real secret ' +
+        "(openssl rand -hex 32) and set it in this deployment's environment.",
+    );
+  }
   if (value && value.length >= 32) return value;
   if (isProduction) {
     throw new Error(

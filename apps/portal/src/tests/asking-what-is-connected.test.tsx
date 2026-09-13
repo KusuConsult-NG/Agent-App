@@ -103,6 +103,8 @@ function stubApi() {
     asked.push(path);
     if (path.startsWith('/reference/lgas')) return [{ id: 'lga-1', name: 'Jos North' }] as never;
     if (path.startsWith('/government/intelligence/leads')) return LEADS as never;
+    // The access log and the record share a prefix and are different shapes.
+    if (path.includes('/access-log')) return [] as never;
     if (path.startsWith('/government/intelligence/taxpayers/')) return RECORD as never;
     return [] as never;
   });

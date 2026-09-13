@@ -14,10 +14,12 @@
  */
 
 import type { PoolClient } from 'pg';
-import { parseKobo } from '@psirs/shared';
+import { formatNaira, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, notFound } from '../lib/errors';
+import { endOfDay } from '../lib/calendar-day';
 import { recordAudit } from './audit';
 
 export interface ComplianceBreakdown {
@@ -41,6 +43,7 @@ export async function computeComplianceScore(
     paid_count: string;
     late_count: string;
     outstanding_kobo: string;
+    disputed_kobo: string;
     distinct_periods: string;
     assessed_periods: string;
     last_payment_at: Date | null;
@@ -57,6 +60,21 @@ export async function computeComplianceScore(
        COALESCE((SELECT SUM(total_amount_kobo - amount_paid_kobo) FROM invoices
                   WHERE taxpayer_id = $1 AND status IN ('UNPAID','PARTIALLY_PAID')), 0)::text
          AS outstanding_kobo,
+       /*
+        * And how much of that is suspended, because it is under objection.
+        *
+        * Same rule the arrears worklist applies in its collectable CTE,
+        * computed in
+        * the same pass as the total so the two cannot drift: an OPEN objection
+        * against the presumptive assessment behind the invoice. Recorded
+        * separately rather than netted off here, because the receivables
+        * report sums the total and disputed money is still owed until somebody
+        * decides the objection — see migration 078.
+        */
+       COALESCE((SELECT SUM(i.total_amount_kobo - i.amount_paid_kobo) FROM invoices i
+                  WHERE i.taxpayer_id = $1 AND i.status IN ('UNPAID','PARTIALLY_PAID')
+                    AND ${UNDER_OPEN_OBJECTION_SQL}), 0)::text
+         AS disputed_kobo,
        /*
         * An assessment with no period label is still a period.
         *
@@ -180,18 +198,43 @@ export async function computeComplianceScore(
   }
 
   const outstanding = parseKobo(stats?.outstanding_kobo ?? '0');
-  if (outstanding === 0n) {
+  const disputed = parseKobo(stats?.disputed_kobo ?? '0');
+
+  /*
+   * What is owed and not suspended.
+   *
+   * The score is read as a judgement about conduct and it gates incentive
+   * programmes, so it is enforcement in everything but name. An assessment
+   * under objection is not something the taxpayer is refusing to pay — it is
+   * something the State has agreed not to pursue until it has decided whether
+   * the bill is right. Docking somebody for that makes objecting expensive,
+   * which is the one thing an objection window may not be.
+   */
+  const enforceable = outstanding - disputed;
+  if (enforceable <= 0n) {
     score += 25;
     components.push({
       factor: 'No outstanding liabilities',
       points: 25,
-      detail: 'No unpaid invoices on record',
+      detail:
+        disputed > 0n
+          ? `Nothing enforceable; ${formatNaira(disputed)} is under objection`
+          : 'No unpaid invoices on record',
     });
   } else {
     components.push({
       factor: 'Outstanding liabilities',
       points: 0,
-      detail: `₦${(outstanding / 100n).toString()} outstanding across unpaid invoices`,
+      /*
+       * Through the primitive, like every other money string on this server.
+       *
+       * Both of these read `₦${(x / 100n).toString()}`. Integer division
+       * truncates, so a taxpayer owing ₦1,234.56 was told "₦1234 outstanding"
+       * — understated, unseparated, and on the line that explains why their
+       * compliance score is what it is. `formatNaira` is what the receipts,
+       * the reminders and the rate-engine trace all use.
+       */
+      detail: `${formatNaira(enforceable)} outstanding across unpaid invoices`,
     });
   }
 
@@ -229,9 +272,9 @@ export async function computeComplianceScore(
   await client.query(
     `INSERT INTO taxpayer_compliance
        (taxpayer_id, score, on_time_payments, late_payments, compliant_periods,
-        assessments_raised, outstanding_amount_kobo, has_valid_tin, last_payment_at,
-        score_breakdown, computed_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,now())
+        assessments_raised, outstanding_amount_kobo, disputed_amount_kobo, has_valid_tin,
+        last_payment_at, score_breakdown, computed_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,now())
      ON CONFLICT (taxpayer_id) DO UPDATE SET
        score = EXCLUDED.score,
        on_time_payments = EXCLUDED.on_time_payments,
@@ -239,6 +282,7 @@ export async function computeComplianceScore(
        compliant_periods = EXCLUDED.compliant_periods,
        assessments_raised = EXCLUDED.assessments_raised,
        outstanding_amount_kobo = EXCLUDED.outstanding_amount_kobo,
+       disputed_amount_kobo = EXCLUDED.disputed_amount_kobo,
        has_valid_tin = EXCLUDED.has_valid_tin,
        last_payment_at = EXCLUDED.last_payment_at,
        score_breakdown = EXCLUDED.score_breakdown,
@@ -251,6 +295,7 @@ export async function computeComplianceScore(
       periods,
       raised,
       outstanding.toString(),
+      disputed.toString(),
       hasTin,
       stats?.last_payment_at ?? null,
       JSON.stringify(components),
@@ -466,9 +511,11 @@ export async function evaluateEligibility(
     const detail = await queryOne<{
       compliant_periods: number;
       outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
     }>(
       client,
-      'SELECT compliant_periods, outstanding_amount_kobo FROM taxpayer_compliance WHERE taxpayer_id = $1',
+      `SELECT compliant_periods, outstanding_amount_kobo, disputed_amount_kobo
+         FROM taxpayer_compliance WHERE taxpayer_id = $1`,
       [params.taxpayerId],
     );
 
@@ -485,7 +532,22 @@ export async function evaluateEligibility(
       eligible = false;
       reasons.push('The programme has not opened yet');
     }
-    if (programme.end_date && programme.end_date < now) {
+    /*
+     * Through the end of the closing day, not the start of it.
+     *
+     * `end_date` is a DATE, so `pg` returns midnight at the start of the day
+     * the programme closes. Compared raw against `now`, an amnesty ran out at
+     * 00:00 on its final date and told every applicant for the whole of that
+     * day that it had closed — the day the radio announcements and the SMS
+     * reminders all name, and the day people therefore turn up. The schema's
+     * own `end_date >= start_date` check permits a one-day programme, which
+     * under that comparison was never open at all.
+     *
+     * The opening end needed no such treatment: `start_date > now` is false
+     * from midnight, so the first day was already included. The window was
+     * inclusive at one end and exclusive at the other.
+     */
+    if (programme.end_date && endOfDay(programme.end_date) < now) {
       eligible = false;
       reasons.push('The programme has closed');
     }
@@ -604,7 +666,21 @@ export async function evaluateEligibility(
       );
     }
 
-    if (programme.requires_no_arrears && parseKobo(detail?.outstanding_amount_kobo ?? '0') > 0n) {
+    /*
+     * Arrears the State is actually pursuing, not arrears it has suspended.
+     *
+     * Withholding a benefit to induce payment is enforcement, whatever it is
+     * called here, and an open objection suspends enforcement. Counting a
+     * disputed assessment against somebody at this gate puts a price on
+     * objecting: a trader who says the estimate is wrong loses a fertiliser
+     * entitlement for as long as PSIRS takes to decide whether they were
+     * right. Netting the disputed part off is what makes the objection window
+     * free to use, which is the only kind worth having.
+     */
+    const enforceableArrears =
+      parseKobo(detail?.outstanding_amount_kobo ?? '0') -
+      parseKobo(detail?.disputed_amount_kobo ?? '0');
+    if (programme.requires_no_arrears && enforceableArrears > 0n) {
       shortfalls.push('There are outstanding revenue obligations');
     } else if (programme.requires_no_arrears) {
       reasons.push('No outstanding revenue obligations');

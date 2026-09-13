@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { enumLabel, formatNaira, localName } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, BarList, Empty, ErrorAlert, Growth, KeyValue, Loading, Money, Sparkline, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -87,7 +87,7 @@ export function DashboardScreen({ navigate }: { navigate: (path: string) => void
       .get<Dashboard>('/government/dashboard')
       .then(setData)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -535,10 +535,7 @@ export function IntelligenceScreen() {
       .get<GeoRow[]>(`/government/intelligence/geography?${params.toString()}`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        else if (caught instanceof Error) {
-          setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setError(asApiError(caught));
       });
   }, [drill]);
 

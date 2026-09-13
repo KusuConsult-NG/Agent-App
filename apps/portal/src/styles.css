@@ -1082,7 +1082,19 @@ td.meta {
 
 .global-search__title { font-weight: 650; font-size: 0.88rem; }
 .global-search__amount { font-weight: 650; font-size: 0.85rem; }
-.global-search__subtitle { grid-column: 2 / -1; font-size: 0.78rem; color: var(--muted); }
+.global-search__subtitle {
+  grid-column: 2 / -1;
+  font-size: 0.78rem;
+  color: var(--muted);
+  /* The badge sits on the same line as the subtitle, so the row still wraps
+     as one meta line rather than becoming a second block. */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.global-search__when { font-variant-numeric: tabular-nums; }
 
 @media (max-width: 900px) {
   .global-search { margin: 10px 0 0; max-width: none; }

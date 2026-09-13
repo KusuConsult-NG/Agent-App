@@ -36,7 +36,15 @@ async function main(): Promise<void> {
     if (page.entriesChecked < PAGE) break;
     from += PAGE;
   }
-  console.log(`valid: ${checked} entries replayed end to end`);
+  /*
+   * "End to end" of what is there, which is not the same as "nothing is
+   * missing". Entries cut from the end of the log leave a shorter chain that
+   * replays perfectly, so the line names where it stopped: that number, kept
+   * from run to run, is what makes a shortened log visible.
+   */
+  console.log(
+    `intact: ${checked} entries replayed, none altered or missing, up to sequence ${total?.max}`,
+  );
   await closePool();
 }
 

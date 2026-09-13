@@ -165,10 +165,17 @@ describe('asking for a statement', () => {
      * carries no code, because it is the same whether or not a record was
      * found. Reading it from the SMS also proves the thing the citizen
      * depends on: that the code reached the handset rather than merely a row.
+     *
+     * `COALESCE(secret_message, message)` is what the gateway is handed.
+     * Since migration 079 the retained `message` has the code masked, because
+     * `otp_codes` keeps only sha256(code) and holding the plaintext beside it
+     * made that hash decorative. Reading the deliverable column is the more
+     * faithful version of what this assertion was always for: the text the
+     * handset receives, not the text the database keeps.
      */
     const sms = await queryOne<{ message: string; recipient: string }>(
       pool,
-      `SELECT message, recipient FROM notifications
+      `SELECT COALESCE(secret_message, message) AS message, recipient FROM notifications
         WHERE channel = 'SMS' AND recipient = $1
         ORDER BY created_at DESC LIMIT 1`,
       [ON_THE_RECORD],

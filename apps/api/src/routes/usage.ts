@@ -99,9 +99,25 @@ usageRouter.get(
   }),
 );
 
+/**
+ * Run the retention sweep by hand.
+ *
+ * `system:configure`, not `report:read:all`. The body of this is `DELETE FROM
+ * usage_events WHERE occurred_at < now() - interval`, and it was gated by a
+ * permission the portal classifies READ_ONLY and that revenue_officer,
+ * finance_officer, auditor and admin all hold. An auditor could delete rows —
+ * the role whose read-only standing `apps/portal/src/lib/permissions.ts` calls
+ * "part of the control environment" and advertises with `isReadOnly`.
+ *
+ * Nothing lost a caller by tightening it. The scheduler in `server.ts` calls
+ * `expireOldEvents(pool)` directly rather than over HTTP, and
+ * `officer-actions-reachable.test.ts` already lists this path as
+ * SCHEDULED_ONLY, meaning no officer screen reaches it. What is left is an
+ * administrator's lever, which is what it now takes.
+ */
 usageRouter.post(
   '/expire',
-  requirePermission('report:read:all'),
+  requirePermission('system:configure'),
   asyncHandler(async (_req, res) => {
     res.json(await usage.expireOldEvents(pool));
   }),

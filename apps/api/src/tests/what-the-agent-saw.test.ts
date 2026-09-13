@@ -55,6 +55,12 @@ import {
   type Observations,
 } from '../services/presumptive';
 import { arrearsWorklist } from '../services/arrears';
+import { sendDueReminders } from '../services/reminders';
+import {
+  createProgramme,
+  evaluateEligibility,
+  syncTaxpayerComplianceAndIncentives,
+} from '../services/incentives';
 
 let auth: { token: string; deviceId: string };
 let officerId: string;
@@ -463,6 +469,111 @@ describe('the disagreement queue', () => {
       [first.id],
     );
     assert.equal(kept!.attestation_state, 'DISAGREED');
+  });
+});
+
+// ===========================================================================
+describe('a capture that was taken days before it arrived', () => {
+  /*
+   * The visit is what is dated, not the sync.
+   *
+   * `observed_at` took the column's `now()` default and the sync endpoint
+   * dropped the `capturedAt` every draft carries, so an observation made in a
+   * market with no signal was dated at the moment the handset next found one.
+   * Arrival order is not visit order, and the queue above decides which of two
+   * observations the State believes by comparing exactly this column.
+   */
+  it('does not let a capture taken before a visit displace the visit', async () => {
+    const taxpayer = await trader('Visited twice');
+    const group = await guild();
+
+    // Monday, in the market, no signal. The capture waits on the handset.
+    const monday = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+
+    // Wednesday: an officer goes in person, and the guild disagrees with them.
+    const visit = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: visit.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.ok(disagreementsHas(await disagreements(pool), visit.id), 'on the queue first');
+
+    // Friday: the handset finds a signal and Monday's capture arrives.
+    const arrived = await recordObservation(pool, {
+      taxpayerId: taxpayer,
+      ...TAILOR,
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+      observedAt: monday,
+    });
+
+    const stored = await queryOne<{ observed_at: Date; created_at: Date }>(
+      pool,
+      'SELECT observed_at, created_at FROM presumptive_observations WHERE id = $1',
+      [arrived.id],
+    );
+    assert.equal(
+      stored!.observed_at.getTime(),
+      monday.getTime(),
+      'dated when the agent stood in front of the business',
+    );
+    assert.ok(
+      stored!.created_at.getTime() > stored!.observed_at.getTime(),
+      'and recorded when it reached the platform, which is the other column',
+    );
+
+    assert.ok(
+      disagreementsHas(await disagreements(pool), visit.id),
+      'a capture taken before the visit must not settle a disagreement raised after it',
+    );
+  });
+
+  /*
+   * The one wrong date with a lasting consequence.
+   *
+   * A handset's clock is whatever its owner last set. A capture dated too
+   * early is superseded by the next observation, which is what would have
+   * happened anyway; one dated in the future sorts ahead of every observation
+   * anybody makes until that date passes, so a single fast phone would pin a
+   * trader's band to one visit and leave an officer standing in the shop
+   * unable to displace it.
+   */
+  it('takes a capture dated in the future as having been made on arrival', async () => {
+    const taxpayer = await trader('Fast handset');
+    const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const arrived = await recordObservation(pool, {
+      taxpayerId: taxpayer,
+      ...TAILOR,
+      actorId: officerId,
+      actorRole: 'admin',
+      observedAt: nextMonth,
+    });
+
+    const stored = await queryOne<{ observed_at: Date }>(
+      pool,
+      'SELECT observed_at FROM presumptive_observations WHERE id = $1',
+      [arrived.id],
+    );
+    assert.ok(
+      stored!.observed_at.getTime() < nextMonth.getTime(),
+      'an observation cannot have been made next month',
+    );
+
+    // Which is the point of it: a real visit afterwards still stands.
+    const later = await observe(taxpayer, { premises: 'STALL' });
+    const newest = await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM presumptive_observations
+        WHERE taxpayer_id = $1 ORDER BY observed_at DESC LIMIT 1`,
+      [taxpayer],
+    );
+    assert.equal(newest!.id, later.id, 'the visit made today is what the State believes');
   });
 });
 
@@ -1163,6 +1274,128 @@ describe('the statutory rate is in one place', () => {
       'and the charge is that rate applied to the schedule figure',
     );
   });
+
+  /*
+   * The figure on the notice and the figure on the bill are two different
+   * computations, and until this they were only ever compared by eye.
+   *
+   * `annual_tax_kobo` is what the trace explains at the stall, what an
+   * objection is decided against, and what the arrears worklist reads. The
+   * money owed is whatever the rate engine made of the revenue catalogue when
+   * the invoice was raised. Nothing tied them together, and they came apart
+   * in two different ways.
+   */
+  it('records the same figure it bills, on a schedule that is not a whole naira', async () => {
+    /*
+     * `assumed_annual_turnover_kobo` is a BIGINT of kobo with no whole-naira
+     * constraint, so a published schedule may carry ...050. At that figure the
+     * service's own `(assumed * 100n) / 10_000n` truncated to 4,800,000 while
+     * `applyBasisPoints` — which the rate engine bills through — rounded to
+     * 4,800,001. The trader was shown one and billed the other.
+     *
+     * MEDIUM because the fixture publishes MICRO and SMALL, and a BUILDING
+     * floors the band there.
+     */
+    await publishScheduleEntry(pool, {
+      economicSector: 'ARTISAN_CRAFT',
+      sizeBand: 'MEDIUM',
+      lgaClass: 'A',
+      assumedAnnualTurnoverKobo: '480000050',
+      instrumentReference: 'Plateau State Revenue (Presumptive Assessment) Regulation 2026',
+      effectiveFrom: '2026-01-01',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    const taxpayer = await trader('Half Kobo');
+    const observation = await observe(taxpayer, { premises: 'BUILDING' });
+    const result = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.equal(result.sizeBand, 'MEDIUM', 'the fixture must reach the unrounded schedule row');
+
+    const billed = await queryOne<{ amount_kobo: string }>(
+      pool,
+      `SELECT amount_kobo FROM assessments
+        WHERE id = (SELECT assessment_id FROM presumptive_assessments WHERE id = $1)`,
+      [result.id],
+    );
+
+    assert.equal(
+      billed!.amount_kobo,
+      result.annualTaxKobo,
+      'the invoice must bill exactly what the assessment says is owed',
+    );
+
+    // And the sentence the trader is read at the stall must carry that figure
+    // too, or the explanation is of a number nobody is charging.
+    const step = result.trace.find((entry) => entry.step.includes('1%'));
+    assert.equal(step?.amountKobo, billed!.amount_kobo, 'the trace must explain the sum billed');
+  });
+
+  it('refuses to assess at all when the catalogue is charging a different rate', async () => {
+    /*
+     * A rate version is publishable through the ordinary catalogue route, and
+     * carries a statutory minimum and maximum besides. None of that reaches
+     * `computePresumptive`, which explains one per cent from a constant. With
+     * a 2% version in force the notice said 4,800,000 kobo and the trader was
+     * billed 9,600,001 — double, with the notice in their hand saying
+     * otherwise.
+     *
+     * No rounding rule reconciles that, and neither figure may be quietly
+     * preferred: recording the engine's leaves the trace explaining a rate
+     * nobody applied, and recording the regime's leaves the State collecting a
+     * sum its own notice contradicts. So nothing is issued.
+     */
+    const item = await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM revenue_items WHERE code = 'PIT-PRESUMPTIVE-SMALL'`,
+      [],
+    );
+    const current = await queryOne<{ id: string; version: number }>(
+      pool,
+      `SELECT id, version FROM revenue_item_rates
+        WHERE revenue_item_id = $1 AND effective_to IS NULL AND lga_id IS NULL
+        ORDER BY version DESC LIMIT 1`,
+      [item!.id],
+    );
+    await query(pool, 'UPDATE revenue_item_rates SET effective_to = now() WHERE id = $1', [
+      current!.id,
+    ]);
+    await query(
+      pool,
+      `INSERT INTO revenue_item_rates
+         (revenue_item_id, lga_id, version, rate_type, rate_basis_points, effective_from, created_by)
+       VALUES ($1, NULL, $2, 'PERCENTAGE', 200, now(), $3)`,
+      [item!.id, current!.version + 1, officerId],
+    );
+
+    const taxpayer = await trader('Rate Adrift');
+    const observation = await observe(taxpayer);
+    await assert.rejects(
+      assessFromObservation(pool, {
+        observationId: observation.id,
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      (error: { code?: string }) => error.code === 'PRESUMPTIVE_CHARGE_DISAGREES',
+      'a notice that explains one figure and bills another must not be issued',
+    );
+
+    // And the refusal must take the invoice down with it. A rolled-back
+    // assessment that left a live bill behind would be the same defect with
+    // the paperwork missing.
+    const orphan = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM assessments a
+         JOIN taxpayers t ON t.id = a.taxpayer_id
+        WHERE t.id = $1`,
+      [taxpayer],
+    );
+    assert.equal(orphan!.count, '0', 'the refusal must leave no assessment behind');
+  });
 });
 
 describe('who may do what', () => {
@@ -1770,5 +2003,232 @@ describe('the other cells of the schedule', () => {
       [observation.id],
     );
     assert.equal(stored!.group_id, association);
+  });
+});
+
+/*
+ * What objecting costs a trader, which must be nothing.
+ *
+ * An open objection suspends enforcement. `collectable` in the arrears
+ * worklist honours that and always has. Three other readers did not, because
+ * they all read `taxpayer_compliance.outstanding_amount_kobo`, which counted
+ * the disputed invoice like any other: the incentive arrears gate, the
+ * compliance score, and the public citizen portal.
+ *
+ * A price on objecting — unadvertised, and levied over a bill the objection
+ * may be about to overturn — is the one thing an objection window may not
+ * have.
+ */
+describe('an objection costs the trader nothing while it is open', () => {
+  async function objectingTrader(name: string) {
+    const taxpayer = await trader(name);
+    const observation = await observe(taxpayer);
+    const assessment = await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await raiseObjection(pool, {
+      presumptiveAssessmentId: assessment.id,
+      ground: 'FACTS_WRONG',
+      statement: 'I have one machine, not two, and nobody works with me.',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await syncTaxpayerComplianceAndIncentives(pool, taxpayer);
+    return taxpayer;
+  }
+
+  it('records the disputed part beside the total rather than instead of it', async () => {
+    const taxpayer = await objectingTrader('Books Straight');
+    const row = await queryOne<{
+      outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
+    }>(
+      pool,
+      `SELECT outstanding_amount_kobo, disputed_amount_kobo
+         FROM taxpayer_compliance WHERE taxpayer_id = $1`,
+      [taxpayer],
+    );
+
+    /*
+     * The gross figure must not move: the receivables report sums it per LGA
+     * to answer "what is the State owed", and disputed money is still owed
+     * until somebody decides the objection. Narrowing it would make a finance
+     * report understate the State's own book.
+     */
+    assert.equal(
+      row!.outstanding_amount_kobo,
+      '4800000',
+      'the receivable is unchanged by the objection',
+    );
+    assert.equal(
+      row!.disputed_amount_kobo,
+      '4800000',
+      'and all of it is recorded as suspended from enforcement',
+    );
+  });
+
+  it('does not disqualify the objector from a programme that requires no arrears', async () => {
+    const taxpayer = await objectingTrader('Fertiliser Wanted');
+
+    const { programmeId } = await createProgramme({
+      input: {
+        name: 'Dry Season Fertiliser Subsidy',
+        code: `FERT-${Date.now()}`,
+        benefitType: 'INPUT_SUBSIDY',
+        minimumScore: 0,
+        minimumCompliancePeriods: 0,
+        requiresNoArrears: true,
+        startDate: '2026-01-01',
+        approvalAuthority: 'Plateau State Executive Council',
+      },
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    // A programme is created DRAFT; only an ACTIVE one is evaluated on merit.
+    await query(pool, `UPDATE incentive_programmes SET status = 'ACTIVE' WHERE id = $1`, [
+      programmeId,
+    ]);
+
+    const verdict = await evaluateEligibility({ programmeId, taxpayerId: taxpayer });
+    assert.ok(
+      !verdict.reasons.includes('There are outstanding revenue obligations'),
+      `objecting must not cost an entitlement; reasons were ${JSON.stringify(verdict.reasons)}`,
+    );
+    assert.equal(
+      verdict.eligible,
+      true,
+      `and the programme must actually be granted; reasons were ${JSON.stringify(verdict.reasons)}`,
+    );
+  });
+
+  it('scores the trader on what is enforceable, not on what is disputed', async () => {
+    const taxpayer = await objectingTrader('Scored Fairly');
+    const row = await queryOne<{ score: number; score_breakdown: unknown }>(
+      pool,
+      'SELECT score, score_breakdown FROM taxpayer_compliance WHERE taxpayer_id = $1',
+      [taxpayer],
+    );
+    const components = row!.score_breakdown as { factor: string; points: number }[];
+    const liabilities = components.find((c) => c.factor.includes('outstanding liabilities'));
+    assert.ok(
+      liabilities && liabilities.points === 25,
+      `the 25 points must not be withheld over a disputed bill; breakdown was ${JSON.stringify(components)}`,
+    );
+  });
+
+  it('tells the citizen their assessment is under objection, not that they are in arrears', async () => {
+    const taxpayer = await objectingTrader('Asking Online');
+    const phone = await queryOne<{ phone: string }>(
+      pool,
+      'SELECT phone FROM taxpayers WHERE id = $1',
+      [taxpayer],
+    );
+
+    const response = await get(`/citizen-status?phone=${encodeURIComponent(phone!.phone)}`);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.equal(
+      response.body.complianceStatus,
+      'UNDER_OBJECTION',
+      'neither HAS_ARREARS, which presses for suspended money, nor COMPLIANT, which is not true either',
+    );
+    assert.ok(
+      !/contact your nearest PSIRS office or a revenue agent to pay/i.test(response.body.message),
+      'the State must not press for money it has agreed not to press for',
+    );
+  });
+
+  it('does not send an objector an SMS demanding the money', async () => {
+    /*
+     * The most direct form of enforcement there is: unsolicited, automated,
+     * at scale, and arriving days after the trader was told their objection
+     * had been received.
+     *
+     * `processWindow` already stops chasing an ended taxpayer record and says
+     * why — "what stops is the chasing". An open objection stops it for the
+     * same reason, and the sweep did not know.
+     *
+     * Asserted on the window flag rather than on messages queued, so the test
+     * does not turn on which notification templates a previous file in the
+     * shard left ACTIVE: the sweep flags the invoice and then queues, so an
+     * invoice it considered carries the flag either way, and one it excluded
+     * does not.
+     */
+    const objector = await objectingTrader('Left Alone');
+    const quiet = await trader('Still Chased');
+    const observation = await observe(quiet);
+    await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+
+    // Fourteen days out is squarely inside the two-week window (13-15 days).
+    const due = new Date(Date.now() + 14 * 86_400_000);
+    await query(
+      pool,
+      `UPDATE invoices SET expires_at = $2 WHERE taxpayer_id = ANY($1::uuid[])`,
+      [[objector, quiet], due],
+    );
+
+    await sendDueReminders(pool);
+
+    const flagged = async (taxpayerId: string) => {
+      const row = await queryOne<{ reminder_sent_2w: boolean }>(
+        pool,
+        'SELECT reminder_sent_2w FROM invoices WHERE taxpayer_id = $1',
+        [taxpayerId],
+      );
+      return row!.reminder_sent_2w;
+    };
+
+    assert.equal(
+      await flagged(objector),
+      false,
+      'an objector must not be chased for money the State has agreed not to pursue',
+    );
+    assert.equal(
+      await flagged(quiet),
+      true,
+      'and the sweep must still reach everybody who has not objected',
+    );
+  });
+
+  /*
+   * The control. Without it every assertion above would also pass on a trader
+   * who simply owes nothing, and the suite would be measuring the fixture
+   * rather than the objection.
+   */
+  it('still calls an unobjected assessment arrears', async () => {
+    const taxpayer = await trader('No Complaint');
+    const observation = await observe(taxpayer);
+    await assessFromObservation(pool, {
+      observationId: observation.id,
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    await syncTaxpayerComplianceAndIncentives(pool, taxpayer);
+
+    const row = await queryOne<{
+      outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
+    }>(
+      pool,
+      `SELECT outstanding_amount_kobo, disputed_amount_kobo
+         FROM taxpayer_compliance WHERE taxpayer_id = $1`,
+      [taxpayer],
+    );
+    assert.equal(row!.outstanding_amount_kobo, '4800000');
+    assert.equal(row!.disputed_amount_kobo, '0', 'nothing is suspended without an objection');
+
+    const phone = await queryOne<{ phone: string }>(
+      pool,
+      'SELECT phone FROM taxpayers WHERE id = $1',
+      [taxpayer],
+    );
+    const response = await get(`/citizen-status?phone=${encodeURIComponent(phone!.phone)}`);
+    assert.equal(response.body.complianceStatus, 'HAS_ARREARS');
   });
 });

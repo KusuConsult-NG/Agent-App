@@ -28,14 +28,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiRequestError,
-  api,
-  can,
-  stepUp,
-  type ApiError,
-  type User,
-} from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -91,7 +84,7 @@ export function PeriodsScreen({ user }: { user: User }) {
     try {
       setPeriods(await api.get<Period[]>('/government/periods'));
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     }
   }, []);
 
@@ -290,7 +283,7 @@ function OpenPeriodForm({ onDone }: { onDone: (message: string) => Promise<void>
             setEnd('');
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -380,7 +373,7 @@ function CloseOrReopen({
       await action();
       await onDone(t.ofcCwSaved);
     } catch (caught) {
-      setError(caught instanceof ApiRequestError ? caught.error : null);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

@@ -43,6 +43,7 @@ import {
   stopTestServer,
 } from './helpers';
 import { queryOne, withTransaction } from '../db/pool';
+import { formatNaira } from '@psirs/shared';
 import { computeComplianceScore } from '../services/incentives';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -273,6 +274,45 @@ describe('Somebody who has not', () => {
     const outstanding = components.find((c) => /outstanding/i.test(c.factor));
     assert.ok(outstanding, 'the breakdown must name the liability');
     assert.equal(outstanding!.points, 0, 'and score nothing for it');
+  });
+
+  /**
+   * The figure on the line that explains the score.
+   *
+   * Both money strings in `incentives.ts` were built as
+   * `₦${(x / 100n).toString()}`. Integer division truncates and nothing groups
+   * the digits, so a taxpayer owing ₦6,875.00 was told "₦6875 outstanding" —
+   * and one owing ₦1,234.56 was told "₦1234", understated on the sentence
+   * that tells them why their compliance score is what it is.
+   *
+   * Asserted against `formatNaira` of the figure the platform actually stored,
+   * rather than a literal, so the test states the property — the sentence
+   * shows the stored amount, to the kobo — instead of restating one price from
+   * the catalogue.
+   */
+  it('states what is owed to the kobo, not rounded down to naira', async () => {
+    const taxpayerId = await newTaxpayer();
+    await assess(taxpayerId, 'MARKET-LEVY');
+
+    const { components } = await scoreFor(taxpayerId);
+    const outstanding = components.find((c) => /outstanding/i.test(c.factor));
+    assert.ok(outstanding, 'the control is broken: the breakdown does not name the liability');
+
+    const stored = await queryOne<{ outstanding_amount_kobo: string }>(
+      pool,
+      'SELECT outstanding_amount_kobo FROM taxpayer_compliance WHERE taxpayer_id = $1',
+      [taxpayerId],
+    );
+    assert.ok(stored, 'the control is broken: no compliance row was written');
+    assert.ok(
+      BigInt(stored!.outstanding_amount_kobo) > 0n,
+      'the control is broken: nothing is outstanding, so the sentence proves nothing',
+    );
+
+    assert.equal(
+      outstanding!.detail,
+      `${formatNaira(BigInt(stored!.outstanding_amount_kobo))} outstanding across unpaid invoices`,
+    );
   });
 
   it('scores worse the more of their obligations go unpaid', async () => {

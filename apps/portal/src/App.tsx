@@ -23,6 +23,7 @@ import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
 import { AgentDetailScreen, AgentsScreen, RefereesScreen } from './screens/Agents';
 import { UserAccessScreen } from './screens/UserAccess';
 import { TaxpayerRecordsScreen } from './screens/TaxpayerRecords';
+import { AssessmentScreen, InvoiceScreen } from './screens/Charge';
 import { PerformanceScreen } from './screens/Performance';
 import { RevenueScreen } from './screens/Revenue';
 import { AllocationsScreen } from './screens/Allocations';
@@ -232,6 +233,8 @@ export function App() {
 const SECTION_LABELS: Record<string, keyof TranslationDictionary> = {
   '/allocations': 'ofcDistributionRound',
   '/transaction': 'ofcT3Title',
+  '/invoice': 'ofcT3Invoice',
+  '/assessment': 'ofcT3Assessment',
   '/cases': 'ofcNavCases',
   '/my-work': 'ofcNavMyWork',
 };
@@ -256,6 +259,16 @@ function Routes({
    */
   const transactionMatch = matchRoute(route, '/transaction/:key');
   const ticketMatch = matchRoute(route, '/support/:id');
+  /*
+   * One invoice and one assessment, each by its own id.
+   *
+   * Both are where the global search now sends a hit. It used to send both to
+   * `/transaction/:id` when a transaction existed and to the outstanding
+   * worklist when one did not — so the invoice nobody had paid, which is the
+   * one an officer is holding a number for, landed on a list of everybody's.
+   */
+  const invoiceMatch = matchRoute(route, '/invoice/:id');
+  const assessmentMatch = matchRoute(route, '/assessment/:id');
   const roundMatch = matchRoute(route, '/allocations/:id');
 
   if (matchRoute(route, '/')) {
@@ -283,6 +296,8 @@ function Routes({
   if (transactionMatch) {
     return <TransactionScreen transactionKey={transactionMatch.key!} navigate={navigate} />;
   }
+  if (invoiceMatch) return <InvoiceScreen id={invoiceMatch.id!} navigate={navigate} />;
+  if (assessmentMatch) return <AssessmentScreen id={assessmentMatch.id!} />;
   if (matchRoute(route, '/targets')) return <TargetsScreen user={user} />;
   if (matchRoute(route, '/taxpayer-base')) return <TaxpayerBaseScreen />;
   if (matchRoute(route, '/platform')) return <PlatformScreen />;

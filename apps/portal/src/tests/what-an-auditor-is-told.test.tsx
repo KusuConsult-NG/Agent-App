@@ -121,22 +121,60 @@ describe('what an auditor is told about the chain', () => {
     expect(screen.queryByText(ha.ofcOvChainLinkMismatch.replace('{{sequence}}', '41'))).toBeNull();
   });
 
-  it('reports a clean replay with the number of entries it covered', async () => {
+  /*
+   * The intact answer now carries two numbers, not one.
+   *
+   * A replay cannot see entries cut from the end of the log — what remains is a
+   * shorter chain that verifies perfectly — so the sentence no longer says "No
+   * tampering detected". It says how many entries it replayed and how far it
+   * reached, the latter being the number an auditor records to notice a log
+   * that has been shortened since.
+   */
+  it('reports a clean replay, how far it reached, and no more than that', async () => {
     answering({
       valid: true,
       entriesChecked: 12045,
+      highestSequence: 12045,
       verdict: 'INTACT',
-      message: 'Audit chain verified over 12045 entries. No tampering detected.',
+      message:
+        'Audit chain intact: 12045 entries replayed, none altered or missing, up to entry 12045.',
     });
 
     await renderSettled();
     await pressVerify();
 
-    await waitFor(() =>
-      expect(screen.getByText(ha.ofcOvChainIntact.replace('{{count}}', '12045'))).toBeTruthy(),
-    );
+    const intact = ha.ofcOvChainIntact
+      .replace('{{count}}', '12045')
+      .replace('{{sequence}}', '12045');
+    await waitFor(() => expect(screen.getByText(intact)).toBeTruthy());
     // The heading says intact, not tampered.
     expect(screen.getByText(ha.ofcOvIntact)).toBeTruthy();
+    // And every placeholder was filled: a raw {{...}} on an auditor's screen is a bug.
+    expect(intact).not.toContain('{{');
+  });
+
+  /*
+   * The window is not the log.
+   *
+   * `entriesChecked` is how many rows this replay covered, which for a paged or
+   * `fromSequence`-bounded call is a window size rather than the length of the
+   * log. `highestSequence` is where it stopped. An auditor recording the wrong
+   * one of those would compare a window against a log.
+   */
+  it('names where the replay stopped, not merely how many rows it saw', async () => {
+    answering({
+      valid: true,
+      entriesChecked: 500,
+      highestSequence: 12045,
+      verdict: 'INTACT',
+      message: 'Audit chain intact: 500 entries replayed, none altered or missing, up to entry 12045.',
+    });
+
+    await renderSettled();
+    await pressVerify();
+
+    const windowed = ha.ofcOvChainIntact.replace('{{count}}', '500').replace('{{sequence}}', '12045');
+    await waitFor(() => expect(screen.getByText(windowed)).toBeTruthy());
   });
 
   /*
@@ -364,5 +402,197 @@ describe('what the job monitor says about an unattended job', () => {
     }
     expect(en.ofcOvJobFailing).toContain('{{count}}');
     expect(ha.ofcOvJobFailing).toContain('{{error}}');
+  });
+});
+
+/**
+ * The five questions an auditor is offered, which were labelled with their
+ * own dictionary keys.
+ *
+ * `AuditQuery.label` was typed `string`, every entry held a key, and the
+ * button drew `{query.label}` straight out. So the card read
+ *
+ *     ofcOvReversedAfterPayment   ofcOvAllRateChanges   ofcOvOneAgentCollected
+ *
+ * in English and in Hausa alike, because a key is the same identifier in
+ * both. The heading over the answer was the same value, so an auditor who
+ * pressed one and got a table had no sentence saying what the table was.
+ *
+ * Nothing caught it, and the reasons are worth writing down: a key is not
+ * English prose, so the English-literal lint passes it; the keys do exist in
+ * the dictionary, so the Hausa coverage guard counts them translated; and no
+ * test had rendered this card at all. The sibling field `prompt` was already
+ * typed `keyof TranslationDictionary` and already drawn through `t[...]` —
+ * the pattern was there and was applied to one of the two fields.
+ */
+describe('the standard audit questions are written in words', () => {
+  function quiet() {
+    vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.includes('/government/workers'))
+        return Promise.resolve({ jobs: [], healthy: true, needingAttention: 0 } as never);
+      return Promise.resolve([] as never);
+    });
+  }
+
+  const KEYS = [
+    'ofcOvReversedAfterPayment',
+    'ofcOvAllRateChanges',
+    'ofcOvOneAgentCollected',
+    'ofcOvReceiptsOneItem',
+    'ofcOvWhoLookedAtRecord',
+  ] as const;
+
+  it('offers them in English as sentences, not identifiers', async () => {
+    quiet();
+    setPortalLanguage('en');
+    await renderSettled(en);
+
+    for (const key of KEYS) {
+      expect(
+        screen.getByRole('button', { name: en[key] }),
+        `the button for ${key} should carry its words`,
+      ).toBeTruthy();
+      expect(screen.queryByRole('button', { name: key })).toBeNull();
+    }
+  });
+
+  it('offers them in Hausa too, which a key could never be', async () => {
+    /*
+     * The half that proves the bug was not merely cosmetic in one language.
+     * A raw key reads identically whichever language the officer chose, so
+     * Hausa was as broken as English and neither guard could see it.
+     */
+    quiet();
+    setPortalLanguage('ha');
+    await renderSettled(ha);
+
+    for (const key of KEYS) {
+      expect(screen.getByRole('button', { name: ha[key] })).toBeTruthy();
+    }
+  });
+
+  /*
+   * The third place the same value is drawn, and the one that survived.
+   *
+   * Typing `label` as `keyof TranslationDictionary` stops a SENTENCE being put
+   * in the field — that is a compile error now. It does nothing about the key
+   * being rendered raw, because a string-literal union is a perfectly good
+   * ReactNode. This site passed the typecheck before and after the type
+   * changed, and only rendering the screen finds it.
+   */
+  it('heads the question that asks for a parameter with words too', async () => {
+    quiet();
+    setPortalLanguage('en');
+    await renderSettled(en);
+
+    // This one needs an agent chosen, so pressing it opens the parameter card.
+    fireEvent.click(screen.getByRole('button', { name: en.ofcOvOneAgentCollected }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: en.ofcOvOneAgentCollected })).toBeTruthy(),
+    );
+    expect(screen.queryByRole('heading', { name: 'ofcOvOneAgentCollected' })).toBeNull();
+  });
+
+  it('heads the answer with the question, not its key', async () => {
+    quiet();
+    setPortalLanguage('en');
+    await renderSettled(en);
+
+    // A question with no parameter runs as soon as it is pressed.
+    fireEvent.click(screen.getByRole('button', { name: en.ofcOvAllRateChanges }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: en.ofcOvAllRateChanges }),
+      ).toBeTruthy(),
+    );
+  });
+});
+
+/**
+ * And the agents the picker cannot offer.
+ *
+ * "What did one agent collect" is answered by choosing the agent from a
+ * select, which is filled from `/agents?limit=200`. That endpoint clamps to
+ * 200 and orders by `created_at DESC`, so the list holds the 200 most
+ * recently registered — and an agent who joined before them cannot be chosen
+ * at all.
+ *
+ * For an audit that is the wrong 200 to keep. The subject of an investigation
+ * is more often a long-serving agent than last month's intake, and the screen
+ * said nothing: the select simply did not contain them, which reads as the
+ * agent not existing rather than as a list that stops.
+ */
+describe('the agent picker says when it is not every agent', () => {
+  const agent = (index: number) => ({
+    id: `agent-${index}`,
+    full_name: `Agent Number ${index}`,
+    agent_code: `PL-${String(index).padStart(4, '0')}`,
+  });
+
+  function withAgents(count: number) {
+    vi.spyOn(api, 'get').mockImplementation((path: string) => {
+      if (path.startsWith('/agents')) {
+        return Promise.resolve(
+          Array.from({ length: count }, (_unused, index) => agent(index)) as never,
+        );
+      }
+      if (path.includes('/government/workers'))
+        return Promise.resolve({ jobs: [], healthy: true, needingAttention: 0 } as never);
+      return Promise.resolve([] as never);
+    });
+  }
+
+  /*
+   * Open the one standard question that needs an agent chosen.
+   *
+   * In English, because this file's `beforeEach` puts the screen in Hausa and
+   * the sentence being asserted below is the English one. Through
+   * `renderSettled` rather than a bare render, for the reason its own comment
+   * gives: the screen fires several requests on mount and a test that returns
+   * while they are still settling fails a different file about one run in six.
+   */
+  async function openTheAgentQuestion() {
+    setPortalLanguage('en');
+    await renderSettled(en);
+    fireEvent.click(await screen.findByRole('button', { name: en.ofcOvOneAgentCollected }));
+    await waitFor(() => expect(screen.getByLabelText(en.ofcOvWhichAgent)).toBeTruthy());
+  }
+
+  it('says so when the list comes back at its ceiling', async () => {
+    withAgents(200);
+    await openTheAgentQuestion();
+
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Agent Number 0/ })).toBeTruthy(),
+    );
+    expect(
+      screen.getByText(/most recently registered agents/i),
+      'a select that stops at 200 reads as PSIRS having 200 agents',
+    ).toBeTruthy();
+  });
+
+  it('says nothing when every agent fits', async () => {
+    // The control: a notice on a complete list would be a false warning, and
+    // an auditor who learns to ignore it will ignore the true one.
+    withAgents(12);
+    await openTheAgentQuestion();
+
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Agent Number 0/ })).toBeTruthy(),
+    );
+    expect(screen.queryByText(/most recently registered agents/i)).toBeNull();
+  });
+
+  it('asks for the same number the notice reasons about', async () => {
+    withAgents(200);
+    const spy = vi.spyOn(api, 'get');
+    await openTheAgentQuestion();
+
+    await waitFor(() => {
+      const asked = spy.mock.calls.map(([path]) => String(path)).find((p) => p.startsWith('/agents'));
+      expect(asked).toBe('/agents?limit=200');
+    });
   });
 });

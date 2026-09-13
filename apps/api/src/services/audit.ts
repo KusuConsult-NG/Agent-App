@@ -231,6 +231,21 @@ export interface ChainVerification {
    * be able to answer with nothing.
    */
   verdict: ChainVerdict;
+  /**
+   * The last sequence this replay actually reached.
+   *
+   * Named because a hash chain cannot see its own tail being cut off. Rewrite
+   * an entry and the recomputed hash disagrees; remove one from the middle and
+   * the next entry's `prev_hash` points at nothing — both are caught below.
+   * Delete the most recent entries and what remains is a shorter chain that is
+   * perfectly self-consistent, and this function has no way to know how long
+   * the log used to be.
+   *
+   * So the answer says how far it got. An auditor who records this number can
+   * tell next time whether the log has grown or been shortened, which is the
+   * one check a replay of the log against itself can never perform.
+   */
+  highestSequence: number;
 }
 
 /**
@@ -305,6 +320,7 @@ export async function verifyAuditChain(
       entriesChecked: 0,
       brokenAtSequence: Number.parseInt(genesis.sequence_no, 10),
       verdict: 'GENESIS_REMOVED',
+      highestSequence: 0,
     };
   }
 
@@ -318,6 +334,7 @@ export async function verifyAuditChain(
         entriesChecked: checked,
         brokenAtSequence: Number.parseInt(row.sequence_no, 10),
         verdict: 'LINK_MISMATCH',
+        highestSequence: checked === 0 ? 0 : Number.parseInt(rows[checked - 1]!.sequence_no, 10),
       };
     }
 
@@ -350,6 +367,7 @@ export async function verifyAuditChain(
         entriesChecked: checked,
         brokenAtSequence: Number.parseInt(row.sequence_no, 10),
         verdict: 'CONTENT_MODIFIED',
+        highestSequence: checked === 0 ? 0 : Number.parseInt(rows[checked - 1]!.sequence_no, 10),
       };
     }
 
@@ -357,5 +375,10 @@ export async function verifyAuditChain(
     checked += 1;
   }
 
-  return { valid: true, entriesChecked: checked, verdict: 'INTACT' };
+  return {
+    valid: true,
+    entriesChecked: checked,
+    verdict: 'INTACT',
+    highestSequence: rows.length === 0 ? 0 : Number.parseInt(rows[rows.length - 1]!.sequence_no, 10),
+  };
 }

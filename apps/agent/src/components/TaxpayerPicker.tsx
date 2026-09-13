@@ -15,7 +15,7 @@
  */
 
 import { useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { ErrorAlert, Field, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 
@@ -82,7 +82,7 @@ export function TaxpayerPicker({
         ),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

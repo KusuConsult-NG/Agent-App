@@ -232,6 +232,42 @@ export async function raiseSystemAlerts(client: PoolClient): Promise<{ raised: n
   let raised = 0;
 
   for (const job of health.jobs) {
+    /*
+     * A job that works some of the time, which no state can say.
+     *
+     * `state` is FAILING only while `consecutive_failures > 0`, and one
+     * success resets that to zero — so a reconciliation sweep failing every
+     * other run is HEALTHY, raises nothing, and the unattended-work board
+     * counts it as nothing needing attention. For reconciliation that is
+     * money not reconciled.
+     *
+     * WARNING rather than CRITICAL, deliberately. The job IS working, some of
+     * the time; CRITICAL is reserved for work that is not happening at all,
+     * and an administrator who cannot tell those apart at a glance stops
+     * reading either.
+     *
+     * Its own dedupe key, so a job that flaps and then fails outright still
+     * raises the louder alert rather than being silenced by this one.
+     */
+    if (job.flapping) {
+      const created = await raise(client, {
+        role: 'admin',
+        kind: 'SYSTEM_ALERT',
+        severity: 'WARNING',
+        subject: `${job.name}: working some of the time`,
+        body:
+          `${job.purpose}\n` +
+          `${job.failuresTotal} of ${job.runsTotal} run(s) have failed. ` +
+          `Last threw ${job.lastFailedAt?.toISOString() ?? 'unknown'}, ` +
+          `last succeeded ${job.lastSucceededAt?.toISOString() ?? 'never'}.` +
+          (job.lastError ? `\nLast error: ${job.lastError}` : ''),
+        entityType: 'background_job',
+        entityId: job.name,
+        dedupeKey: `job:${job.name}:flapping`,
+      });
+      if (created) raised += 1;
+    }
+
     const severity = JOB_ALERT_SEVERITY[job.state];
     if (!severity) continue;
 
@@ -252,7 +288,158 @@ export async function raiseSystemAlerts(client: PoolClient): Promise<{ raised: n
     if (created) raised += 1;
   }
 
+  raised += await raiseEnumerationAlerts(client);
+
   return { raised };
+}
+
+/**
+ * How many distinct identifiers one address may successfully look up in an
+ * hour before somebody is told.
+ *
+ * NOT a low number, and the reason matters. Nigerian mobile networks put
+ * thousands of subscribers behind one public address, so a market where people
+ * check their receipts on their phones can put a great deal of legitimate
+ * traffic on a single IP. A rule that fires on a carrier NAT is a rule an
+ * administrator mutes in a week, and a muted rule detects nothing at all.
+ *
+ * The public verifier is capped at 60 requests a minute per address, so the
+ * most any address can do in the window is 3,600. Five hundred is well above
+ * what a shared address plausibly does by accident and roughly nine minutes of
+ * deliberate work — which is the right side of the trade, because the thing
+ * being watched for takes hours and this catches it in the first few minutes.
+ */
+const ENUMERATION_IN_AN_HOUR = 500;
+
+/**
+ * The same question at the other door, which is a narrower one.
+ *
+ * Two unauthenticated surfaces write to `verification_attempts`, and they are
+ * not throttled alike. The receipt verifier admits 60 requests a minute, so
+ * 3,600 in the window above. The citizen status lookup — what a named person
+ * owes, by TIN or exact phone — admits 10, so 600.
+ *
+ * One threshold therefore cannot serve both. Five hundred is a comfortable
+ * fraction of the receipt door's ceiling and 83% of this one, which would mean
+ * an enumerator had to sustain nearly the maximum possible rate for a full
+ * hour before anybody was told. That is the wrong way round: the citizen door
+ * is the one `citizen.ts` says needs watching most — "a TIN is far more
+ * guessable than a receipt number" — and it is the one where what comes back
+ * is about a person rather than about a piece of paper.
+ *
+ * A hundred is a sixth of what this door can physically emit in the window,
+ * about ten minutes of deliberate work, and far more than a shared address
+ * reaches by accident — the 10-a-minute cap already holds the total any
+ * address can produce, carrier NAT included, to 600.
+ */
+const TAXPAYER_LOOKUPS_IN_AN_HOUR = 100;
+
+/**
+ * Somebody reading the receipt book.
+ *
+ * `GET /verify/:code` is unauthenticated, by design — PRD §20 and §43 want a
+ * citizen or a roadside officer to confirm a piece of paper without an
+ * account. It matches a verification code, which is ten characters from a
+ * 27-letter alphabet and not worth guessing. It ALSO matches the receipt
+ * number and the document number, deliberately, so somebody holding a receipt
+ * with a smudged code can still check it — and those are sequential.
+ *
+ * So the whole revenue book is walkable: every receipt's amount, revenue type,
+ * date, LGA and validity, one number at a time. Not who paid — no name, TIN or
+ * phone is returned — but enough to reconstruct what the State collects, where
+ * and when, and which receipts were reversed.
+ *
+ * Every attempt has always been recorded with its address. What read that
+ * record was one figure on the leakage report, counting `INVALID` and
+ * `NOT_FOUND` — someone mistyping a code. A person walking the numbers gets
+ * `VALID` every time and appeared in no count anywhere, which is the one
+ * shape this platform keeps having to fix: a detection that exists and cannot
+ * see the thing it is for.
+ *
+ * This does not narrow what the endpoint answers. Taking the receipt number
+ * away would break the citizen it was added for, and that is a decision for
+ * PSIRS rather than a side effect of adding a detector.
+ */
+async function raiseEnumerationAlerts(client: PoolClient): Promise<number> {
+  /*
+   * Deliberately unbounded, where nearly every other query here carries a
+   * LIMIT. The HAVING makes this set tiny by construction — addresses that
+   * successfully resolve five hundred distinct identifiers in an hour — and if
+   * it is ever large, that IS the emergency and cutting it to the first twenty
+   * would hide it. A cap on the rows a detector returns is how a detector
+   * reports a quiet morning during a raid.
+   */
+  const addresses = await query<{
+    address: string;
+    identifiers: string;
+    lookups: string;
+    kind: string;
+  }>(
+    client,
+    /*
+     * Grouped by the door as well as the address, so each is judged against
+     * what it can physically emit. An address working both raises two alerts,
+     * which is right: they are two different exposures and an officer reading
+     * one should not have the other folded into it.
+     */
+    `SELECT host(ip_address) AS address,
+            lookup_type AS kind,
+            count(DISTINCT lookup_value)::text AS identifiers,
+            count(*)::text AS lookups
+       FROM verification_attempts
+      WHERE result = 'VALID'
+        AND ip_address IS NOT NULL
+        AND created_at > now() - interval '1 hour'
+      GROUP BY ip_address, lookup_type
+     HAVING count(DISTINCT lookup_value) >
+            CASE WHEN lookup_type = 'TAXPAYER' THEN $2::bigint ELSE $1::bigint END`,
+    [ENUMERATION_IN_AN_HOUR, TAXPAYER_LOOKUPS_IN_AN_HOUR],
+  );
+
+  let raised = 0;
+  for (const row of addresses) {
+    /*
+     * WARNING, not CRITICAL. Nothing is broken and no money has moved; a
+     * person needs to look at an address and decide whether it is a scraper or
+     * a carrier. CRITICAL is what this file reserves for work that is not
+     * happening at all, and an administrator who cannot tell those apart at a
+     * glance stops reading either.
+     *
+     * Keyed on the address alone, so one scraper is one unread row however
+     * many hours it runs for — and raises again once an officer has read and
+     * dismissed the first, which is the right behaviour for something that may
+     * have been dismissed as a known network.
+     */
+    const taxpayerDoor = row.kind === 'TAXPAYER';
+    const created = await raise(client, {
+      role: 'admin',
+      kind: 'SYSTEM_ALERT',
+      severity: 'WARNING',
+      subject: `${row.address} looked up ${row.identifiers} different ${
+        taxpayerDoor ? 'taxpayers' : 'records'
+      } in an hour`,
+      body:
+        (taxpayerDoor
+          ? 'The citizen status page answers without an account, and says what a named ' +
+            'person owes when given their TIN or their exact phone number. A TIN is far ' +
+            'more guessable than a receipt number, and what comes back is about a person.'
+          : 'The public verification page answers without an account, and accepts receipt ' +
+            'and document numbers as well as verification codes. Those numbers run in ' +
+            'sequence, so an address working through them can read what was collected, ' +
+            'for what, where and when — though not who paid.') +
+        '\n' +
+        `${row.lookups} successful lookup(s) across ${row.identifiers} distinct ` +
+        `identifier(s) of kind ${row.kind} in the last hour.\n` +
+        'A shared mobile network can carry a lot of honest traffic, so check the address ' +
+        'before acting on it.',
+      entityType: 'verification_source',
+      entityId: row.address,
+      dedupeKey: `verification:enumeration:${row.kind}:${row.address}`,
+    });
+    if (created) raised += 1;
+  }
+
+  return raised;
 }
 
 // ===========================================================================

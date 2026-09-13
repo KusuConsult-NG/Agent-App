@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, ReasonRule, Table, formatDateTime } from '../ui';
 import { PostingPanel } from './Organisation';
 import { MyAccessScreen } from './MyAccess';
@@ -114,10 +114,7 @@ export function UserAccessScreen({ user }: { user: User }) {
        * told nobody does.
        */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -175,10 +172,7 @@ export function UserAccessScreen({ user }: { user: User }) {
       setReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -219,10 +213,7 @@ export function UserAccessScreen({ user }: { user: User }) {
       setStatusReason('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -242,7 +233,7 @@ export function UserAccessScreen({ user }: { user: User }) {
         setChosenTerritories(data.assigned.map((t) => t.id));
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }
 
@@ -267,7 +258,7 @@ export function UserAccessScreen({ user }: { user: User }) {
       setTerritories(null);
       setCoverageReason('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

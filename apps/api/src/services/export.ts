@@ -72,46 +72,43 @@ export type ExportFormat = 'csv' | 'xlsx' | 'pdf';
 const LIMIT_WHEN_THE_ROLE_CANNOT_BE_READ = 0;
 
 /**
- * Cached for the same thirty seconds, and for the same reasons, as the
- * permission map next door: an export is not a hot path, but reading two rows
- * per download to answer a question that changes about once a year is a query
- * that exists to be forgotten about.
+ * Read per export, not cached.
+ *
+ * THIS USED TO BE A THIRTY-SECOND IN-PROCESS CACHE, on the reasoning printed
+ * beside it: "an export is not a hot path, but reading two rows per download
+ * to answer a question that changes about once a year is a query that exists
+ * to be forgotten about." Both halves of that argue against the cache. The
+ * path is not hot — one call, in `recordExport`, once per export, immediately
+ * before building a spreadsheet of up to tens of thousands of rows — and a
+ * value that changes once a year is not one worth holding a stale copy of.
+ *
+ * What the stale copy cost is the part that matters. `forgetLimits()` cleared
+ * one process's map, and nothing told the others: no LISTEN/NOTIFY, no version
+ * column, nothing. So an administrator lowering a role's limit reached the
+ * instance that served the request and no other, and — unlike `revoke()` next
+ * door, which ends the sessions of everybody holding the role — `setExportLimit`
+ * ends no sessions, so there was no backstop either. Simulated by doing to one
+ * process exactly what happens to the second one, changing the row without
+ * telling it:
+ *
+ *     limit before = 100000
+ *     administrator lowers it to 1
+ *     limit still served = 100000
+ *
+ * For up to thirty seconds, on every instance but one, at the moment an
+ * officer is most likely to be mid-export. The header of this file calls this
+ * number "the only field on a role that is a control" and says erring high
+ * "puts the register on somebody's laptop".
+ *
+ * One row, on a path that is about to render a spreadsheet, buys that away.
  */
-let cache: { at: number; limits: Map<string, number> } | null = null;
-const CACHE_MS = 30_000;
-
-export function forgetLimits(): void {
-  cache = null;
-}
-
 export async function rowLimitFor(role: string): Promise<number> {
-  if (!cache || Date.now() - cache.at > CACHE_MS) {
-    const rows = await query<{ name: string; export_row_limit: number }>(
-      pool,
-      'SELECT name, export_row_limit FROM roles',
-    );
-    cache = { at: Date.now(), limits: new Map(rows.map((row) => [row.name, row.export_row_limit])) };
-  }
-
-  const cached = cache.limits.get(role);
-  if (cached !== undefined) return cached;
-
-  /*
-   * A name the cache has not heard of is asked about, not refused.
-   *
-   * The cache is a snapshot, and a role created thirty seconds ago is exactly
-   * the role an administrator is about to test. Falling through to the
-   * fallback here made a brand-new role export nothing until the snapshot
-   * expired -- safe, and indistinguishable from a bug to the person who had
-   * just set its limit.
-   */
   const row = await queryOne<{ export_row_limit: number }>(
     pool,
     'SELECT export_row_limit FROM roles WHERE name = $1',
     [role],
   );
   if (!row) return LIMIT_WHEN_THE_ROLE_CANNOT_BE_READ;
-  cache.limits.set(role, row.export_row_limit);
   return row.export_row_limit;
 }
 
@@ -499,6 +496,16 @@ export interface PdfReport {
   /** Present when the report is a signed `audit_reports` row. */
   reportNumber?: string | null;
   checksum?: string | null;
+  /**
+   * Set when the query hit its row cap and these are only the most recent rows.
+   *
+   * This renderer already refuses to drop columns silently — the ones that do
+   * not fit are named under the table, because "the reader has to be told the
+   * file has more in it than the paper does". Rows dropped before the payload
+   * was ever built are the same statement about the same reader, and were the
+   * one kind of omission that reached the page unannounced.
+   */
+  truncatedAt?: number | null;
 }
 
 const INK = '#12211a';
@@ -610,6 +617,23 @@ export function renderReportPdf(report: PdfReport): Promise<Buffer> {
       .filter(Boolean)
       .join('  -  ');
     document.text(stamp, left);
+    /*
+     * Before the covering line and before the checksum, because it qualifies
+     * both: the period below is not what this file contains, and the checksum
+     * below verifies only what it does contain.
+     */
+    if (report.truncatedAt) {
+      document.fillColor(INK).text(
+        `PARTIAL REPORT - more than ${report.truncatedAt.toLocaleString()} rows matched. ` +
+          'This file carries only the most recent ' +
+          `${report.truncatedAt.toLocaleString()}, so the earliest part of the period below ` +
+          'is not in it. Narrow the period and generate again for a complete record.',
+        left,
+        undefined,
+        { width },
+      );
+      document.fillColor(MUTED);
+    }
     const parameters = Object.entries(report.parameters)
       .filter(([, value]) => value !== null && value !== undefined && value !== '')
       .map(([key, value]) => `${key}: ${text(value)}`)

@@ -1,8 +1,9 @@
 /** Transaction monitoring and export (PRD §48, §49). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
-import { Badge, ErrorAlert, ExportButtons, Loading, Money, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Table, formatDateTime } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
 import { enumLabel, localName } from '@psirs/shared';
@@ -44,7 +45,8 @@ export function TransactionsScreen() {
   const [rows, setRows] = useState<TransactionRow[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [rowsError, setRowsError] = useState<ApiError | null>(null);
-  const [lgas, setLgas] = useState<{ id: string; name: string }[]>([]);
+  const lgaList = useReferenceList<{ id: string; name: string }>('/reference/lgas');
+  const lgas = lgaList.items;
   /*
    * Kept in the URL and in this session, not in component state.
    *
@@ -70,13 +72,6 @@ export function TransactionsScreen() {
   }, [filters]);
 
   useEffect(() => {
-    api
-      .get<{ id: string; name: string }[]>('/reference/lgas')
-      .then(setLgas)
-      .catch(() => setLgas([]));
-  }, []);
-
-  useEffect(() => {
     setRows(null);
     setRowsError(null);
     api
@@ -88,10 +83,7 @@ export function TransactionsScreen() {
        * screen and a list still loading underneath it, for ever.
        */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setRowsError(caught.error);
-        else if (caught instanceof Error) {
-          setRowsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setRowsError(asApiError(caught));
       });
   }, [buildQuery]);
 
@@ -129,6 +121,7 @@ export function TransactionsScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
 
           <div className="field">
@@ -199,6 +192,22 @@ export function TransactionsScreen() {
                 key: 'created_at',
                 label: 'ofcTxCreated',
                 render: (row) => formatDateTime(row.created_at),
+              },
+              {
+                /*
+                 * When the money was actually confirmed, which is not when the
+                 * transaction was raised.
+                 *
+                 * On a list of transactions those two are days apart whenever
+                 * a citizen pays at a bank, and the second is the one that
+                 * says when the State had the money. It was computed and drawn
+                 * nowhere, so the only date here was the one that says when
+                 * somebody asked for it.
+                 */
+                key: 'verified_at',
+                label: 'ofcTxVerified',
+                render: (row) =>
+                  row.verified_at ? formatDateTime(row.verified_at) : t.ofcTxNotVerified,
               },
             ]}
             rows={rows}

@@ -86,6 +86,7 @@
  */
 
 import type { Db } from '../db/pool';
+import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne } from '../db/pool';
 import { scopeParams, type ReportScope } from './report-scope';
 
@@ -245,13 +246,7 @@ export async function arrearsWorklist(
           * and then got a call demanding payment has been told the objection
           * window means nothing. This is where it means something.
           */
-         AND NOT EXISTS (
-               SELECT 1
-                 FROM presumptive_assessments pa
-                 JOIN assessment_objections ao
-                   ON ao.presumptive_assessment_id = pa.id AND ao.status = 'OPEN'
-                WHERE pa.assessment_id = i.assessment_id
-             )
+         AND NOT ${UNDER_OPEN_OBJECTION_SQL}
     )`;
 
   const rows = await query<{

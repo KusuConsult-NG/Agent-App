@@ -104,6 +104,33 @@ jobs:
         # the steps individually, so nothing was running it.
         run: npm run check:hausa-review
 
+      - name: Check the role action matrix still describes the platform
+        # The step above says of the Hausa sheet: "This was in `npm run verify`
+        # and CI runs the steps individually, so nothing was running it." Its
+        # sibling had the same gap and nobody looked. `verify` names six checks
+        # and this workflow ran five.
+        #
+        # It was failing when it was added here. docs/ROLE-ACTION-MATRIX.md is
+        # generated from the permissions the routes actually name, and moving
+        # `POST /usage/expire` off `report:read:all` left the committed table
+        # describing a platform that no longer existed — in the document a
+        # government reads to answer who may do what. The script says it
+        # better than this comment can: "A matrix PSIRS has signed off which no
+        # longer describes the platform is worse than no matrix, because
+        # somebody is relying on it."
+        #
+        # `a-check-that-nothing-runs.test.ts` now holds every script named in
+        # `verify` to appearing here, so the next one added to that list cannot
+        # go unrun.
+        run: npm run check:action-matrix
+
+      - name: Check no query filters on a value nothing writes
+        # A predicate naming an enum value the platform never writes matches
+        # nothing, and the column it computes reads as a business fact rather
+        # than a bug. It has happened twice to money figures; the script's
+        # header names both. Static, so it runs before the database exists.
+        run: npm run check:dead-predicates
+
       - name: Apply migrations
         run: npm run migrate
 

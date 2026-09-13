@@ -22,8 +22,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, ErrorAlert, Loading, Money, Stat, Table, formatDate } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import { Alert, ErrorAlert, Loading, Money, ReferenceListFailure, Stat, Table, formatDate } from '../ui';
+import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
 
@@ -89,7 +90,8 @@ export function PayrollScreen() {
   const { t } = usePortalI18n();
   const canFile = can('paye:file');
 
-  const [lgas, setLgas] = useState<Lga[]>([]);
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const lgas = lgaList.items;
   const [view, setView] = useState<'PAYE' | 'CONSUMPTION'>('PAYE');
   const [filters, setFilters] = useState({ lgaId: '' });
   const [leads, setLeads] = useState<Leads | null>(null);
@@ -119,7 +121,6 @@ export function PayrollScreen() {
   const [withdrawReason, setWithdrawReason] = useState('');
 
   useEffect(() => {
-    api.get<Lga[]>('/reference/lgas').then(setLgas).catch(() => setLgas([]));
   }, []);
 
   const loadLeads = useCallback(() => {
@@ -136,7 +137,7 @@ export function PayrollScreen() {
       .get<Leads>(path)
       .then(setLeads)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
         setLeads({ summary: { leads: 0, filing: 0 }, rows: [] });
       });
   }, [filters, view]);
@@ -157,10 +158,7 @@ export function PayrollScreen() {
       .get<Return_[]>(`/government/paye/employers/${lead.taxpayerId}/returns`)
       .then(setHistory)
       .catch((caught: unknown) => {
-        if (caught instanceof ApiRequestError) setHistoryError(caught.error);
-        else if (caught instanceof Error) {
-          setHistoryError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setHistoryError(asApiError(caught));
       });
   };
 
@@ -181,7 +179,7 @@ export function PayrollScreen() {
       setHistory(refreshed);
       loadLeads();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setFilingError(caught.error);
+      setFilingError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -212,7 +210,7 @@ export function PayrollScreen() {
         .then(setHistory)
         .catch(() => undefined);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setFilingError(caught.error);
+      setFilingError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -251,6 +249,7 @@ export function PayrollScreen() {
                 </option>
               ))}
             </select>
+            <ReferenceListFailure list={lgaList} />
           </div>
         </div>
 
@@ -284,6 +283,31 @@ export function PayrollScreen() {
                 render: (row: Lead) => (row.economicSector ? enumLabel(row.economicSector, t) : '—'),
               },
               { key: 'natureOfBusiness', label: 'ofcPrNature' },
+              {
+                /*
+                 * Whether this employer has stopped filing, which is the only
+                 * thing that makes them a lead.
+                 *
+                 * The table showed sector, nature of business and what they
+                 * paid last year — none of which separates an employer who
+                 * filed last month from one who has not filed since 2024.
+                 * `monthsSinceLastFiling` says exactly that and was computed,
+                 * declared and drawn nowhere.
+                 *
+                 * Null means they have never filed at all, which is a
+                 * different and louder fact than a long gap, so it gets its
+                 * own words rather than a blank an officer reads as zero.
+                 */
+                key: 'monthsSinceLastFiling',
+                label: 'ofcPrLastFiled',
+                render: (row: Lead) =>
+                  row.monthsSinceLastFiling === null
+                    ? t.ofcPrNeverFiledShort
+                    : t.ofcPrFiledMonthsAgo.replace(
+                        '{{months}}',
+                        String(row.monthsSinceLastFiling),
+                      ),
+              },
               {
                 key: 'paidLastYearKobo',
                 label: 'ofcIgPaidLastYear',

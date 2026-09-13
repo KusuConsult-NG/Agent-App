@@ -19,7 +19,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, KeyValue, Loading, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 import { enumLabel } from '@psirs/shared';
@@ -81,10 +81,7 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
        * an empty queue: it said there were no open complaints.
        */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, [status]);
 
@@ -153,6 +150,24 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
               { key: 'assigned_to_name', label: 'ofcSpAssigned', render: (row) => row.assigned_to_name ?? '—' },
               { key: 'message_count', label: 'ofcSpReplies', numeric: true },
               { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
+              {
+                /*
+                 * When it was last touched, which is what triage runs on.
+                 *
+                 * The queue showed when a ticket was raised and not when
+                 * anybody last answered it, so a complaint opened three weeks
+                 * ago and replied to this morning looked exactly like one
+                 * opened three weeks ago and left alone since. The reply count
+                 * beside it does not separate them either: both may say 4.
+                 *
+                 * Null is a ticket nobody has answered at all, which is the
+                 * row to open first and says so in its own words.
+                 */
+                key: 'last_message_at',
+                label: 'ofcSpLastReply',
+                render: (row) =>
+                  row.last_message_at ? formatDateTime(row.last_message_at) : t.ofcSpNoReplyYet,
+              },
             ]}
             rows={tickets}
             empty="ofcNoneTicketsMatchFilter"
@@ -193,7 +208,9 @@ export function TicketDetailScreen({
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -211,7 +228,7 @@ export function TicketDetailScreen({
       setInternal(false);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -230,7 +247,7 @@ export function TicketDetailScreen({
       setMessage(t.ofcSpTicketMoved.replace('{{status}}', enumLabel(status, t)));
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

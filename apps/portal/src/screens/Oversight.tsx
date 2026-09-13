@@ -1,8 +1,8 @@
 /** Fraud, leakage and audit oversight (PRD §32, §45, §67, §72). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
-import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, Stat, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
+import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure, Stat, Table, formatDateTime } from '../ui';
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
@@ -132,10 +132,7 @@ export function FraudScreen() {
         setLeakageError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLeakageError(caught.error);
-        else if (caught instanceof Error) {
-          setLeakageError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLeakageError(asApiError(caught));
       });
 
     const params = new URLSearchParams();
@@ -151,10 +148,7 @@ export function FraudScreen() {
       // table. The refusal reaches the screen instead — in the queue's own
       // place, rather than above a skeleton that never resolves.
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setFlagsError(caught.error);
-        else if (caught instanceof Error) {
-          setFlagsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setFlagsError(asApiError(caught));
       });
   }, [statusFilter]);
 
@@ -209,7 +203,7 @@ export function FraudScreen() {
                     );
                     load();
                   } catch (caught) {
-                    if (caught instanceof ApiRequestError) setError(caught.error);
+                    setError(asApiError(caught));
                   } finally {
                     setSweeping(false);
                   }
@@ -388,7 +382,23 @@ export function FraudScreen() {
  */
 interface AuditQuery {
   key: string;
-  label: string;
+  /*
+   * A dictionary key, not a sentence.
+   *
+   * Typed as one so it cannot be anything else. It was `string`, and the five
+   * entries below all hold keys, and the button drew `{query.label}` straight
+   * out — so an auditor opening this screen was offered five buttons labelled
+   * `ofcOvReversedAfterPayment` and the like, in whichever language they had
+   * chosen, since a key is the same identifier in both.
+   *
+   * `prompt` below was already `keyof TranslationDictionary` and already drawn
+   * through `t[...]`, which is what the label needed and did not have. Nothing
+   * caught it: a key is not English prose, so the English-literal lint has no
+   * quarrel with it; these keys do exist in the dictionary, so the Hausa
+   * coverage guard counts them as translated; and no test had ever rendered
+   * this card.
+   */
+  label: keyof TranslationDictionary;
   path: string;
   /** What must be picked first. Absent means the question can be asked as it is. */
   parameter?: {
@@ -456,6 +466,17 @@ interface JobReport {
   state: 'NEVER_RUN' | 'HEALTHY' | 'RUNNING' | 'OVERDUE' | 'FAILING' | 'STALLED';
   lastStartedAt: string | null;
   lastSucceededAt: string | null;
+  lastFailedAt: string | null;
+  /*
+   * Failing on and off right now, computed by the API.
+   *
+   * This screen worked it out for itself to begin with, from `lastFailedAt`
+   * and the interval. That put the same rule in two places, and the other
+   * place is the one that decides whether an administrator is told — a board
+   * and an inbox that disagree about which jobs are flapping are worse than
+   * either alone, because the reader cannot tell which is stale.
+   */
+  flapping: boolean;
   lastDetail: string | null;
   /**
    * Why the last run failed.
@@ -528,7 +549,7 @@ export function BackgroundWorkPanel() {
       .get<{ jobs: JobReport[]; healthy: boolean; needingAttention: number }>('/government/workers')
       .then(setHealth)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -578,6 +599,88 @@ export function BackgroundWorkPanel() {
           },
           {
             /*
+             * What the last run actually did, which was arriving and being
+             * dropped.
+             *
+             * `jobHealth` has always sent `lastDetail` — "4 reminder(s)
+             * sent", "promoted 12 commission(s) to eligible" — and this
+             * interface declared it and no column drew it. So a HEALTHY row
+             * said the job ran and nothing about whether it found anything,
+             * which is the difference between a reminder sweep working and a
+             * reminder sweep running over an empty queue because the query
+             * behind it broke.
+             *
+             * The server's words are kept, as `nextStep` on a `conflict()` is:
+             * this sentence carries different counts every run, so there is no
+             * code to key a translation on.
+             *
+             * The three cases are kept apart. A succeeded run with no detail
+             * is "nothing needed doing", which is an answer; a job that has
+             * never succeeded gets a dash, and the state column says why.
+             */
+            key: 'whatItDid',
+            label: 'ofcOvWhatItDid',
+            render: (row: JobReport) =>
+              row.lastDetail ??
+              (row.lastSucceededAt ? t.ofcOvNothingNeededDoing : '\u2014'),
+          },
+          {
+            /*
+             * The failure this board could not report.
+             *
+             * `state` is FAILING only while `consecutiveFailures > 0`, and one
+             * success resets that counter to zero. A job that fails every other
+             * run therefore reads HEALTHY, `needingAttention` counts it as
+             * nothing, and the line above this table says every scheduled job
+             * has run on schedule — while `runsTotal` and `failuresTotal` sat
+             * in the payload, declared in the interface above, and no column
+             * drew them.
+             *
+             * For the reconciliation sweep that is money not reconciled, on a
+             * board whose entire purpose is to say whether unattended work is
+             * happening.
+             *
+             * Two readings, kept apart. The lifetime record is what it says:
+             * how this job has done overall, which a clean job should be proud
+             * of and a bad one cannot hide. Recently is the sharper one — a
+             * job with a recent success AND a recent failure is flapping now,
+             * whatever its state says, and that is the row to look at today.
+             *
+             * "Recent" is measured against the job's own interval, because
+             * every-30-seconds and every-6-hours mean different things by it.
+             */
+            key: 'record',
+            label: 'ofcOvRecord',
+            render: (row: JobReport) => {
+              if (row.runsTotal === 0) return '\u2014';
+              const clean = row.failuresTotal === 0;
+              return (
+                <>
+                  <span>
+                    {clean
+                      ? t.ofcOvNeverFailed.replace('{{runs}}', String(row.runsTotal))
+                      : t.ofcOvFailedOutOf
+                          .replace('{{failures}}', String(row.failuresTotal))
+                          .replace('{{runs}}', String(row.runsTotal))}
+                  </span>
+                  {row.flapping && (
+                    <>
+                      <br />
+                      <span className="table__sub" role="status">
+                        {t.ofcOvFailingIntermittently.replace(
+                          '{{when}}',
+                          formatDateTime(row.lastFailedAt!),
+                        )}
+                        {row.lastError ? ` ${row.lastError}` : ''}
+                      </span>
+                    </>
+                  )}
+                </>
+              );
+            },
+          },
+          {
+            /*
              * Named for what the column shows, not for the field it used to
              * print. `Table` reads `key` for data only when there is no
              * `render`, so if this render is ever dropped the column shows a
@@ -601,6 +704,8 @@ interface ChainAnswer {
   entriesChecked: number;
   brokenAtSequence?: number;
   verdict: ChainVerdict;
+  /** How far the replay reached. The intact sentence names it; see audit.ts. */
+  highestSequence?: number;
   /** The server's English, kept for a build that meets an outcome it does not know. */
   message: string;
 }
@@ -617,7 +722,14 @@ function chainAnswer(answer: ChainAnswer, t: TranslationDictionary): string {
   if (!key) return answer.message;
   return (t[key] as string)
     .replace('{{count}}', String(answer.entriesChecked))
-    .replace('{{sequence}}', String(answer.brokenAtSequence ?? 0));
+    /*
+     * The break, or how far it got.
+     *
+     * A broken chain names the entry it failed at; an intact one names the last
+     * entry it reached, because that is the number an auditor records to notice
+     * a log that has been shortened since.
+     */
+    .replace('{{sequence}}', String(answer.brokenAtSequence ?? answer.highestSequence ?? 0));
 }
 
 export function AuditScreen() {
@@ -625,7 +737,10 @@ export function AuditScreen() {
   const [entries, setEntries] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [verification, setVerification] = useState<ChainAnswer | null>(null);
-  const [queryResult, setQueryResult] = useState<{ label: string; rows: any[] } | null>(null);
+  const [queryResult, setQueryResult] = useState<{
+    label: keyof TranslationDictionary;
+    rows: any[];
+  } | null>(null);
   const [pending, setPending] = useState<AuditQuery | null>(null);
   /*
    * Kept in the URL and in this session. An auditor who filtered to one action,
@@ -660,7 +775,7 @@ export function AuditScreen() {
       .get<any[]>(`/government/audit?${params.toString()}`)
       .then(setEntries)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [auditQuery]);
 
@@ -742,11 +857,11 @@ export function AuditScreen() {
                   const rows = await api.get<any[]>(query.path);
                   setQueryResult({ label: query.label, rows });
                 } catch (caught) {
-                  if (caught instanceof ApiRequestError) setError(caught.error);
+                  setError(asApiError(caught));
                 }
               }}
             >
-              {query.label}
+              {t[query.label]}
             </button>
           ))}
         </div>
@@ -768,7 +883,7 @@ export function AuditScreen() {
         <div className="card card--flush">
           <div className="card__pad">
             <div className="card__header">
-              <h2 className="card__title">{queryResult.label}</h2>
+              <h2 className="card__title">{t[queryResult.label]}</h2>
               <button type="button" className="small secondary" onClick={() => setQueryResult(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
@@ -874,6 +989,23 @@ export function AuditScreen() {
  * taxpayer:read:all, so none of these selects can present a choice the query
  * would then refuse.
  */
+/**
+ * The most agents this picker can offer, which is the endpoint's own ceiling.
+ *
+ * `/agents` clamps to 200 and orders by `created_at DESC`, so the select holds
+ * the 200 most recently registered. An agent who joined before them cannot be
+ * chosen — and for an audit that is the wrong 200 to keep, because the subject
+ * of an investigation is more often a long-serving agent than last month's
+ * intake.
+ *
+ * Taxpayers on this same screen are searched rather than listed, for the
+ * reason given below: there are more of them than any select should hold.
+ * Agents were judged few enough to list, and at some point PSIRS stops being
+ * an organisation where that is true. Until the picker can be searched or
+ * filtered by LGA, saying so is the honest half of the fix.
+ */
+const AGENT_OPTION_LIMIT = 200;
+
 function AuditQueryParameters({
   query,
   onCancel,
@@ -898,6 +1030,14 @@ function AuditQueryParameters({
    * searched to do the thing they have already done.
    */
   const [searched, setSearched] = useState(false);
+  /*
+   * And whether the list could not be read at all, which the select used to
+   * render as "Nothing to choose from" with the control disabled. An auditor
+   * opening an audit on an agent was told PSIRS has no agents — and the one
+   * thing they could do about it, ask again, was not on the screen.
+   */
+  const [optionsFailed, setOptionsFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState(() => {
     const to = new Date();
@@ -911,9 +1051,10 @@ function AuditQueryParameters({
     setOptions(null);
     setValue('');
     setSearched(false);
+    setOptionsFailed(false);
     if (source === 'agents') {
       api
-        .get<{ agents: any[] } | any[]>('/agents?limit=200')
+        .get<{ agents: any[] } | any[]>(`/agents?limit=${AGENT_OPTION_LIMIT}`)
         .then((data) => {
           const list = Array.isArray(data) ? data : data.agents;
           setOptions(
@@ -923,7 +1064,10 @@ function AuditQueryParameters({
             })),
           );
         })
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else if (source === 'revenueItems') {
       api
         .get<any[]>('/revenue/items')
@@ -935,13 +1079,16 @@ function AuditQueryParameters({
             })),
           ),
         )
-        .catch(() => setOptions([]));
+        .catch(() => {
+          setOptions([]);
+          setOptionsFailed(true);
+        });
     } else {
       // Taxpayers are searched rather than listed: there are more of them than
       // any select should hold, and an auditor arrives knowing a name or number.
       setOptions([]);
     }
-  }, [source]);
+  }, [source, attempt]);
 
   async function runSearch() {
     if (!search.trim()) return;
@@ -959,7 +1106,7 @@ function AuditQueryParameters({
       );
       setSearched(true);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -975,7 +1122,7 @@ function AuditQueryParameters({
       }
       onRan(await api.get<any[]>(`${query.path}?${params.toString()}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) onError(caught.error);
+      onError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -984,7 +1131,7 @@ function AuditQueryParameters({
   return (
     <div className="card">
       <div className="card__header">
-        <h2 className="card__title">{query.label}</h2>
+        <h2 className="card__title">{t[query.label]}</h2>
         <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
 
@@ -1022,7 +1169,9 @@ function AuditQueryParameters({
                   ? searched
                     ? t.ofcOvNoTaxpayerMatchedThat
                     : t.ofcOvSearchForATaxpayer
-                  : t.ofcOvNothingToChooseFrom
+                  : optionsFailed
+                    ? t.ofcListCouldNotLoad
+                    : t.ofcOvNothingToChooseFrom
                 : t.ofcOvSelectOne}
           </option>
           {(options ?? []).map((option) => (
@@ -1031,6 +1180,14 @@ function AuditQueryParameters({
             </option>
           ))}
         </select>
+        <ReferenceListFailure
+          list={{ failed: optionsFailed, reload: () => setAttempt((n) => n + 1) }}
+        />
+        {source === 'agents' && options && options.length >= AGENT_OPTION_LIMIT && (
+          <Alert kind="info">
+            {t.ofcOvAgentListIsCapped.replace('{{n}}', String(options.length))}
+          </Alert>
+        )}
       </div>
 
       {query.period && (

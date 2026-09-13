@@ -12,6 +12,10 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { LoginScreen } from '../screens/Login';
 import { VerifyScreen } from '../screens/Public';
 import * as apiModule from '../lib/api';
+import { setPortalLanguage } from '../lib/i18n';
+import { getTranslation } from '@psirs/shared';
+
+const en = getTranslation('en');
 
 describe('1. Government Portal Authentication UI', () => {
   beforeEach(() => {
@@ -122,6 +126,72 @@ describe('2. Public Receipt & Particulars Verification Portal', () => {
       /not a receipt|acknowledge/i.test(verdict!.textContent ?? ''),
       `the verdict read "${verdict!.textContent}", which a glance takes as paid`,
     ).toBe(true);
+  });
+
+  it('does not show a citizen the name of a database column value', async () => {
+    /*
+     * An acknowledgement has no revenue item, and the row fell back to the
+     * document type — which is a `documents.document_type` value, not a
+     * sentence. A citizen checking their paper on the State's own website
+     * read `PAYMENT_ACKNOWLEDGEMENT`, in capitals, with the underscores in
+     * it. Every other enum on this platform reaches a person through
+     * `enumLabel`; this one row did not.
+     */
+    vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
+      status: 'VALID',
+      documentNumber: 'PSIRS-ACK/2026/000008',
+      documentType: 'PAYMENT_ACKNOWLEDGEMENT',
+      issuedAt: '2026-08-27T10:00:36.396Z',
+      integrityConfirmed: true,
+      reason: 'ACKNOWLEDGEMENT_NOT_RECEIPT',
+      message:
+        'This is a genuine PSIRS acknowledgement of payment, and it is NOT a government receipt.',
+    });
+
+    render(<VerifyScreen code="NA76E-2DC3F" />);
+
+    await screen.findByText(/PSIRS-ACK\/2026\/000008/);
+    expect(
+      screen.queryByText(/PAYMENT_ACKNOWLEDGEMENT/),
+      'the raw enum value must not appear anywhere on a citizen-facing page',
+    ).toBeNull();
+    expect(
+      screen.getByText(en.enumPaymentAcknowledgement),
+      'the document type must be rendered through the enum dictionary',
+    ).toBeTruthy();
+  });
+
+  it('renders the revenue item in the language the citizen is reading', async () => {
+    /*
+     * The API sends the revenue item's Hausa name alongside its English one,
+     * because the catalogue carries both. This page offers Hausa and was
+     * dropping the Hausa name on the floor — so a citizen who had switched
+     * the page to Hausa still read the English catalogue entry.
+     */
+    setPortalLanguage('ha');
+    try {
+      vi.spyOn(apiModule.api, 'publicGet').mockResolvedValue({
+        status: 'VALID',
+        receiptNumber: 'PSIRS/2026/000001',
+        revenueType: 'Development Levy',
+        revenueTypeHa: 'Haraji Ci gaba',
+        amountKobo: '250000',
+        issuedAt: '2026-08-27T10:00:36.396Z',
+        integrityConfirmed: true,
+        reason: 'RECEIPT_GENUINE',
+        message: 'This is a genuine government receipt issued by PSIRS.',
+      });
+
+      render(<VerifyScreen code="T7C72-QTUDN" />);
+
+      expect(await screen.findByText('Haraji Ci gaba')).toBeTruthy();
+      expect(
+        screen.queryByText('Development Levy'),
+        'the English catalogue name must not survive onto a Hausa page',
+      ).toBeNull();
+    } finally {
+      setPortalLanguage('en');
+    }
   });
 
   it('displays warning alert when receipt was revoked or voided', async () => {

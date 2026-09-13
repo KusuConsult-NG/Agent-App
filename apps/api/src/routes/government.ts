@@ -997,6 +997,43 @@ governmentRouter.get(
   asyncHandler(async (req, res) => {
     const role = req.auth!.role;
     /*
+     * Which blocks a caller gets is decided by what the role holds, not by
+     * what the role is called.
+     *
+     * Every block below is a statewide read, and four of the functions behind
+     * them say so outright: `revenueOfficerHome` is annotated "a home screen
+     * for a role that holds report:read:all", `auditorHome` "the audit trail
+     * is one trail, and an auditor holds report:read:all", and the two work
+     * queues are "scoped the same way". Two of those queues —
+     * `revenueOfficerWorkItems` and `auditorWorkItems` — return taxpayer
+     * names, phone numbers and amounts from anywhere in Plateau State.
+     *
+     * That justification was sound while the map lived in `rbac.ts`, because
+     * a role's permissions and a role's name could not come apart without a
+     * deployment. Migration 059 made the map data and
+     * `POST /government/roles/:name/revoke` is the lever: withdraw
+     * `report:read:all` from `revenue_officer` and every other report narrows
+     * correctly through `resolveReportScope`, while a switch on the role's
+     * name goes on serving the whole register — because it never asked.
+     *
+     * Asked of `rbacStore` rather than read from `req.auth.permissions`, for
+     * the reason `requirePermission` gives for doing the same: this is the
+     * enforcement point, and a later change to how `req.auth` is populated
+     * must not be able to widen it.
+     *
+     * A caller without the permission gets `{ role }` — the answer a
+     * supervisor already gets here, which the portal answers by falling back
+     * to the dashboard that scopes itself to their territory. Blank is the
+     * wrong outcome for an officer who should have the queue; it is the right
+     * outcome for one whose authority to see the whole state was withdrawn.
+     */
+    const held = await rbacStore.permissionsFor(role);
+    if (!held.includes('report:read:all')) {
+      res.json({ role });
+      return;
+    }
+
+    /*
      * Counts and the work behind them, together.
      *
      * A screen that says "3 agents awaiting clearance" and sends the officer
@@ -1122,19 +1159,101 @@ governmentRouter.get(
 // Reconciliation and settlement (PRD §46, §47)
 // ---------------------------------------------------------------------------
 
+/**
+ * The button that runs reconciliation now, and the lock it used to walk past.
+ *
+ * WHAT WAS WRONG
+ *
+ * This called `runReconciliation` directly, past both guards the scheduled
+ * path has: the module-level `sweepInFlight` boolean, and the cross-instance
+ * advisory lock `withJobLock` takes. So a finance officer pressing the button
+ * during a sweep — or twice, having had no feedback the first time — started
+ * a second full pass.
+ *
+ * WHAT THAT DOES AND DOES NOT COST, MEASURED AGAINST THE CODE
+ *
+ * It does not corrupt anything, and it is worth saying why rather than
+ * assuming either way:
+ *
+ *   * `runReconciliation` writes only `reconciliation_runs` and
+ *     `reconciliation_records`, both under a fresh `runId`. Two passes produce
+ *     two independent, complete record sets rather than interfering.
+ *   * The worklist is already protected. `exceptionQueue` takes the NEWEST
+ *     finding per transaction, deliberately — its own comment describes the
+ *     bug where the same item appeared eight times with eight Resolve
+ *     buttons. A duplicate pass cannot multiply the queue.
+ *   * `confirmPayment`, on the recovery path, re-reads the payment under
+ *     `FOR UPDATE` and refuses anything not in a confirmable state.
+ *
+ * What it does cost is the gateway, and that is precisely what the lock is
+ * for. `withJobLock` exists because replicas meant "N reconciliation sweeps
+ * every six hours, each asking the gateway about every payment reference in a
+ * 48-hour window" — and an officer's button is another door onto the same
+ * harm, one the lock was never told about.
+ *
+ * WHY A REFUSAL RATHER THAN A SKIP
+ *
+ * The scheduled path answers contention with `{ skipped: true }`, which is
+ * right for a timer and wrong for a person. An officer who presses Reconcile
+ * and is handed "skipped" has learned nothing, and may have pressed precisely
+ * because they distrust the last sweep. So the lock is taken, and losing it
+ * is a 409 that says what is already running and what to do about it.
+ *
+ * `withJobLock` rather than `runJob`: a person pressing a button is not the
+ * scheduled sweep, and recording it as one would put a liveness reading
+ * against `reconciliation-sweep` that no worker produced — the reading the
+ * job-run records exist to make trustworthy.
+ */
+const RECONCILIATION_LOCK = 'reconciliation-sweep';
+
+/** The pass another caller is running, for a refusal that names it. */
+async function reconciliationInFlight(): Promise<string> {
+  const running = await queryOne<{ period_start: Date; period_end: Date; started_at: Date }>(
+    pool,
+    `SELECT period_start, period_end, started_at FROM reconciliation_runs
+      WHERE status = 'RUNNING' ORDER BY started_at DESC LIMIT 1`,
+  );
+  /*
+   * There may be no row yet: the run is inserted after the gateway statement
+   * has been fetched, which is the long part. "One is running and has not
+   * reached the point of recording itself" is still the truth, and better
+   * said plainly than dressed up with figures that do not exist.
+   */
+  if (!running) {
+    return 'A reconciliation pass is already running and has not yet recorded its window.';
+  }
+  return (
+    `A reconciliation covering ${running.period_start.toISOString()} to ` +
+    `${running.period_end.toISOString()} has been running since ` +
+    `${running.started_at.toISOString()} and has not finished.`
+  );
+}
+
 governmentRouter.post(
   '/reconciliation/run',
   requirePermission('payment:reconcile'),
   validateBody(
     z.object({ from: z.string().datetime(), to: z.string().datetime() }),
     async (req, res, data) => {
-      const result = await reconciliation.runReconciliation({
-        from: new Date(data.from),
-        to: new Date(data.to),
-        actorId: req.auth!.userId,
-        actorRole: req.auth!.role,
-      });
-      res.json(result);
+      const outcome = await withJobLock(RECONCILIATION_LOCK, () =>
+        reconciliation.runReconciliation({
+          from: new Date(data.from),
+          to: new Date(data.to),
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+
+      if (!outcome.ran) {
+        throw conflict(
+          'RECONCILIATION_ALREADY_RUNNING',
+          await reconciliationInFlight(),
+          'Wait for it to finish and open the run it produced. Starting a second pass asks ' +
+            'the gateway about every reference again and tells you nothing the first will not.',
+        );
+      }
+
+      res.json(outcome.value);
     },
   ),
 );
@@ -1150,12 +1269,30 @@ governmentRouter.post(
       limit: z.number().int().min(1).max(500).default(200),
     }),
     async (_req, res, data) => {
-      const result = await reconciliation.recoverUnverifiedPayments({
-        from: new Date(data.from),
-        to: new Date(data.to),
-        limit: data.limit,
-      });
-      res.json(result);
+      /*
+       * The same lock, for the same reason. Recovery asks the gateway to
+       * verify every unconfirmed payment in the window one at a time, and the
+       * scheduled sweep runs it immediately after reconciling — so a manual
+       * recovery alongside a sweep is the doubled gateway traffic again.
+       */
+      const outcome = await withJobLock(RECONCILIATION_LOCK, () =>
+        reconciliation.recoverUnverifiedPayments({
+          from: new Date(data.from),
+          to: new Date(data.to),
+          limit: data.limit,
+        }),
+      );
+
+      if (!outcome.ran) {
+        throw conflict(
+          'RECONCILIATION_ALREADY_RUNNING',
+          await reconciliationInFlight(),
+          'Wait for it to finish. The scheduled sweep recovers unverified payments itself, ' +
+            'so the pass already running will have done this.',
+        );
+      }
+
+      res.json(outcome.value);
     },
   ),
 );
@@ -2185,7 +2322,8 @@ governmentRouter.get(
         ...result,
         message: chainSentence(result.verdict, {
           count: result.entriesChecked,
-          sequence: result.brokenAtSequence,
+          // The break, or — when there is none — how far the replay reached.
+          sequence: result.brokenAtSequence ?? result.highestSequence,
         }),
       });
     },
@@ -2401,12 +2539,25 @@ governmentRouter.get(
   requirePermission('incentive:read:all'),
   validateQuery(
     z.object({
-      eligible: z.enum(['true', 'false']).optional(),
+      eligible: z.enum(['true', 'false', 'all']).optional(),
       limit: z.coerce.number().int().min(1).max(200).default(50),
       offset: z.coerce.number().int().min(0).default(0),
     }),
     async (req, res, data) => {
-      const eligibleOnly = data.eligible !== 'false'; // default: only eligible
+      /*
+       * `eligible=false` used to mean "do not filter", so a caller asking for
+       * the people this programme turned down was handed the entire evaluated
+       * population with the refusals buried in it. The schema declared an
+       * enum of true and false; the implementation read it as a switch.
+       *
+       * It now means what it says, and the third state it was standing in for
+       * has its own spelling. Nothing passed the parameter, so nothing that
+       * relied on the old reading exists — the officer panel omits it, and
+       * omitting it still means the eligible roll, which is what that panel
+       * is for.
+       */
+      const eligibleFilter =
+        data.eligible === 'all' ? null : data.eligible === 'false' ? false : true;
       const rows = await query<{
         taxpayer_id: string;
         tin: string | null;
@@ -2416,8 +2567,26 @@ governmentRouter.get(
         eligible: boolean;
         reasons: unknown;
         evaluated_at: Date;
+        matching_total: string;
       }>(
         pool,
+        /*
+         * `count(*) over ()` is evaluated before LIMIT, so this is how many
+         * beneficiaries match — not how many came back.
+         *
+         * `total` was `rows.length`: the size of the page, under a name that
+         * means the opposite. A roll of three thousand people answered 50, and
+         * the one instrument a caller had for telling a full page from a
+         * complete list said they were the same thing.
+         *
+         * The tiebreaker on the sort matters more than it looks. `score` is an
+         * integer from 0 to 100 across a whole state's taxpayers, so ties are
+         * not an edge case, they are most of the list — and an ORDER BY that
+         * does not resolve them leaves Postgres free to return a different
+         * hundred each time the page is opened. This is the roll for an
+         * amnesty or a health scheme: who is on it should not depend on the
+         * query plan.
+         */
         `SELECT
            pe.taxpayer_id,
            t.tin,
@@ -2426,18 +2595,26 @@ governmentRouter.get(
            tc.score,
            pe.eligible,
            pe.reasons,
-           pe.evaluated_at
+           pe.evaluated_at,
+           count(*) OVER () AS matching_total
          FROM programme_eligibility pe
          JOIN taxpayers t ON t.id = pe.taxpayer_id
          JOIN lgas l ON l.id = t.lga_id
          LEFT JOIN taxpayer_compliance tc ON tc.taxpayer_id = pe.taxpayer_id
          WHERE pe.programme_id = $1
            AND ($4::boolean IS NULL OR pe.eligible = $4)
-         ORDER BY tc.score DESC NULLS LAST
+         ORDER BY tc.score DESC NULLS LAST, pe.taxpayer_id
          LIMIT $2 OFFSET $3`,
-        [req.params.id, data.limit, data.offset, eligibleOnly ? true : null],
+        [req.params.id, data.limit, data.offset, eligibleFilter],
       );
-      res.json({ beneficiaries: rows, total: rows.length, limit: data.limit, offset: data.offset });
+      // No rows carry no count, and none matching is a total of zero.
+      const total = Number(rows[0]?.matching_total ?? 0);
+      res.json({
+        beneficiaries: rows.map(({ matching_total: _count, ...row }) => row),
+        total,
+        limit: data.limit,
+        offset: data.offset,
+      });
     },
   ),
 );
@@ -3131,12 +3308,21 @@ governmentRouter.get(
   ),
 );
 
-/** What a period holds right now — the same query the close writes down. */
+/**
+ * What a period holds right now — the same query the close writes down.
+ *
+ * The bounds stay calendar days rather than becoming `Date`s. `z.coerce.date()`
+ * here read `2026-09-30` as midnight UTC while the close read the same day out
+ * of a DATE column as midnight LOCAL; those survive being an hour apart only
+ * because `pg` serialises the `Date` back in local time and the skew cancels.
+ * Relying on that is what changed, not the answer. See `CalendarDay` in
+ * services/periods.ts.
+ */
 governmentRouter.get(
   '/periods/figures',
   requirePermission('period:read'),
   validateQuery(
-    z.object({ periodStart: z.coerce.date(), periodEnd: z.coerce.date() }),
+    z.object({ periodStart: z.string().date(), periodEnd: z.string().date() }),
     async (_req, res, data) => {
       res.json(await periods.periodFigures(pool, data.periodStart, data.periodEnd));
     },
@@ -3803,6 +3989,20 @@ governmentRouter.get(
       const report = await workbench.getReport(pool, req.params.id!);
       const rows = ((report.payload as { rows?: Record<string, unknown>[] })?.rows ??
         []) as Record<string, unknown>[];
+      /*
+       * Whether this report is all of its period, taken from the payload
+       * rather than the column beside it.
+       *
+       * The payload is what the checksum covers, so it is the copy that
+       * travels with an exported file and the copy a reader can verify.
+       * Reports generated before coverage was recorded carry no key here, and
+       * are left unmarked: unknown is not the same as partial, and stamping
+       * PARTIAL on a report that may well be complete would be its own false
+       * claim.
+       */
+      const coverage = (report.payload as { coverage?: { complete?: boolean; rowCap?: number } })
+        ?.coverage;
+      const truncatedAt = coverage?.complete === false ? (coverage.rowCap ?? rows.length) : null;
 
       if (data.format === 'pdf') {
         if (!req.auth!.permissions.includes('data:export')) {
@@ -3831,6 +4031,7 @@ governmentRouter.get(
           generatedBy: String(report.generated_by_name ?? 'PSIRS'),
           reportNumber: String(report.report_number),
           checksum: String(report.checksum),
+          truncatedAt,
         });
         res.setHeader('content-type', 'application/pdf');
         res.setHeader(
@@ -3845,7 +4046,14 @@ governmentRouter.get(
         rows,
         format: data.format,
         subject: String(report.title),
-        filename: String(report.report_number).replace(/\//g, '-'),
+        /*
+         * A spreadsheet has nowhere to put a banner — a note row would shift
+         * every column under it and break the thing somebody opens this format
+         * to do. The filename carries it instead, which survives being saved,
+         * emailed and filed in a way a cell would not.
+         */
+        filename:
+          String(report.report_number).replace(/\//g, '-') + (truncatedAt ? '-PARTIAL' : ''),
         parameters: (report.parameters ?? {}) as Record<string, unknown>,
       });
     },
@@ -4016,17 +4224,26 @@ governmentRouter.get(
 );
 
 /*
- * Blocking a machine, and lifting it. Both step-up.
+ * Blocking a machine, and lifting it. Both step-up, and each under its own
+ * name.
  *
  * A block ends every session the device holds and stops it opening another --
  * enforced on the row by migration 063, because the case it exists for is a
  * laptop already in somebody else's hands. That is the same size of decision
  * as changing an officer's role, and gets the same extra verification.
+ *
+ * It used to get it under the same *name*: both routes asked for
+ * `user.role.change`. Size and name are different things, and the name is
+ * what gets written down. `grantStepUp` audits the grant, so blocking a stolen
+ * laptop recorded an `auth.step_up_granted` for a role change that never
+ * happened; the refusal told the officer to step up for a role change; and for
+ * the window's ten minutes either code opened either door. See the note beside
+ * `device.block` in `STEP_UP_ACTIONS`.
  */
 governmentRouter.post(
   '/devices/:id/block',
   requirePermission('user:manage'),
-  requireStepUp('user.role.change'),
+  requireStepUp('device.block'),
   validateBody(
     z.object({ reason: z.string().trim().min(10).max(500) }),
     async (req, res, data) => {
@@ -4044,7 +4261,7 @@ governmentRouter.post(
 governmentRouter.post(
   '/devices/:id/unblock',
   requirePermission('user:manage'),
-  requireStepUp('user.role.change'),
+  requireStepUp('device.unblock'),
   validateBody(
     z.object({ reason: z.string().trim().min(10).max(500) }),
     async (req, res, data) => {

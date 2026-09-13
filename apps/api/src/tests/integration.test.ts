@@ -1192,13 +1192,31 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
     assert.equal(rate.status, 403);
   });
 
-  it('verifies the audit hash chain end to end', async () => {
+  it('replays the audit hash chain and says how far it reached', async () => {
     const response = await get('/government/audit/verify', { token: ctx.auditorToken });
 
     assert.equal(response.status, 200);
     assert.equal(response.body.valid, true);
     assert.ok(response.body.entriesChecked > 20, 'the chain covers the whole run');
-    assert.match(response.body.message, /No tampering detected/);
+
+    /*
+     * This asserted /No tampering detected/, which the replay cannot establish:
+     * entries cut from the end of the log leave a shorter chain that verifies
+     * perfectly. The answer now reports what it did establish and names the
+     * last entry it reached — the number an auditor records so a shortened log
+     * is visible next time.
+     */
+    assert.doesNotMatch(
+      response.body.message,
+      /no tampering/i,
+      'the replay cannot establish that nothing was tampered with',
+    );
+    assert.equal(
+      response.body.highestSequence,
+      response.body.entriesChecked,
+      'an unwindowed replay of the whole log reaches its last entry',
+    );
+    assert.match(response.body.message, new RegExp(String(response.body.highestSequence)));
   });
 
   it('detects tampering with a historical audit entry', async () => {

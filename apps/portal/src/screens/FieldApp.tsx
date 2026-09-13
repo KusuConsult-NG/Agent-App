@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { compareVersions } from '@psirs/shared';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Stat, Table, formatDateTime } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -69,7 +69,7 @@ export function FieldAppScreen() {
       .get<History>('/agents/app-version/history')
       .then(setHistory)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -125,10 +125,7 @@ export function FieldAppScreen() {
       setEffectiveFrom('');
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

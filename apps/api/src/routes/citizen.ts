@@ -171,19 +171,35 @@ citizenRouter.get(
       score: number;
       has_valid_tin: boolean;
       outstanding_amount_kobo: string;
+      disputed_amount_kobo: string;
       last_payment_at: Date | null;
       compliant_periods: number;
       assessments_raised: number;
     }>(
       pool,
-      `SELECT score, has_valid_tin, outstanding_amount_kobo, last_payment_at,
-              compliant_periods, assessments_raised
+      `SELECT score, has_valid_tin, outstanding_amount_kobo, disputed_amount_kobo,
+              last_payment_at, compliant_periods, assessments_raised
          FROM taxpayer_compliance WHERE taxpayer_id = $1`,
       [taxpayer.id],
     );
 
+    /*
+     * What is owed and still being pursued, and what is on hold.
+     *
+     * An open objection suspends enforcement, and this page is where a citizen
+     * finds out where they stand. It was reading the gross figure, so a trader
+     * who had formally objected was told "You have outstanding tax
+     * obligations. Please contact your nearest PSIRS office or a revenue agent
+     * to pay" — the State pressing for money it had agreed not to press for,
+     * on a bill the objection might be about to overturn.
+     *
+     * Netting it off alone would replace that with "Your tax records are up to
+     * date", which is not true either. A live objection is its own answer and
+     * gets its own status.
+     */
+    const disputed = compliance ? BigInt(compliance.disputed_amount_kobo) : 0n;
     const hasOutstanding = compliance
-      ? BigInt(compliance.outstanding_amount_kobo) > 0n
+      ? BigInt(compliance.outstanding_amount_kobo) - disputed > 0n
       : false;
 
     const score = compliance?.score ?? 0;
@@ -207,15 +223,18 @@ citizenRouter.get(
         ? 'NOT_ASSESSED'
         : hasOutstanding
           ? 'HAS_ARREARS'
-          : score >= 60
-            ? 'COMPLIANT'
-            : 'NEEDS_ATTENTION';
+          : disputed > 0n
+            ? 'UNDER_OBJECTION'
+            : score >= 60
+              ? 'COMPLIANT'
+              : 'NEEDS_ATTENTION';
 
     const statusMessages: Record<string, string> = {
       COMPLIANT: 'Your tax records are up to date. Keep paying on time to maintain your status.',
       HAS_ARREARS: 'You have outstanding tax obligations. Please contact your nearest PSIRS office or a revenue agent to pay.',
       NEEDS_ATTENTION: 'Your compliance score needs improvement. Paying your obligations on time will raise it.',
       NOT_ASSESSED: 'Nothing has been assessed against you yet, so there is no compliance score to report. This will update after your first assessment.',
+      UNDER_OBJECTION: 'An assessment against you is under objection, so nothing is being enforced while PSIRS decides it. You do not need to do anything, and you are not treated as being in arrears in the meantime.',
     };
 
     // WHAT AN ANONYMOUS CALLER IS TOLD, AND WHY IT IS THIS LITTLE.

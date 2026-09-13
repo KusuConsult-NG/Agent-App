@@ -43,14 +43,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ApiRequestError,
-  api,
-  can,
-  stepUp,
-  type ApiError,
-  type User,
-} from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -120,6 +113,14 @@ interface ReportRow {
   period_start: string | null;
   period_end: string | null;
   row_count: number;
+  /**
+   * Whether the query returned every matching row, or stopped at the cap.
+   *
+   * `null` for reports generated before the platform recorded this. Unknown is
+   * not the same as partial, and marking those PARTIAL would be a false claim
+   * of its own — so the badge appears only on `false`.
+   */
+  coverage_complete: boolean | null;
   checksum: string;
   status: string;
   generated_at: string;
@@ -180,10 +181,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
       setSamples(drawn.samples);
       setReports(generated.reports);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setLoadError(caught.error);
-      else if (caught instanceof Error) {
-        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setLoadError(asApiError(caught));
       // Unknown, not empty. One `Promise.all`, so a single refusal leaves
       // both unknown — which is honest: neither was read.
       setSamples(null);
@@ -216,10 +214,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
     try {
       setOpenReport(await api.get<ReportDetail>(`/government/audit/reports/${id}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setReportError(caught.error);
-      else if (caught instanceof Error) {
-        setReportError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setReportError(asApiError(caught));
       setOpenReport(null);
     }
   }, []);
@@ -229,7 +224,7 @@ export function WorkbenchScreen({ user }: { user: User }) {
     try {
       setOpen(await api.get<SampleDetail>(`/government/audit/samples/${id}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     }
   }, []);
 
@@ -362,6 +357,23 @@ export function WorkbenchScreen({ user }: { user: User }) {
           <p className="card__hint">{t.ofcWbViewIsRecorded}</p>
 
           {/*
+            * Above the checksum, deliberately.
+            *
+            * The alert below says the stored rows still hash to the value
+            * recorded at generation, which is true and is not the same as the
+            * report being complete. Read on its own it is the more
+            * reassuring of the two statements, and it is the one an officer
+            * takes to the signature.
+            */}
+          {openReport.coverage_complete === false && (
+            <Alert kind="error" title="ofcWbPartialBadge">
+              <p style={{ margin: 0 }}>
+                {t.ofcWbPartialReport.replace(/\{\{n\}\}/g, String(openReport.row_count))}
+              </p>
+            </Alert>
+          )}
+
+          {/*
             * The two values side by side, and the verdict said in words.
             *
             * A reviewer comparing a printed copy needs the whole checksum
@@ -475,7 +487,22 @@ export function WorkbenchScreen({ user }: { user: User }) {
                 label: 'ofcWbReportType',
                 render: (row: ReportRow) => <Badge status={row.report_type} />,
               },
-              { key: 'row_count', label: 'ofcWbRows', numeric: true },
+              {
+                key: 'row_count',
+                label: 'ofcWbRows',
+                numeric: true,
+                render: (row: ReportRow) =>
+                  row.coverage_complete === false ? (
+                    <>
+                      {row.row_count}{' '}
+                      <span className="danger-text" style={{ fontWeight: 600 }}>
+                        {t.ofcWbPartialBadge}
+                      </span>
+                    </>
+                  ) : (
+                    row.row_count
+                  ),
+              },
               {
                 key: 'period',
                 label: 'ofcWbPeriod',
@@ -647,7 +674,7 @@ function DrawForm({ onDrawn }: { onDrawn: (message: string) => Promise<void> }) 
                 .replace('{{n}}', String(result.sampleSize)),
             );
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -766,7 +793,7 @@ function SampleDetailPanel({
                 });
                 await onChanged(t.ofcCwSaved);
               } catch (caught) {
-                setError(caught instanceof ApiRequestError ? caught.error : null);
+                setError(asApiError(caught));
               } finally {
                 setBusy(false);
               }
@@ -821,7 +848,7 @@ function FindingControl({
             });
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -881,7 +908,11 @@ function GenerateForm({ onGenerated }: { onGenerated: (message: string) => Promi
           setBusy(true);
           setError(null);
           try {
-            const result = await api.post<{ reportNumber: string; rowCount: number }>(
+            const result = await api.post<{
+              reportNumber: string;
+              rowCount: number;
+              complete: boolean;
+            }>(
               '/government/audit/reports',
               {
                 reportType,
@@ -891,12 +922,12 @@ function GenerateForm({ onGenerated }: { onGenerated: (message: string) => Promi
             );
             setTitle('');
             await onGenerated(
-              t.ofcWbGenerated
+              (result.complete === false ? t.ofcWbGeneratedPartial : t.ofcWbGenerated)
                 .replace('{{number}}', result.reportNumber)
-                .replace('{{n}}', String(result.rowCount)),
+                .replace(/\{\{n\}\}/g, String(result.rowCount)),
             );
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }
@@ -986,7 +1017,7 @@ function ReportActions({
             setReason('');
             await onDone(t.ofcCwSaved);
           } catch (caught) {
-            setError(caught instanceof ApiRequestError ? caught.error : null);
+            setError(asApiError(caught));
           } finally {
             setBusy(false);
           }

@@ -7,8 +7,15 @@
  *   * they respond through a tokenised link and never need an account (§10);
  *   * a replaced referee is superseded, never overwritten (§29).
  *
- * Invitation tokens are stored only as hashes (§37): the plaintext exists once,
- * in the message sent to the referee.
+ * Invitation tokens are stored only as hashes (§37). That was true of
+ * `referee_invitations` and false of the database as a whole: the SMS carrying
+ * the link was rendered in full into `notifications.message`, which nothing
+ * has ever deleted, so the plaintext sat beside its own hash indefinitely. A
+ * join on the hash of the substring pulled out of the body resolved the
+ * invitation it opens — in the UAT database, one still SENT and a fortnight
+ * from expiry. The queued body is now masked and the deliverable one is
+ * cleared as the gateway takes it; see `secretVariables` in
+ * services/notifications.ts.
  */
 
 import type { PoolClient } from 'pg';
@@ -40,7 +47,12 @@ export interface RefereeInput {
 export interface NominationResult {
   refereeId: string;
   referenceCode: string;
-  /** Returned once so the API can deliver it; never stored in plaintext. */
+  /**
+   * Returned once so the API can deliver it.
+   *
+   * Not retained anywhere afterwards — not in `referee_invitations`, which
+   * holds sha256(token), and no longer in the notification queue either.
+   */
   invitationToken: string;
   invitationUrl: string;
   expiresAt: Date;
@@ -164,6 +176,10 @@ export async function nominateReferee(params: {
         link: invitationUrl,
         expiry: expiresAt.toISOString().slice(0, 10),
       },
+      // The link is the credential — the whole of this route's authorisation
+      // is the token in it. Stored, it would have put back in plaintext the
+      // thing the row above deliberately keeps only as a hash.
+      secretVariables: ['link'],
       entityType: 'referee',
       entityId: referee!.id,
     });

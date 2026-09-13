@@ -430,7 +430,20 @@ export async function confirmedCollection(transactionId: string): Promise<{
  *
  * Returns the transaction id, which is all any caller has wanted from it.
  */
-export async function seedOneCollection(label: string): Promise<string> {
+export async function seedOneCollection(
+  label: string,
+  /*
+   * Stop before settlement, leaving the transaction in RECONCILIATION_PENDING
+   * with no receipt.
+   *
+   * That is a real and common state -- the money is confirmed and recognised,
+   * and the receipt waits for the bank statement -- and until now no fixture
+   * could produce it, so nothing could test a figure that distinguishes
+   * "collected" from "receipted". The default settles, so every existing
+   * caller is unchanged.
+   */
+  options: { settle?: boolean } = {},
+): Promise<string> {
   const demo = await seedDemoAgent();
   if (!demo) {
     throw new Error(
@@ -477,7 +490,7 @@ export async function seedOneCollection(label: string): Promise<string> {
     { gatewayReference: initiated.body.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
     agentAuth,
   );
-  await settleTransaction(assessment.body.transactionId);
+  if (options.settle !== false) await settleTransaction(assessment.body.transactionId);
   return assessment.body.transactionId as string;
 }
 

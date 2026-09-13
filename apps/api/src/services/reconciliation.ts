@@ -1085,6 +1085,59 @@ export const EXCEPTION_STATUSES = [
 const SETTLEMENT_DUE_HOURS = 72;
 
 /**
+ * One SQL answer to "is this record an outstanding exception".
+ *
+ * `EXCEPTION_STATUSES` above says which statuses count, and the queue adds the
+ * part that cannot be expressed as a list: PENDING_SETTLEMENT is an exception
+ * only once the gateway has held the money past the settlement window. Three
+ * other queries needed the same answer, wrote the four obvious statuses out by
+ * hand, and so left out both halves of that — REVERSED, which is
+ * unconditional, and the overdue settlement, which is the one the window was
+ * drawn to expose.
+ *
+ * Returned as a fragment rather than a view because the callers are ordinary
+ * subqueries over `reconciliation_records` with their own aliases and their own
+ * positional parameters, and a fragment composes with all of them. The
+ * settlement window is interpolated as a number from a constant in this file:
+ * there is no user input anywhere near it, and making it a bind parameter
+ * would push the caller's parameter numbering around, which is the friction
+ * that got the list retyped in the first place.
+ *
+ * `alias` is the caller's name for its `reconciliation_records` row. Nothing
+ * else need be in scope — the settlement age is read through a correlated
+ * subquery rather than a join, so a caller that does not select payments at
+ * all still gets the right answer.
+ */
+export function outstandingExceptionSql(
+  alias: string,
+  settlementDueHours: number = SETTLEMENT_DUE_HOURS,
+): string {
+  const hours = Number(settlementDueHours);
+  if (!Number.isFinite(hours) || hours < 0) {
+    throw new Error(`settlementDueHours must be a non-negative number, got ${settlementDueHours}`);
+  }
+  const statuses = EXCEPTION_STATUSES.map((status) => `'${status}'`).join(',');
+  return `${alias}.reconciled_at IS NULL
+      AND ${alias}.status IN (${statuses})
+      AND (
+        ${alias}.status <> 'PENDING_SETTLEMENT'
+        OR EXISTS (
+          SELECT 1 FROM payments p
+           WHERE p.id = ${alias}.payment_id
+             AND COALESCE(p.verified_at, p.paid_at, p.created_at, ${alias}.created_at)
+                   < now() - interval '${hours} hours'
+             AND NOT EXISTS (
+               SELECT 1 FROM settlements s
+                WHERE s.id = p.settlement_id AND s.status = 'RECONCILED')
+        )
+        OR (
+          ${alias}.payment_id IS NULL
+          AND ${alias}.created_at < now() - interval '${hours} hours'
+        )
+      )`;
+}
+
+/**
  * The finance officer's worklist: every unresolved exception, once each.
  *
  * `reconciliation_records` holds one row per transaction *per run*, which is

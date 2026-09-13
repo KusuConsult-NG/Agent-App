@@ -151,8 +151,19 @@ async function enumColumns(): Promise<EnumColumn[]> {
     const column = /\(([a-z_]+) = ANY \(ARRAY/.exec(definition);
     assert.ok(column, `could not read the column out of: ${definition}`);
     const values = [...definition.matchAll(/'([A-Z][A-Z0-9_]*)'::text/g)].map((match) => match[1]);
-    // Lower-case sets — `usage_events.language` is 'en' and 'ha' — are values
-    // of a different kind and are not states anything transitions to.
+    /*
+     * Upper-case values only — and here that is a fact about this check, not
+     * about the schema.
+     *
+     * This proves a state orphaned by the absence of its *name* from the
+     * source. Lower-case names are ordinary words: `cases.department` is
+     * 'supervisor', 'admin', 'auditor', and a scan for those in quotes matches
+     * a hundred unrelated lines, so every value would look accounted for
+     * whether or not anything routed to it. The runtime report in
+     * `scripts/check-enum-coverage.ts` watches those columns, because a write
+     * is a write whatever case it is in. This one has nothing to say about
+     * them and says nothing.
+     */
     return values.length > 0 ? [{ table: table_name, column: column[1], values }] : [];
   });
 }

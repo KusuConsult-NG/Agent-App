@@ -23,7 +23,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ApiRequestError, api } from '../lib/api';
 import { usePortalI18n } from '../lib/i18n';
-import { Money } from '../ui';
+import { Badge, Money, formatDate } from '../ui';
 import type { TranslationDictionary } from '@psirs/shared';
 
 interface Hit {
@@ -58,6 +58,18 @@ export function GlobalSearch({ navigate }: { navigate: (path: string) => void })
   const { t } = usePortalI18n();
   const [term, setTerm] = useState('');
   const [hits, setHits] = useState<Hit[] | null>(null);
+  /*
+   * A search that was refused is not a search that found nothing.
+   *
+   * The catch below read `setHits(caught instanceof ApiRequestError ? [] : null)`,
+   * so a refusal put an EMPTY LIST in front of the officer and the box printed
+   * "No results" — the sentence that ends an investigation. An officer holding
+   * a receipt number off a citizen's SMS was told the platform has no record
+   * of it, when in fact the platform had not been asked successfully. Anything
+   * that was not a refusal produced `null`, which prints nothing at all: the
+   * box simply never answers.
+   */
+  const [failed, setFailed] = useState(false);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
@@ -78,16 +90,23 @@ export function GlobalSearch({ navigate }: { navigate: (path: string) => void })
     }
     let live = true;
     setSearching(true);
+    setFailed(false);
     const timer = setTimeout(() => {
       api
         .get<{ hits: Hit[] }>(`/government/search?q=${encodeURIComponent(trimmed)}`)
         .then((result) => {
           if (!live) return;
+          setFailed(false);
           setHits(result.hits);
           setOpen(true);
         })
-        .catch((caught) => {
-          if (live) setHits(caught instanceof ApiRequestError ? [] : null);
+        .catch(() => {
+          if (!live) return;
+          setHits(null);
+          setFailed(true);
+          // Opened, because a failure the officer cannot see is the same as
+          // the silence this replaces.
+          setOpen(true);
         })
         .finally(() => {
           if (live) setSearching(false);
@@ -122,7 +141,7 @@ export function GlobalSearch({ navigate }: { navigate: (path: string) => void })
         aria-label={t.ofcSearchLabel}
         placeholder={t.ofcSearchPlaceholder}
         onChange={(event) => setTerm(event.target.value)}
-        onFocus={() => hits && setOpen(true)}
+        onFocus={() => (hits || failed) && setOpen(true)}
         onKeyDown={(event) => {
           if (event.key === 'Escape') setOpen(false);
           // Enter on a single result is the common case: an officer pasted a
@@ -134,7 +153,10 @@ export function GlobalSearch({ navigate }: { navigate: (path: string) => void })
       {open && (
         <div className="global-search__results" role="listbox">
           {searching && <p className="muted">{t.ofcSearchSearching}</p>}
-          {!searching && hits?.length === 0 && <p className="muted">{t.ofcSearchNoResults}</p>}
+          {!searching && failed && <p className="muted">{t.ofcSearchCouldNotRun}</p>}
+          {!searching && !failed && hits?.length === 0 && (
+            <p className="muted">{t.ofcSearchNoResults}</p>
+          )}
           {hits?.map((hit) => (
             <button
               key={`${hit.kind}-${hit.id}`}
@@ -146,7 +168,30 @@ export function GlobalSearch({ navigate }: { navigate: (path: string) => void })
             >
               <span className="global-search__kind">{t[KIND_LABEL[hit.kind] ?? 'search']}</span>
               <span className="global-search__title">{hit.title}</span>
-              {hit.subtitle && <span className="global-search__subtitle">{hit.subtitle}</span>}
+              {/*
+                * What state the thing is in, which was arriving and being
+                * dropped.
+                *
+                * Every one of the ten kinds this search returns selects a
+                * status — a receipt is VALID or REVERSED, a taxpayer can be
+                * DECEASED or MERGED, an agent SUSPENDED — and this row drew
+                * the kind, the title, the subtitle and the amount. So a
+                * reversed receipt looked exactly like a paid one, in the list
+                * an officer reads while the citizen is still on the phone,
+                * and the reversal only appeared after clicking through.
+                *
+                * `occurred_at` was dropped with it, which is what tells two
+                * transactions for the same taxpayer apart.
+                */}
+              {(hit.subtitle || hit.status || hit.occurred_at) && (
+                <span className="global-search__subtitle">
+                  {hit.status && <Badge status={hit.status} />}
+                  {hit.subtitle}
+                  {hit.occurred_at && (
+                    <span className="global-search__when">{formatDate(hit.occurred_at)}</span>
+                  )}
+                </span>
+              )}
               {hit.amount_kobo && (
                 <span className="global-search__amount">
                   <Money kobo={hit.amount_kobo} />

@@ -9,7 +9,7 @@
  */
 
 import React, { useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { usePublicI18n } from '../lib/i18n';
 import { LanguageToggle } from '../ui';
 import { Alert, ErrorAlert, KeyValue, Loading, Money, formatDate } from '../ui';
@@ -17,6 +17,7 @@ import {
   VERIFICATION_TEXT,
   enumLabel,
   formatDateIn,
+  localName,
   formatNaira,
   type TranslationDictionary,
   type VerificationReason,
@@ -28,6 +29,7 @@ interface VerificationResult {
   documentNumber?: string;
   documentType?: string;
   revenueType?: string;
+  revenueTypeHa?: string | null;
   amountKobo?: string;
   issuedAt?: string;
   lga?: string;
@@ -40,7 +42,7 @@ interface VerificationResult {
 
 
 export function VerifyScreen({ code }: { code?: string }) {
-  const { t } = usePublicI18n();
+  const { t, lang } = usePublicI18n();
   const [input, setInput] = useState(code ?? '');
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,6 +69,18 @@ export function VerifyScreen({ code }: { code?: string }) {
         } else {
           setError(caught.error);
         }
+      } else {
+        /*
+         * The branch that was missing, on the one surface whose reader has
+         * nobody to ask.
+         *
+         * A citizen checking a receipt at a counter, on a connection that
+         * dropped, got no verdict and no error: the page sat exactly as it
+         * had before they pressed. They cannot tell that from the platform
+         * having no record of their receipt, and there is no officer beside
+         * them to explain the difference.
+         */
+        setError(asApiError(caught));
       }
     } finally {
       setBusy(false);
@@ -164,7 +178,25 @@ export function VerifyScreen({ code }: { code?: string }) {
               <KeyValue
                 items={[
                   [t.pubVerifyReceiptNumber, result.receiptNumber ?? result.documentNumber ?? '—'],
-                  [t.pubVerifyRevenueType, result.revenueType ?? result.documentType ?? '—'],
+                  /*
+                   * What the citizen paid for, in words a citizen uses.
+                   *
+                   * Two things were wrong on this one row. An acknowledgement
+                   * carries no revenue item, so the fallback put the column
+                   * value of `documents.document_type` on the page and a
+                   * citizen checking their paper read
+                   * `PAYMENT_ACKNOWLEDGEMENT`. And the revenue item arrives
+                   * with its Hausa name attached, which this page — which
+                   * offers Hausa — was throwing away.
+                   */
+                  [
+                    t.pubVerifyRevenueType,
+                    result.revenueType
+                      ? localName(lang, result.revenueType, result.revenueTypeHa)
+                      : result.documentType
+                        ? enumLabel(result.documentType, t, 'documents.document_type')
+                        : '—',
+                  ],
                   [t.pubVerifyAmount, result.amountKobo ? <Money key="a" kobo={result.amountKobo} /> : '—'],
                   [t.pubVerifyIssued, formatDate(result.issuedAt)],
                   [t.pubVerifyLga, result.lga ?? '—'],
@@ -269,7 +301,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       .publicGet<Invitation>(`/referee/${token}`)
       .then(setInvitation)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -301,7 +333,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
        */
       setOutcome(refereeOutcome(result.status, t) ?? result.message);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -317,7 +349,7 @@ export function RefereePortalScreen({ token }: { token: string }) {
       // One outcome, so one sentence: the decision is recorded either way.
       setOutcome(t.pubRefereeDeclineRecorded);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -599,6 +631,8 @@ const STATUS_COLORS: Record<string, string> = {
   HAS_ARREARS: 'var(--danger, #c0392b)',
   NEEDS_ATTENTION: 'var(--warning, #b7651d)',
   NOT_ASSESSED: 'var(--muted)',
+  // Not a fault and not a clean bill — a matter the State is still deciding.
+  UNDER_OBJECTION: 'var(--info, #1f5c8b)',
 };
 
 interface AttestationMember {
@@ -645,7 +679,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
       .publicGet<AttestationView>(`/group-attestation/${token}`)
       .then(setView)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [token]);
@@ -680,7 +714,7 @@ export function GroupAttestationScreen({ token }: { token: string }) {
           : t.pubGroupAllConfirmed.replace('{{confirmed}}', String(result.attested)),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -898,7 +932,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       await api.publicPost('/citizen-status/statement/request', body);
       setStage('sent');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -918,7 +952,7 @@ function PaymentStatement({ mode, identifier }: { mode: 'tin' | 'phone'; identif
       setStatement(data);
       setStage('shown');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1231,6 +1265,8 @@ function statusMessage(status: string | undefined, t: TranslationDictionary): st
       return t.pubCitizenMsgAttention;
     case 'NOT_ASSESSED':
       return t.pubCitizenMsgNotAssessed;
+    case 'UNDER_OBJECTION':
+      return t.pubCitizenMsgUnderObjection;
     default:
       return null;
   }
@@ -1257,7 +1293,7 @@ export function CitizenPortalScreen() {
       );
       setResult(data);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -1395,6 +1431,7 @@ export function CitizenPortalScreen() {
                 {result.complianceStatus === 'COMPLIANT' ? `✓ ${t.pubCitizenCompliant}` :
                  result.complianceStatus === 'HAS_ARREARS' ? `⚠ ${t.pubCitizenArrears}` :
                  result.complianceStatus === 'NEEDS_ATTENTION' ? `! ${t.pubCitizenAttention}` :
+                 result.complianceStatus === 'UNDER_OBJECTION' ? t.pubCitizenUnderObjection :
                  t.pubCitizenNotAssessed}
               </p>
             </div>

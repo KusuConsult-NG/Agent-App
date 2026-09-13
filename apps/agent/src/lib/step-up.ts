@@ -22,6 +22,7 @@
  *     it — and the UI is built to match rather than to hold a code around.
  */
 
+import type { StepUpAction } from '@psirs/shared';
 import { api, getUser } from './api';
 
 /** How long the code is good for, as the server reported it. */
@@ -82,7 +83,7 @@ export async function requestStepUpCode(): Promise<CodeRequest> {
  * failure. The agent needs to know which of those it was: one means try again,
  * the other means request a new code.
  */
-export async function grantStepUp(action: string, code: string): Promise<void> {
+export async function grantStepUp(action: StepUpAction, code: string): Promise<void> {
   const destination = stepUpDestination();
   if (!destination) throw new StepUpUnavailable();
 

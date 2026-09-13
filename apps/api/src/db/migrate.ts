@@ -65,6 +65,76 @@ export async function runMigrations(options: { silent?: boolean } = {}): Promise
   }
 }
 
+/**
+ * Migrations that were applied under one name and now live under another.
+ *
+ * A rename is invisible to the runner in both directions: the recorded row
+ * goes on naming a file nobody has, and the file under its new name looks
+ * unapplied and is applied a second time. Seven were renumbered from 055-061
+ * to 068-074 when another branch took those ordinals first, so every database
+ * that had the old names — `psirs_test` and all four shards — ran that SQL
+ * twice. It was harmless because these files are `IF NOT EXISTS` throughout,
+ * which is luck rather than a property anybody checked, and the schemas do
+ * still agree.
+ *
+ * Recorded rather than made everybody's problem. The check below refuses an
+ * applied migration with no file, and would refuse these on every existing
+ * database; the alternative to naming them is telling each holder of one to
+ * drop it. Each entry is verified against the files on disk, so an entry whose
+ * target has itself been renamed fails rather than quietly excusing nothing.
+ */
+export const RENAMED: Record<string, string> = {
+  '055_what_is_connected_to_this_person.sql': '068_what_is_connected_to_this_person.sql',
+  '056_the_employer_who_deducts.sql': '069_the_employer_who_deducts.sql',
+  '057_a_schedule_that_can_be_defended.sql': '070_a_schedule_that_can_be_defended.sql',
+  '058_what_the_agent_saw_and_what_it_cost.sql': '071_what_the_agent_saw_and_what_it_cost.sql',
+  '059_a_count_taken_where_there_is_no_signal.sql':
+    '072_a_count_taken_where_there_is_no_signal.sql',
+  '060_what_the_agent_was_told.sql': '073_what_the_agent_was_told.sql',
+  '061_a_citizen_asking_for_their_own_statement.sql':
+    '074_a_citizen_asking_for_their_own_statement.sql',
+};
+
+/**
+ * Every applied migration is still in the repository.
+ *
+ * The checksum above holds an applied migration to its contents. Nothing held
+ * it to existing: the loop walks the files on disk, so a row naming a file
+ * that has been deleted or renamed is never visited and never mentioned.
+ * Measured on a scratch database — insert a row for a filename nobody has, run
+ * again, and the runner answers "schema is up to date" and exits 0.
+ *
+ * What that costs is the ability to rebuild a database from the repository and
+ * get the one that is deployed. A row nobody can produce is a schema change
+ * nobody can review, reproduce or roll back.
+ */
+export function assertEveryAppliedMigrationIsStillHere(
+  appliedByName: Map<string, string>,
+  onDisk: string[],
+): void {
+  const files = new Set(onDisk);
+
+  const staleExcuse = Object.entries(RENAMED).filter(([, to]) => !files.has(to));
+  if (staleExcuse.length > 0) {
+    throw new Error(
+      `RENAMED names a migration that is not on disk: ${staleExcuse
+        .map(([from, to]) => `${from} -> ${to}`)
+        .join(', ')}. The excuse is stale; correct it rather than leaving it.`,
+    );
+  }
+
+  const missing = [...appliedByName.keys()].filter(
+    (filename) => !files.has(filename) && !(filename in RENAMED),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${missing.length} applied migration(s) are no longer in the repository: ` +
+        `${missing.join(', ')}. This database cannot be rebuilt from these sources. ` +
+        'Restore the file, or record the rename in RENAMED in this file with the reason.',
+    );
+  }
+}
+
 async function applyMigrations(options: { silent?: boolean }): Promise<number> {
   const log = options.silent ? () => {} : (message: string) => console.log(message);
 
@@ -79,6 +149,8 @@ async function applyMigrations(options: { silent?: boolean }): Promise<number> {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((name) => name.endsWith('.sql'))
     .sort();
+
+  assertEveryAppliedMigrationIsStillHere(appliedByName, files);
 
   let count = 0;
 

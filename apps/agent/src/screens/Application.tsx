@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, APP_VERSION, api, type ApiError } from '../lib/api';
+import { APP_VERSION, ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { describeDevice } from '../lib/device';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
 import { BLOCKER_TEXT, type AgentBlocker, type TranslationDictionary } from '@psirs/shared';
@@ -64,7 +64,7 @@ export function ApplicationScreen({ navigate }: { navigate: (path: string) => vo
       setStatus(await api.get<ApplicationStatus>('/agents/me/application'));
       setError(null);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setLoading(false);
     }
@@ -354,10 +354,7 @@ function KycSection({ status, onDone }: { status: ApplicationStatus; onDone: () 
         setDocumentsError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setDocumentsError(caught.error);
-        else if (caught instanceof Error) {
-          setDocumentsError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setDocumentsError(asApiError(caught));
       });
   }, []);
 
@@ -737,10 +734,7 @@ function AgreementSection({ status, onDone }: { status: ApplicationStatus; onDon
         setAgreementError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setAgreementError(caught.error);
-        else if (caught instanceof Error) {
-          setAgreementError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setAgreementError(asApiError(caught));
       });
   }, [status.checklist.agreementAccepted]);
 

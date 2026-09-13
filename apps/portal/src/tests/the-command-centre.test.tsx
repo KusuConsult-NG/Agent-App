@@ -21,7 +21,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent, within } from '@testing-library/react';
 import { TransactionScreen } from '../screens/Transaction';
 import { CasesScreen, MyWorkScreen } from '../screens/Cases';
 import { GlobalSearch } from '../screens/Search';
@@ -480,6 +480,117 @@ describe('the search box', () => {
 
     fireEvent.click(screen.getByRole('option'));
     expect(navigate).toHaveBeenCalledWith(`/transaction/${TX.id}`);
+  });
+
+  /*
+   * What state the thing is in.
+   *
+   * Every one of the kinds this search returns selects a status, and the row
+   * drew the kind, the title, the subtitle and the amount — the fixture above
+   * has carried `status: 'SETTLED'` all along for a value nothing rendered.
+   *
+   * The receipt is the case that costs. A reversed receipt is money that came
+   * in, was receipted, and went back; in this list it looked exactly like one
+   * that was paid, and an officer reading results to a citizen on the phone
+   * had no way to tell without clicking through.
+   */
+  it('says a receipt was reversed, rather than showing it like any other', async () => {
+    signInAs('admin');
+    vi.spyOn(api, 'get').mockResolvedValue({
+      term: 'PSIRS/2026/000182',
+      hits: [
+        {
+          kind: 'receipt',
+          id: 'rcp-1',
+          reference: 'PSIRS/2026/000182',
+          title: 'PSIRS/2026/000182',
+          subtitle: 'Ladi Pamdegu',
+          path: '/transaction/tx-1',
+          amount_kobo: '5000000',
+          status: 'REVERSED',
+          occurred_at: '2026-03-04T09:00:00.000Z',
+        },
+      ],
+    } as never);
+
+    render(<GlobalSearch navigate={vi.fn()} />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'PSIRS/2026/000182' } });
+
+    await waitFor(() => expect(screen.getByRole('option')).toBeTruthy(), { timeout: 2000 });
+    const hit = screen.getByRole('option');
+    expect(within(hit).getByText(/reversed/i)).toBeTruthy();
+  });
+
+  it('says when it happened, which is what tells two of the same apart', async () => {
+    signInAs('admin');
+    vi.spyOn(api, 'get').mockResolvedValue({
+      term: 'Ladi',
+      hits: [
+        {
+          kind: 'transaction',
+          id: 'tx-a',
+          reference: 'TXN-A',
+          title: 'TXN-A',
+          subtitle: 'Ladi Pamdegu',
+          path: '/transaction/tx-a',
+          amount_kobo: '5000000',
+          status: 'SETTLED',
+          occurred_at: '2026-03-04T09:00:00.000Z',
+        },
+        {
+          kind: 'transaction',
+          id: 'tx-b',
+          reference: 'TXN-B',
+          title: 'TXN-B',
+          subtitle: 'Ladi Pamdegu',
+          path: '/transaction/tx-b',
+          amount_kobo: '5000000',
+          status: 'SETTLED',
+          occurred_at: '2026-07-19T09:00:00.000Z',
+        },
+      ],
+    } as never);
+
+    render(<GlobalSearch navigate={vi.fn()} />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Ladi' } });
+
+    await waitFor(() => expect(screen.getAllByRole('option').length).toBe(2), { timeout: 2000 });
+    const [first, second] = screen.getAllByRole('option');
+    const whenOf = (row: HTMLElement) =>
+      row.querySelector('.global-search__when')?.textContent ?? '';
+    expect(whenOf(first!)).toBeTruthy();
+    expect(whenOf(first!)).not.toBe(whenOf(second!));
+  });
+
+  it('still renders a hit that has neither, which several kinds do not carry', async () => {
+    /*
+     * The control. A place and a revenue item have no date, and the row must
+     * not collapse or render an empty meta line because of it.
+     */
+    signInAs('admin');
+    vi.spyOn(api, 'get').mockResolvedValue({
+      term: 'Jos North',
+      hits: [
+        {
+          kind: 'place',
+          id: 'lga-1',
+          reference: 'Jos North',
+          title: 'Jos North',
+          subtitle: null,
+          path: '/taxpayers?lga=lga-1',
+          amount_kobo: null,
+          status: null,
+          occurred_at: null,
+        },
+      ],
+    } as never);
+
+    render(<GlobalSearch navigate={vi.fn()} />);
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'Jos North' } });
+
+    await waitFor(() => expect(screen.getByRole('option')).toBeTruthy(), { timeout: 2000 });
+    expect(screen.getByText('Jos North')).toBeTruthy();
+    expect(screen.getByRole('option').querySelector('.global-search__subtitle')).toBeNull();
   });
 
   /*

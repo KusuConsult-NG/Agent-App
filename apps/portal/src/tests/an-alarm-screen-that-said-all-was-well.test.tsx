@@ -214,3 +214,94 @@ describe('the states this must not have broken', () => {
     expect(screen.getByText('A dispute was assigned to you')).toBeTruthy();
   });
 });
+
+/**
+ * What the notification actually said, which the table dropped.
+ *
+ * The only writer of `body` is `raiseSystemAlerts`, and it composes the job's
+ * purpose, when it last succeeded, how many times it has failed in a row, and
+ * the line that matters:
+ *
+ *     (job.lastError ? `\nLast error: ${job.lastError}` : '')
+ *
+ * This screen declared `body` on its row type and drew four columns, none of
+ * them that one — the same shape as `lastDetail` on the unattended-work board,
+ * and the fixtures above have carried bodies all along for a value nothing
+ * rendered.
+ *
+ * So an administrator woken at night by a CRITICAL alert read the subject —
+ * "reconciliation-sweep: Failed 3 times in a row" — and to find out what it
+ * actually threw had to already know that a different screen would tell them.
+ */
+describe('the detail under the subject', () => {
+  beforeEach(() => cleanup());
+  afterEach(() => vi.restoreAllMocks());
+
+  it('shows what the alert said, not only its subject', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      notifications: [STALLED_JOB],
+      unread: 1,
+    } as never);
+
+    render(<InboxScreen navigate={() => {}} />);
+
+    /*
+     * A CRITICAL row appears twice: once in the alert above the table, which
+     * lists subjects only, and once as a table row. The detail is what is
+     * being asserted, so both queries take all matches.
+     */
+    await waitFor(() =>
+      expect(
+        screen.getAllByText('Reconciliation has not run for three days').length,
+      ).toBeGreaterThan(0),
+    );
+    expect(
+      screen.getAllByText(/The overnight reconciliation job last completed on 8 September/).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('keeps the lines the server composed it with', async () => {
+    /*
+     * `raiseSystemAlerts` joins purpose, last success, failure count and the
+     * error with newlines. Collapsed into one run of text the error is buried
+     * mid-paragraph, which is the one line somebody woken at 3am is looking
+     * for.
+     */
+    vi.spyOn(api, 'get').mockResolvedValue({
+      notifications: [
+        {
+          ...STALLED_JOB,
+          body:
+            'Matches gateway settlements against recorded payments.\n' +
+            'Last succeeded: 2026-09-08T02:00:00Z. Consecutive failures: 3.\n' +
+            'Last error: Remita returned 503 for the statement.',
+        },
+      ],
+      unread: 1,
+    } as never);
+
+    render(<InboxScreen navigate={() => {}} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByText(/Last error: Remita returned 503/).length).toBeGreaterThan(0),
+    );
+    const detail = screen
+      .getAllByText(/Last error: Remita returned 503/)
+      .find((node) => node.tagName === 'SPAN')!;
+    expect(getComputedStyle(detail).whiteSpace).toBe('pre-line');
+  });
+
+  it('shows a dash rather than an empty cell when there is no detail', async () => {
+    // The control. Most notifications are raised with no body at all, and a
+    // blank cell reads as a rendering fault rather than as an absence.
+    vi.spyOn(api, 'get').mockResolvedValue({
+      notifications: [{ ...ROUTINE, body: '' }],
+      unread: 1,
+    } as never);
+
+    render(<InboxScreen navigate={() => {}} />);
+
+    await screen.findByText('A dispute was assigned to you');
+    expect(screen.getAllByText('—').length).toBeGreaterThan(0);
+  });
+});

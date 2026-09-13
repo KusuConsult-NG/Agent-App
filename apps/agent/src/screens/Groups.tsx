@@ -27,7 +27,7 @@
  */
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, newIdempotencyKey, type ApiError } from '../lib/api';
 import { TaxpayerPicker, type PickedTaxpayer } from '../components/TaxpayerPicker';
 import { Alert, Badge, Empty, ErrorAlert, Field, KeyValue, Loading, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
@@ -112,10 +112,7 @@ export function GroupsScreen({ navigate }: { navigate: (path: string) => void })
       const result = await api.get<{ groups: GroupRow[] }>('/groups?limit=100');
       setGroups(result.groups);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setLoadError(caught.error);
-      else if (caught instanceof Error) {
-        setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setLoadError(asApiError(caught));
       setGroups(null);
     }
   }, []);
@@ -222,7 +219,7 @@ export function RegisterGroupScreen({ navigate }: { navigate: (path: string) => 
       );
       navigate(`/groups/${result.groupId}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -365,7 +362,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
     try {
       setGroup(await api.get<GroupDetail>(`/groups/${groupId}`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     }
   }, [groupId]);
 
@@ -399,7 +396,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       setChosen(null);
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -415,7 +412,7 @@ export function GroupScreen({ groupId }: { groupId: string }) {
       );
       setInvitation(result.invitationUrl);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

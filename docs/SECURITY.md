@@ -38,6 +38,30 @@ reported as **INVALID** with an instruction to report it.
 The public page shows the receipt number, revenue type, amount, date and LGA —
 and no taxpayer name, phone number, address or TIN (PRD §20).
 
+### The same rule on the doors that take a token instead of a login
+
+Three surfaces answer somebody who has no account, because the person on the
+other side of them has no reason to hold one: a referee answering a nomination,
+a cooperative's leader confirming who belongs to it, and a citizen asking what
+they owe. The token in the link is the whole of the authorisation, it arrives
+by SMS, and a forwarded message is a forwarded capability.
+
+So every field these return is chosen as though a stranger asked for it,
+because one can. `citizen-status` gives up the TIN, the compliance score, the
+obligation names, the date of the last payment and the officer's closure note
+for that reason — the caller supplied a phone number, which is not a secret,
+and the endpoint cannot tell the taxpayer from anybody else who knows it. The
+referee page carries the applicant's name and LGA and nothing else.
+
+The attestation roster did not meet that standard: it returned every
+cooperative member's telephone number in full, to whoever held the link, for
+the fourteen days it stays live — and the invitation is deliberately reusable,
+so it never becomes spent. Numbers on that surface are now masked to their last
+three digits, which is what the screen needs (two members can share a name) and
+all it needs. `apps/api/src/tests/what-a-forwarded-link-is-worth.test.ts` holds
+every public door to it: no telephone number the database holds may come back
+from any of them.
+
 ## 3. Altering government rates
 
 `catalogue:configure` is held only by revenue officers and administrators, and
@@ -183,8 +207,34 @@ kept so an officer can confirm which document is on file.
 The integration suite asserts that the raw identity number appears nowhere in
 the audit log.
 
-Referee invitation tokens are stored only as hashes; the plaintext exists once,
-in the message sent to the referee.
+Referee invitation tokens are stored only as hashes, and so are one-time
+codes — `referee_invitations.invitation_token_hash` and `otp_codes.code_hash`
+are both SHA-256 and neither table holds the value itself.
+
+That was true of those two tables and, until migration `079`, false of the
+database as a whole. The SMS carrying each of them was rendered in full into
+`notifications.message`, which nothing has ever deleted, so the plaintext sat
+beside its own hash indefinitely and either hash could be reversed by a join
+rather than by an attack. A reader with `SELECT` on the notifications table —
+a reporting replica, an analyst, anyone holding a backup — could recover a
+referee's live invitation token and answer or decline the nomination in their
+name. No API route has ever exposed the column, so this was never reachable
+over HTTP.
+
+A message still has to exist in plaintext at the moment it is handed to the
+gateway. It no longer has to be kept: the deliverable text is carried in
+`notifications.secret_message`, written only for a template that renders a
+credential, read once by the dispatcher and set to `NULL` as the row becomes
+SENT or FAILED — with a CHECK constraint saying a terminal row may not still
+hold one. `message` keeps the same sentence with the credential masked, so the
+queue remains a usable record for support without being a second copy of the
+credential.
+
+**Backups taken before `079` still contain the plaintext.** One-time codes
+expire in minutes and are worthless in an old archive; referee invitations last
+fourteen days, so a snapshot from the last fortnight can still hold a working
+one. `DISASTER-RECOVERY-PLAN.md` §2.2 sets out what that means for archive
+handling.
 
 ## Webhooks
 

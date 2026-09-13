@@ -530,3 +530,37 @@ export const NOT_EXERCISED_BY_TESTS: Record<string, string> = {
   'incentive_allocation_rounds.unit: BAG_25KG':
     'An officer picks the unit when opening a distribution round. The suite opens rounds in bags of 50kg.',
 };
+
+/**
+ * CHECK columns whose values are not states, and why each one is not.
+ *
+ * The observers used to decide this by letter case: a column whose CHECK set
+ * held no upper-case value was skipped, on the reasoning recorded in
+ * `enum-observation.ts` that "lower-case sets — `usage_events.language` is
+ * 'en' and 'ha' — are values of a different kind, not states anything
+ * transitions to."
+ *
+ * That reasoning is sound; the proxy standing in for it was not. Six columns
+ * in the schema have no upper-case value. Five are language tags, and for
+ * those the rule did what it meant to. The sixth was `cases.department` —
+ * five role names a case is routed to, written by `POST /cases` and
+ * `POST /cases/:id/assign`, a state by every definition this report uses —
+ * and the report could not see it in either direction: not in the 747 values
+ * it counted against, not in the observers, and not in the loop that finds
+ * states nothing wrote. Two of the five, `supervisor` and `admin`, were
+ * reachable and written by nothing, and no check was in a position to say so.
+ *
+ * So the judgement is named here rather than inferred. The rot this can suffer
+ * is the opposite kind, and the safe one: a language column added later is
+ * observed until somebody lists it, and the report says so out loud. What the
+ * old rule risked was silent exclusion.
+ */
+export const NOT_STATE_COLUMNS: Record<string, string> = {
+  'notification_templates.language':
+    'A language tag, en or ha. A template is written in a language; it is not in one.',
+  'notifications.language': 'The language the message went out in, not a stage it reached.',
+  'taxpayers.preferred_language':
+    'A preference the citizen sets, not a state the platform moves them through.',
+  'usage_events.language': 'The language the screen was in when the event happened.',
+  'users.preferred_language': 'A preference the officer sets, not a state.',
+};

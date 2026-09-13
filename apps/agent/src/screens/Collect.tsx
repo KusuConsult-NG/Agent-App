@@ -13,7 +13,7 @@
 import { whereAmI } from '../lib/location';
 import { startFlow, track } from '../lib/usage';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, newIdempotencyKey, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, newIdempotencyKey, type ApiError } from '../lib/api';
 import { verificationUrlFor } from '../lib/verification-url';
 import {
   PRINTER_PROBLEM_TEXT,
@@ -24,7 +24,7 @@ import type { ConnectionState } from '../lib/device';
 import { queryParams, useRoute } from '../router';
 import { useI18n } from '../lib/i18n';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
-import { enumLabel, formatDateIn, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateIn, formatNaira, formatDateTimeIn, localName, translations, type Language, type TranslationDictionary } from '@psirs/shared';
 
 interface RevenueItem {
   id: string;
@@ -47,6 +47,43 @@ interface Quote {
   serviceChargeKobo: string;
   totalKobo: string;
   trace: { step: string; detail: string; amount?: string }[];
+}
+
+/**
+ * What this taxpayer already owes, which the agent could not see.
+ *
+ * `GET /revenue/taxpayers/:id/obligations` was built, permissioned on three
+ * scopes, and called from nowhere — one of the reads recorded in
+ * READ_WITHOUT_A_SCREEN. Its own route comment states exactly the case it was
+ * written for: "serving a walk-up taxpayer requires finding them and knowing
+ * their obligations; that much is the job", and "refusing here would push
+ * that agent into raising a second assessment for a debt that already
+ * exists."
+ *
+ * Which is what the agent was pushed into. The collection screen went from
+ * choosing a person straight to choosing a levy, with no sight of the
+ * invoices already open against them — so a trader with an unpaid market levy
+ * who walks up to pay it gets a fresh assessment for the same levy, and now
+ * owes it twice. The platform then has two invoices and no way to know which
+ * one the money was for.
+ */
+interface Obligation {
+  invoice_id: string;
+  invoice_number: string;
+  total_amount_kobo: string;
+  amount_paid_kobo: string;
+  status: string;
+  expires_at: string | null;
+  issued_at: string;
+  assessment_number: string;
+  period_label: string | null;
+  revenue_item: string;
+  revenue_item_ha: string | null;
+  revenue_category: string;
+  revenue_category_ha: string | null;
+  transaction_id: string | null;
+  transaction_reference: string | null;
+  transaction_status: string | null;
 }
 
 interface TaxpayerSummary {
@@ -155,9 +192,37 @@ export function CollectScreen({
       .get<RevenueItem[]>(`/revenue/items?taxpayerType=${taxpayer.taxpayer_type}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [taxpayer]);
+
+  /*
+   * `null` while unknown, `[]` only when the answer is genuinely none.
+   *
+   * "Nothing is outstanding" is the sentence that tells an agent to go ahead
+   * and raise a new charge. A failed read must not be able to say it, because
+   * the charge that follows is a real debt on a real person. `owesFailed`
+   * keeps the two apart.
+   */
+  const [owes, setOwes] = useState<Obligation[] | null>(null);
+  const [owesFailed, setOwesFailed] = useState(false);
+
+  const loadOwes = useCallback(() => {
+    if (!taxpayer) return;
+    setOwesFailed(false);
+    setOwes(null);
+    api
+      .get<Obligation[]>(`/revenue/taxpayers/${taxpayer.id}/obligations`)
+      .then((rows) => setOwes(Array.isArray(rows) ? rows : []))
+      .catch(() => {
+        setOwes(null);
+        setOwesFailed(true);
+      });
+  }, [taxpayer]);
+
+  useEffect(() => {
+    loadOwes();
+  }, [loadOwes]);
 
   const needsBaseAmount =
     selectedItem?.rate_type === 'PERCENTAGE' || selectedItem?.rate_type === 'TIERED';
@@ -191,7 +256,7 @@ export function CollectScreen({
       setQuote(await api.post<Quote>('/revenue/quote', { revenueItemId: selectedItem.id, inputs, taxpayerId: taxpayer.id }));
       flow.current?.step('amount-calculated');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -250,14 +315,21 @@ export function CollectScreen({
       // this and the agent has to be told before they reach for the button
       // again.
       if (reference !== null) setRaised({ reference });
-      if (caught instanceof ApiRequestError) {
-        setError(caught.error);
-        // A nil liability is not a failed collection — it is the correct
-        // answer, and counting it as failure would make the exempt look like
-        // a bug in the funnel.
-        if (caught.error.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
-        else flow.current?.fail(`refused-${caught.error.code}`);
-      }
+      /*
+       * The comment above was true and the code did not implement it.
+       *
+       * Only an `ApiRequestError` set anything, so a dropped signal — the
+       * ordinary failure in a market — left the agent with a button that
+       * stopped spinning, no message, and an assessment that may well have
+       * gone through. They reach for it again, and the taxpayer owes twice.
+       */
+      const failure = asApiError(caught);
+      setError(failure);
+      // A nil liability is not a failed collection — it is the correct
+      // answer, and counting it as failure would make the exempt look like
+      // a bug in the funnel.
+      if (failure.code === 'NO_TAX_PAYABLE') flow.current?.complete('no-tax-payable');
+      else flow.current?.fail(`refused-${failure.code}`);
     } finally {
       setBusy(false);
     }
@@ -297,7 +369,7 @@ export function CollectScreen({
                   ),
                 );
               } catch (caught) {
-                if (caught instanceof ApiRequestError) setError(caught.error);
+                setError(asApiError(caught));
               } finally {
                 setBusy(false);
               }
@@ -362,6 +434,71 @@ export function CollectScreen({
       </div>
 
       <ErrorAlert error={error} />
+
+      {/*
+        * Before the levy list, not after it.
+        *
+        * An agent who has already picked an item and seen a figure is
+        * committed; the moment this has to change their mind is before they
+        * choose. A trader walking up to pay a market levy they already owe
+        * must be taken to the open invoice, not given a second one.
+        */}
+      {!quote && (owesFailed || owes === null || owes.length > 0) && (
+        <div className="card">
+          <h2 className="card__title">{t.colAlreadyOwes}</h2>
+          {owesFailed ? (
+            <>
+              {/*
+                * Said rather than passed over. An agent who does not know
+                * whether there is an open invoice must be told that they do
+                * not know, because the next thing they do creates a debt.
+                */}
+              <Alert kind="warning" title={t.colOwesUnknown}>
+                <p style={{ margin: 0 }}>{t.colOwesUnknownBody}</p>
+              </Alert>
+              <button type="button" className="secondary" onClick={loadOwes}>
+                {t.actionTryAgain}
+              </button>
+            </>
+          ) : owes === null ? (
+            <Loading />
+          ) : (
+            <>
+              <p className="card__hint">{t.colAlreadyOwesBody}</p>
+              <ul className="list list--rows">
+                {owes.map((row) => (
+                  <li key={row.invoice_id}>
+                    <div className="list__body">
+                      <p className="list__title">
+                        {localName(lang, row.revenue_item, row.revenue_item_ha)}
+                        {row.period_label ? ` · ${row.period_label}` : ''}
+                      </p>
+                      <p className="list__meta">
+                        {row.invoice_number} ·{' '}
+                        <Money
+                          kobo={(
+                            BigInt(row.total_amount_kobo) - BigInt(row.amount_paid_kobo)
+                          ).toString()}
+                        />{' '}
+                        · <Badge status={row.status} />
+                      </p>
+                    </div>
+                    {row.transaction_reference && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => navigate(`/transactions/${row.transaction_reference}`)}
+                      >
+                        {t.colTakeThisPayment}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       {!quote && (
         <div className="card">
@@ -536,6 +673,16 @@ interface TransactionStatus {
     transaction_reference: string;
     status: string;
     amount_kobo: string;
+    /*
+     * What the citizen actually hands over, and what of it is the charge.
+     *
+     * `total_amount_kobo = amount_kobo + service_charge_kobo`, enforced by a
+     * CHECK on the table, and the two are never netted — PRD §6, and the
+     * reason `commission.ts` computes commission on `amount_kobo` alone. The
+     * server has been sending the charge to this screen all along and nothing
+     * declared it.
+     */
+    service_charge_kobo: string;
     total_amount_kobo: string;
     invoice_id: string;
     invoice_number: string;
@@ -598,12 +745,27 @@ export function TransactionScreen({
   const [invoicing, setInvoicing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  /*
+   * The receipt text, shown only when the handset would not take it.
+   *
+   * `navigator.clipboard.writeText` is refused on an insecure origin, without
+   * permission, and on some handsets outside the gesture that started the
+   * click — and the screen used to say "Receipt details copied" regardless.
+   * The agent then pastes whatever was in the clipboard before into the
+   * message they send the citizen: no receipt number and no verification
+   * code, on the only proof that citizen has that they paid.
+   *
+   * The recovery is the text itself. A failed copy puts it on the screen to
+   * be read out or typed, which is what an agent does anyway when the phone
+   * in their hand is not the phone they are sending from.
+   */
+  const [shareText, setShareText] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setData(await api.get<TransactionStatus>(`/payments/transactions/${reference}/status`));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setLoading(false);
     }
@@ -631,7 +793,7 @@ export function TransactionScreen({
       window.open(document.downloadUrl, '_blank', 'noopener');
       setNotice(t.colInvoiceReady.replace('{{number}}', document.documentNumber));
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setInvoicing(false);
     }
@@ -665,7 +827,7 @@ export function TransactionScreen({
       );
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -698,7 +860,7 @@ export function TransactionScreen({
     } catch (caught) {
       // A pending gateway answer arrives here as PAYMENT_UNCONFIRMED, and the
       // wording tells the agent explicitly not to collect again.
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -716,7 +878,7 @@ export function TransactionScreen({
       });
       await load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setConfirming(false);
     }
@@ -745,11 +907,41 @@ export function TransactionScreen({
   return (
     <>
       {paid ? (
+        /*
+         * The figure the citizen is looking at, and what it is a figure OF.
+         *
+         * This drew `amount_kobo` — the government portion — as a bare number
+         * under "Payment successful", with nothing saying which of the two
+         * figures it was. Everywhere else in the platform that shows money
+         * says: the printed slip heads it TOTAL PAID, the official receipt
+         * heads it AMOUNT PAID TO GOVERNMENT and discloses the charge beneath
+         * in a sentence, and the detail row three lines below this one is
+         * labelled "Amount" and shows the total.
+         *
+         * So the same screen carried two different numbers for one payment,
+         * and the unlabelled one was the one turned towards the person who had
+         * just handed over money. What "Payment successful — ₦2,050" means to
+         * them is what they paid, which is also what the slip in their hand
+         * will say, so that is what this shows — with the charge disclosed the
+         * way the receipt discloses it rather than folded in silently.
+         *
+         * Latent rather than live: no catalogue item configures a service
+         * charge today, so the two figures are equal and the disclosure does
+         * not render. It is one administrator setting away from not being.
+         */
         <div className="amount-confirm">
           <p className="amount-confirm__label">{t.paymentSuccess}</p>
           <p className="amount-confirm__value">
-            <Money kobo={transaction.amount_kobo} />
+            <Money kobo={transaction.total_amount_kobo} />
           </p>
+          {BigInt(transaction.service_charge_kobo || '0') > 0n && (
+            <p className="amount-confirm__label">
+              {t.colIncludesServiceCharge.replace(
+                '{{charge}}',
+                formatNaira(transaction.service_charge_kobo),
+              )}
+            </p>
+          )}
           <p className="amount-confirm__label">
             {t.colReceiptNumbered.replace('{{number}}', transaction.receipt_number ?? '')}
           </p>
@@ -778,6 +970,26 @@ export function TransactionScreen({
 
       <ErrorAlert error={error} />
       {notice && !error && <Alert kind="success">{notice}</Alert>}
+      {shareText && (
+        <Alert kind="warning" title={t.colCouldNotCopy}>
+          <p style={{ margin: '0 0 0.5rem' }}>{t.colCouldNotCopyBody}</p>
+          <p
+            style={{
+              margin: 0,
+              padding: '0.5rem',
+              background: 'var(--surface-sunken, #f4f4f4)',
+              borderRadius: '4px',
+              // The whole point is that it can be read off the screen and
+              // typed, so it wraps rather than running off the side of a
+              // handset held in one hand.
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {shareText}
+          </p>
+        </Alert>
+      )}
 
       <div className="card">
         <KeyValue
@@ -884,11 +1096,30 @@ export function TransactionScreen({
                 .replace('{{number}}', transaction.receipt_number ?? '')
                 .replace('{{name}}', name)
                 .replace('{{code}}', transaction.receipt_code ?? '');
+              setShareText(null);
               if (navigator.share) {
-                await navigator.share({ title: t.colShareTitle, text }).catch(() => undefined);
-              } else {
-                await navigator.clipboard.writeText(text).catch(() => undefined);
+                try {
+                  await navigator.share({ title: t.colShareTitle, text });
+                  return;
+                } catch (caught) {
+                  /*
+                   * Closing the share sheet is a decision, not a failure, and
+                   * it arrives here as an AbortError. Saying anything about it
+                   * would be telling the agent something went wrong when they
+                   * are the one who changed their mind.
+                   */
+                  if (caught instanceof Error && caught.name === 'AbortError') return;
+                  // Anything else and the sheet did not carry it. Fall through
+                  // to the clipboard, which is the route a handset without
+                  // `share` takes anyway.
+                }
+              }
+              try {
+                await navigator.clipboard.writeText(text);
                 setNotice(t.colReceiptCopied);
+              } catch {
+                setNotice(null);
+                setShareText(text);
               }
             }}
           >{t.colShareReceipt}</button>

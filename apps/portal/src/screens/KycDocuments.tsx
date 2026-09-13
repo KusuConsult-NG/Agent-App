@@ -31,7 +31,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, can, fetchFile, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, fetchFile, type ApiError } from '../lib/api';
 import {
   Alert,
   Badge,
@@ -112,10 +112,7 @@ export function KycDocumentsCard({
         setLoadError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
-        else if (caught instanceof Error) {
-          setLoadError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-        }
+        setLoadError(asApiError(caught));
       });
   }, [agentId]);
 
@@ -235,7 +232,7 @@ function DocumentViewer({
         setUrl(objectUrl);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
     return () => {
@@ -291,7 +288,7 @@ function DocumentViewer({
         ),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }

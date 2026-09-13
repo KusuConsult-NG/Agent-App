@@ -14,6 +14,9 @@ JSON number — `JSON.parse` silently rounds large integers.
 |---|---|
 | `Authorization: Bearer <token>` | Access token |
 | `Idempotency-Key` | Required on payment initiation, recommended on all creates |
+| `X-Device-Id` | Agent device identifier; required for revenue endpoints |
+| `X-App-Version` | PWA build; enforced against the minimum supported version |
+| `X-Request-Id` | Optional correlation id; echoed on the response |
 
 A retry of a completed request is replayed verbatim with `idempotent-replay:
 true`. A retry while the original is still running answers 409
@@ -25,9 +28,7 @@ rather than to keep waiting. The key is deliberately not made retryable, because
 an interrupted request may have committed and lost only its response. Settled
 keys are deleted after thirty days by the `idempotency-sweep` job; interrupted
 ones are never deleted.
-| `X-Device-Id` | Agent device identifier; required for revenue endpoints |
-| `X-App-Version` | PWA build; enforced against the minimum supported version |
-| `X-Request-Id` | Optional correlation id; echoed on the response |
+
 
 **Errors** carry an explicit money status:
 
@@ -153,7 +154,7 @@ usable login; government users are provisioned by an administrator.
 | `GET` | `/agents/me/application` | own |
 | `POST` | `/agents/me/kyc` | own |
 | `POST` | `/agents/me/referees` | own |
-| `GET`/`POST` | `/agents/me/training[/:moduleCode]` | own |
+| `GET` | `/agents/me/training` · `POST` `/agents/me/training/:moduleCode` | own; a completion names the module it completes |
 | `GET` | `/agents/agreement` · `POST` `/agents/me/agreement` | own |
 | `POST` | `/agents/me/bank/verify` | own |
 | `GET` | `/agents/me/bank/change` | own — the proposal waiting, if any |
@@ -161,21 +162,47 @@ usable login; government users are provisioned by an administrator.
 | `POST` | `/agents/:agentId/bank/change` | `agent:manage` — **step-up**; raised on an agent's behalf |
 | `GET` | `/agents/bank-changes` | `agent:read:all` or `approval:review` |
 | `POST` | `/agents/bank-changes/:approvalId/verify` | `agent:manage` — ask the bank again |
+| `POST` | `/agents/me/devices` | own, requires government approval first |
+| `GET` | `/agents/app-version` | version gate (Addendum §43) |
+| `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |
+| `POST` | `/agents/me/commission/payout` | `commission:payout:request` + step-up |
+| `GET` | `/agents` · `/agents/:id` | `agent:read:all` |
+| `GET` | `/agents/kyc-dashboard` · `/referee-dashboard` · `/performance` | `agent:read:all` |
+| `POST` | `/agents/:id/review` | `agent:approve` — reason required |
+| `POST` | `/agents/:id/activate` | `agent:manage` — refused while items outstanding |
+| `POST` | `/agents/:id/suspend` | `agent:suspend` + step-up |
+| `POST` | `/agents/:id/territory` | `agent:assign_territory` |
+| `POST` | `/agents/devices/:id/approve` · `/revoke` | `device:manage` |
+| `POST` | `/agents/referees/:id/review` | `agent:approve` |
+| `POST` | `/agents/app-version` | `system:configure` — raises the minimum build |
+| `GET` | `/agents/app-version/history` | `system:configure` — record and fleet spread |
 
 ### Step-up actions, and the routes that enforce them
 
 `STEP_UP_ACTIONS` names every operation that needs a fresh one-time code as
-well as the permission. All seven are now enforced by a route:
+well as the permission. All twelve are enforced by a route, and every route
+that enforces one is listed below — a caller who has the permission and not a
+current code gets `403 STEP_UP_REQUIRED` on any of them.
 
 | Action | Route | Also requires |
 |---|---|---|
 | `commission.payout.request` | `POST /agents/me/commission/payout` | own agent record |
 | `agent.bank_account.change` | `POST /agents/me/bank/change` · `/agents/:agentId/bank/change` | `agent:manage` for the officer-raised form |
-| `agent.suspend` | `POST /agents/:id/suspend` | `agent:manage` |
-| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:manage` |
-| `payment.reversal.approve` | `POST /government/payments/:id/reverse` | `payment:reverse` |
+| `agent.suspend` | `POST /agents/:id/suspend` | `agent:suspend` — held by supervisors and revenue officers as well as administrators |
+| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:configure` |
+| `payment.reversal.approve` | `POST /government/approvals/:id/execute-reversal` | `payment:reverse:approve`; raised as a `PAYMENT_REVERSAL` approval, decided by a second officer, executed by a third |
 | `taxpayer.identity.change` | `POST /taxpayers/:id/identity` | `taxpayer:correct`; the identity *document* additionally needs `taxpayer:manage` |
-| `user.role.change` | `POST /government/users/:id/role` | `user:manage`; never your own role |
+| `user.role.change` | `POST /government/users/:id/role` · `/government/users/:id/status` · `/government/roles` · `/government/roles/:name/grant` · `/government/roles/:name/revoke` · `/government/roles/:name/retire` · `/government/roles/:name/restore` · `/government/roles/:name/export-limit` | `user:manage`; never your own role. The name is about *who may do what*, so defining a role, granting or revoking a permission on one, and disabling an account are all under it |
+| `financial.period.close` | `POST /government/periods/:id/close` | `period:close`. After this the four tables that decide what the month collected refuse to be written |
+| `financial.period.reopen` | `POST /government/periods/:id/reopen` | `period:reopen`. Split from closing deliberately: one code must not open a month that was minted to close it |
+| `audit.report.sign` | `POST /government/audit/reports/:id/sign` · `/government/audit/reports/:id/withdraw` | `audit:sign` to sign, `audit:report` to withdraw — withdrawal is the other half of the same authority |
+| `device.block` | `POST /government/devices/:id/block` | `user:manage` |
+| `device.unblock` | `POST /government/devices/:id/unblock` | `user:manage` |
+
+Blocking and unblocking a handset are two actions rather than one for the same
+reason closing and reopening a month are: a code is consumed on use and
+authorises exactly one action, so a shared name would let a code minted to take
+a stolen machine out of service be spent handing it back.
 
 #### Correcting a taxpayer record
 
@@ -208,20 +235,6 @@ access can be changed.
 Nobody may change their own role, and nobody may be moved in or out of `agent`:
 agent access follows the clearance pipeline, and activation or suspension is
 how it changes.
-| `POST` | `/agents/me/devices` | own, requires government approval first |
-| `GET` | `/agents/app-version` | version gate (Addendum §43) |
-| `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |
-| `POST` | `/agents/me/commission/payout` | `commission:payout:request` + step-up |
-| `GET` | `/agents` · `/agents/:id` | `agent:read:all` |
-| `GET` | `/agents/kyc-dashboard` · `/referee-dashboard` · `/performance` | `agent:read:all` |
-| `POST` | `/agents/:id/review` | `agent:approve` — reason required |
-| `POST` | `/agents/:id/activate` | `agent:manage` — refused while items outstanding |
-| `POST` | `/agents/:id/suspend` | `agent:suspend` + step-up |
-| `POST` | `/agents/:id/territory` | `agent:assign_territory` |
-| `POST` | `/agents/devices/:id/approve` · `/revoke` | `device:manage` |
-| `POST` | `/agents/referees/:id/review` | `agent:approve` |
-| `POST` | `/agents/app-version` | `system:configure` — raises the minimum build |
-| `GET` | `/agents/app-version/history` | `system:configure` — record and fleet spread |
 
 `POST /agents/app-version` is the lever for a release found to be getting money
 wrong: a handset below the minimum is refused at `/payments/initiate` and
@@ -409,6 +422,10 @@ process would be a lost capture wearing the costume of a successful one.
 | `GET` | `/government/users/:id/sessions` | `user:manage` |
 | `POST` | `/government/devices/:id/block` · `/unblock` | `user:manage`, step-up `user.role.change` |
 | `POST` | `/government/cases/:id/assign` · `/status` · `/priority` | `case:contribute` on the route; the row decides |
+| `GET`/`POST` | `/government/programmes` | `incentive:*` |
+| `GET` | `/government/reference/territories` | `agent:read:*` |
+| `GET` | `/government/platform/integrations` | source-of-truth map |
+| `POST`/`GET` | `/support/tickets` | support and complaints |
 
 ### Global search, Transaction 360, and cases
 
@@ -453,10 +470,6 @@ nothing to look at. `STALLED` means a run started and never returned, which the
 next run infers from finding the row still at `RUNNING` under the advisory lock.
 It is `audit:read` rather than an administrator's permission because whether the
 reconciliation sweep operated is an audit fact.
-| `GET`/`POST` | `/government/programmes` | `incentive:*` |
-| `GET` | `/government/reference/territories` | `agent:read:*` |
-| `GET` | `/government/platform/integrations` | source-of-truth map |
-| `POST`/`GET` | `/support/tickets` | support and complaints |
 
 ### PRD §67 audit queries
 

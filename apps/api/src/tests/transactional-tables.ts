@@ -189,4 +189,36 @@ export const TRANSACTIONAL_TABLES = [
    * emptied here and the default row comes back with the rest of the seed.
    */
   'app_versions',
+
+  /*
+   * The ten that broke the reset a third time.
+   *
+   * `lga_classes` was the first, `app_versions` the second, and the comments
+   * above each describe the same failure in the same words: a table holding
+   * rows that reference a fixture user, left out of this list, so
+   * `resetDatabase`'s `DELETE FROM users` hits a foreign key that says NO
+   * ACTION and the whole shard's remaining files are cancelled. The shard
+   * databases outlive the run, so the breakage persists until somebody drops
+   * them.
+   *
+   * `taxpayer_groups` is the one that happened to be populated this time.
+   * Fourteen unlisted tables could have done it, every one of them NO ACTION;
+   * these ten are the transactional ones. The other four --
+   * `commission_policies`, `revenue_items`, `revenue_item_rates` and
+   * `system_settings` -- are genuine reference data whose audit column points
+   * at a SEED user rather than a fixture one, so they do not bite today. A
+   * test that has a `+234` officer publish a rate would make them bite
+   * tomorrow, and the guard beside this file names them so that stays a
+   * decision somebody took rather than an accident.
+   */
+  'assessment_objections',
+  'incentive_allocation_rounds',
+  'incentive_awards',
+  'kyc_document_access_logs',
+  'presumptive_assessments',
+  'presumptive_observations',
+  'push_subscriptions',
+  'taxpayer_group_members',
+  'taxpayer_groups',
+  'taxpayer_tax_obligations',
 ];

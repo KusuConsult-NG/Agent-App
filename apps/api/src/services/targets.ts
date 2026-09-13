@@ -41,6 +41,7 @@
 import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { recordAudit } from './audit';
 import {
   scopeParams,
@@ -49,7 +50,6 @@ import {
 } from './report-scope';
 
 /** Revenue is recognised only after independent verification (PRD §17, §95). */
-const REVENUE_STATES = `('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')`;
 
 export const TARGET_SCOPES = ['STATE', 'LGA', 'CATEGORY', 'ITEM', 'AGENT'] as const;
 export type TargetScope = (typeof TARGET_SCOPES)[number];
@@ -298,7 +298,7 @@ export async function targetProgress(
             (SELECT COALESCE(SUM(t.amount_kobo), 0)::text
                FROM transactions t
                JOIN revenue_items rti ON rti.id = t.revenue_item_id
-              WHERE t.status IN ${REVENUE_STATES}
+              WHERE t.status IN ${REVENUE_STATES_SQL}
                 AND t.created_at::date BETWEEN rt.period_start AND rt.period_end
                 AND (rt.lga_id IS NULL OR t.lga_id = rt.lga_id)
                 AND (rt.category_id IS NULL OR rti.category_id = rt.category_id)
@@ -635,7 +635,7 @@ async function collectedBetween(
     `SELECT COALESCE(SUM(t.amount_kobo), 0)::text AS total
        FROM transactions t
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
-      WHERE t.status IN ${REVENUE_STATES}
+      WHERE t.status IN ${REVENUE_STATES_SQL}
         AND t.created_at::date BETWEEN $1 AND $2
         AND ($3::uuid IS NULL OR t.lga_id = $3)
         AND ($4::uuid IS NULL OR ri.category_id = $4)
