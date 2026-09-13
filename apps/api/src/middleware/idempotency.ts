@@ -32,9 +32,40 @@ import { log } from '../lib/logger';
  */
 const STALL_AFTER_MS = 5 * 60_000;
 
-function hashRequest(req: Request): string {
+/**
+ * The caller is part of the request.
+ *
+ * This hashed path, method and body. The lookup is `WHERE scope = $1 AND
+ * idempotency_key = $2`, the uniqueness is `(scope, idempotency_key)`, and
+ * `user_id` is written on insert and compared against nothing. So two
+ * different callers presenting the same key with a byte-identical body met a
+ * matching hash, and the second was handed the first's stored response body
+ * without executing anything -- on `payment.initiate`, another agent's payment
+ * reference; on `taxpayer.create`, a record they would then be told they had
+ * created.
+ *
+ * Nobody could reach that, because the agent application mints keys as
+ * `${scope}-${crypto.randomUUID()}` and getting there means guessing a v4 UUID
+ * *and* reproducing a body exactly. That is the point. The isolation was a
+ * property of one client's key generator rather than of this middleware, and a
+ * future caller deriving a key from something natural -- an invoice id, a
+ * device counter, a draft sequence -- would have lost it silently, with
+ * nothing here to notice or complain.
+ *
+ * Including the caller makes the property hold by construction. A second
+ * caller's hash no longer matches, so they get the 422 that already exists for
+ * a key reused on a different request, which is what this is.
+ */
+export function hashRequest(req: Request): string {
   return createHash('sha256')
-    .update(JSON.stringify({ path: req.path, method: req.method, body: req.body ?? {} }))
+    .update(
+      JSON.stringify({
+        path: req.path,
+        method: req.method,
+        body: req.body ?? {},
+        caller: req.auth?.userId ?? null,
+      }),
+    )
     .digest('hex');
 }
 
