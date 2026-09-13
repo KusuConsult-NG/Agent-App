@@ -1435,6 +1435,68 @@ RECONCILIATION_PENDING with no receipt is a real and common state, the money
 confirmed and the receipt waiting on a bank statement, and until now nothing
 could test a figure that distinguishes collected from receipted.
 
+## The rest of the arithmetic, and the webhook, found clean
+
+The 150% rate came out of a sweep, and the rest of that sweep found nothing,
+which is worth recording with the same weight.
+
+**Every SUM that can be taken over nothing.** 130 uses of `SUM(` in the
+services; 24 with no `COALESCE` on the same line, which is the wrong test
+because multi-line SQL puts the `COALESCE` on the line above. Eight survived a
+proper reading. Six are grouped, so the group always has a row. Two are scalar
+subqueries with `COALESCE(( ... ), 0)` wrapping them. The eighth,
+`taxpayersEndedWithArrears`, is an INNER JOIN whose own comment explains that
+the join *selects* the queue — "a record with no unpaid invoice has no row to
+join to and never appears" — and goes on to record that a `HAVING` clause was
+removed from it as unreachable, with the reasoning. Nothing to fix.
+
+**Every division.** Six with `NULLIF`, five without. All five are guarded:
+a `GREATEST($1 - 1, 1)` denominator, a `targetKobo > 0n` ternary, and three
+`CASE WHEN count(*) = 0` branches. `targets.ts` deserves a mention: its
+seasonal projection divides by a median share, and three separate documented
+fallbacks stand between that division and a zero — fewer than two comparable
+years, a share below 5% ("a small numerator over a tiny denominator is noise
+multiplied"), and an early return for a period that has not started or has
+finished, which is also what stops `daysElapsed` reaching either run-rate
+division as a zero. BigInt division by zero throws rather than giving
+infinity, so each of those would have been a 500.
+
+**Every other ratio.** `contribution_bp` divides a row's month by
+`SUM(...) OVER ()` across the same CTE under the same scope — a subset of its
+own window. `growth_bp` is `NULLIF`-guarded. Both correct.
+
+**The webhook.** `POST /webhooks/payments` is the one place where a wrong
+status code loses money permanently: acknowledge a delivery you did not
+process and the gateway never sends it again. Every branch is deliberate and
+every one is recorded in the row: unparseable is REJECTED and answered 400,
+unauthenticated is recorded and then refused with a 401, a duplicate is
+acknowledged, a reference matching no platform payment is IGNORED and
+acknowledged, and a `confirmPayment` that throws is marked FAILED and *still*
+acknowledged — with the reason written beside it, so the gateway does not retry
+forever.
+
+That last decision is the one worth checking rather than accepting, because it
+is the one that trades a retry away. The condition is surfaced three ways: the
+`rejected_webhooks` gauge counts REJECTED and FAILED, the `unverified_payments`
+gauge counts any payment left unverified for over an hour, and the overnight
+statement sweep reaches the money independently. The money is not lost.
+
+One precision, recorded rather than changed: the comment says the failed
+delivery "sits in the reconciliation exception queue instead", and nothing
+routes the webhook event there. The queue is over `reconciliation_records` and
+is filled by the statement sweep, which reaches the same money by its own
+route. The effect the sentence promises happens; the mechanism it names is not
+the one that produces it.
+
+**An observation for PSIRS, not a defect.** Nothing retries a FAILED webhook
+delivery, and no officer screen lists them — the only reader outside the tests
+is the Prometheus gauge. So an operator watching metrics sees a number rise
+with no way to see which deliveries it counts or to ask for them again. A
+transient gateway timeout during confirmation therefore costs a day's delay
+rather than seconds. Whether that is worth a retry and a list is an operational
+judgement about how often the gateway actually times out, which is PSIRS's to
+make and not visible from here.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in
