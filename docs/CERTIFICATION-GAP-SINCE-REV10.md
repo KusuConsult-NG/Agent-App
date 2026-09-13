@@ -1952,6 +1952,64 @@ anything. That is what the restoration test in `DISASTER-RECOVERY.md` and
 `deploy/backup/verify-backup.sh` are for, and saying so here is the point — a
 guard that implied otherwise would be the same defect one level up.
 
+## The step-up table an integrator reads, listing seven of twelve
+
+`docs/API.md` carries "Step-up actions, and the routes that enforce them" — the
+section a government's integrator reads to learn which calls need a fresh
+one-time code as well as a permission. It listed seven rows and said "All seven
+are now enforced by a route".
+
+`STEP_UP_ACTIONS` holds twelve. Five had no row at all:
+
+| Action | Route nothing documented |
+| --- | --- |
+| `financial.period.close` | `POST /government/periods/:id/close` |
+| `financial.period.reopen` | `POST /government/periods/:id/reopen` |
+| `audit.report.sign` | `POST /government/audit/reports/:id/sign` · `/withdraw` |
+| `device.block` | `POST /government/devices/:id/block` |
+| `device.unblock` | `POST /government/devices/:id/unblock` |
+
+The last two arrived on this branch and are mine. The other three did not; they
+have been enforced and undocumented for as long as they have existed.
+
+The `user.role.change` row was wrong the other way round. It named one route.
+Eight demand that code: `POST /government/users/:id/role`, the same for
+`/status`, and the whole custom-role surface — `POST /government/roles` with
+`grant`, `revoke`, `retire`, `restore` and `export-limit` under `/roles/:name`.
+All eight are `user:manage`. Someone building a role-administration screen from
+the reference would have learned about the step-up from a `403
+STEP_UP_REQUIRED` in production, on the screen where an administrator is
+already halfway through disabling an account.
+
+The table now carries all twelve actions and every route that enforces each,
+with the two splits explained where they are easy to read as duplication:
+closing and reopening a month are separate actions, and so are blocking and
+unblocking a handset, because a code is consumed on use and authorises exactly
+one action — a shared name would let a code minted to take a stolen machine out
+of service be spent handing it back.
+
+### What now holds it
+
+A fifth case in `a-code-that-names-the-wrong-door.test.ts`, which already holds
+this constant against the routes and against the officer portal. The reference
+table is now bound to both: its row set must equal `STEP_UP_ACTIONS` exactly,
+every `requireStepUp` site's declared path must appear in its action's route
+cell, and the sentence above the table must spell the current count. Whichever
+of the three drifts, the failure names it.
+
+Mutation-checked. One failing case each for a dropped row, a route removed from
+the `user.role.change` cell, the count changed to eleven, and an invented row.
+
+A fifth mutation — adding an action to `STEP_UP_ACTIONS` — reported **no
+failures**, which was a miss worth recording rather than quietly fixing. The
+tests import the constant from `@psirs/shared`, meaning the *built* package:
+editing `packages/shared/src/rbac.ts` alone changes nothing a test can see.
+Rebuilt with `tsc -b packages/shared`, the same mutation failed the two cases
+predicted — "is consumed somewhere, for every action the list offers" and the
+new one. The guard binds; what did not was my hand. Anyone running a single
+test file after editing `packages/shared` is running it against the previous
+build, and `verify` hides this because `typecheck` builds before `test` runs.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

@@ -261,4 +261,86 @@ describe('a step-up code names the door it opens', () => {
         'the officer has already been sent a code:\n  ' + refused.join('\n  '),
     );
   });
+
+  /**
+   * The table an integrator reads before they build against a route.
+   *
+   * `docs/API.md` carries "Step-up actions, and the routes that enforce them".
+   * It listed seven rows and said "All seven are now enforced by a route",
+   * which was true when it was written and had been wrong since: the list had
+   * grown to twelve, and five of them appeared nowhere in the reference —
+   * `financial.period.close`, `financial.period.reopen`, `audit.report.sign`,
+   * and the two this file exists for, `device.block` and `device.unblock`.
+   *
+   * The `user.role.change` row was wrong in the other direction. It named one
+   * route; eight demand that code, and the seven it omitted are the custom
+   * role surface and `POST /government/users/:id/status`. An integrator
+   * building a role-administration screen against the reference would learn
+   * about the step-up only from a 403 in production.
+   *
+   * WHAT THIS CANNOT DO. It matches a declared path against the text of the
+   * row's route cell, so a path that is a prefix of another — `/roles` under
+   * `/roles/:name/grant` — is satisfied by the longer one being listed. The
+   * boundary below stops the loosest version of that; the check is for a whole
+   * action or route family gone missing, not for a mis-typed parameter name.
+   */
+  it('is a row in the API reference, for every action, naming every route that demands it', () => {
+    const REFERENCE = join('..', '..', 'docs', 'API.md');
+    const source = readFileSync(REFERENCE, 'utf8');
+
+    const heading = source.indexOf('### Step-up actions, and the routes that enforce them');
+    assert.notEqual(heading, -1, 'docs/API.md no longer has the step-up section this checks');
+
+    const section = source.slice(heading, source.indexOf('\n#### ', heading));
+    const rows = new Map<string, string>();
+    for (const row of section.matchAll(/^\|\s*`([a-z][a-z0-9_.]+)`\s*\|([^|]*)\|/gm)) {
+      rows.set(row[1]!, row[2]!);
+    }
+
+    assert.deepEqual(
+      [...rows.keys()].sort(),
+      [...STEP_UP_ACTIONS].sort(),
+      'the reference table and STEP_UP_ACTIONS name different sets of actions. ' +
+        'An action missing from the table is a 403 an integrator meets in ' +
+        'production; a row naming no action is a control the reference invents.',
+    );
+
+    const missing = stepUpSites()
+      .filter((site) => {
+        const cell = rows.get(site.action);
+        if (cell === undefined) return false; // already reported above
+        // The table gives mounted paths; the declaration gives the path
+        // relative to its router. The boundary keeps `/roles` from being
+        // satisfied by `/roles/:name/grant` alone.
+        const bounded = new RegExp(
+          site.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![A-Za-z0-9:/_-])',
+        );
+        return !bounded.test(cell);
+      })
+      .map((site) => `${site.where}: ${site.method} …${site.path} (${site.action})`);
+
+    assert.deepEqual(
+      missing,
+      [],
+      'these routes demand a step-up code and the reference does not say so:\n  ' +
+        missing.join('\n  '),
+    );
+
+    /*
+     * And the sentence above the table, which is the part a reader believes
+     * without counting the rows.
+     */
+    const spelled = [
+      'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+      'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen',
+      'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty',
+    ][STEP_UP_ACTIONS.length];
+    assert.ok(spelled, `no spelling for ${STEP_UP_ACTIONS.length}; extend the list`);
+    assert.match(
+      section,
+      new RegExp(`All ${spelled} are enforced by a route`),
+      `docs/API.md should say "All ${spelled} are enforced by a route"; ` +
+        `STEP_UP_ACTIONS holds ${STEP_UP_ACTIONS.length}`,
+    );
+  });
 });

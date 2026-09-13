@@ -180,7 +180,9 @@ usable login; government users are provisioned by an administrator.
 ### Step-up actions, and the routes that enforce them
 
 `STEP_UP_ACTIONS` names every operation that needs a fresh one-time code as
-well as the permission. All seven are now enforced by a route:
+well as the permission. All twelve are enforced by a route, and every route
+that enforces one is listed below — a caller who has the permission and not a
+current code gets `403 STEP_UP_REQUIRED` on any of them.
 
 | Action | Route | Also requires |
 |---|---|---|
@@ -190,7 +192,17 @@ well as the permission. All seven are now enforced by a route:
 | `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:configure` |
 | `payment.reversal.approve` | `POST /government/approvals/:id/execute-reversal` | `payment:reverse:approve`; raised as a `PAYMENT_REVERSAL` approval, decided by a second officer, executed by a third |
 | `taxpayer.identity.change` | `POST /taxpayers/:id/identity` | `taxpayer:correct`; the identity *document* additionally needs `taxpayer:manage` |
-| `user.role.change` | `POST /government/users/:id/role` | `user:manage`; never your own role |
+| `user.role.change` | `POST /government/users/:id/role` · `/government/users/:id/status` · `/government/roles` · `/government/roles/:name/grant` · `/government/roles/:name/revoke` · `/government/roles/:name/retire` · `/government/roles/:name/restore` · `/government/roles/:name/export-limit` | `user:manage`; never your own role. The name is about *who may do what*, so defining a role, granting or revoking a permission on one, and disabling an account are all under it |
+| `financial.period.close` | `POST /government/periods/:id/close` | `period:close`. After this the four tables that decide what the month collected refuse to be written |
+| `financial.period.reopen` | `POST /government/periods/:id/reopen` | `period:reopen`. Split from closing deliberately: one code must not open a month that was minted to close it |
+| `audit.report.sign` | `POST /government/audit/reports/:id/sign` · `/government/audit/reports/:id/withdraw` | `audit:sign` to sign, `audit:report` to withdraw — withdrawal is the other half of the same authority |
+| `device.block` | `POST /government/devices/:id/block` | `user:manage` |
+| `device.unblock` | `POST /government/devices/:id/unblock` | `user:manage` |
+
+Blocking and unblocking a handset are two actions rather than one for the same
+reason closing and reopening a month are: a code is consumed on use and
+authorises exactly one action, so a shared name would let a code minted to take
+a stolen machine out of service be spent handing it back.
 
 #### Correcting a taxpayer record
 
