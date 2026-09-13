@@ -1087,6 +1087,21 @@ draftRouter.post(
               actorId: req.auth!.userId,
               actorRole: req.auth!.role,
               agentId,
+              /*
+               * Dated when the agent stood there, not when the phone found a
+               * signal.
+               *
+               * Every draft carries `capturedAt` and this endpoint stored it
+               * on `offline_drafts` and then dropped it, so the observation
+               * itself took the column's `now()` default. That is the moment
+               * of arrival, and arrival order is not visit order: an
+               * observation is superseded by a later one, so a Monday capture
+               * synced on Friday displaced an officer's Wednesday visit and
+               * the band the trader is assessed on came from the earlier of
+               * the two. The officer's queue read Friday as the date of the
+               * visit as well.
+               */
+              observedAt: new Date(draft.capturedAt),
             });
             await accept(
               'presumptive_observation',

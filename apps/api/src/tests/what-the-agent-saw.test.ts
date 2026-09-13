@@ -472,6 +472,111 @@ describe('the disagreement queue', () => {
   });
 });
 
+// ===========================================================================
+describe('a capture that was taken days before it arrived', () => {
+  /*
+   * The visit is what is dated, not the sync.
+   *
+   * `observed_at` took the column's `now()` default and the sync endpoint
+   * dropped the `capturedAt` every draft carries, so an observation made in a
+   * market with no signal was dated at the moment the handset next found one.
+   * Arrival order is not visit order, and the queue above decides which of two
+   * observations the State believes by comparing exactly this column.
+   */
+  it('does not let a capture taken before a visit displace the visit', async () => {
+    const taxpayer = await trader('Visited twice');
+    const group = await guild();
+
+    // Monday, in the market, no signal. The capture waits on the handset.
+    const monday = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+
+    // Wednesday: an officer goes in person, and the guild disagrees with them.
+    const visit = await observe(taxpayer, { groupId: group });
+    await attestObservation(pool, {
+      observationId: visit.id,
+      agrees: false,
+      attestedByName: 'Guild Leader',
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+    });
+    assert.ok(disagreementsHas(await disagreements(pool), visit.id), 'on the queue first');
+
+    // Friday: the handset finds a signal and Monday's capture arrives.
+    const arrived = await recordObservation(pool, {
+      taxpayerId: taxpayer,
+      ...TAILOR,
+      premises: 'STALL',
+      actorId: officerId,
+      actorRole: 'admin',
+      observedAt: monday,
+    });
+
+    const stored = await queryOne<{ observed_at: Date; created_at: Date }>(
+      pool,
+      'SELECT observed_at, created_at FROM presumptive_observations WHERE id = $1',
+      [arrived.id],
+    );
+    assert.equal(
+      stored!.observed_at.getTime(),
+      monday.getTime(),
+      'dated when the agent stood in front of the business',
+    );
+    assert.ok(
+      stored!.created_at.getTime() > stored!.observed_at.getTime(),
+      'and recorded when it reached the platform, which is the other column',
+    );
+
+    assert.ok(
+      disagreementsHas(await disagreements(pool), visit.id),
+      'a capture taken before the visit must not settle a disagreement raised after it',
+    );
+  });
+
+  /*
+   * The one wrong date with a lasting consequence.
+   *
+   * A handset's clock is whatever its owner last set. A capture dated too
+   * early is superseded by the next observation, which is what would have
+   * happened anyway; one dated in the future sorts ahead of every observation
+   * anybody makes until that date passes, so a single fast phone would pin a
+   * trader's band to one visit and leave an officer standing in the shop
+   * unable to displace it.
+   */
+  it('takes a capture dated in the future as having been made on arrival', async () => {
+    const taxpayer = await trader('Fast handset');
+    const nextMonth = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    const arrived = await recordObservation(pool, {
+      taxpayerId: taxpayer,
+      ...TAILOR,
+      actorId: officerId,
+      actorRole: 'admin',
+      observedAt: nextMonth,
+    });
+
+    const stored = await queryOne<{ observed_at: Date }>(
+      pool,
+      'SELECT observed_at FROM presumptive_observations WHERE id = $1',
+      [arrived.id],
+    );
+    assert.ok(
+      stored!.observed_at.getTime() < nextMonth.getTime(),
+      'an observation cannot have been made next month',
+    );
+
+    // Which is the point of it: a real visit afterwards still stands.
+    const later = await observe(taxpayer, { premises: 'STALL' });
+    const newest = await queryOne<{ id: string }>(
+      pool,
+      `SELECT id FROM presumptive_observations
+        WHERE taxpayer_id = $1 ORDER BY observed_at DESC LIMIT 1`,
+      [taxpayer],
+    );
+    assert.equal(newest!.id, later.id, 'the visit made today is what the State believes');
+  });
+});
+
 function disagreementsHas(queue: Awaited<ReturnType<typeof disagreements>>, id: string) {
   return queue.some((row) => row.observationId === id);
 }

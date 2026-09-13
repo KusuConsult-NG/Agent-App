@@ -426,6 +426,60 @@ describe('a capture that fails for a reason nobody wrote', () => {
     assert.equal(response.body.results.length, 50);
   });
 
+  /*
+   * The date on the capture is the date of the visit.
+   *
+   * Every draft carries `capturedAt` and this endpoint stored it on
+   * `offline_drafts` and then dropped it, so the observation itself took the
+   * `now()` default on its column — the moment the handset found a signal.
+   * `presumptive_observations.observed_at` is what decides which of two
+   * observations the State believes, so dating a capture on arrival reordered
+   * the visits: a Monday capture synced on Friday displaced an officer's
+   * Wednesday visit and the trader was banded from the older of the two.
+   *
+   * Asserted over HTTP because the drop was in the route, not the service.
+   */
+  it('dates an observation when the agent made it, not when the phone got through', async () => {
+    const registered = await sync([registration('draft-observed-at-registration')]);
+    const taxpayerId = registered.body.results[0].entityId as string;
+    assert.ok(taxpayerId, JSON.stringify(registered.body).slice(0, 200));
+
+    const capturedAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+    const response = await sync([
+      {
+        clientReference: 'draft-observed-at-observation',
+        draftType: 'BUSINESS_OBSERVATION',
+        capturedAt: capturedAt.toISOString(),
+        payload: {
+          taxpayerId,
+          premises: 'STALL',
+          equipmentCount: 1,
+          peopleWorking: 1,
+          economicSector: 'ARTISAN_CRAFT',
+        },
+      },
+    ]);
+
+    assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 300));
+    const result = response.body.results[0];
+    assert.equal(result.status, 'SYNCED', JSON.stringify(result));
+
+    const stored = await queryOne<{ observed_at: Date; created_at: Date }>(
+      pool,
+      'SELECT observed_at, created_at FROM presumptive_observations WHERE id = $1',
+      [result.entityId],
+    );
+    assert.equal(
+      stored!.observed_at.getTime(),
+      capturedAt.getTime(),
+      'the observation is dated when the agent stood in front of the business',
+    );
+    assert.ok(
+      stored!.created_at.getTime() > stored!.observed_at.getTime(),
+      'and the moment it reached PSIRS is kept separately, which is what created_at is',
+    );
+  });
+
   it('still shows a refusal the platform composed', async () => {
     const response = await sync([
       {

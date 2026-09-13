@@ -1876,7 +1876,7 @@ instructions — but they are what an agent reads all day.
 | `ofcEnLeaderSays` | The leader disputes | Shugaba ya ki amincewa | ☐ | |
 | `ofcEnBandGap` | Effect on the band | Tasiri a kan mataki | ☐ | |
 | `ofcEnSameBand` | Same band either way | Mataki daya ko ta yaya | ☐ | |
-| `ofcEnObservedOn` | Recorded on | An rubuta a | ☐ | |
+| `ofcEnObservedOn` | Observed on | An lura a | ☐ | |
 | `ofcEnAttestedBy` | Attested by | Wanda ya tabbatar | ☐ | |
 | `ofcEnNoDisagreements` | Nothing is in dispute. | Babu bayanin da ake takaddama a kai. | ☐ | |
 | `ofcEnObjections` | Estimates under objection | Kiyasin da ake kalubalanta | ☐ | |
