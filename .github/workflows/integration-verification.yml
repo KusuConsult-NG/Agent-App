@@ -245,7 +245,22 @@ jobs:
         with:
           name: integration-verification-${{ github.run_number }}
           path: verification.log
-          # B-4 is closed by evidence, and evidence that vanishes in ninety days
-          # is not much use to an auditor asking in month four.
-          retention-days: 180
+          # Ninety days, because ninety days is the most this repository can
+          # ask for.
+          #
+          # This read 180, under a comment saying evidence that vanishes in
+          # ninety days is no use to an auditor asking in month four. It was
+          # never 180. GitHub caps artifact retention at 90 days for a public
+          # repository, and the action documents the input as "Max: 90 days",
+          # so the request was reduced on arrival: the file said four months
+          # and the artifact expired in three. That is worse than asking for
+          # ninety, because it reads as a solved problem.
+          #
+          # B-4 still wants evidence an auditor can reach in month four, and
+          # this workflow cannot supply it. Anything longer has to live
+          # outside Actions retention -- an object-storage bucket with its own
+          # lifecycle -- which is a deployment decision, recorded as one in
+          # docs/INTEGRATION-VERIFICATION.md rather than implied by a number
+          # here.
+          retention-days: 90
           if-no-files-found: warn

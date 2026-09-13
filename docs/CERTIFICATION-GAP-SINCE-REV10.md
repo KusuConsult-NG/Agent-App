@@ -2054,6 +2054,48 @@ literals must be found across those 14 calls, the fifteenth being the second
 arm of `MyAccess`'s block/unblock ternary, so the rule cannot quietly match
 nothing.
 
+## Evidence for an auditor in month four, deleted in month three
+
+Found while checking two Dependabot major bumps, and not caused by either.
+
+`integration-verification.yml` uploads `verification.log` as the evidence that
+closes blocker **B-4**, and asked to keep it for 180 days. The comment above
+the number said why: evidence that vanishes in ninety days "is not much use to
+an auditor asking in month four". `docs/INTEGRATION-VERIFICATION.md` repeated
+the same figure.
+
+It was never 180. **This repository is public**, and GitHub caps artifact
+retention at ninety days for a public repository — `actions/upload-artifact`
+documents the input in its own `action.yml` as "Max: 90 days". The request is
+reduced on arrival, so two files said four months and the artifact expired in
+three.
+
+That is worse than having asked for ninety. A figure nobody can act on reads as
+a problem already solved, and the one person it misleads is the auditor the
+sentence was written for.
+
+Both files now say ninety and say why, and both name what would actually
+deliver month four: copying the log to object storage with its own lifecycle
+policy — the same place the disaster-recovery archives are meant to go, and
+equally not yet in existence. That is a deployment decision, recorded as one
+rather than implied by a number in a workflow.
+
+### What now holds it
+
+`how-long-the-evidence-lasts.test.ts`, two cases. No workflow may ask for more
+retention than a public repository can give, and the document's figure must
+equal the workflow's — the second is the binding that was missing, since the
+two files agreed with each other while neither agreed with GitHub.
+
+Mutation-checked: the workflow put back to 180 fails **both** cases, being over
+the cap and disagreeing with the document; the document alone changed to 180
+fails one; a new workflow asking for 120 days fails one.
+
+What the guard cannot do is ask GitHub what the cap is. The ninety is written
+into the test from the action's documented maximum, so a repository made
+private — where the ceiling rises to 400 — makes this test the thing to change
+deliberately, rather than a number drifting again.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

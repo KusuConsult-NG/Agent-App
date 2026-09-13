@@ -290,6 +290,17 @@ legitimate vendor replies and therefore indistinguishable from a mapping that
 does not recognise what the vendor said. That strictness is what makes a green
 run worth having.
 
-Output is kept as a build artifact for 180 days, because B-4 closes on evidence
-and evidence that expires in ninety days is little use to an auditor asking in
-month four.
+Output is kept as a build artifact for **90 days**, which is the longest this
+repository can keep one: GitHub caps artifact retention at ninety days for a
+public repository, and the upload action documents the input as "Max: 90 days".
+
+This said 180 days, and the workflow asked for 180, and neither was true — the
+request was reduced on arrival, so the evidence expired in month three while
+two files said month four. B-4 closes on evidence an auditor can still reach,
+and an auditor asking in month four will find nothing here.
+
+**Outstanding, and a deployment decision rather than a workflow one:** copying
+`verification.log` to object storage with its own lifecycle policy, the same
+place the disaster-recovery archives are meant to go. Until that exists, a run
+older than ninety days is evidenced only by its own green tick in the Actions
+history, not by the log that justified it.
