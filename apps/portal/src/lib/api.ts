@@ -7,7 +7,7 @@
  * (PRD §62, §54).
  */
 
-import { getTranslation } from '@psirs/shared';
+import { getTranslation, type StepUpAction } from '@psirs/shared';
 import { getPortalLanguage } from './i18n';
 
 const API_BASE = '/api/v1';
@@ -396,7 +396,7 @@ export async function logout(): Promise<void> {
  * The development OTP is returned by the API only while a mock SMS provider is
  * configured, which config.ts forbids in production.
  */
-export async function stepUp(action: string, phone: string): Promise<void> {
+export async function stepUp(action: StepUpAction, phone: string): Promise<void> {
   const otp = await api.post<{ developmentCode?: string }>('/auth/otp/request', {
     destination: phone,
     purpose: 'STEP_UP',

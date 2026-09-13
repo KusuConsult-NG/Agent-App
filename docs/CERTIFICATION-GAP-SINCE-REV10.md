@@ -2010,6 +2010,50 @@ new one. The guard binds; what did not was my hand. Anyone running a single
 test file after editing `packages/shared` is running it against the previous
 build, and `verify` hides this because `typecheck` builds before `test` runs.
 
+## A step-up action name that was a `string` on both clients
+
+No live defect. This closes the class that produced one.
+
+The two applications send an action name to `POST /auth/step-up`, which
+validates it with `z.enum(STEP_UP_ACTIONS)` and answers 422. The refusal
+arrives *after* `/auth/otp/request` has already sent the person a text, so a
+name that is merely wrong costs an officer or an agent an SMS, the wait, and
+the code — and reads as the platform refusing them. That is not hypothetical:
+the officer home screen asked for `commission.payout.approve` and did exactly
+this every time, which is why
+`a-code-that-names-the-wrong-door.test.ts` has a case scanning the portal.
+
+That scan covers one application and one spelling. Three seams carry the name,
+and all three took a plain `string`:
+
+| Seam | Reached by |
+| --- | --- |
+| `stepUp(action, phone)` in `apps/portal/src/lib/api.ts` | the officer portal's 14 call sites across nine screens — scanned by the existing case |
+| `grantStepUp(action, code)` in `apps/agent/src/lib/step-up.ts` | the agent application |
+| the `action` prop of `<StepUpPrompt>` in `apps/agent/src/components/StepUp.tsx` | the agent's two uses — `commission.payout.request` and `agent.bank_account.change`, scanned by nothing |
+
+The agent half is the half nothing watched, and one of its two actions is the
+one an agent uses to ask for their own money.
+
+`StepUpAction` — `(typeof STEP_UP_ACTIONS)[number]` — has been exported from
+`@psirs/shared` all along, and both applications already depend on the package.
+All three seams now take it, so a name off the list stops compiling rather than
+reaching an SMS gateway. Verified by typing a plausible typo into two real call
+sites: `action="commission.payout.requests"` on the agent's payout prompt and
+`stepUp('financial.period.closed', …)` on the officer's month-close, each one
+compile error naming the twelve permitted values.
+
+The type found exactly one thing already in the tree, and it was harmless: a
+portal test passed `'x'` as the action while asserting something else entirely
+— that an abandoned step-up renders in Hausa. It now passes
+`'audit.report.sign'`, which is what it was always testing around.
+
+Both scans stay. The type binds the literal written at a call site; the scan is
+the floor under it, and it has a floor of its own — at least fifteen action
+literals must be found across those 14 calls, the fifteenth being the second
+arm of `MyAccess`'s block/unblock ternary, so the rule cannot quietly match
+nothing.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

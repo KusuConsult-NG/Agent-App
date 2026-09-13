@@ -13,6 +13,7 @@
  * can act on before it happens.
  */
 
+import type { StepUpAction } from '@psirs/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, type ApiError } from '../lib/api';
 import { StepUpUnavailable, grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
@@ -33,7 +34,7 @@ export function StepUpPrompt({
   onCancel,
 }: {
   /** The step-up action name the API expects, e.g. commission.payout.request. */
-  action: string;
+  action: StepUpAction;
   title: string;
   /** What the agent is authorising. Shown above the code entry. */
   description: React.ReactNode;

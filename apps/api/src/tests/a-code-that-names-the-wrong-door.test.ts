@@ -228,7 +228,7 @@ describe('a step-up code names the door it opens', () => {
     /*
      * The client half, and the half that was actually wrong.
      *
-     * `stepUp` in the portal takes a plain `string`, not `StepUpAction`, so
+     * `stepUp` in the portal took a plain `string`, not `StepUpAction`, so
      * nothing stopped `RoleHome` asking for `commission.payout.approve` -- a
      * name that reads perfectly and is not on the list. `POST /auth/step-up`
      * validates with `z.enum(STEP_UP_ACTIONS)` and answers 422, but only
@@ -241,6 +241,13 @@ describe('a step-up code names the door it opens', () => {
      * Checked here rather than in the portal's own suite because this is a
      * fact about two workspaces at once, and this is the file that already
      * holds the list.
+     *
+     * The three seams that carry an action name are now typed `StepUpAction`
+     * -- `stepUp` here, and `grantStepUp` and the `StepUpPrompt` prop in the
+     * agent application -- so a name off the list no longer compiles, in
+     * either workspace. This case stays as the floor: the type binds the
+     * literal at the call site, and this binds what the scan can still see if
+     * an action name ever reaches the network another way.
      */
     const offered = new Set<string>(STEP_UP_ACTIONS);
     const asked = portalAsksFor();

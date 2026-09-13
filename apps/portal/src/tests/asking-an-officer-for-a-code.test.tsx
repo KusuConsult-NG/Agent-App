@@ -103,7 +103,7 @@ describe('asking an officer for a code', () => {
    */
   it('puts the refusal on the screen in Hausa', async () => {
     setPortalLanguage('ha');
-    const caught = (await stepUp('x', '+2348000000009').catch((error) => error)) as ApiRequestError;
+    const caught = (await stepUp('audit.report.sign', '+2348000000009').catch((error) => error)) as ApiRequestError;
 
     render(<ErrorAlert error={caught.error} />);
     await waitFor(() => {
