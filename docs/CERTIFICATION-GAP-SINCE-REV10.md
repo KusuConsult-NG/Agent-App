@@ -1141,6 +1141,160 @@ screen can still do its job. The fourth test is the class rather than the
 instance: one fixture, every public door it can reach, and the assertion that
 no telephone number the database holds comes back from any of them.
 
+## A step-up code that named a role change, for a laptop
+
+`SECURITY.md` says step-up authentication is "consumed on use — one code
+authorises exactly one action". The consumption half holds: `consumeStepUpGrant`
+spends the grant row under `FOR UPDATE SKIP LOCKED`, so one code buys one action
+and two codes buy two, including when both are spent at once. The other word was
+where the problem was. An action is a *name*, and the name is what gets written
+down.
+
+`POST /government/devices/:id/block` and `/unblock` asked for
+`user.role.change`. The comment above them gave the reasoning: taking a machine
+off whoever is holding it is "the same size of decision as changing an officer's
+role, and gets the same extra verification". The size was right. Three things
+followed from the name being wrong.
+
+`grantStepUp` audits the grant it writes. An officer who blocked a stolen laptop
+left an `auth.step_up_granted` row recording that they had authenticated a role
+change — an authentication event naming an action that did not happen, in the
+table whose whole worth is that it does not do that. An auditor reconciling
+which step-ups authorised which actions would find role-change grants with no
+role change beside them, and device blocks with no step-up of their own.
+
+`requireStepUp` builds its refusal from the action, so an officer blocking a
+handset was told, in `nextStep`, to step up for a role change.
+
+And for the window's ten minutes the two doors took each other's keys. Blocking
+and unblocking a handset is routine — a laptop is lost, a laptop comes back.
+Changing a role is the rare one, and it is the action that turns one compromised
+administrator session into any level of access at all. Minting a role-change
+grant several times a week for handset admin is how an officer learns to approve
+that prompt without reading it, and every routine unblock left a live
+role-change authorisation open behind it.
+
+The two routes now ask for `device.block` and `device.unblock`, split for the
+same reason `financial.period.close` and `.reopen` are split: the risk runs one
+way. Blocking is the defensive move; unblocking restores access to a machine
+that was taken away for a reason, and a code obtained for the first should not
+spend on the second.
+
+The class is now checked rather than the instance. Every `requireStepUp` call in
+the route files must share a word with the route it guards — twenty-one sites, a
+floor so a scan that stops matching fails rather than passes, and no exception
+list. It is a check on the *subject*, not the verb, and deliberately so:
+`audit.report.sign` also gates `/audit/reports/:id/withdraw`, and the note beside
+it says why. Grouping two operations on one subject under one name is a
+judgement this repository makes on purpose. Gating a device route on a user
+action shared no word at all, which is the line the check draws.
+
+## What the portal asked for, and what the server would issue
+
+Checking the list in the other direction — every action `STEP_UP_ACTIONS` offers
+must be consumed by some route, and every action a route demands must be one the
+list offers — turned up nothing on the server. Extending the same question to
+the client did.
+
+`RoleHome.tsx` asked for `commission.payout.approve`. There is no such action.
+The list has `commission.payout.request`, and `POST /auth/step-up` validates with
+`z.enum(STEP_UP_ACTIONS)` and answers 422. `stepUp` in the portal takes a plain
+`string`, not `StepUpAction`, so nothing refused it at compile time.
+
+What made it worse than a dead button is the order. `stepUp` calls
+`/auth/otp/request` *first*, and that route does not care which action the code
+is for — it sends the officer a text. Only then is the code presented to
+`/auth/step-up` and refused. So approving a commission payout from the officer's
+home screen sent an SMS, took the officer's code, and refused it. Every time,
+since the button was written.
+
+Nothing in either workspace could see it. The API tests post their own valid
+bodies; the portal tests mock the network away. The check that now holds it
+reads both: every action literal the portal passes to `stepUp` must be one the
+list offers, with a floor of fifteen so the scan cannot quietly stop matching.
+
+The same button was broken a second, independent way: it posted `{}` to a route
+requiring `{ reason: string().min(5) }`. It is a copy of the approve button on
+the Finance screen, which prompts for a reason through `withJustification` and
+sends it. It now uses the same helper.
+
+Whether approving a payout *should* need a step-up code is left open, and it is
+PSIRS's question rather than this document's. The route asks for none; the
+screen this button was copied from asks for none; segregation of duties is the
+control actually in place, and the API test spells it out — the requesting agent
+cannot approve their own payout, finance does. If the answer is that it should,
+the change is an entry in `STEP_UP_ACTIONS` and a `requireStepUp` on the route,
+not a name invented on one screen.
+
+## Six buttons on the officer's home screen, dead since 30 August
+
+The worst of the three, and it was found by accident while reading the one
+above.
+
+`useAction` is the helper `RoleHome.tsx` runs all six of its action buttons
+through — re-ask a failed TIN, approve a payout, and four more. Its callback
+opened with
+
+```ts
+const { t } = usePortalI18n();
+```
+
+at the wrong indentation, dropped in by the i18n pass of 30 August 2026 and
+never used: nothing below it reads `t`. `usePortalI18n` calls `useState` and
+`useEffect`, so calling it from inside an async callback calls a React hook
+outside render. React's dispatcher is null there, and it throws `Invalid hook
+call`.
+
+The throw lands *above* the `try` two lines down, so the helper's own `catch` —
+the one that turns a failure into an `ErrorAlert` — never saw it, and `setBusy`
+had not run either. The officer pressed the button, the label did not change, no
+error appeared, and nothing was sent. It is the same "watched the button stop
+spinning and was told nothing at all" failure this portal has been through
+before, except that here the button never started spinning.
+
+This is recorded at length because of how it survived. The portal suite was
+green at 656 tests with all six buttons dead: no test had ever clicked one.
+Typecheck passes — a hook called in the wrong place is a runtime rule, not a
+type. Lint did not run a rules-of-hooks check over it. The screen renders
+perfectly, which is what the existing screen tests assert. Nothing in the
+repository's considerable apparatus was pointed at the question "does pressing
+this do anything", and for a fortnight the answer on the officer's home screen
+was no.
+
+It is proven by a click, not by reading: a test renders the screen, presses the
+button, and asserts the request reaches the server. Restoring the line fails
+exactly those two tests and nothing else, which is the measure of how alone they
+are.
+
+### The class is not guarded, and this is what it would take
+
+The other findings in this document each came with a mechanical check for the
+class behind the instance. This one does not, and the reason should be on the
+record rather than left as an omission.
+
+The standard answer is ESLint's `react-hooks/rules-of-hooks`, which is exactly
+this rule and is what every React codebase uses to hold it. **There is no ESLint
+in this repository at all** — no config, no dependency, no script. Adding it is a
+toolchain decision with a real footprint (a plugin set, a config, a CI step, and
+a first run that will have opinions about eleven thousand lines of existing
+code), and it is PSIRS's call rather than something to slip in beside a bug fix.
+
+Writing the check by hand was attempted and abandoned, which is worth recording
+because the reason is not obvious. The check needs to know, for each `useX()`
+call, which function encloses it — that is a parser's question, not a regular
+expression's. The repository is on TypeScript 7, whose package exports only
+version metadata from its root; the compiler API has moved to `typescript/
+unstable/*`, is project- and snapshot-oriented rather than parse-a-file-oriented,
+and is named unstable because it is. A guard built on it would break on a
+TypeScript bump, and a guard that breaks is worse than an absent one, because it
+gets deleted in a hurry by somebody who is not thinking about what it was for.
+
+So: two tests that press two of the six buttons, and this paragraph. The
+recommendation is ESLint with the `react-hooks` plugin, run in CI beside
+`typecheck`. Until then the gap is real — a hook moved into a callback anywhere
+in either React workspace will pass `tsc`, pass both suites, render perfectly,
+and throw when somebody presses the button.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in
