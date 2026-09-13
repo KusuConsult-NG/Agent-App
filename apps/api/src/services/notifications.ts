@@ -85,6 +85,14 @@ function render(template: string, variables: Record<string, string>): string {
   });
 }
 
+/**
+ * The mask that stands in for a credential in the retained body.
+ *
+ * Deliberately not the right length: a support officer reading the queue
+ * should see that something was withheld, not how many characters it had.
+ */
+const WITHHELD = '\u2588\u2588\u2588\u2588\u2588\u2588';
+
 export interface QueueNotificationParams {
   event: NotificationEvent;
   userId?: string | null;
@@ -93,6 +101,23 @@ export interface QueueNotificationParams {
   recipientOverride?: string | null;
   channels?: ('SMS' | 'EMAIL' | 'PUSH')[];
   variables?: Record<string, string>;
+  /**
+   * Variables whose value is a credential, and must not survive delivery.
+   *
+   * `otp_codes` keeps only sha256(code) and `referee_invitations` only
+   * sha256(token) — both on purpose. Rendering the same code, and the same
+   * link, into `notifications.message` put the plaintext back in the database
+   * beside the hash, where nothing ever deleted it: a join from the queued
+   * body to either table, hashing the substring out of the SMS, resolved the
+   * row the credential opens. In the UAT database that returned a referee
+   * invitation still SENT and a fortnight from expiring.
+   *
+   * Naming a variable here splits the row in two. The deliverable body goes to
+   * `secret_message`, which the dispatcher reads once and clears as the row
+   * becomes SENT or FAILED; `message` keeps the same sentence with the value
+   * masked, which is what a support officer needs and all they need.
+   */
+  secretVariables?: string[];
   entityType?: string;
   entityId?: string;
 }
@@ -207,6 +232,16 @@ export async function queueNotification(
     [params.event, params.channels ?? null, language],
   );
 
+  /*
+   * The credential, held for exactly as long as it takes to hand it over.
+   *
+   * Empty for all but the two events that carry one, and then `retained` and
+   * `deliverable` below are the same string and `secret_message` is NULL.
+   */
+  const secretVariables = (params.secretVariables ?? []).filter((key) => key in variables);
+  const maskedVariables: Record<string, string> = { ...variables };
+  for (const key of secretVariables) maskedVariables[key] = WITHHELD;
+
   let queued = 0;
 
   for (const template of templates) {
@@ -232,17 +267,42 @@ export async function queueNotification(
           : recipientPhone ?? recipientEmail; // SMS and WHATSAPP both use phone number
     if (!recipient) continue;
 
+    /*
+     * Two renders of the same body when a credential is in it.
+     *
+     * `deliverable` is what the gateway is handed. `retained` is the same
+     * sentence with the named variables masked, and is what stays in the
+     * database once the row is terminal. Masking is a second render rather
+     * than a search-and-replace over the first, so a code that happens to
+     * appear elsewhere in the text — a reference number, a date — is not
+     * blanked along with it.
+     *
+     * The subject is masked in both. A subject is a preview: it is what shows
+     * on a locked handset, in an inbox list and in a push banner, which is why
+     * every template that carries a code puts it in the body. A test beside
+     * this file fails any ACTIVE template whose subject names `{{code}}` or
+     * `{{link}}`, so this line is the floor under a rule caught earlier.
+     */
+    const subject = template.subject ? render(template.subject, maskedVariables) : null;
+    const deliverable = render(template.body, variables);
+    const retained = secretVariables.length ? render(template.body, maskedVariables) : deliverable;
+
     await client.query(
       `INSERT INTO notifications
-         (user_id, recipient, event, channel, subject, message, entity_type, entity_id, language)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+         (user_id, recipient, event, channel, subject, message, secret_message,
+          entity_type, entity_id, language)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
       [
         userId,
         recipient,
         params.event,
         template.channel,
-        template.subject ? render(template.subject, variables) : null,
-        render(template.body, variables),
+        subject,
+        retained,
+        // NULL unless this template actually rendered a credential, so the
+        // column stays empty for every event that does not carry one — and
+        // for a named variable the template never used.
+        deliverable === retained ? null : deliverable,
         params.entityType ?? null,
         params.entityId ?? null,
         // The language it was actually rendered in, not the one asked for:
@@ -293,7 +353,11 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
     attempts: number;
   }>(
     db,
-    `SELECT id, channel, recipient, subject, message, attempts
+    // `secret_message` where there is one: `message` has the credential masked
+    // and is the copy that stays. The two are the same string for every event
+    // that carries no credential, which is all but two of them.
+    `SELECT id, channel, recipient, subject,
+            COALESCE(secret_message, message) AS message, attempts
        FROM notifications
       WHERE status = 'QUEUED' AND attempts < 5
       ORDER BY created_at LIMIT $1`,
@@ -318,7 +382,8 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
       await query(
         db,
         `UPDATE notifications
-            SET status = 'FAILED', attempts = attempts + 1, failure_reason = $2
+            SET status = 'FAILED', attempts = attempts + 1, failure_reason = $2,
+                secret_message = NULL
           WHERE id = $1`,
         [notification.id, error instanceof Error ? error.message : 'Unknown delivery error'],
       );
@@ -330,7 +395,8 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
         db,
         `UPDATE notifications
             SET status = 'SENT', sent_at = now(), attempts = attempts + 1,
-                provider = $3, provider_reference = $2, failure_reason = NULL
+                provider = $3, provider_reference = $2, failure_reason = NULL,
+                secret_message = NULL
           WHERE id = $1`,
         [notification.id, result.reference || null, result.provider],
       );
@@ -343,7 +409,7 @@ export async function dispatchQueued(db: Db, options: { limit?: number } = {}): 
         db,
         `UPDATE notifications
             SET status = 'FAILED', attempts = attempts + 1,
-                provider = $3, failure_reason = $2
+                provider = $3, failure_reason = $2, secret_message = NULL
           WHERE id = $1`,
         [notification.id, result.reason ?? 'The provider refused the message', result.provider],
       );

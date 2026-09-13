@@ -36,6 +36,41 @@ The platform processes statutory government revenue and issues immutable digital
 - **Cryptographic Hashing:** Every backup produces a companion `.sha256` checksum file to guarantee that images cannot be altered at rest.
 - **Retention:** 30 days rolling on primary storage; 365 days rolling in immutable S3 Glacier / Compliance vault.
 
+### 2.2 What an archive taken before migration 079 contains
+
+Treat every snapshot and every WAL segment produced before `079_a_credential_kept_after_it_was_delivered.sql` was applied as **credential-bearing**, and hold it to the same handling as the database itself.
+
+Until 079, `notifications.message` held the rendered text of every message the
+platform ever sent, and two of those carry a credential: the SMS containing a
+one-time login code, and the SMS containing a referee's invitation link. Both
+tables that own those credentials — `otp_codes` and `referee_invitations` —
+store only a SHA-256 of them, deliberately, so the plaintext in the queue was
+the only copy and it sat beside its own hash indefinitely. A one-line join
+recovers it:
+
+```sql
+SELECT i.status, i.expires_at
+  FROM notifications n
+  JOIN referee_invitations i
+    ON i.invitation_token_hash =
+       encode(digest(substring(n.message from 'referee/([A-Za-z0-9_-]+)'), 'sha256'), 'hex')
+ WHERE n.event = 'REFEREE_INVITATION';
+```
+
+One-time codes expire in minutes, so an old archive yields nothing usable
+there. **Referee invitations last fourteen days**, which means any archive from
+the last fortnight can still hold a working one: whoever holds the file can
+answer a nomination in a referee's name, or decline it and pull a working
+agent's clearance down. That is the concrete reason this section exists rather
+than a general caution about backups.
+
+The running database is no longer such a copy — 079 masks the credential out of
+the rows already queued, and from 079 onward the deliverable text is carried in
+`notifications.secret_message` and cleared the moment the gateway accepts it.
+Restoring an older archive puts the plaintext back; run 079 over any database
+restored from one before returning it to service, which the migration runner
+does automatically as part of `npm run migrate`.
+
 ---
 
 ## 3. Step-by-Step Restoration & Failover Runbook

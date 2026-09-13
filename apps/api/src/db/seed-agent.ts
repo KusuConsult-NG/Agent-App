@@ -116,7 +116,7 @@ export async function seedDemoAgent(): Promise<DemoAgent | null> {
   });
 
   // 3. Referee — nominated by the applicant, answered by the referee. The
-  //    invitation token is returned once and never stored in plaintext, so it
+  //    invitation token is returned once and kept nowhere afterwards, so it
   //    has to be carried from here to the response.
   const nomination = await referees.nominateReferee({
     agentId,

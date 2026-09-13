@@ -15,23 +15,23 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`f2ca1ec`) |
+| | At `fa8f454` (Revision 10) | Now (`54e9f5c`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
-| Database migrations | 54 | 78 |
-| API test files | 139 | 177 |
+| Database migrations | 54 | 79 |
+| API test files | 139 | 182 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
-| CHECK constraints | 194 *(report's figure)* | 299 |
-| API tests passing | 1,523 *(report's figure)* | 2,112 |
+| CHECK constraints | 194 *(report's figure)* | 300 *(see below)* |
+| API tests passing | 1,523 *(report's figure)* | 2,134 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
-| Agent PWA tests | 134 *(report's figure)* | 342 |
+| Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `f2ca1ec`: API 2,112 passing
-across four shards with 0 failing and 0 cancelled; portal 656; agent 342;
-typecheck clean across all five projects. The 81 declared states the suite did
+Current figures are from a full local run at `54e9f5c` plus the working tree
+for migration 079: API 2,134 passing across four shards with 0 failing and 0
+cancelled; portal 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
 those on any insert that omits the column, so no row taking one means the
@@ -51,14 +51,14 @@ question. Triggers are `pg_trigger` rows that are not internal
 **and not test instrumentation** (156); a trigger declared
 `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
 `information_schema.triggers`. CHECK constraints are `pg_constraint` rows of
-type `c` **on a relation in `public`** (299).
+type `c` **on a relation in `public`** (300).
 
 THIS ROW WAS WRONG UNTIL NOW, AND THE WAY IT WAS WRONG IS THE POINT. It read
 332, measured against `psirs_test`. The suite's enum-coverage harness
 (`apps/api/src/tests/enum-observation.ts`) attaches `observe_enum_ins` and
 `observe_enum_upd` to every table it watches — 176 triggers across 88 tables —
 so more than half of that 332 was instrumentation that exists in no deployed
-database. A database built fresh from the 78 migrations carries 156. The
+database. A database built fresh from the 79 migrations carries 156. The
 paragraph above this one is a careful note about *how* to count triggers, and
 it was attached to a count taken from the wrong database; getting the method
 right does not help if the subject is wrong.
@@ -82,10 +82,16 @@ platform, and the sentence is about not doing that.
 this platform than the observation triggers were, and by the standard the
 trigger row above sets — instrumentation "that exists in no deployed database"
 — they belong outside the count for the same reason. Narrowed to relations in
-`public`, which is how tables are already counted, the figure is 299. This is
+`public`, which is how tables are already counted, the figure was 299. This is
 a change of rule rather than the correction of an error: 301 was consistent
 with the method printed beside it, and a reader who re-derives it should know
 why it moved.
+
+It is 300 now, and the extra one is migration 079's
+`notifications_secret_cleared_when_terminal`. A row the gateway has finished
+with must not still be holding the credential it was carrying; the constraint
+is what makes that a property of the schema rather than of the four `UPDATE`
+statements in `dispatchQueued` that clear it.
 
 `1,694` was measured against `psirs_test`. On `psirs_uat` the same query
 answers 1,691, and the three between them are the NOT NULL columns of
@@ -140,7 +146,7 @@ assesses as a property of code:
 * **`organisation`** — departments, a reporting line and postings, which is a
   second axis of scope beside territory.
 
-## Twenty-two migrations, by what they introduce
+## Twenty-five migrations, by what they introduce
 
 `055` work across departments · `056` revenue targets · `057` the organisation ·
 `058` a month that can be closed · `059`–`060`, `067` permissions as data and
@@ -149,7 +155,9 @@ reports · `063` officers' own devices and files · `064` the officer inbox ·
 `065` whether the outside world answered · `066` how much a role may export ·
 `068` what a person is connected to · `069`–`070`, `075` PAYE and its schedule ·
 `071`–`073` what the agent saw, a count with no signal, what the agent was told ·
-`074` a citizen's own statement · `076` a report that did not say it stopped.
+`074` a citizen's own statement · `076` a report that did not say it stopped ·
+`077` one per cent computed three ways · `078` what objecting costs a trader ·
+`079` a credential kept after it was delivered.
 
 ## Claims in the report a revision would have to re-establish
 
@@ -560,7 +568,7 @@ IF NOT EXISTS` throughout, so the second application did nothing. Had any of
 them been a bare `CREATE TABLE` or an `ALTER TABLE ... ADD COLUMN`, the second
 run would have failed — loudly, which is better, or in the middle of a
 deployment, which is worse. `psirs_uat` and `psirs_test` still agree at 103
-tables and 299 CHECK constraints.
+tables and 300 CHECK constraints.
 
 What it costs while it is silent is the ability to rebuild a database from the
 repository and get the one that is deployed. A row nobody can produce is a
@@ -572,6 +580,68 @@ both, and refuses on any it cannot find. The seven real renames are recorded in
 a `RENAMED` map in the same file, each verified to point at a file that is
 still there, so an existing database keeps working and the history is written
 down rather than made every holder's problem.
+
+## A credential the queue kept, and what the backups still hold
+
+Two tables in this schema hold only a SHA-256 of a credential, on purpose, and
+both say so where they are written: `otp_codes.code_hash` and
+`referee_invitations.invitation_token_hash`. The referee module's own header
+put it as plainly as it can be put — "Invitation tokens are stored only as
+hashes (§37): the plaintext exists once, in the message sent to the referee."
+
+It existed twice. `queueNotification` rendered every template in full into
+`notifications.message`, so the SMS carrying the one-time code and the SMS
+carrying the invitation link sat in the same database as their own hashes — and
+nothing has ever deleted a notification, so they sat there permanently. Neither
+hash was doing any work. Run against `psirs_uat`, this join returned two
+invitations, one of them still `SENT` and a fortnight from expiry:
+
+```sql
+SELECT i.status, i.expires_at
+  FROM notifications n
+  JOIN referee_invitations i
+    ON i.invitation_token_hash =
+       encode(digest(substring(n.message from 'referee/([A-Za-z0-9_-]+)'), 'sha256'), 'hex')
+ WHERE n.event = 'REFEREE_INVITATION';
+```
+
+What that token opens is the whole of the referee portal's authorisation: every
+route there is unauthenticated by design, because "the referee should not need
+an agent account to respond". Holding one, a reader of the notifications table
+can answer a nomination in the referee's name, or decline it — which marks the
+referee `REJECTED` and pulls the agent's clearance back down.
+
+No API route selects `message`, so this was never reachable over HTTP. The
+reach is everyone with `SELECT` on the database: a reporting replica, an
+analyst, a dump, and the backups — which is the part that outlives the fix.
+
+**What changed.** Migration `079` masks the credential out of the rows already
+queued and adds `notifications.secret_message`, which carries the deliverable
+text from the queue to the gateway and no further: written only for a template
+that actually renders a credential, read once by the dispatcher, and set to
+`NULL` as the row becomes `SENT` or `FAILED` — with a CHECK constraint saying a
+terminal row may not still be holding one. `message` keeps the same sentence
+with the value masked, so a support officer working the queue still sees what
+was sent, to whom, in which language and whether it arrived. A message that
+carries no credential is stored in one column exactly as before.
+
+**What did not change, and is PSIRS's to act on.** A backup taken before `079`
+still contains every plaintext credential the platform ever sent. One-time
+codes expire in minutes and are worthless in an old archive; referee
+invitations last fourteen days, so **any snapshot or WAL segment from the last
+fortnight can still hold a working one**. `DISASTER-RECOVERY-PLAN.md` §2.2 now
+says so and says what to do about it. Deciding whether those archives are
+re-encrypted, re-access-controlled or destroyed is a data-handling decision for
+the authority, not one this repository can make.
+
+`apps/api/src/tests/a-credential-the-queue-kept.test.ts` holds the property by
+the mechanism rather than by the two events known to carry a credential: it
+hashes every word-shaped substring of every stored body and looks for it in
+both credential tables, so a third credential rendered into a third template is
+caught on the day it is added. It also holds the other half — that the
+unmasked text still reaches the handset, because a fix that stopped the leak by
+sending a citizen six blocks where their code should be would be worse than the
+leak.
 
 ## A fourth thing, read but not run: four security headers on three locations
 
