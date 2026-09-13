@@ -1,8 +1,30 @@
 # PRD traceability
 
 Every acceptance criterion from PRD §84 and Addendum §47, mapped to the code
-that implements it and the test that proves it. Test names are from
-`apps/api/src/tests/`.
+that implements it and the test that proves it.
+
+Cited test names are quoted verbatim from `apps/api/src/tests/`,
+`apps/agent/src/` and `apps/portal/src/tests/` — the offline and session
+criteria are proved in the agent application, which is where that behaviour
+lives, and the sentence here used to name only the API suite. A citation is
+either a verbatim test name, an abbreviation of one ending in `…`, or a plain
+phrase saying what covers it; `apps/api/src/tests/what-this-table-cites.test.ts`
+holds the first two kinds to the suites and fails on a name no test carries.
+
+WHAT THAT GUARD CANNOT DO, said here rather than left to be assumed: it checks
+that a cited test exists, not that the test proves the criterion beside it.
+Those are different questions and only the first is mechanical.
+
+One correction is worth recording rather than quietly making. Against **View
+audit logs** this table cited *verifies the audit hash chain end to end*. No
+test of that name has ever existed, and the claim is one this platform has
+established it cannot make: a replay compares the log against itself, and
+entries cut from the end leave a shorter chain that verifies perfectly.
+`services/audit.ts` says so — the function "has no way to know how long the log
+used to be" — and the test was named *replays the audit hash chain and says how
+far it reached* for exactly that reason, asserting that the answer does **not**
+read "no tampering detected". The code and the test stopped making the
+end-to-end claim; this document went on making it.
 
 ## PRD §84 — Taxpayer
 
@@ -78,11 +100,11 @@ that implements it and the test that proves it. Test names are from
 |---|---|---|
 | See all transactions | `GET /government/transactions` | *exports transactions as CSV* |
 | Collections by agent | `agentPerformance`, dashboard | *reports collections by category, LGA, agent and MDA* |
-| Collections by LGA | `revenueByLga`, `geographicIntelligence` | same; *drills down State → LGA → Ward* |
+| Collections by LGA | `revenueByLga`, `geographicIntelligence` | same; *drills down State -> LGA -> Ward* |
 | Collections by revenue type | `revenueByCategory` | same |
 | Reconcile payments | reconciliation module | reconciliation suite |
 | Investigate exceptions | `exceptionQueue`, `resolveException` | — |
-| View audit logs | `GET /government/audit` (+ CSV) | *verifies the audit hash chain end to end* |
+| View audit logs | `GET /government/audit` (+ CSV) | *replays the audit hash chain and says how far it reached* |
 | Suspend agents | `suspend` — sessions and devices cut immediately | *suspends an agent and stops them collecting immediately* |
 | Configure revenue items | catalogue endpoints | *keeps historical assessments…* |
 | Configure commission rates | `commission_policies`, versioned | *computes 1.5%…* |
@@ -111,7 +133,7 @@ that implements it and the test that proves it. Test names are from
 | Government can approve/reject | `reviewApplication` | *requires a reason on every government decision* |
 | Government can suspend | `suspend` | *suspends an agent…* |
 | Government can revoke devices | `revokeDevice` | *revokes a device and ends its sessions immediately* |
-| Every clearance decision audited | `agent_clearance_events` + audit chain | *verifies the audit hash chain* |
+| Every clearance decision audited | `agent_clearance_events` + audit chain | *replays the audit hash chain and says how far it reached* |
 | Referee replacement supported | `replacesRefereeId`; original marked `REPLACED`, never overwritten | referee section of the PWA |
 | KYC failure triggers corrective action | resubmission supersedes; notification queued | *clears identity KYC…* (failure path in `MockKycProvider`) |
 | PWA works on mobile browsers | responsive, 48px targets, tested in Chromium | visual verification |

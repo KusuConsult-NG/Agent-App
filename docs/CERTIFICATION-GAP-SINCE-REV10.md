@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`08a67a9`) |
+| | At `fa8f454` (Revision 10) | Now (`38db5c0`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 184 |
+| API test files | 139 | 185 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,144 |
+| API tests passing | 1,523 *(report's figure)* | 2,146 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `08a67a9` plus the working tree:
-API 2,144 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `38db5c0` plus the working tree:
+API 2,146 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,61 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## What the traceability table cites, and what it said about the audit chain
+
+`PRD-TRACEABILITY.md` maps every acceptance criterion from PRD §84 and
+Addendum §47 to "the code that implements it and the test that proves it", and
+nothing had ever checked that the tests it names exist. Seventy-nine citations;
+this is what a check found.
+
+**One was false, and it is the reason the rest of this section exists.** Against
+**View audit logs** the table cited *verifies the audit hash chain end to end*.
+No test of that name has ever existed — and the claim is one this platform has
+already established it cannot make. The real test is *replays the audit hash
+chain and says how far it reached*, and its body records why:
+
+> This asserted /No tampering detected/, which the replay cannot establish:
+> entries cut from the end of the log leave a shorter chain that verifies
+> perfectly.
+
+`services/audit.ts` says the same of the function: it "has no way to know how
+long the log used to be". This is the third open question already recorded in
+this document — the audit chain has no external anchor against truncation. The
+code stopped claiming end-to-end verification and the test was renamed to stop
+claiming it; the document a government reads went on claiming it. A second row
+cited *verifies the audit hash chain*, which also names no test, though its
+wording is not itself false.
+
+**The rest were the check being wrong, and that is worth recording too**, because
+each wrong answer would have been an accusation against a document that was
+telling the truth:
+
+| first reported | what it actually was |
+| --- | --- |
+| 5 tests "missing" | a curly apostrophe against a straight one |
+| *drills down State → LGA → Ward* | the test writes the arrows as `->` |
+| 2 tests "missing" | generated names — ``it(`refuses ${label}`)`` over a table of routes |
+| 5 tests "not in the API suite" | they are in the agent suite, where that behaviour lives; the table's header named only `apps/api/src/tests/` |
+| 3 tests "missing" | the table quotes the distinctive fragment of a long name |
+
+So of 79 citations, **two named nothing** and the remaining seventy-seven were
+sound. The header sentence was too narrow, one row's arrows were the wrong
+glyph, and the two audit rows now name the test that exists.
+
+`apps/api/src/tests/what-this-table-cites.test.ts` holds the table to this from
+now on, and says in its own header what it cannot do: it checks that a cited
+test exists, not that the test proves the criterion beside it. Those are
+different questions and only the first is mechanical.
+
+ONE THING THE GUARD GOT WRONG ABOUT ITSELF, recorded because it is the same
+shape as everything above. The first version searched the raw text of every
+test file — and passed on *verifies the audit hash chain end to end*, because
+this new file's own header quotes that citation while explaining it. A guard
+that reads its own prose as evidence cannot fail for the one input it was
+written for, and reports success. It now parses names out of `it`, `test` and
+`describe` declarations instead, which is both stricter and immune to being
+talked about.
 
 ## A promise of a constraint, and a nullable column
 
