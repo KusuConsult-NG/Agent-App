@@ -126,7 +126,7 @@ that implements it and the test that proves it. Test names are from
 | Possession is never permanent | `sessions.absolute_expires_at`, carried unchanged through rotation | *A session chain ends on a fixed date* |
 | No draft is silently dropped | unprocessable types are REJECTED with a reason | *leaves no draft in a state nothing will ever process* |
 | Citizen receives their receipt | `services/messaging/`, SMS as the citizen's only channel | *A notification is only recorded as sent if it was sent* |
-| A message is never recorded as sent unless a provider took it | `notifications.provider` NOT NULL for SENT; migration 011 corrects the historical claims | *leaves no notification claiming delivery without a provider* |
+| A message is never recorded as sent unless a provider took it | `notifications_provider_named_when_delivered` CHECK (migration 080); migration 011 corrects the historical claims | *leaves no notification claiming delivery without a provider* |
 | An outage does not exhaust the retry budget | UNAVAILABLE leaves the row QUEUED and does not increment attempts | *never marks a message sent when the provider could not be reached* |
 | Offline cannot falsely mark payments successful | no payment draft type; `assertNotFinancial` runtime guard; SW never caches financial endpoints | *offers no offline path that can mark a payment as received*; *offline mode cannot authorise a payment* |
 | Payment status recoverable after browser closure | `GET /payments/transactions/:reference/status` | *recovers the transaction status after the browser is closed* |

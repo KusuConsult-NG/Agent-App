@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`d47d3c7`) |
+| | At `fa8f454` (Revision 10) | Now (`08a67a9`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
-| Database migrations | 54 | 79 |
-| API test files | 139 | 183 |
+| Database migrations | 54 | 80 |
+| API test files | 139 | 184 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
-| CHECK constraints | 194 *(report's figure)* | 300 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,138 |
+| CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
+| API tests passing | 1,523 *(report's figure)* | 2,144 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `d47d3c7` plus the working tree:
-API 2,138 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `08a67a9` plus the working tree:
+API 2,144 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -51,14 +51,14 @@ question. Triggers are `pg_trigger` rows that are not internal
 **and not test instrumentation** (156); a trigger declared
 `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
 `information_schema.triggers`. CHECK constraints are `pg_constraint` rows of
-type `c` **on a relation in `public`** (300).
+type `c` **on a relation in `public`** (301).
 
 THIS ROW WAS WRONG UNTIL NOW, AND THE WAY IT WAS WRONG IS THE POINT. It read
 332, measured against `psirs_test`. The suite's enum-coverage harness
 (`apps/api/src/tests/enum-observation.ts`) attaches `observe_enum_ins` and
 `observe_enum_upd` to every table it watches — 176 triggers across 88 tables —
 so more than half of that 332 was instrumentation that exists in no deployed
-database. A database built fresh from the 79 migrations carries 156. The
+database. A database built fresh from the 80 migrations carries 156. The
 paragraph above this one is a careful note about *how* to count triggers, and
 it was attached to a count taken from the wrong database; getting the method
 right does not help if the subject is wrong.
@@ -87,8 +87,9 @@ a change of rule rather than the correction of an error: 301 was consistent
 with the method printed beside it, and a reader who re-derives it should know
 why it moved.
 
-It is 300 now, and the extra one is migration 079's
-`notifications_secret_cleared_when_terminal`. A row the gateway has finished
+It is 301 now. Two have been added since: migration 079's
+`notifications_secret_cleared_when_terminal` and migration 080's
+`notifications_provider_named_when_delivered`. A row the gateway has finished
 with must not still be holding the credential it was carrying; the constraint
 is what makes that a property of the schema rather than of the four `UPDATE`
 statements in `dispatchQueued` that clear it.
@@ -146,7 +147,7 @@ assesses as a property of code:
 * **`organisation`** — departments, a reporting line and postings, which is a
   second axis of scope beside territory.
 
-## Twenty-five migrations, by what they introduce
+## Twenty-six migrations, by what they introduce
 
 `055` work across departments · `056` revenue targets · `057` the organisation ·
 `058` a month that can be closed · `059`–`060`, `067` permissions as data and
@@ -157,7 +158,8 @@ reports · `063` officers' own devices and files · `064` the officer inbox ·
 `071`–`073` what the agent saw, a count with no signal, what the agent was told ·
 `074` a citizen's own statement · `076` a report that did not say it stopped ·
 `077` one per cent computed three ways · `078` what objecting costs a trader ·
-`079` a credential kept after it was delivered.
+`079` a credential kept after it was delivered · `080` a message that claims it
+was delivered.
 
 ## Claims in the report a revision would have to re-establish
 
@@ -568,7 +570,7 @@ IF NOT EXISTS` throughout, so the second application did nothing. Had any of
 them been a bare `CREATE TABLE` or an `ALTER TABLE ... ADD COLUMN`, the second
 run would have failed — loudly, which is better, or in the middle of a
 deployment, which is worse. `psirs_uat` and `psirs_test` still agree at 103
-tables and 300 CHECK constraints.
+tables and 301 CHECK constraints.
 
 What it costs while it is silent is the ability to rebuild a database from the
 repository and get the one that is deployed. A row nobody can produce is a
@@ -642,6 +644,68 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A promise of a constraint, and a nullable column
+
+`PRD-TRACEABILITY.md` is the table a government reads to answer "how is this
+enforced". One row answered with a database guarantee:
+
+> A message is never recorded as sent unless a provider took it —
+> `notifications.provider` NOT NULL for SENT
+
+No migration ever wrote that constraint. The column was added by migration
+`011`, whose own header states the remedy in the strongest word available:
+
+> `provider` is what makes that **unrepresentable** going forward: a row can
+> only claim SENT alongside the name of the service that accepted it.
+
+It adds `provider TEXT`. Nullable, no CHECK, no trigger. Nothing was
+unrepresentable — demonstrated against `psirs_uat` with no service involved:
+
+```sql
+INSERT INTO notifications (recipient, event, channel, message, status,
+                           sent_at, provider_reference)
+VALUES ('+2348000000000','RECEIPT_GENERATED','SMS','PSIRS: your receipt…',
+        'SENT', now(), 'looks-real-000999');
+-- INSERT 0 1, provider NULL
+```
+
+A row claiming delivery, with a timestamp and a plausible gateway reference,
+and no gateway.
+
+WHY 011 EXISTS IS WHY THIS MATTERS. `dispatchQueued` used to mark every
+notification SENT with a fabricated `mock-<id>` reference whether or not a
+provider had been configured, let alone contacted. Nothing reached anybody and
+the table said otherwise. For a citizen who holds no account, that SMS is the
+only copy of their receipt they ever get, so the table saying otherwise is the
+whole of the harm. The service has been correct since 011 and sets `provider`
+on every path; what was missing is the thing this repository says in its own
+tests — *a rule the service enforces and the database does not is one UPDATE
+away from being undone*.
+
+Every other database control that traceability table names is real:
+`receipts_require_verified_payment`, `renewals_require_payment`, `UNIQUE
+(gateway, event_id)`, `idx_payments_one_active`, and the agent clearance CHECK
+were each checked against the catalogue and each exists. This was the one that
+did not, which is what made it worth finding rather than a symptom of a
+careless document.
+
+Migration `080` is the constraint. It deliberately still admits the four shapes
+the delivery sweep actually produces — QUEUED with no provider (nothing asked
+yet), QUEUED *with* one (tried, unreachable, still owed), FAILED with none
+(nobody owns that channel) and FAILED with one (asked and refused) — and
+covers DELIVERED and READ alongside SENT, because a message cannot have been
+read without having been delivered. CHECK constraints: 300 → 301.
+
+The guard attempts the forbidden write with the service bypassed, and also
+holds the traceability table to its own claims. The mutation run separates the
+two: dropping the constraint fails three of six including the document check,
+narrowing it to SENT alone fails exactly the DELIVERED/READ test, and the four
+legitimate shapes hold throughout. Against the document *as it read before this
+commit*, the check reported the defect in the words it needed —
+"notifications.provider is nullable and no CHECK mentions it together with
+SENT" — which is the evidence that it would have caught this on the day the
+claim was written.
 
 ## What a forwarded link was worth
 
