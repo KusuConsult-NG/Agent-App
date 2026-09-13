@@ -30,12 +30,80 @@ function required(name: string, fallback?: string): string {
 }
 
 /**
+ * Every secret value this repository publishes, which production must refuse.
+ *
+ * The header above has always promised that production "refuses to start if a
+ * security-critical secret is missing **or left at a development default**".
+ * Only the first half was implemented: `secret()` asked whether the value was
+ * at least 32 characters and nothing else, and every placeholder below is
+ * padded past 32 characters precisely so that it passes.
+ *
+ * `docker-compose.yml` set `NODE_ENV: production` and supplied three of them
+ * as `${VAR:-<placeholder>}` defaults, so `docker compose up` with no `.env`
+ * started a production-mode platform whose JWT signing key is printed in this
+ * file's own repository. A known signing key is not a weak one: it mints an
+ * access token for any role, for anybody who can read a public git history.
+ *
+ * An exact list rather than a cleverer rule. "Looks like a placeholder" would
+ * one day refuse a real, correctly generated secret at three in the morning
+ * during a recovery, and a check that cries wolf gets switched off.
+ * `a-secret-this-repository-publishes.test.ts` reads the files below and fails
+ * if any of them grows a value that is not here, which is what keeps an exact
+ * list from rotting.
+ */
+export const PUBLISHED_SECRETS: ReadonlySet<string> = new Set([
+  /*
+   * Formerly the `${VAR:-...}` defaults in docker-compose.yml, which now
+   * refuses to start rather than supplying one. Kept, and kept first, because
+   * removing them from that file does not unpublish them: they are in this
+   * repository's history, and in the `.env` of anybody who copied the file
+   * while they were there. A value that has been public once stays on this
+   * list.
+   */
+  'psirs_development_secret_key_minimum_32_characters_long_12345',
+  'psirs_identity_hash_secret_minimum_32_chars_12345',
+  'psirs_payment_webhook_secret_minimum_32_chars',
+  // .env.production.example
+  'GENERATE_STRONG_RANDOM_SECRET_KEY_MIN_32_CHARS_A1B2C3D4E5F6',
+  'GENERATE_LONG_LIVED_HMAC_SECRET_FOR_NIN_HASHING_123456789',
+  'REMITA_OR_GATEWAY_WEBHOOK_HMAC_SECRET_SIGNING_KEY_32CHARS',
+  // scripts/uat/stack.sh
+  'uat-jwt-secret-value-long-enough-for-32ch',
+  'uat-identity-secret-long-enough-for-32ch',
+  'uat-webhook-secret-long-enough-for-32chars',
+  // scripts/browser-test.sh
+  'browser-test-jwt-secret-value-long-enough-32',
+  'browser-test-identity-secret-long-enough-32',
+  'browser-test-webhook-secret-long-enough-32',
+  // .github/workflows/ci.yml and deploy.yml
+  'ci-jwt-secret-value-that-is-long-enough-32',
+  'ci-identity-hash-secret-long-enough-32',
+  'ci-payment-webhook-secret-long-enough-32',
+  // .github/workflows/integration-verification.yml
+  'verification-run-jwt-secret-long-enough-32',
+  'verification-run-identity-secret-long-32',
+  'verification-run-webhook-secret-long-32',
+]);
+
+/**
  * Secrets get a random per-process value outside production so local runs and
  * tests work without setup, while production demands a real, explicitly
  * provisioned value.
  */
 function secret(name: string): string {
   const value = process.env[name];
+  /*
+   * Checked only in production, so that the UAT stack and the browser tests —
+   * which set these on purpose, under NODE_ENV=development — keep the value
+   * they chose rather than silently getting a fresh random one per process.
+   */
+  if (isProduction && value && PUBLISHED_SECRETS.has(value)) {
+    throw new Error(
+      `Configuration error: ${name} is set to a placeholder that is published in this ` +
+        'repository, so it is known to anyone who can read it. Generate a real secret ' +
+        "(openssl rand -hex 32) and set it in this deployment's environment.",
+    );
+  }
   if (value && value.length >= 32) return value;
   if (isProduction) {
     throw new Error(
@@ -95,6 +163,22 @@ export const config = {
         : 'postgres://postgres:postgres@localhost:5432/psirs'),
     poolSize: int('DB_POOL_SIZE', 10),
     statementTimeoutMs: int('DB_STATEMENT_TIMEOUT_MS', 15_000),
+
+    /**
+     * How long a transaction may sit open with nothing running.
+     *
+     * `statement_timeout` bounds a slow query. It does nothing about a
+     * transaction that is open while the application waits on somebody else —
+     * and several services still call an external provider mid-transaction, so
+     * the row locks they hold are released only when a third party answers.
+     * From PostgreSQL's side that session is idle, which is exactly what this
+     * timeout is for.
+     *
+     * Set above the longest provider timeout so no legitimate call is cut
+     * short, and far below "forever" so a provider that hangs cannot hold a
+     * pooled connection and a row lock until somebody notices.
+     */
+    idleInTransactionTimeoutMs: int('DB_IDLE_IN_TRANSACTION_TIMEOUT_MS', 60_000),
   },
 
   auth: {
@@ -352,6 +436,25 @@ export const config = {
     signedUrlTtlSeconds: int('SIGNED_URL_TTL_SECONDS', 900),
 
     /**
+     * Which deployment owns the keys in the bucket.
+     *
+     * Document keys were `receipt/2026/PSIRS-RCT-2026-000123.pdf` and nothing
+     * more. Document numbers come from a sequence in *this* database, so a
+     * staging environment restored from a production backup — or simply
+     * pointed at the same bucket by a copied `.env` — issues the same numbers
+     * again and writes over the production receipt at that key. The row keeps
+     * its checksum, so the overwrite is not silent: public verification starts
+     * answering that a genuine receipt has been tampered with.
+     *
+     * Prefixing every key with the deployment name makes two environments
+     * sharing a bucket harmless. Set it per environment; the default keeps a
+     * developer's machine out of anybody else's prefix.
+     */
+    keyPrefix: (process.env.STORAGE_KEY_PREFIX ?? process.env.NODE_ENV ?? 'development')
+      .trim()
+      .replace(/^\/+|\/+$/g, ''),
+
+    /**
      * S3-compatible object storage.
      *
      * Path-style addressing by default, because a state government deployment
@@ -403,6 +506,15 @@ export const config = {
   },
 
   security: {
+    /**
+     * Where the rate limiter keeps its counts: `postgres` or `memory`.
+     *
+     * `memory` is per-process, so with N instances the effective cap is N
+     * times `rateLimitMax` — correct for development and for a single-instance
+     * deployment, wrong for the recommended two-or-more topology. Production
+     * refuses to boot on `memory` for that reason.
+     */
+    rateLimitStore: process.env.RATE_LIMIT_STORE ?? 'memory',
     rateLimitWindowMs: int('RATE_LIMIT_WINDOW_MS', 60_000),
     rateLimitMax: int('RATE_LIMIT_MAX', 120),
     authRateLimitMax: int('AUTH_RATE_LIMIT_MAX', 10),
@@ -419,6 +531,36 @@ export const config = {
     // low because this is a public, token-addressed surface, and configurable
     // because a test suite exercising the flow is not the shape of real use.
     groupAttestationRateLimitMax: int('GROUP_ATTESTATION_RATE_LIMIT_MAX', 20),
+    // The referee portal is unauthenticated and its token is a bearer
+    // credential, so guessing is throttled hard. Configurable for the same
+    // reason the others are: the suite walks more referees in a minute than a
+    // real LGA does in a week.
+    refereeRateLimitMax: int('REFEREE_RATE_LIMIT_MAX', 20),
+    /**
+     * Approve a newly registered handset instead of leaving it for an officer.
+     *
+     * An agent's first handset is auto-approved so onboarding can finish; every
+     * one after that waits, because revoking a stolen phone would be worth
+     * nothing if the thief could register another and carry on collecting.
+     *
+     * That rule makes a demonstration or a local trial need two people to show
+     * one screen: the seeded agent already has a handset, so anybody opening
+     * the app in their own browser is a second one. Where the stakes are nil,
+     * this closes that gap.
+     *
+     * Off unless somebody asks for it, and refused outright in production by the
+     * boot check below. On a laptop it is a convenience; on a government revenue
+     * platform it is device binding removed, and a revoked handset that can be
+     * replaced without anybody looking is a revocation that meant nothing.
+     *
+     * Defaulting it *on* outside production was the obvious thing to write and
+     * was wrong twice over. It silently changed what the test suite was
+     * exercising — several suites assert that a second handset waits for an
+     * officer, and they are asserting the production rule — and it made the
+     * strict behaviour the one you had to opt into, which is the wrong way round
+     * for a control. The demonstration stack sets it explicitly instead.
+     */
+    deviceAutoApprove: isProduction ? false : bool('DEVICE_AUTO_APPROVE', false),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())
@@ -448,8 +590,36 @@ if (isProduction) {
   // state: a mock gateway in production would accept payments nobody ever made.
   const problems: string[] = [];
   if (config.payments.gateway === 'mock') problems.push('PAYMENT_GATEWAY is still "mock"');
+
+  /*
+   * Read from the environment rather than from `config`, which has already
+   * forced it false. The point is to refuse the deployment, not to quietly
+   * correct it: somebody who set this meant to turn off the control that makes
+   * a revoked handset stay revoked, and they need to be told rather than left
+   * believing it is on.
+   */
+  if (bool('DEVICE_AUTO_APPROVE', false)) {
+    problems.push(
+      'DEVICE_AUTO_APPROVE is set — a replacement handset would be approved without any officer, ' +
+        'which is device binding removed',
+    );
+  }
   if (config.integrations.tinService === 'mock') problems.push('TIN_SERVICE is still "mock"');
   if (config.storage.driver === 'local') problems.push('STORAGE_DRIVER is still "local"');
+
+  /*
+   * A per-process limiter advertises a cap in `x-ratelimit-limit` that the
+   * deployment does not enforce: two instances mean twice the budget for
+   * enumerating TINs, guessing receipt codes and farming applications. The
+   * recommended topology is two or more replicas, so in production this is
+   * wrong by default rather than by misconfiguration.
+   */
+  if (config.security.rateLimitStore !== 'postgres') {
+    problems.push(
+      `RATE_LIMIT_STORE is "${config.security.rateLimitStore}" — per-instance counts, so the ` +
+        'advertised limit is multiplied by the number of replicas',
+    );
+  }
 
   // The mock providers hand out deterministic verdicts. In production they
   // would clear agents nobody checked and confirm vehicles nobody looked up.
@@ -471,6 +641,27 @@ if (isProduction) {
   if (config.notifications.smsProvider !== 'mock' && !config.notifications.http.url) {
     problems.push(
       `SMS_PROVIDER is "${config.notifications.smsProvider}" but SMS_PROVIDER_URL is not set`,
+    );
+  }
+
+  /*
+   * Push is optional; a half-configured push is not.
+   *
+   * One key without the other is a deployment that will serve no VAPID key,
+   * accept no browser subscription and send no notification — and say nothing
+   * about it, because the channel is allowed to be absent. Naming the missing
+   * half turns a silent no-op into a line on a checklist.
+   *
+   * Both absent is a supported deployment: push is a convenience, and the
+   * citizen's receipt goes by SMS.
+   */
+  const vapidPublic = process.env.VAPID_PUBLIC_KEY?.trim();
+  const vapidPrivate = process.env.VAPID_PRIVATE_KEY?.trim();
+  if (Boolean(vapidPublic) !== Boolean(vapidPrivate)) {
+    problems.push(
+      vapidPublic
+        ? 'VAPID_PUBLIC_KEY is set but VAPID_PRIVATE_KEY is not, so no push can be sent'
+        : 'VAPID_PRIVATE_KEY is set but VAPID_PUBLIC_KEY is not, so no browser can subscribe',
     );
   }
 

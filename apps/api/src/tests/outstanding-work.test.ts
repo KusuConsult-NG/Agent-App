@@ -62,6 +62,11 @@ const QUEUES = [
   { path: '/government/refunds/outstanding', gate: 'payment:read:all' },
   { path: '/taxpayers/tin-outstanding', gate: 'taxpayer:tin_sync' },
   { path: '/vehicles/renewals/authority-outstanding', gate: 'vehicle:authority_sync' },
+  // Records taken off the register while they still owed something. No retry
+  // button: nothing here is waiting on an integration to come back. It is
+  // waiting on a person to decide whether the debt is pursued, and that
+  // decision is made on the taxpayer record itself.
+  { path: '/taxpayers/ended-with-arrears', gate: 'taxpayer:read:all' },
 ] as const;
 
 /** What each section's retry button posts to, and what it needs. */
@@ -132,6 +137,10 @@ describe('The empty case is a real answer, not a permission failure', () => {
     const refunds = await get('/government/refunds/outstanding', { token: TOKENS.finance_officer! });
     assert.equal(refunds.status, 200);
     assert.deepEqual(refunds.body.refunds, []);
+
+    const ended = await get('/taxpayers/ended-with-arrears', { token: TOKENS.revenue_officer! });
+    assert.equal(ended.status, 200, JSON.stringify(ended.body));
+    assert.deepEqual(ended.body.taxpayers, []);
 
     const tins = await get('/taxpayers/tin-outstanding', { token: TOKENS.revenue_officer! });
     assert.equal(tins.status, 200);

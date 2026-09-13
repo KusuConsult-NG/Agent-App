@@ -22,8 +22,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, downloadCsv, type ApiError } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table } from '../ui';
+import { ApiRequestError, api, asApiError, downloadCsv, type ApiError } from '../lib/api';
+import { Alert, Badge, ErrorAlert, Growth, Loading, Money, Stat, Table } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
 
 interface AgentRow {
   agent_id: string;
@@ -42,25 +43,55 @@ interface AgentRow {
   commission_earned_kobo: string;
   open_fraud_flags: string;
   active_days: string;
+  /** This month and the same days of last month, so a decline is visible. */
+  month_kobo: string;
+  previous_month_kobo: string;
+  /** Basis points, or null where the agent has no previous month. */
+  growth_bp: number | null;
+  categories_processed: string;
 }
 
+/**
+ * The endpoint's own ceiling: `limit` is `z.coerce.number().int().max(200)`,
+ * so 200 is not a choice this screen makes, it is every row the report can
+ * return. Asking for more is refused, and there is no offset to page with.
+ */
+const AGENT_LIMIT = 200;
+
 export function PerformanceScreen({ navigate }: { navigate: (path: string) => void }) {
-  const [rows, setRows] = useState<AgentRow[] | null>(null);
+  const { t } = usePortalI18n();
+  /*
+   * Three states, because a failed read is not an empty list.
+   *
+   * It used to be two: the catch set `rows` to `[]`, and everything below
+   * folded an unread page into four confident zeros — nought collected,
+   * nought onboarded, "0 of 0 agents worked", and nought open fraud flags,
+   * that last one styled as the good news it would be if anybody had
+   * actually looked. The error alert sat above them, and four large stat
+   * tiles are the more legible thing on a screen.
+   *
+   * A supervisor's whole use of this page is spotting the agent who needs
+   * attention. Manufacturing "no flags are open" out of a request that
+   * failed is the one answer that stops them looking.
+   */
+  const [rows, setRows] = useState<AgentRow[] | 'unreadable' | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
 
   const load = useCallback(() => {
     api
-      .get<AgentRow[]>('/agents/performance?limit=200')
+      .get<AgentRow[]>(`/agents/performance?limit=${AGENT_LIMIT}`)
       .then(setRows)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setRows([]);
+        setError(asApiError(caught));
+        setRows('unreadable');
       });
   }, []);
 
   useEffect(load, [load]);
 
-  const totals = (rows ?? []).reduce(
+  const read = Array.isArray(rows) ? rows : null;
+
+  const totals = (read ?? []).reduce(
     (acc, row) => ({
       collected: acc.collected + BigInt(row.collected_kobo),
       onboarded: acc.onboarded + Number(row.taxpayers_onboarded),
@@ -70,61 +101,92 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
     { collected: 0n, onboarded: 0, flags: 0, working: 0 },
   );
 
-  const flagged = (rows ?? []).filter((row) => Number(row.open_fraud_flags) > 0);
+  const flagged = (read ?? []).filter((row) => Number(row.open_fraud_flags) > 0);
 
   return (
     <>
       <ErrorAlert error={error} />
 
+      {rows === 'unreadable' && (
+        <Alert kind="warning" title="ofcPfFiguresUnreadable">
+          <p style={{ margin: 0 }}>{t.ofcPfFiguresUnreadableBody}</p>
+        </Alert>
+      )}
+
       {flagged.length > 0 && (
-        <Alert kind="warning" title={`${flagged.length} agent(s) with an open fraud flag`}>
+        <Alert kind="warning" title={{ text: t.ofcPfAgentsWithFlag.replace('{{n}}', String(flagged.length)) }}>
           <p style={{ margin: 0 }}>
-            A flag is a question, not a finding. Their figures are shown here unchanged —{' '}
+            {t.ofcPfFlagIsQuestion}{' '}
             {flagged.map((row) => row.full_name).join(', ')}.
           </p>
         </Alert>
       )}
 
-      <div className="stat-grid">
-        <Stat label="Collected by agents" value={<Money kobo={totals.collected.toString()} />} />
-        <Stat label="Taxpayers onboarded" value={totals.onboarded.toLocaleString()} />
-        <Stat label="Agents who worked" value={`${totals.working} of ${rows?.length ?? 0}`} />
-        <Stat
-          label="Open fraud flags"
-          value={String(totals.flags)}
-          variant={totals.flags > 0 ? 'alert' : undefined}
-        />
-      </div>
+      {/*
+        * What the four figures below are actually a total of.
+        *
+        * They are summed from `read`, and `read` is at most the endpoint's
+        * own ceiling of 200 rows, ordered by collections descending. So on an
+        * agency with more agents than that, "Collected by agents" is the sum
+        * over the top 200, "Open fraud flags" counts only theirs, and the
+        * worked-of figure reports 200 as the size of the agency.
+        *
+        * The agents cut off are the LOWEST collectors, which is where an idle,
+        * absconded or suspect agent sits — so the figure most distorted by the
+        * truncation is the one about fraud. The fraud queue answers that
+        * properly; this says so rather than leaving the number to be read as
+        * the whole picture.
+        */}
+      {read && read.length >= AGENT_LIMIT && (
+        <Alert kind="info">
+          {t.ofcPfFiguresCoverTopAgents.replace('{{n}}', String(read.length))}
+        </Alert>
+      )}
+
+      {read && (
+        <div className="stat-grid">
+          <Stat label="ofcPfCollectedByAgents" value={<Money kobo={totals.collected.toString()} />} />
+          <Stat label="ofcPfTaxpayersOnboarded" value={totals.onboarded.toLocaleString()} />
+          <Stat label="ofcPfAgentsWorked" value={t.ofcPfWorkedOf.replace('{{worked}}', String(totals.working)).replace('{{total}}', String(read.length))} />
+          <Stat
+            label="ofcPfOpenFraudFlags"
+            value={String(totals.flags)}
+            variant={totals.flags > 0 ? 'alert' : undefined}
+          />
+        </div>
+      )}
 
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
+        <div className="card__pad">
           <div className="card__header">
-            <h2 className="card__title">Agent performance</h2>
-            <p className="card__hint">
-              Collections, reach and trouble side by side. An agent in a commercial ward will
-              out-collect the best agent in a rural one, so read the columns together rather than
-              sorting by naira.
-            </p>
+            <h2 className="card__title">{t.ofcNavPerformance}</h2>
+            <p className="card__hint">{t.ofcPfIntro}</p>
           </div>
-          {rows && rows.length > 0 && (
+          {read && read.length > 0 && (
             <button
               type="button"
               className="small secondary"
-              onClick={() => downloadCsv('agent-performance.csv', toCsv(rows))}
-            >
-              Download CSV
-            </button>
+              onClick={() => downloadCsv('agent-performance.csv', toCsv(read))}
+            >{t.ofcDownloadCsv}</button>
           )}
         </div>
 
-        {!rows ? (
+        {/*
+          * An unreadable list is not an empty table.
+          *
+          * `Table` renders its own empty state, and "no agents" is a
+          * statement about the agency. The warning above says what actually
+          * happened; repeating it here would be noise, but rendering the
+          * table would be a claim.
+          */}
+        {rows === 'unreadable' ? null : !read ? (
           <Loading />
         ) : (
           <Table
             columns={[
               {
                 key: 'full_name',
-                label: 'Agent',
+                label: 'ofcRhAgent',
                 render: (row) => (
                   <button
                     type="button"
@@ -135,40 +197,54 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                   </button>
                 ),
               },
-              { key: 'agent_code', label: 'Code' },
-              { key: 'lga', label: 'LGA', render: (row) => row.lga ?? '—' },
+              { key: 'agent_code', label: 'ofcAgCode' },
+              { key: 'lga', label: 'tpLgaShort', render: (row) => row.lga ?? '—' },
               {
                 key: 'operational_status',
-                label: 'Status',
+                label: 'appStatus',
                 render: (row) => <Badge status={row.operational_status} />,
               },
               {
                 key: 'collected_kobo',
-                label: 'Collected',
+                label: 'ofcPfCollected',
                 numeric: true,
                 render: (row) => <Money kobo={row.collected_kobo} />,
               },
-              { key: 'successful_transactions', label: 'Transactions', numeric: true },
+              {
+                /*
+                 * The column that turns a ranking into a management tool.
+                 *
+                 * Sorted by size, an agent whose collections halved is simply
+                 * further down the list and looks like a smaller agent. The
+                 * direction is the thing a supervisor acts on.
+                 */
+                key: 'growth_bp',
+                label: 'ofcPfGrowth',
+                numeric: true,
+                render: (row) => <Growth basisPoints={row.growth_bp} />,
+              },
+              { key: 'successful_transactions', label: 'ofcNavTransactions', numeric: true },
+              { key: 'categories_processed', label: 'ofcPfCategories', numeric: true },
               {
                 key: 'average_transaction_kobo',
-                label: 'Average',
+                label: 'ofcPfAverage',
                 numeric: true,
                 render: (row) => <Money kobo={row.average_transaction_kobo} />,
               },
-              { key: 'taxpayers_onboarded', label: 'Onboarded', numeric: true },
-              { key: 'tins_registered', label: 'TINs', numeric: true },
-              { key: 'vehicle_renewals', label: 'Renewals', numeric: true },
+              { key: 'taxpayers_onboarded', label: 'ofcPfOnboarded', numeric: true },
+              { key: 'tins_registered', label: 'ofcPfTins', numeric: true },
+              { key: 'vehicle_renewals', label: 'ofcPfRenewals', numeric: true },
               {
                 key: 'commission_earned_kobo',
-                label: 'Commission',
+                label: 'navCommission',
                 numeric: true,
                 render: (row) => <Money kobo={row.commission_earned_kobo} />,
               },
-              { key: 'failed_transactions', label: 'Failed', numeric: true },
-              { key: 'reversed_transactions', label: 'Reversed', numeric: true },
+              { key: 'failed_transactions', label: 'ofcPfFailed', numeric: true },
+              { key: 'reversed_transactions', label: 'ofcPfReversed', numeric: true },
               {
                 key: 'open_fraud_flags',
-                label: 'Flags',
+                label: 'ofcPfFlags',
                 numeric: true,
                 render: (row) =>
                   Number(row.open_fraud_flags) > 0 ? (
@@ -177,10 +253,10 @@ export function PerformanceScreen({ navigate }: { navigate: (path: string) => vo
                     '0'
                   ),
               },
-              { key: 'active_days', label: 'Days worked', numeric: true },
+              { key: 'active_days', label: 'ofcPfDaysWorked', numeric: true },
             ]}
-            rows={rows}
-            empty="No agents have been cleared yet."
+            rows={read}
+            empty="ofcNoneAgentsCleared"
           />
         )}
       </div>

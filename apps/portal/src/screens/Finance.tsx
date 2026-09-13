@@ -1,16 +1,21 @@
 /** Reconciliation, settlement, commission and maker-checker approvals. */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import type { Label } from '../ui';
 import { withJustification } from '../lib/justify';
 import { BankChangesCard } from './Agents';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 // ------------------------------------------------------------ reconciliation
 
 export function ReconciliationScreen() {
+  const { t } = usePortalI18n();
   const [settlements, setSettlements] = useState<any | null>(null);
   const [exceptions, setExceptions] = useState<any[] | null>(null);
+  const [inTransit, setInTransit] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   /**
    * A panel that could not be loaded, kept apart from `error`.
@@ -29,6 +34,22 @@ export function ReconciliationScreen() {
     from: new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
     to: new Date().toISOString().slice(0, 10),
   });
+  /*
+   * Recording a settlement had no way in.
+   *
+   * `POST /government/settlements` is the entry point to the whole settlement
+   * path — it is what moves a day's collections to SETTLED, and SETTLED is
+   * what the commission ledger waits for — and no screen called it. Nothing
+   * caught that: the reachability check compares a write endpoint against the
+   * portal's source, and this screen already mentioned `/government/settlements`
+   * to read the figures, so the POST looked reached.
+   */
+  const [entry, setEntry] = useState({
+    settlementDate: new Date().toISOString().slice(0, 10),
+    gatewayReferences: '',
+    receivedNaira: '',
+    bankReference: '',
+  });
 
   const load = useCallback(() => {
     api
@@ -38,17 +59,151 @@ export function ReconciliationScreen() {
         setLoadError(null);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setLoadError(caught.error);
+        setLoadError(asApiError(caught));
       });
+    /*
+     * A list that could not be read is not a list with nothing in it.
+     *
+     * Both of these answered a failure with an empty array, and an empty
+     * exceptions table reads as "reconciliation is clean" — which is the one
+     * conclusion an officer must not draw from a request that failed. The
+     * summary fetch above already reports its failure; these now do too, so a
+     * scoped refusal on one endpoint is visible rather than reassuring.
+     */
     api
       .get<any[]>('/government/reconciliation/exceptions')
       .then(setExceptions)
-      .catch(() => setExceptions([]));
+      .catch((caught) => {
+        setLoadError(asApiError(caught));
+      });
+    api
+      .get<any[]>('/government/reconciliation/awaiting-settlement')
+      .then(setInTransit)
+      .catch((caught) => {
+        setLoadError(asApiError(caught));
+      });
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  /** Naira as an officer types it, kobo as the API takes it. */
+  function toKobo(naira: string): string | null {
+    const trimmed = naira.trim().replace(/,/g, '');
+    if (!/^\d+(\.\d{1,2})?$/.test(trimmed)) return null;
+    const [whole, fraction = ''] = trimmed.split('.');
+    return `${BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, '0'))}`;
+  }
+
+  async function record() {
+    const receivedAmountKobo = toKobo(entry.receivedNaira);
+    if (!receivedAmountKobo) {
+      setError({ code: 'INVALID_AMOUNT', message: t.ofcFnEnterTheCreditedAmount } as ApiError);
+      return;
+    }
+    const gatewayReferences = entry.gatewayReferences
+      .split(/[\s,]+/)
+      .map((reference) => reference.trim())
+      .filter(Boolean);
+    if (gatewayReferences.length === 0) {
+      setError({ code: 'NO_REFERENCES', message: t.ofcFnListTheGatewayReferences } as ApiError);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{
+        settlementReference: string;
+        status: 'RECONCILED' | 'DISPUTED';
+        transactionsSettled: number;
+        varianceKobo: string;
+      }>('/government/settlements', {
+        settlementDate: entry.settlementDate,
+        gatewayReferences,
+        receivedAmountKobo,
+        bankReference: entry.bankReference,
+      });
+      setMessage(
+        result.status === 'RECONCILED'
+          ? t.ofcFnSettlementRecorded
+              .replace('{{reference}}', result.settlementReference)
+              .replace('{{count}}', String(result.transactionsSettled))
+          : t.ofcFnSettlementDisputed.replace('{{reference}}', result.settlementReference),
+      );
+      setEntry({ ...entry, gatewayReferences: '', receivedNaira: '', bankReference: '' });
+      load();
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /**
+   * Close a settlement whose credit did not match what it covers.
+   *
+   * Three answers rather than one, which is why this does not go through
+   * `withJustification` — but it has to hold the same line the helper was
+   * written to hold. Every one of these checks used to be `?? ''` followed by
+   * a bare `return`: an amount that did not parse, an empty bank reference, or
+   * a note a character short all abandoned the action without a word, on the
+   * screen directly above one that says the credited amount in so many words
+   * when `record()` cannot read it. The officer had answered three questions
+   * about money that has not arrived and was told nothing at all.
+   *
+   * `null` is the one quiet case, in each of the three: it means Cancel, and
+   * somebody who changed their mind knows they did.
+   */
+  async function closeDispute(row: { id: string; settlement_reference: string }) {
+    const typedAmount = window.prompt(
+      t.ofcFnTotalCreditedPrompt.replace('{{reference}}', row.settlement_reference) +
+        t.ofcFnItHasToAccount,
+      '',
+    );
+    if (typedAmount === null) return;
+    const receivedAmountKobo = toKobo(typedAmount);
+    if (!receivedAmountKobo) {
+      setError({ code: 'INVALID_AMOUNT', message: t.ofcFnEnterTheCreditedAmount } as ApiError);
+      return;
+    }
+
+    const bankReference = window.prompt(t.ofcFnBankReferenceForThe, '');
+    if (bankReference === null) return;
+    if (!bankReference.trim()) {
+      setError({ code: 'MISSING_REFERENCE', message: t.ofcFnBankReferenceRequired } as ApiError);
+      return;
+    }
+
+    const note = window.prompt(t.ofcFnWhatTheVarianceTurned, '');
+    if (note === null) return;
+    if (note.trim().length < 10) {
+      setError({ code: 'NOTE_TOO_SHORT', message: t.ofcFnDisputeNoteTooShort } as ApiError);
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await api.post<{ settlementReference: string; transactionsSettled: number }>(
+        `/government/settlements/${row.id}/reconcile`,
+        { receivedAmountKobo, bankReference: bankReference.trim(), note: note.trim() },
+      );
+      setMessage(
+        t.ofcFnSettlementClosed
+          .replace('{{reference}}', result.settlementReference)
+          .replace('{{n}}', String(result.transactionsSettled)),
+      );
+      load();
+    } catch (caught) {
+      setError(asApiError(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -77,27 +232,31 @@ export function ReconciliationScreen() {
         setError({
           code: 'RECONCILIATION_ABORTED',
           moneyStatus: 'UNCONFIRMED',
-          nextStep: 'Re-run this period once the gateway is reachable.',
+          nextStep: t.ofcFnReRunThisPeriod,
           message:
-            `Reconciliation did not run: ${result.abortReason ?? 'the gateway statement could not be retrieved.'} ` +
-            'Nothing was compared for this period, so nothing about it has been confirmed. Try again once the gateway is reachable.',
+            t.ofcFnReconciliationAborted.replace(
+              '{{reason}}',
+              result.abortReason ?? t.ofcFnStatementUnavailable,
+            ) + t.ofcFnNothingWasComparedFor,
         });
         load();
         return;
       }
 
       setMessage(
-        `Reconciliation complete: ${result.matched} matched, ${result.exceptions} exception(s)` +
+        t.ofcFnReconciliationComplete
+          .replace('{{matched}}', String(result.matched))
+          .replace('{{exceptions}}', String(result.exceptions)) +
           (result.unchecked > 0
-            ? `, ${result.unchecked} reference(s) the gateway could not be asked about`
+            ? t.ofcFnReconciliationUnchecked.replace('{{count}}', String(result.unchecked))
             : '') +
-          `. Platform total and gateway total ${
-            result.totalPlatformKobo === result.totalGatewayKobo ? 'agree' : 'DO NOT agree'
-          }.`,
+          (result.totalPlatformKobo === result.totalGatewayKobo
+            ? t.ofcFnTotalsAgree
+            : t.ofcFnTotalsDisagree),
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -116,12 +275,13 @@ export function ReconciliationScreen() {
         },
       );
       setMessage(
-        `Checked ${result.attempted} unconfirmed payment(s) against the gateway; ` +
-          `${result.verified} were confirmed and have now been receipted.`,
+        t.ofcFnRecoverChecked
+          .replace('{{attempted}}', String(result.attempted))
+          .replace('{{verified}}', String(result.verified)),
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -132,17 +292,14 @@ export function ReconciliationScreen() {
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Three-way reconciliation</h2>
-            <p className="card__hint">
-              Platform transaction against gateway transaction against government settlement.
-              Anything that does not match becomes an exception below.
-            </p>
+            <h2 className="card__title">{t.ofcFnThreeWay}</h2>
+            <p className="card__hint">{t.ofcFnThreeWayBody}</p>
           </div>
         </div>
 
         <div className="filters">
           <div className="field">
-            <label htmlFor="from">From</label>
+            <label htmlFor="from">{t.ofcFrom}</label>
             <input
               id="from"
               type="date"
@@ -151,7 +308,7 @@ export function ReconciliationScreen() {
             />
           </div>
           <div className="field">
-            <label htmlFor="to">To</label>
+            <label htmlFor="to">{t.ofcTo}</label>
             <input
               id="to"
               type="date"
@@ -161,54 +318,147 @@ export function ReconciliationScreen() {
           </div>
           {can('payment:reconcile') && (
             <>
-              <button type="button" disabled={busy} onClick={run}>
-                Run reconciliation
-              </button>
-              <button type="button" className="secondary" disabled={busy} onClick={recover}>
-                Recover missed confirmations
-              </button>
+              <button type="button" disabled={busy} onClick={run}>{t.ofcFnRunReconciliation}</button>
+              <button type="button" className="secondary" disabled={busy} onClick={recover}>{t.ofcFnRecoverMissed}</button>
             </>
           )}
         </div>
 
-        <p className="field__hint">
-          "Recover missed confirmations" re-checks payments the gateway completed but the platform
-          never confirmed — normally a webhook that never arrived — and issues the receipts owed.
-        </p>
+        <p className="field__hint">{t.ofcFnRecoverMissedBody}</p>
       </div>
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
 
       {loadError && (
-        <Alert kind="info" title="Settlement figures are not available to your role">
+        <Alert kind="info" title="ofcFnNotYourRole">
           <p style={{ margin: 0 }}>{loadError.message}</p>
         </Alert>
       )}
 
       {settlements && (
         <div className="stat-grid">
-          <Stat label="Total expected" value={<Money kobo={settlements.totals.total_expected_kobo} />} />
-          <Stat label="Total received" value={<Money kobo={settlements.totals.total_received_kobo} />} />
+          <Stat label="ofcFnTotalExpected" value={<Money kobo={settlements.totals.total_expected_kobo} />} />
+          <Stat label="ofcFnTotalReceived" value={<Money kobo={settlements.totals.total_received_kobo} />} />
           <Stat
-            label="Variance"
+            label="ofcFnVariance"
             value={<Money kobo={settlements.totals.total_variance_kobo} />}
             variant={settlements.totals.total_variance_kobo !== '0' ? 'alert' : undefined}
           />
           <Stat
-            label="Awaiting settlement"
+            label="ofcLvAwaitingSettlement"
             value={<Money kobo={settlements.awaitingSettlement.amount_kobo} />}
-            hint={`${settlements.awaitingSettlement.count} transaction(s)`}
+            hint={{ text: t.ofcOvTransactionCount.replace('{{n}}', String(settlements.awaitingSettlement.count)) }}
           />
         </div>
       )}
 
+      {can('payment:reconcile') && (
+        <div className="card">
+          <h2 className="card__title">{t.ofcFnRecordSettlementTitle}</h2>
+          <p className="card__hint">{t.ofcFnStatementBody}</p>
+          <div className="field-row">
+            <div className="field">
+              <label htmlFor="settlement-date">{t.ofcFnValueDate}</label>
+              <input
+                id="settlement-date"
+                type="date"
+                value={entry.settlementDate}
+                onChange={(event) => setEntry({ ...entry, settlementDate: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settlement-bank">{t.ofcFnBankReference}</label>
+              <input
+                id="settlement-bank"
+                value={entry.bankReference}
+                placeholder={t.ofcFnAsOnStatement}
+                onChange={(event) => setEntry({ ...entry, bankReference: event.target.value })}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="settlement-amount">{t.ofcFnCredited}</label>
+              <input
+                id="settlement-amount"
+                inputMode="decimal"
+                value={entry.receivedNaira}
+                placeholder="1250000.00"
+                onChange={(event) => setEntry({ ...entry, receivedNaira: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="field">
+            <label htmlFor="settlement-references">{t.ofcFnGatewayReferences}</label>
+            <textarea
+              id="settlement-references"
+              rows={3}
+              value={entry.gatewayReferences}
+              placeholder={t.ofcFnOnePerLine}
+              onChange={(event) => setEntry({ ...entry, gatewayReferences: event.target.value })}
+            />
+          </div>
+          <button type="button" disabled={busy} onClick={record}>
+            {t.ofcFnRecordSettlementAction}
+          </button>
+        </div>
+      )}
+
+      {/*
+        * Money in transit, kept out of the exception queue.
+        *
+        * A payment the gateway has confirmed is money the *gateway* holds; it
+        * reaches the government account in a batch a day or two later. That is
+        * the third leg of the reconciliation, not a fault, and listing it as an
+        * exception made ordinary business look like a problem while hiding the
+        * case that is one — a collection confirmed days ago and never handed
+        * over. Those have moved to the queue below.
+        */}
       <div className="card card--flush">
-        <div style={{ padding: '18px 18px 0' }}>
-          <h2 className="card__title">Exception queue</h2>
-          <p className="card__hint">
-            Every exception is a finance officer's task. Nothing here is written off automatically.
-          </p>
+        <div className="card__pad">
+          <h2 className="card__title">{t.ofcFnAwaitingSettlement}</h2>
+          <p className="card__hint">{t.ofcFnAwaitingSettlementBody}</p>
+        </div>
+        {!inTransit ? (
+          <div style={{ padding: 18 }}>
+            <Loading rows={3} />
+          </div>
+        ) : (
+          <Table
+            columns={[
+              { key: 'transaction_reference', label: 'supTransactionLabel' },
+              {
+                key: 'name',
+                label: 'colTaxpayerLabel',
+                render: (row: any) =>
+                  row.business_name ?? [row.first_name, row.last_name].filter(Boolean).join(' ') ?? '—',
+              },
+              {
+                key: 'expected_amount_kobo',
+                label: 'pubVerifyAmount',
+                numeric: true,
+                render: (row: any) => <Money kobo={row.expected_amount_kobo} />,
+              },
+              {
+                key: 'age_hours',
+                label: 'ofcRhWaiting',
+                numeric: true,
+                render: (row: any) =>
+                  row.age_hours < 24
+                    ? `${row.age_hours} h`
+                    : `${Math.floor(row.age_hours / 24)} d ${row.age_hours % 24} h`,
+              },
+              { key: 'agent_code', label: 'ofcRhAgent' },
+            ]}
+            rows={inTransit}
+            empty="ofcNoneConfirmedCollectionReachedGovernment"
+          />
+        )}
+      </div>
+
+      <div className="card card--flush">
+        <div className="card__pad">
+          <h2 className="card__title">{t.ofcFnExceptionQueue}</h2>
+          <p className="card__hint">{t.ofcFnExceptionQueueBody}</p>
         </div>
         {!exceptions ? (
           <div style={{ padding: 18 }}>
@@ -217,39 +467,39 @@ export function ReconciliationScreen() {
         ) : (
           <Table
             columns={[
-              { key: 'status', label: 'Exception', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'ofcFnException', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'transaction_reference',
-                label: 'Transaction',
+                label: 'supTransactionLabel',
                 render: (row) => <span className="mono">{row.transaction_reference ?? '—'}</span>,
               },
               {
                 key: 'gateway_reference',
-                label: 'Gateway reference',
+                label: 'colGatewayReference',
                 render: (row) => <span className="mono">{row.gateway_reference ?? '—'}</span>,
               },
               {
                 key: 'expected_amount_kobo',
-                label: 'Expected',
+                label: 'ofcRhExpected',
                 numeric: true,
                 render: (row) => <Money kobo={row.expected_amount_kobo} />,
               },
               {
                 key: 'received_amount_kobo',
-                label: 'Received',
+                label: 'ofcRhReceived',
                 numeric: true,
                 render: (row) => <Money kobo={row.received_amount_kobo} />,
               },
               {
                 key: 'variance_kobo',
-                label: 'Variance',
+                label: 'ofcFnVariance',
                 numeric: true,
                 render: (row) => <Money kobo={row.variance_kobo} />,
               },
-              { key: 'agent_code', label: 'Agent', render: (row) => row.agent_code ?? '—' },
+              { key: 'agent_code', label: 'ofcRhAgent', render: (row) => row.agent_code ?? '—' },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) =>
                   can('payment:reconcile') ? (
                     <button
@@ -257,10 +507,9 @@ export function ReconciliationScreen() {
                       className="small secondary"
                       onClick={() =>
                         void withJustification({
-                          question: 'Record how this exception was resolved (at least 10 characters):',
+                          question: t.ofcFnRecordHowThisException,
                           minimum: 10,
-                          tooShort:
-                            'Say how the exception was resolved, in at least 10 characters. It is the only record of why this discrepancy was closed.',
+                          tooShort: t.ofcFnResolveTooShort,
                           run: async (resolution) => {
                             await api.post(
                               `/government/reconciliation/exceptions/${row.id}/resolve`,
@@ -268,55 +517,67 @@ export function ReconciliationScreen() {
                             );
                             load();
                           },
-                          onSuccess: 'Exception recorded as resolved.',
+                          onSuccess: t.ofcFnExceptionResolved,
                           setError,
                           setMessage,
                         })
                       }
-                    >
-                      Resolve
-                    </button>
+                    >{t.ofcFnResolve}</button>
                   ) : null,
               },
             ]}
             rows={exceptions}
-            empty="No open reconciliation exceptions."
+            empty="ofcNoneOpenReconciliationExceptions"
           />
         )}
       </div>
 
       {settlements && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
-            <h2 className="card__title">Settlements to government accounts</h2>
+          <div className="card__pad">
+            <h2 className="card__title">{t.ofcFnSettlements}</h2>
           </div>
           <Table
             columns={[
               {
                 key: 'settlement_reference',
-                label: 'Reference',
+                label: 'errReference',
                 render: (row) => <span className="mono">{row.settlement_reference}</span>,
               },
-              { key: 'settlement_date', label: 'Date', render: (row) => formatDate(row.settlement_date) },
-              { key: 'bank_reference', label: 'Bank reference' },
-              { key: 'transaction_count', label: 'Transactions', numeric: true },
+              { key: 'settlement_date', label: 'ofcFnDate', render: (row) => formatDate(row.settlement_date) },
+              { key: 'bank_reference', label: 'ofcFnBankReference' },
+              { key: 'transaction_count', label: 'ofcNavTransactions', numeric: true },
               {
                 key: 'expected_amount_kobo',
-                label: 'Expected',
+                label: 'ofcRhExpected',
                 numeric: true,
                 render: (row) => <Money kobo={row.expected_amount_kobo} />,
               },
               {
                 key: 'received_amount_kobo',
-                label: 'Received',
+                label: 'ofcRhReceived',
                 numeric: true,
                 render: (row) => <Money kobo={row.received_amount_kobo} />,
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+              {
+                key: 'id',
+                label: { text: '' },
+                render: (row) =>
+                  row.status === 'DISPUTED' && can('payment:reconcile') ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={busy}
+                      onClick={() => closeDispute(row)}
+                    >{t.ofcFnCloseDispute}</button>
+                  ) : null,
+              },
             ]}
             rows={settlements.recentSettlements}
-            empty="No settlements recorded."
+            empty="ofcNoneSettlementsRecorded"
           />
+          <p className="field__hint" style={{ padding: '0 18px 18px' }}>{t.ofcFnDisputeBody}</p>
         </div>
       )}
     </>
@@ -326,16 +587,28 @@ export function ReconciliationScreen() {
 // ---------------------------------------------------------------- commissions
 
 export function CommissionsScreen() {
+  const { t } = usePortalI18n();
   const [payouts, setPayouts] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  /*
+   * Kept apart from `error`, which belongs to the buttons on this screen.
+   *
+   * A failed list left `payouts` at null and drew the skeleton below forever:
+   * the error said the read was refused and the table underneath went on
+   * saying it was still arriving. An officer reading the two together cannot
+   * tell whether to wait.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
+
   const load = useCallback(() => {
+    setLoadError(null);
     api
       .get<any[]>('/government/commissions/payouts')
       .then(setPayouts)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
@@ -346,25 +619,34 @@ export function CommissionsScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Commission payouts</h2>
-        <p className="card__hint">
-          Commission is calculated by the platform from verified government revenue. It is never
-          deducted from what a taxpayer pays, and never payable on a reversed transaction.
-        </p>
+        <h2 className="card__title">{t.ofcFnCommissionPayouts}</h2>
+        <p className="card__hint">{t.ofcFnCommissionBody}</p>
         {can('commission:manage') && (
           <button
             type="button"
             className="secondary"
+            /*
+              This one moves money: it promotes every eligible commission to
+              payable, for every agent at once. The request sat in an async
+              handler with no catch, so a refusal produced no error and no
+              message — and "nothing happened" was indistinguishable from "it
+              worked and the confirmation did not draw". An officer who cannot
+              tell those apart presses it again.
+            */
             onClick={async () => {
-              const result = await api.post<{ promoted: number; message: string }>(
-                '/government/commissions/promote',
-              );
-              setMessage(result.message);
-              load();
+              setError(null);
+              setMessage(null);
+              try {
+                const result = await api.post<{ promoted: number }>(
+                  '/government/commissions/promote',
+                );
+                setMessage(t.ofcFnPromotedForPayout.replace('{{n}}', String(result.promoted)));
+                load();
+              } catch (caught) {
+                setError(asApiError(caught));
+              }
             }}
-          >
-            Promote eligible commission
-          </button>
+          >{t.ofcFnPromoteEligible}</button>
         )}
       </div>
 
@@ -372,7 +654,14 @@ export function CommissionsScreen() {
       {message && <Alert kind="success">{message}</Alert>}
 
       <div className="card card--flush">
-        {!payouts ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !payouts ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
@@ -381,21 +670,21 @@ export function CommissionsScreen() {
             columns={[
               {
                 key: 'payout_reference',
-                label: 'Payout',
+                label: 'ofcFnPayout',
                 render: (row) => <span className="mono">{row.payout_reference}</span>,
               },
-              { key: 'agent_code', label: 'Agent' },
-              { key: 'full_name', label: 'Name' },
+              { key: 'agent_code', label: 'ofcRhAgent' },
+              { key: 'full_name', label: 'tpName' },
               {
                 key: 'amount_kobo',
-                label: 'Amount',
+                label: 'pubVerifyAmount',
                 numeric: true,
                 render: (row) => <Money kobo={row.amount_kobo} />,
               },
-              { key: 'commission_count', label: 'Entries', numeric: true },
+              { key: 'commission_count', label: 'ofcFnEntries', numeric: true },
               {
                 key: 'bank',
-                label: 'Bank account',
+                label: 'ofcFnBankAccount',
                 render: (row) => (
                   <>
                     {row.bank_name} ····{String(row.account_number).slice(-4)}{' '}
@@ -403,10 +692,10 @@ export function CommissionsScreen() {
                   </>
                 ),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div className="button-row">
                     {row.status === 'REQUESTED' && can('commission:payout:approve') && (
@@ -415,9 +704,9 @@ export function CommissionsScreen() {
                         className="small"
                         onClick={() =>
                           void withJustification({
-                            question: 'Reason for approving this payout (at least 5 characters):',
+                            question: t.ofcFnReasonForApprovingThis,
                             minimum: 5,
-                            tooShort: 'Give a reason for approving this payout, in at least 5 characters.',
+                            tooShort: t.ofcFnApprovePayoutTooShort,
                             run: async (reason) => {
                               await api.post(
                                 `/government/commissions/payouts/${row.id}/approve`,
@@ -425,13 +714,36 @@ export function CommissionsScreen() {
                               );
                               load();
                             },
-                            onSuccess: 'Payout approved.',
+                            onSuccess: t.ofcFnPayoutApproved,
+                            setError,
+                            setMessage,
+                          })
+                        }
+                      >{t.ofcRhApprove}</button>
+                    )}
+                    {row.status === 'APPROVED' && can('commission:manage') && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() =>
+                          void withJustification({
+                            question: t.ofcFnBankTransferReferenceAt,
+                            minimum: 3,
+                            tooShort: t.ofcFnTransferReferenceTooShort,
+                            run: async (bankReference) => {
+                              await api.post(
+                                `/government/commissions/payouts/${row.id}/complete`,
+                                { bankReference },
+                              );
+                              load();
+                            },
+                            onSuccess: t.ofcFnPayoutPaid,
                             setError,
                             setMessage,
                           })
                         }
                       >
-                        Approve
+                        {t.ofcFnRecordPayment}
                       </button>
                     )}
                     {row.status === 'APPROVED' && can('commission:manage') && (
@@ -440,42 +752,149 @@ export function CommissionsScreen() {
                         className="small secondary"
                         onClick={() =>
                           void withJustification({
-                            question: 'Bank transfer reference (at least 3 characters):',
-                            minimum: 3,
-                            tooShort:
-                              'Enter the bank transfer reference. It is what ties this payout to the money that actually left the account.',
-                            run: async (bankReference) => {
+                            question: t.ofcFnWhatDidTheBank,
+                            minimum: 10,
+                            tooShort: t.ofcFnPayoutFailedTooShort,
+                            run: async (reason) => {
                               await api.post(
-                                `/government/commissions/payouts/${row.id}/complete`,
-                                { bankReference },
+                                `/government/commissions/payouts/${row.id}/fail`,
+                                { reason },
                               );
                               load();
                             },
-                            onSuccess: 'Payout recorded as paid.',
+                            onSuccess: t.ofcFnPayoutFailedRecorded,
                             setError,
                             setMessage,
                           })
                         }
-                      >
-                        Record payment
-                      </button>
+                      >{t.ofcFnTransferFailed}</button>
                     )}
                   </div>
                 ),
               },
             ]}
             rows={payouts}
-            empty="No payout requests."
+            empty="ofcNonePayoutRequests"
           />
         )}
       </div>
+
+      <CommissionByPlace />
     </>
+  );
+}
+
+/**
+ * Where commission is being earned, and how it has moved month by month.
+ *
+ * `GET /government/commissions/by-place` was written with its purpose in its
+ * own one-line comment — "commission by place and by month, which is how a
+ * Council asks about it" — and had no caller anywhere in either front end.
+ * One of the reads recorded in READ_WITHOUT_A_SCREEN.
+ *
+ * The commissions screen is a payout queue: one row per agent per payout,
+ * which answers "who is owed" and nothing about where the money is coming
+ * from. A Council asking how much its agents earned last quarter, or an
+ * officer asking why the commission bill has moved, had nowhere to look.
+ *
+ * Reversed is a column rather than a footnote. A place with high accrual and
+ * high reversal is not a place collecting well; it is a place raising
+ * charges that do not stand up, and the two are indistinguishable in a total.
+ */
+function CommissionByPlace() {
+  const { t } = usePortalI18n();
+  const [report, setReport] = useState<{
+    byLga: Record<string, string>[];
+    byPeriod: Record<string, string>[];
+  } | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api
+      .get<{ byLga: Record<string, string>[]; byPeriod: Record<string, string>[] }>(
+        '/government/commissions/by-place',
+      )
+      .then(setReport)
+      .catch((caught) => {
+        setError(asApiError(caught));
+        setReport(null);
+      });
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  /* Both halves are lists; neither is a figure this screen may invent. */
+  const rows = (key: 'byLga' | 'byPeriod') =>
+    report && Array.isArray(report[key]) ? report[key] : [];
+
+  const money = (label: Label, field: string) => ({
+    key: field,
+    label,
+    numeric: true,
+    render: (row: Record<string, string>) => <Money kobo={row[field]} />,
+  });
+
+  return (
+    <div className="card card--flush">
+      <div className="card__pad">
+        <h2 className="card__title">{t.ofcFnWhereEarned}</h2>
+        <p className="card__hint">{t.ofcFnWhereEarnedBody}</p>
+      </div>
+
+      {error ? (
+        <div style={{ padding: 18 }}>
+          <ErrorAlert error={error} />
+          <button type="button" className="secondary" onClick={load}>
+            {t.actionTryAgain}
+          </button>
+        </div>
+      ) : !report ? (
+        <div style={{ padding: 18 }}>
+          <Loading rows={3} />
+        </div>
+      ) : (
+        <>
+          <Table
+            columns={[
+              { key: 'lga', label: 'tpLgaShort' },
+              { key: 'commissions', label: 'ofcFnEntries', numeric: true },
+              money('ofcFnAccrued', 'accrued_kobo'),
+              money('ofcFnPaidOut', 'paid_kobo'),
+              money('ofcAgOutstanding', 'outstanding_kobo'),
+              money('ofcFnReversed', 'reversed_kobo'),
+            ]}
+            rows={rows('byLga')}
+            empty="ofcFnNoCommissionInPeriod"
+          />
+
+          <div className="card__pad">
+            <h3 className="card__title">{t.ofcFnByMonth}</h3>
+          </div>
+          <Table
+            columns={[
+              { key: 'period', label: 'ofcPhPeriod' },
+              { key: 'commissions', label: 'ofcFnEntries', numeric: true },
+              money('ofcFnAccrued', 'accrued_kobo'),
+              money('ofcFnPaidOut', 'paid_kobo'),
+              money('ofcAgOutstanding', 'outstanding_kobo'),
+              money('ofcFnReversed', 'reversed_kobo'),
+            ]}
+            rows={rows('byPeriod')}
+            empty="ofcFnNoCommissionInPeriod"
+          />
+        </>
+      )}
+    </div>
   );
 }
 
 // ------------------------------------------------------------------ approvals
 
 export function ApprovalsScreen({ user }: { user: User }) {
+  const { t } = usePortalI18n();
   const [approvals, setApprovals] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -488,7 +907,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
       .get<any[]>(`/government/approvals?${params.toString()}`)
       .then(setApprovals)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
   }, [statusFilter]);
 
@@ -498,14 +917,14 @@ export function ApprovalsScreen({ user }: { user: User }) {
 
   async function decide(id: string, decision: 'REVIEW' | 'APPROVE' | 'REJECT') {
     await withJustification({
-      question: 'Reason for this decision (at least 10 characters):',
+      question: t.ofcFnReasonForThisDecision,
       minimum: 10,
-      tooShort: 'Give a reason for this decision, in at least 10 characters.',
+      tooShort: t.ofcFnDecisionTooShort,
       run: async (reason) => {
         await api.post(`/government/approvals/${id}/decide`, { decision, reason });
         load();
       },
-      onSuccess: `Request ${decision.toLowerCase()}d.`,
+      onSuccess: t.ofcFnRequestDecided.replace('{{decision}}', enumLabel(decision, t)),
       setError,
       setMessage,
     });
@@ -519,15 +938,13 @@ export function ApprovalsScreen({ user }: { user: User }) {
         `/government/approvals/${id}/execute-reversal`,
       );
       setMessage(
-        `Reversal executed as ${result.refundReference}. ` +
-          `${result.commissionReversed} commission record(s) reversed.`,
+        t.ofcFnReversalExecuted
+          .replace('{{reference}}', result.refundReference)
+          .replace('{{count}}', String(result.commissionReversed)),
       );
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     }
   }
 
@@ -545,25 +962,22 @@ export function ApprovalsScreen({ user }: { user: User }) {
       <div className="card">
         <div className="card__header">
           <div>
-            <h2 className="card__title">Maker-checker approvals</h2>
-            <p className="card__hint">
-              The officer who raises a request can never review or authorise it. Reversals need a
-              third officer to execute, with step-up authentication.
-            </p>
+            <h2 className="card__title">{t.ofcFnMakerChecker}</h2>
+            <p className="card__hint">{t.ofcFnMakerCheckerBody}</p>
           </div>
           <div className="field" style={{ marginBottom: 0, minWidth: 170 }}>
-            <label htmlFor="approval-status">Status</label>
+            <label htmlFor="approval-status">{t.appStatus}</label>
             <select
               id="approval-status"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
-              <option value="">All</option>
-              <option value="REQUESTED">Requested</option>
-              <option value="REVIEWED">Reviewed</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="EXECUTED">Executed</option>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="REQUESTED">{t.ofcRhRequested}</option>
+              <option value="REVIEWED">{t.ofcKycReviewed}</option>
+              <option value="APPROVED">{t.ofcFnApproved}</option>
+              <option value="REJECTED">{t.ofcFnRejected}</option>
+              <option value="EXECUTED">{t.ofcFnExecuted}</option>
             </select>
           </div>
         </div>
@@ -582,40 +996,48 @@ export function ApprovalsScreen({ user }: { user: User }) {
             columns={[
               {
                 key: 'approval_type',
-                label: 'Type',
+                label: 'tpType',
                 render: (row) => <Badge status={row.approval_type} />,
               },
-              { key: 'entity_type', label: 'Subject' },
-              { key: 'requested_by_name', label: 'Requested by' },
-              { key: 'requested_reason', label: 'Reason' },
+              { key: 'entity_type', label: 'ofcSpSubject' },
+              { key: 'requested_by_name', label: 'ofcFnRequestedBy' },
+              { key: 'requested_reason', label: 'ofcAgReason' },
               {
                 key: 'requested_at',
-                label: 'Requested',
+                label: 'ofcRhRequested',
                 render: (row) => formatDateTime(row.requested_at),
               },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => {
-                  const isRequester = row.requested_by_name === user.fullName;
+                  /*
+                   * By id, not by name.
+                   *
+                   * The server refuses self-approval on `requested_by` and has
+                   * done all along, so this was never a way past the control —
+                   * what it got wrong was the label, in both directions. Two
+                   * officers sharing a name meant the second was shown "Your
+                   * request" and no buttons, and was blocked from a review they
+                   * were entitled to do; a difference of casing or spacing meant
+                   * the requester was offered Approve on their own request and
+                   * got a 403 for pressing it.
+                   */
+                  const isRequester = row.requested_by_user_id === user.id;
                   if (isRequester) {
-                    return <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Your request</span>;
+                    return <span style={{ fontSize: 'var(--text-xs)', color: 'var(--muted)' }}>{t.ofcFnYourRequest}</span>;
                   }
                   return (
                     <div className="button-row">
                       {['REQUESTED', 'REVIEWED'].includes(row.status) && can('approval:review') && (
                         <>
-                          <button type="button" className="small" onClick={() => decide(row.id, 'APPROVE')}>
-                            Approve
-                          </button>
+                          <button type="button" className="small" onClick={() => decide(row.id, 'APPROVE')}>{t.ofcRhApprove}</button>
                           <button
                             type="button"
                             className="small danger"
                             onClick={() => decide(row.id, 'REJECT')}
-                          >
-                            Reject
-                          </button>
+                          >{t.ofcAgReject}</button>
                         </>
                       )}
                       {row.status === 'APPROVED' &&
@@ -625,9 +1047,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
                             type="button"
                             className="small secondary"
                             onClick={() => executeReversal(row.id)}
-                          >
-                            Execute reversal
-                          </button>
+                          >{t.ofcFnExecuteReversal}</button>
                         )}
                     </div>
                   );
@@ -635,7 +1055,7 @@ export function ApprovalsScreen({ user }: { user: User }) {
               },
             ]}
             rows={approvals}
-            empty="No approval requests match this filter."
+            empty="ofcNoneApprovalRequestsMatchFilter"
           />
         )}
       </div>

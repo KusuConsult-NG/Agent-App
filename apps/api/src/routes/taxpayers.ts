@@ -2,8 +2,10 @@
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { ECONOMIC_SECTORS, roleHasPermission } from '@psirs/shared';
+import { ECONOMIC_SECTORS, draftRefusalSentence, roleHasPermission } from '@psirs/shared';
+import type { Permission } from '@psirs/shared';
 import { pool, queryOne, withTransaction, query } from '../db/pool';
+import * as rbacStore from '../services/rbac-store';
 import {
   authenticate,
   requireActiveAgent,
@@ -20,14 +22,90 @@ import {
   validateBody,
   validateQuery,
 } from '../middleware/validate';
-import { badRequest, forbidden } from '../lib/errors';
+import { AppError, badRequest, forbidden } from '../lib/errors';
+import { log } from '../lib/logger';
 import * as taxpayers from '../services/taxpayers';
+import { resolveTaxpayerReach } from '../services/report-scope';
 import * as vehicles from '../services/vehicles';
 import * as obligations from '../services/obligations';
 import { vehicleCaptureSchema } from './vehicles';
+import { observationCaptureSchema } from './government';
+import { recordObservation } from '../services/enumeration';
 import { evaluateRegistrationRisk } from '../services/fraud';
 import { getTaxpayerIncentives, syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 import { queueNotification } from '../services/notifications';
+
+/** What a citizen can hand an agent, once the search box has recognised it. */
+type PresentedIdentifier =
+  | { phone: string }
+  | { tin: string }
+  | { vehicleRegistration: string }
+  | { receiptNumber: string }
+  | { transactionReference: string };
+
+/**
+ * The identifier a search box was handed, or null if it holds a name fragment.
+ *
+ * The hint under that box tells the agent, in both languages, that a citizen
+ * registered in another area can still be found "by their phone number, TIN,
+ * vehicle registration or a receipt number" — so those are the shapes read
+ * here, and the acknowledgement reference besides, because an acknowledgement
+ * is numbered by its transaction and that is the number the SMS gives the
+ * citizen to quote.
+ *
+ * Each shape is specific enough that no plausible name or business name is
+ * one: two of them are all digits, two carry a prefix and a slash or dash,
+ * and the plate is letters-digits-letters with no space. Recognising a string
+ * as an identifier is therefore not a guess about what the agent meant. What
+ * falls through — including a partial identifier, which is a fragment by
+ * definition — stays a fragment and stays scoped.
+ */
+export function promoteExactIdentifier(q: string | undefined): PresentedIdentifier | null {
+  const text = (q ?? '').trim();
+  if (!text) return null;
+  const upper = text.toUpperCase();
+
+  // A government receipt: PSIRS/2026/000001.
+  if (/^PSIRS\/\d{4}\/\d{4,}$/.test(upper)) return { receiptNumber: upper };
+
+  /*
+   * The acknowledgement a citizen holds while a payment is still in flight.
+   * It is numbered by its transaction — TXN-2026-000005 — deliberately, so a
+   * receipt number from the government series is never spent on money that
+   * may never arrive.
+   */
+  if (/^TXN-\d{4}-\d{4,}$/.test(upper)) return { transactionReference: upper };
+
+  /*
+   * A phone number in any form a Nigerian writes one. `phoneSchema` is the
+   * platform's single definition of that, punctuation and all, and it hands
+   * back the +234 form the column stores — which is the whole point, because
+   * an agent who types 08031000014 is looking for +2348031000014 and a LIKE
+   * on the raw text never finds them.
+   */
+  const phone = phoneSchema.safeParse(text);
+  if (phone.success) return { phone: phone.data };
+
+  /*
+   * A TIN is digits and nothing else, in the length the registry issues.
+   * Checked after the phone shapes, so an eleven-digit local number is never
+   * mistaken for one. A shorter run of digits is a fragment and stays one.
+   */
+  const digits = text.replace(/[\s-]/g, '');
+  if (/^\d{8,12}$/.test(digits)) return { tin: digits };
+
+  /*
+   * A plate, in the shape the registry issues them: letters, digits, letters,
+   * with or without the separators a person writes. Anchored at both ends and
+   * required to start with letters, so a business name that happens to carry a
+   * number — 9JAFOODS — is still searched for as a name.
+   */
+  if (/^[A-Z]{2,3}[- ]?\d{2,4}[- ]?[A-Z]{2,3}$/.test(upper)) {
+    return { vehicleRegistration: upper.replace(/[\s-]/g, '') };
+  }
+
+  return null;
+}
 
 export const taxpayerRouter = Router();
 
@@ -68,6 +146,18 @@ taxpayerRouter.use(authenticate);
 const taxpayerInputSchema = z
   .object({
     taxpayerType: z.enum(['INDIVIDUAL', 'BUSINESS']),
+    /*
+     * The language this person reads.
+     *
+     * Asked at registration because the agent is standing in front of them and
+     * is the only one who can ask. Everything the platform ever sends this
+     * taxpayer is chosen with it — and for a taxpayer that is one SMS carrying
+     * the only copy of their receipt they will ever hold.
+     *
+     * Optional, defaulting to English, so a handset on an older build that does
+     * not send it still registers people.
+     */
+    preferredLanguage: z.enum(['en', 'ha']).optional(),
     firstName: z.string().min(2).max(80).optional(),
     middleName: z.string().max(80).optional(),
     lastName: z.string().min(2).max(80).optional(),
@@ -167,6 +257,9 @@ taxpayerRouter.post(
             role: req.auth!.role,
             mayWaive: req.auth!.permissions.includes('taxpayer:obligation:waive'),
           },
+          // Inside this transaction, not beside it: a later step throwing must
+          // take the obligations with it.
+          client,
         );
       }
       await evaluateRegistrationRisk(client, {
@@ -210,6 +303,20 @@ taxpayerRouter.post(
  * Declared before the parametrised routes so "tin-outstanding" is not read as
  * a taxpayer id.
  */
+/**
+ * Records taken off the register while they still owed something.
+ *
+ * Declared here with `tin-outstanding` and for the same reason: before the
+ * parametrised routes, so the path is not read as a taxpayer id.
+ */
+taxpayerRouter.get(
+  '/ended-with-arrears',
+  requirePermission('taxpayer:read:all'),
+  asyncHandler(async (_req, res) => {
+    res.json({ taxpayers: await taxpayers.taxpayersEndedWithArrears(pool) });
+  }),
+);
+
 taxpayerRouter.get(
   '/tin-outstanding',
   requirePermission('taxpayer:tin_sync'),
@@ -259,13 +366,144 @@ taxpayerRouter.get(
       receiptNumber: z.string().max(40).optional(),
       transactionReference: z.string().max(40).optional(),
       lgaId: uuidSchema.optional(),
+      // "Who is registered under Development Levy?" — a set, not an individual.
+      revenueItemId: uuidSchema.optional(),
+      categoryId: uuidSchema.optional(),
+      outstandingOnly: z.coerce.boolean().optional(),
       limit: z.coerce.number().int().min(1).max(100).default(25),
     }),
     async (req, res, data) => {
-      if (!Object.values(data).some((value) => typeof value === 'string' && value.length > 0)) {
+      /*
+       * A SEARCH BOX IS ONE BOX.
+       *
+       * Every screen that looks a taxpayer up — the collection flow, the
+       * register, the picker inside the group and vehicle screens — offers a
+       * single field labelled "Name, phone or TIN" and sends whatever was
+       * typed as `q`. A citizen recites their phone number, the agent types it
+       * into that one box, and it arrives here as a name fragment.
+       *
+       * The scoping rule below turns on exactly that distinction, so it is
+       * settled here, once, before anything reads the search: a `q` that *is*
+       * an identifier is treated as the identifier it is. That is not a guess
+       * about what the caller meant, it is a fact about the string, and a
+       * fragment stays a fragment.
+       */
+      const promoted = promoteExactIdentifier(data.q);
+      const search = promoted ? { ...data, ...promoted, q: undefined } : data;
+
+      /*
+       * A filter counts as something to search for.
+       *
+       * The guard tested for a non-empty *string*, which an item id satisfies
+       * but `outstandingOnly` on its own does not — and "everyone with anything
+       * unpaid" is a legitimate question. It now asks whether any criterion was
+       * given at all, rather than whether any of them happened to be text.
+       */
+      const { limit: _limit, ...criteria } = search;
+      const searched = Object.values(criteria).some((value) =>
+        typeof value === 'string' ? value.length > 0 : value !== undefined && value !== false,
+      );
+      if (!searched) {
         throw badRequest('Enter something to search for — a name, phone number, TIN or reference.');
       }
-      res.json(await taxpayers.searchTaxpayers(pool, data));
+
+      /*
+       * A FILTER NARROWS A SEARCH. IT IS NOT A SEARCH.
+       *
+       * Everything this endpoint originally accepted required already knowing
+       * who you were looking for: an exact TIN, phone number, receipt number
+       * or vehicle plate, or a fragment of a name. `revenueItemId`,
+       * `categoryId` and `outstandingOnly` were added so an officer could ask
+       * "who is registered under Market Levy" — a question about a set of
+       * people rather than a person, and a useful one.
+       *
+       * This route accepts `taxpayer:read:assigned`, which every field agent
+       * holds. Those three parameters therefore turned a lookup into an
+       * enumeration: a hundred citizens' names, TINs and telephone numbers,
+       * selected by a levy the agent collects, delivered to their handset. An
+       * `lgaId` on its own is the same shape and predates them — "everybody in
+       * Jos North" is not a search for anybody.
+       *
+       * So a caller who may not read every taxpayer has to name one. The
+       * filters still work; they just cannot be the whole question.
+       */
+      const given = (key: keyof typeof criteria) => {
+        const value = criteria[key];
+        return typeof value === 'string' && value.trim().length > 0;
+      };
+
+      /*
+       * AN IDENTIFIER REACHES ANYWHERE. A FRAGMENT REACHES WHERE YOU WORK.
+       *
+       * A TIN, a phone number, a receipt number or a vehicle registration is a
+       * thing the citizen standing in front of the agent hands over, and it
+       * has to keep working across every Local Government Area: a trader
+       * registered in Jos North buys their levy at a Jos South market, and an
+       * agent who cannot serve them is a worse outcome than the one being
+       * prevented here.
+       *
+       * `q` is not that. It is a guess, and it can be varied — `a`, then `ab`,
+       * then `ac` — until the register falls out a hundred rows at a time.
+       * There is no offset parameter, which bounds a single query and not a
+       * patient caller. So a fragment is answered from the caller's own
+       * territory, and an agent's territory is one LGA that the schema will
+       * not let them be active without.
+       *
+       * The promotion at the top of this handler is what makes the first half
+       * of that reachable. Without it the carve-out lived on the API and no
+       * client could get to it: an agent in a Jos South market, holding the
+       * TIN of a trader registered in Jos North, typed that TIN into the one
+       * search box there is and was told nobody matched — precisely the
+       * outcome this paragraph calls worse than the one being prevented.
+       */
+      const identifiedExactly =
+        given('tin') || given('phone') || given('vehicleRegistration') ||
+        given('receiptNumber') || given('transactionReference');
+      const namedSomebody = identifiedExactly || given('q');
+
+      const reach = await resolveTaxpayerReach(pool, req.auth!);
+
+      /*
+       * Listing rather than looking up.
+       *
+       * A supervisor asking who is registered under the shop rate in their own
+       * area is doing their job, and the reports beside this one already
+       * answer for them. A field agent holding the same list is holding the
+       * material an unofficial collection is made from, and PRD §36 gives them
+       * "Assigned" access for exactly that reason. Same boundary, different
+       * entitlement inside it — which is what `source` distinguishes.
+       */
+      if (!namedSomebody) {
+        if (reach.source === 'AGENT') {
+          throw forbidden(
+            'Listing taxpayers by levy, category, arrears or Local Government Area is a report, ' +
+              'not a search, and it is not part of a collecting agent’s access.',
+            'Search for the taxpayer by name, phone number, TIN, receipt number or vehicle ' +
+              'registration. You can still add a levy or an area to narrow that search.',
+          );
+        }
+        if (reach.source === 'OFFICER' && reach.scope.kind === 'TERRITORIES' &&
+            reach.scope.territories.length === 0) {
+          /*
+           * Fail closed, and say which failure it is. An empty list would read
+           * as "nobody matches", and the account most likely to reach this is
+           * one an administrator has not finished setting up.
+           */
+          throw forbidden(
+            'Your account has no territory assigned, so there is no area to list taxpayers for.',
+            'Ask an administrator to assign your territories, then try again. You can still ' +
+              'look somebody up by name, phone number or TIN.',
+          );
+        }
+      }
+
+      res.json(
+        await taxpayers.searchTaxpayers(
+          pool,
+          search,
+          identifiedExactly ? { kind: 'STATEWIDE' } : reach.scope,
+        ),
+      );
     },
   ),
 );
@@ -388,6 +626,45 @@ taxpayerRouter.post(
   ),
 );
 
+/**
+ * Taking a record off the register, pausing it, or putting it back.
+ *
+ * `taxpayer:correct` rather than `taxpayer:manage`: the officer who learns
+ * that a shop has shut is a revenue officer, not an administrator, and this
+ * changes nothing about *which person* the record is about — which is the
+ * distinction that reserves the identity route for an administrator.
+ *
+ * No step-up. It moves no money, repoints no identity, is reversible by the
+ * same permission, and every change carries a reason into the audit log. What
+ * guards against it being used to stop the State chasing a friend's arrears is
+ * not a second factor but daylight: the debt stays in every total, and the
+ * record appears in `/taxpayers/ended-with-arrears` until it is paid.
+ */
+taxpayerRouter.post(
+  '/:id/status',
+  requirePermission('taxpayer:correct'),
+  validateBody(
+    z.object({
+      status: z.enum(['ACTIVE', 'SUSPENDED', 'CLOSED']),
+      reason: z
+        .string()
+        .trim()
+        .min(10, 'Say what happened to this taxpayer, in at least 10 characters'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await taxpayers.setTaxpayerStatus({
+          taxpayerId: req.params.id,
+          status: data.status,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
 taxpayerRouter.put(
   '/:id/obligations',
   requirePermission('taxpayer:update', 'taxpayer:manage'),
@@ -436,7 +713,8 @@ draftRouter.use(authenticate);
 /**
  * Accept captures taken without a connection (PRD §30; Addendum §23).
  *
- * Three rules govern this endpoint, and all of them are about what it refuses.
+ * Four rules govern this endpoint. Three are about what it refuses; the
+ * fourth is about what it is allowed to claim.
  *
  * First, the draft types. Every one is a record of something the agent
  * observed; none of them moves money. There is no payment draft type, and the
@@ -455,8 +733,42 @@ draftRouter.use(authenticate);
  * a binding every other agent write enforces — and left the audit entry with
  * no device against it, so the record could not afterwards be traced to a
  * handset at all. A queued capture is not a lesser capture.
+ *
+ * Fourth, an answer about a draft has to be an answer about that draft. The
+ * phone acts on what this endpoint says — deleting a capture it is told was
+ * synchronised, keeping one it is told was refused — so "already
+ * synchronised" for a draft that was rejected, or for one still waiting to be
+ * processed, does not merely mislead: it erases the only remaining copy. Each
+ * stored state gets its own reply, and the state that means "not finished" is
+ * finished rather than reported as though it had been.
  */
-const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE'] as const;
+const DRAFT_TYPES = ['TAXPAYER_REGISTRATION', 'VEHICLE_CAPTURE', 'BUSINESS_OBSERVATION'] as const;
+
+/**
+ * What each capture would need if it were done in front of an officer.
+ *
+ * The queue is a second entrance to three operations that each have a front
+ * door, and the two were gated differently: this route admits on
+ * `taxpayer:create`, while `POST /government/enumeration/observations` needs
+ * `assessment:create` or `paye:file` and `POST /vehicles` needs
+ * `vehicle:renew`. Two of the three were therefore wider at the back.
+ *
+ * Nobody could walk through. `agent` is the only role holding
+ * `taxpayer:create` and it holds the other two as well — which is a fact
+ * about migration 059, not a property of the design, and `role_permissions`
+ * exists so PSIRS can change that without a deployment. The same reasoning
+ * `a-permission-that-scoped-nothing` gives for the `:own` routes: they come
+ * apart the moment the permission is granted to a role not spelled `agent`,
+ * and when they come apart this one fails open.
+ *
+ * The sync door is also the one furthest from anybody watching — reached by a
+ * handset in a market, hours after the capture, with no officer present.
+ */
+const DRAFT_NEEDS: Record<(typeof DRAFT_TYPES)[number], Permission[]> = {
+  TAXPAYER_REGISTRATION: ['taxpayer:create'],
+  VEHICLE_CAPTURE: ['vehicle:renew'],
+  BUSINESS_OBSERVATION: ['assessment:create', 'paye:file'],
+};
 
 draftRouter.post(
   '/sync',
@@ -484,56 +796,90 @@ draftRouter.post(
         status: string;
         entityType?: string;
         entityId?: string;
+        /** Present on a refusal, so the phone can say why in its own language. */
+        code?: string;
+        /** The failing fields, when it was validation that refused it. */
+        detail?: string;
         message: string;
       }[] = [];
 
       for (const draft of data.drafts) {
-        // The client reference is the idempotency key: replaying a sync after a
-        // dropped connection cannot create the record twice.
-        const existing = await queryOne<{
-          id: string;
-          status: string;
-          result_entity_type: string | null;
-          result_entity_id: string | null;
-        }>(
-          pool,
-          `SELECT id, status, result_entity_type, result_entity_id
-             FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
-          [agentId, draft.clientReference],
-        );
-
-        if (existing) {
+        /*
+         * One bad capture must not take the batch down with it.
+         *
+         * Storing the payload is a database write like any other, and a draft
+         * carrying something the column will not hold — a NUL byte left in a
+         * name by a mis-scanned document, say — used to throw from outside
+         * this try, answering the whole request with a 500. Every other draft
+         * in the batch went unanswered, the phone kept all of them, and the
+         * next sync died on the same one: an agent's entire queue held shut by
+         * a single corrupt capture, with no way for them to see which.
+         *
+         * The whole of one draft's handling therefore sits inside the catch,
+         * including its own storage. A draft that cannot even be stored is
+         * refused by name, and the other forty-nine go through.
+         */
+        /*
+         * The same question the front door asks, before anything is stored.
+         *
+         * Ahead of the store so a capture the caller may not make leaves no
+         * row behind, and per draft rather than per request so a caller
+         * entitled to queue a registration and not an observation still gets
+         * the registration through.
+         *
+         * Asked of `rbacStore` and not of `roleHasPermission`, for the reason
+         * `requirePermission` gives: the compiled map is what the platform
+         * shipped with, and `role_permissions` is what PSIRS has since
+         * granted. Written against the compiled map first, this check passed a
+         * capture whose permission had been withdrawn from the table — the
+         * test below caught it, which is the entire argument for asking the
+         * enforcement point's own source.
+         */
+        const held = await rbacStore.permissionsFor(req.auth!.role);
+        if (!DRAFT_NEEDS[draft.draftType].some((needed) => held.includes(needed))) {
           results.push({
             clientReference: draft.clientReference,
-            status: 'DUPLICATE',
-            entityType: existing.result_entity_type ?? undefined,
-            entityId: existing.result_entity_id ?? undefined,
-            message: 'This draft was already synchronised. It has not been duplicated.',
+            status: 'REJECTED',
+            code: 'DRAFT_NOT_PERMITTED',
+            message: draftRefusalSentence('DRAFT_NOT_PERMITTED', { type: draft.draftType }),
           });
           continue;
         }
 
-        const stored = await queryOne<{ id: string }>(
-          pool,
-          `INSERT INTO offline_drafts
-             (agent_id, device_id, client_reference, draft_type, payload, captured_at)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
-          [
-            agentId,
-            req.agent?.deviceId ?? null,
-            draft.clientReference,
-            draft.draftType,
-            JSON.stringify(draft.payload),
-            draft.capturedAt,
-          ],
-        );
+        let storedId: string | null = null;
 
-        const reject = async (message: string) => {
-          await pool.query(
-            `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
-            [stored!.id, message],
-          );
-          results.push({ clientReference: draft.clientReference, status: 'REJECTED', message });
+        /*
+         * The code travels; the English is the record.
+         *
+         * `rejection_reason` is read back long afterwards by support and by
+         * anybody reconciling what an agent says they collected against what
+         * PSIRS holds, so it stays one language. The code is what lets the
+         * phone say the same thing in the language its holder reads — which
+         * matters here more than anywhere, because this is what somebody
+         * standing in a market is told about work they have already done.
+         */
+        const reject = async (code: string, message: string, detail?: string) => {
+          // A draft that failed before it could be stored has no row to mark;
+          // the agent is still told, by name, that this one was refused.
+          if (storedId) {
+            await pool.query(
+              `UPDATE offline_drafts SET status = 'REJECTED', rejection_reason = $2 WHERE id = $1`,
+              [storedId, message],
+            );
+          }
+          results.push({
+            clientReference: draft.clientReference,
+            status: 'REJECTED',
+            code,
+            /*
+             * The failing fields, sent apart from the sentence they were
+             * baked into. The phone knows its own draft type and reference
+             * and can fill those in itself; this is the one part of a refusal
+             * it cannot work out.
+             */
+            ...(detail ? { detail } : {}),
+            message,
+          });
         };
 
         const accept = async (entityType: string, entityId: string, message: string) => {
@@ -542,7 +888,7 @@ draftRouter.post(
                 SET status = 'SYNCED', synced_at = now(),
                     result_entity_type = $3, result_entity_id = $2
               WHERE id = $1`,
-            [stored!.id, entityId, entityType],
+            [storedId, entityId, entityType],
           );
           results.push({
             clientReference: draft.clientReference,
@@ -554,13 +900,93 @@ draftRouter.post(
         };
 
         try {
+          /*
+           * The client reference is the idempotency key: replaying a sync after
+           * a dropped connection cannot create the record twice.
+           *
+           * What the replay is told, though, has to be about this draft. Any
+           * existing row used to answer "already synchronised", and the phone
+           * acts on that by deleting its copy — so a draft the server had
+           * *rejected*, re-sent because the agent never saw the reply, was
+           * reported as done and then erased along with the reason the agent
+           * needed to fix it. A row still in PENDING_SYNC — what a crash between
+           * the insert and the handler leaves behind — was answered the same
+           * way, and the capture existed nowhere afterwards.
+           *
+           * So each stored state gets its own answer, and the one state that
+           * means "not finished" is finished now rather than reported as though
+           * it had been.
+           */
+          const existing = await queryOne<{
+            id: string;
+            status: string;
+            result_entity_type: string | null;
+            result_entity_id: string | null;
+            rejection_reason: string | null;
+          }>(
+            pool,
+            `SELECT id, status, result_entity_type, result_entity_id, rejection_reason
+               FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
+            [agentId, draft.clientReference],
+          );
+
+          if (existing && existing.status !== 'PENDING_SYNC') {
+            if (existing.status === 'REJECTED') {
+              results.push({
+                clientReference: draft.clientReference,
+                status: 'REJECTED',
+                message:
+                  existing.rejection_reason ??
+                  'This draft was refused earlier and has not been stored as a record.',
+              });
+            } else {
+              results.push({
+                clientReference: draft.clientReference,
+                status: 'DUPLICATE',
+                entityType: existing.result_entity_type ?? undefined,
+                entityId: existing.result_entity_id ?? undefined,
+                message: 'This draft was already synchronised. It has not been duplicated.',
+              });
+            }
+            continue;
+          }
+
+          storedId = (
+            existing
+            ? await queryOne<{ id: string }>(
+                pool,
+                // Resuming: the phone still holds this capture, so what it is
+                // sending now is what the record should be made from, and the
+                // row should say so rather than keeping a payload that produced
+                // nothing.
+                `UPDATE offline_drafts SET payload = $2, device_id = COALESCE($3, device_id)
+                  WHERE id = $1 RETURNING id`,
+                [existing.id, JSON.stringify(draft.payload), req.agent?.deviceId ?? null],
+              )
+            : await queryOne<{ id: string }>(
+                pool,
+                `INSERT INTO offline_drafts
+                   (agent_id, device_id, client_reference, draft_type, payload, captured_at)
+                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+                [
+                  agentId,
+                  req.agent?.deviceId ?? null,
+                  draft.clientReference,
+                  draft.draftType,
+                  JSON.stringify(draft.payload),
+                  draft.capturedAt,
+                ],
+              )
+          )!.id;
+
           if (draft.draftType === 'TAXPAYER_REGISTRATION') {
             const parsed = taxpayerInputSchema.safeParse(draft.payload);
             if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
               await reject(
-                `Draft could not be accepted: ${parsed.error.issues
-                  .map((issue) => issue.message)
-                  .join('; ')}`,
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
               );
               continue;
             }
@@ -571,7 +997,22 @@ draftRouter.post(
               actorRole: req.auth!.role,
               agentId,
               source: 'AGENT',
-              acknowledgeDuplicates: parsed.data.acknowledgeDuplicates,
+              /*
+               * A duplicate acknowledgement cannot travel in the queue.
+               *
+               * The flag means a person looked at the matches the server
+               * offered and said none of them is this citizen. A phone with no
+               * signal has no duplicate list to have looked at, so the only
+               * way it reaches the queue is an attempt made online, refused,
+               * acknowledged, resubmitted — and then cut off before its reply
+               * arrived. Which is the one case where the acknowledgement is
+               * certainly wrong: the record it waves past is the one that
+               * attempt created.
+               *
+               * So the check runs against the register as it stands now, and
+               * the agent decides with the current record in front of them.
+               */
+              acknowledgeDuplicates: false,
               ipAddress: req.clientIp,
               // The same fields the online route records. A capture that
               // arrived through the queue is audited no differently from one
@@ -592,10 +1033,11 @@ draftRouter.post(
           if (draft.draftType === 'VEHICLE_CAPTURE') {
             const parsed = vehicleCaptureSchema.safeParse(draft.payload);
             if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
               await reject(
-                `Draft could not be accepted: ${parsed.error.issues
-                  .map((issue) => issue.message)
-                  .join('; ')}`,
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
               );
               continue;
             }
@@ -613,15 +1055,105 @@ draftRouter.post(
             continue;
           }
 
+          if (draft.draftType === 'BUSINESS_OBSERVATION') {
+            const parsed = observationCaptureSchema.safeParse(draft.payload);
+            if (!parsed.success) {
+              const detail = parsed.error.issues.map((issue) => issue.message).join('; ');
+              await reject(
+                'DRAFT_INVALID',
+                draftRefusalSentence('DRAFT_INVALID', { detail }),
+                detail,
+              );
+              continue;
+            }
+
+            /*
+             * The band is reached here, from the facts the phone carried, by
+             * the same shared function the phone itself ran at the stall.
+             *
+             * So the handset's answer and this one agree in the ordinary case
+             * by construction rather than by two copies being maintained in
+             * step. Where they do not — an old build, or a rule changed
+             * between capture and sync — this one stands and the handset's is
+             * kept beside it, because a trader was told the handset's and is
+             * entitled to an explanation rather than a correction.
+             */
+            const observation = await recordObservation(pool, {
+              ...parsed.data,
+              groupId: parsed.data.groupId ?? null,
+              latitude: parsed.data.latitude ?? null,
+              longitude: parsed.data.longitude ?? null,
+              bandAtCapture: parsed.data.bandAtCapture ?? null,
+              actorId: req.auth!.userId,
+              actorRole: req.auth!.role,
+              agentId,
+              /*
+               * Dated when the agent stood there, not when the phone found a
+               * signal.
+               *
+               * Every draft carries `capturedAt` and this endpoint stored it
+               * on `offline_drafts` and then dropped it, so the observation
+               * itself took the column's `now()` default. That is the moment
+               * of arrival, and arrival order is not visit order: an
+               * observation is superseded by a later one, so a Monday capture
+               * synced on Friday displaced an officer's Wednesday visit and
+               * the band the trader is assessed on came from the earlier of
+               * the two. The officer's queue read Friday as the date of the
+               * visit as well.
+               */
+              observedAt: new Date(draft.capturedAt),
+            });
+            await accept(
+              'presumptive_observation',
+              observation.id,
+              `Recorded. The office has this as a ${observation.sizeBand.toLowerCase()} business.`,
+            );
+            continue;
+          }
+
           // Unreachable while every member of DRAFT_TYPES is handled above. If a
           // type is ever added without a handler, this rejects it loudly instead
           // of storing it where nothing will ever look.
           await reject(
-            `This version of the platform cannot process a "${draft.draftType}" capture. ` +
-              'It has not been discarded — quote this reference to support.',
+            'DRAFT_TYPE_UNSUPPORTED',
+            draftRefusalSentence('DRAFT_TYPE_UNSUPPORTED', { type: draft.draftType }),
           );
         } catch (error) {
-          await reject(error instanceof Error ? error.message : 'Unknown error');
+          /*
+           * A refusal the platform composed is worth showing; a fault is not.
+           *
+           * This used to reject with `error.message`, whatever it happened to
+           * be, and store it for good. "This person is already registered as
+           * Rifkatu Bala (TIN 481...)" is exactly what an agent needs. `duplicate
+           * key value violates unique constraint "taxpayers_tin_key"` is not:
+           * it tells them nothing they can act on, and tells anyone reading
+           * over their shoulder the names of our tables.
+           */
+          if (error instanceof AppError) {
+            /*
+             * Its own code, not one of ours.
+             *
+             * `AppError` already carries a code, and the agent application
+             * already translates the ones it knows through `TRANSLATED_ERRORS`
+             * — so passing it through translates this whole class (an already
+             * registered taxpayer, a lapsed clearance) without inventing
+             * anything. Taking only `message`, as this did, threw that away.
+             */
+            await reject(error.code, error.message);
+          } else {
+            log.error('offline draft could not be processed', {
+              component: 'drafts',
+              draftId: storedId,
+              clientReference: draft.clientReference,
+              error,
+            });
+            await reject(
+              'DRAFT_NOT_PROCESSED',
+              draftRefusalSentence('DRAFT_NOT_PROCESSED', {
+                reference: draft.clientReference,
+              }),
+            );
+          }
         }
       }
 

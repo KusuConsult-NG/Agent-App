@@ -34,7 +34,13 @@ const GLOSSARY: { term: string; english: RegExp; hausa: RegExp }[] = [
   { term: 'receipt', english: /receipt/i, hausa: /rasit/i },
   { term: 'confirm', english: /confirm/i, hausa: /tabbatar/i },
   { term: 'device', english: /\bdevice\b/i, hausa: /na.?ura/i },
-  { term: 'account', english: /\baccount\b/i, hausa: /asusu/i },
+  /*
+   * The noun, not the verb. "A remittance run has to account for all
+   * seventeen" is not a sentence about a bank account, and demanding `asusu`
+   * in its translation would have forced a wrong word into the one place the
+   * glossary exists to keep right.
+   */
+  { term: 'account', english: /\baccounts?\b(?!\s+for)/i, hausa: /asusu/i },
   { term: 'commission', english: /commission/i, hausa: /kwamishan/i },
   { term: 'cash', english: /\bcash\b/i, hausa: /kudi/i },
 ];
@@ -54,9 +60,55 @@ describe('the Hausa dictionary holds together', () => {
    */
   const AWAITING_REVIEW = ['navProfile'];
 
+  /**
+   * Words that are the same in both languages because they are the same word.
+   *
+   * Kept apart from AWAITING_REVIEW on purpose: that list is a debt, and an
+   * entry on it should eventually be deleted by somebody translating the
+   * string. These never will be. "Hausa" is what the language is called in
+   * Hausa, and the toggle offering it has to be readable to somebody who
+   * cannot yet read the page.
+   */
+  const SAME_IN_BOTH = [
+    'pubHausa',
+    /*
+     * Acronyms and product names, which are what they are called in Hausa
+     * too. An agent looking for the USSD option is looking for the letters
+     * U-S-S-D, and a translated WhatsApp is a WhatsApp nobody can find.
+     */
+    'enumApi',
+    'enumHa',
+    'enumPos',
+    'enumSms',
+    'enumUssd',
+    'enumWhatsapp',
+    // A literal an auditor types into the audit-log filter. It is the name of
+    // an event the API emits, not a phrase — translating it would return no
+    // rows.
+    'ofcOvActionPlaceholder',
+    /*
+     * Months whose Hausa abbreviation is the English one.
+     *
+     * Janairu, Maris and Mayu shorten to Jan, Mar and May, which is what the
+     * English shortens to as well. They are not untranslated — they are
+     * translated and come out the same, and inventing a difference to make
+     * this list shorter would put a word in front of a reader that no Hausa
+     * speaker writes.
+     *
+     * The long forms differ (`monthJan` is Janairu), so a reviewer checking
+     * whether the months were done at all has somewhere to look.
+     */
+    'monJan',
+    'monMar',
+    'monMay',
+  ];
+
   it('passes no English off as Hausa', () => {
     const copied = keys.filter(
-      (k) => en[k].trim() === ha[k].trim() && !AWAITING_REVIEW.includes(k),
+      (k) =>
+        en[k].trim() === ha[k].trim() &&
+        !AWAITING_REVIEW.includes(k) &&
+        !SAME_IN_BOTH.includes(k),
     );
     expect(copied).toEqual([]);
   });
@@ -84,7 +136,14 @@ describe('the Hausa dictionary holds together', () => {
     // strings that turn on *not* are the ones that stop an agent taking cash
     // or telling a taxpayer to pay a second time.
     const englishNegative = /\b(not|never|no|cannot|can't|do not|don't|without|nothing|unless)\b/i;
-    const hausaNegative = /\b(ba|kada|babu|bai|banda)\b/i;
+    // `a’a` is the bare "no" — the answer to a yes/no question rather than a
+    // negated sentence. It was missing here, and the first string that needed
+    // it was the Yes/No pair asking whether a taxpayer already holds a TIN.
+    // `marar`/`mara` — "one without" — is how Hausa negates an attribute
+    // rather than a verb: `marar aikin yi` is somebody with no work. It was
+    // missing here, and the first string that needed it was the sector a
+    // taxpayer chooses when they are a student or not working.
+    const hausaNegative = /(\b(ba|kada|babu|bai|banda|marar?)\b|a’a)/i;
     const dropped = keys.filter((k) => englishNegative.test(en[k]) && !hausaNegative.test(ha[k]));
     expect(dropped).toEqual([]);
   });

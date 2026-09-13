@@ -31,8 +31,19 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiRequestError, api, can, fetchFile, type ApiError } from '../lib/api';
-import { Alert, Badge, Empty, ErrorAlert, Loading, Table, formatDateTime } from '../ui';
+import { ApiRequestError, api, asApiError, can, fetchFile, type ApiError } from '../lib/api';
+import {
+  Alert,
+  Badge,
+  Empty,
+  ErrorAlert,
+  Loading,
+  ReasonRule,
+  Table,
+  formatDateTime,
+} from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 export interface KycDocument {
   id: string;
@@ -57,7 +68,6 @@ interface AccessEntry {
   role: string | null;
 }
 
-const humanise = (value: string) => value.replace(/_/g, ' ').toLowerCase();
 
 const sizeOf = (bytes: number) =>
   bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -76,18 +86,33 @@ export function KycDocumentsCard({
   agentId: string;
   onReviewed?: () => void;
 }) {
+  const { t } = usePortalI18n();
   const [documents, setDocuments] = useState<KycDocument[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * The same distinction the access log below already makes, on the list
+   * itself.
+   *
+   * `setDocuments([])` on a failure printed "This applicant has not submitted
+   * any documents." — and the next thing that happens on this screen is a
+   * decision about whether somebody becomes a government revenue agent. The
+   * warning two lines down exists because approving without opening the
+   * documents rests the identity check on an automated answer alone; being
+   * told there are none to open is the same thing, arrived at by accident.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [open, setOpen] = useState<KycDocument | null>(null);
 
   const load = useCallback(() => {
     api
       .get<{ documents: KycDocument[] }>(`/agents/${agentId}/kyc/documents`)
-      .then((data) => setDocuments(data.documents))
+      .then((data) => {
+        setDocuments(data.documents);
+        setLoadError(null);
+      })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setDocuments([]);
+        setLoadError(asApiError(caught));
       });
   }, [agentId]);
 
@@ -98,40 +123,40 @@ export function KycDocumentsCard({
   return (
     <div className="card">
       <div className="card__header">
-        <h2 className="card__title">Identity documents</h2>
-        <p className="card__hint">
-          What the applicant submitted. Opening one is recorded against your name.
-        </p>
+        <h2 className="card__title">{t.ofcKycIdentityDocuments}</h2>
+        <p className="card__hint">{t.ofcKycIntro}</p>
       </div>
 
       <ErrorAlert error={error} />
       {message && (
-        <Alert kind="success" title="Recorded">
+        <Alert kind="success" title="allocRecorded">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
 
-      {!documents ? (
+      {loadError ? (
+        <>
+          <ErrorAlert error={loadError} />
+          <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+        </>
+      ) : !documents ? (
         <Loading />
       ) : documents.length === 0 ? (
-        <Empty>This applicant has not submitted any documents.</Empty>
+        <Empty>{t.ofcKycNoDocuments}</Empty>
       ) : (
         <>
           {pending > 0 && (
-            <Alert kind="warning" title={`${pending} document(s) not yet reviewed`}>
-              <p style={{ margin: 0 }}>
-                Approving this applicant without opening them means the identity check rests on the
-                provider's automated answer alone.
-              </p>
+            <Alert kind="warning" title={{ text: t.ofcKycNotReviewed.replace('{{n}}', String(pending)) }}>
+              <p style={{ margin: 0 }}>{t.ofcKycApprovingBlind}</p>
             </Alert>
           )}
 
           <Table
             columns={[
-              { key: 'document_type', label: 'Document', render: (row) => humanise(row.document_type) },
+              { key: 'document_type', label: 'ofcKycDocument', render: (row) => enumLabel(row.document_type, t) },
               {
                 key: 'verification_status',
-                label: 'Status',
+                label: 'appStatus',
                 render: (row) =>
                   row.superseded_at ? (
                     <Badge status="SUPERSEDED" />
@@ -139,26 +164,26 @@ export function KycDocumentsCard({
                     <Badge status={row.verification_status} />
                   ),
               },
-              { key: 'capture_source', label: 'Captured', render: (row) => humanise(row.capture_source ?? 'unknown') },
-              { key: 'byte_size', label: 'Size', numeric: true, render: (row) => sizeOf(row.byte_size) },
-              { key: 'uploaded_at', label: 'Submitted', render: (row) => formatDateTime(row.uploaded_at) },
+              { key: 'capture_source', label: 'ofcKycCaptured', render: (row) => enumLabel(row.capture_source ?? 'unknown', t) },
+              { key: 'byte_size', label: 'ofcKycSize', numeric: true, render: (row) => sizeOf(row.byte_size) },
+              { key: 'uploaded_at', label: 'ofcAgSubmitted', render: (row) => formatDateTime(row.uploaded_at) },
               {
                 key: 'reviewed_at',
-                label: 'Reviewed',
+                label: 'ofcKycReviewed',
                 render: (row) => (row.reviewed_at ? formatDateTime(row.reviewed_at) : '—'),
               },
               {
                 key: 'id',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <button type="button" className="link" onClick={() => setOpen(row)}>
-                    {row.superseded_at ? 'View' : 'Open and review'}
+                    {row.superseded_at ? t.enumView : t.ofcKyOpenAndReview}
                   </button>
                 ),
               },
             ]}
             rows={documents}
-            empty="No documents."
+            empty="ofcNoneDocuments"
           />
         </>
       )}
@@ -188,11 +213,13 @@ function DocumentViewer({
   onClose: () => void;
   onReviewed: (message: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [access, setAccess] = useState<AccessEntry[] | null>(null);
+  const [accessError, setAccessError] = useState<ApiError | null>(null);
   const urlRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -205,7 +232,7 @@ function DocumentViewer({
         setUrl(objectUrl);
       })
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setError(asApiError(caught));
       });
 
     return () => {
@@ -219,11 +246,34 @@ function DocumentViewer({
     };
   }, [doc.id]);
 
+  /*
+   * "Nobody looked" and "I could not find out who looked" are different answers.
+   *
+   * This swallowed the rejection and set the list to empty, so a failed lookup
+   * rendered "No access recorded" — the screen asserting, about a log of who
+   * has read somebody's identity papers, a fact it did not have. An officer
+   * checking whether a colleague opened a file would have been told no.
+   *
+   * The failure is now shown and the button stays, so the question can be
+   * asked again. Nothing here is a control; it is evidence, and evidence that
+   * reports a failure as a finding is worse than evidence that is missing.
+   */
   const showAccess = useCallback(() => {
+    setAccessError(null);
     api
       .get<{ access: AccessEntry[] }>(`/agents/kyc/documents/${doc.id}/access`)
       .then((data) => setAccess(data.access))
-      .catch(() => setAccess([]));
+      .catch((caught) => {
+        setAccess(null);
+        if (caught instanceof ApiRequestError) setAccessError(caught.error);
+        else {
+          setAccessError({
+            code: 'CLIENT',
+            message: t.ofcKyTheAccessLogCould,
+            moneyStatus: 'NOT_APPLICABLE',
+          });
+        }
+      });
   }, [doc.id]);
 
   async function decide(decision: 'ACCEPT' | 'REJECT') {
@@ -232,12 +282,13 @@ function DocumentViewer({
     try {
       await api.post(`/agents/kyc/documents/${doc.id}/review`, { decision, reason });
       onReviewed(
-        decision === 'ACCEPT'
-          ? `${humanise(doc.document_type)} accepted.`
-          : `${humanise(doc.document_type)} rejected. The applicant can see the reason and submit a replacement.`,
+        (decision === 'ACCEPT' ? t.ofcKycAccepted : t.ofcKycRejectedNotice).replace(
+          '{{document}}',
+          enumLabel(doc.document_type, t),
+        ),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -249,10 +300,8 @@ function DocumentViewer({
   return (
     <div className="document-viewer">
       <div className="document-viewer__head">
-        <h3>{humanise(doc.document_type)}</h3>
-        <button type="button" className="secondary" onClick={onClose}>
-          Close
-        </button>
+        <h3>{enumLabel(doc.document_type, t)}</h3>
+        <button type="button" className="secondary" onClick={onClose}>{t.ofcKycClose}</button>
       </div>
 
       <ErrorAlert error={error} />
@@ -261,42 +310,42 @@ function DocumentViewer({
         <Loading rows={2} />
       ) : url ? (
         isImage ? (
-          <img className="document-viewer__image" src={url} alt={`${humanise(doc.document_type)} submitted by the applicant`} />
+          <img
+            className="document-viewer__image"
+            src={url}
+            alt={t.ofcKycSubmittedByApplicant.replace(
+              '{{document}}',
+              enumLabel(doc.document_type, t),
+            )}
+          />
         ) : (
           <p className="card__hint">
-            This is a {doc.content_type} file.{' '}
-            <a href={url} target="_blank" rel="noreferrer">
-              Open it in a new tab
-            </a>
+            {t.ofcKycFileType.replace('{{type}}', doc.content_type)}{' '}
+            <a href={url} target="_blank" rel="noreferrer">{t.ofcKycOpenNewTab}</a>
             .
           </p>
         )
       ) : null}
 
-      <p className="card__hint">
-        Checksum <code>{doc.checksum.slice(0, 16)}…</code> · {sizeOf(doc.byte_size)} ·{' '}
+      <p className="card__hint">{t.ofcKycChecksum}<code>{doc.checksum.slice(0, 16)}…</code> · {sizeOf(doc.byte_size)} ·{' '}
         {doc.original_filename ?? 'captured in the app'}
       </p>
 
       {doc.superseded_at ? (
-        <Alert kind="info" title="Superseded">
-          <p style={{ margin: 0 }}>
-            A newer capture of this document has been submitted. Review that one instead.
-          </p>
+        <Alert kind="info" title="ofcKycSupersededLabel">
+          <p style={{ margin: 0 }}>{t.ofcKycSuperseded}</p>
         </Alert>
       ) : decided ? (
-        <Alert kind="info" title={`Already ${humanise(doc.verification_status)}`}>
+        <Alert kind="info" title={{ text: t.ofcKycAlready.replace('{{status}}', enumLabel(doc.verification_status, t)) }}>
           <p style={{ margin: 0 }}>
             {doc.rejection_reason
-              ? `Reason given: ${doc.rejection_reason}`
-              : 'Reviewed on ' + formatDateTime(doc.reviewed_at)}
+              ? t.ofcKycReasonGiven.replace('{{reason}}', doc.rejection_reason)
+              : `${t.ofcKyReviewedOn} ${formatDateTime(doc.reviewed_at)}`}
           </p>
         </Alert>
       ) : can('agent:approve') ? (
         <div className="field">
-          <label htmlFor="kyc-review-reason">
-            Why? Required either way, and shown to the applicant on a rejection
-          </label>
+          <label htmlFor="kyc-review-reason">{t.ofcKycWhyRequired}</label>
           <textarea
             id="kyc-review-reason"
             value={reason}
@@ -305,43 +354,39 @@ function DocumentViewer({
             maxLength={500}
             onChange={(event) => setReason(event.target.value)}
           />
+          <ReasonRule value={reason} minimum={4} />
           <div className="button-row">
-            <button type="button" disabled={busy || reason.trim().length < 4} onClick={() => decide('ACCEPT')}>
-              Accept
-            </button>
+            <button type="button" disabled={busy || reason.trim().length < 4} onClick={() => decide('ACCEPT')}>{t.ofcKycAccept}</button>
             <button
               type="button"
               className="danger"
               disabled={busy || reason.trim().length < 4}
               onClick={() => decide('REJECT')}
-            >
-              Reject
-            </button>
+            >{t.ofcAgReject}</button>
           </div>
         </div>
       ) : (
-        <p className="card__hint">Deciding on a document needs agent:approve.</p>
+        <p className="card__hint">{t.ofcKycNeedsPermission}</p>
       )}
 
       {can('audit:read') && (
         <div className="document-viewer__access">
+          <ErrorAlert error={accessError} />
           {!access ? (
-            <button type="button" className="link" onClick={showAccess}>
-              Who has looked at this?
-            </button>
+            <button type="button" className="link" onClick={showAccess}>{t.ofcKycWhoLooked}</button>
           ) : access.length === 0 ? (
-            <Empty>No access recorded.</Empty>
+            <Empty>{t.ofcNoneAccessRecorded}</Empty>
           ) : (
             <Table
               columns={[
-                { key: 'full_name', label: 'Who', render: (row) => row.full_name ?? 'the applicant' },
-                { key: 'role', label: 'Role', render: (row) => humanise(row.role ?? 'unknown') },
-                { key: 'access_type', label: 'What', render: (row) => humanise(row.access_type) },
-                { key: 'created_at', label: 'When', render: (row) => formatDateTime(row.created_at) },
-                { key: 'ip_address', label: 'From', render: (row) => row.ip_address ?? '—' },
+                { key: 'full_name', label: 'ofcKycWho', render: (row) => row.full_name ?? 'the applicant' },
+                { key: 'role', label: 'ofcRhRole', render: (row) => enumLabel(row.role ?? 'unknown', t) },
+                { key: 'access_type', label: 'ofcKycWhat', render: (row) => enumLabel(row.access_type, t) },
+                { key: 'created_at', label: 'ofcRhWhen', render: (row) => formatDateTime(row.created_at) },
+                { key: 'ip_address', label: 'ofcFrom', render: (row) => row.ip_address ?? '—' },
               ]}
               rows={access}
-              empty="No access recorded."
+              empty="ofcNoneAccessRecorded"
             />
           )}
         </div>

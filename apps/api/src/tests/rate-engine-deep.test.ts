@@ -30,6 +30,8 @@ const baseRate = (overrides: Partial<RateVersion>): RateVersion => ({
   id: 'rv-test',
   revenue_item_id: 'ri-test',
   version: 1,
+  // Statewide: these fixtures exercise the arithmetic, not rate resolution.
+  lga_id: null,
   rate_type: 'FIXED',
   fixed_amount_kobo: '200000',
   rate_basis_points: null,

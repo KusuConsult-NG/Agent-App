@@ -64,7 +64,15 @@ and this is deliberate:
 - **Gateway `PENDING`/`UNKNOWN`** — what an unmapped status code becomes. Safe,
   and it means that reference can never be confirmed.
 
-Running it against mocks tells you nothing, and it says so in its own output.
+A third outcome is reported the same way, for the same reason:
+
+- **Any provider still on `mock`** — the check is printed as `MOCK` rather than
+  `ok` and the run exits 1. A mock answers whatever it was written to answer, so
+  a run whose subjects were mocks is not evidence about any real provider and
+  must not be filed as though it were. Until 25 August 2026 this was only a note
+  in the output: mock checks printed `ok`, and a run against six mocks ended
+  "every answer was understood by the platform. Record this output against the
+  go-live checklist" and exited 0.
 
 ## What must be confirmed, per provider
 
@@ -159,6 +167,34 @@ Send a real message to a real handset and confirm it arrives, with the right
 sender ID and readable content — `--sms` is deliberately excluded from `--all`
 because it has a side effect.
 
+## What has been exercised without credentials
+
+A live call needs a credential and a network route, and neither belongs in a
+repository. What does not need either is proving the adapter speaks the
+provider's protocol correctly through the whole platform, rather than in
+isolation — which is where the untested seam actually was.
+
+Three runs now boot the real app on a real adapter against a server speaking
+that provider's wire protocol over TCP. Each one fails if its adapter is
+switched back to the mock, so none of them can quietly become a mock test
+again:
+
+| Run | Adapter | What it takes the whole way |
+|---|---|---|
+| `remita-live-path.test.ts` | `RemitaGateway` | RRR generated at Remita, an unconfirmed poll, a notification that does not move the money state, verification, receipt, reconciliation |
+| `tin-live-path.test.ts` | `HttpTinService` | an existing TIN confirmed and stored as the register spells it, an unknown one refused, an outage registering nothing |
+| `kyc-live-path.test.ts` | `HttpKycProvider` | a clearance, an unrecognised status that cannot clear anybody, an outage that is not a refusal |
+
+The unit boundary is checked end to end in the first of these: the platform
+sends Naira where it holds kobo, and the amount on the receipt is the amount
+Remita reported. A hundredfold error there would look like an ordinary number
+all the way to the taxpayer.
+
+This is not a substitute for the sign-off below. It proves the adapters are
+correct against the protocol as documented; it cannot prove PSIRS's own
+merchant configuration, status vocabulary or credentials are what the adapters
+expect. That still takes one real call.
+
 ## Sign-off
 
 This blocker closes when:
@@ -185,11 +221,33 @@ failure mode B-4 exists to prevent.
 whatever the repository secrets point at, so the answer is never more than a day
 old.
 
-**Until the secrets are set it reports *skipped*, naming what is missing.** Not
-failed, because a red cross every morning for a condition nobody can fix that
-morning teaches people to ignore red crosses. Not passed either — a green tick
-would assert the integrations were verified. "Not checked" must not be able to
-look like "checked".
+**Until it is enabled the run reports *skipped*.** Not failed, because a red
+cross every morning for a condition nobody can fix that morning teaches people
+to ignore red crosses. Not passed either — a green tick would assert the
+integrations were verified. "Not checked" must not be able to look like
+"checked".
+
+To enable it: set the secrets listed above, then set the repository variable
+`INTEGRATION_VERIFICATION` to `enabled`. The variable is separate from the
+secrets because a job-level `if` cannot read secrets, and because it is the
+honest place for the claim being made — somebody has declared these sandboxes
+ready to be asked.
+
+Once enabled, a missing secret **fails** the run instead of skipping it. At
+that point somebody has said the check should work, and skipping quietly would
+be the same false assurance in a smaller form.
+
+Two ways that guarantee was broken until 25 August 2026, both worth naming
+because they are the same mistake in different clothing:
+
+- The gate was a *step*, and a job whose steps are all skipped completes
+  `success`. Every night the run called "Ask each provider one real question"
+  carried a green tick, having contacted nobody. It is now the job's own `if`,
+  so an unconfigured run is `skipped` — grey, not green.
+- The harness was piped into `tee`. GitHub's default `run:` shell is `bash -e`
+  without `pipefail`, so the pipeline's exit status was `tee`'s and always 0 —
+  a provider whose answer the platform could not read would not have failed the
+  step. The step now sets `pipefail` explicitly.
 
 ### Secrets to add
 

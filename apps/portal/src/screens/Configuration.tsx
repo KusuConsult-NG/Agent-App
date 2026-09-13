@@ -1,15 +1,51 @@
 /** Revenue catalogue and social incentive programmes (PRD §9, §41). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { formatNaira, nairaToKobo } from '@psirs/shared';
-import { ApiRequestError, api, can, stepUp, type ApiError, type User } from '../lib/api';
-import { Alert, Badge, ErrorAlert, Loading, Money, Table, formatDate } from '../ui';
+import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
+import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
+import { Alert, Badge, ErrorAlert, Loading, Money, ReasonRule, Table, formatDate } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
+
+/**
+ * Which arm of government a levy belongs to, and who it is collected for.
+ *
+ * `listItems` has returned `authority_name`, `tier` and `mda_name` on every
+ * row since the MDA mapping was done, and this screen declared none of them
+ * and drew none of them. State revenue and Local Government revenue are
+ * separate purses, and the officer administering the catalogue could not see
+ * which purse any item was in.
+ */
+interface Category {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  authority_name: string;
+  authority_name_ha: string | null;
+  tier: string;
+}
+
+interface Authority {
+  id: string;
+  name: string;
+  name_ha: string | null;
+  code: string;
+  tier: string;
+}
 
 interface RevenueItem {
   id: string;
   code: string;
   name: string;
+  name_ha: string | null;
   category_name: string;
+  category_name_ha: string | null;
+  category_id: string;
+  authority_name: string;
+  authority_name_ha: string | null;
+  tier: string;
+  mda_name: string | null;
+  mda_name_ha: string | null;
   frequency: string;
   rate_type: string | null;
   fixed_amount_kobo: string | null;
@@ -18,56 +54,157 @@ interface RevenueItem {
   version: number | null;
   self_assessable: boolean;
   commission_eligible: boolean;
+  status: string;
+  status_reason: string | null;
 }
 
-function describeRate(item: RevenueItem): string {
-  if (!item.rate_type) return 'No approved rate in force';
+function describeRate(item: RevenueItem, t: TranslationDictionary): string {
+  if (!item.rate_type) return t.ofcCfNoApprovedRateIn;
   switch (item.rate_type) {
     case 'FIXED':
       return item.fixed_amount_kobo ? formatNaira(BigInt(item.fixed_amount_kobo)) : '—';
     case 'PERCENTAGE':
-      return `${((item.rate_basis_points ?? 0) / 100).toFixed(2)}% of assessable amount`;
+      return `${((item.rate_basis_points ?? 0) / 100).toFixed(2)}${t.ofcCfOfAssessableAmount}`;
     case 'TIERED':
-      return 'Progressive bands';
+      return t.ofcCfProgressiveBands;
     case 'FORMULA':
-      return 'Calculated by formula';
+      return t.ofcCfCalculatedByFormula;
     default:
       return item.rate_type;
   }
 }
 
 export function CatalogueScreen({ user }: { user: User }) {
+  const { lang, t } = usePortalI18n();
   const [items, setItems] = useState<RevenueItem[] | null>(null);
+  /*
+   * The arms of government, from `/revenue/authorities` — an endpoint that had
+   * no caller anywhere in either front end until this filter.
+   *
+   * `null` is "could not be read", which is not "there are none". An empty
+   * list here would silently offer a filter with nothing in it.
+   */
+  const [authorities, setAuthorities] = useState<Authority[] | null>(null);
+  const [authorityId, setAuthorityId] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  /* A failed list is not an empty catalogue; kept apart from action errors. */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<RevenueItem | null>(null);
   const [history, setHistory] = useState<{ item: RevenueItem; rows: any[] } | null>(null);
+  const [withdrawing, setWithdrawing] = useState<RevenueItem | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  /*
+   * Who may read a rate's history.
+   *
+   * `/government/audit/queries/rate-changes` is guarded on `audit:read` or
+   * `catalogue:configure`, deliberately: what the rate used to be is public,
+   * but who changed it, when and why is administrative information. A
+   * supervisor holds neither and is offered this screen, so the History button
+   * beside every row answered 403 for them — a control the platform advertises
+   * and refuses.
+   */
+  const canReadRateHistory = can('audit:read') || can('catalogue:configure');
 
   const load = useCallback(() => {
+    setLoadError(null);
+    const query = new URLSearchParams();
+    // An officer configuring the catalogue sees what has been withdrawn as
+    // well as what is on sale — otherwise a suspended item disappears the
+    // moment it is suspended and nobody can ever restore it.
+    if (can('catalogue:configure')) query.set('includeWithdrawn', 'true');
+    if (authorityId) query.set('authorityId', authorityId);
     api
-      .get<RevenueItem[]>('/revenue/items')
+      .get<RevenueItem[]>(`/revenue/items?${query.toString()}`)
       .then(setItems)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        setLoadError(asApiError(caught));
+        /*
+         * Not `setItems([])`. "No revenue item matches" is a sentence about
+         * the catalogue, and a refused request is a sentence about the
+         * request — an officer told the first when the second is true will
+         * conclude the state has no levies configured.
+         */
+        setItems(null);
       });
-  }, []);
+  }, [authorityId]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    api
+      .get<Authority[]>('/revenue/authorities')
+      .then(setAuthorities)
+      .catch(() => setAuthorities(null));
+  }, []);
+
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Revenue catalogue</h2>
-        <p className="card__hint">
-          Revenue items and their rates are government configuration, not code. Changing a rate
-          creates a new version with an effective date — it never rewrites what was already assessed.
-        </p>
+        <div className="card__header">
+          <div>
+            <h2 className="card__title">{t.ofcNavCatalogue}</h2>
+            <p className="card__hint">{t.ofcCfCatalogueIntro}</p>
+          </div>
+          {can('catalogue:configure') && !creating && (
+            <button type="button" className="small" onClick={() => setCreating(true)}>{t.ofcCfAddRevenueItem}</button>
+          )}
+        </div>
+
+        {/*
+          * Whose revenue this is. Hidden rather than drawn empty when the
+          * list could not be read: a filter with one option that says
+          * "everything" is not a filter, and pretending to offer a choice
+          * that is not there is worse than not offering it.
+          */}
+        {authorities && authorities.length > 0 && (
+          <div className="field">
+            <label htmlFor="cat-authority">{t.ofcCfArmOfGovernment}</label>
+            <select
+              id="cat-authority"
+              value={authorityId}
+              onChange={(event) => setAuthorityId(event.target.value)}
+            >
+              <option value="">{t.ofcCfEveryArm}</option>
+              {authorities.map((authority) => (
+                <option key={authority.id} value={authority.id}>
+                  {localName(lang, authority.name, authority.name_ha)} ·{' '}
+                  {enumLabel(authority.tier, t)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
+
+      {creating && (
+        <NewItemForm
+          onCancel={() => setCreating(false)}
+          onDone={(note) => {
+            setCreating(false);
+            setMessage(note);
+            load();
+          }}
+        />
+      )}
 
       <ErrorAlert error={error} />
       {message && <Alert kind="success">{message}</Alert>}
+
+      {withdrawing && (
+        <WithdrawItemForm
+          item={withdrawing}
+          onCancel={() => setWithdrawing(null)}
+          onDone={(note) => {
+            setWithdrawing(null);
+            setMessage(note);
+            load();
+          }}
+        />
+      )}
 
       {editing && (
         <RateChangeForm
@@ -84,100 +221,148 @@ export function CatalogueScreen({ user }: { user: User }) {
 
       {history && (
         <div className="card card--flush">
-          <div style={{ padding: '18px 18px 0' }}>
+          <div className="card__pad">
             <div className="card__header">
               <div>
-                <h2 className="card__title">Rate history — {history.item.name}</h2>
-                <p className="card__hint">
-                  Historical assessments remain attached to the version in force when they were
-                  raised.
-                </p>
+                <h2 className="card__title">
+                  {t.ofcCfRateHistoryFor.replace('{{name}}', localName(lang, history.item.name, history.item.name_ha))}
+                </h2>
+                <p className="card__hint">{t.ofcCfHistoricalAssessments}</p>
               </div>
-              <button type="button" className="small secondary" onClick={() => setHistory(null)}>
-                Close
-              </button>
+              <button type="button" className="small secondary" onClick={() => setHistory(null)}>{t.ofcKycClose}</button>
             </div>
           </div>
           <Table
             columns={[
-              { key: 'version', label: 'Version', numeric: true },
-              { key: 'rate_type', label: 'Type' },
+              { key: 'version', label: 'ofcAgVersion', numeric: true },
+              { key: 'rate_type', label: 'tpType' },
               {
                 key: 'fixed_amount_kobo',
-                label: 'Fixed amount',
+                label: 'ofcCfFixedAmount',
                 numeric: true,
                 render: (row) => <Money kobo={row.fixed_amount_kobo} />,
               },
               {
                 key: 'rate_basis_points',
-                label: 'Rate',
+                label: 'ofcCfRate',
                 numeric: true,
                 render: (row) =>
                   row.rate_basis_points ? `${(row.rate_basis_points / 100).toFixed(2)}%` : '—',
               },
-              { key: 'effective_from', label: 'From', render: (row) => formatDate(row.effective_from) },
+              { key: 'effective_from', label: 'ofcFrom', render: (row) => formatDate(row.effective_from) },
               {
                 key: 'effective_to',
-                label: 'To',
-                render: (row) => (row.effective_to ? formatDate(row.effective_to) : 'Current'),
+                label: 'ofcTo',
+                render: (row) => (row.effective_to ? formatDate(row.effective_to) : t.ofcCfCurrent),
               },
-              { key: 'changed_by', label: 'Changed by', render: (row) => row.changed_by ?? 'System' },
+              { key: 'changed_by', label: 'ofcCfChangedBy', render: (row) => row.changed_by ?? t.ofcOvSystem },
               {
                 key: 'requested_reason',
-                label: 'Reason',
+                label: 'ofcAgReason',
                 render: (row) => row.decision_reason ?? row.requested_reason ?? '—',
               },
             ]}
             rows={history.rows}
-            empty="No rate history."
+            empty="ofcNoneRateHistory"
           />
         </div>
       )}
 
       <div className="card card--flush">
-        {!items ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !items ? (
           <div style={{ padding: 18 }}>
             <Loading rows={6} />
           </div>
         ) : (
           <Table
             columns={[
-              { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
-              { key: 'name', label: 'Revenue item' },
-              { key: 'category_name', label: 'Category' },
-              { key: 'frequency', label: 'Frequency', render: (row) => <Badge status={row.frequency} /> },
-              { key: 'rate', label: 'Current rate', render: (row) => describeRate(row) },
+              { key: 'code', label: 'ofcAgCode', render: (row) => <span className="mono">{row.code}</span> },
+              { key: 'name', label: 'colRevenueItem', render: (row: RevenueItem) => localName(lang, row.name, row.name_ha) },
+              { key: 'category_name', label: 'ofcAgCategory', render: (row: RevenueItem) => localName(lang, row.category_name, row.category_name_ha) },
+              {
+                /*
+                 * Returned on every row since the MDA mapping was done and
+                 * shown on none. PSIRS collects the money; the arm of
+                 * government beneath it is who the money belongs to, and the
+                 * two are not the same question.
+                 */
+                key: 'authority_name',
+                label: 'ofcCfArmOfGovernment',
+                render: (row: RevenueItem) => (
+                  <>
+                    {localName(lang, row.authority_name, row.authority_name_ha)}
+                    <p className="table__sub" style={{ margin: '2px 0 0' }}>
+                      {row.mda_name
+                        ? localName(lang, row.mda_name, row.mda_name_ha)
+                        : t.ofcCfNoMdaMapped}
+                    </p>
+                  </>
+                ),
+              },
+              { key: 'frequency', label: 'ofcCfFrequency', render: (row) => <Badge status={row.frequency} /> },
+              { key: 'rate', label: 'ofcCfCurrentRate', render: (row) => describeRate(row, t) },
               {
                 key: 'version',
-                label: 'Version',
+                label: 'ofcAgVersion',
                 numeric: true,
                 render: (row) => row.version ?? '—',
               },
               {
                 key: 'commission_eligible',
-                label: 'Commission',
-                render: (row) => (row.commission_eligible ? 'Eligible' : 'Not eligible'),
+                label: 'navCommission',
+                render: (row) => (row.commission_eligible ? t.ofcCfEligible : t.ofcCfNotEligible),
+              },
+              {
+                key: 'status',
+                label: 'ofcCfOnSale',
+                render: (row) =>
+                  row.status === 'ACTIVE' ? (
+                    <Badge status="ACTIVE" />
+                  ) : (
+                    <span title={row.status_reason ?? undefined}>
+                      <Badge status={row.status} />
+                    </span>
+                  ),
               },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div className="button-row">
-                    <button
-                      type="button"
-                      className="small secondary"
-                      onClick={async () => {
-                        const rows = await api.get<any[]>(
-                          `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
-                        );
-                        setHistory({ item: row, rows });
-                      }}
-                    >
-                      History
-                    </button>
-                    {can('catalogue:configure') && (
-                      <button type="button" className="small" onClick={() => setEditing(row)}>
-                        Change rate
+                    {canReadRateHistory && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={async () => {
+                          setError(null);
+                          try {
+                            const rows = await api.get<any[]>(
+                              `/government/audit/queries/rate-changes?revenueItemId=${row.id}`,
+                            );
+                            setHistory({ item: row, rows });
+                          } catch (caught) {
+                            setError(asApiError(caught));
+                          }
+                        }}
+                      >{t.colHistory}</button>
+                    )}
+                    {can('catalogue:configure') && row.status === 'ACTIVE' && (
+                      <button type="button" className="small" onClick={() => setEditing(row)}>{t.ofcCfChangeRate}</button>
+                    )}
+                    {can('catalogue:configure') && row.status !== 'RETIRED' && (
+                      <button
+                        type="button"
+                        className="small secondary"
+                        onClick={() => setWithdrawing(row)}
+                      >
+                        {row.status === 'ACTIVE' ? t.ofcPrWithdraw : t.ofcAgRestore}
                       </button>
                     )}
                   </div>
@@ -185,11 +370,379 @@ export function CatalogueScreen({ user }: { user: User }) {
               },
             ]}
             rows={items}
-            empty="No revenue items configured."
+            empty="ofcNoneRevenueItemsConfigured"
           />
         )}
       </div>
     </>
+  );
+}
+
+/**
+ * Adding a revenue item to the catalogue.
+ *
+ * `POST /revenue/items` existed, was permission-guarded, was audited, and was
+ * called from nowhere. The catalogue screen could reprice an item, withdraw it
+ * and restore it — everything except bring one into existence. A new bye-law
+ * meant a database insert by hand, which is the state of affairs this platform
+ * was built to end.
+ *
+ * A new item is created without a rate, deliberately: `POST /revenue/items`
+ * takes no price and `POST /revenue/items/:id/rates` requires a reason and a
+ * step-up, because setting what a citizen must pay is a separate decision from
+ * naming the thing they pay it for. That is right, and it is not guessable
+ * from a form, so the outcome message says so — an item with no rate cannot be
+ * assessed in the field, and an officer who thinks they have finished has left
+ * agents with a levy they cannot charge.
+ */
+function NewItemForm({
+  onCancel,
+  onDone,
+}: {
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}) {
+  const { lang, t } = usePortalI18n();
+  /*
+   * `null` is "could not be read", and it is not the same as no categories.
+   *
+   * This was `setCategories([])` in the catch. The category is required and
+   * the submit button is disabled without one, so a refused request left an
+   * officer looking at an empty dropdown, a dead button, and nothing saying
+   * why — the same shape as the LGA list that stopped an agent registering
+   * somebody in a market.
+   */
+  const [categories, setCategories] = useState<Category[] | null>(null);
+  const [categoriesFailed, setCategoriesFailed] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({
+    categoryId: '',
+    code: '',
+    name: '',
+    description: '',
+    frequency: 'ANNUAL',
+    selfAssessable: false,
+    commissionEligible: true,
+    applicableTaxpayerTypes: ['INDIVIDUAL', 'BUSINESS'] as string[],
+  });
+
+  const loadCategories = useCallback(() => {
+    setCategoriesFailed(false);
+    api
+      .get<Category[]>('/revenue/categories')
+      .then((rows) => setCategories(rows))
+      .catch(() => {
+        setCategories(null);
+        setCategoriesFailed(true);
+      });
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  /*
+   * Grouped by the arm of government the category belongs to.
+   *
+   * `listCategories` orders by tier and returns `authority_name`, and this
+   * screen rendered a flat alphabetical list of names with neither. State
+   * revenue and Local Government revenue are separate purses: an officer
+   * implementing a new bye-law picks the category that decides which one a
+   * levy is paid into, and nothing on the screen told them which was which.
+   * Filing a Council levy under a state category does not fail — it collects
+   * the money into the wrong government's revenue.
+   */
+  const byAuthority = (categories ?? []).reduce<Map<string, Category[]>>((groups, category) => {
+    const key = localName(lang, category.authority_name, category.authority_name_ha);
+    groups.set(key, [...(groups.get(key) ?? []), category]);
+    return groups;
+  }, new Map());
+
+  const toggleType = (type: string) =>
+    setForm({
+      ...form,
+      applicableTaxpayerTypes: form.applicableTaxpayerTypes.includes(type)
+        ? form.applicableTaxpayerTypes.filter((entry) => entry !== type)
+        : [...form.applicableTaxpayerTypes, type],
+    });
+
+  return (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <h2 className="card__title">{t.ofcCfNewRevenueItem}</h2>
+          <p className="card__hint">{t.ofcCfCreatedWithoutPrice}</p>
+        </div>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            await api.post<{ revenueItemId: string }>('/revenue/items', {
+              categoryId: form.categoryId,
+              code: form.code.trim().toUpperCase(),
+              name: form.name.trim(),
+              description: form.description.trim() || undefined,
+              frequency: form.frequency,
+              selfAssessable: form.selfAssessable,
+              commissionEligible: form.commissionEligible,
+              applicableTaxpayerTypes: form.applicableTaxpayerTypes,
+            });
+            onDone(t.ofcCfItemAdded.replace('{{name}}', form.name.trim()));
+          } catch (caught) {
+            setError(asApiError(caught));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <div className="filters">
+          <div className="field">
+            <label htmlFor="new-item-category">{t.ofcAgCategory}</label>
+            <select
+              id="new-item-category"
+              required
+              value={form.categoryId}
+              onChange={(event) => setForm({ ...form, categoryId: event.target.value })}
+            >
+              <option value="">
+                {categoriesFailed ? t.ofcCfCategoriesUnreadable : t.ofcCfChooseCategory}
+              </option>
+              {[...byAuthority].map(([authority, group]) => (
+                <optgroup key={authority} label={authority}>
+                  {group.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {localName(lang, category.name, category.name_ha)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+            {categoriesFailed && (
+              /*
+               * The button below is disabled without a category, so without
+               * this the officer is stopped by a control that says nothing.
+               */
+              <p className="card__hint" role="status" style={{ marginBottom: 0 }}>
+                {t.ofcCfCategoriesUnreadable}{' '}
+                <button type="button" className="link" onClick={loadCategories}>
+                  {t.actionTryAgain}
+                </button>
+              </p>
+            )}
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-code">{t.ofcAgCode}</label>
+            <input
+              id="new-item-code"
+              required
+              minLength={2}
+              maxLength={40}
+              placeholder="MARKET-LEVY"
+              value={form.code}
+              onChange={(event) => setForm({ ...form, code: event.target.value })}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-name">{t.tpName}</label>
+            <input
+              id="new-item-name"
+              required
+              minLength={2}
+              maxLength={200}
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="new-item-frequency">{t.ofcCfHowOften}</label>
+            <select
+              id="new-item-frequency"
+              value={form.frequency}
+              onChange={(event) => setForm({ ...form, frequency: event.target.value })}
+            >
+              {['ONE_OFF', 'DAILY', 'MONTHLY', 'QUARTERLY', 'ANNUAL'].map((frequency) => (
+                <option key={frequency} value={frequency}>
+                  {enumLabel(frequency, t)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="field">
+          <label htmlFor="new-item-description">{t.ofcCfWhatItIsFor}</label>
+          <input
+            id="new-item-description"
+            maxLength={1000}
+            value={form.description}
+            onChange={(event) => setForm({ ...form, description: event.target.value })}
+          />
+        </div>
+
+        <fieldset style={{ border: 0, padding: 0, margin: '0 0 14px' }}>
+          <legend style={{ fontSize: 'var(--text-sm)', color: 'var(--muted)' }}>{t.ofcCfWhoItApplies}</legend>
+          <div className="button-row">
+            {['INDIVIDUAL', 'BUSINESS'].map((type) => (
+              <label key={type} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <input
+                  type="checkbox"
+                  checked={form.applicableTaxpayerTypes.includes(type)}
+                  onChange={() => toggleType(type)}
+                />
+                {type === 'INDIVIDUAL' ? t.ofcCfIndividuals : t.ofcCfBusinesses}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <div className="button-row" style={{ marginBottom: 14 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={form.selfAssessable}
+              onChange={(event) => setForm({ ...form, selfAssessable: event.target.checked })}
+            />{t.ofcCfSelfAssessable}</label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input
+              type="checkbox"
+              checked={form.commissionEligible}
+              onChange={(event) => setForm({ ...form, commissionEligible: event.target.checked })}
+            />{t.ofcCfCommissionable}</label>
+        </div>
+
+        <button
+          type="submit"
+          disabled={busy || form.applicableTaxpayerTypes.length === 0 || !form.categoryId}
+        >
+          {busy ? t.ofcCfAdding : t.ofcCfAddToTheCatalogue}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Withdrawing a revenue item, or putting it back.
+ *
+ * Two things the officer has to be told before they press it, because neither
+ * is guessable: what happens to money already owed (nothing — invoices raised
+ * under the old rule stay payable), and that retiring cannot be undone.
+ */
+function WithdrawItemForm({
+  item,
+  onCancel,
+  onDone,
+}: {
+  item: RevenueItem;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}) {
+  const { lang, t } = usePortalI18n();
+  const restoring = item.status !== 'ACTIVE';
+  const [status, setStatus] = useState(restoring ? 'ACTIVE' : 'SUSPENDED');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  return (
+    <div className="card">
+      <div className="card__header">
+        <div>
+          <h2 className="card__title">
+            {restoring ? t.ofcAgRestore : t.ofcPrWithdraw} — {localName(lang, item.name, item.name_ha)}
+          </h2>
+          <p className="card__hint">
+            {restoring
+              ? t.ofcCfTheItemGoesBack
+              : t.ofcCfNoNewAssessmentCan}
+          </p>
+        </div>
+        <button type="button" className="small secondary" onClick={onCancel}>{t.camCancel}</button>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      <form
+        onSubmit={async (event) => {
+          event.preventDefault();
+          setBusy(true);
+          setError(null);
+          try {
+            const result = await api.post<{ name?: string; message: string }>(
+              `/revenue/items/${item.id}/status`,
+              { status, reason },
+            );
+            /*
+             * Three answers, and the differences are money.
+             *
+             * Suspending stops new assessments while leaving issued invoices
+             * payable; retiring does the same and cannot be undone. An
+             * officer working in Hausa was told which of the three had just
+             * happened in English. The status is the one this screen chose,
+             * and the name comes back with the response.
+             */
+            const named = result.name ?? item.name;
+            onDone(
+              status === 'ACTIVE'
+                ? t.ofcItemBackInCatalogue.replace('{{name}}', named)
+                : status === 'SUSPENDED'
+                  ? t.ofcItemSuspended.replace('{{name}}', named)
+                  : status === 'RETIRED'
+                    ? t.ofcItemRetired.replace('{{name}}', named)
+                    : result.message,
+            );
+          } catch (caught) {
+            setError(asApiError(caught));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {!restoring && (
+          <label>{t.ofcCfWhatIsHappening}<select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="SUSPENDED">{t.ofcCfSuspendOption}</option>
+              <option value="RETIRED">{t.ofcCfRetireOption}</option>
+            </select>
+          </label>
+        )}
+
+        <label>{t.ofcAgReason}<textarea
+            required
+            minLength={5}
+            rows={3}
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder={
+              restoring
+                ? t.ofcCfWhatChangedForExample
+                : t.ofcCfForExampleRepealedBy
+            }
+          />
+        </label>
+        <ReasonRule value={reason} minimum={5} />
+
+        {status === 'RETIRED' && (
+          <Alert kind="warning">{t.ofcCfRetireWarning}</Alert>
+        )}
+
+        <div className="button-row">
+          <button type="submit" disabled={busy || reason.trim().length < 5}>
+            {busy ? t.agEnSaving : restoring ? t.ofcCfRestoreItem : t.ofcCfWithdrawItem}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -204,6 +757,7 @@ function RateChangeForm({
   onCancel: () => void;
   onDone: (message: string) => void;
 }) {
+  const { lang, t } = usePortalI18n();
   const [rateType, setRateType] = useState(item.rate_type ?? 'FIXED');
   const [amount, setAmount] = useState('');
   const [percent, setPercent] = useState('');
@@ -226,25 +780,25 @@ function RateChangeForm({
    * of zero is a decision somebody should have to type.
    */
   const rateProblem = ((): string | null => {
-    if (reason.trim().length < 10) return 'Give a reason for the rate change, in at least 10 characters.';
+    if (reason.trim().length < 10) return t.ofcCfGiveAReasonFor;
     if (rateType === 'FIXED') {
-      if (!amount.trim()) return 'Enter the new amount. Leave nothing to chance \u2014 type 0 if the levy is being suspended.';
+      if (!amount.trim()) return t.ofcCfEnterTheNewAmount;
       try {
         const kobo = nairaToKobo(amount);
-        if (kobo < 0n) return 'A rate cannot be negative.';
+        if (kobo < 0n) return t.ofcCfRateCannotBeNegative;
       } catch {
-        return `\u201c${amount.trim()}\u201d is not an amount in naira. Enter it as 15000 or 15000.00.`;
+        return t.ofcCfNotAnAmount.replace('{{amount}}', amount.trim());
       }
       return null;
     }
     if (rateType === 'PERCENTAGE') {
       const typed = percent.trim();
-      if (!typed) return 'Enter the new rate as a percentage. Type 0 if the levy is being suspended.';
+      if (!typed) return t.ofcCfEnterTheNewRate;
       // Deliberately stricter than parseFloat: the whole box must be a number.
       if (!/^\d+(?:\.\d{1,2})?$/.test(typed)) {
-        return `\u201c${typed}\u201d is not a percentage. Enter it as 5 or 5.00.`;
+        return t.ofcCfNotAPercentage.replace('{{value}}', typed);
       }
-      if (Number.parseFloat(typed) > 100) return 'A percentage rate cannot be more than 100%.';
+      if (Number.parseFloat(typed) > 100) return t.ofcCfPercentageCannotExceed100;
       return null;
     }
     return null;
@@ -274,14 +828,12 @@ function RateChangeForm({
       });
 
       onDone(
-        `A new rate version for "${item.name}" has been recorded, effective ${effectiveFrom}. ` +
-          'Existing assessments are unaffected.',
+        t.ofcCfRateRecorded
+          .replace('{{name}}', localName(lang, item.name, item.name_ha))
+          .replace('{{date}}', effectiveFrom) + t.ofcCfExistingAssessmentsAreUnaffected,
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (caught instanceof Error) {
-        setError({ code: 'CLIENT', message: caught.message, moneyStatus: 'NOT_APPLICABLE' });
-      }
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -289,25 +841,23 @@ function RateChangeForm({
 
   return (
     <div className="card">
-      <h2 className="card__title">Change rate — {item.name}</h2>
-      <p className="card__hint">
-        The current version stays on record and keeps applying to assessments already raised.
-      </p>
+      <h2 className="card__title">{t.ofcCfChangeRateFor.replace('{{name}}', localName(lang, item.name, item.name_ha))}</h2>
+      <p className="card__hint">{t.ofcCfCurrentVersionStays}</p>
 
       <ErrorAlert error={error} />
 
       <div className="filters">
         <div className="field">
-          <label htmlFor="rate-type">Rate type</label>
+          <label htmlFor="rate-type">{t.ofcCfRateType}</label>
           <select id="rate-type" value={rateType} onChange={(event) => setRateType(event.target.value)}>
-            <option value="FIXED">Fixed amount</option>
-            <option value="PERCENTAGE">Percentage</option>
+            <option value="FIXED">{t.ofcCfFixedAmount}</option>
+            <option value="PERCENTAGE">{t.ofcCfPercentage}</option>
           </select>
         </div>
 
         {rateType === 'FIXED' ? (
           <div className="field">
-            <label htmlFor="amount">New amount (₦)</label>
+            <label htmlFor="amount">{t.ofcCfNewAmount}</label>
             <input
               id="amount"
               inputMode="decimal"
@@ -318,7 +868,7 @@ function RateChangeForm({
           </div>
         ) : (
           <div className="field">
-            <label htmlFor="percent">New rate (%)</label>
+            <label htmlFor="percent">{t.ofcCfNewRate}</label>
             <input
               id="percent"
               inputMode="decimal"
@@ -330,7 +880,7 @@ function RateChangeForm({
         )}
 
         <div className="field">
-          <label htmlFor="effective">Effective from</label>
+          <label htmlFor="effective">{t.ofcCfEffectiveFrom}</label>
           <input
             id="effective"
             type="date"
@@ -342,12 +892,12 @@ function RateChangeForm({
       </div>
 
       <div className="field">
-        <label htmlFor="rate-reason">Reason for the change (minimum 10 characters)</label>
+        <label htmlFor="rate-reason">{t.ofcCfReasonForChange}</label>
         <textarea
           id="rate-reason"
           value={reason}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="Approved under the 2026 revenue review, Executive Council minute 14/2026."
+          placeholder={t.ofcCfSampleReason}
         />
       </div>
 
@@ -359,11 +909,9 @@ function RateChangeForm({
 
       <div className="button-row">
         <button type="button" disabled={busy || rateProblem !== null} onClick={submit}>
-          {busy ? 'Recording…' : 'Record new rate version'}
+          {busy ? t.ofcCfRecording : t.ofcCfRecordNewRateVersion}
         </button>
-        <button type="button" className="secondary" onClick={onCancel}>
-          Cancel
-        </button>
+        <button type="button" className="secondary" onClick={onCancel}>{t.camCancel}</button>
       </div>
     </div>
   );
@@ -371,12 +919,29 @@ function RateChangeForm({
 
 // ---------------------------------------------------------------------------
 
+/**
+ * One request's worth of the roll. The endpoint's own ceiling is 200; a
+ * hundred fills the panel, and the notice below says what it is a hundred of.
+ */
+const BENEFICIARY_PAGE = 100;
+
 export function ProgrammesScreen() {
+  const { lang, t } = usePortalI18n();
   const [programmes, setProgrammes] = useState<any[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedProgramme, setSelectedProgramme] = useState<any | null>(null);
   const [beneficiaries, setBeneficiaries] = useState<any[] | null>(null);
+  /*
+   * How many there actually are, which is not how many arrived.
+   *
+   * This panel asks for a hundred and drew whatever came back, with nothing
+   * saying it was a hundred of three thousand. It is the roll for a social
+   * programme — an amnesty, a health scheme, fertiliser — so an officer
+   * working a table that looks complete simply never reaches beneficiary 101,
+   * and has no way to discover that they exist.
+   */
+  const [beneficiaryTotal, setBeneficiaryTotal] = useState(0);
   const [evaluating, setEvaluating] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -384,7 +949,9 @@ export function ProgrammesScreen() {
       .get<any[]>('/government/programmes')
       .then(setProgrammes)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, []);
 
@@ -395,23 +962,25 @@ export function ProgrammesScreen() {
   async function viewBeneficiaries(programme: any) {
     setSelectedProgramme(programme);
     setBeneficiaries(null);
-    const result = await api.get<{ beneficiaries: any[] }>(
-      `/government/programmes/${programme.id}/beneficiaries?limit=100`,
+    setBeneficiaryTotal(0);
+    const result = await api.get<{ beneficiaries: any[]; total: number }>(
+      `/government/programmes/${programme.id}/beneficiaries?limit=${BENEFICIARY_PAGE}`,
     );
     setBeneficiaries(result.beneficiaries);
+    setBeneficiaryTotal(result.total);
   }
 
   async function evaluateAll(programme: any) {
     setEvaluating(programme.id);
     try {
-      const result = await api.post<{ evaluated: number; message: string }>(
+      const result = await api.post<{ evaluated: number }>(
         `/government/programmes/${programme.id}/evaluate-all`,
         {},
       );
-      setMessage(result.message);
+      setMessage(t.ofcCfEvaluatedCount.replace('{{n}}', String(result.evaluated)));
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setEvaluating(null);
     }
@@ -420,17 +989,10 @@ export function ProgrammesScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Social incentive programmes</h2>
-        <p className="card__hint">
-          Programmes record who qualifies for a government benefit and why. They add entitlement —
-          they never withdraw a service. Each citizen with a TIN who meets the criteria automatically
-          qualifies when evaluated.
-        </p>
-        <Alert kind="info" title="Essential services are protected">
-          <p style={{ margin: 0 }}>
-            A programme that links an essential public service to tax compliance can only be created
-            if the legal or policy authority for that linkage is recorded against it.
-          </p>
+        <h2 className="card__title">{t.ofcCfProgrammesTitle}</h2>
+        <p className="card__hint">{t.ofcCfProgrammesIntro}</p>
+        <Alert kind="info" title="ofcCfEssentialProtected">
+          <p style={{ margin: 0 }}>{t.ofcCfEssentialServiceLink}</p>
         </Alert>
       </div>
 
@@ -438,36 +1000,46 @@ export function ProgrammesScreen() {
       {message && <Alert kind="success">{message}</Alert>}
 
       <div className="card card--flush">
-        {!programmes ? (
+        {error && !programmes ? (
+          /*
+           * The failure replaces the list, rather than sitting above a
+           * skeleton that goes on loading. Both were on screen at once: a
+           * sentence saying the read had failed, and below it the animation
+           * that means it is still arriving.
+           */
+          <div style={{ padding: 18 }}>
+            <button type="button" className="secondary" onClick={load}>
+              {t.actionTryAgain}
+            </button>
+          </div>
+        ) : !programmes ? (
           <div style={{ padding: 18 }}>
             <Loading rows={4} />
           </div>
         ) : (
           <Table
             columns={[
-              { key: 'name', label: 'Programme' },
-              { key: 'code', label: 'Code', render: (row) => <span className="mono">{row.code}</span> },
-              { key: 'benefit_type', label: 'Benefit' },
-              { key: 'minimum_score', label: 'Min. score', numeric: true },
+              { key: 'name', label: 'ofcAlProgramme', render: (row: any) => localName(lang, row.name, row.name_ha) },
+              { key: 'code', label: 'ofcAgCode', render: (row: any) => <span className="mono">{row.code}</span> },
+              { key: 'benefit_type', label: 'ofcCfBenefit' },
+              { key: 'minimum_score', label: 'ofcCfMinScore', numeric: true },
               {
                 key: 'requires_no_arrears',
-                label: 'Requires no arrears',
-                render: (row) => (row.requires_no_arrears ? 'Yes' : 'No'),
+                label: 'ofcCfRequiresNoArrears',
+                render: (row) => (row.requires_no_arrears ? t.tpYes : t.tpNo),
               },
-              { key: 'eligible_taxpayers', label: 'Eligible', numeric: true },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'eligible_taxpayers', label: 'ofcCfEligible', numeric: true },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'action',
-                label: '',
+                label: { text: '' },
                 render: (row) => (
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button
                       type="button"
                       className="small secondary"
                       onClick={() => void viewBeneficiaries(row)}
-                    >
-                      Beneficiaries
-                    </button>
+                    >{t.ofcCfBeneficiaries}</button>
                     {can('incentive:configure') && (
                       <>
                         <button
@@ -476,7 +1048,7 @@ export function ProgrammesScreen() {
                           disabled={evaluating === row.id}
                           onClick={() => void evaluateAll(row)}
                         >
-                          {evaluating === row.id ? 'Evaluating…' : 'Evaluate all'}
+                          {evaluating === row.id ? t.ofcCfEvaluating : t.ofcCfEvaluateAll}
                         </button>
                         <button
                           type="button"
@@ -495,21 +1067,18 @@ export function ProgrammesScreen() {
                               await api.post(`/government/programmes/${row.id}/status`, {
                                 status: next,
                               });
-                              setMessage(`Programme "${row.name}" is now ${next.toLowerCase()}.`);
+                              setMessage(
+                                t.ofcCfProgrammeStatus
+                                  .replace('{{name}}', row.name)
+                                  .replace('{{status}}', enumLabel(next, t)),
+                              );
                               load();
                             } catch (caught) {
-                              if (caught instanceof ApiRequestError) setError(caught.error);
-                              else if (caught instanceof Error) {
-                                setError({
-                                  code: 'CLIENT',
-                                  message: caught.message,
-                                  moneyStatus: 'NOT_APPLICABLE',
-                                });
-                              }
+                              setError(asApiError(caught));
                             }
                           }}
                         >
-                          {row.status === 'ACTIVE' ? 'Close' : 'Activate'}
+                          {row.status === 'ACTIVE' ? t.ofcKycClose : t.ofcCfActivate}
                         </button>
                       </>
                     )}
@@ -518,7 +1087,7 @@ export function ProgrammesScreen() {
               },
             ]}
             rows={programmes}
-            empty="No incentive programmes have been created."
+            empty="ofcNoneIncentiveProgrammesCreated"
           />
         )}
       </div>
@@ -528,28 +1097,32 @@ export function ProgrammesScreen() {
         <div className="card">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ margin: 0 }}>
-              Beneficiaries — {selectedProgramme.name}
+              {t.ofcCfBeneficiariesFor.replace('{{name}}', selectedProgramme.name)}
             </h3>
-            <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>
-              Close
-            </button>
+            <button type="button" className="small secondary" onClick={() => { setSelectedProgramme(null); setBeneficiaries(null); }}>{t.ofcKycClose}</button>
           </div>
           {!beneficiaries ? (
             <Loading rows={3} />
           ) : beneficiaries.length === 0 ? (
-            <p style={{ color: 'var(--muted)', fontSize: '0.87rem' }}>
-              No eligible taxpayers yet. Run "Evaluate all" to assess the active taxpayer population.
-            </p>
+            <p className="card__hint">{t.ofcCfNoEligibleYet}</p>
           ) : (
+            <>
+            {beneficiaries.length < beneficiaryTotal && (
+              <p className="card__hint" role="status">
+                {t.ofcCfShowingSomeBeneficiaries
+                  .replace('{{shown}}', String(beneficiaries.length))
+                  .replace('{{total}}', String(beneficiaryTotal))}
+              </p>
+            )}
             <Table
               columns={[
-                { key: 'tin', label: 'TIN', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
-                { key: 'name', label: 'Name' },
-                { key: 'lga_name', label: 'LGA' },
-                { key: 'score', label: 'Score', numeric: true, render: (row) => row.score ?? '—' },
+                { key: 'tin', label: 'tpStepTin', render: (row) => <span className="mono">{row.tin ?? '—'}</span> },
+                { key: 'name', label: 'tpName' },
+                { key: 'lga_name', label: 'tpLgaShort' },
+                { key: 'score', label: 'ofcAgScore', numeric: true, render: (row) => row.score ?? '—' },
                 {
                   key: 'eligible',
-                  label: 'Eligible',
+                  label: 'ofcCfEligible',
                   render: (row) => (
                     <span style={{ color: row.eligible ? 'var(--success, #1a7f3c)' : 'var(--danger, #c0392b)', fontWeight: 600 }}>
                       {row.eligible ? '✓ Yes' : '✗ No'}
@@ -558,13 +1131,14 @@ export function ProgrammesScreen() {
                 },
                 {
                   key: 'evaluated_at',
-                  label: 'Evaluated',
-                  render: (row) => new Date(row.evaluated_at).toLocaleDateString('en-NG'),
+                  label: 'ofcCfEvaluated',
+                  render: (row) => formatDate(row.evaluated_at),
                 },
               ]}
               rows={beneficiaries}
-              empty="No beneficiaries found."
+              empty="ofcNoneBeneficiariesFound"
             />
+            </>
           )}
         </div>
       )}

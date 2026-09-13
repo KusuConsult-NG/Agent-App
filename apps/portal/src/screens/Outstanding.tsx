@@ -20,8 +20,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, Loading, Money, Stat, Table, formatDate, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
 
 interface Refund {
   id: string;
@@ -56,6 +58,20 @@ interface AuthorityRenewal {
   created_at: string;
 }
 
+interface EndedWithArrears {
+  id: string;
+  name: string;
+  tin: string | null;
+  phone: string;
+  status: string;
+  status_reason: string | null;
+  status_changed_at: string;
+  ended_by: string | null;
+  lga_name: string | null;
+  outstanding_kobo: string;
+  unpaid_invoices: number;
+}
+
 interface AwaitingAuthority {
   id: string;
   registration_number: string;
@@ -66,23 +82,51 @@ interface AwaitingAuthority {
 }
 
 /** A queue the signed-in officer may not read, stated rather than hidden. */
-function NotYours({ what, permission }: { what: string; permission: string }) {
+/**
+ * `what` is a dictionary key, not a heading.
+ *
+ * It was `string` and every call site passed English, which is how four
+ * headings on this screen stayed untranslated while everything around them was
+ * keyed. Typed this way the compiler holds the boundary — the same trade
+ * `Stat`, `Table` and `Alert` already make.
+ */
+function NotYours({ what, permission }: { what: keyof TranslationDictionary; permission: string }) {
+  const { t } = usePortalI18n();
   return (
     <div className="card">
-      <h2 className="card__title">{what}</h2>
-      <p className="card__hint">
-        Reading this queue needs <code>{permission}</code>, which your role does not hold. It is not
-        empty — it is not yours.
-      </p>
+      <h2 className="card__title">{t[what]}</h2>
+      <p className="card__hint">{t.ofcOsReadingNeeds}<code>{permission}</code>{t.ofcOsNotYours}</p>
     </div>
   );
 }
 
+/**
+ * What a retry did, said by this screen rather than by the server.
+ *
+ * Each of the three endpoints composes an English sentence and returns it as
+ * `message`, and this screen rendered it in preference to the dictionary
+ * string sitting behind the `??` — six English sentences about money that has
+ * not been returned, reaching an officer reading Hausa. The ninth time this
+ * exact shape has been found in this application.
+ *
+ * The counts come back in the payload either way, so the wording belongs
+ * here, where there is a dictionary. The server keeps its `message`: it is
+ * what the scheduled-job log and any non-browser client read, and neither of
+ * those has a language.
+ */
+const PHRASING: Record<string, { done: keyof TranslationDictionary; partly: keyof TranslationDictionary }> = {
+  refunds: { done: 'ofcOsRefundsReturned', partly: 'ofcOsRefundsPartly' },
+  tins: { done: 'ofcOsTinsAssigned', partly: 'ofcOsTinsPartly' },
+  renewals: { done: 'ofcOsRenewalsAcked', partly: 'ofcOsRenewalsPartly' },
+};
+
 export function OutstandingScreen() {
+  const { t } = usePortalI18n();
   const [refunds, setRefunds] = useState<Refund[] | null>(null);
   const [tins, setTins] = useState<AwaitingTin[] | null>(null);
   const [renewals, setRenewals] = useState<AuthorityRenewal[] | null>(null);
   const [vehicles, setVehicles] = useState<AwaitingAuthority[] | null>(null);
+  const [ended, setEnded] = useState<EndedWithArrears[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [message, setMessage] = useState<{ text: string; resolved: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -90,19 +134,46 @@ export function OutstandingScreen() {
   const readsRefunds = can('payment:read:all');
   const readsTins = can('taxpayer:tin_sync');
   const readsVehicles = can('vehicle:authority_sync');
+  const readsTaxpayers = can('taxpayer:read:all');
+
+  /*
+   * Which queues could not be read, as opposed to which are empty.
+   *
+   * Every fetch on this screen answered a failure with `setX([])`, and an
+   * empty array is what an emptied queue looks like. With all four failing —
+   * an expired session, the API down — `waiting` came to zero, `loaded` came
+   * to true, and this screen showed a green success alert reading "Nothing is
+   * outstanding. Every refund has been made."
+   *
+   * The screen's own opening paragraph says why that must not happen: "A
+   * queue nobody can look at is indistinguishable from an empty one, which is
+   * the wrong thing for a refund to be indistinguishable from." It was the
+   * one thing this screen exists to prevent, and it was doing it.
+   */
+  const [unreadable, setUnreadable] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
+    setUnreadable(new Set());
+    const failed = (queue: string) => () =>
+      setUnreadable((current) => new Set(current).add(queue));
+
     if (readsRefunds) {
       api
         .get<{ refunds: Refund[] }>('/government/refunds/outstanding')
         .then((data) => setRefunds(data.refunds))
-        .catch(() => setRefunds([]));
+        .catch(failed('refunds'));
     }
     if (readsTins) {
       api
         .get<{ taxpayers: AwaitingTin[] }>('/taxpayers/tin-outstanding')
         .then((data) => setTins(data.taxpayers))
-        .catch(() => setTins([]));
+        .catch(failed('tins'));
+    }
+    if (readsTaxpayers) {
+      api
+        .get<{ taxpayers: EndedWithArrears[] }>('/taxpayers/ended-with-arrears')
+        .then((data) => setEnded(data.taxpayers))
+        .catch(failed('ended'));
     }
     if (readsVehicles) {
       api
@@ -113,12 +184,9 @@ export function OutstandingScreen() {
           setRenewals(data.renewals);
           setVehicles(data.vehiclesAwaitingAuthority);
         })
-        .catch(() => {
-          setRenewals([]);
-          setVehicles([]);
-        });
+        .catch(failed('vehicles'));
     }
-  }, [readsRefunds, readsTins, readsVehicles]);
+  }, [readsRefunds, readsTins, readsVehicles, readsTaxpayers]);
 
   useEffect(load, [load]);
 
@@ -129,18 +197,31 @@ export function OutstandingScreen() {
     try {
       const result = await api.post<{
         message?: string;
+        completed?: number;
+        assigned?: number;
+        accepted?: number;
         stillOutstanding?: number;
         stillFailing?: number;
       }>(path, {});
-      // The three queues report what is left under different names. Anything
+      // The three queues report what happened under different names. Anything
       // left means the retry did not resolve it, and saying so in green under
       // the word "complete" would be the cheerful reading of a citizen still
       // waiting for their money.
       const left = result.stillOutstanding ?? result.stillFailing ?? 0;
-      setMessage({ text: result.message ?? 'Retry complete.', resolved: left === 0 });
+      const done = result.completed ?? result.assigned ?? result.accepted ?? 0;
+      const words = PHRASING[key]!;
+      setMessage({
+        text:
+          left === 0
+            ? t[words.done].replace('{{n}}', String(done))
+            : t[words.partly]
+                .replace('{{done}}', String(done))
+                .replace('{{left}}', String(left)),
+        resolved: left === 0,
+      });
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(null);
     }
@@ -161,22 +242,35 @@ export function OutstandingScreen() {
 
   return (
     <>
-      {waiting === 0 && loaded ? (
-        <Alert kind="success" title="Nothing is outstanding">
+      {unreadable.size > 0 && (
+        <Alert kind="warning" title="ofcOsQueueUnreadable">
+          <p style={{ margin: 0 }}>
+            {t.ofcOsQueueUnreadableBody.replace('{{n}}', String(unreadable.size))}
+          </p>
+        </Alert>
+      )}
+      {/*
+        * "Nothing is outstanding" is a claim, and it needs every queue read.
+        *
+        * A queue that failed leaves its list null rather than empty, so
+        * `loaded` is already false while one is outstanding — but a queue that
+        * failed *and* was retried could settle at empty, so the success is
+        * gated on having read them all as well.
+        */}
+      {waiting === 0 && loaded && unreadable.size === 0 ? (
+        <Alert kind="success" title="ofcOsNothingOutstanding">
           <p style={{ margin: 0 }}>
             {readsRefunds && readsTins && readsVehicles
-              ? 'Every refund has been returned, every taxpayer has their TIN, and the vehicle ' +
-                'authority has acknowledged every renewal.'
-              : 'Every queue you can see is empty. Others are guarded by permissions your role ' +
-                'does not hold.'}
+              ? t.ofcOsEveryRefundHasBeen
+              : t.ofcOsEveryQueueYouCan}
           </p>
         </Alert>
       ) : (
         <div className="stat-grid">
-          <Stat label="Owed to taxpayers" value={<Money kobo={owedKobo.toString()} />} />
-          <Stat label="Refunds not yet made" value={String(refunds?.length ?? 0)} />
-          <Stat label="Waiting for a TIN" value={String(tins?.length ?? 0)} />
-          <Stat label="Renewals unacknowledged" value={String(renewals?.length ?? 0)} />
+          <Stat label="ofcOsOwedToTaxpayers" value={<Money kobo={owedKobo.toString()} />} />
+          <Stat label="ofcOsRefundsNotMade" value={String(refunds?.length ?? 0)} />
+          <Stat label="ofcOsWaitingForTin" value={String(tins?.length ?? 0)} />
+          <Stat label="ofcOsRenewalsUnacknowledged" value={String(renewals?.length ?? 0)} />
         </div>
       )}
 
@@ -184,7 +278,7 @@ export function OutstandingScreen() {
       {message && (
         <Alert
           kind={message.resolved ? 'success' : 'warning'}
-          title={message.resolved ? 'Cleared' : 'Still outstanding'}
+          title={message.resolved ? 'ofcOsCleared' : 'ofcOsStillOutstanding'}
         >
           <p style={{ margin: 0 }}>{message.text}</p>
         </Alert>
@@ -192,15 +286,12 @@ export function OutstandingScreen() {
 
       {/* Money first. A citizen waiting on a refund outranks a missing number. */}
       {!readsRefunds ? (
-        <NotYours what="Refunds owed to taxpayers" permission="payment:read:all" />
+        <NotYours what="ofcOsRefundsOwed" permission="payment:read:all" />
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Refunds owed to taxpayers</h2>
-            <p className="card__hint">
-              A reversal voids the receipt immediately; the money comes back only when the gateway
-              confirms it. Until then the taxpayer has not been refunded.
-            </p>
+            <h2 className="card__title">{t.ofcOsRefundsOwed}</h2>
+            <p className="card__hint">{t.ofcOsReversalBody}</p>
           </div>
           {!refunds ? (
             <Loading />
@@ -208,30 +299,30 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'refund_reference', label: 'Refund' },
-                  { key: 'transaction_reference', label: 'Transaction' },
+                  { key: 'refund_reference', label: 'ofcOsRefund' },
+                  { key: 'transaction_reference', label: 'supTransactionLabel' },
                   {
                     key: 'amount_kobo',
-                    label: 'Amount',
+                    label: 'pubVerifyAmount',
                     numeric: true,
                     render: (row) => <Money kobo={row.amount_kobo} />,
                   },
-                  { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
-                  { key: 'attempts', label: 'Attempts', numeric: true },
+                  { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
+                  { key: 'attempts', label: 'ofcOsAttempts', numeric: true },
                   {
                     key: 'failure_reason',
-                    label: 'Why not yet',
-                    render: (row) => row.failure_reason ?? 'Not attempted yet',
+                    label: 'ofcOsWhyNotYet',
+                    render: (row) => row.failure_reason ?? t.ofcOsNotAttemptedYet,
                   },
                   {
                     key: 'last_attempt_at',
-                    label: 'Last tried',
+                    label: 'ofcOsLastTried',
                     render: (row) => (row.last_attempt_at ? formatDateTime(row.last_attempt_at) : '—'),
                   },
-                  { key: 'created_at', label: 'Owed since', render: (row) => formatDate(row.created_at) },
+                  { key: 'created_at', label: 'ofcOsOwedSince', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={refunds}
-                empty="No refund is outstanding."
+                empty="ofcNoneRefundOutstanding"
               />
               {can('payment:reconcile') && refunds.length > 0 && (
                 <button
@@ -239,7 +330,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('refunds', '/government/refunds/retry')}
                 >
-                  {busy === 'refunds' ? 'Asking the gateway…' : 'Ask the gateway again'}
+                  {busy === 'refunds' ? t.ofcOsAskingTheGateway : t.ofcOsAskTheGatewayAgain}
                 </button>
               )}
             </>
@@ -248,15 +339,12 @@ export function OutstandingScreen() {
       )}
 
       {!readsTins ? (
-        <NotYours what="Taxpayers waiting for a TIN" permission="taxpayer:tin_sync" />
+        <NotYours what="ofcOsWaitingTinTitle" permission="taxpayer:tin_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Taxpayers waiting for a TIN</h2>
-            <p className="card__hint">
-              Registered while the PSIRS TIN service could not be reached. They can be assessed and
-              can pay; only the number is missing.
-            </p>
+            <h2 className="card__title">{t.ofcOsWaitingTinTitle}</h2>
+            <p className="card__hint">{t.ofcOsWaitingTinBody}</p>
           </div>
           {!tins ? (
             <Loading />
@@ -264,15 +352,19 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'display_name', label: 'Taxpayer' },
-                  { key: 'phone', label: 'Phone' },
-                  { key: 'tin_status', label: 'Status', render: (row) => <Badge status={row.tin_status} /> },
-                  { key: 'tin_attempts', label: 'Attempts', numeric: true },
-                  { key: 'tin_reason', label: 'Why not yet', render: (row) => row.tin_reason ?? '—' },
-                  { key: 'created_at', label: 'Registered', render: (row) => formatDate(row.created_at) },
+                  { key: 'display_name', label: 'colTaxpayerLabel' },
+                  { key: 'phone', label: 'tpPhone' },
+                  {
+                    key: 'tin_status',
+                    label: 'appStatus',
+                    render: (row) => <Badge status={row.tin_status} column="taxpayers.tin_status" />,
+                  },
+                  { key: 'tin_attempts', label: 'ofcOsAttempts', numeric: true },
+                  { key: 'tin_reason', label: 'ofcOsWhyNotYet', render: (row) => row.tin_reason ?? '—' },
+                  { key: 'created_at', label: 'ofcRhRegistered', render: (row) => formatDate(row.created_at) },
                 ]}
                 rows={tins}
-                empty="Everyone has their TIN."
+                empty="ofcNoneEveryoneTin"
               />
               {tins.length > 0 && (
                 <button
@@ -280,7 +372,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('tins', '/taxpayers/tin-retry')}
                 >
-                  {busy === 'tins' ? 'Asking the TIN service…' : 'Ask the TIN service again'}
+                  {busy === 'tins' ? t.ofcOsAskingTheTinService : t.ofcOsAskTheTinService}
                 </button>
               )}
             </>
@@ -289,15 +381,12 @@ export function OutstandingScreen() {
       )}
 
       {!readsVehicles ? (
-        <NotYours what="Renewals the vehicle authority has not acknowledged" permission="vehicle:authority_sync" />
+        <NotYours what="ofcOsRenewalsUnackTitle" permission="vehicle:authority_sync" />
       ) : (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Renewals the vehicle authority has not acknowledged</h2>
-            <p className="card__hint">
-              The renewal itself is valid and paid for. What is outstanding is the authority
-              recording it, which matters the first time the driver is stopped.
-            </p>
+            <h2 className="card__title">{t.ofcOsRenewalsUnackTitle}</h2>
+            <p className="card__hint">{t.ofcOsRenewalsUnackBody}</p>
           </div>
           {!renewals ? (
             <Loading />
@@ -305,23 +394,23 @@ export function OutstandingScreen() {
             <>
               <Table
                 columns={[
-                  { key: 'registration_number', label: 'Vehicle' },
-                  { key: 'document_number', label: 'Document' },
-                  { key: 'expiry_date', label: 'Valid until', render: (row) => formatDate(row.expiry_date) },
+                  { key: 'registration_number', label: 'moreVehicleLabel' },
+                  { key: 'document_number', label: 'ofcKycDocument' },
+                  { key: 'expiry_date', label: 'ofcOsValidUntil', render: (row) => formatDate(row.expiry_date) },
                   {
                     key: 'authority_notification_status',
-                    label: 'Status',
+                    label: 'appStatus',
                     render: (row) => <Badge status={row.authority_notification_status} />,
                   },
-                  { key: 'authority_notification_attempts', label: 'Attempts', numeric: true },
+                  { key: 'authority_notification_attempts', label: 'ofcOsAttempts', numeric: true },
                   {
                     key: 'authority_notification_reason',
-                    label: 'Why not yet',
+                    label: 'ofcOsWhyNotYet',
                     render: (row) => row.authority_notification_reason ?? '—',
                   },
                 ]}
                 rows={renewals}
-                empty="The authority has acknowledged every renewal."
+                empty="ofcNoneAuthorityAcknowledgedRenewal"
               />
               {renewals.length > 0 && (
                 <button
@@ -329,7 +418,7 @@ export function OutstandingScreen() {
                   disabled={busy !== null}
                   onClick={() => retry('renewals', '/vehicles/renewals/authority-retry')}
                 >
-                  {busy === 'renewals' ? 'Sending to the authority…' : 'Send to the authority again'}
+                  {busy === 'renewals' ? t.ofcOsSendingToTheAuthority : t.ofcOsSendToTheAuthority}
                 </button>
               )}
             </>
@@ -340,27 +429,73 @@ export function OutstandingScreen() {
       {readsVehicles && vehicles && vehicles.length > 0 && (
         <div className="card">
           <div className="card__header">
-            <h2 className="card__title">Vehicles captured without an authority check</h2>
-            <p className="card__hint">
-              Recorded from what the owner presented because the authority could not be reached. The
-              details have not been confirmed against the register.
-            </p>
+            <h2 className="card__title">{t.ofcOsVehiclesUncheckedTitle}</h2>
+            <p className="card__hint">{t.ofcOsVehiclesUncheckedBody}</p>
           </div>
           <Table
             columns={[
-              { key: 'registration_number', label: 'Registration' },
-              { key: 'owner_name', label: 'Owner' },
+              { key: 'registration_number', label: 'moreRegistrationLabel' },
+              { key: 'owner_name', label: 'moreOwnerLabel' },
               {
                 key: 'make',
-                label: 'Vehicle',
+                label: 'moreVehicleLabel',
                 render: (row) => [row.make, row.model].filter(Boolean).join(' ') || '—',
               },
-              { key: 'created_at', label: 'Captured', render: (row) => formatDate(row.created_at) },
+              { key: 'created_at', label: 'ofcKycCaptured', render: (row) => formatDate(row.created_at) },
             ]}
             rows={vehicles}
-            empty="None."
+            empty="ofcNoneNone"
           />
         </div>
+      )}
+
+      {/*
+        * Records taken off the register while they still owed something.
+        *
+        * The counterpart to letting a record be closed at all. Refusing to
+        * close one with arrears would mean a deceased taxpayer's record can
+        * never be closed, so the pairing is surfaced instead of prevented —
+        * the debt stays in every total, and stays somebody's job until it is
+        * paid or the record is put back.
+        */}
+      {!readsTaxpayers ? (
+        <NotYours what="ofcOsEndedOwingTitle" permission="taxpayer:read:all" />
+      ) : (
+        ended && (
+          <div className="card card--flush">
+            <div className="card__pad">
+              <h2 className="card__title">{t.ofcOsEndedOwingTitle}</h2>
+              <p className="card__hint">{t.ofcOsEndedOwingBody}</p>
+            </div>
+            <Table
+              columns={[
+                { key: 'name', label: 'colTaxpayerLabel' },
+                { key: 'tin', label: 'tpStepTin', render: (row) => row.tin ?? '—' },
+                { key: 'status', label: 'ofcOsState', render: (row) => <Badge status={row.status} /> },
+                {
+                  key: 'outstanding_kobo',
+                  label: 'ofcOsOwed',
+                  numeric: true,
+                  render: (row) => <Money kobo={row.outstanding_kobo} />,
+                },
+                { key: 'unpaid_invoices', label: 'ofcLvInvoices', numeric: true },
+                {
+                  key: 'status_reason',
+                  label: 'ofcOsWhyEnded',
+                  render: (row) => row.status_reason ?? '—',
+                },
+                {
+                  key: 'status_changed_at',
+                  label: 'ofcOsEnded',
+                  render: (row) =>
+                    `${formatDate(row.status_changed_at)}${row.ended_by ? ` · ${row.ended_by}` : ''}`,
+                },
+              ]}
+              rows={ended}
+              empty="ofcNoneEndedRecordOwesAnything"
+            />
+          </div>
+        )
       )}
     </>
   );

@@ -20,6 +20,8 @@
  * not pay for a scanner they may not use (PRD §55, low-bandwidth).
  */
 
+import type { TranslationDictionary } from '@psirs/shared';
+
 /** Codes look like `T7C72-QTUDN`: two groups from an unambiguous alphabet. */
 const VERIFICATION_CODE = /^[0-9A-HJ-NP-Z]{5}-[0-9A-HJ-NP-Z]{5}$/;
 
@@ -58,15 +60,49 @@ export interface ScanHandle {
   stop: () => void;
 }
 
-export class CameraUnavailable extends Error {
-  readonly reason: 'DENIED' | 'NO_CAMERA' | 'UNSUPPORTED';
+/** Why the camera could not be opened. The screen decides what to say. */
+export type CameraUnavailableReason = 'DENIED' | 'NO_CAMERA' | 'UNSUPPORTED';
 
-  constructor(reason: 'DENIED' | 'NO_CAMERA' | 'UNSUPPORTED', message: string) {
-    super(message);
+/**
+ * The camera could not be opened, and why.
+ *
+ * This carries a `reason` and no message worth showing anybody. That is
+ * deliberate, and it is a correction: it used to take an English sentence and
+ * both screens rendered it, in preference to the translated string they
+ * already had. An agent who declined the camera permission was answered in
+ * English by an application that has offered Hausa since it was built, and
+ * nothing failed, because an English sentence in a `message` field looks
+ * exactly like a working one.
+ *
+ * So there is no longer an English sentence here to render. `super()` gets a
+ * developer's line for a stack trace; what a person reads comes from
+ * `CAMERA_UNAVAILABLE_TEXT` and the dictionary.
+ */
+export class CameraUnavailable extends Error {
+  readonly reason: CameraUnavailableReason;
+
+  constructor(reason: CameraUnavailableReason) {
+    super(`camera unavailable: ${reason}`);
     this.name = 'CameraUnavailable';
     this.reason = reason;
   }
 }
+
+/**
+ * What to tell the agent, per reason.
+ *
+ * `Record` over the union rather than over `string`, so adding a reason
+ * without a string is a type error rather than a screen falling back to
+ * whatever English was nearest.
+ */
+export const CAMERA_UNAVAILABLE_TEXT: Record<
+  CameraUnavailableReason,
+  keyof TranslationDictionary
+> = {
+  DENIED: 'scanCameraDenied',
+  NO_CAMERA: 'scanCameraMissing',
+  UNSUPPORTED: 'scanCameraUnsupported',
+};
 
 /**
  * Open the camera and call `onCode` with the first thing it reads.
@@ -80,10 +116,7 @@ export async function scanForCode(params: {
   onError?: (error: Error) => void;
 }): Promise<ScanHandle> {
   if (!navigator.mediaDevices?.getUserMedia) {
-    throw new CameraUnavailable(
-      'UNSUPPORTED',
-      'This browser cannot open the camera. Type the code printed under the QR square instead.',
-    );
+    throw new CameraUnavailable('UNSUPPORTED');
   }
 
   let stream: MediaStream;
@@ -96,16 +129,9 @@ export async function scanForCode(params: {
   } catch (error) {
     const name = (error as { name?: string }).name;
     if (name === 'NotAllowedError' || name === 'SecurityError') {
-      throw new CameraUnavailable(
-        'DENIED',
-        'PSIRS does not have permission to use the camera. Allow it in your browser settings, ' +
-          'or type the code printed under the QR square.',
-      );
+      throw new CameraUnavailable('DENIED');
     }
-    throw new CameraUnavailable(
-      'NO_CAMERA',
-      'No camera was found on this device. Type the code printed under the QR square instead.',
-    );
+    throw new CameraUnavailable('NO_CAMERA');
   }
 
   params.video.srcObject = stream;

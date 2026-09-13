@@ -20,7 +20,7 @@ import {
   applyBasisPoints,
   clampAmount,
   parseKobo,
-  koboToNaira,
+  formatNaira,
   type Kobo,
 } from '@psirs/shared';
 import { badRequest } from '../lib/errors';
@@ -38,6 +38,8 @@ export interface RateVersion {
   maximum_amount_kobo: string | null;
   effective_from: Date;
   effective_to: Date | null;
+  /** The LGA this rate belongs to, or null for the statewide default. */
+  lga_id: string | null;
 }
 
 export interface ComputationTraceStep {
@@ -50,6 +52,20 @@ export interface RateComputation {
   amountKobo: Kobo;
   rateVersionId: string;
   trace: ComputationTraceStep[];
+  /**
+   * The assessable amount the operator declared, where the item has one.
+   *
+   * It is carried out of the computation so a caller can tell apart the two
+   * quite different things a result of zero can mean: a schedule that taxes
+   * the declared amount at nothing, and a form nobody filled in. Under the
+   * Fourth Schedule the first is the ordinary case for a grassroots trader
+   * and the second is a mistake, and they must not be reported alike.
+   *
+   * Null for FIXED and FORMULA items, which have no single declared base — a
+   * zero there is a rate configured at nothing or a formula that cancels, and
+   * neither is a statement about the taxpayer.
+   */
+  declaredBaseKobo: Kobo | null;
 }
 
 interface Tier {
@@ -81,13 +97,36 @@ function requireNumericInput(inputs: ComputationInputs, key: string, label: stri
       { field: key, issue: `${label} is missing` },
     ]);
   }
+  let amount: Kobo;
   try {
-    return parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
+    amount = parseKobo(typeof raw === 'boolean' ? Number(raw) : raw);
   } catch {
     throw badRequest(`${label} must be a whole number of kobo.`, [
       { field: key, issue: 'Not a valid amount' },
     ]);
   }
+
+  /*
+   * Nothing a revenue item is computed from can be negative.
+   *
+   * There is no negative turnover, no negative property value, no negative
+   * assessable income for this purpose. A negative here is a mistake or a
+   * crafted input, and it used to pass: the percentage of a negative base
+   * rounds to zero, the statutory minimum is then applied because zero is
+   * below it, and an assessment is raised for the floor. The taxpayer is
+   * charged, the trace reads "2.00% of ₦-0.01", and nothing refused it.
+   *
+   * It only ever failed to slip through on items with no minimum, where the
+   * zero result was caught further down — so whether a nonsensical input was
+   * rejected depended on whether the item happened to have a floor.
+   */
+  if (amount < 0n) {
+    throw badRequest(`${label} cannot be negative.`, [
+      { field: key, issue: `${label} must be zero or more` },
+    ]);
+  }
+
+  return amount;
 }
 
 /**
@@ -116,7 +155,7 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
       bandAmount = parseKobo(tier.fixedAmountKobo);
       trace.push({
         step: `Band ${index + 1}`,
-        detail: `Flat charge for band up to ₦${ceiling === null ? '∞' : koboToNaira(ceiling)}`,
+        detail: `Flat charge for band up to ${ceiling === null ? '∞' : formatNaira(ceiling)}`,
         amount: bandAmount.toString(),
       });
     } else if (tier.basisPoints !== undefined) {
@@ -124,9 +163,9 @@ function computeTiered(base: Kobo, tiers: Tier[]): { amount: Kobo; trace: Comput
       trace.push({
         step: `Band ${index + 1}`,
         detail:
-          `${(tier.basisPoints / 100).toFixed(2)}% of ₦${koboToNaira(portion)} ` +
-          `(portion between ₦${koboToNaira(previousCeiling)} and ` +
-          `₦${ceiling === null ? '∞' : koboToNaira(ceiling)})`,
+          `${(tier.basisPoints / 100).toFixed(2)}% of ${formatNaira(portion)} ` +
+          `(portion between ${formatNaira(previousCeiling)} and ` +
+          `${ceiling === null ? '∞' : formatNaira(ceiling)})`,
         amount: bandAmount.toString(),
       });
     } else {
@@ -293,6 +332,7 @@ function evaluateFormula(formula: string, inputs: ComputationInputs): Kobo {
 export function computeAmount(rate: RateVersion, inputs: ComputationInputs): RateComputation {
   const trace: ComputationTraceStep[] = [];
   let amount: Kobo;
+  let declaredBase: Kobo | null = null;
 
   switch (rate.rate_type) {
     case 'FIXED': {
@@ -307,11 +347,12 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
 
     case 'PERCENTAGE': {
       const base = requireNumericInput(inputs, 'baseAmountKobo', 'Assessable amount');
+      declaredBase = base;
       const basisPoints = rate.rate_basis_points ?? 0;
       amount = applyBasisPoints(base, basisPoints);
       trace.push({
         step: 'Percentage of assessable amount',
-        detail: `${(basisPoints / 100).toFixed(2)}% of ₦${koboToNaira(base)}`,
+        detail: `${(basisPoints / 100).toFixed(2)}% of ${formatNaira(base)}`,
         amount: amount.toString(),
       });
       break;
@@ -319,6 +360,7 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
 
     case 'TIERED': {
       const base = requireNumericInput(inputs, 'baseAmountKobo', 'Assessable amount');
+      declaredBase = base;
       const tiers = (rate.tiers as { tiers?: Tier[] } | Tier[] | null);
       const list = Array.isArray(tiers) ? tiers : (tiers?.tiers ?? []);
       if (list.length === 0) {
@@ -358,15 +400,15 @@ export function computeAmount(rate: RateVersion, inputs: ComputationInputs): Rat
       step: clamped > amount ? 'Minimum applied' : 'Maximum applied',
       detail:
         clamped > amount
-          ? `Below the statutory minimum of ₦${koboToNaira(minimum!)} — minimum charged`
-          : `Above the statutory maximum of ₦${koboToNaira(maximum!)} — capped`,
+          ? `Below the statutory minimum of ${formatNaira(minimum!)} — minimum charged`
+          : `Above the statutory maximum of ${formatNaira(maximum!)} — capped`,
       amount: clamped.toString(),
     });
   }
 
   trace.push({ step: 'Payable', detail: 'Amount payable to government', amount: clamped.toString() });
 
-  return { amountKobo: clamped, rateVersionId: rate.id, trace };
+  return { amountKobo: clamped, rateVersionId: rate.id, trace, declaredBaseKobo: declaredBase };
 }
 
 export { evaluateFormula, computeTiered };

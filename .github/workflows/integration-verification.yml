@@ -12,13 +12,32 @@ name: Integration verification
 #
 # WHAT IT DOES WHEN THE CREDENTIALS ARE NOT THERE
 #
-# It skips, visibly, and reports why. It does not fail, because a red cross on
-# every run for a condition nobody can fix that morning trains people to ignore
-# red crosses. It does not pass either — a green tick would say the
-# integrations were verified, which would be a lie, and the whole point of B-4
-# is that nobody should be able to mistake "not checked" for "checked".
+# It skips, visibly. It does not fail, because a red cross every morning for a
+# condition nobody can fix that morning trains people to ignore red crosses. It
+# does not pass either — a green tick would say the integrations were verified,
+# which would be a lie, and the whole point of B-4 is that nobody should be
+# able to mistake "not checked" for "checked".
 #
-# It reports "skipped" and names the missing secret.
+# That last sentence was untrue until 25 August 2026. The gate was a *step*
+# whose failure left every later step conditional, and a job whose steps are
+# all skipped completes `success`. So each night this workflow put a green tick
+# on a run called "Ask each provider one real question" that had contacted
+# nobody — the precise outcome the paragraph above forbids.
+#
+# The gate is now the job's own `if`. A job that does not run is `skipped`, and
+# a run whose only job is skipped is `skipped` rather than `success`: grey in
+# the list, not green. `vars` is used rather than `secrets` because job-level
+# `if` cannot read secrets, and a repository variable is also the honest place
+# for the statement being made — somebody has declared these sandboxes ready.
+#
+# ENABLING IT
+#
+#   1. Set the secrets named below.
+#   2. Set the repository variable INTEGRATION_VERIFICATION to `enabled`.
+#
+# Once enabled, a missing secret fails the run rather than skipping it: at that
+# point somebody has said this should work, and silence about it working would
+# be the same lie in a smaller form. See docs/INTEGRATION-VERIFICATION.md.
 #
 # WHAT IT DOES WHEN THEY ARE THERE
 #
@@ -51,6 +70,9 @@ concurrency:
 jobs:
   verify:
     name: Ask each provider one real question
+    # Job-level, not step-level. This is what makes an unconfigured run report
+    # `skipped` instead of a green `success` — see the header.
+    if: vars.INTEGRATION_VERIFICATION == 'enabled'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -129,17 +151,16 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Decide whether the credentials are present
-        id: gate
-        # One representative secret per provider. If the gateway and KYC
-        # selectors are absent there is nothing real to talk to, and running
-        # would only verify the mocks — which is precisely the thing B-4 says
-        # proves nothing.
+      - name: Refuse to run half-configured
+        # Reached only when somebody has set INTEGRATION_VERIFICATION=enabled.
+        # A missing credential is then a real failure: the declaration has been
+        # made and the check cannot be carried out.
+        #
+        # Written as explicit `if` blocks rather than `[ -z "$X" ] && ...`:
+        # GitHub runs each step under `bash -e`, and an AND-list whose test
+        # fails returns non-zero, so the terse form aborted the step in the one
+        # case that matters — every credential present.
         run: |
-          # Written as explicit `if` blocks rather than `[ -z "$X" ] && ...`:
-          # GitHub runs each step under `bash -e`, and an AND-list whose test
-          # fails returns non-zero, so the terse form aborted the step in the
-          # one case that matters — every credential present.
           missing=""
           for name in PAYMENT_GATEWAY KYC_PROVIDER VERIFY_RRR VERIFY_NIN; do
             if [ -z "$(printenv "${name}" || true)" ]; then
@@ -148,56 +169,54 @@ jobs:
           done
 
           if [ -n "${missing}" ]; then
-            echo "ready=false" >> "$GITHUB_OUTPUT"
             {
-              echo "### Integration verification skipped"
+              echo "### Integration verification cannot run"
               echo
-              echo "Blocker **B-4** remains open: the provider credentials are not configured."
+              echo "\`INTEGRATION_VERIFICATION\` is set to \`enabled\`, so this job is"
+              echo "expected to contact the provider sandboxes. It cannot: the following"
+              echo "repository secrets are not set."
               echo
-              echo "Missing repository secrets:${missing}"
+              echo "Missing:${missing}"
               echo
-              echo "This run is neither a pass nor a failure. It reports skipped so that"
-              echo "\"not checked\" cannot be mistaken for \"checked\" — which is the whole"
-              echo "substance of B-4."
-              echo
-              echo "See \`docs/INTEGRATION-VERIFICATION.md\` for the field paths and status"
-              echo "words each provider needs confirmed."
+              echo "Either set them, or set \`INTEGRATION_VERIFICATION\` back to anything"
+              echo "other than \`enabled\` so the run reports *skipped* rather than failing."
             } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "::error::Missing provider secrets:${missing}"
+            exit 1
           fi
 
       - uses: actions/checkout@v5
-        if: steps.gate.outputs.ready == 'true'
-
       - uses: actions/setup-node@v7
-        if: steps.gate.outputs.ready == 'true'
         with:
           node-version: 22
           cache: npm
 
       - name: Install
-        if: steps.gate.outputs.ready == 'true'
         run: npm ci
 
       - name: Build shared
-        if: steps.gate.outputs.ready == 'true'
         run: npm run build --workspace @psirs/shared
 
       - name: Prepare the schema
-        if: steps.gate.outputs.ready == 'true'
         # The harness reads configuration through the same code path the API
         # uses, which expects its tables to exist.
         run: npm run migrate
 
       - name: Ask each provider one real question
-        if: steps.gate.outputs.ready == 'true'
         # Deliberately not --sms: sending a message is a side effect, and a
         # daily job should not text somebody at 05:00 to prove it can.
         #
         # The subjects come from secrets rather than being written here, so a
         # real citizen's NIN never appears in this file or in a build log.
+        #
+        # `set -o pipefail` is load-bearing, not hygiene. GitHub's default shell
+        # for `run:` is `bash -e {0}` — `-e` but no `pipefail` — so the status of
+        # `harness | tee` is tee's, which is always 0. Without this line the
+        # harness could exit 1 for a provider whose answer the platform cannot
+        # read and the step would still go green, which is the same false
+        # assurance this workflow exists to prevent.
         run: |
+          set -o pipefail
           npm run verify:integrations -- \
             --tin "${VERIFY_TIN}" \
             --nin "${VERIFY_NIN}" \
@@ -208,7 +227,7 @@ jobs:
             | tee verification.log
 
       - name: Record the result
-        if: always() && steps.gate.outputs.ready == 'true'
+        if: always()
         run: |
           {
             echo "### Integration verification"
@@ -221,7 +240,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Keep the evidence
-        if: always() && steps.gate.outputs.ready == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: integration-verification-${{ github.run_number }}

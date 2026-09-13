@@ -1,21 +1,36 @@
 /**
- * Government receipts (PRD §19, §20, §43).
+ * Government receipts, and the acknowledgement that precedes one
+ * (PRD §19, §20, §43).
  *
- * `issueReceipt` is called from exactly one place — the verified branch of
- * `confirmPayment` — and even then the database trigger
- * `receipts_require_verified_payment` re-checks that the payment is VERIFIED,
- * belongs to the transaction and matches the amount. There is no API route,
- * admin screen or service function that issues a receipt on request.
+ * A receipt asserts that the Plateau State Government received the money, so it
+ * is issued only once that is true: `issueReceipt` is called from exactly one
+ * place — the settlement branch of `settleLinkedTransactions` — and even then
+ * the database trigger `receipts_require_verified_payment` re-checks that the
+ * payment is VERIFIED, that it carries a `settlement_id`, that it belongs to the
+ * transaction and that it matches the amount. There is no API route, admin
+ * screen or service function that issues a receipt on request.
+ *
+ * It used to be issued when the *gateway* confirmed, which is a different fact:
+ * the gateway holding the money is not the State having been paid. What the
+ * taxpayer gets at that moment is `issueAcknowledgement` below — a verifiable
+ * document that says the payment is confirmed, that the State has not yet
+ * received it, and that a receipt follows.
  */
 
 import type { PoolClient } from 'pg';
+import { verificationSentence, type VerificationReason } from '@psirs/shared';
 import { parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { queryOne, query } from '../db/pool';
-import { generateVerificationCode, normaliseVerificationCode } from '../lib/crypto';
+import { generateVerificationCode, hashIdentityNumber, normaliseVerificationCode } from '../lib/crypto';
 import { nextReceiptNumber } from '../lib/references';
 import { notFound } from '../lib/errors';
-import { registerDocument, renderReceiptPdf, verifyDocumentIntegrity } from './documents';
+import {
+  registerDocument,
+  renderAcknowledgementPdf,
+  renderReceiptPdf,
+  verifyDocumentIntegrity,
+} from './documents';
 
 export interface IssuedReceipt {
   receiptId: string;
@@ -53,10 +68,15 @@ export async function issueReceipt(
     business_name: string | null;
     tin: string | null;
     revenue_item: string;
+    revenue_item_ha: string | null;
     revenue_category: string;
+    revenue_category_ha: string | null;
     mda_name: string | null;
+    mda_name_ha: string | null;
     lga_name: string;
     period_label: string | null;
+    period_start: Date | null;
+    period_end: Date | null;
     agent_code: string | null;
     payment_reference: string;
     gateway_reference: string | null;
@@ -66,8 +86,10 @@ export async function issueReceipt(
     client,
     `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.taxpayer_id,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
-            ri.name AS revenue_item, rc.name AS revenue_category, m.name AS mda_name,
-            l.name AS lga_name, a.period_label, ag.agent_code,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
+            l.name AS lga_name, a.period_label, a.period_start, a.period_end, ag.agent_code,
             p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
        FROM transactions t
        JOIN taxpayers tp ON tp.id = t.taxpayer_id
@@ -126,6 +148,8 @@ export async function issueReceipt(
     paidAt: context.paid_at ?? issuedAt,
     issuedAt,
     periodLabel: context.period_label,
+    periodStart: context.period_start,
+    periodEnd: context.period_end,
     agentCode: context.agent_code,
     lgaName: context.lga_name,
     verificationCode,
@@ -155,6 +179,145 @@ export async function issueReceipt(
   };
 }
 
+export interface IssuedAcknowledgement {
+  documentId: string;
+  documentNumber: string;
+  verificationCode: string;
+}
+
+/**
+ * What the taxpayer holds between the gateway confirming and the State being
+ * paid.
+ *
+ * Not a receipt, and built so it cannot be mistaken for one: its own document
+ * type, its own number series, its own wording, and a standing notice above the
+ * amount saying the money has not reached a government account yet. The
+ * alternative was to give a citizen who has just been debited nothing at all,
+ * at a market stall, with an agent who has nothing to show them — which is its
+ * own way of making the State look like it took the money and denied it.
+ *
+ * Idempotent by transaction, because a webhook and a status check can both
+ * reach the verified branch and neither should mint a second document.
+ */
+export async function issueAcknowledgement(
+  client: PoolClient,
+  params: { transactionId: string; paymentId: string },
+): Promise<IssuedAcknowledgement> {
+  const existing = await queryOne<{
+    id: string;
+    document_number: string;
+    verification_code: string;
+  }>(
+    client,
+    `SELECT id, document_number, verification_code FROM documents
+      WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_type = 'transaction'
+        AND entity_id = $1 AND status <> 'REVOKED'`,
+    [params.transactionId],
+  );
+  if (existing) {
+    return {
+      documentId: existing.id,
+      documentNumber: existing.document_number,
+      verificationCode: existing.verification_code,
+    };
+  }
+
+  const context = await queryOne<{
+    transaction_reference: string;
+    amount_kobo: string;
+    service_charge_kobo: string;
+    taxpayer_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    business_name: string | null;
+    tin: string | null;
+    revenue_item: string;
+    revenue_item_ha: string | null;
+    revenue_category: string;
+    revenue_category_ha: string | null;
+    mda_name: string | null;
+    mda_name_ha: string | null;
+    lga_name: string;
+    period_label: string | null;
+    period_start: Date | null;
+    period_end: Date | null;
+    agent_code: string | null;
+    payment_reference: string;
+    gateway_reference: string | null;
+    payment_method: string | null;
+    paid_at: Date | null;
+  }>(
+    client,
+    `SELECT t.transaction_reference, t.amount_kobo, t.service_charge_kobo, t.taxpayer_id,
+            tp.first_name, tp.last_name, tp.business_name, tp.tin,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
+            m.name AS mda_name, m.name_ha AS mda_name_ha,
+            l.name AS lga_name, a.period_label, a.period_start, a.period_end, ag.agent_code,
+            p.payment_reference, p.gateway_reference, p.payment_method, p.paid_at
+       FROM transactions t
+       JOIN taxpayers tp ON tp.id = t.taxpayer_id
+       JOIN revenue_items ri ON ri.id = t.revenue_item_id
+       JOIN revenue_categories rc ON rc.id = ri.category_id
+       LEFT JOIN mdas m ON m.id = ri.mda_id
+       JOIN lgas l ON l.id = t.lga_id
+       JOIN assessments a ON a.id = t.assessment_id
+       LEFT JOIN agents ag ON ag.id = t.agent_id
+       JOIN payments p ON p.id = $2
+      WHERE t.id = $1`,
+    [params.transactionId, params.paymentId],
+  );
+  if (!context) throw notFound('That transaction');
+
+  const verificationCode = generateVerificationCode();
+  const issuedAt = new Date();
+  const taxpayerName =
+    context.business_name ?? `${context.first_name ?? ''} ${context.last_name ?? ''}`.trim();
+
+  const pdf = await renderAcknowledgementPdf({
+    // The acknowledgement's own number, not a receipt number: receipt numbers
+    // are a government series and one must not be spent on a payment that may
+    // never arrive.
+    receiptNumber: context.transaction_reference,
+    transactionReference: context.transaction_reference,
+    paymentReference: context.payment_reference,
+    gatewayReference: context.gateway_reference ?? 'Not recorded',
+    taxpayerName,
+    tin: context.tin,
+    revenueCategory: context.revenue_category,
+    revenueItem: context.revenue_item,
+    mdaName: context.mda_name,
+    amountKobo: parseKobo(context.amount_kobo),
+    serviceChargeKobo: parseKobo(context.service_charge_kobo),
+    paymentMethod: context.payment_method,
+    paidAt: context.paid_at ?? issuedAt,
+    issuedAt,
+    periodLabel: context.period_label,
+    periodStart: context.period_start,
+    periodEnd: context.period_end,
+    agentCode: context.agent_code,
+    lgaName: context.lga_name,
+    verificationCode,
+  });
+
+  const document = await registerDocument(client, {
+    documentType: 'PAYMENT_ACKNOWLEDGEMENT',
+    ownerType: 'TAXPAYER',
+    ownerId: context.taxpayer_id,
+    entityType: 'transaction',
+    entityId: params.transactionId,
+    bytes: pdf,
+    verificationCode,
+    numberPrefix: 'PSIRS-ACK',
+  });
+
+  return {
+    documentId: document.documentId,
+    documentNumber: document.documentNumber,
+    verificationCode,
+  };
+}
+
 export interface PublicVerificationResult {
   status: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
   /** Deliberately minimal — PRD §20: "Sensitive taxpayer information must not
@@ -163,10 +326,21 @@ export interface PublicVerificationResult {
   documentNumber?: string;
   documentType?: string;
   revenueType?: string;
+  revenueTypeHa?: string | null;
   amountKobo?: string;
   issuedAt?: string;
   lga?: string;
   integrityConfirmed?: boolean;
+  /**
+   * Which of the eleven answers this is.
+   *
+   * `message` is the same answer in English. Both travel: a browser reads the
+   * code and says it in the reader's language, and anything else still gets a
+   * sentence. See `packages/shared/src/verification.ts`.
+   */
+  reason: VerificationReason;
+  /** Present only on DOCUMENT_EXPIRED, so the client can format the date. */
+  expiresAt?: string;
   message: string;
 }
 
@@ -176,6 +350,14 @@ export interface PublicVerificationResult {
  * Accepts a receipt number, a document number or a verification code. Beyond
  * checking the record exists, it recomputes the stored PDF's checksum so a
  * doctored file is reported as invalid even though the record is genuine.
+ *
+ * A receipt is two rows — the receipt and the PDF registered beside it — and
+ * only the receipt row carries the validity that reversal changes. So the
+ * receipt lookup matches the paired document's number as well, and a receipt
+ * answers with its own status whichever of its three handles is presented.
+ * Reversal revokes the document row too; this is the belt to that brace, so
+ * that a future issuing path which forgets to revoke cannot resurrect a
+ * reversed receipt by its document number.
  */
 export async function verifyPublicly(
   db: Db,
@@ -183,6 +365,12 @@ export async function verifyPublicly(
 ): Promise<PublicVerificationResult> {
   const raw = input.trim();
   const normalised = normaliseVerificationCode(raw);
+  // Receipt and document numbers are generated upper case, so comparing the
+  // typed value upper-cased is both case-insensitive and still index-friendly.
+  // Verification codes were normalised from the start; the numbers beside them
+  // were matched byte-for-byte, and a citizen who typed their own receipt
+  // number in lower case was told it had not been issued by PSIRS.
+  const typed = raw.toUpperCase();
 
   const receipt = await queryOne<{
     receipt_number: string;
@@ -190,6 +378,7 @@ export async function verifyPublicly(
     issued_at: Date;
     status: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
     lga_name: string;
     storage_reference: string | null;
     checksum: string | null;
@@ -197,7 +386,8 @@ export async function verifyPublicly(
   }>(
     db,
     `SELECT r.receipt_number, r.amount_kobo, r.issued_at, r.status,
-            ri.name AS revenue_item, l.name AS lga_name,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            l.name AS lga_name,
             d.storage_reference, d.checksum, d.document_number
        FROM receipts r
        JOIN transactions t ON t.id = r.transaction_id
@@ -205,39 +395,45 @@ export async function verifyPublicly(
        JOIN lgas l ON l.id = t.lga_id
        LEFT JOIN documents d ON d.id = r.document_id
       WHERE r.receipt_number = $1
+         OR d.document_number = $1
          OR replace(upper(r.verification_code), '-', '') = $2`,
-    [raw, normalised],
+    [typed, normalised],
   );
 
   if (receipt) {
-    const integrityConfirmed =
+    const integrity =
       receipt.storage_reference && receipt.checksum
         ? await verifyDocumentIntegrity(receipt.storage_reference, receipt.checksum)
-        : undefined;
+        : 'UNAVAILABLE';
 
     if (receipt.status !== 'VALID') {
       return {
         status: receipt.status === 'REVERSED' || receipt.status === 'REFUNDED' ? 'REVERSED' : 'INVALID',
         receiptNumber: receipt.receipt_number,
         revenueType: receipt.revenue_item,
+        revenueTypeHa: receipt.revenue_item_ha,
         amountKobo: receipt.amount_kobo,
         issuedAt: receipt.issued_at.toISOString(),
         lga: receipt.lga_name,
-        message:
+        reason:
           receipt.status === 'REVERSED' || receipt.status === 'REFUNDED'
-            ? 'This receipt was issued but the payment has since been reversed or refunded. It is no longer valid evidence of payment.'
-            : 'This receipt has been voided and is not valid.',
+            ? 'RECEIPT_REVERSED'
+            : 'RECEIPT_VOIDED',
+        message: verificationSentence(
+          receipt.status === 'REVERSED' || receipt.status === 'REFUNDED'
+            ? 'RECEIPT_REVERSED'
+            : 'RECEIPT_VOIDED',
+        ),
       };
     }
 
-    if (integrityConfirmed === false) {
+    if (integrity === 'MISMATCHED') {
       return {
         status: 'INVALID',
         receiptNumber: receipt.receipt_number,
         integrityConfirmed: false,
-        message:
-          'A receipt with this number exists, but the stored document does not match its original ' +
-          'fingerprint. Treat the document you were given as unverified and report it to PSIRS.',
+        reason: 'RECEIPT_FINGERPRINT_MISMATCH',
+        message: verificationSentence('RECEIPT_FINGERPRINT_MISMATCH'),
       };
     }
 
@@ -247,11 +443,15 @@ export async function verifyPublicly(
       documentNumber: receipt.document_number ?? undefined,
       documentType: 'RECEIPT',
       revenueType: receipt.revenue_item,
+      revenueTypeHa: receipt.revenue_item_ha,
       amountKobo: receipt.amount_kobo,
       issuedAt: receipt.issued_at.toISOString(),
       lga: receipt.lga_name,
-      integrityConfirmed: integrityConfirmed ?? undefined,
-      message: 'This is a genuine government receipt issued by PSIRS.',
+      integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+      reason: integrity === 'MATCHED' ? 'RECEIPT_GENUINE' : 'RECEIPT_GENUINE_UNCHECKED',
+      message: verificationSentence(
+        integrity === 'MATCHED' ? 'RECEIPT_GENUINE' : 'RECEIPT_GENUINE_UNCHECKED',
+      ),
     };
   }
 
@@ -264,53 +464,104 @@ export async function verifyPublicly(
     status: string;
     storage_reference: string;
     checksum: string;
+    transaction_status: string | null;
   }>(
     db,
-    `SELECT document_number, document_type, issued_at, expires_at, status,
-            storage_reference, checksum
-       FROM documents
-      WHERE document_number = $1
-         OR replace(upper(verification_code), '-', '') = $2`,
-    [raw, normalised],
+    /*
+     * The transaction comes along for the acknowledgement's sake.
+     *
+     * A revoked receipt is answered by the branch above, which knows from
+     * `receipts.status` whether the payment was reversed. A document has no
+     * such column, so every revoked document got the same line — and for an
+     * acknowledgement that is a citizen being told their document is void
+     * without being told their money came back. Those are different situations
+     * and only one of them means they are square with the government.
+     */
+    `SELECT d.document_number, d.document_type, d.issued_at, d.expires_at, d.status,
+            d.storage_reference, d.checksum, t.status AS transaction_status
+       FROM documents d
+       LEFT JOIN transactions t ON d.entity_type = 'transaction' AND t.id = d.entity_id
+      WHERE d.document_number = $1
+         OR replace(upper(d.verification_code), '-', '') = $2`,
+    [typed, normalised],
   );
 
   if (!document) {
     return {
       status: 'NOT_FOUND',
-      message:
-        'No government document matches that number or code. If you were given a receipt bearing ' +
-        'this number, it was not issued by PSIRS.',
+      reason: 'NOT_FOUND',
+      message: verificationSentence('NOT_FOUND'),
     };
   }
 
-  const integrityConfirmed = await verifyDocumentIntegrity(
+  const integrity = await verifyDocumentIntegrity(
     document.storage_reference,
     document.checksum,
   );
 
   if (document.status === 'REVOKED') {
+    const returned =
+      document.transaction_status === 'REVERSED' || document.transaction_status === 'REFUNDED';
     return {
-      status: 'INVALID',
+      status: returned ? 'REVERSED' : 'INVALID',
       documentNumber: document.document_number,
       documentType: document.document_type,
       issuedAt: document.issued_at.toISOString(),
-      message: 'This document has been revoked and is no longer valid.',
+      reason: returned ? 'PAYMENT_REVERSED' : 'DOCUMENT_REVOKED',
+      message: verificationSentence(returned ? 'PAYMENT_REVERSED' : 'DOCUMENT_REVOKED'),
     };
   }
 
   const expired = document.expires_at !== null && document.expires_at.getTime() < Date.now();
 
+  if (integrity === 'MISMATCHED') {
+    return {
+      status: 'INVALID',
+      documentNumber: document.document_number,
+      documentType: document.document_type,
+      issuedAt: document.issued_at.toISOString(),
+      integrityConfirmed: false,
+      reason: 'DOCUMENT_FINGERPRINT_MISMATCH',
+      message: verificationSentence('DOCUMENT_FINGERPRINT_MISMATCH'),
+    };
+  }
+
+  /*
+   * An acknowledgement is genuine and is not a receipt, and the difference is
+   * the entire point of it. Answering with the wording every other document
+   * gets — "a genuine government document issued by PSIRS" — is how the person
+   * holding it concludes the State has been paid, which is the confusion this
+   * document exists to prevent. So it gets its own answer, saying what it is,
+   * what it is not, and what happens next.
+   */
+  if (document.document_type === 'PAYMENT_ACKNOWLEDGEMENT') {
+    return {
+      status: 'VALID',
+      documentNumber: document.document_number,
+      documentType: document.document_type,
+      issuedAt: document.issued_at.toISOString(),
+      integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+      reason: 'ACKNOWLEDGEMENT_NOT_RECEIPT',
+      message: verificationSentence('ACKNOWLEDGEMENT_NOT_RECEIPT'),
+    };
+  }
+
   return {
-    status: expired || !integrityConfirmed ? 'INVALID' : 'VALID',
+    status: expired ? 'INVALID' : 'VALID',
     documentNumber: document.document_number,
     documentType: document.document_type,
     issuedAt: document.issued_at.toISOString(),
-    integrityConfirmed,
-    message: !integrityConfirmed
-      ? 'The stored document does not match its original fingerprint. Report this to PSIRS.'
-      : expired
-        ? `This document expired on ${document.expires_at!.toISOString().slice(0, 10)}.`
-        : 'This is a genuine government document issued by PSIRS.',
+    integrityConfirmed: integrity === 'MATCHED' ? true : undefined,
+    reason: expired
+      ? 'DOCUMENT_EXPIRED'
+      : integrity === 'MATCHED'
+        ? 'DOCUMENT_GENUINE'
+        : 'DOCUMENT_GENUINE_UNCHECKED',
+    /** The client formats this in the reader's locale; the sentence is a fallback. */
+    expiresAt: expired ? document.expires_at!.toISOString() : undefined,
+    message: expired
+      ? verificationSentence('DOCUMENT_EXPIRED', document.expires_at!.toISOString())
+      : verificationSentence(integrity === 'MATCHED' ? 'DOCUMENT_GENUINE' : 'DOCUMENT_GENUINE_UNCHECKED'),
   };
 }
 
@@ -318,16 +569,31 @@ export async function verifyPublicly(
 export async function logVerificationAttempt(
   db: Db,
   params: {
-    lookupType: 'RECEIPT' | 'DOCUMENT' | 'INVOICE';
+    lookupType: 'RECEIPT' | 'DOCUMENT' | 'INVOICE' | 'TAXPAYER';
     lookupValue: string;
     result: 'VALID' | 'INVALID' | 'REVERSED' | 'NOT_FOUND';
     ipAddress?: string | null;
+    /**
+     * Hash the value instead of storing it.
+     *
+     * A receipt number is not personal data. A TIN or a phone number is, and a
+     * log of who asked about whom would be a new place for it to sit. Hashing
+     * keeps the thing this log exists for — the same identifier probed over
+     * and over is still the same hash — and makes the log itself worthless to
+     * anybody who takes a copy.
+     */
+    hashValue?: boolean;
   },
 ): Promise<void> {
+  const value = params.hashValue
+    ? hashIdentityNumber(params.lookupValue.trim().toUpperCase())
+    : params.lookupValue.slice(0, 128);
+
   await query(
     db,
-    `INSERT INTO verification_attempts (lookup_type, lookup_value, result, ip_address)
-     VALUES ($1,$2,$3,$4)`,
-    [params.lookupType, params.lookupValue.slice(0, 128), params.result, params.ipAddress ?? null],
+    `INSERT INTO verification_attempts
+       (lookup_type, lookup_value, result, ip_address, lookup_value_hashed)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [params.lookupType, value, params.result, params.ipAddress ?? null, params.hashValue === true],
   );
 }

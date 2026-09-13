@@ -18,6 +18,18 @@ JSON number — `JSON.parse` silently rounds large integers.
 | `X-App-Version` | PWA build; enforced against the minimum supported version |
 | `X-Request-Id` | Optional correlation id; echoed on the response |
 
+A retry of a completed request is replayed verbatim with `idempotent-replay:
+true`. A retry while the original is still running answers 409
+`REQUEST_IN_PROGRESS`. Past five minutes the same row answers 409
+`REQUEST_INTERRUPTED` instead: the original attempt died before it could be
+settled, so whether it took effect is genuinely unknown — `moneyStatus` stays
+`UNCONFIRMED` and the caller is told to check the record and use a new key
+rather than to keep waiting. The key is deliberately not made retryable, because
+an interrupted request may have committed and lost only its response. Settled
+keys are deleted after thirty days by the `idempotency-sweep` job; interrupted
+ones are never deleted.
+
+
 **Errors** carry an explicit money status:
 
 ```json
@@ -118,9 +130,16 @@ approval payload and in the audit log.
 | `POST` | `/auth/login` | Phone + password; binds device when `X-Device-Id` present |
 | `POST` | `/auth/refresh` | Rotates the refresh token |
 | `POST` | `/auth/logout` · `/auth/logout-all` | Revoke this session / all sessions |
-| `POST` | `/auth/otp/request` · `/auth/otp/verify` | One-time codes |
-| `POST` | `/auth/step-up` | Grant for one high-risk action, consumed on use |
+| `POST` | `/auth/otp/request` | A one-time code for a step-up, sent to the caller's own registered number |
+| `POST` | `/auth/step-up` | Redeems that code for a grant covering one high-risk action, consumed on use |
 | `GET` | `/auth/me` | Current identity and permissions |
+
+`STEP_UP` is the only purpose the code table's five are offered for: there is no
+self-registration, no password reset and no OTP sign-in, so the other four would
+have sent a real SMS carrying a code no endpoint could redeem. There is no
+`/auth/otp/verify`, either — verifying a code consumes it, so a route that
+verified without granting anything could only destroy one, and other people's at
+that. A code is redeemed once, at `/auth/step-up`, by the session it authorises.
 
 There is no self-registration endpoint. Citizens hold no account: an authorised
 agent approaches them to onboard them or to help them remit. Agents enter through
@@ -135,7 +154,7 @@ usable login; government users are provisioned by an administrator.
 | `GET` | `/agents/me/application` | own |
 | `POST` | `/agents/me/kyc` | own |
 | `POST` | `/agents/me/referees` | own |
-| `GET`/`POST` | `/agents/me/training[/:moduleCode]` | own |
+| `GET` | `/agents/me/training` · `POST` `/agents/me/training/:moduleCode` | own; a completion names the module it completes |
 | `GET` | `/agents/agreement` · `POST` `/agents/me/agreement` | own |
 | `POST` | `/agents/me/bank/verify` | own |
 | `GET` | `/agents/me/bank/change` | own — the proposal waiting, if any |
@@ -143,21 +162,47 @@ usable login; government users are provisioned by an administrator.
 | `POST` | `/agents/:agentId/bank/change` | `agent:manage` — **step-up**; raised on an agent's behalf |
 | `GET` | `/agents/bank-changes` | `agent:read:all` or `approval:review` |
 | `POST` | `/agents/bank-changes/:approvalId/verify` | `agent:manage` — ask the bank again |
+| `POST` | `/agents/me/devices` | own, requires government approval first |
+| `GET` | `/agents/app-version` | version gate (Addendum §43) |
+| `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |
+| `POST` | `/agents/me/commission/payout` | `commission:payout:request` + step-up |
+| `GET` | `/agents` · `/agents/:id` | `agent:read:all` |
+| `GET` | `/agents/kyc-dashboard` · `/referee-dashboard` · `/performance` | `agent:read:all` |
+| `POST` | `/agents/:id/review` | `agent:approve` — reason required |
+| `POST` | `/agents/:id/activate` | `agent:manage` — refused while items outstanding |
+| `POST` | `/agents/:id/suspend` | `agent:suspend` + step-up |
+| `POST` | `/agents/:id/territory` | `agent:assign_territory` |
+| `POST` | `/agents/devices/:id/approve` · `/revoke` | `device:manage` |
+| `POST` | `/agents/referees/:id/review` | `agent:approve` |
+| `POST` | `/agents/app-version` | `system:configure` — raises the minimum build |
+| `GET` | `/agents/app-version/history` | `system:configure` — record and fleet spread |
 
 ### Step-up actions, and the routes that enforce them
 
 `STEP_UP_ACTIONS` names every operation that needs a fresh one-time code as
-well as the permission. All seven are now enforced by a route:
+well as the permission. All twelve are enforced by a route, and every route
+that enforces one is listed below — a caller who has the permission and not a
+current code gets `403 STEP_UP_REQUIRED` on any of them.
 
 | Action | Route | Also requires |
 |---|---|---|
 | `commission.payout.request` | `POST /agents/me/commission/payout` | own agent record |
 | `agent.bank_account.change` | `POST /agents/me/bank/change` · `/agents/:agentId/bank/change` | `agent:manage` for the officer-raised form |
-| `agent.suspend` | `POST /agents/:id/suspend` | `agent:manage` |
-| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:manage` |
-| `payment.reversal.approve` | `POST /government/payments/:id/reverse` | `payment:reverse` |
+| `agent.suspend` | `POST /agents/:id/suspend` | `agent:suspend` — held by supervisors and revenue officers as well as administrators |
+| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:configure` |
+| `payment.reversal.approve` | `POST /government/approvals/:id/execute-reversal` | `payment:reverse:approve`; raised as a `PAYMENT_REVERSAL` approval, decided by a second officer, executed by a third |
 | `taxpayer.identity.change` | `POST /taxpayers/:id/identity` | `taxpayer:correct`; the identity *document* additionally needs `taxpayer:manage` |
-| `user.role.change` | `POST /government/users/:id/role` | `user:manage`; never your own role |
+| `user.role.change` | `POST /government/users/:id/role` · `/government/users/:id/status` · `/government/roles` · `/government/roles/:name/grant` · `/government/roles/:name/revoke` · `/government/roles/:name/retire` · `/government/roles/:name/restore` · `/government/roles/:name/export-limit` | `user:manage`; never your own role. The name is about *who may do what*, so defining a role, granting or revoking a permission on one, and disabling an account are all under it |
+| `financial.period.close` | `POST /government/periods/:id/close` | `period:close`. After this the four tables that decide what the month collected refuse to be written |
+| `financial.period.reopen` | `POST /government/periods/:id/reopen` | `period:reopen`. Split from closing deliberately: one code must not open a month that was minted to close it |
+| `audit.report.sign` | `POST /government/audit/reports/:id/sign` · `/government/audit/reports/:id/withdraw` | `audit:sign` to sign, `audit:report` to withdraw — withdrawal is the other half of the same authority |
+| `device.block` | `POST /government/devices/:id/block` | `user:manage` |
+| `device.unblock` | `POST /government/devices/:id/unblock` | `user:manage` |
+
+Blocking and unblocking a handset are two actions rather than one for the same
+reason closing and reopening a month are: a code is consumed on use and
+authorises exactly one action, so a shared name would let a code minted to take
+a stolen machine out of service be spent handing it back.
 
 #### Correcting a taxpayer record
 
@@ -190,18 +235,15 @@ access can be changed.
 Nobody may change their own role, and nobody may be moved in or out of `agent`:
 agent access follows the clearance pipeline, and activation or suspension is
 how it changes.
-| `POST` | `/agents/me/devices` | own, requires government approval first |
-| `GET` | `/agents/app-version` | version gate (Addendum §43) |
-| `GET` | `/agents/me/home` · `/me/transactions` · `/me/commission` | own |
-| `POST` | `/agents/me/commission/payout` | `commission:payout:request` + step-up |
-| `GET` | `/agents` · `/agents/:id` | `agent:read:all` |
-| `GET` | `/agents/kyc-dashboard` · `/referee-dashboard` · `/performance` | `agent:read:all` |
-| `POST` | `/agents/:id/review` | `agent:approve` — reason required |
-| `POST` | `/agents/:id/activate` | `agent:manage` — refused while items outstanding |
-| `POST` | `/agents/:id/suspend` | `agent:suspend` + step-up |
-| `POST` | `/agents/:id/territory` | `agent:assign_territory` |
-| `POST` | `/agents/devices/:id/approve` · `/revoke` | `device:manage` |
-| `POST` | `/agents/referees/:id/review` | `agent:approve` |
+
+`POST /agents/app-version` is the lever for a release found to be getting money
+wrong: a handset below the minimum is refused at `/payments/initiate` and
+`/vehicles/:id/renew` with 426 and `moneyStatus: NOT_DEBITED`. It appends to
+`app_versions` rather than updating, so what was required when stays readable,
+and it answers with how many active handsets the new minimum stops — locking
+every agent out is permitted, being unaware of it is not. A minimum above the
+recommended version is refused, as is an effective date at or before the row
+already in force, which the gate would never read.
 
 ## Taxpayers
 
@@ -222,6 +264,7 @@ how it changes.
 | `GET` | `/revenue/items/:id/rates` | `catalogue:read` |
 | `POST` | `/revenue/items` | `catalogue:configure` |
 | `POST` | `/revenue/items/:id/rates` | `catalogue:configure` + step-up |
+| `POST` | `/revenue/items/:id/status` | `catalogue:configure` — withdraw an item from the catalogue (`SUSPENDED`) or end it (`RETIRED`), or restore a suspended one. No new assessment can be raised against a withdrawn item; invoices already issued stay payable. Retirement is terminal. |
 | `POST` | `/revenue/quote` | price without creating anything |
 | `POST` | `/revenue/assessments` | `assessment:create` + active agent |
 | `GET` | `/revenue/assessments/:id` · `/invoices/:id` | read |
@@ -233,17 +276,46 @@ how it changes.
 | Method | Path | Notes |
 |---|---|---|
 | `POST` | `/payments/initiate` | `Idempotency-Key` required |
-| `POST` | `/payments/:id/confirm` | asks the gateway; returns whatever it says |
+| `POST` | `/payments/:id/confirm` | asks the gateway; returns whatever it says. On success it issues an **acknowledgement of payment**, not a receipt — see below |
 | `GET` | `/payments/transactions/:reference/status` | authoritative recovery (Addendum §44) |
 | `GET` | `/payments` | `payment:read:all` |
 | `POST` | `/payments/simulate` | development gateway only |
-| `GET` | `/receipts` · `/receipts/lookup?number=` · `/receipts/:id` | receipt numbers contain `/`, so lookup by number uses a query parameter |
+| `GET` | `/receipts` · `/receipts/lookup?number=` · `/receipts/:id` | receipt numbers contain `/`, so lookup by number uses a query parameter. A receipt exists only after settlement |
 | `GET` | `/documents/:id` | metadata plus a signed download URL |
 | `GET` | `/vehicles/lookup/:registrationNumber` | platform, then authority; `source` is `PLATFORM`, `AUTHORITY`, `NOT_FOUND` or `REGISTRY_UNAVAILABLE` |
 | `POST` | `/vehicles` · `/vehicles/:id/renew` | `vehicle:renew`; capture returns `authorityOutcome` (`FOUND` / `NOT_FOUND` / `UNAVAILABLE`) |
 | `POST` | `/vehicles/renewals/:id/document` | issue or re-fetch the renewal PDF |
 | `GET` | `/vehicles/renewals/authority-outstanding` | `vehicle:authority_sync` — renewals the authority never acknowledged, and vehicles captured while it was unreachable |
 | `POST` | `/vehicles/renewals/authority-retry` | `vehicle:authority_sync` — re-send those notifications; changes no financial record |
+| `POST` | `/vehicles/:id/status` | `vehicle:manage` — take a vehicle out of service (`SUSPENDED` while something is looked into, `ARCHIVED` when it is sold, written off or scrapped) or put it back. Renewal is refused for anything but `ACTIVE`; renewals already issued stay valid for the period paid for. |
+
+### Acknowledgement now, receipt on settlement
+
+A government receipt asserts that the Plateau State Government received the
+money. The gateway confirming a payment is a different fact: it means the
+*gateway* holds the money, which reaches the government account in a batch a
+day or two later. So the two are separate events with separate documents.
+
+| When | Transaction status | What the taxpayer holds |
+|---|---|---|
+| Gateway confirms | `RECONCILIATION_PENDING` | `PAYMENT_ACKNOWLEDGEMENT` — verifiable, numbered `PSIRS-ACK-…`, and marked on its face as **not a receipt** |
+| Settlement reconciled | `RECEIPT_GENERATED` → `SETTLED` | the government receipt, plus any vehicle particulars the collection paid for |
+
+Two consequences for a client:
+
+- `POST /payments/:id/confirm` returns `acknowledgementNumber`, not
+  `receiptNumber`. A screen that reads a missing `receiptNumber` as "payment
+  failed" will tell an agent to collect a second time from someone who has
+  already paid. `GET /payments/transactions/:reference/status` carries
+  `acknowledgement_number` / `acknowledgement_code` alongside the receipt
+  columns for exactly this reason.
+- A vehicle renewal has no document until settlement. `POST
+  /vehicles/renewals/:id/document` before then is refused — the database
+  refuses it, not merely the route.
+
+Both rules are enforced by triggers (`receipts_require_verified_payment`,
+`vehicle_renewals_require_verified_payment`), so they hold against a
+compromised service account and not only against this codebase.
 
 `REGISTRY_UNAVAILABLE` is not `NOT_FOUND`. The first says the vehicle authority
 could not be asked; the second says it answered and holds no such vehicle. A
@@ -302,7 +374,7 @@ process would be a lost capture wearing the costume of a successful one.
 |---|---|---|
 | `GET` | `/government/dashboard` · `/kpis` | `report:read:all` |
 | `GET` | `/government/intelligence/geography` | drill State → LGA → Ward → Community |
-| `GET` | `/government/transactions?format=json\|csv` | `payment:read:all` |
+| `GET` | `/government/transactions?format=json\|csv\|xlsx\|pdf` | `payment:read:all`; any format but `json` also needs `data:export` |
 | `POST` | `/government/reconciliation/run` · `/recover` | `payment:reconcile` |
 | `GET` | `/government/reconciliation/exceptions` | exception queue |
 | `POST` | `/government/reconciliation/exceptions/:id/resolve` | resolution required |
@@ -315,13 +387,89 @@ process would be a lost capture wearing the costume of a successful one.
 | `POST` | `/government/commissions/payouts/:id/approve` · `/complete` | segregation of duties |
 | `GET` | `/government/leakage` · `/fraud/flags` | `fraud:read` |
 | `POST` | `/government/fraud/flags/:id/review` · `/fraud/sweep` | `fraud:manage` |
-| `GET` | `/government/audit?format=json\|csv` | `audit:read` |
+| `GET` | `/government/roles` | `user:manage` — every role, its permissions, its officers, and how many rows it may export |
+| `POST` | `/government/roles` | `user:manage`, step-up — create a role, optionally copying an existing one's grants |
+| `POST` | `/government/roles/:name/grant` · `/revoke` | `user:manage`, step-up — the delegation of authority, as data since migration 059 |
+| `POST` | `/government/roles/:name/retire` · `/restore` | `user:manage`, step-up — a retired role cannot be assigned (migration 060) |
+| `POST` | `/government/roles/:name/export-limit` | `user:manage`, step-up — rows the role may take out in one file; 0 means none |
+| `GET` | `/government/audit?format=json\|csv\|xlsx\|pdf` | `audit:read`; any format but `json` also needs `data:export` |
 | `GET` | `/government/audit/verify` | replays the hash chain |
 | `GET` | `/government/audit/queries/*` | the PRD §67 questions, as endpoints |
+| `POST`/`GET` | `/government/audit/samples` | `audit:sample` — draw a sample, or list what has been drawn |
+| `GET` | `/government/audit/samples/:id` | the sample, its seed, and every transaction it selected |
+| `POST` | `/government/audit/samples/items/:id/finding` | `CLEAN`, `EXCEPTION` (which must say what was wrong) or `NOT_AVAILABLE` |
+| `POST` | `/government/audit/samples/:id/complete` | refused while any item is still unexamined |
+| `POST`/`GET` | `/government/audit/reports` | `audit:report` — generate a report of one of thirteen kinds, or list them |
+| `GET` | `/government/audit/reports/:id` | the frozen payload, plus `checksumMatches` recomputed on read; the read is itself audited |
+| `GET` | `/government/audit/reports/:id/export?format=csv\|xlsx\|pdf` | the frozen payload as a file, carrying the report number and checksum |
+| `POST` | `/government/audit/reports/:id/sign` | `audit:sign`, step-up `audit.report.sign` |
+| `POST` | `/government/audit/reports/:id/withdraw` | `audit:report`, step-up — a report is never deleted |
+| `GET` | `/government/workers` | `audit:read` — whether the scheduled jobs are running |
+| `GET` | `/government/search?q=` | `catalogue:read` — see below; each result kind is gated separately |
+| `GET` | `/government/transactions/:key/full` | Transaction 360; `:key` is an id or a reference |
+| `GET` | `/government/my-work` | `case:read:all` — everything waiting for the signed-in officer |
+| `GET`/`POST` | `/government/cases` | `case:read:all` / `case:create` |
+| `GET` | `/government/cases/:id` | the case and its whole history |
+| `POST` | `/government/cases/:id/comments` · `/evidence` | `case:contribute` |
+| `POST` | `/government/cases/:id/evidence/upload` | `case:contribute`; the body is the file, its type checked against the bytes |
+| `GET` | `/government/cases/evidence/:id/file` | `case:read:all`; the read is audited |
+| `GET` | `/government/platform/integrations` | `system:configure` or `audit:read` — which adapter is configured *and* whether it is answering |
+| `GET` | `/government/inbox?unreadOnly=` | no permission — what this officer and their role were told |
+| `POST` | `/government/inbox/:id/read` · `/inbox/read-all` | their own, or their role's |
+| `GET` | `/government/users/:id/activity?days=` | their own without a permission; anybody else's with `audit:read` |
+| `GET` | `/government/sessions/mine` | no permission — an officer's own sessions and machines |
+| `POST` | `/government/sessions/:id/end` | their own; anybody's with `user:manage` |
+| `GET` | `/government/users/:id/sessions` | `user:manage` |
+| `POST` | `/government/devices/:id/block` · `/unblock` | `user:manage`, step-up `user.role.change` |
+| `POST` | `/government/cases/:id/assign` · `/status` · `/priority` | `case:contribute` on the route; the row decides |
 | `GET`/`POST` | `/government/programmes` | `incentive:*` |
 | `GET` | `/government/reference/territories` | `agent:read:*` |
 | `GET` | `/government/platform/integrations` | source-of-truth map |
 | `POST`/`GET` | `/support/tickets` | support and complaints |
+
+### Global search, Transaction 360, and cases
+
+`GET /government/search` is gated on the weakest permission any portal role
+holds, and that is deliberate: it grants nothing on its own. Every *kind* of
+result — transaction, receipt, taxpayer, agent, officer, vehicle, case — is
+gated separately inside the service on the permission that kind's own screen
+requires, and territory scope narrows a supervisor to their own LGAs. Gating the
+endpoint itself more tightly would only mean the roles that hold less get no
+search, while changing nothing about what any of them can see through it.
+
+`GET /government/transactions/:key/full` assembles the whole chain — taxpayer,
+agent, revenue item, assessment, invoice, payments, gateway, receipt, refunds,
+settlement, reconciliation, commission, payout — plus a timeline that merges
+`transaction_events` with `audit_logs` in time order, carrying the before and
+after of every change. Sections the caller may not see are omitted **and named
+in `withheld`**: an empty `commission` and a hidden one look identical, and an
+investigator who cannot tell them apart will conclude something false.
+
+A transaction outside the caller's territory scope answers `404`, not `403`.
+"No such reference" and "not yours" are the same answer to somebody who should
+not know the row exists.
+
+The three case endpoints that move a case are `case:contribute` on the route,
+and the real gate is inside `services/cases.ts`: `case:manage`, **or** having
+opened this case, **or** having it assigned to you. That cannot be expressed as
+a route permission because it is a fact about the row — and requiring
+`case:manage` instead would let a finance officer raise a settlement discrepancy
+and then be unable to resolve it.
+
+`case_events` is append-only and the database enforces it: an `UPDATE` or
+`DELETE` is refused by trigger, and a case is `CLOSED` rather than deleted.
+A case cannot be `RESOLVED` without a resolution, checked in the service and
+again by a CHECK constraint.
+
+`GET /government/workers` answers for every declared background job: when it
+last started, when it last *succeeded* — the reading that separates a job
+throwing since Tuesday from a healthy one — how many times in a row it has
+failed, and one of six states. `NEVER_RUN` and `OVERDUE` are the ones with no
+evidence anywhere else in the platform: a job that is not running produces
+nothing to look at. `STALLED` means a run started and never returned, which the
+next run infers from finding the row still at `RUNNING` under the advisory lock.
+It is `audit:read` rather than an administrator's permission because whether the
+reconciliation sweep operated is an audit fact.
 
 ### PRD §67 audit queries
 
@@ -359,8 +507,18 @@ curl -X POST localhost:4000/api/v1/payments/initiate \
 # 4. Ask whether the money actually arrived
 curl -X POST localhost:4000/api/v1/payments/$PAYMENT/confirm \
   -H "authorization: Bearer $TOKEN" -H "x-device-id: $DEVICE"
-# → 200 with receiptNumber, or 202 PAYMENT_UNCONFIRMED with moneyStatus UNCONFIRMED
+# → 200 with acknowledgementNumber, or 202 PAYMENT_UNCONFIRMED with
+#   moneyStatus UNCONFIRMED. Note: acknowledgement, not receipt.
 
-# 5. Anyone can verify the receipt, with no account
-curl localhost:4000/api/v1/verify/$RECEIPT_CODE
+# 5. Anyone can verify it, with no account. Before settlement this answers
+#    documentType PAYMENT_ACKNOWLEDGEMENT and says plainly that it is not a
+#    receipt; after settlement the receipt code answers RECEIPT.
+curl localhost:4000/api/v1/verify/$ACK_CODE
+
+# 6. A finance officer records the bank credit. This is what issues the
+#    receipt, and any vehicle particulars the collection paid for.
+curl -X POST localhost:4000/api/v1/government/settlements \
+  -H "authorization: Bearer $FINANCE_TOKEN" -H 'content-type: application/json' \
+  -d '{"settlementDate":"2026-08-27","gatewayReferences":["'$GWREF'"],
+       "receivedAmountKobo":"500000","bankReference":"BANK-CREDIT-0001"}'
 ```

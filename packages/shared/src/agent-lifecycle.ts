@@ -161,6 +161,49 @@ export function deriveAccessStage(axes: AgentStatusAxes): AccessStage {
 }
 
 /**
+ * The seven gates, as codes.
+ *
+ * They used to be English sentences, and the applicant's own screen printed
+ * them straight onto the page — so the one list telling somebody what stands
+ * between them and their first day's earnings was in English, in an
+ * application that has offered Hausa since it was built. A sentence composed
+ * here cannot be translated at the point it is read, because by then it is
+ * prose. A code can.
+ */
+export const AGENT_BLOCKERS = [
+  'KYC',
+  'REFEREE',
+  'GOVERNMENT_APPROVAL',
+  'TRAINING',
+  'BANK',
+  'AGREEMENT',
+  'DEVICE',
+] as const;
+
+export type AgentBlocker = (typeof AGENT_BLOCKERS)[number];
+
+/**
+ * The same seven in English, for the two places a code cannot go.
+ *
+ * `override_reason` is an audit record — it is written once, read years later
+ * by whoever asks why this agent was activated early, and must not depend on
+ * what a dictionary says at the time it is read. The officer-facing conflict
+ * message is the other: it names the unmet items inside a sentence, and the
+ * portal has no way to reassemble that from codes.
+ *
+ * Nothing an applicant reads should come from here. They get the codes.
+ */
+export const BLOCKER_SENTENCES: Record<AgentBlocker, string> = {
+  KYC: 'KYC clearance is not complete',
+  REFEREE: 'No referee has been cleared for this applicant',
+  GOVERNMENT_APPROVAL: 'Government review has not approved this application',
+  TRAINING: 'Mandatory training is not complete',
+  BANK: 'Commission bank account has not been verified',
+  AGREEMENT: 'The agent agreement has not been accepted',
+  DEVICE: 'No active device has been registered',
+};
+
+/**
  * §14 / §50 — the activation gate, enforced in the backend.
  *
  * Returns the list of unmet requirements. An empty list is the only thing
@@ -169,16 +212,21 @@ export function deriveAccessStage(axes: AgentStatusAxes): AccessStage {
  * function — it records an approved exception alongside the unmet items, so
  * the reason an agent was activated early stays visible forever.
  */
-export function activationBlockers(flags: AgentClearanceFlags): string[] {
-  const blockers: string[] = [];
-  if (!flags.kycCleared) blockers.push('KYC clearance is not complete');
-  if (!flags.refereeCleared) blockers.push('No referee has been cleared for this applicant');
-  if (!flags.governmentApproved) blockers.push('Government review has not approved this application');
-  if (!flags.trainingCompleted) blockers.push('Mandatory training is not complete');
-  if (!flags.bankVerified) blockers.push('Commission bank account has not been verified');
-  if (!flags.agreementAccepted) blockers.push('The agent agreement has not been accepted');
-  if (!flags.deviceRegistered) blockers.push('No approved device has been registered');
+export function activationBlockers(flags: AgentClearanceFlags): AgentBlocker[] {
+  const blockers: AgentBlocker[] = [];
+  if (!flags.kycCleared) blockers.push('KYC');
+  if (!flags.refereeCleared) blockers.push('REFEREE');
+  if (!flags.governmentApproved) blockers.push('GOVERNMENT_APPROVAL');
+  if (!flags.trainingCompleted) blockers.push('TRAINING');
+  if (!flags.bankVerified) blockers.push('BANK');
+  if (!flags.agreementAccepted) blockers.push('AGREEMENT');
+  if (!flags.deviceRegistered) blockers.push('DEVICE');
   return blockers;
+}
+
+/** The English for a blocker, for an audit record or an officer's sentence. */
+export function blockerSentence(code: AgentBlocker): string {
+  return BLOCKER_SENTENCES[code];
 }
 
 export function canActivate(flags: AgentClearanceFlags): boolean {
@@ -187,18 +235,18 @@ export function canActivate(flags: AgentClearanceFlags): boolean {
 
 /** §18 — mandatory training curriculum. */
 export const TRAINING_MODULES = [
-  { code: 'TRN-01', title: 'Revenue collection process', assessed: true, passMark: 70 },
-  { code: 'TRN-02', title: 'Taxpayer registration', assessed: true, passMark: 70 },
-  { code: 'TRN-03', title: 'TIN process', assessed: true, passMark: 70 },
-  { code: 'TRN-04', title: 'Payment process', assessed: true, passMark: 80 },
-  { code: 'TRN-05', title: 'Receipt verification', assessed: true, passMark: 80 },
-  { code: 'TRN-06', title: 'Vehicle renewal', assessed: false, passMark: 0 },
-  { code: 'TRN-07', title: 'Agent commission', assessed: false, passMark: 0 },
-  { code: 'TRN-08', title: 'Fraud prevention', assessed: true, passMark: 80 },
-  { code: 'TRN-09', title: 'Data protection', assessed: true, passMark: 80 },
-  { code: 'TRN-10', title: 'Customer service', assessed: false, passMark: 0 },
-  { code: 'TRN-11', title: 'Government ethics', assessed: true, passMark: 80 },
-  { code: 'TRN-12', title: 'Escalation procedures', assessed: false, passMark: 0 },
+  { code: 'TRN-01', title: 'Revenue Collection Process', assessed: true, passMark: 70 },
+  { code: 'TRN-02', title: 'Taxpayer Registration', assessed: true, passMark: 70 },
+  { code: 'TRN-03', title: 'TIN Process', assessed: true, passMark: 70 },
+  { code: 'TRN-04', title: 'Payment Process', assessed: true, passMark: 80 },
+  { code: 'TRN-05', title: 'Receipt Verification', assessed: true, passMark: 80 },
+  { code: 'TRN-06', title: 'Vehicle Renewal', assessed: false, passMark: 0 },
+  { code: 'TRN-07', title: 'Agent Commission', assessed: false, passMark: 0 },
+  { code: 'TRN-08', title: 'Fraud Prevention', assessed: true, passMark: 80 },
+  { code: 'TRN-09', title: 'Data Protection', assessed: true, passMark: 80 },
+  { code: 'TRN-10', title: 'Customer Service', assessed: false, passMark: 0 },
+  { code: 'TRN-11', title: 'Government Ethics', assessed: true, passMark: 80 },
+  { code: 'TRN-12', title: 'Escalation Procedures', assessed: false, passMark: 0 },
 ] as const;
 
 /** §8 — referee categories; configurable by PSIRS, seeded with these defaults. */

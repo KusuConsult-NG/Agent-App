@@ -43,10 +43,10 @@ import {
 import { nextPaymentReference } from '../lib/references';
 import { recordAudit } from './audit';
 import { accrueCommission } from './commission';
-import { issueReceipt } from './receipts';
+import { issueAcknowledgement } from './receipts';
 import { completeRenewal } from './vehicles';
 import { transitionTransaction } from './revenue';
-import { evaluateTransactionRisk } from './fraud';
+import { evaluateTransactionRisk, raiseFlag } from './fraud';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { metrics } from '../lib/metrics';
@@ -295,8 +295,17 @@ export interface ConfirmationResult {
   paymentId: string;
   transactionId: string;
   transactionReference: string;
+  /** Present once the money has settled and a receipt exists. */
   receiptNumber?: string;
   receiptId?: string;
+  /**
+   * The acknowledgement issued at gateway confirmation, before any receipt.
+   *
+   * Kept as its own field rather than reusing `receiptNumber` so no caller can
+   * print one where it means the other — which is the entire failure this
+   * change exists to prevent, and the easiest one to reintroduce by accident.
+   */
+  acknowledgementNumber?: string;
   documentId?: string;
   commissionKobo?: string;
   message: string;
@@ -326,22 +335,45 @@ export async function confirmPayment(params: {
 }): Promise<ConfirmationResult> {
   const result = await verifyAndRecord(params);
 
-  // What the citizen actually bought. Issuing it lived in the route the agent's
-  // app calls when it taps "check payment status", so a renewal confirmed by
-  // webhook — the ordinary path, and the one this platform treats as
-  // authoritative — took the money, issued the receipt, and never issued the
-  // renewal or told the vehicle authority. The taxpayer was left holding a
-  // government receipt for a renewal that had not happened.
-  //
-  // It belongs here, where the docstring above already says every confirmation
-  // route converges. Outside the transaction because it calls the vehicle
-  // authority over the network, and that must not be done holding a
-  // SERIALIZABLE transaction open.
-  if (result.status === 'VERIFIED') {
-    await issueRenewalFor(result, params);
-  }
-
+  /*
+   * The renewal document is no longer issued here.
+   *
+   * It is what a driver shows at a checkpoint: a legal instrument granting a
+   * year of cover. Issuing it on the gateway's word meant the State could grant
+   * that cover for a payment that never arrived and take a year to find out. It
+   * now issues with the receipt, when the settlement covering it is reconciled
+   * — `issueRenewalsFor` below, called from the settlement path, and refused by
+   * the database until the transaction has actually reached that point.
+   */
   return result;
+}
+
+/**
+ * Issue vehicle particulars for transactions a settlement has just paid for.
+ *
+ * Called after the settlement transaction has committed, never inside it,
+ * because announcing a renewal to the vehicle authority is a network call and
+ * a settlement must not hold a database transaction open across somebody
+ * else's network. A failure here leaves the renewal without its document and
+ * reports itself; the money and the receipt are unaffected, and the retry job
+ * carries the announcement.
+ */
+export async function issueRenewalsFor(
+  transactionIds: string[],
+  params: { actorId?: string | null; actorRole?: string | null },
+): Promise<void> {
+  for (const transactionId of transactionIds) {
+    await issueRenewalFor(
+      {
+        status: 'VERIFIED',
+        paymentId: '',
+        transactionId,
+        transactionReference: '',
+        message: '',
+      },
+      params,
+    );
+  }
 }
 
 /**
@@ -398,7 +430,50 @@ async function verifyAndRecord(params: {
   actorId?: string | null;
   actorRole?: string | null;
 }): Promise<ConfirmationResult> {
-  return withTransaction(
+  /*
+   * Ask the gateway before opening the transaction, not inside it.
+   *
+   * `gateway.verify` is a call to somebody else's computer. Held inside this
+   * transaction it kept a pool connection and the payment's advisory lock for
+   * the whole round trip, which coupled how fast government can confirm
+   * revenue to how fast Remita answers — and, with the development gateway,
+   * deadlocked outright: that adapter reads its own table through the same
+   * pool, so every connection ended up inside a transaction waiting for a
+   * connection that could not be freed. At a concurrency of twelve against a
+   * pool of ten it never recovered.
+   *
+   * Nothing about the guarantee moves. The transaction below still takes the
+   * lock, still re-reads the payment under it, and still refuses to act on
+   * anything it does not find in a confirmable state — so a payment confirmed
+   * by another caller in the meantime is picked up there, exactly as before.
+   * What changes is that the lock is held across database work only.
+   */
+  const preRead = await queryOne<{ gateway_reference: string | null; status: PaymentState }>(
+    pool,
+    'SELECT gateway_reference, status FROM payments WHERE id = $1',
+    [params.paymentId],
+  );
+  const preVerified =
+    preRead?.gateway_reference && preRead.status !== 'FAILED' && preRead.status !== 'ABANDONED'
+      ? await gateway.verify(preRead.gateway_reference)
+      : null;
+
+  /*
+   * A refusal still has to be recorded.
+   *
+   * The amount-mismatch branch below writes three things — the transaction
+   * goes UNDER_REVIEW, a CRITICAL fraud flag is raised against it, and the
+   * discrepancy goes on the audit trail — and then refused the caller by
+   * throwing. The throw rolled all three back. What survived was the metric
+   * and the alert, neither of which is a record: the agent was told the
+   * transaction had been placed under review when it had not, the flag queue
+   * an officer works from stayed empty, and the one anomaly this platform
+   * treats as urgent left less behind than an ordinary failed payment.
+   *
+   * So the transaction decides and writes, and hands back what it decided; the
+   * refusal is raised afterwards, once the evidence has committed.
+   */
+  const outcome = await withTransaction<ConfirmationResult | AmountMismatch>(
     async (client) => {
       const payment = await queryOne<{
         id: string;
@@ -441,6 +516,20 @@ async function verifyAndRecord(params: {
           'SELECT id, receipt_number, document_id FROM receipts WHERE payment_id = $1',
           [payment.id],
         );
+        /*
+         * A confirmed payment has one of two documents behind it depending on
+         * whether the money has arrived, and the answer given here has to be
+         * whichever one actually exists.
+         */
+        const acknowledgement = receipt
+          ? null
+          : await queryOne<{ id: string; document_number: string }>(
+              client,
+              `SELECT id, document_number FROM documents
+                WHERE document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND entity_type = 'transaction'
+                  AND entity_id = $1 AND status <> 'REVOKED'`,
+              [payment.transaction_id],
+            );
         return {
           status: 'VERIFIED',
           paymentId: payment.id,
@@ -448,8 +537,12 @@ async function verifyAndRecord(params: {
           transactionReference: payment.transaction_reference,
           receiptNumber: receipt?.receipt_number,
           receiptId: receipt?.id,
-          documentId: receipt?.document_id ?? undefined,
-          message: 'This payment was already confirmed. The receipt below is the original.',
+          acknowledgementNumber: acknowledgement?.document_number,
+          documentId: receipt?.document_id ?? acknowledgement?.id ?? undefined,
+          message: receipt
+            ? 'This payment was already confirmed and settled. The receipt below is the original.'
+            : 'This payment was already confirmed by the gateway. The government receipt is ' +
+              'issued once the money reaches a government account.',
         };
       }
 
@@ -465,7 +558,10 @@ async function verifyAndRecord(params: {
       }
 
       // ---- The independent confirmation -----------------------------------
-      const verification = await gateway.verify(payment.gateway_reference);
+      // Normally answered before this transaction opened. The fallback covers
+      // the narrow race where the gateway reference was set between that read
+      // and this one; it is not the ordinary path.
+      const verification = preVerified ?? (await gateway.verify(payment.gateway_reference));
 
       if (verification.status === 'PENDING' || verification.status === 'UNKNOWN') {
         await client.query(
@@ -476,12 +572,40 @@ async function verifyAndRecord(params: {
         throw paymentUnconfirmed(payment.transaction_reference);
       }
 
-      if (verification.status === 'FAILED' || verification.status === 'ABANDONED') {
+      /*
+       * REVERSED belongs here, and its absence was the whole defect.
+       *
+       * `verify()` may answer PENDING, SUCCESS, FAILED, ABANDONED, REVERSED or
+       * UNKNOWN — the contract says so, and both adapters can return the fifth.
+       * This function handled four of the six. REVERSED fell past every branch
+       * to the success path below, so a gateway saying "that money went back"
+       * produced a VERIFIED payment, an acknowledgement handed to the taxpayer,
+       * and commission accruing to the agent. The integration brief states the
+       * rule this broke: an answer the platform does not recognise is treated as
+       * a failure, not as a success and not as "probably fine". Here it was a
+       * recognised answer, and it was treated as the best possible one.
+       *
+       * It maps to FAILED rather than to the payment status of the same name.
+       * REVERSED is reachable only from VERIFIED — you cannot give back money
+       * you never confirmed receiving — and a payment arriving here is by
+       * definition not yet verified, because an already-confirmed one returned
+       * further up. So the truthful record is that this attempt did not
+       * complete, with the gateway's own word for why.
+       */
+      if (
+        verification.status === 'FAILED' ||
+        verification.status === 'ABANDONED' ||
+        verification.status === 'REVERSED'
+      ) {
         await transitionPayment(client, {
           paymentId: payment.id,
           from: payment.status,
-          to: verification.status === 'FAILED' ? 'FAILED' : 'ABANDONED',
-          failureReason: verification.failureReason ?? 'Gateway reported the payment did not succeed',
+          to: verification.status === 'ABANDONED' ? 'ABANDONED' : 'FAILED',
+          failureReason:
+            verification.failureReason ??
+            (verification.status === 'REVERSED'
+              ? 'The gateway reports this payment was reversed: the money has gone back'
+              : 'Gateway reported the payment did not succeed'),
           response: verification.raw,
         });
         await transitionTransaction(client, {
@@ -502,6 +626,33 @@ async function verifyAndRecord(params: {
 
         metrics.paymentConfirmed('FAILED', params.source);
 
+        /*
+         * And tell the taxpayer, which this branch never did.
+         *
+         * Success queued PAYMENT_SUCCESSFUL; failure queued nothing, though a
+         * PAYMENT_FAILED template has been seeded from the beginning. The
+         * sentence returned below goes to whichever client made the call —
+         * the agent's handset, or a gateway posting a webhook — and neither of
+         * those is the person whose money it is.
+         *
+         * The asymmetry is the wrong way round. A citizen whose payment
+         * succeeded finds out anyway, because a receipt follows. A citizen
+         * whose payment failed may have been debited by their own bank and had
+         * the gateway report failure regardless, and PRD §60 exists because
+         * somebody who cannot tell whether their money left their account pays
+         * a second time.
+         */
+        await queueNotification(client, {
+          event: 'PAYMENT_FAILED',
+          taxpayerId: await taxpayerIdFor(client, payment.transaction_id),
+          entityType: 'transaction',
+          entityId: payment.transaction_id,
+          variables: {
+            reference: payment.transaction_reference,
+            reason: verification.failureReason ?? 'the payment did not complete',
+          },
+        });
+
         return {
           status: 'FAILED',
           paymentId: payment.id,
@@ -512,43 +663,81 @@ async function verifyAndRecord(params: {
         };
       }
 
+      /*
+       * Anything still unaccounted for is not a success.
+       *
+       * The branches above name every status the contract declares, so nothing
+       * should reach this line. That is exactly why it is here: the defect it
+       * guards against was a status the contract declared and this function did
+       * not read, and the cost of that omission was not an error but a receipt.
+       * Falling through to the success path is the one outcome an unrecognised
+       * answer must never produce, so the default is refusal and the unknown
+       * word is logged rather than assumed.
+       *
+       * Adding a status to the gateway contract now fails closed here instead of
+       * silently opening the money path.
+       */
+      if (verification.status !== 'SUCCESS') {
+        log.error('gateway returned a status this platform does not handle', {
+          component: 'payments',
+          gatewayStatus: verification.status,
+          paymentId: payment.id,
+        });
+        await client.query(`UPDATE payments SET verification_response = $2 WHERE id = $1`, [
+          payment.id,
+          JSON.stringify(verification.raw),
+        ]);
+        metrics.paymentConfirmed('PENDING', params.source);
+        throw paymentUnconfirmed(payment.transaction_reference);
+      }
+
       // ---- Amount check ----------------------------------------------------
       // A gateway reporting success for a different amount is never accepted as
       // payment of this obligation: that would let a ₦100 payment discharge a
       // ₦100,000 assessment.
       const expected = parseKobo(payment.amount_kobo);
       if (verification.amountKobo === null || verification.amountKobo !== expected) {
-        await transitionTransaction(client, {
+        /*
+         * Only if it is not already there.
+         *
+         * The refusal tells the agent not to collect payment again; it does
+         * not stop them, or support, pressing Confirm again. The second press
+         * came back through here, tried to move an UNDER_REVIEW transaction to
+         * UNDER_REVIEW, and answered with "Transaction cannot move from
+         * UNDER_REVIEW to UNDER_REVIEW" — a sentence about our state machine
+         * in place of the one fact that matters, which is that the gateway
+         * named a different amount and no receipt exists.
+         */
+        if (payment.transaction_status !== 'UNDER_REVIEW') {
+          await transitionTransaction(client, {
+            transactionId: payment.transaction_id,
+            to: 'UNDER_REVIEW',
+            reason: `Gateway amount ${verification.amountKobo ?? 'unknown'} does not match expected ${expected}`,
+            actorId: params.actorId ?? null,
+            source: 'SYSTEM',
+          });
+        }
+        /*
+         * Raised the same way every other flag is.
+         *
+         * This one was inserted straight into the table, which was invisible
+         * while the insert was being rolled back anyway. Committing it makes
+         * the difference matter: a second Confirm on the same refused payment
+         * — which the agent is told not to make, and support will make anyway
+         * — would file a second identical CRITICAL flag. `raiseFlag` is where
+         * the platform decides whether a signal is new, and there is no reason
+         * for the most serious one to be the exception.
+         */
+        await raiseFlag(client, {
+          rule: 'AMOUNT_MISMATCH',
+          severity: 'CRITICAL',
+          entityType: 'TRANSACTION',
+          entityId: payment.transaction_id,
           transactionId: payment.transaction_id,
-          to: 'UNDER_REVIEW',
-          reason: `Gateway amount ${verification.amountKobo ?? 'unknown'} does not match expected ${expected}`,
-          actorId: params.actorId ?? null,
-          source: 'SYSTEM',
-        });
-        await client.query(
-          `INSERT INTO fraud_flags (rule, severity, entity_type, entity_id, transaction_id, detail)
-           VALUES ('AMOUNT_MISMATCH','CRITICAL','TRANSACTION',$1,$1,$2)`,
-          [
-            payment.transaction_id,
-            JSON.stringify({
-              expectedKobo: expected.toString(),
-              gatewayKobo: verification.amountKobo?.toString() ?? null,
-              gatewayReference: payment.gateway_reference,
-            }),
-          ],
-        );
-        metrics.amountMismatch();
-        metrics.paymentConfirmed('FAILED', params.source);
-        // A gateway confirming a different amount than the invoice is either a
-        // gateway fault or an attack. Either way a person needs to look today.
-        reportError({
-          message: 'Gateway confirmed a payment for an amount that does not match the invoice',
-          severity: 'error',
-          component: 'payments',
-          context: {
-            transactionReference: payment.transaction_reference,
+          detail: {
             expectedKobo: expected.toString(),
             gatewayKobo: verification.amountKobo?.toString() ?? null,
+            gatewayReference: payment.gateway_reference,
           },
         });
 
@@ -565,16 +754,12 @@ async function verifyAndRecord(params: {
           },
         });
 
-        throw new AppError({
-          statusCode: 409,
-          code: 'PAYMENT_AMOUNT_MISMATCH',
-          message:
-            'The amount confirmed by the payment gateway does not match this invoice. ' +
-            'The transaction has been placed under review and no receipt has been issued. ' +
-            'Do not collect payment again.',
-          moneyStatus: 'UNCONFIRMED',
-          reference: payment.transaction_reference,
-        });
+        return {
+          amountMismatch: true,
+          transactionReference: payment.transaction_reference,
+          expectedKobo: expected.toString(),
+          gatewayKobo: verification.amountKobo?.toString() ?? null,
+        };
       }
 
       // ---- Confirmed: advance the money states ----------------------------
@@ -624,27 +809,28 @@ async function verifyAndRecord(params: {
         [payment.invoice_id, expected.toString()],
       );
 
-      // ---- Evidence and incentive, in the same transaction -----------------
-      const receipt = await issueReceipt(client, {
+      /*
+       * ---- What the taxpayer gets now, and what they get later -------------
+       *
+       * Not a receipt. The gateway confirming means the gateway holds the
+       * money; a receipt says the State received it, and that is not true yet.
+       * The acknowledgement says exactly what is and is not the case, and the
+       * receipt is issued by `settleLinkedTransactions` when a bank credit
+       * covering this collection is reconciled — enforced underneath by the
+       * trigger, which refuses a receipt for a payment with no settlement.
+       */
+      const acknowledgement = await issueAcknowledgement(client, {
         transactionId: payment.transaction_id,
         paymentId: payment.id,
-        actorId: params.actorId ?? null,
-      });
-
-      await transitionTransaction(client, {
-        transactionId: payment.transaction_id,
-        to: 'RECEIPT_GENERATED',
-        actorId: params.actorId ?? null,
-        source: 'SYSTEM',
-        metadata: { receiptNumber: receipt.receiptNumber },
       });
 
       await transitionTransaction(client, {
         transactionId: payment.transaction_id,
         to: 'RECONCILIATION_PENDING',
-        reason: 'Awaiting settlement confirmation',
+        reason: 'Confirmed by the gateway; awaiting settlement into a government account',
         actorId: params.actorId ?? null,
         source: 'SYSTEM',
+        metadata: { acknowledgementNumber: acknowledgement.documentNumber },
       });
 
       const commission = await accrueCommission(client, {
@@ -667,7 +853,7 @@ async function verifyAndRecord(params: {
           gatewayReference: verification.gatewayReference,
           amountKobo: expected.toString(),
           verifiedBy: params.source,
-          receiptNumber: receipt.receiptNumber,
+          acknowledgementNumber: acknowledgement.documentNumber,
           commissionKobo: commission?.amountKobo.toString() ?? null,
         },
       });
@@ -684,7 +870,10 @@ async function verifyAndRecord(params: {
         entityId: payment.transaction_id,
         variables: {
           amount: expected.toString(),
-          receiptNumber: receipt.receiptNumber,
+          // The taxpayer is told their payment is confirmed and that the
+          // receipt follows. Naming the acknowledgement rather than a receipt
+          // number keeps the message true: there is no receipt yet.
+          receiptNumber: acknowledgement.documentNumber,
           reference: payment.transaction_reference,
         },
       });
@@ -694,18 +883,81 @@ async function verifyAndRecord(params: {
         paymentId: payment.id,
         transactionId: payment.transaction_id,
         transactionReference: payment.transaction_reference,
-        receiptNumber: receipt.receiptNumber,
-        receiptId: receipt.receiptId,
-        documentId: receipt.documentId,
+        acknowledgementNumber: acknowledgement.documentNumber,
+        documentId: acknowledgement.documentId,
         commissionKobo: commission?.amountKobo.toString(),
-        message: 'Payment confirmed and government receipt issued.',
+        message:
+          'Payment confirmed by the gateway. The taxpayer has an acknowledgement of payment; ' +
+          'the government receipt is issued once the money reaches a government account.',
       };
     },
     // SERIALIZABLE: verification reads the payment, the invoice and the
     // commission ledger and writes all three. A phantom under READ COMMITTED
     // could allow two concurrent confirmations to both accrue commission.
-    { isolationLevel: 'SERIALIZABLE' },
+    /*
+     * READ COMMITTED, and the exclusion comes from locks that name what they
+     * protect.
+     *
+     * Two confirmations of one payment must not both issue a receipt. That is
+     * held by the advisory lock on the payment id taken above, and by the
+     * `FOR UPDATE OF p` on the row itself — both of which name the payment.
+     * SERIALIZABLE was a third guard over the top, and because it works on
+     * read/write dependencies rather than on identity, it also caught
+     * confirmations that had nothing to do with each other: every one appends
+     * to the audit chain, the chain hashes its predecessor, so twelve agents
+     * confirming twelve different payments all read one tail and write past
+     * it. Postgres is obliged to abort them.
+     *
+     * Measured, that was 83ms for a lone confirmation and 9.3 seconds at the
+     * median for thirty-two, one in six failing outright after ten retries —
+     * on a market day, the platform would stop confirming revenue. It bought
+     * no safety the two locks were not already providing, which is what the
+     * race tests in payment-confirmation-race.test.ts are there to hold: they
+     * passed before this line changed and must pass after it.
+     *
+     * The retry stays. READ COMMITTED still meets 40P01 occasionally, and a
+     * deadlock the database has already rolled back is not news for an agent.
+     */
+    { isolationLevel: 'READ COMMITTED', retryOnConflict: true },
   );
+
+  if ('amountMismatch' in outcome) {
+    metrics.amountMismatch();
+    metrics.paymentConfirmed('FAILED', params.source);
+    // A gateway confirming a different amount than the invoice is either a
+    // gateway fault or an attack. Either way a person needs to look today.
+    reportError({
+      message: 'Gateway confirmed a payment for an amount that does not match the invoice',
+      severity: 'error',
+      component: 'payments',
+      context: {
+        transactionReference: outcome.transactionReference,
+        expectedKobo: outcome.expectedKobo,
+        gatewayKobo: outcome.gatewayKobo,
+      },
+    });
+
+    throw new AppError({
+      statusCode: 409,
+      code: 'PAYMENT_AMOUNT_MISMATCH',
+      message:
+        'The amount confirmed by the payment gateway does not match this invoice. ' +
+        'The transaction has been placed under review and no receipt has been issued. ' +
+        'Do not collect payment again.',
+      moneyStatus: 'UNCONFIRMED',
+      reference: outcome.transactionReference,
+    });
+  }
+
+  return outcome;
+}
+
+/** What the transaction hands back when the gateway named a different amount. */
+interface AmountMismatch {
+  amountMismatch: true;
+  transactionReference: string;
+  expectedKobo: string;
+  gatewayKobo: string | null;
 }
 
 async function taxpayerIdFor(client: PoolClient, transactionId: string): Promise<string> {
@@ -912,12 +1164,22 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
     `SELECT t.id, t.transaction_reference, t.status, t.amount_kobo, t.service_charge_kobo,
             t.total_amount_kobo, t.created_at, t.verified_at, t.settled_at, t.agent_id,
             i.id AS invoice_id, i.invoice_number, i.status AS invoice_status, i.expires_at,
-            ri.name AS revenue_item, rc.name AS revenue_category,
+            ri.name AS revenue_item, ri.name_ha AS revenue_item_ha,
+            rc.name AS revenue_category, rc.name_ha AS revenue_category_ha,
             tp.first_name, tp.last_name, tp.business_name, tp.tin,
+            /*
+             * The language the receipt is printed in. Set at registration by
+             * the agent standing in front of the taxpayer, and honoured by the
+             * message queue since migration 047 — the printed receipt was the
+             * one copy that ignored it.
+             */
+            tp.preferred_language,
             p.id AS payment_id, p.payment_reference, p.gateway_reference, p.status AS payment_status,
             p.paid_at, p.verified_at AS payment_verified_at, p.failure_reason,
             r.id AS receipt_id, r.receipt_number, r.verification_code AS receipt_code,
-            r.document_id
+            r.document_id,
+            ack.id AS acknowledgement_id, ack.document_number AS acknowledgement_number,
+            ack.verification_code AS acknowledgement_code
        FROM transactions t
        JOIN invoices i ON i.id = t.invoice_id
        JOIN revenue_items ri ON ri.id = t.revenue_item_id
@@ -926,6 +1188,14 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
        LEFT JOIN payments p ON p.transaction_id = t.id
             AND p.status IN ('INITIATED','PENDING','SUCCESSFUL','VERIFIED')
        LEFT JOIN receipts r ON r.transaction_id = t.id
+       /*
+        * The acknowledgement is what the taxpayer holds between the gateway
+        * confirming and the money reaching a government account. The agent's
+        * app has to be able to show it, or a confirmed collection reads on
+        * screen as an unconfirmed one and the agent collects again.
+        */
+       LEFT JOIN documents ack ON ack.entity_type = 'transaction' AND ack.entity_id = t.id
+            AND ack.document_type = 'PAYMENT_ACKNOWLEDGEMENT' AND ack.status <> 'REVOKED'
       WHERE t.transaction_reference = $1`,
     [transactionReference],
   );
@@ -935,7 +1205,8 @@ export async function getTransactionStatus(db: Db, transactionReference: string)
   const events = await query(
     db,
     `SELECT from_status, to_status, reason, source, created_at
-       FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at`,
+       FROM transaction_events WHERE transaction_id = $1
+      ORDER BY created_at, sequence`,
     [transaction.id],
   );
 

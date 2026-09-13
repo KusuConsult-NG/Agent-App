@@ -8,6 +8,7 @@
  */
 import { pool, closePool, queryOne } from '../src/db/pool';
 import { verifyAuditChain } from '../src/services/audit';
+import { chainSentence } from '@psirs/shared';
 
 const PAGE = 10_000;
 
@@ -23,7 +24,11 @@ async function main(): Promise<void> {
   for (;;) {
     const page = await verifyAuditChain(pool, { fromSequence: from, limit: PAGE });
     if (!page.valid) {
-      console.log(`BROKEN at sequence ${page.brokenAtSequence}: ${page.detail}`);
+      console.log(
+        `BROKEN at sequence ${page.brokenAtSequence}: ${chainSentence(page.verdict, {
+          sequence: page.brokenAtSequence,
+        })}`,
+      );
       await closePool();
       process.exit(1);
     }
@@ -31,7 +36,15 @@ async function main(): Promise<void> {
     if (page.entriesChecked < PAGE) break;
     from += PAGE;
   }
-  console.log(`valid: ${checked} entries replayed end to end`);
+  /*
+   * "End to end" of what is there, which is not the same as "nothing is
+   * missing". Entries cut from the end of the log leave a shorter chain that
+   * replays perfectly, so the line names where it stopped: that number, kept
+   * from run to run, is what makes a shortened log visible.
+   */
+  console.log(
+    `intact: ${checked} entries replayed, none altered or missing, up to sequence ${total?.max}`,
+  );
   await closePool();
 }
 

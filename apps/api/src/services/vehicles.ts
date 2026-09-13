@@ -11,16 +11,19 @@
  * this code.
  */
 
-import { parseKobo } from '@psirs/shared';
+import { REVENUE_RECOGNISED_STATES, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { conflict, notFound, badRequest } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
+import { endOfDay } from '../lib/calendar-day';
+import { REVENUE_STATES_SQL } from '../lib/revenue-states';
 import { vehicleRegistry, type VehicleLookupOutcome } from '../integrations';
 import { recordAudit } from './audit';
 import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
 import { queueNotification } from './notifications';
+import { log } from '../lib/logger';
 
 export interface VehicleLookup {
   /**
@@ -138,8 +141,24 @@ export async function upsertVehicle(params: {
 }): Promise<VehicleCaptureResult> {
   const normalised = params.input.registrationNumber.trim().toUpperCase().replace(/\s+/g, '');
 
+  /*
+   * Asked before the transaction opens, not inside it.
+   *
+   * This call used to be the first statement in the transaction below, which
+   * meant every capture held a pooled connection and an open transaction for
+   * as long as the vehicle authority took to answer — up to the registry
+   * timeout, on a service the platform does not control. Under a slow registry
+   * that is how a pool runs out of connections and a queue of agents in
+   * markets stops being able to do anything at all.
+   *
+   * Nothing in the transaction feeds this call, so it simply moves out. Where
+   * a call genuinely does depend on rows read inside a transaction, the fix is
+   * the one `attemptRefund` uses — commit, then call — and it is a larger
+   * change than moving a line.
+   */
+  const authority = await vehicleRegistry.lookup(normalised);
+
   return withTransaction(async (client) => {
-    const authority = await vehicleRegistry.lookup(normalised);
     const found = authority.outcome === 'FOUND';
     const record = authority.vehicle;
     const source = found ? 'AUTHORITY_LOOKUP' : 'MANUAL_ENTRY';
@@ -263,6 +282,7 @@ function captureMessage(outcome: VehicleLookupOutcome): string {
  * vehicle renewal is reconciled, receipted and commissioned by exactly the same
  * machinery as a market levy.
  */
+
 export async function initiateRenewal(params: {
   vehicleId: string;
   revenueItemId: string;
@@ -289,16 +309,41 @@ export async function initiateRenewal(params: {
       taxpayer_id: string | null;
       owner_name: string;
       current_expiry_date: Date | null;
+      status: string;
+      status_reason: string | null;
     }>(
       client,
       `SELECT id, registration_number, vehicle_type, vehicle_class, taxpayer_id,
-              owner_name, current_expiry_date
+              owner_name, current_expiry_date, status, status_reason
          FROM vehicles WHERE id = $1`,
       [params.vehicleId],
     ),
   );
 
   if (!vehicle) throw notFound('That vehicle');
+
+  /*
+   * A vehicle that is out of service cannot have its particulars renewed.
+   *
+   * `vehicles.status` has declared ACTIVE, SUSPENDED and ARCHIVED since the
+   * table was created, and until `setVehicleStatus` there was no way to leave
+   * ACTIVE — so this check had nothing to catch and the column was decoration.
+   * Both halves had to arrive together: a status nothing writes is a state
+   * that never happens, and a status nothing reads is a state that means
+   * nothing when it does.
+   */
+  if (vehicle.status !== 'ACTIVE') {
+    throw conflict(
+      'VEHICLE_NOT_IN_SERVICE',
+      vehicle.status === 'ARCHIVED'
+        ? `${vehicle.registration_number} has been taken off the register` +
+          `${vehicle.status_reason ? ` — ${vehicle.status_reason}` : ''}. Papers cannot be ` +
+          'renewed for it. Register the vehicle again if it is back on the road.'
+        : `${vehicle.registration_number} is suspended` +
+          `${vehicle.status_reason ? ` — ${vehicle.status_reason}` : ''}. PSIRS has to lift the ` +
+          'suspension before its particulars can be renewed.',
+    );
+  }
 
   // PRD §22 step 3: verify owner. The vehicle must belong to the taxpayer who
   // is paying, so one person cannot renew another's papers by accident.
@@ -310,6 +355,40 @@ export async function initiateRenewal(params: {
     );
   }
 
+  /*
+   * An early renewal carries the unexpired time forward.
+   *
+   * This used to be `new Date()` unconditionally, so the period always began
+   * the day it was paid for. A motorist renewing a month before their papers
+   * ran out lost that month: twelve months paid, eleven received. It compounds
+   * over a vehicle's life, and it falls hardest on the owners who did the right
+   * thing — renewing before expiry is exactly what this platform's own
+   * reminders ask them to do.
+   *
+   * `current_expiry_date` was already selected here and simply never read.
+   *
+   * A vehicle that has lapsed, or that this platform has never renewed, still
+   * starts today. There is nothing to carry forward, and back-dating cover
+   * across a period the vehicle was driving unlicensed would be a worse answer
+   * than starting now.
+   */
+  const now = new Date();
+  const unexpired =
+    vehicle.current_expiry_date && vehicle.current_expiry_date.getTime() > now.getTime()
+      ? new Date(vehicle.current_expiry_date)
+      : null;
+  const periodStart = unexpired ?? now;
+  const expiryDate = new Date(periodStart);
+  expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
+
+  /*
+   * Worked out before the assessment, not after, so both carry the same dates.
+   *
+   * The renewal row has always recorded this period and the assessment never
+   * did — it carried the sentence "12 month vehicle renewal" instead, composed
+   * here in English and shown to a citizen reading Hausa. The period is dates,
+   * and the dates were already being calculated four lines further down.
+   */
   const assessment = await createAssessment({
     taxpayerId: params.taxpayerId,
     revenueItemId: params.revenueItemId,
@@ -319,7 +398,19 @@ export async function initiateRenewal(params: {
       vehicleClass: vehicle.vehicle_class,
       registrationNumber: vehicle.registration_number,
     },
-    periodLabel: `${params.renewalPeriodMonths} month vehicle renewal`,
+    periodStart: periodStart.toISOString().slice(0, 10),
+    periodEnd: expiryDate.toISOString().slice(0, 10),
+    /*
+     * No label. The period is the two dates above.
+     *
+     * A label was the only thing this assessment recorded about its period,
+     * and every renewal wrote the same words — so the compliance score, which
+     * counts DISTINCT period labels, folded a motorist's 2025 and 2026
+     * renewals into one period and scored them as though they had been
+     * assessed once. Unlabelled, each assessment counts as its own occasion,
+     * which is what the score's own comment says an unlabelled one is.
+     */
+    periodLabel: null,
     actorId: params.actorId,
     actorRole: params.actorRole,
     agentId: params.agentId ?? null,
@@ -328,10 +419,6 @@ export async function initiateRenewal(params: {
     latitude: params.latitude ?? null,
     longitude: params.longitude ?? null,
   });
-
-  const periodStart = new Date();
-  const expiryDate = new Date(periodStart);
-  expiryDate.setMonth(expiryDate.getMonth() + params.renewalPeriodMonths);
 
   const renewal = await withTransaction(async (client) => {
     const row = await queryOne<{ id: string }>(
@@ -383,7 +470,7 @@ export async function completeRenewal(params: {
   actorId: string | null;
   actorRole: string;
 }): Promise<{ documentId: string; documentNumber: string; verificationCode: string; expiryDate: Date }> {
-  return withTransaction(async (client) => {
+  const completed = await withTransaction(async (client) => {
     const renewal = await queryOne<{
       id: string;
       vehicle_id: string;
@@ -427,16 +514,22 @@ export async function completeRenewal(params: {
         'SELECT document_number, verification_code FROM documents WHERE id = $1',
         [renewal.document_id],
       );
+      // Already issued: this call is a repeat, so there is nothing new to
+      // tell the authority. If the original announcement never landed, the
+      // renewal is still not ACCEPTED and the sweep will carry it.
       return {
         documentId: renewal.document_id,
         documentNumber: doc!.document_number,
         verificationCode: doc!.verification_code,
         expiryDate: renewal.expiry_date,
+        announce: null,
       };
     }
 
-    const paidStates = ['PAYMENT_VERIFIED', 'RECEIPT_GENERATED', 'RECONCILIATION_PENDING', 'SETTLED'];
-    if (!renewal.transaction_status || !paidStates.includes(renewal.transaction_status)) {
+    if (
+      !renewal.transaction_status ||
+      !(REVENUE_RECOGNISED_STATES as readonly string[]).includes(renewal.transaction_status)
+    ) {
       throw conflict(
         'RENEWAL_NOT_PAID',
         'The renewal document cannot be issued until the payment has been confirmed. ' +
@@ -475,7 +568,16 @@ export async function completeRenewal(params: {
       bytes: pdf,
       verificationCode,
       numberPrefix: 'PSIRS-VEH',
-      expiresAt: renewal.expiry_date,
+      /*
+       * `expiry_date` is a DATE, and `documents.expires_at` is a TIMESTAMPTZ.
+       * Written across untouched it made the certificate invalid from one
+       * second after midnight on the very date printed on it — verification
+       * asks `expires_at < now` — so a motorist stopped on the 4th handed over
+       * papers reading 4 March and was told they had already lapsed. Neither
+       * side knew there was a disagreement, because neither knew the other's
+       * convention.
+       */
+      expiresAt: endOfDay(renewal.expiry_date),
     });
 
     await client.query(
@@ -490,35 +592,6 @@ export async function completeRenewal(params: {
       renewal.expiry_date,
     ]);
 
-    // Tell the authoritative registry the renewal happened — the platform
-    // records the service, the authority remains the source of truth (§82).
-    //
-    // The taxpayer has paid and is entitled to the document either way, so a
-    // failure here does not fail the renewal. It is written down instead:
-    // an unacknowledged renewal is a fact the government has to chase, and
-    // `retryAuthorityNotifications` below is how it gets chased.
-    const notification = await vehicleRegistry.recordRenewal({
-      registrationNumber: renewal.registration_number,
-      expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
-      documentNumber: document.documentNumber,
-    });
-
-    await client.query(
-      `UPDATE vehicle_renewals
-          SET authority_notification_status = $2,
-              authority_notification_reference = $3,
-              authority_notification_reason = $4,
-              authority_notification_attempts = authority_notification_attempts + 1,
-              authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
-        WHERE id = $1`,
-      [
-        renewal.id,
-        notification.accepted ? 'ACCEPTED' : 'FAILED',
-        notification.reference || null,
-        notification.reason ?? null,
-      ],
-    );
-
     await recordAudit(client, {
       actorId: params.actorId,
       actorRole: params.actorRole,
@@ -529,8 +602,6 @@ export async function completeRenewal(params: {
         documentNumber: document.documentNumber,
         expiryDate: renewal.expiry_date.toISOString().slice(0, 10),
         registrationNumber: renewal.registration_number,
-        authorityNotified: notification.accepted,
-        authorityNotificationReason: notification.reason ?? null,
       },
     });
 
@@ -552,8 +623,112 @@ export async function completeRenewal(params: {
       documentNumber: document.documentNumber,
       verificationCode: document.verificationCode,
       expiryDate: renewal.expiry_date,
+      // Carried out of the transaction so the authority can be told once the
+      // renewal is durably recorded, rather than while its rows are locked.
+      announce: {
+        renewalId: renewal.id,
+        registrationNumber: renewal.registration_number,
+      },
     };
   });
+
+  /*
+   * Tell the authoritative registry, after the renewal is committed.
+   *
+   * The platform records the service; the authority remains the source of
+   * truth (§82). This used to happen inside the transaction above, which meant
+   * a paid renewal held its row locks — and a pooled connection — for as long
+   * as the vehicle authority took to answer.
+   *
+   * Moving it out changes what a crash costs, and changes it for the better.
+   * Before, a failure between the document and the acknowledgement rolled the
+   * whole renewal back: the taxpayer had paid and had nothing. Now the renewal
+   * stands and only the acknowledgement is outstanding — which is a state the
+   * platform already knows how to finish, because `authority_notification_status`
+   * starts as PENDING and `retryAuthorityNotifications` sweeps for anything
+   * that is not ACCEPTED. A renewal nobody managed to announce is a fact the
+   * government has to chase, and there was already a way to chase it.
+   */
+  if (completed.announce) {
+    await announceRenewal({
+      renewalId: completed.announce.renewalId,
+      registrationNumber: completed.announce.registrationNumber,
+      expiryDate: completed.expiryDate,
+      documentNumber: completed.documentNumber,
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+    });
+  }
+
+  return {
+    documentId: completed.documentId,
+    documentNumber: completed.documentNumber,
+    verificationCode: completed.verificationCode,
+    expiryDate: completed.expiryDate,
+  };
+}
+
+/**
+ * Record the authority's answer about one renewal.
+ *
+ * Its own transaction, and deliberately forgiving: the taxpayer has paid and
+ * is entitled to their papers whatever the registry says or fails to say. A
+ * throw here would turn an unacknowledged renewal into a failed request for a
+ * document the citizen has already bought.
+ */
+async function announceRenewal(params: {
+  renewalId: string;
+  registrationNumber: string;
+  expiryDate: Date;
+  documentNumber: string;
+  actorId: string | null;
+  actorRole: string;
+}): Promise<void> {
+  try {
+    const notification = await vehicleRegistry.recordRenewal({
+      registrationNumber: params.registrationNumber,
+      expiryDate: params.expiryDate.toISOString().slice(0, 10),
+      documentNumber: params.documentNumber,
+    });
+
+    await withTransaction(async (client) => {
+      await client.query(
+        `UPDATE vehicle_renewals
+            SET authority_notification_status = $2,
+                authority_notification_reference = $3,
+                authority_notification_reason = $4,
+                authority_notification_attempts = authority_notification_attempts + 1,
+                authority_notified_at = CASE WHEN $2 = 'ACCEPTED' THEN now() ELSE NULL END
+          WHERE id = $1`,
+        [
+          params.renewalId,
+          notification.accepted ? 'ACCEPTED' : 'FAILED',
+          notification.reference || null,
+          notification.reason ?? null,
+        ],
+      );
+
+      await recordAudit(client, {
+        actorId: params.actorId,
+        actorRole: params.actorRole,
+        action: 'vehicle.authority_notified',
+        entityType: 'vehicle_renewal',
+        entityId: params.renewalId,
+        newValue: {
+          accepted: notification.accepted,
+          reason: notification.reason ?? null,
+          reference: notification.reference || null,
+        },
+      });
+    });
+  } catch (error) {
+    // Left PENDING for the sweep, which is what PENDING is for.
+    log.warn('authority could not be told about a renewal', {
+      component: 'vehicles',
+      renewalId: params.renewalId,
+      error,
+    });
+  }
 }
 
 /** Renewals awaiting document issue once their payment lands. */
@@ -562,7 +737,7 @@ export async function pendingRenewals(db: Db, limit = 100) {
     db,
     `SELECT r.id FROM vehicle_renewals r JOIN transactions t ON t.id = r.transaction_id
       WHERE r.document_id IS NULL
-        AND t.status IN ('PAYMENT_VERIFIED','RECEIPT_GENERATED','RECONCILIATION_PENDING','SETTLED')
+        AND t.status IN ${REVENUE_STATES_SQL}
       LIMIT $1`,
     [limit],
   );
@@ -707,3 +882,72 @@ export async function vehiclesAwaitingAuthority(db: Db, limit = 100) {
 }
 
 export { parseKobo };
+
+/**
+ * Take a vehicle out of service, or put it back (PRD §21).
+ *
+ * A vehicle record outlives the vehicle. It is sold and re-registered to
+ * somebody else, it is written off in an accident, it is scrapped; or the
+ * plate turns up on two chassis and PSIRS needs it frozen while that is
+ * looked into. `vehicles.status` named all three situations — ACTIVE,
+ * SUSPENDED, ARCHIVED — from the first migration, and nothing could move a
+ * vehicle out of ACTIVE, so every vehicle ever captured was renewable for
+ * ever. The owner of a car that no longer exists could still be sold
+ * particulars for it.
+ *
+ * SUSPENDED is a hold: the vehicle is real and somebody will decide. ARCHIVED
+ * is the end of this record. Neither touches the renewals already issued —
+ * papers valid until next March stay valid until next March, because the
+ * money for them was taken for a period, not for a record.
+ *
+ * Archiving is reversible here rather than terminal, unlike retiring a revenue
+ * item, and the asymmetry is deliberate: a levy brought back is a new law with
+ * a new rate, but a car wrongly written off is the same car.
+ */
+export async function setVehicleStatus(params: {
+  vehicleId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ registrationNumber: string; from: string; to: string }> {
+  return withTransaction(async (client) => {
+    const vehicle = await queryOne<{ registration_number: string; status: string }>(
+      client,
+      'SELECT registration_number, status FROM vehicles WHERE id = $1 FOR UPDATE',
+      [params.vehicleId],
+    );
+    if (!vehicle) throw notFound('That vehicle');
+
+    if (vehicle.status === params.status) {
+      throw conflict(
+        'VEHICLE_STATUS_UNCHANGED',
+        `${vehicle.registration_number} is already ${params.status.toLowerCase()}.`,
+      );
+    }
+
+    await client.query(
+      `UPDATE vehicles
+          SET status = $2, status_reason = $3, status_changed_at = now(),
+              status_changed_by = $4, updated_at = now()
+        WHERE id = $1`,
+      [params.vehicleId, params.status, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: params.status === 'ACTIVE' ? 'vehicle.returned_to_service' : 'vehicle.taken_out_of_service',
+      entityType: 'vehicle',
+      entityId: params.vehicleId,
+      oldValue: { status: vehicle.status },
+      newValue: { status: params.status, reason: params.reason },
+    });
+
+    return {
+      registrationNumber: vehicle.registration_number,
+      from: vehicle.status,
+      to: params.status,
+    };
+  });
+}

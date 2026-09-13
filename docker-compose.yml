@@ -13,7 +13,9 @@ services:
     environment:
       POSTGRES_DB: psirs
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # No default: `postgres` was one, and the API container below builds its
+      # DATABASE_URL out of the same variable.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - psirs_db_data:/var/lib/postgresql/data
@@ -36,19 +38,41 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # `:?` rather than `:-`, because this block sets NODE_ENV: production.
+    #
+    # These three carried committed defaults, each padded past 32 characters so
+    # that the API's length check would accept them. `docker compose up` with
+    # no `.env` beside it therefore started a production-mode platform signing
+    # its tokens with a key published in this repository, hashing NINs with a
+    # published key, and accepting gateway webhooks signed with a published
+    # one. Compose now refuses to start until a real value is provided, and the
+    # API refuses these particular strings even if they are (see
+    # `PUBLISHED_SECRETS` in apps/api/src/config.ts).
+    #
+    #   JWT_SECRET=$(openssl rand -hex 32) docker compose up
+    #
+    # or an `.env` file beside this one, which is git-ignored.
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/psirs
-      JWT_SECRET: ${JWT_SECRET:-psirs_development_secret_key_minimum_32_characters_long_12345}
-      IDENTITY_HASH_SECRET: ${IDENTITY_HASH_SECRET:-psirs_identity_hash_secret_minimum_32_chars_12345}
-      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-psirs_payment_webhook_secret_minimum_32_chars}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/psirs
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to a fresh 32+ character secret, e.g. openssl rand -hex 32}
+      IDENTITY_HASH_SECRET: ${IDENTITY_HASH_SECRET:?set IDENTITY_HASH_SECRET to a fresh 32+ character secret}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:?set PAYMENT_WEBHOOK_SECRET to the gateway's signing key}
       PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-mock}
       STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
     volumes:
       - psirs_storage:/app/storage
     ports:
-      - "4000:4000"
+      # Loopback, like the database above, and for the same reason.
+      #
+      # Published on every interface, this port was a second front door to the
+      # API that went around nginx — and so around its rate-limiting zones and,
+      # once the TLS block is enabled, around TLS. Nothing in the stack needs
+      # it: nginx reaches the API as `api:4000` over the compose network and
+      # the healthcheck runs inside the container. What is left is what it was
+      # for, a host-local `curl` while debugging.
+      - "127.0.0.1:4000:4000"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/health/ready || exit 1"]
       interval: 15s

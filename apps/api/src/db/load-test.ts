@@ -52,8 +52,39 @@ process.env.IDENTITY_HASH_SECRET ??= 'load-test-identity-secret-long-enough-32';
 process.env.PAYMENT_WEBHOOK_SECRET ??= 'load-test-webhook-secret-long-enough-32';
 process.env.STORAGE_PATH ??= '/tmp/psirs-load-storage';
 
+import { ECONOMIC_SECTORS } from '@psirs/shared';
 import { pool } from './pool';
 import { recordAuditStandalone } from '../services/audit';
+import { createAssessment } from '../services/revenue';
+import { confirmPayment, initiatePayment } from '../services/payments';
+import { runReconciliation } from '../services/reconciliation';
+
+/**
+ * Sectors for the fixture: a deliberate spread, checked against the real list.
+ *
+ * The fixture named four sectors literally, and one of them —
+ * TRANSPORT_LOGISTICS — was dropped by migration 019, which split it into
+ * TRANSPORT_PASSENGER and TRANSPORT_HAULAGE. The check constraint then refused
+ * every insert, so this measurement could not seed a single taxpayer and had
+ * not run since.
+ *
+ * The spread still matters — four sectors from one industry would not exercise
+ * the filtered read below the way four unrelated ones do — so the codes are
+ * named rather than sliced off the front of the list. What has changed is that
+ * they are now verified against it at startup: the next vocabulary change
+ * fails here, immediately and by name, instead of ten thousand rows later
+ * inside a constraint violation.
+ */
+const FIXTURE_SECTORS = ['AGRICULTURE', 'RETAIL_TRADE', 'TRANSPORT_HAULAGE', 'ARTISAN_CRAFT'];
+
+for (const code of FIXTURE_SECTORS) {
+  if (!ECONOMIC_SECTORS.some((sector) => sector.code === code)) {
+    throw new Error(
+      `Fixture sector "${code}" is not in ECONOMIC_SECTORS. The vocabulary changed; ` +
+        'update FIXTURE_SECTORS to match, keeping the sectors unrelated to one another.',
+    );
+  }
+}
 
 interface Sample {
   label: string;
@@ -162,12 +193,12 @@ async function seedVolume(target: number): Promise<number> {
        SELECT 'INDIVIDUAL', 'Load', 'Fixture' || g,
               '+234' || lpad((700000000 + $2 + g)::text, 10, '0'),
               'Jos North', $1,
-              (ARRAY['AGRICULTURE','RETAIL_TRADE','TRANSPORT_LOGISTICS','ARTISAN_CRAFT'])[1 + (g % 4)],
+              ($4::text[])[1 + (g % 4)],
               'PL' || lpad((10000000 + $2 + g)::text, 8, '0'),
               'ASSIGNED', 'ACTIVE'
          FROM generate_series(1, $3) g
        ON CONFLICT DO NOTHING`,
-      [lga.rows[0]!.id, have + done, batch],
+      [lga.rows[0]!.id, have + done, batch, FIXTURE_SECTORS],
     );
   }
 
@@ -182,6 +213,227 @@ async function seedVolume(target: number): Promise<number> {
  * that exists and an index the planner chooses are different facts — and the
  * second is the one that decides whether an officer's dashboard returns.
  */
+/**
+ * Payments sitting unconfirmed, ready to be confirmed under contention.
+ *
+ * Built through `createAssessment` and `initiatePayment` rather than by
+ * INSERT, for the reason the audit probe learned the hard way: a fixture
+ * assembled by hand measures a code path nobody runs. These go through the
+ * same services an agent's tap goes through, and the mock gateway rows are
+ * then marked SUCCESS so that confirmation has something truthful to find.
+ *
+ * Each payment is confirmable exactly once — the second attempt is idempotent
+ * and returns without doing the work — so the measurement needs one payment
+ * per iteration rather than one payment hit repeatedly.
+ */
+async function seedConfirmablePayments(count: number): Promise<string[]> {
+  const officer = await pool.query<{ id: string }>(
+    `INSERT INTO users (full_name, phone, email, password_hash, role, status)
+     VALUES ('Load Fixture Officer', '+2348099000001', 'load@psirs.invalid',
+             'not-a-usable-hash', 'revenue_officer', 'ACTIVE')
+     ON CONFLICT (phone) DO UPDATE SET full_name = EXCLUDED.full_name
+     RETURNING id`,
+  );
+  const actorId = officer.rows[0]!.id;
+
+  const item = await pool.query<{ id: string }>(
+    `SELECT ri.id FROM revenue_items ri
+       JOIN revenue_item_rates r ON r.revenue_item_id = ri.id
+      WHERE r.rate_type = 'FIXED'
+        AND ri.status = 'ACTIVE'
+        AND 'INDIVIDUAL' = ANY (ri.applicable_taxpayer_types)
+        AND (r.effective_to IS NULL OR r.effective_to > now())
+      ORDER BY ri.code LIMIT 1`,
+  );
+  if (item.rowCount === 0) throw new Error('no fixed-rate revenue item — run the seed first');
+  const revenueItemId = item.rows[0]!.id;
+
+  const taxpayers = await pool.query<{ id: string }>(
+    `SELECT id FROM taxpayers WHERE last_name LIKE 'Fixture%' ORDER BY created_at LIMIT $1`,
+    [count],
+  );
+  if (taxpayers.rowCount! < count) {
+    throw new Error(`only ${taxpayers.rowCount} fixture taxpayers for ${count} payments`);
+  }
+
+  console.log(`  preparing ${count} unconfirmed payments…`);
+  const paymentIds: string[] = [];
+  for (const row of taxpayers.rows) {
+    const assessment = await createAssessment({
+      taxpayerId: row.id,
+      revenueItemId,
+      inputs: {},
+      actorId,
+      actorRole: 'revenue_officer',
+      channel: 'OFFICER',
+    });
+    const payment = await initiatePayment({
+      transactionId: assessment.transactionId,
+      actorId,
+      actorRole: 'revenue_officer',
+    });
+    paymentIds.push(payment.paymentId);
+  }
+
+  // The gateway says these were paid. Confirmation still has to go and ask.
+  await pool.query(
+    `UPDATE mock_gateway_transactions
+        SET status = 'SUCCESS', paid_at = now(), payment_method = 'CARD'
+      WHERE payment_reference IN (
+        SELECT payment_reference FROM payments WHERE id = ANY($1::uuid[]))`,
+    [paymentIds],
+  );
+
+  return paymentIds;
+}
+
+/**
+ * A day's settled traffic, for the sweep that decides whether agents get paid.
+ *
+ * Bulk-inserted rather than driven through the services, and the distinction
+ * from the confirmation fixture above is deliberate: there, the code under
+ * measurement was the thing that creates the rows, so building them by hand
+ * would have measured nothing. Here the code under measurement is
+ * `runReconciliation`, which only reads them. What it needs is a realistic
+ * number of realistically shaped rows, and forty thousand of those through
+ * the assessment service would take longer than the measurement.
+ *
+ * Each level is seeded into its own day so a run reconciles exactly its own
+ * traffic and not the level before it.
+ */
+async function seedSettledDay(
+  count: number,
+  daysAgo: number,
+  options: { variances?: boolean } = {},
+): Promise<{ from: Date; to: Date }> {
+  const template = await pool.query<{
+    taxpayer_id: string;
+    invoice_id: string;
+    assessment_id: string;
+    revenue_item_id: string;
+    lga_id: string;
+    created_by: string;
+  }>(
+    `SELECT taxpayer_id, invoice_id, assessment_id, revenue_item_id, lga_id, created_by
+       FROM transactions ORDER BY created_at LIMIT 1`,
+  );
+  if (template.rowCount === 0) throw new Error('no transaction to model the fixture on');
+  const t = template.rows[0]!;
+  const tag = `D${daysAgo}`;
+
+  await pool.query(
+    `INSERT INTO transactions
+       (transaction_reference, taxpayer_id, invoice_id, assessment_id, revenue_item_id,
+        lga_id, amount_kobo, total_amount_kobo, created_by, status, created_at)
+     SELECT 'RECON-' || $7 || '-' || g, $1, $2, $3, $4, $5, 200000, 200000, $6,
+            'SETTLED', now() - make_interval(days => $8)
+       FROM generate_series(1, $9) g`,
+    [t.taxpayer_id, t.invoice_id, t.assessment_id, t.revenue_item_id, t.lga_id, t.created_by,
+     tag, daysAgo, count],
+  );
+
+  await pool.query(
+    // verified_at and verified_by_source are not decoration: the schema refuses
+    // a VERIFIED payment without them, which is the same refusal that stops a
+    // receipt existing for money nothing confirmed. The fixture has to be as
+    // honest as a real one.
+    `INSERT INTO payments
+       (transaction_id, payment_reference, gateway, gateway_reference, amount_kobo,
+        status, verified_at, verified_by_source, created_at)
+     SELECT tx.id, 'RECONPAY-' || $1 || '-' || g, 'mock', 'RECONGW-' || $1 || '-' || g,
+            200000, 'VERIFIED', now() - make_interval(days => $2), 'WEBHOOK',
+            now() - make_interval(days => $2)
+       FROM generate_series(1, $3) g
+       JOIN transactions tx ON tx.transaction_reference = 'RECON-' || $1 || '-' || g`,
+    [tag, daysAgo, count],
+  );
+
+  // The gateway's side of the same day. Reconciliation compares the two.
+  await pool.query(
+    `INSERT INTO mock_gateway_transactions
+       (gateway_reference, payment_reference, amount_kobo, status, paid_at,
+        settlement_reference, created_at)
+     SELECT 'RECONGW-' || $1 || '-' || g, 'RECONPAY-' || $1 || '-' || g, 200000,
+            'SUCCESS', now() - make_interval(days => $2),
+            'SETL-' || $1, now() - make_interval(days => $2)
+       FROM generate_series(1, $3) g`,
+    [tag, daysAgo, count],
+  );
+
+  if (options.variances) {
+    /*
+     * A day that did not go perfectly, which is every real day.
+     *
+     * The clean fixture above reconciles eight thousand lines to eight
+     * thousand matches, and a run that finds nothing wrong is the one case
+     * the exception path never executes. These are the disagreements an
+     * officer actually opens the queue to see, seeded in the proportions that
+     * make the measurement worth reading rather than at a rate that would
+     * make every record an exception.
+     */
+    // One in ten: the gateway says a different amount than the platform.
+    await pool.query(
+      `UPDATE mock_gateway_transactions SET amount_kobo = 190000
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 10) = 0`,
+      [tag],
+    );
+    // One in twenty: the platform believes it was paid and the gateway has no
+    // line for it at all. The worst kind, and the reason the sweep exists.
+    await pool.query(
+      `DELETE FROM mock_gateway_transactions
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 20) = 1`,
+      [tag],
+    );
+    // One in twenty: the gateway says it failed while the platform says paid.
+    await pool.query(
+      `UPDATE mock_gateway_transactions SET status = 'FAILED'
+        WHERE gateway_reference LIKE 'RECONGW-' || $1 || '-%'
+          AND (split_part(gateway_reference, '-', 3)::int % 20) = 2`,
+      [tag],
+    );
+    // And lines the gateway has that the platform never issued, which are
+    // found by the second pass rather than the first.
+    await pool.query(
+      `INSERT INTO mock_gateway_transactions
+         (gateway_reference, payment_reference, amount_kobo, status, paid_at,
+          settlement_reference, created_at)
+       SELECT 'RECONGW-' || $1 || '-orphan-' || g, 'RECONPAY-' || $1 || '-orphan-' || g,
+              200000, 'SUCCESS', now() - make_interval(days => $2),
+              'SETL-' || $1, now() - make_interval(days => $2)
+         FROM generate_series(1, $3) g`,
+      [tag, daysAgo, Math.max(1, Math.floor(count / 20))],
+    );
+  }
+
+  /*
+   * The third leg: government's own record that the money arrived in its
+   * account. Without it every line reconciles to PENDING_SETTLEMENT, which is
+   * correct — PRD §46 will not call money reconciled on the gateway's word
+   * alone — but it means the fixture never exercises the matching path, and
+   * matching is the work this section exists to time.
+   */
+  const settlement = await pool.query<{ id: string }>(
+    `INSERT INTO settlements
+       (settlement_reference, gateway, settlement_date, expected_amount_kobo)
+     VALUES ('SETL-' || $1, 'mock', now() - make_interval(days => $2), $3)
+     RETURNING id`,
+    [tag, daysAgo, String(200000 * count)],
+  );
+  await pool.query(
+    `UPDATE payments SET settlement_id = $1
+      WHERE payment_reference LIKE 'RECONPAY-' || $2 || '-%'`,
+    [settlement.rows[0]!.id, tag],
+  );
+
+  const day = new Date(Date.now() - daysAgo * 86_400_000);
+  return {
+    from: new Date(day.getTime() - 12 * 3_600_000),
+    to: new Date(day.getTime() + 12 * 3_600_000),
+  };
+}
+
 async function planFor(label: string, sql: string, params: unknown[] = []): Promise<void> {
   const { rows } = await pool.query<{ 'QUERY PLAN': string }>(
     `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT) ${sql}`,
@@ -281,7 +533,97 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\n4. Query plans on the paths that matter');
+  console.log('\n4. Payment confirmation under contention (ms)');
+  /*
+   * The property this file was written for, and the one it never measured.
+   *
+   * `confirmPayment` runs at SERIALIZABLE behind an advisory lock, because
+   * two confirmations of one payment must not both issue a receipt. That is
+   * correct, and it is also where latency goes when a market fills up and
+   * thirty agents tap "check payment status" at once. A p99 that is fine
+   * alone and terrible at 32 is a market-day incident, and until now nothing
+   * would have said so.
+   *
+   * Read the movement, not the absolute figures: what matters is whether
+   * confirmation degrades gracefully as agents pile on, or falls off a cliff.
+   */
+  const confirmations: Sample[] = [];
+  const perLevel = 60;
+  const levels = [1, 8, 32];
+  const confirmable = await seedConfirmablePayments(perLevel * levels.length);
+  let taken = 0;
+  for (const concurrency of levels) {
+    const slice = confirmable.slice(taken, taken + perLevel);
+    taken += perLevel;
+    confirmations.push(
+      await drive(`payment confirmation, c=${concurrency}`, slice.length, concurrency, async (i) => {
+        await confirmPayment({ paymentId: slice[i]!, source: 'POLL', actorRole: 'system' });
+      }),
+    );
+  }
+  table(confirmations);
+
+  console.log('\n5. Reconciliation over a day of settled traffic');
+  /*
+   * The control that decides whether an agent is paid.
+   *
+   * `runReconciliation` writes one `reconciliation_records` row per payment,
+   * awaited one at a time inside a single transaction — so the sweep costs a
+   * round trip per payment and holds one transaction open for all of them.
+   * At demo scale that is a matched record and a shrug. Plateau State's
+   * seventeen LGAs will not be at demo scale, and if a day's reconciliation
+   * cannot finish inside a day, commission stops being payable.
+   *
+   * Watch the per-record cost across the levels rather than the totals: a
+   * flat figure means it scales linearly and the ceiling is arithmetic; a
+   * rising one means something in here is quadratic and the ceiling arrives
+   * sooner than the arithmetic suggests.
+   */
+  const officer = await pool.query<{ id: string }>(
+    `SELECT id FROM users WHERE role = 'revenue_officer' ORDER BY created_at LIMIT 1`,
+  );
+  const actorId = officer.rows[0]?.id ?? null;
+
+  console.log(
+    `  ${'day'.padEnd(24)}${'elapsed'.padStart(12)}${'per record'.padStart(14)}${'matched'.padStart(10)}${'exceptions'.padStart(12)}`,
+  );
+  console.log('  ' + '-'.repeat(72));
+  let daysAgo = 1;
+  for (const [volume, variances] of [
+    [500, false],
+    [2000, false],
+    [8000, false],
+    // The same volume again, on a day that did not go perfectly. Compared
+    // against the row above it, the difference is what an exception costs.
+    [8000, true],
+  ] as [number, boolean][]) {
+    const window = await seedSettledDay(volume, daysAgo, { variances });
+    daysAgo += 1;
+    const startedAt = process.hrtime.bigint();
+    const summary = await runReconciliation({
+      from: window.from,
+      to: window.to,
+      actorId,
+      actorRole: 'revenue_officer',
+    });
+    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+    // Every payment in the window gets a record, whatever its outcome. Dividing
+    // by matched+exceptions alone reported 0.00 ms per record on a run that had
+    // just written eight thousand of them.
+    const written = await pool.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM reconciliation_records WHERE run_id = $1',
+      [summary.runId],
+    );
+    const checked = Number(written.rows[0]!.n);
+    const label = variances ? `${volume}, with variances` : String(volume);
+    console.log(
+      `  ${label.padEnd(24)}${(elapsedMs.toFixed(0) + ' ms').padStart(12)}` +
+        `${((checked ? elapsedMs / checked : 0).toFixed(2) + ' ms').padStart(14)}` +
+        `${String(summary.matched).padStart(10)}${String(summary.exceptions).padStart(12)}`,
+    );
+  }
+
+  console.log('\n6. Query plans on the paths that matter');
   await planFor(
     'taxpayer by TIN',
     'SELECT id FROM taxpayers WHERE tin = $1',
@@ -302,7 +644,7 @@ async function main(): Promise<void> {
     "SELECT id FROM payments WHERE status = 'VERIFIED' LIMIT 100",
   );
 
-  console.log('\n5. Table sizes');
+  console.log('\n7. Table sizes');
   const sizes = await pool.query<{ relname: string; size: string; n: string }>(
     `SELECT c.relname,
             pg_size_pretty(pg_total_relation_size(c.oid)) AS size,

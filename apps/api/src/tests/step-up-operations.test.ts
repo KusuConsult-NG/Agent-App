@@ -350,3 +350,128 @@ describe('changing what an officer may do', () => {
     assert.equal(self.isSelf, true, 'the caller is marked so a screen can grey their own row');
   });
 });
+
+// ------------------------------------------------------------------ accounts
+
+describe('closing an officer’s account', () => {
+  /**
+   * `users.status` has carried SUSPENDED and CLOSED since the first migration
+   * and `signIn` refuses both by name — and nothing in the platform could ever
+   * write either one. An account, once created, worked for ever: when an
+   * officer left the service the only lever an administrator had was to change
+   * their role, and every role can still sign in and still read taxpayer
+   * records. A refusal that cannot be reached is not a control.
+   */
+  it('is refused without a step-up code', async () => {
+    const response = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'SUSPENDED', reason: 'Suspended pending the outcome of an enquiry.' },
+      { token: adminToken },
+    );
+    assert.equal(response.status, 403);
+    assert.equal(response.body.error.code, 'STEP_UP_REQUIRED');
+  });
+
+  it('is refused for anybody without user:manage', async () => {
+    await grantStepUp(officerToken, OFFICER, 'user.role.change');
+    const response = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'CLOSED', reason: 'A revenue officer closing an administrator account.' },
+      { token: officerToken },
+    );
+    assert.equal(response.status, 403);
+  });
+
+  it('will not let an administrator close their own account', async () => {
+    const me = await queryOne<{ id: string }>(pool, 'SELECT id FROM users WHERE phone = $1', [ADMIN]);
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const response = await post(
+      `/government/users/${me!.id}/status`,
+      { status: 'SUSPENDED', reason: 'Attempting to suspend my own account.' },
+      { token: adminToken },
+    );
+    assert.equal(response.status, 403, JSON.stringify(response.body));
+    assert.match(response.body.error.message, /your own account/i);
+  });
+
+  it('suspends the account, ends its sessions, and refuses the next sign-in', async () => {
+    const before = await get('/government/users', { token: otherAdmin.token });
+    assert.equal(before.status, 200, 'they can reach an admin-only endpoint beforehand');
+
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const suspended = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'SUSPENDED', reason: 'Suspended pending the outcome of an enquiry.' },
+      { token: adminToken },
+    );
+    assert.equal(suspended.status, 200, JSON.stringify(suspended.body));
+    assert.equal(suspended.body.status, 'SUSPENDED');
+    assert.ok(suspended.body.sessionsEnded >= 1, 'the open session should have been ended');
+
+    const stored = await queryOne<{ status: string }>(
+      pool,
+      'SELECT status FROM users WHERE id = $1',
+      [otherAdmin.id],
+    );
+    assert.equal(stored?.status, 'SUSPENDED');
+
+    // The token they were holding no longer works, and neither does signing in
+    // again — which is the half that role changes could never cover.
+    const after = await get('/government/users', { token: otherAdmin.token });
+    assert.notEqual(after.status, 200, 'the token must not survive the suspension');
+
+    const signIn = await post('/auth/login', { phone: otherAdmin.phone, password: 'Password123' });
+    assert.notEqual(signIn.status, 200, 'a suspended officer must not be able to sign in');
+
+    // Suspension is a pause, so it can be lifted.
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const restored = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'ACTIVE', reason: 'Enquiry closed with no finding against them.' },
+      { token: adminToken },
+    );
+    assert.equal(restored.status, 200, JSON.stringify(restored.body));
+    const back = await post('/auth/login', { phone: otherAdmin.phone, password: 'Password123' });
+    assert.equal(back.status, 200, JSON.stringify(back.body));
+  });
+
+  it('closes an account for good, and will not reopen it', async () => {
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const closed = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'CLOSED', reason: 'Left the service at the end of the quarter.' },
+      { token: adminToken },
+    );
+    assert.equal(closed.status, 200, JSON.stringify(closed.body));
+    assert.equal(closed.body.status, 'CLOSED');
+
+    const signIn = await post('/auth/login', { phone: otherAdmin.phone, password: 'Password123' });
+    assert.notEqual(signIn.status, 200, 'a closed account must not be able to sign in');
+
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const reopened = await post(
+      `/government/users/${otherAdmin.id}/status`,
+      { status: 'ACTIVE', reason: 'Trying to bring back somebody who has left.' },
+      { token: adminToken },
+    );
+    assert.equal(reopened.status, 409, JSON.stringify(reopened.body));
+    assert.equal(reopened.body.error.code, 'ACCOUNT_CLOSED');
+  });
+
+  it('will not close an agent underneath their clearance', async () => {
+    const agentUser = await queryOne<{ id: string }>(
+      pool,
+      `SELECT u.id FROM users u WHERE u.role = 'agent' LIMIT 1`,
+    );
+    assert.ok(agentUser, 'the demonstration agent is signed in for these tests');
+
+    await grantStepUp(adminToken, ADMIN, 'user.role.change');
+    const refused = await post(
+      `/government/users/${agentUser!.id}/status`,
+      { status: 'SUSPENDED', reason: 'Bypassing the clearance pipeline from the user table.' },
+      { token: adminToken },
+    );
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+    assert.match(refused.body.error.message, /clearance pipeline/i);
+  });
+});

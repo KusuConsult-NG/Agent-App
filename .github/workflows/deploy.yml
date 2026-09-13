@@ -80,10 +80,35 @@ jobs:
       - run: npm ci
       - run: npm run build --workspace @psirs/shared
       - run: npm run typecheck
+
+      # THE SAME CHECKS THE BRANCH PATH RUNS, BECAUSE THIS IS THE PATH THAT
+      # SHIPS.
+      #
+      # This job ran typecheck and `npm test` and nothing else, so the release
+      # was verified less thoroughly than the commit had been — and nothing
+      # gates a tag on CI having passed, so "CI already ran it" was not a
+      # guarantee either. What was missing were the four that exist because
+      # something went wrong once:
+      #
+      #   check:dead-predicates   "It has happened twice to money figures"
+      #   check:action-matrix     the who-may-do-what table a government reads,
+      #                           which had already drifted
+      #   check:hausa-review      what a native speaker reads before any of this
+      #                           reaches an agent
+      #   test:concurrency        the money path under contention
+      #
+      # `a-check-that-nothing-runs.test.ts` now requires every script the root
+      # `verify` names to appear in both workflows, so this cannot drift apart
+      # from ci.yml again.
+      - run: npm run check:action-matrix
+      - run: npm run check:hausa-review
+      - run: npm run check:dead-predicates
       - run: npm run migrate
+      # `npm test` is the shared build plus the API, agent and portal suites.
+      # A second `--workspace @psirs/agent` step used to follow it, reading as
+      # extra assurance and running the same tests again.
       - run: npm test
-      - name: Agent PWA tests
-        run: npm run test --workspace @psirs/agent
+      - run: npm run test:concurrency
 
   # ---------------------------------------------------------------------
   build:
@@ -211,6 +236,20 @@ jobs:
             sleep 10
           done
           echo "deployment did not become healthy within 5 minutes" >&2
+          exit 1
+
+      - name: Say so if a rollback was impossible
+        # The step below only runs when a previous version was recorded. When
+        # `DEPLOY_DESCRIBE_COMMAND` fails there is nothing to revert to, and
+        # without this the rollback is skipped in silence: the job fails on the
+        # health check and nobody is told that the failed rollout is still the
+        # one serving traffic.
+        if: failure() && steps.current.outputs.previous == ''
+        run: |
+          echo "::error::Rollout failed health checks and NO ROLLBACK WAS ATTEMPTED:" \
+               "the currently-deployed version could not be recorded before the" \
+               "deploy, so there is no target to revert to. The new image is still" \
+               "serving. Roll back by hand with the 'rollback_to' input."
           exit 1
 
       - name: Roll back if the rollout did not come up

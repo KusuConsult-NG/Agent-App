@@ -17,15 +17,17 @@ import type { NextFunction, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import {
   activationBlockers,
-  permissionsForRole,
-  roleHasPermission,
   type AgentClearanceFlags,
   type Permission,
   type Role,
   type StepUpAction,
+  compareVersions,
+  BAND_RULE_SINCE,
 } from '@psirs/shared';
 import { config } from '../config';
-import { pool, queryOne } from '../db/pool';
+import * as rbacStore from '../services/rbac-store';
+import { pool, queryOne, withTransaction } from '../db/pool';
+import { recordAudit } from '../services/audit';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
 import {
   issueAccessToken,
@@ -98,7 +100,17 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       userId: payload.sub,
       role,
       sessionId: payload.sid,
-      permissions: permissionsForRole(role),
+      /*
+       * Read from the database, not from the compiled map.
+       *
+       * The role-to-permission table moved out of `rbac.ts` and into
+       * `role_permissions` so PSIRS can change their own delegation of
+       * authority without a deployment. `rbacStore` caches it for thirty
+       * seconds, so this stays one map lookup per request rather than a query
+       * — see the note in that file on why a revocation does not wait for the
+       * cache to expire.
+       */
+      permissions: await rbacStore.permissionsFor(role),
       agentId: payload.agentId,
       deviceId: payload.deviceId,
     };
@@ -113,11 +125,88 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
   }
 }
 
+/**
+ * Name the caller if they are signed in, and let them through either way.
+ *
+ * For a route whose authorisation is something other than a session — today
+ * only `GET /documents/:id/download`, where a signed, expiring link lets a
+ * taxpayer open their receipt on a phone with no account at all.
+ *
+ * That route recorded `req.auth?.userId ?? null` into `document_access_logs`,
+ * and nothing had ever put `req.auth` there, so every row was written with no
+ * actor. The fraud rule REPEATED_RECEIPT_REGENERATION counts those rows
+ * `WHERE accessed_by IS NOT NULL` — "the same officer fetching one document
+ * twelve times in a day is the signal" — so it could not fire, ever. A
+ * download carrying a perfectly valid officer token recorded nobody.
+ *
+ * This changes who is *named*, never who is *admitted*: the signature still
+ * decides that, and a missing, expired, revoked or suspended token means the
+ * download proceeds anonymously exactly as a citizen's does. It reuses
+ * `authenticate` rather than decoding the token itself, so a revoked session
+ * or a suspended officer is not credited with a retrieval — the checks that
+ * make "force logout" immediate apply here too.
+ */
+export async function identifyIfSignedIn(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.header('authorization')?.startsWith('Bearer ')) return next();
+  await authenticate(req, res, () => {
+    // Whatever `authenticate` decided, this route continues. On any failure it
+    // never reached the assignment, so `req.auth` is still undefined and the
+    // row is written anonymously.
+    next();
+  });
+}
+
 export function requirePermission(...permissions: Permission[]) {
-  return (req: Request, _res: Response, next: NextFunction): void => {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     if (!req.auth) return next(unauthorised());
-    const granted = permissions.some((permission) => roleHasPermission(req.auth!.role, permission));
+    /*
+     * Asked of the store rather than of the compiled map, for the same reason.
+     *
+     * `req.auth.permissions` was already resolved above and could be read from
+     * there — but this is the enforcement point, and having it consult the same
+     * source directly means a future change to how `req.auth` is populated
+     * cannot quietly widen what is allowed.
+     */
+    const held = await rbacStore.permissionsFor(req.auth.role);
+    const granted = permissions.some((permission) => held.includes(permission));
     if (!granted) {
+      /*
+       * A refusal is a thing that happened.
+       *
+       * `audit_logs.result` has always allowed DENIED, `recordAudit` has
+       * always accepted it, and the executive dashboard counts it as
+       * "refused this week" — and nothing ever wrote one. So an officer
+       * looking at that figure has always seen zero, on a platform that
+       * refuses things constantly. Somebody probing what their role can reach
+       * left no trace at all, which is the opposite of what an audit log on a
+       * revenue platform is for.
+       *
+       * Awaited, and the failure swallowed. An audit entry written on a
+       * best-effort basis is not much of an audit entry — and not awaiting it
+       * meant the write could land after the request had been answered, which
+       * in the suite arrived after a reset had emptied the table the row
+       * pointed into. A refusal is rare enough to afford one insert; a failure
+       * to record it must still never turn a 403 into a 500.
+       */
+      const { userId, role } = req.auth;
+      await withTransaction((client) =>
+        recordAudit(client, {
+          actorId: userId,
+          actorRole: role,
+          action: 'access.denied',
+          entityType: 'permission',
+          entityId: permissions.join(','),
+          result: 'DENIED',
+          newValue: { method: req.method, path: req.originalUrl.split('?')[0] },
+          ipAddress: req.clientIp ?? null,
+          requestId: req.requestId ?? null,
+        }),
+      ).catch(() => undefined);
+
       return next(
         forbidden(
           `Your role (${req.auth.role}) is not permitted to perform this action.`,
@@ -140,6 +229,38 @@ export function requireRole(...roles: Role[]) {
 }
 
 /**
+ * Spend one step-up grant, or report that there was none to spend (PRD §35).
+ *
+ * Selecting an unspent grant and then marking it spent are two statements, and
+ * two requests arriving between them both read the same unspent row and both
+ * pass — one code, two high-risk actions, which is exactly what the step-up
+ * gate exists to prevent. So the choosing and the spending are one statement:
+ * the inner SELECT takes a write lock on the grant it picks, and the outer
+ * UPDATE spends that same locked row. Whoever gets the `RETURNING` row is the
+ * one caller that grant authorises; everyone else gets nothing.
+ *
+ * `SKIP LOCKED` rather than plain `FOR UPDATE`, so the arithmetic stays honest
+ * in both directions: a second caller passes over the grant already being
+ * spent and takes the next unspent one if the user holds one. One code buys
+ * one action, and two codes buy two — including when both are spent at once.
+ */
+export async function consumeStepUpGrant(userId: string, action: StepUpAction): Promise<boolean> {
+  const consumed = await queryOne<{ id: string }>(
+    pool,
+    `UPDATE step_up_grants SET consumed_at = now()
+      WHERE id = (
+        SELECT id FROM step_up_grants
+         WHERE user_id = $1 AND action = $2 AND consumed_at IS NULL AND expires_at > now()
+         ORDER BY granted_at DESC LIMIT 1
+         FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id`,
+    [userId, action],
+  );
+  return consumed !== null;
+}
+
+/**
  * Consume a step-up authentication grant (PRD §35).
  *
  * The grant is consumed, not merely checked, so one OTP authorises exactly one
@@ -151,15 +272,7 @@ export function requireStepUp(action: StepUpAction) {
     try {
       if (!req.auth) throw unauthorised();
 
-      const grant = await queryOne<{ id: string }>(
-        pool,
-        `SELECT id FROM step_up_grants
-          WHERE user_id = $1 AND action = $2 AND consumed_at IS NULL AND expires_at > now()
-          ORDER BY granted_at DESC LIMIT 1`,
-        [req.auth.userId, action],
-      );
-
-      if (!grant) {
+      if (!(await consumeStepUpGrant(req.auth.userId, action))) {
         throw new AppError({
           statusCode: 403,
           code: 'STEP_UP_REQUIRED',
@@ -169,7 +282,6 @@ export function requireStepUp(action: StepUpAction) {
         });
       }
 
-      await pool.query('UPDATE step_up_grants SET consumed_at = now() WHERE id = $1', [grant.id]);
       next();
     } catch (error) {
       next(error);
@@ -312,13 +424,36 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        if (device.status === 'REVOKED' || device.status === 'SUSPENDED') {
+        /*
+         * Revoked and suspended stop collection alike and mean opposite things
+         * to the person holding the phone. Both answered DEVICE_REVOKED —
+         * "this device has been revoked and can no longer be used" — so an
+         * agent whose handset had been paused for a fortnight while it was
+         * looked for was being told to go and get another one, which costs
+         * them a phone and an officer an approval for a handset that was
+         * always coming back.
+         */
+        if (device.status === 'REVOKED') {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_REVOKED',
             message:
               'This device has been revoked and can no longer be used for revenue collection. ' +
               'Contact your supervisor.',
+            nextStep:
+              'A revoked handset cannot be registered again. Register the replacement handset ' +
+              'and ask your supervisor to approve it.',
+          });
+        }
+
+        if (device.status === 'SUSPENDED') {
+          throw new AppError({
+            statusCode: 403,
+            code: 'DEVICE_SUSPENDED',
+            message:
+              'Collection on this device has been paused. It has not been taken away, and it ' +
+              'can be put back.',
+            nextStep: 'Your supervisor can tell you why, and restore it.',
           });
         }
 
@@ -338,9 +473,13 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
 
       const blockers = activationBlockers(flags);
       if (blockers.length > 0) {
-        // Defence in depth: the DB CHECK constraint should make an active agent
-        // with unmet requirements unreachable, but such an agent must be
-        // stopped rather than trusted.
+        // Defence in depth, and worth keeping for a reason the previous wording
+        // got wrong. The CHECK constraint on `agents` covers four of the seven
+        // gates — it cannot see agent_clearance, where the agreement, the bank
+        // account and the device live. Migration 029 covers those three with a
+        // trigger, so the database now refuses all seven; this stays because an
+        // agent already ACTIVE when a flag is withdrawn must stop collecting on
+        // their next request, which no constraint on the write can do.
         throw notCleared(blockers);
       }
 
@@ -359,6 +498,65 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
       next(error);
     }
   };
+}
+
+/**
+ * Refuse an enumeration from a handset running an out-of-date band rule.
+ *
+ * The phone works out a size at the stall and shows it, so a trader gets an
+ * answer with no signal. That is only safe while the phone's arithmetic is the
+ * platform's arithmetic. A build older than `BAND_RULE_SINCE` is running a
+ * different rule and will tell somebody a size the notice contradicts — a
+ * promise made on the State's behalf that the State then breaks, which is
+ * worse than the agent having said nothing.
+ *
+ * SEPARATE FROM THE GLOBAL GATE, AND DELIBERATELY NARROWER.
+ *
+ * `requireSupportedAppVersion` stops an outdated handset taking money, and
+ * raising that floor for a band-rule change would stop the same handset
+ * collecting revenue as well. An agent who cannot collect is an agent not
+ * working, which is a large price for a display that is wrong in one part of
+ * the platform. This blocks the one act that depends on the rule.
+ *
+ * NOT ON `/drafts/sync`, ON PURPose.
+ *
+ * A capture already sitting in the queue was taken before anybody could stop
+ * it, and its facts — premises, equipment, people — are as good as any. What
+ * is stale is the size the agent was shown, and the platform reaches its own
+ * band from those facts anyway and records the disagreement. Blocking the sync
+ * would strand real field work on a phone to punish a display, so the gate
+ * sits at capture and the queue drains regardless.
+ */
+export async function requireCurrentBandRule(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    // Officers enumerate from the portal, which is served with the API and
+    // cannot be a stale build in somebody's pocket.
+    if (req.auth?.role !== 'agent') return next();
+
+    const current = req.appVersion;
+    if (!current || compareVersions(current, BAND_RULE_SINCE) < 0) {
+      throw new AppError({
+        statusCode: 426,
+        code: 'UPDATE_REQUIRED_TO_ENUMERATE',
+        message:
+          'This version of the app works out business sizes by an old rule, so it would ' +
+          'tell the trader something the office does not agree with. Update before ' +
+          'writing down any more businesses.',
+        moneyStatus: 'NOT_APPLICABLE',
+        nextStep:
+          'Close and reopen the app to install the latest version. Anything already ' +
+          'saved on this phone will still be sent.',
+      });
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
 
 /**
@@ -405,15 +603,3 @@ export async function requireSupportedAppVersion(
   }
 }
 
-/** Semantic version comparison; missing parts are treated as 0. */
-export function compareVersions(a: string, b: string): number {
-  const parse = (v: string) => v.split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const left = parse(a);
-  const right = parse(b);
-  const length = Math.max(left.length, right.length);
-  for (let i = 0; i < length; i += 1) {
-    const diff = (left[i] ?? 0) - (right[i] ?? 0);
-    if (diff !== 0) return diff > 0 ? 1 : -1;
-  }
-  return 0;
-}
