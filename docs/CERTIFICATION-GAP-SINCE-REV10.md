@@ -1770,6 +1770,55 @@ between the two words matched nothing. A guard discovering that about itself
 before a person discovers it about the guard is the whole argument for running
 one before trusting it.
 
+## A gap assessment that understated what had been delivered
+
+`OFFICER-READINESS-GAP-ASSESSMENT.md` closes with a section headed "What this
+assessment says to do next" — nine items, ordered by what an officer loses
+without each. Four were struck through as done. Five were left standing as
+outstanding work.
+
+**Four of those five were built.** Checked against the routes, one at a time:
+
+- *Configurable roles and permissions* — "changing who may approve a refund is
+  a code change and a deployment". It is not: `rbac-store.ts` reads
+  `role_permissions` at the enforcement point, and
+  `POST /government/roles/:name/grant` and `/revoke` move a permission between
+  roles while `/roles` creates, retires and restores them.
+- *Audit sampling and audit reports as objects* — `POST /government/audit/samples`
+  draws a sample, `/audit/samples/:id/complete` refuses while an item is still
+  unexamined, `/audit/samples/items/:id/finding` records a finding, and a report
+  is signed, withdrawn and exported as an object.
+- *PDF and Excel export* — `export.ts` offers `'csv' | 'xlsx' | 'pdf'` and
+  implements all three, `pdfkit` for the PDF and `toXlsx` for the workbook.
+- *Officer sessions and evidence upload* — `GET /government/users/:id/sessions`
+  answers with the sessions and their devices, and
+  `POST /government/cases/:id/evidence/upload` takes a document that did not
+  come from this platform, checking the declared type against the bytes.
+
+The fifth is two-thirds built: the inbox and system alerts both exist. **Saved
+filters are the one thing on that list still genuinely outstanding**, and
+nothing in either workspace saves one.
+
+The document also disagreed with itself twice over. Its own Roles row says an
+administrator creates and retires roles from `/roles`; its own System alerts row
+says alerts are complete. Both sit a few hundred lines above the list calling
+them outstanding. And the list's own preamble said "the first three are done"
+above four struck-through items.
+
+### Why this direction of error is worth as much attention as the other
+
+Every other documentation finding in this branch was an overstatement — a route
+that did not exist, a permission that did not exist, a procedure naming the
+wrong endpoint. This one runs the other way, and costs more rather than less.
+A gap assessment is what a government reads to decide what still needs scoping,
+funding and procuring. Told that configurable permissions, audit sampling, PDF
+export and evidence upload remain to be built, PSIRS would plan and pay for four
+things it already owns.
+
+Overstatement is caught by the first person who tries to use the thing.
+Understatement is never caught at all: nobody goes looking for a capability
+they have been told is absent.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in

@@ -466,8 +466,15 @@ nothing else.
 
 ## What this assessment says to do next
 
-Ordered by what an officer loses without it. The first three are done; what
-follows them is what remains.
+Ordered by what an officer loses without it. Eight of the nine are now done;
+the ninth is done in two of its three parts.
+
+This list had drifted, and in the direction that costs the most. It said "the
+first three are done" above four struck-through items, and left five below as
+outstanding when four of them had been built and the fifth two-thirds built. A
+gap assessment that understates delivery is not a harmless error: PSIRS reads
+this to decide what still needs scoping and funding, and every line of it was
+checked against the routes before being struck.
 
 1. ~~**Revenue targets and forecasting** (§12, §13).~~ Done. `revenue_targets`,
    target-versus-actual against each target's own period, and a forecast shaped
@@ -481,15 +488,33 @@ follows them is what remains.
 4. ~~**Financial period closing** (§16).~~ Done. A closed month is refused by
    the database, closing and reopening are separate authorities, and closing
    over an unresolved exception demands a reason that goes on the record.
-5. **Configurable roles and permissions** (§4). Today, changing who may
-   approve a refund is a code change and a deployment.
-6. **Audit sampling** (§25) and **audit reports as objects** (§26).
-7. **PDF and Excel export** (§26). CSV is enough for analysis and not enough
-   for a report that goes in a file.
-8. **Officer sessions and evidence upload** (§1, §23). An officer cannot see
-   their own sessions, and an auditor cannot attach a document that did not
-   originate in the platform.
-9. **An officer inbox, system alerts and saved filters** (§1, §3).
+5. ~~**Configurable roles and permissions** (§4).~~ Done. `role_permissions`
+   is read at the enforcement point by `rbac-store.ts`, not compiled in:
+   `POST /government/roles/:name/grant` and `/revoke` move a permission between
+   roles, and `/roles` creates, retires and restores them. Changing who may
+   approve a refund is an administrator's afternoon, not a deployment. This
+   assessment's own Roles row says so a few hundred lines above.
+6. ~~**Audit sampling** (§25) and **audit reports as objects** (§26).~~ Done.
+   `POST /government/audit/samples` draws one, `/audit/samples/:id/complete`
+   refuses while any item is still unexamined, and
+   `/audit/samples/items/:id/finding` records what was found. A report is an
+   object that is signed (`/audit/reports/:id/sign`, under step-up), withdrawn
+   and exported.
+7. ~~**PDF and Excel export** (§26).~~ Done. `export.ts` offers
+   `'csv' | 'xlsx' | 'pdf'` and implements all three — `pdfkit` for the PDF and
+   `toXlsx` for the workbook — so a report that goes in a file can go in one.
+8. ~~**Officer sessions and evidence upload** (§1, §23).~~ Done.
+   `GET /government/users/:id/sessions` answers with the sessions and the
+   devices behind them, and `POST /government/cases/:id/evidence/upload` takes
+   a document that did not come from this platform — the route sits under a
+   heading that says exactly that, and checks the declared type against the
+   bytes rather than trusting the header.
+9. **Saved filters** (§3) — and only that. The inbox is done
+   (`GET /government/inbox`, `/inbox/:id/read`, `/inbox/read-all`) and so are
+   system alerts, which raise overdue, failing and stalled jobs into the
+   administrator's inbox; this assessment's System alerts row already records
+   them as complete. Nothing in either workspace saves a filter, and that is
+   the one part of this list still genuinely outstanding.
 
 All four of the items I said I would not put in front of a PSIRS officer
 without are now done.
