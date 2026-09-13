@@ -14,7 +14,7 @@
  */
 
 import type { PoolClient } from 'pg';
-import { parseKobo } from '@psirs/shared';
+import { formatNaira, parseKobo } from '@psirs/shared';
 import type { Db } from '../db/pool';
 import { UNDER_OPEN_OBJECTION_SQL } from '../lib/enforcement-suspended';
 import { query, queryOne, withTransaction } from '../db/pool';
@@ -218,14 +218,23 @@ export async function computeComplianceScore(
       points: 25,
       detail:
         disputed > 0n
-          ? `Nothing enforceable; ₦${(disputed / 100n).toString()} is under objection`
+          ? `Nothing enforceable; ${formatNaira(disputed)} is under objection`
           : 'No unpaid invoices on record',
     });
   } else {
     components.push({
       factor: 'Outstanding liabilities',
       points: 0,
-      detail: `₦${(enforceable / 100n).toString()} outstanding across unpaid invoices`,
+      /*
+       * Through the primitive, like every other money string on this server.
+       *
+       * Both of these read `₦${(x / 100n).toString()}`. Integer division
+       * truncates, so a taxpayer owing ₦1,234.56 was told "₦1234 outstanding"
+       * — understated, unseparated, and on the line that explains why their
+       * compliance score is what it is. `formatNaira` is what the receipts,
+       * the reminders and the rate-engine trace all use.
+       */
+      detail: `${formatNaira(enforceable)} outstanding across unpaid invoices`,
     });
   }
 
