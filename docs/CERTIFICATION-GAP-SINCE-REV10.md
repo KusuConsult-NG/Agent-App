@@ -1354,6 +1354,39 @@ entirely and at build time, including every shape the scanner cannot read. That
 is a structural change across both workspaces and it is PSIRS's call, so it is
 recorded here as the recommendation rather than started.
 
+## What else was swept after the home screen, and found clean
+
+Three defects on one screen justified asking whether the same shapes were
+elsewhere. Three sweeps, all clean, recorded because a bounded problem is worth
+more than an unbounded suspicion.
+
+**Every client call reaches a real route.** 187 calls with a literal path in the
+two React workspaces, against all 281 routes. All 187 resolve. This is the
+forward direction of `officer-actions-reachable.test.ts`, which holds the
+reverse — that every officer endpoint has a caller — and nothing held this way
+round until it was measured. Three apparent misses were all artifacts of the
+scan: a `?` inside a ternary in a template literal, a query string built from a
+variable, and a test file living outside a `tests/` directory.
+
+**Interaction coverage.** Every screen in the officer portal that makes a write
+call is now imported by at least one test that fires an event; the three that
+are render-only make no write calls at all. In the agent PWA, nine files carry
+29 write calls between them and every one is covered by an event-firing test.
+The measurement was validated against the known answer first: it correctly
+reports that `role-home.test.tsx` rendered the home screen and fired nothing,
+which is precisely how three defects lived there.
+
+**Tests that assert nothing.** 2,930 test cases scanned for a body with no
+assertion in it. Six flagged; all six are false positives, and they share one
+cause worth naming because it is a trap: brace-matching a function body without
+skipping strings and regexes ends the body early, and `\$\{[^}]*\}` inside a
+`.replace()` closes the count before any assertion is reached. The scan was
+abandoned rather than sharpened -- it was finding nothing, and a fifth
+correction to a tool with no findings is not evidence, it is sunk cost.
+
+None of the three produced a defect. That is the result, and it is the useful
+one: the home screen was not the tip of anything either.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in
