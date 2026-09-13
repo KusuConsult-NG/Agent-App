@@ -1558,6 +1558,79 @@ checked against the code rather than believed. That is the whole reason the
 count came down to one: the tool was wrong far more often than the document
 was.
 
+## A procedure for a live chargeback, naming an endpoint that does not exist
+
+Having found the API reference wrong, the same two questions were put to every
+markdown file in the repository: does each permission it names exist, and does
+each fully-written route. 28 files, 221 permission mentions, 282 route
+mentions.
+
+Most of what came back was correct prose about things that were **removed on
+purpose** — `PRD-TRACEABILITY.md` has a "Was / Now" table whose left column is
+a list of deleted surfaces, and `SECURITY.md` §8 is titled "Attack surface that
+exists for a workflow the product does not have" and describes the
+self-registration endpoint that was taken out. A naive repo-wide check flags
+both, which is why the guard added with the previous finding is scoped to
+`API.md` and stays there. This document would fail it too, for quoting the
+names it exists to report.
+
+Two were real, and one of them matters.
+
+`docs/SOP-FINANCE-RECONCILIATION.md` is a **standing operating procedure**,
+audience "Finance Officers, Auditors, Revenue Directors". Its Case 2 is a
+fraudulent chargeback — money leaving the State, under time pressure. It said:
+
+> 1. Finance Officer initiates reversal request in portal
+>    (`POST /payments/:id/refund`).
+> 2. Maker-Checker approval required: An Administrator or Director of Finance
+>    must approve.
+> 3. Upon approval: Transaction marked `REVERSED`. Receipt marked `VOID`.
+
+Four things wrong in three lines.
+
+`POST /payments/:id/refund` is not a route. The reversal flow is three steps:
+raise a `PAYMENT_REVERSAL` approval, have a second officer decide it, have a
+third execute it — each refusing the officer who did the step before.
+
+"Maker-Checker" and "must approve" describe **two** signatures. There are
+three, and the separation is enforced, not advisory.
+
+There is no **Director of Finance** role. The roles are `admin`, `supervisor`,
+`revenue_officer`, `finance_officer`, `auditor`, and who may do each step is
+decided by permission rather than title.
+
+The receipt is marked **`REVERSED`**, not `VOID`. Both are statuses a receipt
+can hold and they are not interchangeable: `VOID` is a receipt cancelled on its
+own, `REVERSED` is one whose money went back. An auditor searching for voided
+receipts after a chargeback would find none.
+
+Two smaller ones in the same file. It sends officers to
+`http://localhost:5174`, a development server no PSIRS workstation can reach.
+And it states a flat "72-hour holding period" for agent commission, which is
+`commission_policies.hold_period_hours` — per policy, defaulting to 72, and an
+administrator can change it. An officer quoting 72 hours to an agent under a
+policy set otherwise is quoting the default, not the rule.
+
+Three of its claims were checked and are **correct**, and were left alone: the
+reconciliation sweep does run every six hours, a manual run does exist
+(`POST /government/reconciliation/run`), and the three-way principle it draws
+is the one the platform implements.
+
+The second real one is small: `OFFICER-READINESS-GAP-ASSESSMENT.md` marked
+officer suspension **Complete** against `PATCH /government/users/:id/status`.
+The route is a `POST`.
+
+### What was deliberately not done
+
+The SOP was corrected where the code settles the answer and **not** rewritten
+where it does not. It quotes portal button labels — "Click **Start
+Reconciliation Run**" — and those were left, with the note that the underlying
+action is real, because the portal is bilingual: an officer working in Hausa
+sees different text, so quoting English labels in a procedure is fragile
+whoever writes it. Replacing them with labels invented from a reading of the
+code would have been worse than leaving a known-imperfect reference to a
+control that does exist.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in

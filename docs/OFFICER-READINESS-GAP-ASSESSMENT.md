@@ -171,7 +171,7 @@ are all Complete and each is covered by a test that fails if it stops being.
 | Agent assignments | Complete | `agent:assign_territory` |
 | Officer assignments | Complete | `user_territories` |
 | Officer transfers | Complete | `officer_transfers`, append-only, one row per thing that moved — including the territory and role changes that were previously only audit entries |
-| Officer suspension | Complete | `PATCH /government/users/:id/status` |
+| Officer suspension | Complete | `POST /government/users/:id/status` |
 | Officer deactivation | Complete | Same, `CLOSED` |
 | Granular view/create/edit/approve/reverse/refund/export/configure | Complete | All eight verbs exist as permissions, are enforced per route, and are now granted and revoked per role by an administrator. A revocation takes effect within 30s (`rbac-store.ts` cache) |
 
