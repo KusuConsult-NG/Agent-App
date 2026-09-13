@@ -13,9 +13,9 @@ verification run — describes the platform as it stood at that commit.
 
 ## The size of the gap
 
-`fa8f454..HEAD` is **211 commits**.
+`fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`e3f5345`) |
+| | At `fa8f454` (Revision 10) | Now (`f2ca1ec`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 78 |
@@ -23,21 +23,21 @@ verification run — describes the platform as it stood at that commit.
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 |
-| API tests passing | 1,523 *(report's figure)* | 2,111 |
-| Officer portal tests | 140 *(report's figure)* | 655 |
+| API tests passing | 1,523 *(report's figure)* | 2,112 |
+| Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 342 |
-| Declared enum states | 537 *(report's figure)* | 747 |
-| Enum states written by the suite | 462 *(report's figure)* | 666 |
+| Declared enum states | 537 *(report's figure)* | 752 |
+| Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `e3f5345`: API 2,111 passing
-across four shards with 0 failing and 0 cancelled; portal 655; agent 342;
+Current figures are from a full local run at `f2ca1ec`: API 2,112 passing
+across four shards with 0 failing and 0 cancelled; portal 656; agent 342;
 typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
 those on any insert that omits the column, so no row taking one means the
 column is always specified rather than the state being unreachable, and the
 script skips them with that reasoning. 74 + 1 alone does not balance against
-747 - 666, which is why the third category is named here.
+752 - 671, which is why the third category is named here.
 
 This paragraph previously read 2,045 at `c6c880a` while the table two lines
 above it read 2,096 — the same quantity, twice, differing. Both were true when
@@ -78,7 +78,7 @@ save you from the second.
 
 | figure | subject |
 | --- | --- |
-| tables, CHECK constraints, declared states | any migrated database; verified identical in `psirs_uat` and `psirs_test` |
+| tables, CHECK constraints, declared states | any migrated database; verified identical in `psirs_uat` and `psirs_test`. Declared states are the CHECK sets of every column except the five named in `NOT_STATE_COLUMNS`, which hold a language tag rather than a state |
 | triggers | a database built **only** from migrations (`psirs_uat`), because the suite adds 176 observation triggers to `psirs_test` |
 | enum states written by the suite | the four shard databases after a full run, counted over the declared set only |
 | API / portal / agent tests | one full local run at the commit named above |
@@ -219,32 +219,50 @@ mechanism that has since changed.
    figures: 233 was taken while the same test instrumentation existed, and 156
    deliberately excludes it.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
-   666 of 747, still with none unaccounted.
+   671 of 752, still with none unaccounted.
 
-   That numerator read 669 until this revision of the document, and the three
-   it lost are worth a sentence because of what they were. The denominator
-   counts upper-case values only, deliberately: `enum-observation.ts` records
-   that "lower-case sets — `usage_events.language` is 'en' and 'ha' — are
-   values of a different kind, not states anything transitions to", and the
-   observer never watches those columns. The coverage script's separate read
-   of standing reference data did not apply the same rule, so
+   Both halves of that ratio have moved twice in this document, for two
+   different errors in the same rule, and both are worth keeping because the
+   rule looked reasonable each time.
+
+   The numerator read 669 against 747 for one revision. The denominator
+   counted upper-case values only, deliberately: `enum-observation.ts`
+   recorded that "lower-case sets — `usage_events.language` is 'en' and 'ha' —
+   are values of a different kind, not states anything transitions to", and
+   the observer never watched those columns. The coverage script's separate
+   read of standing reference data did not apply the same rule, so
    `notification_templates.language: en`, `: ha` and
-   `users.preferred_language: en` were counted as written — three states the
+   `users.preferred_language: en` were counted as written — three values the
    denominator excludes on purpose. A ratio whose numerator is drawn from a
-   wider universe than its denominator is not a ratio.
+   wider universe than its denominator is not a ratio, and it became 666 of
+   747.
 
    The accounting was never affected: the loop that finds unwritten states
    iterates the declared set, so a value outside it was never compared to
    anything. Only the headline figure moved.
 
-   Fifteen enum-ish values sit outside this report entirely and always have —
-   ten language codes across five columns, and the five role names on
-   `cases.department`. The language ones are the deliberate exclusion above.
-   The `cases.department` ones are role names written in lower case, and
-   whether they belong in a states report is a question this document raises
-   rather than answers.
+   The second error was in the exclusion itself, and it cost coverage rather
+   than arithmetic. Fifteen values sat outside this report entirely: ten
+   language codes across five columns, and the five role names on
+   `cases.department`. A previous revision of this document raised the second
+   group as a question rather than answering it. The answer is that they are
+   states and always were — `POST /cases` and `POST /cases/:id/assign` both
+   take one, `my-work` reads the department queue off it, and all five are
+   reachable — so a rule that decided by letter case excluded a routing column
+   along with the language tags it was aimed at.
+
+   What that cost is the point. `supervisor` and `admin` were written by
+   nothing anywhere in the repository, and the check built to find exactly
+   that could not see the column in either direction. Run the old script
+   against shard databases with every `cases.department` write removed and it
+   prints 666 of 747 and exits 0: a column with no coverage at all, and
+   silence. The exclusion is now a named list, `NOT_STATE_COLUMNS`, one entry
+   per column with the reason it holds something other than a state, and both
+   halves of the ratio read it. 671 of 752 — the same 81 unwritten as before,
+   because the two states are now covered by a test that walks
+   `CASE_DEPARTMENTS` rather than naming them.
 5. **"140 tests across 18 files; 10 of 21 screens rendered under test"** for the
-   officer portal. Now 655 tests, and the screen count has moved with the new
+   officer portal. Now 656 tests, and the screen count has moved with the new
    subsystems.
 6. **The security and access-control section** reasons about a permission map
    held in code. Migration `059` made it data, editable at runtime and cached.
