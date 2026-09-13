@@ -50,6 +50,7 @@
 import { createHash } from 'node:crypto';
 import { koboToNaira, nairaToKobo, type Kobo, type PaymentMethod } from '@psirs/shared';
 import { config } from '../../config';
+import { safeEqual } from '../../lib/crypto';
 import type {
   GatewayVerificationResult,
   GatewayWebhookEvent,
@@ -343,7 +344,22 @@ export class RemitaGateway implements PaymentGateway {
     if (expectedSecret) {
       const presented =
         input.headers['x-remita-signature'] ?? input.headers['x-psirs-signature'] ?? '';
-      if (presented !== expectedSecret) {
+      /*
+       * Constant time, because this is the one credential a caller presents.
+       *
+       * This read `presented !== expectedSecret`. The endpoint is a public
+       * callback with no attempt limiting, so a caller may present guesses in
+       * a loop and time them, and a short-circuiting compare returns sooner
+       * the earlier it finds a wrong byte. `safeEqual` is the helper this
+       * repository already wrote for exactly this -- its own comment says "for
+       * OTPs, signatures and verification codes" -- and until now it was
+       * called from one place.
+       *
+       * Behaviour is unchanged for every credential, right or wrong:
+       * `safeEqual` returns false on a length mismatch and compares in
+       * constant time otherwise.
+       */
+      if (!safeEqual(presented, expectedSecret)) {
         return {
           accepted: false,
           authenticated: false,
