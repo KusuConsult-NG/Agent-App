@@ -62,13 +62,24 @@ EOF
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [backup] Base backup created: ${BACKUP_PATH}.dump"
 
 # 4. Optional Remote Sync (e.g. AWS S3 / Cloudflare R2 / MinIO)
+#
+# Optional means the bucket is optional, not the upload.
+#
+# This was nested inside `if command -v aws`, so a host with `BACKUP_S3_BUCKET`
+# set and no `aws` on it took neither branch, said nothing, and finished with
+# "Backup and retention cycle complete." Setting that variable is an operator
+# asking for a copy off the machine; getting local-only backups and a success
+# message is the difference between having off-site backups and believing you
+# have them, and it would hold until the day the machine is gone.
 if [ -n "${BACKUP_S3_BUCKET:-}" ]; then
-  if command -v aws >/dev/null 2>&1; then
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [backup] Uploading snapshot to S3: s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.dump"
-    aws s3 cp "${BACKUP_PATH}.dump" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.dump"
-    aws s3 cp "${BACKUP_PATH}.sha256" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.sha256"
-    aws s3 cp "${BACKUP_PATH}.meta.json" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.meta.json"
+  if ! command -v aws >/dev/null 2>&1; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [backup] FATAL: BACKUP_S3_BUCKET is set to '${BACKUP_S3_BUCKET}' but the aws CLI is not installed, so this snapshot exists only on this machine." >&2
+    exit 1
   fi
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [backup] Uploading snapshot to S3: s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.dump"
+  aws s3 cp "${BACKUP_PATH}.dump" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.dump"
+  aws s3 cp "${BACKUP_PATH}.sha256" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.sha256"
+  aws s3 cp "${BACKUP_PATH}.meta.json" "s3://${BACKUP_S3_BUCKET}/backups/${BACKUP_NAME}.meta.json"
 fi
 
 # 5. Retention Pruning (Remove backups older than RETENTION_DAYS)

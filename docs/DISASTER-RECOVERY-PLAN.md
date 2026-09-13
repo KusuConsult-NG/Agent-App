@@ -88,9 +88,22 @@ bash deploy/backup/verify-backup.sh
 **Verification Checklist Executed by Script:**
 1. Generates a fresh compressed dump with SHA256 checksum.
 2. Creates an ephemeral isolated PostgreSQL database `psirs_verify_restore_<PID>`.
-3. Restores schema, table definitions, foreign keys, and indexes.
-4. Asserts that all **17 LGAs**, **37 revenue catalogue items**, and all database triggers (`receipts_require_verified_payment`, `prevent_delete`) are active and enforcing rules.
+3. Restores schema, table definitions, foreign keys, and indexes, failing the
+   run if `pg_restore` reports an error or if any of the eight financial tables
+   is absent from the restored database.
+4. Asserts **at least 17 LGAs** and **at least 30 revenue catalogue items**
+   (the seeded catalogue currently holds 42), and that the receipt control
+   `receipts_require_verified_payment` is present on `receipts` and not
+   disabled.
 5. Drops the verification database and reports exit code 0.
+
+**What step 4 does not do**, because a runbook that overstates its own checks
+is worse than one that claims less. It asserts *one* named trigger, not every
+trigger: an earlier version of this list named `prevent_delete` alongside it,
+which is the name of a trigger *function* rather than of any trigger, and
+nothing looks for it. It confirms that control is present and enabled; it does
+not fire it. The forbidden-insert check that actually exercises a control lives
+in `apps/api/scripts/restore.sh`.
 
 ---
 

@@ -442,22 +442,60 @@ positional second argument), and they verify different things:
 
 | | `apps/api/scripts` | `deploy/backup` |
 | --- | --- | --- |
-| checksum against a manifest | yes | yes |
-| financial tables present, with counts | 8 tables | table count only, printed |
-| named control trigger present and enabled | yes | yes, since this commit |
+| checksum against a manifest | yes | yes, and now says so when there is none |
+| the archive read before the database is dropped | n/a, does not drop | yes, since this commit |
+| a failed `pg_restore` fails the script | yes | yes, since this commit |
+| financial tables present, with counts | 8 tables | 8 tables, since this commit |
+| named control trigger present and enabled | yes | yes |
 | the control actually exercised | yes | no |
 | run by CI | no | yes, via `verify-backup.sh` |
 
-The last two rows are the point. The pair that verifies more is the pair no
-automation runs; the pair CI runs is the one that verifies less. An operator
-following `DISASTER-RECOVERY.md` at two in the morning runs scripts that have
-never been exercised by anything except by hand, and an operator following
-`DISASTER-RECOVERY-PLAN.md` runs the tested ones and gets a weaker assurance.
+The last two rows were always the point. The pair that verifies more is the
+pair no automation runs; the pair CI runs is the one that verifies less. An
+operator following `DISASTER-RECOVERY.md` at two in the morning runs scripts
+that have never been exercised by anything except by hand, and an operator
+following `DISASTER-RECOVERY-PLAN.md` runs the tested ones and gets a weaker
+assurance.
 
-Both were exercised end to end while writing this: a real backup of the seeded
-stack, restored into a fresh database, 23 transactions and 198 audit entries
-back, 21 triggers, checksum verified. Neither is broken. What is unsettled is
-which one PSIRS is supposed to use, and nothing in either document
+A PREVIOUS REVISION OF THIS DOCUMENT SAID "NEITHER IS BROKEN", AND ONE WAS.
+
+That sentence rested on exercising both end to end — a real backup of the
+seeded stack, restored into a fresh database, 23 transactions and 198 audit
+entries back, triggers present, checksum verified. Every word of it is true and
+it is the wrong test. A restore script's entire job is the run that goes wrong,
+and neither script had ever been given one.
+
+`deploy/backup/restore.sh` ran `pg_restore ... || true`, discarding the
+verdict, and then "verified" by counting rows in `information_schema.tables`
+and printing the number without comparing it to anything. Measured, against a
+throwaway database:
+
+```
+truncated archive   pg_restore: could not read from input file: end of file
+                    [restore] Restore complete. Public schema tables: 0
+                    exit 0
+
+valid archive, no   [restore] Restore complete. Public schema tables: 1
+financial tables    exit 0
+```
+
+Both after step 3 had already dropped the target database, whose default is
+`psirs`. The failure mode was: destroy the database, fail to replace it, report
+success. The same shape appears twice more in the pair — a missing `.sha256`
+skipped the integrity check without a word, and `backup.sh` skipped the
+off-site upload in silence when `BACKUP_S3_BUCKET` was set on a host with no
+`aws` CLI, which is the difference between having off-site backups and
+believing you have them.
+
+CI did not catch any of it, and the reason is worth keeping: `verify-backup.sh`
+makes its own assertions *after* calling `restore.sh`, so the restore script's
+own verification step was never the thing under test. A caller that checks the
+callee's work conceals a callee that checks nothing.
+
+All four are closed at the commit above. The same three archives now give exit
+2 before the drop with the database untouched, exit 3 naming the missing table,
+and exit 0 with all eight financial tables listed. What is still unsettled is
+which procedure PSIRS is supposed to use, and nothing in either document
 acknowledges that the other exists.
 
 A revision should not need to guess. Consolidating to one pair, or stating
