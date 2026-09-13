@@ -38,6 +38,30 @@ reported as **INVALID** with an instruction to report it.
 The public page shows the receipt number, revenue type, amount, date and LGA —
 and no taxpayer name, phone number, address or TIN (PRD §20).
 
+### The same rule on the doors that take a token instead of a login
+
+Three surfaces answer somebody who has no account, because the person on the
+other side of them has no reason to hold one: a referee answering a nomination,
+a cooperative's leader confirming who belongs to it, and a citizen asking what
+they owe. The token in the link is the whole of the authorisation, it arrives
+by SMS, and a forwarded message is a forwarded capability.
+
+So every field these return is chosen as though a stranger asked for it,
+because one can. `citizen-status` gives up the TIN, the compliance score, the
+obligation names, the date of the last payment and the officer's closure note
+for that reason — the caller supplied a phone number, which is not a secret,
+and the endpoint cannot tell the taxpayer from anybody else who knows it. The
+referee page carries the applicant's name and LGA and nothing else.
+
+The attestation roster did not meet that standard: it returned every
+cooperative member's telephone number in full, to whoever held the link, for
+the fourteen days it stays live — and the invitation is deliberately reusable,
+so it never becomes spent. Numbers on that surface are now masked to their last
+three digits, which is what the screen needs (two members can share a name) and
+all it needs. `apps/api/src/tests/what-a-forwarded-link-is-worth.test.ts` holds
+every public door to it: no telephone number the database holds may come back
+from any of them.
+
 ## 3. Altering government rates
 
 `catalogue:configure` is held only by revenue officers and administrators, and

@@ -47,7 +47,10 @@ const VIEW = {
       id: 'm1',
       status: 'PENDING_ATTESTATION',
       full_name: 'Dashe Pam',
-      phone: '+2348030000001',
+      // Masked, because that is what the API sends: this route is
+      // unauthenticated and the link is forwardable, so the roster carries
+      // enough of the number to tell two members apart and no more.
+      phone: '***********001',
       member_reference: 'FG-019',
     },
   ],

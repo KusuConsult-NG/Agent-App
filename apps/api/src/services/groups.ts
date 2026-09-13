@@ -26,7 +26,7 @@ import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { nextGroupCode } from '../lib/references';
-import { generateVerificationCode, sha256 } from '../lib/crypto';
+import { generateVerificationCode, maskPhone, sha256 } from '../lib/crypto';
 import { recordAudit } from './audit';
 import { groupAttestationUrl } from '../lib/public-urls';
 
@@ -390,6 +390,28 @@ export async function openAttestation(db: Db, token: string) {
     });
   }
 
+  /*
+   * The roster, read as though a stranger asked for it — because one can.
+   *
+   * This route is unauthenticated by design and the token arrives by SMS on a
+   * village chairman's handset, where (in the words of the test that narrowed
+   * the write side) "a forwarded message is a forwarded capability". The
+   * invitation is deliberately reusable and never becomes spent, so the link
+   * stays live for its whole fourteen days.
+   *
+   * It returned every member's telephone number in full. That is the
+   * cooperative's phone book, handed to whoever kept the message — and the
+   * standard this platform applies elsewhere is explicit: `citizen.ts` strips
+   * the TIN, the compliance score, the obligation names and the officer's note
+   * from its public answer on the reasoning that "every field here is read as
+   * though a stranger asked for it", and the agent application masks the
+   * number a code was sent to as "enough to recognise, not to publish".
+   *
+   * The number is masked and not dropped, because the screen's whole question
+   * is "is this person really one of yours" and two members can share a name.
+   * Three digits answer that for a leader who knows their own members; they
+   * answer nothing at all for anyone else.
+   */
   const members = await query<{
     id: string;
     status: string;
@@ -413,7 +435,7 @@ export async function openAttestation(db: Db, token: string) {
     groupCode: invitation.group_code,
     leaderName: invitation.leader_name,
     lga: invitation.lga_name,
-    members,
+    members: members.map((member) => ({ ...member, phone: maskPhone(member.phone) })),
   };
 }
 

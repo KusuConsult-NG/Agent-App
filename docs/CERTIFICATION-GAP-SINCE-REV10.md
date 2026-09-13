@@ -15,23 +15,23 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`54e9f5c`) |
+| | At `fa8f454` (Revision 10) | Now (`d47d3c7`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 79 |
-| API test files | 139 | 182 |
+| API test files | 139 | 183 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 300 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,134 |
+| API tests passing | 1,523 *(report's figure)* | 2,138 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `54e9f5c` plus the working tree
-for migration 079: API 2,134 passing across four shards with 0 failing and 0
-cancelled; portal 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
+Current figures are from a full local run at `d47d3c7` plus the working tree:
+API 2,138 passing across four shards with 0 failing and 0 cancelled; portal
+656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
 those on any insert that omits the column, so no row taking one means the
@@ -642,6 +642,52 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## What a forwarded link was worth
+
+The platform has three doors that take a token instead of a login, because the
+person behind each has no account and no reason to hold one: a referee, a
+cooperative's leader, and a citizen asking what they owe. `citizen.ts` states
+the standard all three are held to and pays for it —
+
+> every field here is read as though a stranger asked for it, because one can
+
+— having given up the TIN, the compliance score, the obligation names, the date
+of the last payment and the officer's closure note, on the reasoning that the
+caller supplied a phone number and a phone number is not a secret.
+
+`GET /group-attestation/:token` did not meet it. Measured, not reasoned about:
+
+```json
+{ "full_name": "Nanribet Choji",   "phone": "+2348120000100" },
+{ "full_name": "Nanribet Dachung", "phone": "+2348120000110" },
+{ "full_name": "Nanribet Gyang",   "phone": "+2348120000120" }
+```
+
+A village cooperative's phone book, to anyone holding the link, for the
+fourteen days it stays live — and the invitation is deliberately reusable, so
+unlike the referee's it never becomes spent.
+
+What makes this one worth recording is that the reasoning already existed, one
+file away and unapplied. `attestation-replay.test.ts` narrowed the *write* side
+on exactly this threat — "these arrive by SMS to a village chairman's handset;
+a forwarded message is a forwarded capability" — and in the same paragraph
+points straight at the read it never revisited: "`openAttestation` hands out
+every member's id". It hands out their telephone number too.
+
+Numbers on that surface are now masked to the last three digits, which is the
+rule the agent application already applies to the number a one-time code was
+sent to: "enough to recognise, not to publish". Masked and not dropped, because
+the screen's whole question is whether the leader recognises this person and
+two members can share a name — three digits settle that for somebody who knows
+their own members and settle nothing for anyone else.
+
+The guard holds both directions, and the mutation run shows it: returning the
+raw roster fails three of four, neutering the mask itself fails the same three,
+and masking the number *completely* fails exactly one — the test that the
+screen can still do its job. The fourth test is the class rather than the
+instance: one fixture, every public door it can reach, and the assertion that
+no telephone number the database holds comes back from any of them.
 
 ## A fourth thing, read but not run: four security headers on three locations
 
