@@ -391,9 +391,27 @@ export function RoleHomeScreen({
                           action.act(
                             row.id!,
                             () =>
+                              /*
+                               * `reason`, and the sentence rather than its key.
+                               *
+                               * This sent `note: 'ofcRhApprovedFromHome'`, and
+                               * both halves were wrong. The route takes
+                               * `reason`, not `note`, so approving an agent
+                               * from here was a 422 -- on top of the hook that
+                               * was already stopping the request being made at
+                               * all. And the value was the dictionary key
+                               * itself, not `t.` anything, so had the field
+                               * name been right the audit trail would record
+                               * `ofcRhApprovedFromHome` as the State's reason
+                               * for letting somebody collect revenue.
+                               *
+                               * The English-literal guard could not see it: a
+                               * bare identifier is exactly what that check
+                               * skips, by a rule added on purpose.
+                               */
                               api.post(`/agents/${row.id}/review`, {
                                 decision: 'APPROVE',
-                                note: 'ofcRhApprovedFromHome',
+                                reason: t.ofcRhApprovedFromHome,
                               }),
                             t.ofcRhAgentApproved.replace('{{name}}', row.full_name),
                           )

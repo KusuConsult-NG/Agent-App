@@ -1295,6 +1295,65 @@ recommendation is ESLint with the `react-hooks` plugin, run in CI beside
 in either React workspace will pass `tsc`, pass both suites, render perfectly,
 and throw when somebody presses the button.
 
+## A reason that was a field name away, and a sentence that was its own key
+
+The payout button's `{}` raised a general question worth asking once: how many
+other client calls send a body the server's schema would reject? It is a
+mechanical question, so it was measured rather than guessed. Every `api.post`,
+`.put` and `.patch` with an inline object body in both React workspaces --
+115 of them -- against the required keys of the 113 routes that declare a
+`validateBody` schema.
+
+**One mismatch.** The class is not widespread, and that is the useful finding:
+the payout button was not the tip of anything.
+
+The one is on the same screen. `RoleHome.tsx` approves an agent with
+
+    api.post(`/agents/${row.id}/review`, {
+      decision: 'APPROVE',
+      note: 'ofcRhApprovedFromHome',
+    })
+
+and the route takes `reason`, not `note`. So approving an agent from the home
+screen was a 422 -- underneath the hook that was already stopping the request
+being made at all.
+
+The second half is worse than the first. The value is the dictionary KEY, not
+`t.ofcRhApprovedFromHome`. Had the field name been right, the audit trail would
+record the string `ofcRhApprovedFromHome` as the State's reason for letting
+somebody collect revenue on its behalf -- and it would have passed the route's
+`min(10)` comfortably, because a key is longer than ten characters. The
+English-literal guard cannot see this: a bare identifier is exactly what that
+check skips, by a rule added deliberately when it was hiding real words.
+
+Approving an agent is what lets them collect. It is the second money-path
+button on this one screen found broken in a way no test could see.
+
+### No guard for this one either, and why
+
+The scan that found it needed four corrections before it was right -- a
+shorthand `{ reason }` read as an empty body; a fixed lookahead window let a
+route using `asyncHandler` borrow the schema of the route below it; the search
+for the next declaration started inside the current one and rejected almost
+every schema; a `//` comment above a key hid that key. Each error pointed the
+wrong way at least once.
+
+It also cannot see a body built from a variable, a body with a nested object, or
+one assembled with a spread -- and those are the shapes the remaining calls
+mostly use. A check with that hit rate and that blind spot would raise false
+alarms, and a check that raises false alarms is deleted in a hurry by somebody
+who is not thinking about what it was for.
+
+The real answer is not a scanner. `api.post` takes an untyped body, so none of
+this is checked at compile time by a compiler that could check all of it. It is
+the same shape as `stepUp(action: string)` taking a plain string when
+`StepUpAction` exists: a type that is known on one side of the wire and thrown
+away on the other. Exporting the route schemas -- `packages/shared` is the
+obvious home -- and typing `api.post` against them would close this class
+entirely and at build time, including every shape the scanner cannot read. That
+is a structural change across both workspaces and it is PSIRS's call, so it is
+recorded here as the recommendation rather than started.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in

@@ -195,3 +195,82 @@ describe('approving a payout from the home screen', () => {
     ]);
   });
 });
+
+/*
+ * Approving an agent from the home screen: the field the route actually takes,
+ * and a sentence rather than the name of one.
+ *
+ * This posted `{ decision, note: 'ofcRhApprovedFromHome' }`. The route takes
+ * `reason`, so it was a 422 on top of the hook that stopped it being sent at
+ * all; and the value was the dictionary KEY, so had the field name been right
+ * the audit trail would carry `ofcRhApprovedFromHome` as the State's recorded
+ * reason for letting somebody collect revenue.
+ *
+ * Asserted against the dictionary, not against the English, so translating the
+ * sentence does not break this and sending the key again does.
+ */
+const AGENT_HOME = {
+  role: 'admin',
+  admin: {
+    agents_awaiting_review: 1,
+    devices_awaiting_approval: 0,
+    supervisors_without_a_territory: 0,
+  },
+  work: {
+    agents: [
+      {
+        id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+        agent_code: 'AGT-00002',
+        full_name: 'Applicant Awaiting Clearance',
+        applied: '2026-09-01',
+      },
+    ],
+  },
+};
+
+const ADMIN = {
+  id: 'u3',
+  phone: '+2348000000001',
+  fullName: 'Administrator',
+  role: 'admin',
+  permissions: permissionsForRole('admin'),
+};
+
+describe('approving an agent from the home screen', () => {
+  beforeEach(() => {
+    sessionStorage.setItem('psirs.portal.user', JSON.stringify(ADMIN));
+    vi.spyOn(api, 'get').mockResolvedValue(AGENT_HOME as never);
+  });
+
+  it('sends a reason, under the name the route reads it by', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ decision: 'APPROVE' } as never);
+
+    render(<RoleHomeScreen user={ADMIN as never} navigate={() => {}} />);
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: en.ofcRhApprove! })));
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const [path, body] = post.mock.calls[0] as [string, Record<string, unknown>];
+
+    expect(path).toBe('/agents/cccccccc-cccc-cccc-cccc-cccccccccccc/review');
+    expect(body.decision).toBe('APPROVE');
+    expect(Object.keys(body)).toContain('reason');
+    expect(Object.keys(body)).not.toContain('note');
+  });
+
+  it('sends the sentence, not the name of the sentence', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ decision: 'APPROVE' } as never);
+
+    render(<RoleHomeScreen user={ADMIN as never} navigate={() => {}} />);
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: en.ofcRhApprove! })));
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    const reason = (post.mock.calls[0]![1] as { reason?: string }).reason;
+
+    expect(reason).toBe(en.ofcRhApprovedFromHome);
+    // The route asks for at least ten characters, and a key would have cleared
+    // that bar comfortably -- so length alone is not the property. This is: a
+    // dictionary key is never its own value.
+    expect(reason).not.toBe('ofcRhApprovedFromHome');
+    expect(reason!.length).toBeGreaterThanOrEqual(10);
+  });
+});
