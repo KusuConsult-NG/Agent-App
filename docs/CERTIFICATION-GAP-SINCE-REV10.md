@@ -15,7 +15,7 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`83a1169`) |
+| | At `fa8f454` (Revision 10) | Now (`ffe3242`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
@@ -23,14 +23,14 @@ verification run — describes the platform as it stood at that commit.
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,170 |
+| API tests passing | 1,523 *(report's figure)* | 2,171 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `83a1169` plus the working tree:
-API 2,170 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `ffe3242` plus the working tree:
+API 2,171 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,50 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A guard whose own list was unguarded, and the bug that fell out of closing it
+
+The last of the three workflows, `integration-verification.yml`, turned out to
+be the most carefully reasoned file in the repository on exactly this subject:
+its header records that the gate used to be a *step*, that "a job whose steps
+are all skipped completes `success`", and that each night it therefore put a
+green tick on a run which had contacted nobody. The gate is now the job's own
+`if`, and one job means a skipped run is grey rather than green. Checked and
+sound — including the three secrets it commits, all three already in
+`PUBLISHED_SECRETS`.
+
+Which raised the better question. `a-secret-this-repository-publishes.test.ts`
+promises in its header that "the list cannot fall behind the files it is a list
+*of*", and delivers that for `PUBLISHED_SECRETS` against `FILES`. **`FILES` is
+seven paths somebody typed, and nothing held it to the repository.** A new
+workflow, a second compose file or another example env could publish a
+placeholder and neither list would notice — the same failure one level up.
+Verified complete today (every tracked file assigning one of the three names
+was already listed), so the gap was latent. It is now closed by walking the
+tree and failing on any unlisted file that publishes one.
+
+AND THE WALK IMMEDIATELY FOUND A BUG IN THE GUARD IT WAS EXTENDING. The scan's
+pattern used `\s*` around the separator, which matches a newline, so an empty
+assignment took the *next line* as its value:
+
+```
+PAYMENT_WEBHOOK_SECRET=          <- .env.example, line 21
+ACCESS_TOKEN_TTL_SECONDS         <- reported as the published secret
+```
+
+No file in `FILES` leaves one of these empty, so nothing surfaced it until the
+walk started reading files that do. It is `[ \t]*` now. A guard finding a bug
+in the guard is the best argument for writing the second one.
+
+The walk also had to repeat a rule the file already stated — `.env` and
+`.env.local` are git-ignored and "whatever an operator keeps there is theirs
+and is not published by us" — because walking the tree reaches them whether or
+not the comment above `FILES` says they are out of scope.
+
+    a new unlisted file publishing a secret   names the file and the value
+    the newline-crossing pattern restored     names .env.example
+    one real secret dropped from the list     the original test, naming the
+                                              workflow it is published in
 
 ## The release path verified less than the branch path, and gated on nothing
 
