@@ -1497,6 +1497,67 @@ rather than seconds. Whether that is worth a retry and a list is an operational
 judgement about how often the gateway actually times out, which is PSIRS's to
 make and not visible from here.
 
+## The reference a government integrates against, checked against the code
+
+`docs/API.md` is hand-written, and nothing held it to the API. The step-up
+table — seven rows, the contract for the seven most consequential actions the
+platform offers — had **three of them wrong**.
+
+`POST /government/payments/:id/reverse` is not a route and never was. The
+reversal flow is three steps under segregation of duties: raise a
+`PAYMENT_REVERSAL` approval (which needs `payment:reverse:request` on top of
+`approval:request`), have a second officer decide it, have a third execute it
+at `/government/approvals/:id/execute-reversal`. The row collapsed all of that
+into one endpoint that answers 404 — and the same document states the real
+route correctly about thirty rows further down, so it contradicted itself
+rather than merely being out of date.
+
+`payment:reverse` is not a permission. The catalogue has
+`payment:reverse:request` and `payment:reverse:approve`.
+
+`catalogue:manage` is not a permission either. The rate-change route checks
+`catalogue:configure`.
+
+The fourth is the one that would have cost something. The suspend row named
+`agent:manage`, which **administrators alone** hold. The route checks
+`agent:suspend`, which **supervisors and revenue officers hold too**. So the
+reference told a supervisor to go and find an administrator before an agent
+could be stopped from collecting — on the one control whose entire value is how
+quickly it can be used. Wrong in the direction that adds delay to an
+emergency.
+
+A fifth, smaller: `` `GET`/`POST` | `/agents/me/training[/:moduleCode]` ``
+claimed both methods work with and without the module code. `POST` without it
+does not exist.
+
+### The check, and what it deliberately does not check
+
+Two properties, neither needing a list anybody maintains.
+
+Every path the document writes out **in full** must be a route. Not every path
+it mentions: the reference uses two abbreviations a scan reads as broken links
+— a `·` joining a full path to a sibling named only by its last segment, and
+`[/:id]` for an optional one — and requiring a known router mount prefix drops
+those without guessing what they expand to. A trailing `*` is honoured as a
+family and satisfied by any route under the prefix. The fully-written paths are
+what an integrator copies anyway.
+
+Every permission-shaped token must be a permission.
+
+It does **not** check that every route is documented. 144 of 281 are not, and
+that is not a defect: the reference is prose about the surfaces that matter, it
+claims completeness nowhere, and a check demanding it would invent a standard
+this repository never set.
+
+The scan that found all this reported thirty-four broken links on its first
+run and five on its second; every one of the twenty-nine that disappeared was
+the scan's own fault, and four of the last five were too — a table cell carries
+its own method labels as often as it inherits the row's first cell, and
+applying the row's method to every path in it condemns four good rows. Each was
+checked against the code rather than believed. That is the whole reason the
+count came down to one: the tool was wrong far more often than the document
+was.
+
 ## A fourth thing, read but not run: four security headers on three locations
 
 Recorded separately from everything above because it is the one finding in

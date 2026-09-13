@@ -154,7 +154,7 @@ usable login; government users are provisioned by an administrator.
 | `GET` | `/agents/me/application` | own |
 | `POST` | `/agents/me/kyc` | own |
 | `POST` | `/agents/me/referees` | own |
-| `GET`/`POST` | `/agents/me/training[/:moduleCode]` | own |
+| `GET` | `/agents/me/training` · `POST` `/agents/me/training/:moduleCode` | own; a completion names the module it completes |
 | `GET` | `/agents/agreement` · `POST` `/agents/me/agreement` | own |
 | `POST` | `/agents/me/bank/verify` | own |
 | `GET` | `/agents/me/bank/change` | own — the proposal waiting, if any |
@@ -186,9 +186,9 @@ well as the permission. All seven are now enforced by a route:
 |---|---|---|
 | `commission.payout.request` | `POST /agents/me/commission/payout` | own agent record |
 | `agent.bank_account.change` | `POST /agents/me/bank/change` · `/agents/:agentId/bank/change` | `agent:manage` for the officer-raised form |
-| `agent.suspend` | `POST /agents/:id/suspend` | `agent:manage` |
-| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:manage` |
-| `payment.reversal.approve` | `POST /government/payments/:id/reverse` | `payment:reverse` |
+| `agent.suspend` | `POST /agents/:id/suspend` | `agent:suspend` — held by supervisors and revenue officers as well as administrators |
+| `catalogue.rate.change` | `POST /revenue/items/:id/rates` | `catalogue:configure` |
+| `payment.reversal.approve` | `POST /government/approvals/:id/execute-reversal` | `payment:reverse:approve`; raised as a `PAYMENT_REVERSAL` approval, decided by a second officer, executed by a third |
 | `taxpayer.identity.change` | `POST /taxpayers/:id/identity` | `taxpayer:correct`; the identity *document* additionally needs `taxpayer:manage` |
 | `user.role.change` | `POST /government/users/:id/role` | `user:manage`; never your own role |
 
