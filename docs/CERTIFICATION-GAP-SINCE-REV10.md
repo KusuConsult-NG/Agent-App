@@ -15,22 +15,22 @@ verification run — describes the platform as it stood at that commit.
 
 `fa8f454..HEAD` is **215 commits**.
 
-| | At `fa8f454` (Revision 10) | Now (`f249435`) |
+| | At `fa8f454` (Revision 10) | Now (`fb08bdd`) |
 | --- | --- | --- |
 | API service modules | 39 | 44 |
 | Database migrations | 54 | 80 |
-| API test files | 139 | 187 |
+| API test files | 139 | 188 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
 | CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
-| API tests passing | 1,523 *(report's figure)* | 2,156 |
+| API tests passing | 1,523 *(report's figure)* | 2,161 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
 | Declared enum states | 537 *(report's figure)* | 752 |
 | Enum states written by the suite | 462 *(report's figure)* | 671 |
 
-Current figures are from a full local run at `f249435` plus the working tree:
-API 2,156 passing across four shards with 0 failing and 0 cancelled; portal
+Current figures are from a full local run at `fb08bdd` plus the working tree:
+API 2,161 passing across four shards with 0 failing and 0 cancelled; portal
 656; agent 345; typecheck clean across all five projects. The 81 declared states the suite did
 not write break down as 74 documented as deliberately unreachable, 1 as not
 exercised by tests, and 6 that are a column's default — the database writes
@@ -644,6 +644,61 @@ caught on the day it is added. It also holds the other half — that the
 unmasked text still reaches the handset, because a fix that stopped the leak by
 sending a citizen six blocks where their code should be would be worse than the
 leak.
+
+## A control cached in each process, with nothing to tell the others
+
+`roles.export_row_limit` is how many rows of the register may leave the
+platform in one file. `services/export.ts` calls it "the only field on a role
+that is a control" and says erring high "puts the register on somebody's
+laptop". It was cached for thirty seconds in an in-process map, on reasoning
+printed beside it:
+
+> an export is not a hot path, but reading two rows per download to answer a
+> question that changes about once a year is a query that exists to be
+> forgotten about
+
+Both halves of that argue against the cache. What it cost is that
+`forgetLimits()` emptied one process's map and nothing told the others — there
+is no LISTEN/NOTIFY and no version column anywhere in this codebase — and,
+unlike `revoke()` next door, `setExportLimit` ends no sessions, so there was no
+backstop either. Simulated by doing to one process exactly what happens to the
+second, changing the row without telling it:
+
+```
+limit before                     = 100000
+administrator lowers it to 1
+limit still served               = 100000
+```
+
+For up to thirty seconds, on every instance but one, at the moment an officer
+is most likely to be mid-export. The limit is now read per export — one row,
+immediately before rendering a spreadsheet of up to tens of thousands — so
+there is no second copy to go stale, and `forgetLimits` is gone rather than
+left as a name that looks like a control.
+
+The existing suite could not have caught this and still cannot: *"and the cache
+does not hold it back"* changes the value through the service in the same
+process, which is the one case where an in-process cache behaves correctly. The
+new test does to the process what the network does to the others.
+
+### The permission cache, which keeps its cache and has its guarantee narrowed
+
+`rbac-store.ts` caches the role→permission map for the same thirty seconds, and
+that one earns it: every authenticated request reads it. Its backstop is real —
+`revoke` ends the sessions of everybody holding the role, and that is a database
+write, so it takes effect on every instance at once.
+
+Its header went one clause further than that: "and the next sign-in reads fresh
+grants". Only here. `forget()` empties the map in the process that called it, so
+an officer signed out by a revocation who signs straight back in and lands on
+another instance is served that instance's snapshot, which can still hold the
+withdrawn permission for the remainder of its thirty seconds.
+
+Narrow — a single-instance deployment cannot reach it, and it needs a
+re-sign-in inside the window — and **left as it is**. Closing it means a query
+on the one read every authenticated request makes, and that is a trade PSIRS
+should make knowingly rather than one to take while passing. The header now
+states the guarantee it actually offers, which is the part that was wrong.
 
 ## A storage key that walks out of the storage directory
 

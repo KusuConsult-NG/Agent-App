@@ -43,7 +43,6 @@ import { seedReferenceData } from '../db/seed';
 import { MINIMUM_COLUMN, fitColumns, rowLimitFor, toXlsx } from '../services/export';
 import { grantStepUp } from './helpers';
 import { forget } from '../services/rbac-store';
-import { forgetLimits } from '../services/export';
 
 const PHONES = {
   auditor: '+2348081000001',
@@ -71,7 +70,6 @@ beforeEach(async () => {
    * leave the next test running against a snapshot of its own changes.
    */
   forget();
-  forgetLimits();
   for (const [key, phone] of Object.entries(PHONES)) {
     await createGovernmentUser({
       fullName: `Export ${key}`,

@@ -24,10 +24,25 @@
  *
  * That means a *grant* takes up to thirty seconds to reach every instance,
  * which is harmless. A *revocation* taking thirty seconds would not be, so
- * revoking does not rely on the cache expiring: `revokePermission` ends the
- * sessions of everybody holding the role, and the next sign-in reads fresh
- * grants. The officer is signed out, which is a visible and correct
- * consequence of having their authority reduced.
+ * revoking does not rely on the cache expiring: `revoke` ends the sessions of
+ * everybody holding the role, and that is a database write, so it is immediate
+ * on every instance at once. The officer is signed out, which is a visible and
+ * correct consequence of having their authority reduced.
+ *
+ * WHAT THAT DOES NOT COVER, stated because this paragraph used to end with
+ * "and the next sign-in reads fresh grants" and that is only true here.
+ * `forget()` empties the map in the process that called it; there is no
+ * LISTEN/NOTIFY and no version column, so nothing tells the others. An officer
+ * signed out by a revocation who signs straight back in and lands on a
+ * different instance is served that instance's snapshot, which can still hold
+ * the withdrawn permission for the remainder of its thirty seconds.
+ *
+ * Narrow — a single-instance deployment cannot reach it at all, and it needs a
+ * re-sign-in inside the window — and left as it is rather than closed with a
+ * per-request query on the one read every authenticated request makes. It is
+ * written down here so the guarantee is not read as wider than it is, and it
+ * is in CERTIFICATION-GAP-SINCE-REV10.md as a decision for PSIRS rather than a
+ * silence.
  *
  * FAILING CLOSED IS NOT AN OPTION HERE, AND FAILING OPEN IS WORSE
  *
@@ -43,7 +58,6 @@ import { PERMISSIONS, permissionsForRole as compiledPermissionsFor, type Permiss
 import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
-import { forgetLimits } from './export';
 import { log } from '../lib/logger';
 import { recordAudit } from './audit';
 
@@ -289,9 +303,13 @@ export async function setExportLimit(
     });
   });
 
-  // Both caches: the map's, and the export limit's next door.
+  /*
+   * The permission map's cache only. The export limit next door is no longer
+   * cached at all — it is read per export — because a `forget()` reaches the
+   * process that called it and no other, and that number is a control with no
+   * session-revocation backstop behind it.
+   */
   forget();
-  forgetLimits();
 }
 
 /**
