@@ -57,8 +57,20 @@ ITEM_COUNT=$(PGPASSWORD="${PGPASSWORD:-postgres}" psql -h "${DB_HOST}" -p "${DB_
   SELECT count(*) FROM revenue_items;
 ")
 
+# Present AND enabled, and on the table it belongs to.
+#
+# This counted rows in pg_trigger by name alone. pg_dump emits
+# "ALTER TABLE ... DISABLE TRIGGER" for a disabled trigger and pg_restore
+# reproduces it faithfully, so a control switched off before the snapshot came
+# back switched off -- and this step still reported "trigger constraints
+# active". Verified by disabling receipts_require_verified_payment on a copy of
+# the seeded database and running this script against it: SUCCESS, exit 0.
 TRIGGER_COUNT=$(PGPASSWORD="${PGPASSWORD:-postgres}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d "${VERIFY_DB}" -t -c "
-  SELECT count(*) FROM pg_trigger WHERE tgname = 'receipts_require_verified_payment';
+  SELECT count(*) FROM pg_trigger t
+    JOIN pg_class c ON c.oid = t.tgrelid
+   WHERE t.tgname = 'receipts_require_verified_payment'
+     AND c.relname = 'receipts'
+     AND t.tgenabled <> 'D';
 ")
 
 echo "  -> LGAs found: ${LGA_COUNT// /}"
@@ -66,7 +78,11 @@ echo "  -> Revenue items found: ${ITEM_COUNT// /}"
 echo "  -> Financial trigger checks: ${TRIGGER_COUNT// /}"
 
 if [ "${LGA_COUNT// /}" -ge 17 ] && [ "${ITEM_COUNT// /}" -ge 30 ] && [ "${TRIGGER_COUNT// /}" -ge 1 ]; then
-  echo "SUCCESS: Backup restored with complete data integrity and trigger constraints active."
+  # Deliberately not "complete data integrity". This confirms the archive
+  # restores, that the reference tables came back, and that the receipt
+  # control is present and not disabled. It does not exercise the control:
+  # the forbidden-insert check in apps/api/scripts/restore.sh does that.
+  echo "SUCCESS: archive restored; reference data present and the receipt control trigger enabled."
 else
   echo "FAILED: Integrity assertions failed on restored database."
   exit 1

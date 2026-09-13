@@ -311,6 +311,48 @@ the signed audit reports that already exist — differ in cost and in who has to
 be trusted, and choosing among them is PSIRS's decision rather than one to make
 while passing.
 
+## A third open question: which disaster-recovery procedure is the procedure
+
+There are two, and they are not the same one.
+
+```
+docs/DISASTER-RECOVERY.md        ->  apps/api/scripts/backup.sh
+                                     apps/api/scripts/restore.sh
+docs/DISASTER-RECOVERY-PLAN.md   ->  deploy/backup/backup.sh
+                                     deploy/backup/restore.sh
+```
+
+They differ in more than location. The archives are named differently
+(`psirs-<stamp>.dump` against `psirs_backup_<stamp>.dump`), the restore takes
+its target differently (`RESTORE_TARGET_URL` in the environment against a
+positional second argument), and they verify different things:
+
+| | `apps/api/scripts` | `deploy/backup` |
+| --- | --- | --- |
+| checksum against a manifest | yes | yes |
+| financial tables present, with counts | 8 tables | table count only, printed |
+| named control trigger present and enabled | yes | yes, since this commit |
+| the control actually exercised | yes | no |
+| run by CI | no | yes, via `verify-backup.sh` |
+
+The last two rows are the point. The pair that verifies more is the pair no
+automation runs; the pair CI runs is the one that verifies less. An operator
+following `DISASTER-RECOVERY.md` at two in the morning runs scripts that have
+never been exercised by anything except by hand, and an operator following
+`DISASTER-RECOVERY-PLAN.md` runs the tested ones and gets a weaker assurance.
+
+Both were exercised end to end while writing this: a real backup of the seeded
+stack, restored into a fresh database, 23 transactions and 198 audit entries
+back, 21 triggers, checksum verified. Neither is broken. What is unsettled is
+which one PSIRS is supposed to use, and nothing in either document
+acknowledges that the other exists.
+
+A revision should not need to guess. Consolidating to one pair, or stating
+plainly which is authoritative and why the other is kept, is a decision for
+PSIRS — it touches the runbook people are trained on and the scheduling that
+has yet to be set up (`DISASTER-RECOVERY.md` records that `backup.sh` "is not
+yet on a timer anywhere").
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say
