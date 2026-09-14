@@ -29,7 +29,7 @@ import {
   formatDate,
 } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, localName, todayIsoLocal } from '@psirs/shared';
 
 interface FoundTaxpayer {
   id: string;
@@ -113,7 +113,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
     if (form.identityNumber.trim() && !form.identityType) {
       return t.ofcTrNameTheTypeOf;
     }
-    if (form.dateOfBirth && form.dateOfBirth > new Date().toISOString().slice(0, 10)) {
+    if (form.dateOfBirth && form.dateOfBirth > todayIsoLocal()) {
       return t.birthDateFuture;
     }
     if (form.reason.trim().length < 10) {
@@ -254,7 +254,7 @@ export function TaxpayerRecordsScreen({ user }: { user: User }) {
               id="c-dob"
               type="date"
               min="1900-01-01"
-              max={new Date().toISOString().slice(0, 10)}
+              max={todayIsoLocal()}
               value={form.dateOfBirth}
               onChange={set('dateOfBirth')}
             />

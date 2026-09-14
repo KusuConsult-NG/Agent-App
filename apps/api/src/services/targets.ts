@@ -42,6 +42,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { currentYearInPlateau, plateauParts } from '../lib/calendar-day';
 import { recordAudit } from './audit';
 import {
   scopeParams,
@@ -677,11 +678,11 @@ function shiftYears(date: Date, years: number): Date {
 }
 
 function startOfYear(): Date {
-  return new Date(Date.UTC(new Date().getUTCFullYear(), 0, 1));
+  return new Date(Date.UTC(currentYearInPlateau(), 0, 1));
 }
 
 function endOfYear(): Date {
-  return new Date(Date.UTC(new Date().getUTCFullYear(), 11, 31));
+  return new Date(Date.UTC(currentYearInPlateau(), 11, 31));
 }
 
 /**
@@ -695,16 +696,23 @@ export function resolvePeriod(
   kind: TargetPeriod,
   anchor: Date = new Date(),
 ): { start: Date; end: Date } {
-  const year = anchor.getUTCFullYear();
-  const month = anchor.getUTCMonth();
-  const date = anchor.getUTCDate();
+  /*
+   * The anchor's calendar date in Plateau State, not in UTC.
+   *
+   * Read off `getUTCDate()`, an officer setting a daily target in the first
+   * hour of a Plateau day got yesterday's window, and one setting an annual
+   * target in the first hour of 1 January got the year that had just ended.
+   * The zone is named here for the reason `reminders.ts` names it: the period
+   * somebody means is the period they are standing in.
+   */
+  const { year, month, day: date } = plateauParts(anchor);
 
   switch (kind) {
     case 'DAILY':
       return { start: new Date(Date.UTC(year, month, date)), end: new Date(Date.UTC(year, month, date)) };
     case 'WEEKLY': {
       // Monday-based, which is how a Nigerian collection week is counted.
-      const weekday = (anchor.getUTCDay() + 6) % 7;
+      const weekday = (new Date(Date.UTC(year, month, date)).getUTCDay() + 6) % 7;
       const start = new Date(Date.UTC(year, month, date - weekday));
       return { start, end: new Date(start.getTime() + 6 * 86_400_000) };
     }

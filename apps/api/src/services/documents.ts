@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { queryOne } from '../db/pool';
 import { generateVerificationCode } from '../lib/crypto';
 import { nextDocumentNumber } from '../lib/references';
+import { currentYearInPlateau } from '../lib/calendar-day';
 import { storage, storageKey } from './storage';
 
 const COLOURS = {
@@ -623,7 +624,7 @@ export async function registerDocument(
   const verificationCode = params.verificationCode ?? generateVerificationCode();
   const key = storageKey(
     params.documentType.toLowerCase(),
-    String(new Date().getUTCFullYear()),
+    String(currentYearInPlateau()),
     `${documentNumber.replace(/[/]/g, '-')}.pdf`,
   );
 

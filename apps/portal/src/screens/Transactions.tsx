@@ -6,7 +6,7 @@ import { Badge, ErrorAlert, ExportButtons, Loading, Money, ReferenceListFailure,
 import { useReferenceList } from '../lib/reference';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
-import { enumLabel, localName } from '@psirs/shared';
+import { enumLabel, localName, todayIsoLocal } from '@psirs/shared';
 
 interface TransactionRow {
   transaction_reference: string;
@@ -146,7 +146,7 @@ export function TransactionsScreen() {
 
           <ExportButtons
             path={`/government/transactions?${buildQuery().toString()}`}
-            filename={`plateau-transactions-${new Date().toISOString().slice(0, 10)}`}
+            filename={`plateau-transactions-${todayIsoLocal()}`}
             disabled={!rows || rows.length === 0}
           />
         </div>

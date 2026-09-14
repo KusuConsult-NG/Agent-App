@@ -2322,6 +2322,185 @@ made to release the endpoint. That fix covered one of the two things a handset
 keeps across a handover. The draft store was the other, and a fix to one
 persistence layer did not reach the second.
 
+## A receipt numbered under the year that had just ended
+
+Nigeria keeps West Africa Time all year: UTC+1, no daylight saving. Every
+container in this repository runs UTC. So between midnight and 01:00 on any
+Plateau day, the platform's clock and the State's clock name different days —
+and for that hour on 1 January, different years.
+
+Thirteen government reference numbers took their year from
+`new Date().getUTCFullYear()`. Observed with the clock frozen at 00:30 on 1
+January 2027, Plateau time, against the real database:
+
+```
+receipt number minted:   PSIRS/2026/002548
+date printed beside it:  1 January 2027
+```
+
+One receipt, two financial years. The number is not decoration: it is what the
+receipt is filed under, what a taxpayer quotes in an objection, and what is read
+back down a telephone to a support officer.
+
+`getUTC*` ignores `TZ`, so deploying the containers as `Africa/Lagos` would not
+have corrected a single one of these sites. The zone has to be named. That is
+the conclusion `reminders.ts` had already reached for the date a taxpayer is
+*told* — "the date they are given has to be theirs" — and `calendar-day.ts` had
+already reached for the last day a certificate names. Neither reached the date
+the State *writes down*.
+
+### What carried it
+
+`lib/references.ts` mints receipts, invoices, assessments, transactions,
+payments, refunds, settlements, payouts, documents, cases, groups, tickets,
+applications and referee codes — every one with the same `currentYear()`. Four
+other sites asked the same question in the same way:
+
+| site | what it stamps | consequence in that hour |
+|---|---|---|
+| `lib/references.ts` | 13 reference-number families | the year on a government number |
+| `services/audit-workbench.ts` | `PSIRS-AR/…`, `PSIRS-SMP/…` | the year on a signed audit report |
+| `services/enumeration.ts` | an assessment's `periodLabel` | the tax year a trader is assessed for |
+| `services/targets.ts` | the default target window, and `resolvePeriod` | the period an officer is shown, or sets |
+| `routes/citizen.ts` | the end of a payment-history window | a payment made at 00:15 missing from the payer's own history until 01:00 |
+
+`services/documents.ts` stamped the same year into the stored object's path.
+That one is cosmetic — the key is internal, nothing reads the year back out of
+it — and was changed for consistency, not because anything was wrong for a
+user.
+
+### What was checked and found clean
+
+Three things that looked like part of this and are not, recorded so the next
+reader does not re-open them:
+
+- **The sequences are never reset.** Nothing in the migrations or the scripts
+  issues `ALTER SEQUENCE … RESTART` or `setval`, so numbers stay globally unique
+  whatever year is printed on them. The defect is the label, never a collision —
+  which is why it had gone unnoticed.
+- **Nothing parses the year back out of a reference.** `investigation.ts` and
+  `routes/taxpayers.ts` match the *shape* of a reference to decide what kind of
+  thing it is; neither reads the year as data. So no query silently misses the
+  first hour's records.
+- **`periods.ts monthLabel` is the same shape and not the same bug.** It reads
+  `getUTCFullYear()` off a period start that arrived as a validated `YYYY-MM-DD`
+  and was parsed at UTC midnight — reading a date back, not asking what day it
+  is now. The two are distinguished by which direction the question runs.
+
+One latent hazard was found and left alone: `audit-workbench.ts` interpolates a
+sequence name straight into SQL (`nextval('${sequence}')`). Both call sites pass
+string literals, so nothing user-supplied reaches it and there is no live
+defect. It is written down here rather than fixed because changing it is a
+decision about that file's shape, not about this one.
+
+### The clients ask the same question, and get it wrong differently
+
+Seven more sites live in the two browser applications, and they fail for a
+related but distinct reason: `new Date()` there is the *device's* clock, which
+in Jos is already the right clock — and then `.toISOString()` throws that away
+and converts to UTC. So the correction is not "name the zone" but "stop
+converting".
+
+| site | what it decides | in that hour |
+|---|---|---|
+| `portal/Finance.tsx` | the settlement date a form is prefilled with | a settlement recorded at 00:15 is dated the day before |
+| `portal/Finance.tsx` | the end of the default collections range | this morning's collections are outside the window |
+| `portal/TaxpayerRecords.tsx` | "date of birth is in the future" | ×2 — the validation and the picker's `max` |
+| `portal/Configuration.tsx` | the earliest date a schedule may start | permissive by a day |
+| `agent/Auth.tsx` | the applicant date-of-birth picker's `max` | permissive by a day |
+| `portal/Transactions.tsx`, `portal/Oversight.tsx` | export filenames | cosmetic |
+
+`todayIsoLocal` and `daysAgoIsoLocal` in `@psirs/shared` read the local parts
+instead. Deliberately the device's clock rather than a named zone: these are
+defaults a person is shown and can change, so they should match the clock on the
+wall behind them, and the server never trusts them — which is the division
+`targets.ts` already draws when it says a client computing "this month" from its
+own clock is a client that can be wrong about it.
+
+### The fix, and the guard
+
+`lib/calendar-day.ts` — already the file that holds this platform's reasoning
+about whose clock a date is on — gains `plateauParts`, `currentYearInPlateau`
+and `todayInPlateau`. The parts come back as numbers rather than a `Date`, for
+the reason that file already gives: a calendar date is not an instant, and
+handing back a `Date` invites the re-interpretation the whole file exists to
+warn about.
+
+The substitution is one line repeated across fourteen files in three
+applications, which is exactly the kind of fix the fifteenth file does not get.
+So the change also adds a guard: nothing under the API, the shared package or
+either client may ask `new Date()` what year, month or day it is, or take
+`toISOString().slice(0, 10)` of it, unless the file is written down in an
+`ALLOWED` map with the reason. One entry stands today —
+`routes/vehicles.ts`, an upper bound on year of manufacture that is evaluated
+once at module load and already carries a `+1` of slack, so the hour is absorbed
+and nothing is stamped with the value.
+
+The guard skips lines that are wholly comment. A guard that counts a pattern
+quoted in its own explanation is a guard that fires on itself, and that lesson
+is already on the record here: the reachability guard once counted a path
+mentioned in a comment as a caller.
+
+### Two things the guard caught in its own author
+
+Recorded because they are the substance of why the guard exists, not incidental.
+
+**The first pattern could not see half of what it was guarding.** It was written
+`(?:getUTC)?(?:FullYear|Month|Date|Day)\(\)`, which matches
+`.getUTCFullYear()` and silently misses `.getFullYear()` — the plain local
+getter. The one site then sitting in `ALLOWED` used exactly that form, so the
+exception was excusing something the guard was never going to find, and a sweep
+run through it would have reported the tree clean while `new Date().getMonth()`
+sat anywhere it liked. Caught by testing the regex against both forms before
+trusting it. The pattern is now `get(?:UTC)?(…)`.
+
+**An exception that excuses nothing reads exactly like an exception that
+works.** A second `ALLOWED` entry was written for `packages/shared/src/dates.ts`
+— unnecessary, because the replacement's getters run on a parameter rather than
+on `new Date()`, so the pattern never matched there at all. It was caught by a
+third case added after the first flaw: every written-down exception must be
+load-bearing, and the test removes each in turn and requires the guard to notice.
+That case exists so the first flaw cannot recur silently.
+
+### One false positive, fixed where it belonged
+
+The portal's English-literal guard reported `todayIsoLocal())` as untranslated
+English: `form.dateOfBirth > todayIsoLocal()` puts that run between the `>` and
+the block's `{`, and `looksLikeCode` recognised a *method* call
+(`something.method(`) but not a bare one. The first fix was to contort the call
+site into a `localeCompare`, which is the wrong move — it bends readable code
+around a lint. Reverted, and the rule was added to `looksLikeCode` instead: no
+sentence contains an empty pair of parentheses closed immediately after a word.
+Mutation-checked like the rest.
+
+### Verification
+
+Eight cases in `the-first-hour-of-a-plateau-year.test.ts`, including the
+end-to-end mint against the real database under a frozen clock, and — the case
+that keeps the fix honest — an assertion that 31 minutes earlier the *old* year
+is still the answer, so the skew has been removed rather than moved.
+
+Mutation-checked, all six predictions correct:
+
+| mutation | predicted | actual |
+|---|---|---|
+| revert `references.ts` to `getUTCFullYear()` | 2 failures | 2 |
+| revert `resolvePeriod` to the UTC anchor parts | 1 failure | 1 |
+| make `todayInPlateau` return the UTC day | 1 failure | 1 |
+| empty the guard's `ALLOWED` | 1 failure | 1 |
+| revert one client site (`Finance.tsx`) | 1 failure | 1 |
+| drop the new `looksLikeCode` rule | 1 failure (portal) | 1 |
+
+The second is 1 rather than 2 deliberately: the guard matches `new Date()` asked
+directly, not a getter on a variable that already holds an instant, so it cannot
+see that mutation. The behavioural case is what carries it, and the prediction
+said so before the mutation was run.
+
+Agent **350/350**, portal **662/662**, `npm run typecheck` clean. The API suite
+figure is added in the commit that follows this one, once the full run on the
+final tree has actually reported it — the number is not written down here ahead
+of being observed.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

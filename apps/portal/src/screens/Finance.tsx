@@ -7,7 +7,7 @@ import type { Label } from '../ui';
 import { withJustification } from '../lib/justify';
 import { BankChangesCard } from './Agents';
 import { usePortalI18n } from '../lib/i18n';
-import { enumLabel } from '@psirs/shared';
+import { daysAgoIsoLocal, enumLabel, todayIsoLocal } from '@psirs/shared';
 
 // ------------------------------------------------------------ reconciliation
 
@@ -31,8 +31,8 @@ export function ReconciliationScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [range, setRange] = useState({
-    from: new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10),
-    to: new Date().toISOString().slice(0, 10),
+    from: daysAgoIsoLocal(7),
+    to: todayIsoLocal(),
   });
   /*
    * Recording a settlement had no way in.
@@ -45,7 +45,7 @@ export function ReconciliationScreen() {
    * to read the figures, so the POST looked reached.
    */
   const [entry, setEntry] = useState({
-    settlementDate: new Date().toISOString().slice(0, 10),
+    settlementDate: todayIsoLocal(),
     gatewayReferences: '',
     receivedNaira: '',
     bankReference: '',

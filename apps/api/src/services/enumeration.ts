@@ -56,6 +56,7 @@ import {
   type SizeBand,
 } from './presumptive';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
+import { currentYearInPlateau } from '../lib/calendar-day';
 
 /**
  * How long a taxpayer has to object before the debt is chased.
@@ -497,7 +498,7 @@ export async function assessFromObservation(
         taxpayerId: observation.taxpayer_id,
         revenueItemId: await presumptiveItemFor(client, computation.sizeBand),
         inputs: { baseAmountKobo: computation.assumedAnnualTurnoverKobo },
-        periodLabel: String(new Date().getUTCFullYear()),
+        periodLabel: String(currentYearInPlateau()),
         assessmentType: 'OFFICER',
         actorId: params.actorId,
         actorRole: params.actorRole,
