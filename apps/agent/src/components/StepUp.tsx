@@ -13,10 +13,12 @@
  * can act on before it happens.
  */
 
+import type { StepUpAction } from '@psirs/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiRequestError, type ApiError } from '../lib/api';
-import { grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
+import { StepUpUnavailable, grantStepUp, requestStepUpCode, stepUpDestination } from '../lib/step-up';
 import { Alert, ErrorAlert, Field, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
 
 /** Mask all but the last three digits: enough to recognise, not to publish. */
 function maskPhone(phone: string): string {
@@ -32,7 +34,7 @@ export function StepUpPrompt({
   onCancel,
 }: {
   /** The step-up action name the API expects, e.g. commission.payout.request. */
-  action: string;
+  action: StepUpAction;
   title: string;
   /** What the agent is authorising. Shown above the code entry. */
   description: React.ReactNode;
@@ -41,6 +43,7 @@ export function StepUpPrompt({
   onAuthorised: () => Promise<void> | void;
   onCancel: () => void;
 }) {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export function StepUpPrompt({
       inputRef.current?.focus();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : 'Could not send a code.');
+      else setFailure(caught instanceof StepUpUnavailable ? t.stepUpSignInAgain : t.stepUpCodeFailed);
     } finally {
       setSending(false);
     }
@@ -97,7 +100,7 @@ export function StepUpPrompt({
       await onAuthorised();
     } catch (caught) {
       if (caught instanceof ApiRequestError) setError(caught.error);
-      else setFailure(caught instanceof Error ? caught.message : 'Could not authorise this.');
+      else setFailure(caught instanceof StepUpUnavailable ? t.stepUpSignInAgain : t.stepUpAuthoriseFailed);
       // The grant failed, so the code is spent or wrong either way. Clearing it
       // stops a second submit re-sending the same rejected digits.
       setCode('');
@@ -117,28 +120,28 @@ export function StepUpPrompt({
 
       <p className="card__hint">
         {sending
-          ? 'Sending a one-time code…'
+          ? t.agStepSendingACode
           : destination
-            ? `We sent a code to ${maskPhone(destination)}. It is only for this one action.`
-            : 'We sent a code to your registered number.'}
+            ? t.agStepCodeSentTo.replace('{{phone}}', maskPhone(destination))
+            : t.agStepCodeSentToNumber}
       </p>
 
       <ErrorAlert error={error} />
       {failure && (
-        <Alert kind="error" title="Could not continue">
+        <Alert kind="error" title={t.stepUpCouldNotContinue}>
           <p style={{ margin: 0 }}>{failure}</p>
         </Alert>
       )}
 
       {developmentCode && (
-        <Alert kind="info" title="Development build">
+        <Alert kind="info" title={t.stepUpDevelopmentBuild}>
           <p style={{ margin: 0 }}>
-            No real SMS is configured, so the code is shown here: <strong>{developmentCode}</strong>
+            {t.stepUpNoSms} <strong>{developmentCode}</strong>
           </p>
         </Alert>
       )}
 
-      <Field label="One-time code" required>
+      <Field label={t.stepUpOneTimeCode} required>
         <input
           ref={inputRef}
           value={code}
@@ -154,12 +157,12 @@ export function StepUpPrompt({
 
       {!sending &&
         (expired ? (
-          <Alert kind="warning" title="That code has expired">
-            <p style={{ margin: 0 }}>Ask for a new one to continue.</p>
+          <Alert kind="warning" title={t.stepUpExpired}>
+            <p style={{ margin: 0 }}>{t.stepUpAskNew}</p>
           </Alert>
         ) : (
           <p className="field__hint">
-            Expires in {minutes}:{seconds}
+            {t.stepUpExpiresIn.replace('{{time}}', `${minutes}:${seconds}`)}
           </p>
         ))}
 
@@ -175,12 +178,12 @@ export function StepUpPrompt({
           {busy ? <Spinner /> : confirmLabel}
         </button>
         <button type="button" className="secondary" disabled={sending || busy} onClick={() => void send()}>
-          Send a new code
+          {t.stepUpSendNew}
         </button>
       </div>
 
       <button type="button" className="secondary" disabled={busy} onClick={onCancel}>
-        Cancel
+        {t.camCancel}
       </button>
     </form>
   );

@@ -9,6 +9,7 @@
  *     rather than at the moment money is about to move.
  */
 
+import { configureUsage, flush as flushUsage, track } from './lib/usage';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   APP_VERSION,
@@ -19,6 +20,7 @@ import {
   isConnectivityFailure,
   logout,
   restoreSession,
+  type ApiError,
   type Session,
 } from './lib/api';
 import {
@@ -30,7 +32,7 @@ import {
 import { pendingDrafts, requestBackgroundSync, syncDrafts } from './lib/drafts';
 import { useI18n } from './lib/i18n';
 import { matchRoute, useRoute } from './router';
-import { Alert, Icons } from './ui';
+import { Alert, Icons, errorText, nextStepText } from './ui';
 import { ApplyScreen, LoginScreen } from './screens/Auth';
 import { ApplicationScreen } from './screens/Application';
 import { HomeScreen } from './screens/Home';
@@ -45,6 +47,8 @@ import {
 } from './screens/More';
 import { VerifyScreen } from './screens/Verify';
 import { CollectionScreen } from './screens/Collection';
+import { GroupsScreen, GroupScreen, RegisterGroupScreen } from './screens/Groups';
+import { EnumerateScreen } from './screens/Enumerate';
 import { RaiseTicketScreen, SupportScreen, TicketScreen } from './screens/Support';
 
 interface VersionState {
@@ -60,6 +64,41 @@ export function App() {
   const [session, setSession] = useState<Session['user'] | null>(getUser());
   const [restoring, setRestoring] = useState(hasStoredSession());
   const [connection, setConnection] = useState<ConnectionState>(detectConnectionState);
+
+  /*
+   * Keep the usage context current.
+   *
+   * Language and connection travel on every event because they are the two
+   * things most likely to explain a difference — a flow abandoned on a slow
+   * connection and one abandoned on a good one are different problems, and
+   * until now nothing recorded which had happened.
+   */
+  useEffect(() => {
+    configureUsage({ language: lang, connection });
+  }, [lang, connection]);
+
+  /** Opened. The denominator for everything else. */
+  useEffect(() => {
+    track('app.opened');
+  }, []);
+
+  /** Which screens are reached, and which never are. */
+  useEffect(() => {
+    track('screen.viewed', { step: route });
+  }, [route]);
+
+  /*
+   * Send what is queued when the connection returns.
+   *
+   * After the draft sync above, never before it: a queued registration is
+   * work and telemetry is not, and they must not compete for the first
+   * request on a connection that has just come back.
+   */
+  useEffect(() => {
+    if (connection === 'OFFLINE') return;
+    const timer = setTimeout(() => void flushUsage(), 3000);
+    return () => clearTimeout(timer);
+  }, [connection, route]);
   const [version, setVersion] = useState<VersionState | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -72,7 +111,7 @@ export function App() {
    * queue would otherwise sit at "waiting to send" for ever with the reason
    * known to the server and to nobody else.
    */
-  const [syncProblem, setSyncProblem] = useState<{ message: string; nextStep?: string } | null>(
+  const [syncProblem, setSyncProblem] = useState<ApiError | null>(
     null,
   );
 
@@ -103,9 +142,10 @@ export function App() {
       const outcome = await syncDrafts((drafts) => api.post('/drafts/sync', { drafts }));
       if (outcome.synced > 0 || outcome.rejected > 0) {
         setSyncMessage(
-          `${outcome.synced} saved record(s) sent to PSIRS` +
-            (outcome.rejected > 0 ? `, ${outcome.rejected} need correction` : '') +
-            '.',
+          (outcome.rejected > 0
+            ? t.appDraftsSyncedRejected.replace('{{rejected}}', String(outcome.rejected))
+            : t.appDraftsSynced
+          ).replace('{{count}}', String(outcome.synced)),
         );
       }
       setSyncProblem(null);
@@ -120,13 +160,25 @@ export function App() {
       // The server refused the captures. Retrying will not register a handset
       // or restore a clearance, so the agent is told now, while the records are
       // still on the phone and can still be sent from somewhere that works.
-      if (caught instanceof ApiRequestError) {
-        setSyncProblem({ message: caught.error.message, nextStep: caught.error.nextStep });
-      } else {
-        setSyncProblem({
-          message: 'Your saved records could not be sent to PSIRS. They are still on this phone.',
-        });
-      }
+      /*
+       * The error itself, not two strings pulled out of it.
+       *
+       * This took `message` and `nextStep` off the `ApiError` and rendered
+       * them raw, which walked straight past `ErrorAlert` and the
+       * `TRANSLATED_ERRORS` map that would already have said it in Hausa. The
+       * translation existed; the screen just did not go through the component
+       * that applies it.
+       *
+       * This is what an agent reads when work captured on their phone was
+       * refused by PSIRS — not when the signal went, which is handled above
+       * and stays silent. The records are still on the device and they need
+       * to know why they will not go.
+       */
+      setSyncProblem(
+        caught instanceof ApiRequestError
+          ? caught.error
+          : { code: 'SYNC_FAILED', message: t.shellSyncFailed, moneyStatus: 'NOT_APPLICABLE' },
+      );
     }
   }, [session, connection, refreshPending]);
 
@@ -167,8 +219,8 @@ export function App() {
       <div className="center-screen">
         <div className="brand">
           <img className="brand__mark" src="/icon.svg" alt="" />
-          <p className="brand__name">Plateau State Revenue Agent</p>
-          <p className="brand__tagline">Restoring your session…</p>
+          <p className="brand__name">{t.shellAgentBrand}</p>
+          <p className="brand__tagline">{t.shellRestoring}</p>
         </div>
       </div>
     );
@@ -187,8 +239,14 @@ export function App() {
         type="button"
         className="ghost"
         style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}
-        onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
-        aria-label="Switch language"
+        onClick={() => {
+          // The Hausa dictionary, its review sheet and its tests are a large
+          // investment, and nothing anywhere reported whether one agent had
+          // ever switched to it.
+          track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
+          setLanguage(lang === 'en' ? 'ha' : 'en');
+        }}
+        aria-label={t.appSwitchLanguage}
       >
         {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
       </button>
@@ -214,15 +272,21 @@ export function App() {
         <div className="app-header__row">
           <img src="/icon.svg" alt="" width={30} height={30} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h1 className="app-header__title">PSIRS Revenue Agent</h1>
+            <h1 className="app-header__title">{t.shellAgentTitle}</h1>
             <p className="app-header__subtitle">{session.fullName}</p>
           </div>
           <button
             type="button"
             className="ghost"
             style={{ color: '#fff', width: 'auto', padding: '4px 8px', fontSize: '0.78rem', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '6px', marginRight: '6px' }}
-            onClick={() => setLanguage(lang === 'en' ? 'ha' : 'en')}
-            aria-label="Switch Language"
+            onClick={() => {
+          // The Hausa dictionary, its review sheet and its tests are a large
+          // investment, and nothing anywhere reported whether one agent had
+          // ever switched to it.
+          track('language.changed', { step: lang === 'en' ? 'ha' : 'en' });
+          setLanguage(lang === 'en' ? 'ha' : 'en');
+        }}
+            aria-label={t.appSwitchLanguage}
           >
             {lang === 'en' ? 'HA (Hausa)' : 'EN (English)'}
           </button>
@@ -232,28 +296,28 @@ export function App() {
             style={{ color: '#fff', width: 'auto' }}
             onClick={signOut}
           >
-            Sign out
+            {t.appSignOut}
           </button>
         </div>
 
         <div className={`connection connection--${connection}`} role="status" aria-live="polite">
           <span className="connection__dot" />
           <span>
-            {connectionCopy.label}
-            {pendingCount > 0 && ` · ${pendingCount} saved record(s) waiting to send`}
+            {t[connectionCopy.label]}
+            {pendingCount > 0 && ` · ${pendingCount} ${t.appRecordsWaiting}`}
           </span>
         </div>
       </header>
 
       <main className="app-main">
         {connection !== 'ONLINE' && (
-          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={connectionCopy.label}>
-            <p style={{ margin: 0 }}>{connectionCopy.detail}</p>
+          <Alert kind={connection === 'OFFLINE' ? 'error' : 'warning'} title={t[connectionCopy.label]}>
+            <p style={{ margin: 0 }}>{t[connectionCopy.detail]}</p>
           </Alert>
         )}
 
         {version && !version.supported && (
-          <Alert kind="error" title="Update required">
+          <Alert kind="error" title={t.appUpdateRequired}>
             <p style={{ margin: 0 }}>
               This version ({APP_VERSION}) can no longer be used for transactions. Close and reopen
               the app to install version {version.recommendedVersion}.
@@ -262,18 +326,26 @@ export function App() {
         )}
 
         {syncMessage && (
-          <Alert kind="success" title="Records synchronised">
+          <Alert kind="success" title={t.appRecordsSynced}>
             <p style={{ margin: 0 }}>{syncMessage}</p>
           </Alert>
         )}
 
         {syncProblem && (
-          <Alert kind="error" title="Saved records could not be sent">
-            <p style={{ margin: 0 }}>{syncProblem.message}</p>
-            {syncProblem.nextStep && <p style={{ margin: '0.5rem 0 0' }}>{syncProblem.nextStep}</p>}
+          <Alert kind="error" title={t.appRecordsNotSent}>
+            <p style={{ margin: 0 }}>{errorText(syncProblem, t)}</p>
+            {/*
+              * And what to do about it, which this banner was still printing
+              * in English after the sentence above it was translated. Found
+              * by widening the guard to look at `nextStep` at all — the
+              * earlier fix moved the explanation into the dictionary and
+              * left the instruction under it exactly as the API wrote it.
+              */}
+            {nextStepText(syncProblem, t) && (
+              <p style={{ margin: '0.5rem 0 0' }}>{nextStepText(syncProblem, t)}</p>
+            )}
             <p style={{ margin: '0.5rem 0 0' }}>
-              Nothing has been lost — the records are still on this phone and will be sent once this
-              is put right.
+              {t.shellNothingLost}
             </p>
           </Alert>
         )}
@@ -281,7 +353,7 @@ export function App() {
         <Routes route={route} navigate={navigate} connection={connection} onSignOut={signOut} />
       </main>
 
-      <nav className="app-nav" aria-label="Main">
+      <nav className="app-nav" aria-label={t.shellMain}>
         {nav.map((item) => {
           const active = route === item.path || (item.path !== '/' && route.startsWith(item.path));
           return (
@@ -311,13 +383,19 @@ function Routes({
   connection: ConnectionState;
   onSignOut: () => void;
 }) {
+  const { t } = useI18n();
+  const enumerateMatch = matchRoute(route, '/taxpayers/:id/enumerate');
   const taxpayerMatch = matchRoute(route, '/taxpayers/:id');
   const transactionMatch = matchRoute(route, '/transactions/:reference');
   const ticketMatch = matchRoute(route, '/support/:id');
+  const groupMatch = matchRoute(route, '/groups/:id');
 
   if (matchRoute(route, '/')) return <HomeScreen navigate={navigate} />;
   if (matchRoute(route, '/application')) return <ApplicationScreen navigate={navigate} />;
   if (matchRoute(route, '/taxpayers')) return <TaxpayersScreen navigate={navigate} />;
+  if (enumerateMatch) {
+    return <EnumerateScreen taxpayerId={enumerateMatch.id!} navigate={navigate} />;
+  }
   if (matchRoute(route, '/taxpayers/new')) {
     return <RegisterTaxpayerScreen navigate={navigate} connection={connection} />;
   }
@@ -330,6 +408,10 @@ function Routes({
   if (matchRoute(route, '/receipts')) return <ReceiptsScreen />;
   if (matchRoute(route, '/verify')) return <VerifyScreen connection={connection} />;
   if (matchRoute(route, '/collections')) return <CollectionScreen />;
+  if (matchRoute(route, '/groups')) return <GroupsScreen navigate={navigate} />;
+  if (matchRoute(route, '/groups/new')) return <RegisterGroupScreen navigate={navigate} />;
+  // After /groups/new, so the literal route is not swallowed by the pattern.
+  if (groupMatch) return <GroupScreen groupId={groupMatch.id!} />;
   if (matchRoute(route, '/commission')) return <CommissionScreen />;
   if (matchRoute(route, '/profile')) return <ProfileScreen onSignOut={onSignOut} />;
   if (matchRoute(route, '/bank')) return <BankAccountScreen navigate={navigate} />;
@@ -339,9 +421,9 @@ function Routes({
   if (ticketMatch) return <TicketScreen ticketId={ticketMatch.id!} />;
 
   return (
-    <Alert kind="info" title="Page not found">
+    <Alert kind="info" title={t.appPageNotFound}>
       <p style={{ margin: 0 }}>
-        That screen does not exist. <a href="#/">Return to the home screen</a>.
+        {t.appPageNotFoundBody} <a href="#/">{t.appReturnHome}</a>.
       </p>
     </Alert>
   );

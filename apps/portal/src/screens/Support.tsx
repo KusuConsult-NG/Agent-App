@@ -19,8 +19,10 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, can, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, can, type ApiError } from '../lib/api';
 import { Alert, Badge, Empty, ErrorAlert, KeyValue, Loading, Table, formatDateTime } from '../ui';
+import { usePortalI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface TicketSummary {
   id: string;
@@ -54,24 +56,32 @@ interface TicketDetail extends TicketSummary {
   }[];
 }
 
-const humanise = (value: string) => value.replace(/_/g, ' ').toLowerCase();
 
 /** Complaints about the collection itself, which need to be seen as such. */
 const CONDUCT_CATEGORIES = new Set(['AGENT_MISCONDUCT', 'UNAUTHORISED_CHARGE']);
 
 export function SupportScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = usePortalI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [status, setStatus] = useState('');
   const [error, setError] = useState<ApiError | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   const load = useCallback(() => {
     setTickets(null);
+    setLoadError(null);
     api
       .get<TicketSummary[]>(`/support/tickets${status ? `?status=${status}` : ''}`)
       .then(setTickets)
+      /*
+       * `setTickets([])` printed "No tickets match this filter." from a request
+       * that failed — and took the conduct banner with it, which is the part
+       * that matters. Complaints about how revenue staff treated somebody are
+       * counted out of this same list, so a refused read did not merely show
+       * an empty queue: it said there were no open complaints.
+       */
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        setLoadError(asApiError(caught));
       });
   }, [status]);
 
@@ -86,66 +96,81 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
       <ErrorAlert error={error} />
 
       {conduct.length > 0 && (
-        <Alert kind="warning" title={`${conduct.length} open complaint(s) about conduct or charges`}>
-          <p style={{ margin: 0 }}>
-            These are reports about how revenue was collected, not about the platform. They are
-            listed first below.
-          </p>
+        <Alert kind="warning" title={{ text: t.ofcSpOpenComplaints.replace('{{n}}', String(conduct.length)) }}>
+          <p style={{ margin: 0 }}>{t.ofcSpAboutRevenue}</p>
         </Alert>
       )}
 
       <div className="card">
         <div className="card__header">
-          <h2 className="card__title">Support queue</h2>
-          <p className="card__hint">
-            Ordered by priority. A ticket is answered in its thread — a status change on its own
-            tells the person who reported it nothing.
-          </p>
+          <h2 className="card__title">{t.ofcSpSupportQueue}</h2>
+          <p className="card__hint">{t.ofcSpQueueIntro}</p>
         </div>
 
         <div className="filters">
-          <label>
-            Status
-            <select value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="">All</option>
-              <option value="OPEN">Open</option>
-              <option value="ASSIGNED">Assigned</option>
-              <option value="IN_PROGRESS">In progress</option>
-              <option value="RESOLVED">Resolved</option>
-              <option value="CLOSED">Closed</option>
+          <label>{t.appStatus}<select value={status} onChange={(event) => setStatus(event.target.value)}>
+              <option value="">{t.ofcAgAll}</option>
+              <option value="OPEN">{t.ofcRhOpen}</option>
+              <option value="ASSIGNED">{t.ofcSpAssigned}</option>
+              <option value="IN_PROGRESS">{t.ofcSpInProgress}</option>
+              <option value="RESOLVED">{t.ofcSpResolved}</option>
+              <option value="CLOSED">{t.ofcSpClosed}</option>
             </select>
           </label>
         </div>
 
-        {!tickets ? (
+        {loadError ? (
+          <div style={{ padding: 18 }}>
+            <ErrorAlert error={loadError} />
+            <button type="button" className="secondary" onClick={load}>{t.actionTryAgain}</button>
+          </div>
+        ) : !tickets ? (
           <Loading />
         ) : (
           <Table
             columns={[
-              { key: 'ticket_number', label: 'Ticket' },
+              { key: 'ticket_number', label: 'ofcSpTicket' },
               {
                 key: 'subject',
-                label: 'Subject',
+                label: 'ofcSpSubject',
                 render: (row) => (
                   <button type="button" className="link" onClick={() => navigate(`/support/${row.id}`)}>
                     {row.subject}
                   </button>
                 ),
               },
-              { key: 'category', label: 'About', render: (row) => humanise(row.category) },
-              { key: 'priority', label: 'Priority', render: (row) => <Badge status={row.priority} /> },
-              { key: 'status', label: 'Status', render: (row) => <Badge status={row.status} /> },
+              { key: 'category', label: 'supAbout', render: (row) => enumLabel(row.category, t) },
+              { key: 'priority', label: 'ofcSpPriority', render: (row) => <Badge status={row.priority} /> },
+              { key: 'status', label: 'appStatus', render: (row) => <Badge status={row.status} /> },
               {
                 key: 'raised_by_name',
-                label: 'Reported by',
-                render: (row) => `${row.raised_by_name} (${humanise(row.raiser_role)})`,
+                label: 'ofcSpReportedBy',
+                render: (row) => `${row.raised_by_name} (${enumLabel(row.raiser_role, t)})`,
               },
-              { key: 'assigned_to_name', label: 'Assigned', render: (row) => row.assigned_to_name ?? '—' },
-              { key: 'message_count', label: 'Replies', numeric: true },
-              { key: 'created_at', label: 'Raised', render: (row) => formatDateTime(row.created_at) },
+              { key: 'assigned_to_name', label: 'ofcSpAssigned', render: (row) => row.assigned_to_name ?? '—' },
+              { key: 'message_count', label: 'ofcSpReplies', numeric: true },
+              { key: 'created_at', label: 'ofcRhRaisedHeading', render: (row) => formatDateTime(row.created_at) },
+              {
+                /*
+                 * When it was last touched, which is what triage runs on.
+                 *
+                 * The queue showed when a ticket was raised and not when
+                 * anybody last answered it, so a complaint opened three weeks
+                 * ago and replied to this morning looked exactly like one
+                 * opened three weeks ago and left alone since. The reply count
+                 * beside it does not separate them either: both may say 4.
+                 *
+                 * Null is a ticket nobody has answered at all, which is the
+                 * row to open first and says so in its own words.
+                 */
+                key: 'last_message_at',
+                label: 'ofcSpLastReply',
+                render: (row) =>
+                  row.last_message_at ? formatDateTime(row.last_message_at) : t.ofcSpNoReplyYet,
+              },
             ]}
             rows={tickets}
-            empty="No tickets match this filter."
+            empty="ofcNoneTicketsMatchFilter"
           />
         )}
       </div>
@@ -167,6 +192,7 @@ export function TicketDetailScreen({
   ticketId: string;
   navigate: (path: string) => void;
 }) {
+  const { t } = usePortalI18n();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [reply, setReply] = useState('');
@@ -182,7 +208,9 @@ export function TicketDetailScreen({
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -196,11 +224,11 @@ export function TicketDetailScreen({
     try {
       await api.post(`/support/tickets/${ticketId}/messages`, { body: reply, internal });
       setReply('');
-      setMessage(internal ? 'Internal note saved. The reporter cannot see it.' : 'Reply sent.');
+      setMessage(internal ? t.ofcSpInternalNoteSavedThe : t.ofcSpReplySent);
       setInternal(false);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -216,10 +244,10 @@ export function TicketDetailScreen({
         ...(status === 'RESOLVED' ? { resolution } : {}),
       });
       setResolution('');
-      setMessage(`Ticket moved to ${humanise(status)}.`);
+      setMessage(t.ofcSpTicketMoved.replace('{{status}}', enumLabel(status, t)));
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -228,9 +256,7 @@ export function TicketDetailScreen({
   if (!ticket) {
     return (
       <div className="card">
-        <button type="button" className="secondary" onClick={() => navigate('/support')}>
-          Back to the queue
-        </button>
+        <button type="button" className="secondary" onClick={() => navigate('/support')}>{t.ofcSpBackToQueue}</button>
         <ErrorAlert error={error} />
         {!error && <Loading />}
       </div>
@@ -239,9 +265,7 @@ export function TicketDetailScreen({
 
   return (
     <>
-      <button type="button" className="secondary" onClick={() => navigate('/support')}>
-        Back to the queue
-      </button>
+      <button type="button" className="secondary" onClick={() => navigate('/support')}>{t.ofcSpBackToQueue}</button>
 
       <div className="card">
         <div className="card__header">
@@ -250,25 +274,25 @@ export function TicketDetailScreen({
         </div>
         <KeyValue
           items={[
-            ['Status', <Badge status={ticket.status} key="s" />],
-            ['Priority', <Badge status={ticket.priority} key="p" />],
-            ['About', humanise(ticket.category)],
-            ['Reported by', `${ticket.raised_by_name} (${humanise(ticket.raiser_role)})`],
-            ['Contact', ticket.raised_by_phone],
-            ['Transaction', ticket.transaction_reference ?? '—'],
-            ['Raised', formatDateTime(ticket.created_at)],
-            ['Assigned to', ticket.assigned_to_name ?? 'Nobody yet'],
+            [t.appStatus, <Badge status={ticket.status} key="s" />],
+            [t.ofcSpPriority, <Badge status={ticket.priority} key="p" />],
+            [t.supAbout, enumLabel(ticket.category, t)],
+            [t.ofcSpReportedBy, `${ticket.raised_by_name} (${enumLabel(ticket.raiser_role, t)})`],
+            [t.ofcSpContact, ticket.raised_by_phone],
+            [t.supTransactionLabel, ticket.transaction_reference ?? '—'],
+            [t.ofcRhRaisedHeading, formatDateTime(ticket.created_at)],
+            [t.ofcSpAssignedTo, ticket.assigned_to_name ?? t.ofcSpNobodyYet],
           ]}
         />
         {ticket.resolution && (
-          <Alert kind="success" title="Resolution recorded">
+          <Alert kind="success" title="ofcSpResolutionRecorded">
             <p style={{ margin: 0 }}>{ticket.resolution}</p>
           </Alert>
         )}
       </div>
 
       <div className="card">
-        <h2 className="card__title">Conversation</h2>
+        <h2 className="card__title">{t.supConversation}</h2>
         <ol className="thread">
           <li className="thread__item">
             <p className="thread__meta">
@@ -277,7 +301,7 @@ export function TicketDetailScreen({
             <p className="thread__body">{ticket.description}</p>
           </li>
           {ticket.messages.length === 0 ? (
-            <Empty>Nobody has replied yet.</Empty>
+            <Empty>{t.ofcSpNobodyReplied}</Empty>
           ) : (
             ticket.messages.map((entry) => (
               <li
@@ -285,7 +309,7 @@ export function TicketDetailScreen({
                 className={`thread__item${entry.internal ? ' thread__item--internal' : ''}`}
               >
                 <p className="thread__meta">
-                  {entry.author_name} · {humanise(entry.author_role)} ·{' '}
+                  {entry.author_name} · {enumLabel(entry.author_role, t)} ·{' '}
                   {formatDateTime(entry.created_at)}
                   {entry.internal && ' · internal note, not visible to the reporter'}
                 </p>
@@ -297,30 +321,27 @@ export function TicketDetailScreen({
       </div>
 
       {message && (
-        <Alert kind="success" title="Done">
+        <Alert kind="success" title="ofcSpDone">
           <p style={{ margin: 0 }}>{message}</p>
         </Alert>
       )}
       <ErrorAlert error={error} />
 
       {!manage ? (
-        <Alert kind="info" title="You have read access to this ticket">
-          <p style={{ margin: 0 }}>
-            Replying and moving a ticket need support:manage. You can read everything here,
-            including internal notes.
-          </p>
+        <Alert kind="info" title="ofcSpReadAccess">
+          <p style={{ margin: 0 }}>{t.ofcSpReadOnlyNote}</p>
         </Alert>
       ) : ticket.status === 'CLOSED' ? (
-        <Alert kind="info" title="This ticket is closed">
-          <p style={{ margin: 0 }}>A closed ticket keeps its history. New problems get new tickets.</p>
+        <Alert kind="info" title="ofcSpTicketClosed">
+          <p style={{ margin: 0 }}>{t.ofcSpClosedKeepsHistory}</p>
         </Alert>
       ) : (
         <form className="card" onSubmit={send}>
-          <h2 className="card__title">{internal ? 'Add an internal note' : 'Reply to the reporter'}</h2>
+          <h2 className="card__title">{internal ? t.ofcSpAddAnInternalNote : t.ofcSpReplyToTheReporter}</h2>
           <p className="card__hint">
             {internal
-              ? 'Only staff with support access can read this. The reporter never sees it.'
-              : 'This goes to the person who raised the ticket, and they are notified.'}
+              ? t.ofcSpOnlyStaffWithSupport
+              : t.ofcSpThisGoesToThe}
           </p>
           <textarea
             value={reply}
@@ -336,56 +357,41 @@ export function TicketDetailScreen({
                 type="checkbox"
                 checked={internal}
                 onChange={(event) => setInternal(event.target.checked)}
-              />
-              Keep this internal — do not show it to the reporter
-            </label>
+              />{t.ofcSpKeepInternal}</label>
           )}
           <button type="submit" disabled={busy || reply.trim().length < 2}>
-            {busy ? 'Saving…' : internal ? 'Save internal note' : 'Send reply'}
+            {busy ? t.agEnSaving : internal ? t.ofcSpSaveInternalNote : t.ofcSpSendReply}
           </button>
         </form>
       )}
 
       {manage && ticket.status !== 'CLOSED' && (
         <div className="card">
-          <h2 className="card__title">Move this ticket</h2>
+          <h2 className="card__title">{t.ofcSpMoveTicket}</h2>
           <div className="button-row">
-            <button type="button" className="secondary" disabled={busy} onClick={() => update('ASSIGNED')}>
-              Assigned
-            </button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => update('ASSIGNED')}>{t.ofcSpAssigned}</button>
             <button
               type="button"
               className="secondary"
               disabled={busy}
               onClick={() => update('IN_PROGRESS')}
-            >
-              In progress
-            </button>
-            <button type="button" className="secondary" disabled={busy} onClick={() => update('CLOSED')}>
-              Close
-            </button>
+            >{t.ofcSpInProgress}</button>
+            <button type="button" className="secondary" disabled={busy} onClick={() => update('CLOSED')}>{t.ofcKycClose}</button>
           </div>
 
-          <label className="field">
-            How was it resolved?
-            <textarea
+          <label className="field">{t.ofcSpHowResolved}<textarea
               value={resolution}
               rows={3}
               maxLength={2000}
               onChange={(event) => setResolution(event.target.value)}
             />
           </label>
-          <p className="card__hint">
-            A resolution is required before a ticket can be marked resolved, and it is shown to the
-            person who reported it.
-          </p>
+          <p className="card__hint">{t.ofcSpResolutionRequired}</p>
           <button
             type="button"
             disabled={busy || resolution.trim().length === 0}
             onClick={() => update('RESOLVED')}
-          >
-            Mark resolved
-          </button>
+          >{t.ofcSpMarkResolved}</button>
         </div>
       )}
     </>

@@ -13,8 +13,16 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { ApiRequestError, api, isConnectivityFailure, type ApiError } from '../lib/api';
-import { CameraUnavailable, scanForCode, verificationCodeFrom, type ScanHandle } from '../lib/scanner';
+import {
+  CAMERA_UNAVAILABLE_TEXT,
+  CameraUnavailable,
+  scanForCode,
+  verificationCodeFrom,
+  type ScanHandle,
+} from '../lib/scanner';
 import { Alert, ErrorAlert, Spinner } from '../ui';
+import { useI18n } from '../lib/i18n';
+import { enumLabel } from '@psirs/shared';
 
 interface Collected {
   awardId: string;
@@ -24,9 +32,8 @@ interface Collected {
   message: string;
 }
 
-const readable = (unit: string) => unit.replace(/_/g, ' ').toLowerCase();
-
 export function CollectionScreen() {
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
@@ -53,28 +60,37 @@ export function CollectionScreen() {
       setCollected(result);
       setCode('');
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
-      else if (isConnectivityFailure(caught)) {
-        /*
-         * Not queued for later, deliberately.
-         *
-         * Everything else this app captures offline is a record of something
-         * the agent witnessed and can vouch for. A collection is a claim on a
-         * finite store, and the platform is the only thing that knows whether
-         * this code has already been used — recording it optimistically is how
-         * the same bag of fertiliser gets handed out twice.
-         */
+      /*
+       * The lost signal is tested FIRST, and the order is the whole point.
+       *
+       * Not queued for later, deliberately. Everything else this app captures
+       * offline is a record of something the agent witnessed and can vouch
+       * for. A collection is a claim on a finite store, and the platform is
+       * the only thing that knows whether this code has already been used —
+       * recording it optimistically is how the same bag of fertiliser gets
+       * handed out twice. So the agent is the only control, and this sentence
+       * is the only thing directing them.
+       *
+       * `instanceof ApiRequestError` used to be tested first. That was
+       * harmless until `request()` began wrapping a lost signal as
+       * `ApiRequestError(0, { code: 'NETWORK' })` so it could carry a
+       * translated sentence — after which the first branch swallowed every
+       * connectivity failure and this one could not run at all. An agent
+       * standing at a store with a queue in front of them read "Could not
+       * reach PSIRS. Try again." instead of being told to hold the goods.
+       */
+      if (isConnectivityFailure(caught)) {
         setError({
           code: 'OFFLINE',
           message:
-            'PSIRS could not be reached, so this collection has not been recorded. ' +
-            'Do not hand anything over until it has been.',
+            t.allocOfflineBody,
           moneyStatus: 'NOT_APPLICABLE',
         });
-      } else {
+      } else if (caught instanceof ApiRequestError) setError(caught.error);
+      else {
         setError({
           code: 'COLLECTION_FAILED',
-          message: 'The collection could not be recorded. Try again.',
+          message: t.allocFailed,
           moneyStatus: 'NOT_APPLICABLE',
         });
       }
@@ -93,7 +109,7 @@ export function CollectionScreen() {
         onCode: (text) => {
           const found = verificationCodeFrom(text);
           if (!found) {
-            setCameraError('That code is not a PSIRS collection code. Keep it in frame.');
+            setCameraError(t.allocNotACode);
             return;
           }
           stopCamera();
@@ -105,8 +121,8 @@ export function CollectionScreen() {
       setScanning(false);
       setCameraError(
         caught instanceof CameraUnavailable
-          ? caught.message
-          : 'The camera could not be opened. Type the code instead.',
+          ? t[CAMERA_UNAVAILABLE_TEXT[caught.reason]]
+          : t.allocCameraFailed,
       );
     }
   }
@@ -114,34 +130,32 @@ export function CollectionScreen() {
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Hand out an allocation</h2>
+        <h2 className="card__title">{t.allocHandOut}</h2>
         <p className="card__hint">
-          Scan or type the collection code the beneficiary was given. Record it before you hand
-          anything over — a code can only be used once, and this is what stops the same allocation
-          being collected twice.
+          {t.allocScanHint}
         </p>
 
         {scanning ? (
           <>
             <video ref={videoRef} className="scanner__view" playsInline muted />
             <button type="button" className="secondary" onClick={stopCamera}>
-              Stop scanning
+              {t.allocStopScanning}
             </button>
           </>
         ) : (
           <button type="button" onClick={() => void startScanning()} disabled={busy}>
-            Scan the code
+            {t.allocScanCode}
           </button>
         )}
 
         {cameraError && (
-          <Alert kind="warning" title="Camera">
+          <Alert kind="warning" title={t.scanCamera}>
             <p style={{ margin: 0 }}>{cameraError}</p>
           </Alert>
         )}
 
         <div className="field" style={{ marginTop: 14 }}>
-          <label htmlFor="collection-code">Or type the collection code</label>
+          <label htmlFor="collection-code">{t.allocTypeCode}</label>
           <input
             id="collection-code"
             value={code}
@@ -157,7 +171,7 @@ export function CollectionScreen() {
           onClick={() => void record(code.trim())}
         >
           {busy ? <Spinner /> : null}
-          {busy ? 'Checking with PSIRS…' : 'Record this collection'}
+          {busy ? t.verifyChecking : t.allocRecordCollection}
         </button>
 
         <ErrorAlert error={error} />
@@ -165,14 +179,14 @@ export function CollectionScreen() {
 
       {collected && (
         <div className="card">
-          <Alert kind="success" title="Recorded">
+          <Alert kind="success" title={t.allocRecorded}>
             <p style={{ margin: 0 }}>
-              Give <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
-              {readable(collected.unit)}.
+              {t.allocGive} <strong>{collected.taxpayerName}</strong> {collected.quantity}{' '}
+              {enumLabel(collected.unit, t)}.
             </p>
           </Alert>
           <p className="card__hint" style={{ marginTop: 10 }}>
-            This code is now used. If the beneficiary comes back with it, PSIRS will refuse it.
+            {t.allocCodeUsed}
           </p>
         </div>
       )}

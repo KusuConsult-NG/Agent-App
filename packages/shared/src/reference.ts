@@ -72,6 +72,29 @@ export const FRAUD_RULES = [
   'UNUSUAL_VOLUME',
   'RAPID_SUCCESSION',
   'COMMISSION_ANOMALY',
+  /*
+   * The gateway paid in less — or more — than the collections it was settling.
+   *
+   * Raised against the settlement itself rather than any one collection: the
+   * variance is a fact about the batch, and which of the day's transactions it
+   * belongs to is exactly what nobody knows yet. It was being raised under
+   * this name already, from a direct insert, with a rule string no list here
+   * knew about and an entity type that said 'TRANSACTION'.
+   */
+  'SETTLEMENT_VARIANCE',
+  /*
+   * The four the officer-readiness assessment found missing, all of which
+   * watch the platform's own people rather than the field.
+   *
+   * Every rule above this point asks whether an agent is behaving oddly. None
+   * of them could see an officer at all, which left the largest single lever
+   * on this platform — a person with `payment:reverse` and a keyboard —
+   * unwatched by the fraud engine that watches everybody else.
+   */
+  'REPEATED_RECEIPT_REGENERATION',
+  'UNUSUAL_TRANSACTION_TIMING',
+  'UNUSUAL_OFFICER_ACTIVITY',
+  'FREQUENT_MANUAL_INTERVENTION',
 ] as const;
 export type FraudRule = (typeof FRAUD_RULES)[number];
 

@@ -51,3 +51,43 @@ export function birthDateMessage(problem: BirthDateProblem): string {
       return 'Enter the date of birth as a day, month and year.';
   }
 }
+
+/**
+ * Why the platform thinks a registration may already exist.
+ *
+ * Codes rather than sentences, for the reason the clearance blockers are
+ * codes: these are read by an agent standing in front of the person being
+ * registered, on a device that offers Hausa, and a sentence composed in
+ * `apps/api` is a sentence in English by the time it arrives. The agent is
+ * being asked to decide whether two records are the same human being, and
+ * that decision is made on exactly these five lines.
+ */
+export const DUPLICATE_REASONS = [
+  'IDENTITY_NUMBER',
+  'PHONE_AND_NAME',
+  'PHONE',
+  'BUSINESS_NAME_IN_LGA',
+  'NAME_IN_LGA',
+] as const;
+
+export type DuplicateReason = (typeof DUPLICATE_REASONS)[number];
+
+/**
+ * The same five in English, for `taxpayer_duplicate_checks.match_reasons`.
+ *
+ * That column is the record of why an agent was warned and what they decided,
+ * read back by whoever investigates a duplicate months later. It must not
+ * depend on what a dictionary says at the time it is read.
+ */
+export const DUPLICATE_REASON_SENTENCES: Record<DuplicateReason, string> = {
+  IDENTITY_NUMBER: 'The same identification number is already registered',
+  PHONE_AND_NAME: 'Same phone number and same name',
+  PHONE: 'This phone number is already registered to another taxpayer',
+  BUSINESS_NAME_IN_LGA: 'A business with this name is already registered in this LGA',
+  NAME_IN_LGA: 'A taxpayer with this name is already registered in this LGA',
+};
+
+/** The English for a match reason, for the record rather than the screen. */
+export function duplicateReasonSentence(code: DuplicateReason): string {
+  return DUPLICATE_REASON_SENTENCES[code];
+}

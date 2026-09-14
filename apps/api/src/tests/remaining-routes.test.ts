@@ -451,3 +451,80 @@ describe('an agent reading their own offline drafts', () => {
     assert.equal(rows.length, 0, 'another agent’s captures must not appear in this queue');
   });
 });
+
+/*
+ * The two routes the revision-10 recount found exercised by nothing.
+ *
+ * D-21 closed on 156 routes; there are 189 now, and re-running the
+ * enumeration turned up these two. Both feed screens D-5 already records as
+ * untested, which is why they slipped: the portal calls them and nothing
+ * else does, so the API suite and the portal suite each assumed the other.
+ *
+ * Read rather than counted, on the premise D-21 established — that "exercised
+ * by nothing" has predicted "wrong" on this codebase at close to one defect
+ * per route. Neither is wrong. That is a result: one is the only way an
+ * officer sees the identity documents behind an agent, and the other is the
+ * officer's list of money the State has not received, which is the queue the
+ * whole settlement design exists to keep short.
+ */
+describe('an officer reading the identity documents behind an agent', () => {
+  it('lists them for the applicant asked for, and nobody else', async () => {
+    const otherUser = await createGovernmentUser({
+      role: 'agent',
+      phone: '+2348141999010',
+      fullName: 'Other KYC Agent',
+    });
+    const otherAgent = await queryOne<{ id: string }>(
+      pool,
+      'INSERT INTO agents (user_id, application_number) VALUES ($1,$2) RETURNING id',
+      [otherUser, `APP-KYC-${Date.now()}`],
+    );
+    const doc = async (agentId: string, kind: string) =>
+      pool.query(
+        `INSERT INTO kyc_documents
+           (agent_id, document_type, storage_reference, content_type, byte_size, checksum)
+         VALUES ($1, $2, $3, 'image/jpeg', 1024, $4)`,
+        [agentId, kind, `kyc/${agentId}/${kind}`, `sum-${kind}-${agentId}`],
+      );
+    await doc(agent.agentId, 'IDENTITY_DOCUMENT');
+    await doc(otherAgent!.id, 'PASSPORT_PHOTOGRAPH');
+
+    const response = await get(`/agents/${agent.agentId}/kyc/documents`, { token: officerToken });
+
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    const documents = response.body.documents as Array<{ document_type: string }>;
+    assert.ok(Array.isArray(documents), `expected a list: ${JSON.stringify(response.body).slice(0, 160)}`);
+    assert.deepEqual(
+      documents.map((d) => d.document_type),
+      ['IDENTITY_DOCUMENT'],
+      'the other applicant’s document must not appear on this applicant’s list',
+    );
+  });
+
+  it('is refused to an agent, who has no business reading an applicant file', async () => {
+    const response = await get(`/agents/${agent.agentId}/kyc/documents`, {
+      token: agent.token,
+      deviceId: agent.device,
+    });
+    assert.equal(response.status, 403, JSON.stringify(response.body));
+  });
+});
+
+describe('the officer’s list of money the State has not received', () => {
+  it('answers to a finance officer and refuses an agent', async () => {
+    const allowed = await get('/government/reconciliation/awaiting-settlement', {
+      token: financeToken,
+    });
+    assert.equal(allowed.status, 200, JSON.stringify(allowed.body));
+    assert.ok(
+      Array.isArray(allowed.body),
+      `expected a list, got ${JSON.stringify(allowed.body).slice(0, 160)}`,
+    );
+
+    const refused = await get('/government/reconciliation/awaiting-settlement', {
+      token: agent.token,
+      deviceId: agent.device,
+    });
+    assert.equal(refused.status, 403, JSON.stringify(refused.body));
+  });
+});

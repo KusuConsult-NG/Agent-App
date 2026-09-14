@@ -19,8 +19,30 @@ import { rateLimit } from '../middleware/security';
 import { asyncHandler, uuidSchema, validateBody, validateQuery } from '../middleware/validate';
 import * as groups from '../services/groups';
 import * as allocations from '../services/allocations';
+import { callerUserId, seesEverything } from '../lib/ownership';
+import { notFound } from '../lib/errors';
+import type { RouteRequest } from '../middleware/validate';
 
 export const groupRouter = Router();
+
+/**
+ * May this caller act on this group at all?
+ *
+ * `group:register` admits any active agent, which is right for creating a
+ * group and wrong for adding members to one somebody else recorded. An officer
+ * holds `group:manage` and passes untouched, because reviewing anybody's group
+ * is precisely their job.
+ */
+async function assertGroupVisible(req: RouteRequest, groupId: string): Promise<void> {
+  // An officer sees the whole register and reviews anybody's group; that is
+  // the job, and they pass untouched.
+  if (seesEverything(req, 'group:read:all') || seesEverything(req, 'group:manage')) return;
+
+  const visibility = await groups.groupVisibility(pool, groupId, callerUserId(req));
+  // `notFound` for both, never `forbidden`: a 403 confirms to anyone who
+  // guesses an id that the group is there, and the row names its leader.
+  if (visibility !== 'VISIBLE') throw notFound('That group');
+}
 
 /**
  * The leader's surface, before `authenticate`.
@@ -126,9 +148,24 @@ groupRouter.post(
   ),
 );
 
+/**
+ * The groups this caller may read.
+ *
+ * Gated on either permission, then narrowed by row — `requirePermission` can
+ * only see the role. An agent holds `group:read:own` and gets the cooperatives
+ * they recorded; an officer holds `group:read:all` and gets the register.
+ *
+ * Until this narrowing existed the route answered `group:read:all` alone, and
+ * agents hold that permission because they are the ones who register groups.
+ * So the field screen headed "your groups" returned every group in the State,
+ * each row carrying its leader's name and phone number. An agent is paid
+ * commission on what the people they register later pay, which makes a
+ * directory of every organised group in Plateau — who leads it, how to reach
+ * them, how many members it claims — a thing worth having and worth misusing.
+ */
 groupRouter.get(
   '/',
-  requirePermission('group:read:all'),
+  requirePermission('group:read:own', 'group:read:all'),
   validateQuery(
     z.object({
       status: z.enum(['PENDING', 'ACTIVE', 'SUSPENDED']).optional(),
@@ -136,16 +173,25 @@ groupRouter.get(
       sector: z.enum(ECONOMIC_SECTOR_CODES).optional(),
       limit: z.coerce.number().int().min(1).max(200).default(100),
     }),
-    async (_req, res, data) => {
-      res.json({ groups: await groups.listGroups(pool, data) });
+    async (req, res, data) => {
+      const registeredBy = seesEverything(req, 'group:read:all') ? null : callerUserId(req);
+      res.json({ groups: await groups.listGroups(pool, { ...data, registeredBy }) });
     },
   ),
 );
 
+/**
+ * One group.
+ *
+ * Narrowed by the same rule as the list — a list filter a caller can step
+ * around by knowing an id is decoration, and this route returned the whole
+ * row, including `leader_phone` and `registered_by`.
+ */
 groupRouter.get(
   '/:id',
-  requirePermission('group:read:all'),
+  requirePermission('group:read:own', 'group:read:all'),
   asyncHandler(async (req, res) => {
+    await assertGroupVisible(req, req.params.id);
     res.json(await groups.groupDetail(pool, req.params.id));
   }),
 );
@@ -171,6 +217,45 @@ groupRouter.post(
   ),
 );
 
+/*
+ * `group:manage`, the same permission as approving the group.
+ *
+ * Conferring standing is the same size of act as admitting the association in
+ * the first place, and a reason is required for the same reason it is there:
+ * an officer reading the audit log two years later needs to know why this
+ * union was allowed to contradict an agent's count of somebody's stall.
+ */
+groupRouter.post(
+  '/:id/tax-role',
+  requirePermission('group:manage'),
+  validateBody(
+    z.object({
+      taxRole: z.enum(['ENUMERATION', 'ATTESTATION', 'NONE']),
+      reason: z.string().min(10, 'Record why this group is being given this part'),
+    }),
+    async (req, res, data) => {
+      res.json(
+        await groups.setGroupTaxRole({
+          groupId: req.params.id,
+          taxRole: data.taxRole,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
+);
+
+groupRouter.get(
+  '/:id/members',
+  requirePermission('group:read:own', 'group:read:all'),
+  asyncHandler(async (req, res) => {
+    await assertGroupVisible(req, req.params.id);
+    res.json(await groups.listMembers(pool, req.params.id));
+  }),
+);
+
 groupRouter.post(
   '/:id/members',
   requirePermission('group:register', 'group:manage'),
@@ -182,6 +267,7 @@ groupRouter.post(
       joinedOn: z.string().date().optional(),
     }),
     async (req, res, data) => {
+      await assertGroupVisible(req, req.params.id);
       const result = await groups.addMember({
         groupId: req.params.id,
         taxpayerId: data.taxpayerId,
@@ -199,10 +285,45 @@ groupRouter.post(
   ),
 );
 
+/**
+ * Record that a member has left the group (PRD §33).
+ *
+ * `group:manage` — the officer's permission — and not `group:register`, which
+ * agents hold. An agent is paid commission on what their groups collect, so an
+ * agent who could end a membership could also trim a group down to the members
+ * who transact. Adding is field work; removing is a decision.
+ */
+groupRouter.post(
+  '/:id/members/:membershipId/departure',
+  requirePermission('group:manage'),
+  validateBody(
+    z.object({
+      reason: z.string().min(5, 'Say why the membership has ended'),
+    }),
+    async (req, res, data) => {
+      await assertGroupVisible(req, req.params.id);
+      const result = await groups.recordMemberDeparture({
+        groupId: req.params.id,
+        membershipId: req.params.membershipId,
+        reason: data.reason,
+        actorId: req.auth!.userId,
+        actorRole: req.auth!.role,
+      });
+      res.json({
+        ...result,
+        message:
+          `${result.memberName} is recorded as having left ${result.groupName}. They keep what ` +
+          'they already collected and will not be counted in future allocations.',
+      });
+    },
+  ),
+);
+
 groupRouter.post(
   '/:id/attestation-request',
   requirePermission('group:manage', 'group:register'),
   asyncHandler(async (req, res) => {
+    await assertGroupVisible(req, req.params.id);
     const result = await groups.inviteLeaderToAttest({
       groupId: req.params.id,
       actorId: req.auth!.userId,
@@ -318,6 +439,32 @@ allocationRouter.post(
       message: `Give the beneficiary this code to collect: ${result.collectionCode}`,
     });
   }),
+);
+
+/**
+ * Release a share that was awarded and never collected, back into the round.
+ *
+ * Under `allocation:manage` rather than `allocation:collect`: the agent at the
+ * store hands goods over, but deciding that a beneficiary has forfeited theirs
+ * — and putting public property back on the shelf for someone else — is the
+ * officer's call, and it is recorded with a reason.
+ */
+allocationRouter.post(
+  '/awards/:id/forfeit',
+  requirePermission('allocation:manage'),
+  validateBody(
+    z.object({ reason: z.string().min(10).max(500) }),
+    async (req, res, data) => {
+      res.json(
+        await allocations.forfeitAward({
+          awardId: req.params.id,
+          reason: data.reason,
+          actorId: req.auth!.userId,
+          actorRole: req.auth!.role,
+        }),
+      );
+    },
+  ),
 );
 
 /** At the collection point: somebody presents their code and takes their share. */

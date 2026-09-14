@@ -17,12 +17,14 @@ import {
   grantStepUp,
   loginAs,
   pool,
+  settleTransaction,
   post,
   resetDatabase,
   revenueItemByCode,
   startTestServer,
   stopTestServer,
   territoryForLga,
+  importStatementFor,
 } from './helpers';
 import { seedDemoUsers, seedReferenceData } from '../db/seed';
 import * as notifications from '../services/notifications';
@@ -629,7 +631,27 @@ describe('Payment, verification and receipt (PRD §17, §19, §95)', () => {
     assert.equal(response.body.gatewayStatus, 'SUCCESS');
     assert.equal(response.body.webhook.outcome.status, 'VERIFIED');
 
-    ctx.receiptNumber = response.body.webhook.outcome.receiptNumber;
+    /*
+     * The webhook confirms the payment; it does not produce a receipt. What the
+     * taxpayer holds now is an acknowledgement saying the gateway confirmed it
+     * and the State has not yet received it. Settling the collection is what
+     * turns that into a government receipt, and it is done here so the rest of
+     * this file — the PDF, the public verification, the immutability — has one
+     * to work with.
+     */
+    assert.ok(
+      response.body.webhook.outcome.acknowledgementNumber,
+      'the taxpayer is not left with nothing',
+    );
+    assert.equal(response.body.webhook.outcome.receiptNumber, undefined);
+
+    await settleTransaction(ctx.transactionId);
+    const issued = await queryOne<{ receipt_number: string }>(
+      pool,
+      `SELECT receipt_number FROM receipts WHERE transaction_id = $1`,
+      [ctx.transactionId],
+    );
+    ctx.receiptNumber = issued!.receipt_number;
     assert.match(ctx.receiptNumber, /^PSIRS\/\d{4}\/\d{6}$/);
 
     const transaction = await queryOne<{ status: string; verified_at: Date | null }>(
@@ -637,7 +659,7 @@ describe('Payment, verification and receipt (PRD §17, §19, §95)', () => {
       'SELECT status, verified_at FROM transactions WHERE id = $1',
       [ctx.transactionId],
     );
-    assert.equal(transaction!.status, 'RECONCILIATION_PENDING');
+    assert.equal(transaction!.status, 'SETTLED');
     assert.ok(transaction!.verified_at);
 
     const payment = await queryOne<{ status: string; verified_by_source: string }>(
@@ -828,38 +850,95 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
       { token: ctx.financeToken },
     );
 
+  /*
+   * A second collection, confirmed and deliberately not settled.
+   *
+   * The story above now settles its own collection, because a receipt cannot
+   * exist until the money has arrived and the PDF, the public verification and
+   * the immutability tests all need one. So the two tests below — which are
+   * about the interval *before* settlement — need a collection still in it.
+   */
+  const unsettled = { transactionId: '', gatewayReference: '', amountKobo: '' };
+
+  before(async () => {
+    const assessment = await post(
+      '/revenue/assessments',
+      {
+        taxpayerId: ctx.taxpayerId,
+        revenueItemId: await revenueItemByCode('SHOPS-KIOSKS'),
+        inputs: {},
+      },
+      { token: ctx.agentToken, deviceId: ctx.deviceId, idempotencyKey: 'assessment-unsettled' },
+    );
+    assert.equal(assessment.status, 201, JSON.stringify(assessment.body));
+    unsettled.transactionId = assessment.body.transactionId;
+    unsettled.amountKobo = String(assessment.body.amountKobo);
+
+    const payment = await post(
+      '/payments/initiate',
+      { transactionId: unsettled.transactionId },
+      { token: ctx.agentToken, deviceId: ctx.deviceId, idempotencyKey: 'payment-unsettled' },
+    );
+    assert.equal(payment.status, 201, JSON.stringify(payment.body));
+    unsettled.gatewayReference = payment.body.gatewayReference;
+
+    await post(
+      '/payments/simulate',
+      { gatewayReference: unsettled.gatewayReference, outcome: 'SUCCESS', deliverWebhook: true },
+      { token: ctx.agentToken, deviceId: ctx.deviceId },
+    );
+  });
+
   it('reports verified-but-unsettled money as pending settlement, not as collected', async () => {
     // Platform and gateway agree, but government has not yet seen the money in
     // its own account — the third leg of PRD §46's three-way match.
     const response = await reconcile();
 
     assert.equal(response.status, 200);
-    assert.equal(response.body.totalPlatformKobo, response.body.totalGatewayKobo);
     assert.ok((response.body.byStatus.PENDING_SETTLEMENT ?? 0) >= 1);
     assert.equal(response.body.exceptions, 0, 'a pending settlement is not an exception');
+
+    // And no receipt, which is the whole of it: the State has not been paid.
+    const receipts = await queryOne<{ count: string }>(
+      pool,
+      `SELECT count(*)::text AS count FROM receipts WHERE transaction_id = $1`,
+      [unsettled.transactionId],
+    );
+    assert.equal(receipts!.count, '0');
   });
 
-  it('records a settlement and moves the transaction to SETTLED', async () => {
+  it('records a settlement, issues the receipt and moves the transaction to SETTLED', async () => {
+    // The gateway's statement first: recordSettlement refuses a reference it
+    // does not confirm, and production imports it before an officer settles.
+    await importStatementFor([unsettled.gatewayReference]);
     const response = await post(
       '/government/settlements',
       {
         settlementDate: new Date().toISOString().slice(0, 10),
-        gatewayReferences: [ctx.gatewayReference],
-        receivedAmountKobo: '500000',
+        gatewayReferences: [unsettled.gatewayReference],
+        receivedAmountKobo: unsettled.amountKobo,
         bankReference: 'CBN-SETTLE-0001',
       },
       { token: ctx.financeToken },
     );
 
-    assert.equal(response.status, 201);
+    assert.equal(response.status, 201, JSON.stringify(response.body));
     assert.equal(response.body.transactionsSettled, 1);
 
     const transaction = await queryOne<{ status: string }>(
       pool,
       'SELECT status FROM transactions WHERE id = $1',
-      [ctx.transactionId],
+      [unsettled.transactionId],
     );
     assert.equal(transaction!.status, 'SETTLED');
+
+    // The receipt appears at the same moment, and not before it.
+    const receipt = await queryOne<{ receipt_number: string }>(
+      pool,
+      `SELECT receipt_number FROM receipts WHERE transaction_id = $1`,
+      [unsettled.transactionId],
+    );
+    assert.ok(receipt, 'the money arrived, so the receipt exists');
   });
 
   it('marks the payment fully matched once government settlement is recorded', async () => {
@@ -891,6 +970,10 @@ describe('Reconciliation and settlement (PRD §46, §47)', () => {
       { token: ctx.agentToken, deviceId: ctx.deviceId },
     );
 
+    // The gateway confirms it paid the full amount; the bank credit is short,
+    // which is the variance this case is about. Without the import the batch is
+    // refused as uncorroborated before the amounts are ever compared.
+    await importStatementFor([payment.body.gatewayReference]);
     const settlement = await post(
       '/government/settlements',
       {
@@ -1109,13 +1192,31 @@ describe('Access control and audit integrity (PRD §36, §45, §67)', () => {
     assert.equal(rate.status, 403);
   });
 
-  it('verifies the audit hash chain end to end', async () => {
+  it('replays the audit hash chain and says how far it reached', async () => {
     const response = await get('/government/audit/verify', { token: ctx.auditorToken });
 
     assert.equal(response.status, 200);
     assert.equal(response.body.valid, true);
     assert.ok(response.body.entriesChecked > 20, 'the chain covers the whole run');
-    assert.match(response.body.message, /No tampering detected/);
+
+    /*
+     * This asserted /No tampering detected/, which the replay cannot establish:
+     * entries cut from the end of the log leave a shorter chain that verifies
+     * perfectly. The answer now reports what it did establish and names the
+     * last entry it reached — the number an auditor records so a shortened log
+     * is visible next time.
+     */
+    assert.doesNotMatch(
+      response.body.message,
+      /no tampering/i,
+      'the replay cannot establish that nothing was tampered with',
+    );
+    assert.equal(
+      response.body.highestSequence,
+      response.body.entriesChecked,
+      'an unwindowed replay of the whole log reaches its last entry',
+    );
+    assert.match(response.body.message, new RegExp(String(response.body.highestSequence)));
   });
 
   it('detects tampering with a historical audit entry', async () => {
@@ -1271,6 +1372,26 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
       { token },
     );
     assert.equal(replacement.status, 201, JSON.stringify(replacement.body));
+
+    /*
+     * And an officer lets it in.
+     *
+     * A replacement handset is not a first handset. `registerDevice`
+     * auto-approves the first device an agent ever registers so onboarding can
+     * finish, and it used to decide that by counting devices that were
+     * currently APPROVED or ACTIVE — so a revoked handset made the next one
+     * count as the first and it went live with nobody having looked at it,
+     * which is the opposite of what revoking a device is for. This journey
+     * asserted 201 and then transacted, so it was walking that path.
+     */
+    console.error('REPL', JSON.stringify(replacement.body));
+    assert.equal(replacement.body.status, 'PENDING');
+    const approved = await post(
+      `/agents/devices/${replacement.body.deviceId}/approve`,
+      {},
+      { token: ctx.adminToken },
+    );
+    assert.equal(approved.status, 200, JSON.stringify(approved.body));
     ctx.deviceId = 'replacement-device-000002';
 
     const response = await post(
@@ -1297,7 +1418,7 @@ describe('Offline drafts (PRD §30; Addendum §23)', () => {
       { token, deviceId: ctx.deviceId },
     );
 
-    assert.equal(response.status, 200);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
     assert.equal(response.body.results[0].status, 'SYNCED');
     assert.ok(response.body.results[0].entityId, 'the server assigns the id, not the device');
 
@@ -1584,15 +1705,34 @@ describe('Citizens are served by agents, not by a portal', () => {
   });
 
   it('will not let the database hold a citizen login', async () => {
-    // Migration 007 narrowed users.role, so this holds for any caller —
-    // including one at a psql prompt.
+    /*
+     * Refused for any caller, including one at a psql prompt.
+     *
+     * Migration 007 did this with a CHECK constraint and migration 059 replaced
+     * it with a foreign key to `roles`, which deliberately has no `taxpayer`
+     * row. The guarantee is unchanged and the constraint's name is not, so the
+     * assertion is on the refusal rather than on which constraint delivers it —
+     * naming one pins the mechanism and lets the property drift.
+     */
     await assert.rejects(
       pool.query(
         `INSERT INTO users (full_name, phone, password_hash, role)
          VALUES ('Citizen', '+2347099000002', 'x', 'taxpayer')`,
       ),
-      /users_role_check/,
+      /users_role_check|users_role_fkey/,
     );
+
+    /*
+     * And the reason it is refused: there is no such role to hold.
+     *
+     * Asserted separately because the rejection above would also fire if the
+     * roles table were empty or missing, which is a different fault with the
+     * same symptom.
+     */
+    const citizenRole = await pool.query(`SELECT 1 FROM roles WHERE name = 'taxpayer'`);
+    assert.equal(citizenRole.rowCount, 0, 'there is no citizen role to sign in as');
+    const realRoles = await pool.query(`SELECT 1 FROM roles WHERE name = 'admin'`);
+    assert.equal(realRoles.rowCount, 1, 'and the roles table is populated');
   });
 
   it('will not let a transaction claim it came from a citizen portal', async () => {
@@ -2084,10 +2224,10 @@ describe('A persisted refresh token is bound to its device', () => {
     });
     agentId = application.body.agentId;
 
-    // A device must exist and be approved for the session to bind to it.
+    // A device must exist and be active for the session to bind to it.
     await pool.query(
       `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
-       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+       VALUES ($1, $2, 'Test handset', 'ACTIVE', now())`,
       [agentId, device],
     );
 
@@ -2173,7 +2313,7 @@ describe('A session chain ends on a fixed date', () => {
     assert.equal(application.status, 201, JSON.stringify(application.body));
     await pool.query(
       `INSERT INTO agent_devices (agent_id, device_identifier, device_name, status, approved_at)
-       VALUES ($1, $2, 'Test handset', 'APPROVED', now())`,
+       VALUES ($1, $2, 'Test handset', 'ACTIVE', now())`,
       [application.body.agentId, device],
     );
 
@@ -2312,9 +2452,17 @@ describe('A notification is only recorded as sent if it was sent', () => {
   });
 
   it('does not let one unroutable message stall everyone else\'s receipt', async () => {
-    // No push adapter exists, so a PUSH row cannot be delivered. It must fail
-    // on its own and let the sweep continue — an exception here would stop
-    // every queued receipt behind it.
+    /*
+     * A PUSH row addressed to a subscription token rather than a user id. There
+     * is a push adapter now, and this is still unroutable — a push is addressed
+     * to a person, and a template queuing PUSH for anything else has been
+     * written for the wrong channel. It must fail on its own and let the sweep
+     * continue; an exception here would stop every queued receipt behind it.
+     *
+     * Permanently refused rather than retried, and that distinction is the
+     * point: a server with no VAPID keys is two settings from working and gets
+     * left QUEUED, while this can never become deliverable.
+     */
     const unroutable = await queryOne<{ id: string }>(
       pool,
       `INSERT INTO notifications (recipient, event, channel, message)

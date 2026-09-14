@@ -43,7 +43,6 @@ export const SOURCE_OF_TRUTH = {
 } as const;
 
 export {
-  tinService,
   tinUnavailable,
   tinRegistrationUnavailable,
   assignedTin,
@@ -59,7 +58,6 @@ export {
 } from './tin';
 
 export {
-  kycProvider,
   kycUnavailable,
   HttpKycProvider,
   MockKycProvider,
@@ -71,7 +69,6 @@ export {
 } from './kyc';
 
 export {
-  vehicleRegistry,
   registryUnavailable,
   HttpVehicleRegistry,
   MockVehicleRegistry,
@@ -84,7 +81,6 @@ export {
 } from './vehicles';
 
 export {
-  bankVerification,
   bankUnavailable,
   matchesAccountName,
   HttpBankVerification,
@@ -105,3 +101,86 @@ export function integrationStatus() {
     sourceOfTruth: SOURCE_OF_TRUTH,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Whether the outside world answered
+// ---------------------------------------------------------------------------
+
+import { tinService as rawTinService } from './tin';
+import { kycProvider as rawKycProvider } from './kyc';
+import { vehicleRegistry as rawVehicleRegistry } from './vehicles';
+import { bankVerification as rawBankVerification } from './banks';
+import { recordCall, type IntegrationName } from '../services/integration-health';
+
+/**
+ * Every outbound call, recorded, at the one place they are all handed out.
+ *
+ * The alternative was a line in each of the eight adapter methods, which is
+ * eight places to forget and eight places for a future adapter to not know
+ * about. Wrapping here means a service that calls `tinService.lookup` is
+ * measured whether or not whoever wrote it had heard of this file, which is
+ * the only version of monitoring that stays true.
+ *
+ * WHY A PROXY RATHER THAN FOUR TYPED WRAPPERS
+ *
+ * The four contracts have eight methods between them and no common shape, so
+ * typed wrappers would be forty lines of forwarding that say nothing. What
+ * they *do* share is the design decision this whole directory is built on:
+ * every result carries an outcome, and `UNAVAILABLE` means the provider could
+ * not be asked rather than that the answer was no. That one field is all this
+ * needs, so the proxy reads it and passes everything else through untouched.
+ *
+ * KYC calls the field `status` where the other three call it `outcome`. That
+ * is a wart in the contracts rather than here, and it is read rather than
+ * fixed because renaming a field on a shipped provider interface to tidy a
+ * monitoring wrapper is the wrong trade.
+ */
+function watched<T extends object>(name: IntegrationName, adapter: T): T {
+  return new Proxy(adapter, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+
+      return async (...args: unknown[]) => {
+        /*
+         * A throw is a failure too, and a worse one.
+         *
+         * Adapters promise never to throw for an upstream problem, and an
+         * adapter that breaks that promise is exactly the case worth
+         * recording. The error is re-thrown untouched: swallowing it here
+         * would turn a bug into silence.
+         */
+        try {
+          const result = await (value as (...inner: unknown[]) => Promise<unknown>).apply(
+            target,
+            args,
+          );
+          const outcome = (result as { outcome?: string; status?: string } | null)?.outcome
+            ?? (result as { status?: string } | null)?.status
+            ?? 'ANSWERED';
+          const provider = (result as { provider?: string } | null)?.provider ?? null;
+          const reason =
+            (result as { reason?: string; failureReason?: string } | null)?.reason ??
+            (result as { failureReason?: string } | null)?.failureReason ??
+            null;
+          await recordCall(name, outcome, { provider, error: reason });
+          return result;
+        } catch (error) {
+          await recordCall(name, 'UNAVAILABLE', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+          throw error;
+        }
+      };
+    },
+  });
+}
+
+/*
+ * The adapters every service uses. Same names, same contracts, same behaviour
+ * -- the wrapper adds a row and changes no answer.
+ */
+export const tinService = watched('tin', rawTinService);
+export const kycProvider = watched('kyc', rawKycProvider);
+export const vehicleRegistry = watched('vehicles', rawVehicleRegistry);
+export const bankVerification = watched('banks', rawBankVerification);

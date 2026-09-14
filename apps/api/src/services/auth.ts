@@ -4,24 +4,32 @@
  * Phone/password plus OTP, device binding for agents, and step-up grants for
  * high-risk actions. Refresh tokens and OTPs are stored only as hashes, and a
  * refresh rotates its token so a stolen one is usable at most once.
+ *
+ * "Stored only as hashes" was true of `otp_codes` and false of the database:
+ * the SMS carrying the code was kept in full in `notifications.message`, which
+ * nothing deletes, so the plaintext sat beside its own hash permanently. See
+ * `secretVariables` in services/notifications.ts and migration 079.
  */
 
 import type { PoolClient } from 'pg';
 import type { Role } from '@psirs/shared';
-import { permissionsForRole } from '@psirs/shared';
 import type { Db } from '../db/pool';
-import { pool, queryOne, withTransaction } from '../db/pool';
+import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { config } from '../config';
 import {
   generateOtp,
   generateToken,
   hashPassword,
+  safeEqual,
   sha256,
   verifyPassword,
 } from '../lib/crypto';
 import { AppError, forbidden, unauthorised, conflict, badRequest, notFound } from '../lib/errors';
 import { issueAccessToken } from '../middleware/auth';
 import { recordAudit } from './audit';
+import { recordTransfer } from './organisation';
+import * as rbacStore from './rbac-store';
+import * as officerDevices from './officer-devices';
 import { queueNotification } from './notifications';
 
 export interface SessionTokens {
@@ -47,6 +55,8 @@ async function createSession(params: {
   email: string | null;
   agentId?: string | null;
   deviceId?: string | null;
+  /** The officer's machine, discovered at sign-in. Null for an agent handset. */
+  officerDeviceId?: string | null;
   ipAddress?: string | null;
   userAgent?: string | null;
   /**
@@ -78,13 +88,14 @@ async function createSession(params: {
     const row = await queryOne<{ id: string }>(
       client,
       `INSERT INTO sessions
-         (user_id, refresh_token_hash, device_id, ip_address, user_agent, expires_at,
-          absolute_expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+         (user_id, refresh_token_hash, device_id, officer_device_id, ip_address, user_agent,
+          expires_at, absolute_expires_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [
         params.userId,
         sha256(refreshToken),
         params.deviceId ?? null,
+        params.officerDeviceId ?? null,
         params.ipAddress ?? null,
         params.userAgent ?? null,
         // The rolling expiry can never outlast the absolute one.
@@ -123,7 +134,16 @@ async function createSession(params: {
         phone: params.phone,
         email: params.email,
         role: params.role,
-        permissions: permissionsForRole(params.role),
+        /*
+         * From the database, like the middleware.
+         *
+         * The portal renders its menu from this list, so a grant an
+         * administrator made a minute ago has to be in the session the officer
+         * signs in with — otherwise the API allows something the menu does not
+         * offer, which is the exact drift `permissions.ts` in the portal was
+         * written to prevent.
+         */
+        permissions: await rbacStore.permissionsFor(params.role),
         agentId: params.agentId ?? undefined,
       },
     },
@@ -226,6 +246,28 @@ export async function login(params: {
     deviceId = device?.id ?? null;
   }
 
+  /*
+   * The machine an officer is signing in from, discovered rather than
+   * registered.
+   *
+   * Agents are excluded: their device is the handset, it is already bound and
+   * approved, and giving them a second parallel device record would mean two
+   * places to revoke and one of them forgotten. `deviceForSignIn` refuses a
+   * blocked machine here so the officer gets a sentence, and migration 063
+   * refuses it again at the row so a laptop in somebody else's hands cannot
+   * hold a session whatever the caller does.
+   */
+  const officerDeviceId =
+    user.role === 'agent'
+      ? null
+      : await withTransaction((client) =>
+          officerDevices.deviceForSignIn(client, {
+            userId: user.id,
+            userAgent: params.userAgent ?? null,
+            clientDeviceId: params.deviceIdentifier ?? null,
+          }),
+        );
+
   const { tokens } = await createSession({
     userId: user.id,
     role: user.role,
@@ -234,6 +276,7 @@ export async function login(params: {
     email: user.email,
     agentId: agent?.id ?? null,
     deviceId,
+    officerDeviceId,
     ipAddress: params.ipAddress ?? null,
     userAgent: params.userAgent ?? null,
   });
@@ -307,6 +350,7 @@ export async function refresh(params: {
       id: string;
       user_id: string;
       device_id: string | null;
+      officer_device_id: string | null;
       device_identifier: string | null;
       expires_at: Date;
       absolute_expires_at: Date | null;
@@ -320,7 +364,8 @@ export async function refresh(params: {
       status: string;
     }>(
       client,
-      `SELECT s.id, s.user_id, s.device_id, s.expires_at, s.absolute_expires_at, s.revoked_at,
+      `SELECT s.id, s.user_id, s.device_id, s.officer_device_id, s.expires_at,
+              s.absolute_expires_at, s.revoked_at,
               s.revoked_reason, s.rotated_to_session_id,
               d.device_identifier,
               u.full_name, u.phone, u.email, u.role, u.status
@@ -394,6 +439,10 @@ export async function refresh(params: {
       email: session.email,
       agentId: agent?.id ?? null,
       deviceId: session.device_id,
+      // Carried, not rediscovered: a refresh is the same machine by
+      // definition, and re-deriving it from a header would let a rotation
+      // quietly move a session onto a different device record.
+      officerDeviceId: session.officer_device_id,
       ipAddress: params.ipAddress ?? null,
       // Carried, never recomputed: this is what stops rotation from resetting it.
       absoluteExpiresAt: session.absolute_expires_at,
@@ -579,9 +628,56 @@ export async function revokeAllSessions(
   return result.rowCount ?? 0;
 }
 
+/**
+ * A step-up code goes to the account, not to whoever asked for it.
+ *
+ * Both `/auth/otp/request` and `/auth/step-up` take the destination from the
+ * request body, and the body is written by whoever holds the token. That was
+ * the whole gate: somebody with a captured access token asked for the code to
+ * be sent to their own phone, read it there, and confirmed it against the
+ * account the token belongs to. The second factor then proved possession of
+ * the attacker's own handset, and the audit trail recorded the account holder
+ * as the person who confirmed it.
+ *
+ * So a step-up code is only ever requested by, and only ever confirmed
+ * against, the number the account is registered under. Where the code goes is
+ * decided here from the user record, never by the caller.
+ */
+async function ownRegisteredNumber(userId: string | null, destination: string): Promise<string> {
+  if (!userId) {
+    throw unauthorised('Sign in before requesting a code for a high-risk action.');
+  }
+  const owner = await queryOne<{ phone: string }>(pool, 'SELECT phone FROM users WHERE id = $1', [
+    userId,
+  ]);
+  if (!owner || owner.phone !== destination) {
+    throw forbidden(
+      'A verification code for this action can only be sent to the number this account is registered under.',
+      'If that number has changed, ask an administrator to update it before trying again.',
+    );
+  }
+  return owner.phone;
+}
+
+/**
+ * What a one-time code is for.
+ *
+ * CITIZEN_STATEMENT is the odd one out and deliberately so: every other
+ * purpose belongs to somebody who already has an account. This one proves that
+ * whoever is asking is holding the handset the taxpayer record names, which is
+ * the only proof available to a person with no login at all.
+ */
+export type OtpPurpose =
+  | 'LOGIN'
+  | 'REGISTRATION'
+  | 'STEP_UP'
+  | 'PASSWORD_RESET'
+  | 'REFEREE_VERIFY'
+  | 'CITIZEN_STATEMENT';
+
 export async function requestOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   userId?: string | null;
 }): Promise<{
   sent: boolean;
@@ -597,6 +693,10 @@ export async function requestOtp(params: {
   codeLength: number;
   developmentCode?: string;
 }> {
+  if (params.purpose === 'STEP_UP') {
+    await ownRegisteredNumber(params.userId ?? null, params.destination);
+  }
+
   const code = generateOtp();
   const expiresAt = new Date(Date.now() + config.auth.otpTtlSeconds * 1000);
 
@@ -619,6 +719,10 @@ export async function requestOtp(params: {
       recipientOverride: params.destination,
       channels: ['SMS'],
       variables: { code, purpose: params.purpose, minutes: String(config.auth.otpTtlSeconds / 60) },
+      // `otp_codes` above stores sha256(code) and not the code. Rendering it
+      // into the retained SMS body put it back, unhashed, in the same
+      // database — and nothing has ever deleted a notification.
+      secretVariables: ['code'],
     });
   });
 
@@ -632,12 +736,35 @@ export async function requestOtp(params: {
   };
 }
 
+type OtpOutcome =
+  | { kind: 'OK'; userId: string | null }
+  | { kind: 'MISSING' }
+  | { kind: 'EXPIRED' }
+  | { kind: 'EXHAUSTED' }
+  | { kind: 'WRONG'; remaining: number };
+
+/**
+ * Check a one-time code, and record the attempt whether or not it was right.
+ *
+ * The counting and the refusing are deliberately separated. Every refusal here
+ * is also a write — a wrong guess increments `attempts`, and the guess that
+ * exhausts the budget consumes the code — so a refusal thrown from inside the
+ * transaction takes its own evidence down with it on the rollback. That is
+ * what used to happen: `attempts` never left zero, `max_attempts` was
+ * unreachable, and the message under the entry box told every caller, on every
+ * wrong guess, that they had four attempts left. A six-digit code with no
+ * attempt limit is a six-digit code that can be guessed, and this one
+ * authorises reversals, payouts and rate changes.
+ *
+ * So the transaction decides and writes; the throwing happens after it has
+ * committed.
+ */
 export async function verifyOtp(params: {
   destination: string;
-  purpose: 'LOGIN' | 'REGISTRATION' | 'STEP_UP' | 'PASSWORD_RESET' | 'REFEREE_VERIFY';
+  purpose: OtpPurpose;
   code: string;
 }): Promise<{ userId: string | null }> {
-  return withTransaction(async (client) => {
+  const outcome = await withTransaction<OtpOutcome>(async (client) => {
     const otp = await queryOne<{
       id: string;
       user_id: string | null;
@@ -655,27 +782,50 @@ export async function verifyOtp(params: {
       [params.destination, params.purpose],
     );
 
-    if (!otp) {
-      throw badRequest('No verification code was requested for this number, or it has already been used.');
-    }
-    if (otp.expires_at.getTime() < Date.now()) {
-      throw badRequest('That verification code has expired. Request a new one.');
-    }
+    if (!otp) return { kind: 'MISSING' };
+    if (otp.expires_at.getTime() < Date.now()) return { kind: 'EXPIRED' };
+
     if (otp.attempts >= otp.max_attempts) {
       await client.query('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [otp.id]);
-      throw badRequest('Too many incorrect attempts. Request a new verification code.');
+      return { kind: 'EXHAUSTED' };
     }
 
-    if (sha256(params.code) !== otp.code_hash) {
+    /*
+     * Constant time, though the leak here is worth almost nothing.
+     *
+     * Both sides are hex digests, so a timing difference exposes bytes of the
+     * stored hash rather than of the code, and `max_attempts` below bounds
+     * guessing regardless. It is written this way because `safeEqual` names
+     * OTPs in its own comment as one of the three things it is for, and a
+     * helper that names a use it is not put to is the shape this repository
+     * keeps finding: the comment claiming more than the code does.
+     */
+    if (!safeEqual(sha256(params.code), otp.code_hash)) {
+      const remaining = otp.max_attempts - otp.attempts - 1;
       await client.query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1', [otp.id]);
-      throw badRequest(
-        `That code is not correct. You have ${otp.max_attempts - otp.attempts - 1} attempt(s) left.`,
-      );
+      return { kind: 'WRONG', remaining };
     }
 
     await client.query('UPDATE otp_codes SET consumed_at = now() WHERE id = $1', [otp.id]);
-    return { userId: otp.user_id };
+    return { kind: 'OK', userId: otp.user_id };
   });
+
+  switch (outcome.kind) {
+    case 'OK':
+      return { userId: outcome.userId };
+    case 'MISSING':
+      throw badRequest(
+        'No verification code was requested for this number, or it has already been used.',
+      );
+    case 'EXPIRED':
+      throw badRequest('That verification code has expired. Request a new one.');
+    case 'EXHAUSTED':
+      throw badRequest('Too many incorrect attempts. Request a new verification code.');
+    case 'WRONG':
+      throw outcome.remaining > 0
+        ? badRequest(`That code is not correct. You have ${outcome.remaining} attempt(s) left.`)
+        : badRequest('Too many incorrect attempts. Request a new verification code.');
+  }
 }
 
 /** Grant a step-up window after successful OTP verification (PRD §35). */
@@ -685,7 +835,8 @@ export async function grantStepUp(params: {
   destination: string;
   code: string;
 }): Promise<{ expiresAt: Date }> {
-  await verifyOtp({ destination: params.destination, purpose: 'STEP_UP', code: params.code });
+  const destination = await ownRegisteredNumber(params.userId, params.destination);
+  await verifyOtp({ destination, purpose: 'STEP_UP', code: params.code });
 
   const expiresAt = new Date(Date.now() + config.auth.stepUpTtlSeconds * 1000);
 
@@ -797,6 +948,17 @@ export async function changeUserRole(params: {
       reason: params.reason,
     });
 
+    // The dated posting record, for the same reason as the territory change
+    // below: an audit entry says what was written, a transfer says what
+    // somebody's posting was on a given date.
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'ROLE',
+      fromValue: { role: target.role },
+      toValue: { role: params.newRole },
+      reason: params.reason,
+    });
+
     await queueNotification(client, {
       event: 'USER_ROLE_CHANGED',
       userId: params.targetUserId,
@@ -814,6 +976,212 @@ export async function changeUserRole(params: {
         (sessionsEnded > 0
           ? `${sessionsEnded} open session${sessionsEnded === 1 ? '' : 's'} ended, so they must sign in again.`
           : 'They had no open sessions.'),
+    };
+  });
+}
+
+/**
+ * Close or reopen an officer's account.
+ *
+ * `users.status` has had SUSPENDED and CLOSED from the first migration, and
+ * `signIn` refuses both by name — but nothing in the platform could ever write
+ * either one, so an account, once created, worked for ever. When an officer
+ * left the service the only lever an administrator had was to change their
+ * role, and every role can still sign in and still read taxpayer records. A
+ * refusal that cannot be reached is not a control.
+ *
+ * SUSPENDED and CLOSED differ in whether anyone expects them back: suspension
+ * is a pause pending an answer, closing is the end of the appointment. Both
+ * end the account's open sessions in the same transaction, for the reason a
+ * role change does — the access token carries what it carries, and a
+ * revocation that happened separately would leave a window in which the closed
+ * account still worked.
+ *
+ * Nobody may close their own account: an administrator who locked themselves
+ * out would need another administrator to undo it, and the one who is being
+ * removed is not the one who should decide it.
+ */
+export async function setUserStatus(params: {
+  targetUserId: string;
+  status: 'ACTIVE' | 'SUSPENDED' | 'CLOSED';
+  actorId: string;
+  actorRole: string;
+  reason: string;
+}): Promise<{ previousStatus: string; status: string; sessionsEnded: number; message: string }> {
+  if (params.targetUserId === params.actorId) {
+    throw forbidden(
+      'You cannot change your own account status. Another administrator has to make this change.',
+    );
+  }
+
+  return withTransaction(async (client) => {
+    const target = await queryOne<{ id: string; full_name: string; role: string; status: string }>(
+      client,
+      'SELECT id, full_name, role, status FROM users WHERE id = $1 FOR UPDATE',
+      [params.targetUserId],
+    );
+    if (!target) throw notFound('That user');
+
+    if (target.role === 'agent') {
+      // The same boundary a role change respects: an agent's access follows
+      // the clearance pipeline, and suspending the user underneath it would
+      // leave the agent record saying ACTIVE while the person cannot sign in.
+      throw forbidden(
+        'An agent is suspended through the clearance pipeline, not by closing their user account.',
+      );
+    }
+
+    if (target.status === params.status) {
+      throw badRequest(`${target.full_name}'s account is already ${params.status.toLowerCase()}.`);
+    }
+
+    if (target.status === 'CLOSED' && params.status !== 'CLOSED') {
+      throw conflict(
+        'ACCOUNT_CLOSED',
+        `${target.full_name}'s account has been closed and cannot be reopened. ` +
+          'Create a new account if they return to the service.',
+      );
+    }
+
+    await client.query('UPDATE users SET status = $2 WHERE id = $1', [
+      params.targetUserId,
+      params.status,
+    ]);
+
+    const sessionsEnded =
+      params.status === 'ACTIVE'
+        ? 0
+        : await revokeAllSessions(
+            params.targetUserId,
+            `Account ${params.status.toLowerCase()}: ${params.reason}`,
+            client,
+          );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'user.status_changed',
+      entityType: 'user',
+      entityId: params.targetUserId,
+      oldValue: { status: target.status },
+      newValue: { status: params.status, sessionsEnded },
+      reason: params.reason,
+    });
+
+    return {
+      previousStatus: target.status,
+      status: params.status,
+      sessionsEnded,
+      message:
+        params.status === 'ACTIVE'
+          ? `${target.full_name} can sign in again.`
+          : `${target.full_name}'s account is ${params.status.toLowerCase()}. ` +
+            (sessionsEnded > 0
+              ? `${sessionsEnded} open session${sessionsEnded === 1 ? '' : 's'} ended immediately.`
+              : 'They had no open sessions.'),
+    };
+  });
+}
+
+/**
+ * Assign or remove the territories an officer may see reports for.
+ *
+ * Audited, and for the same reason a role change is: this decides how much of
+ * the state's revenue somebody can see. It is a smaller lever than a role but
+ * it is the same kind of lever, and an unaudited widening of it would be
+ * invisible afterwards.
+ *
+ * Assignments are replaced wholesale rather than added one at a time, so the
+ * audit record is the officer's complete coverage after the change rather than
+ * a diff a reader has to reassemble.
+ */
+export async function setOfficerTerritories(params: {
+  targetUserId: string;
+  territoryIds: string[];
+  actorId: string;
+  actorRole: string;
+  reason: string;
+}) {
+  return withTransaction(async (client) => {
+    const target = await queryOne<{ id: string; full_name: string; role: string }>(
+      client,
+      'SELECT id, full_name, role FROM users WHERE id = $1',
+      [params.targetUserId],
+    );
+    if (!target) throw notFound('That officer');
+    if (target.role === 'agent') {
+      throw badRequest(
+        'Territories cannot be assigned to a field agent here. An agent’s territory follows their clearance record.',
+      );
+    }
+
+    const before = await query<{ territory_id: string }>(
+      client,
+      'SELECT territory_id FROM user_territories WHERE user_id = $1',
+      [params.targetUserId],
+    );
+
+    if (params.territoryIds.length > 0) {
+      const found = await query<{ id: string }>(
+        client,
+        `SELECT id FROM territories WHERE id = ANY($1::uuid[]) AND status = 'ACTIVE'`,
+        [params.territoryIds],
+      );
+      if (found.length !== new Set(params.territoryIds).size) {
+        throw badRequest('One of those territories does not exist or is not active.');
+      }
+    }
+
+    await query(client, 'DELETE FROM user_territories WHERE user_id = $1', [params.targetUserId]);
+    for (const territoryId of new Set(params.territoryIds)) {
+      await query(
+        client,
+        `INSERT INTO user_territories (user_id, territory_id, assigned_by) VALUES ($1,$2,$3)`,
+        [params.targetUserId, territoryId, params.actorId],
+      );
+    }
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'user.territories.change',
+      entityType: 'users',
+      entityId: params.targetUserId,
+      oldValue: { territoryIds: before.map((row) => row.territory_id) },
+      newValue: { territoryIds: [...new Set(params.territoryIds)] },
+      reason: params.reason,
+    });
+
+    /*
+     * And a dated posting record, beside the audit entry.
+     *
+     * They answer different questions. The audit entry says what changed and
+     * when somebody wrote it; the transfer says who covered which territory
+     * from which date — which is what a revenue dispute asks, and what you
+     * cannot reconstruct by replaying a log and hoping none of it is missing.
+     */
+    await recordTransfer(client, { userId: params.actorId, role: params.actorRole }, {
+      userId: params.targetUserId,
+      kind: 'TERRITORY',
+      fromValue: { territoryIds: before.map((row) => row.territory_id) },
+      toValue: { territoryIds: [...new Set(params.territoryIds)] },
+      reason: params.reason,
+    });
+
+    /*
+     * The count as well as the sentence.
+     *
+     * The sentence was all this returned, so the officer portal had nothing to
+     * build its own from and rendered the English. `covers` is what the
+     * sentence was counting anyway.
+     */
+    const covers = new Set(params.territoryIds).size;
+    return {
+      covers,
+      message:
+        covers === 0
+          ? `${target.full_name} now covers no territory and will see no revenue figures.`
+          : `${target.full_name} now covers ${covers} territory(ies).`,
     };
   });
 }

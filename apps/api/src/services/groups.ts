@@ -26,7 +26,7 @@ import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { nextGroupCode } from '../lib/references';
-import { generateVerificationCode, sha256 } from '../lib/crypto';
+import { generateVerificationCode, maskPhone, sha256 } from '../lib/crypto';
 import { recordAudit } from './audit';
 import { groupAttestationUrl } from '../lib/public-urls';
 
@@ -142,6 +142,67 @@ export async function reviewGroup(params: {
     });
 
     return { status };
+  });
+}
+
+/**
+ * Give a group a part to play in enumeration, or take it away.
+ *
+ * A registered association is not automatically an attesting body. Standing
+ * over what its members are assessed on is something PSIRS confers, on the
+ * record, with a reason — and the reason is the whole point: a leader who can
+ * contradict an agent's count has real power over a member's bill, and a group
+ * that acquired that power because somebody ticked a box on a registration
+ * form would be a governance failure waiting to be discovered.
+ *
+ * Withdrawing it back to NONE is deliberately allowed. A union that starts
+ * inflating its members' figures should stop being consulted the same day, and
+ * that cannot wait on a schema change.
+ */
+export async function setGroupTaxRole(params: {
+  groupId: string;
+  taxRole: 'ENUMERATION' | 'ATTESTATION' | 'NONE';
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ taxRole: string }> {
+  return withTransaction(async (client) => {
+    const group = await queryOne<{ id: string; status: string; tax_role: string }>(
+      client,
+      'SELECT id, status, tax_role FROM taxpayer_groups WHERE id = $1 FOR UPDATE',
+      [params.groupId],
+    );
+    if (!group) throw notFound('That group');
+    /*
+     * Only a group PSIRS has approved. A pending registration is a claim that
+     * an association exists; giving it standing before anybody has checked
+     * would let a group confer authority on itself by registering.
+     */
+    if (group.status !== 'ACTIVE' && params.taxRole !== 'NONE') {
+      throw conflict(
+        'GROUP_NOT_ACTIVE',
+        `This group is ${group.status.toLowerCase()} and cannot be given a part in enumeration ` +
+          'until it has been approved.',
+      );
+    }
+
+    await client.query('UPDATE taxpayer_groups SET tax_role = $2 WHERE id = $1', [
+      params.groupId,
+      params.taxRole,
+    ]);
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'group.tax_role_set',
+      entityType: 'taxpayer_group',
+      entityId: params.groupId,
+      oldValue: { taxRole: group.tax_role },
+      newValue: { taxRole: params.taxRole },
+      reason: params.reason,
+    });
+
+    return { taxRole: params.taxRole };
   });
 }
 
@@ -304,6 +365,22 @@ export async function openAttestation(db: Db, token: string) {
     });
   }
   if (invitation.expires_at.getTime() < Date.now()) {
+    /*
+     * Marked, not merely refused.
+     *
+     * The refusal reached the leader and left nothing behind, so the row went
+     * on saying the link had been sent and was awaiting an answer. An officer
+     * chasing an attestation could not tell a leader who is ignoring the
+     * message from one whose link died before they opened it, and those are
+     * different things to do about. The referee invitations have always marked
+     * their own expiry; this is the same rule in the other place it applies.
+     */
+    await query(
+      db,
+      `UPDATE group_attestation_invitations SET status = 'EXPIRED'
+        WHERE id = $1 AND status <> 'RESPONDED'`,
+      [invitation.id],
+    );
     throw new AppError({
       statusCode: 410,
       code: 'ATTESTATION_EXPIRED',
@@ -313,6 +390,28 @@ export async function openAttestation(db: Db, token: string) {
     });
   }
 
+  /*
+   * The roster, read as though a stranger asked for it — because one can.
+   *
+   * This route is unauthenticated by design and the token arrives by SMS on a
+   * village chairman's handset, where (in the words of the test that narrowed
+   * the write side) "a forwarded message is a forwarded capability". The
+   * invitation is deliberately reusable and never becomes spent, so the link
+   * stays live for its whole fourteen days.
+   *
+   * It returned every member's telephone number in full. That is the
+   * cooperative's phone book, handed to whoever kept the message — and the
+   * standard this platform applies elsewhere is explicit: `citizen.ts` strips
+   * the TIN, the compliance score, the obligation names and the officer's note
+   * from its public answer on the reasoning that "every field here is read as
+   * though a stranger asked for it", and the agent application masks the
+   * number a code was sent to as "enough to recognise, not to publish".
+   *
+   * The number is masked and not dropped, because the screen's whole question
+   * is "is this person really one of yours" and two members can share a name.
+   * Three digits answer that for a leader who knows their own members; they
+   * answer nothing at all for anyone else.
+   */
   const members = await query<{
     id: string;
     status: string;
@@ -336,7 +435,7 @@ export async function openAttestation(db: Db, token: string) {
     groupCode: invitation.group_code,
     leaderName: invitation.leader_name,
     lga: invitation.lga_name,
-    members,
+    members: members.map((member) => ({ ...member, phone: maskPhone(member.phone) })),
   };
 }
 
@@ -376,6 +475,16 @@ export async function submitAttestation(params: {
       });
     }
     if (invitation.expires_at.getTime() < Date.now()) {
+      /*
+       * Not marked here, unlike the read above, and deliberately.
+       *
+       * This runs inside the transaction that holds `FOR UPDATE OF i`, and the
+       * refusal below rolls that transaction back — so a mark written here
+       * would be undone on its way out, and writing it on a second connection
+       * would wait for a lock this transaction is still holding. Opening the
+       * link is what marks it, and a leader who reaches this branch reached it
+       * through a page that had already been opened.
+       */
       throw new AppError({
         statusCode: 410,
         code: 'ATTESTATION_EXPIRED',
@@ -405,13 +514,33 @@ export async function submitAttestation(params: {
       [invitation.group_id, params.confirmedMemberIds, invitation.leader_name],
     );
 
+    /*
+     * Outstanding questions only, exactly as the confirm above.
+     *
+     * `ATTESTED` used to be on this line, which meant a confirmation could be
+     * taken back through the link at any point in its fourteen days by anybody
+     * holding it. The invitation is deliberately reusable — a cooperative
+     * grows and the leader answers about whoever is new — so it never becomes
+     * spent, and these arrive by SMS to a village chairman's handset where a
+     * forwarded message is a forwarded capability. `openAttestation` hands out
+     * every member's id, so no guessing was needed either.
+     *
+     * `allocations.ts` awards only to a member whose status is ATTESTED, so
+     * flipping somebody back removed their claim on fertiliser and farm
+     * inputs — and the audit entry named the leader as the person who did it,
+     * because the token is all this endpoint has to go on.
+     *
+     * A leader who confirmed somebody in error goes through PSIRS, as a
+     * referee withdrawing a response does. A recorded decision is not undone
+     * through a public endpoint by whoever kept the message.
+     */
     const rejected = await query<{ id: string }>(
       client,
       `UPDATE taxpayer_group_members
           SET status = 'REJECTED', attested_at = now(), attested_by_name = $3,
               rejection_reason = $4
         WHERE group_id = $1 AND id = ANY($2::uuid[])
-          AND status IN ('PENDING_ATTESTATION', 'ATTESTED')
+          AND status = 'PENDING_ATTESTATION'
         RETURNING id`,
       [
         invitation.group_id,
@@ -457,6 +586,29 @@ export async function attestedGroupsFor(db: Db, taxpayerId: string) {
   );
 }
 
+/**
+ * Who recorded this group, or null if there is no such group.
+ *
+ * Used by the routes that act on a single group so an agent can be narrowed to
+ * their own before anything is written, rather than after.
+ */
+export async function groupVisibility(
+  db: Db,
+  groupId: string,
+  userId: string | null,
+): Promise<'MISSING' | 'VISIBLE' | 'ANOTHER_AGENTS'> {
+  const row = await queryOne<{ registered_by: string | null; by_an_agent: boolean }>(
+    db,
+    `SELECT g.registered_by,
+            EXISTS (SELECT 1 FROM agents a WHERE a.user_id = g.registered_by) AS by_an_agent
+       FROM taxpayer_groups g WHERE g.id = $1`,
+    [groupId],
+  );
+  if (!row) return 'MISSING';
+  if (!row.by_an_agent) return 'VISIBLE';
+  return row.registered_by === userId ? 'VISIBLE' : 'ANOTHER_AGENTS';
+}
+
 export async function groupDetail(db: Db, groupId: string) {
   const group = await queryOne(
     db,
@@ -475,13 +627,66 @@ export async function groupDetail(db: Db, groupId: string) {
   return group;
 }
 
+/**
+ * Who is in a group, and who is no longer.
+ *
+ * Departed members stay on the list rather than vanishing from it. A group
+ * whose members silently disappear cannot be audited: an allocation awarded
+ * last season to somebody who is not on today's list reads as an award to a
+ * non-member, when in fact they were one at the time.
+ */
+export async function listMembers(db: Db, groupId: string) {
+  return query(
+    db,
+    `SELECT m.id, m.status, m.member_reference, m.joined_on, m.attested_at,
+            m.rejection_reason, m.left_at, m.left_reason,
+            tp.id AS taxpayer_id, tp.tin,
+            COALESCE(NULLIF(TRIM(CONCAT_WS(' ', tp.first_name, tp.last_name)), ''),
+                     tp.business_name) AS member_name
+       FROM taxpayer_group_members m
+       JOIN taxpayers tp ON tp.id = m.taxpayer_id
+      WHERE m.group_id = $1
+      ORDER BY CASE m.status
+                 WHEN 'PENDING_ATTESTATION' THEN 0
+                 WHEN 'ATTESTED' THEN 1
+                 WHEN 'REJECTED' THEN 2
+                 ELSE 3
+               END,
+               member_name`,
+    [groupId],
+  );
+}
+
 export async function listGroups(
   db: Db,
-  options: { status?: string; lgaId?: string; sector?: string; limit?: number } = {},
+  options: {
+    status?: string;
+    lgaId?: string;
+    sector?: string;
+    limit?: number;
+    /**
+     * Narrow to what one field user may see.
+     *
+     * Set for a caller holding `group:read:own` rather than `group:read:all` —
+     * an agent, who registers cooperatives in the field and has no business
+     * reading the State's whole register of them.
+     *
+     * "Theirs" is not simply `registered_by = them`. An officer may record a
+     * large cooperative centrally, from a ministry register, and hand it to an
+     * agent to enrol the members — a handoff `group-device-binding.test.ts`
+     * already documents, and which strict ownership breaks: the agent cannot
+     * even see the group they were told to work.
+     *
+     * So the rule is: mine, or nobody's in particular. What an agent may not
+     * see is *another agent's*, which is the disclosure that matters — every
+     * row carries the group leader's name and phone number.
+     */
+    registeredBy?: string | null;
+  } = {},
 ) {
   return query(
     db,
-    `SELECT g.id, g.code, g.name, g.group_type, g.economic_sector, g.status,
+    `SELECT g.id, g.code, g.name, g.group_type, g.economic_sector, g.status, g.tax_role,
             l.name AS lga_name, g.leader_name, g.leader_phone,
             (SELECT count(*) FROM taxpayer_group_members m
               WHERE m.group_id = g.id AND m.status = 'ATTESTED') AS attested_members
@@ -490,8 +695,117 @@ export async function listGroups(
       WHERE ($1::text IS NULL OR g.status = $1)
         AND ($2::uuid IS NULL OR g.lga_id = $2)
         AND ($3::text IS NULL OR g.economic_sector = $3)
+        AND (
+          $5::uuid IS NULL
+          OR g.registered_by = $5
+          OR NOT EXISTS (SELECT 1 FROM agents a WHERE a.user_id = g.registered_by)
+        )
       ORDER BY g.created_at DESC
       LIMIT $4`,
-    [options.status ?? null, options.lgaId ?? null, options.sector ?? null, options.limit ?? 100],
+    [
+      options.status ?? null,
+      options.lgaId ?? null,
+      options.sector ?? null,
+      options.limit ?? 100,
+      options.registeredBy ?? null,
+    ],
   );
+}
+
+/**
+ * Record that a member has left the group (PRD §33).
+ *
+ * Membership decides who gets things. `allocations.ts` awards a subsidised
+ * benefit only to a taxpayer whose membership is ATTESTED, and `incentives.ts`
+ * gates a programme requiring group membership on the same status. Both were
+ * right; what neither could survive was that membership never ended. A trader
+ * who left the market association, a farmer who moved to another LGA, a member
+ * expelled by the cooperative — all of them stayed ATTESTED for as long as the
+ * row existed, and kept a claim on fertiliser meant for the people still in
+ * the group. `LEFT` was in the constraint from the first migration and nothing
+ * has ever written it.
+ *
+ * The row is updated, never deleted, and this matters more than it looks: the
+ * person *was* a member when the allocations they already collected were
+ * awarded, and an award whose justification has been deleted is an award that
+ * looks fraudulent to the next auditor who reads it.
+ *
+ * An officer records this, not the group's leader. The attestation link is a
+ * forwardable SMS — the same reasoning that keeps a leader from un-confirming
+ * a member through it keeps them from removing one.
+ */
+export async function recordMemberDeparture(params: {
+  groupId: string;
+  membershipId: string;
+  reason: string;
+  actorId: string;
+  actorRole: string;
+}): Promise<{ memberName: string; groupName: string; from: string }> {
+  return withTransaction(async (client) => {
+    const member = await queryOne<{
+      status: string;
+      group_name: string;
+      member_name: string;
+    }>(
+      client,
+      `SELECT m.status, g.name AS group_name,
+              COALESCE(NULLIF(TRIM(CONCAT_WS(' ', tp.first_name, tp.last_name)), ''),
+                       tp.business_name, 'This member') AS member_name
+         FROM taxpayer_group_members m
+         JOIN taxpayer_groups g ON g.id = m.group_id
+         JOIN taxpayers tp ON tp.id = m.taxpayer_id
+        WHERE m.id = $1 AND m.group_id = $2
+        FOR UPDATE OF m`,
+      [params.membershipId, params.groupId],
+    );
+    // Scoped to the group in the query rather than checked afterwards, so a
+    // membership id belonging to another group reads as absent rather than as
+    // a membership this officer may act on.
+    if (!member) throw notFound('That membership');
+
+    if (member.status === 'LEFT') {
+      throw conflict(
+        'MEMBER_ALREADY_LEFT',
+        `${member.member_name} is already recorded as having left ${member.group_name}.`,
+      );
+    }
+
+    /*
+     * A rejected claim is not a departure. The leader answered that this
+     * person was never a member of the group, and overwriting that with LEFT
+     * would turn a denial into a membership that ended — which is the version
+     * the person themselves would prefer, and is not what was attested.
+     */
+    if (member.status === 'REJECTED') {
+      throw conflict(
+        'MEMBERSHIP_REJECTED',
+        `${member.group_name}'s leader did not confirm ${member.member_name} as a member, so ` +
+          'there is no membership to end.',
+      );
+    }
+
+    await client.query(
+      `UPDATE taxpayer_group_members
+          SET status = 'LEFT', left_at = now(), left_reason = $2,
+              recorded_left_by = $3, updated_at = now()
+        WHERE id = $1`,
+      [params.membershipId, params.reason, params.actorId],
+    );
+
+    await recordAudit(client, {
+      actorId: params.actorId,
+      actorRole: params.actorRole,
+      action: 'group.member_left',
+      entityType: 'group_member',
+      entityId: params.membershipId,
+      oldValue: { status: member.status },
+      newValue: { status: 'LEFT', reason: params.reason, groupId: params.groupId },
+    });
+
+    return {
+      memberName: member.member_name,
+      groupName: member.group_name,
+      from: member.status,
+    };
+  });
 }

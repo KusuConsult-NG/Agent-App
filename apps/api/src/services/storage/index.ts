@@ -45,6 +45,25 @@ function selectDriver(): StorageDriver {
 export const storage: StorageDriver = selectDriver();
 
 /**
+ * Where this deployment's objects live inside the bucket.
+ *
+ * Keys are built from a document number, and document numbers come from a
+ * sequence in *this* database — so two deployments pointed at one bucket
+ * (a staging environment restored from a production backup, a copied `.env`)
+ * issue the same numbers and write over each other's files. The row keeps its
+ * checksum, so public verification would start reporting that a genuine
+ * receipt had been tampered with.
+ *
+ * Applied when a key is built rather than inside the driver, so
+ * `storage_reference` holds the whole key and anything stored before this
+ * existed is still found by the reference it was written with.
+ */
+export function storageKey(...segments: string[]): string {
+  const path = segments.join('/').replace(/^\/+/, '');
+  return config.storage.keyPrefix ? `${config.storage.keyPrefix}/${path}` : path;
+}
+
+/**
  * Signed, expiring document URL.
  *
  * The signature covers the document id and the expiry, so a link cannot be

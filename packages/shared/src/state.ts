@@ -35,9 +35,11 @@ export type TransactionState = (typeof TRANSACTION_STATES)[number];
  * Two properties are load-bearing and enforced here rather than in prose:
  *   1. Nothing reaches PAYMENT_SUCCESSFUL except from a payment-in-flight
  *      state, and only the gateway verification path may drive it (PRD §95).
- *   2. RECEIPT_GENERATED is reachable only from PAYMENT_VERIFIED, so a
- *      failed or unverified payment can never produce a valid receipt
- *      (PRD §84, §88.26).
+ *   2. RECEIPT_GENERATED is reachable only from RECONCILIATION_PENDING, so a
+ *      failed payment, an unverified one, or one the gateway confirmed and
+ *      never handed over can never produce a valid receipt (PRD §84, §88.26).
+ *      It used to be reachable from PAYMENT_VERIFIED, which asserted the State
+ *      had been paid on the gateway's word alone.
  */
 export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly TransactionState[]> = {
   INITIATED: ['ASSESSMENT_CREATED', 'CANCELLED', 'EXPIRED'],
@@ -46,9 +48,19 @@ export const TRANSACTION_TRANSITIONS: Record<TransactionState, readonly Transact
   PAYMENT_INITIATED: ['PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'FAILED', 'CANCELLED', 'EXPIRED'],
   PAYMENT_PENDING: ['PAYMENT_SUCCESSFUL', 'FAILED', 'EXPIRED', 'UNDER_REVIEW'],
   PAYMENT_SUCCESSFUL: ['PAYMENT_VERIFIED', 'UNDER_REVIEW', 'FAILED'],
-  PAYMENT_VERIFIED: ['RECEIPT_GENERATED', 'UNDER_REVIEW'],
-  RECEIPT_GENERATED: ['RECONCILIATION_PENDING', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
-  RECONCILIATION_PENDING: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
+  /*
+   * A receipt is no longer reachable from PAYMENT_VERIFIED.
+   *
+   * The gateway confirming a payment means the gateway holds the money. The
+   * receipt says the State received it, which is a different fact that arrives
+   * a day or two later with the bank credit — so the only way into
+   * RECEIPT_GENERATED is now through RECONCILIATION_PENDING, and the only thing
+   * that makes that move is a reconciled settlement. What the taxpayer holds in
+   * between is an acknowledgement of payment, which says exactly that.
+   */
+  PAYMENT_VERIFIED: ['RECONCILIATION_PENDING', 'UNDER_REVIEW'],
+  RECONCILIATION_PENDING: ['RECEIPT_GENERATED', 'SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
+  RECEIPT_GENERATED: ['SETTLED', 'UNDER_REVIEW', 'REVERSED', 'REFUNDED'],
   SETTLED: ['REVERSED', 'REFUNDED', 'UNDER_REVIEW'],
   UNDER_REVIEW: ['SETTLED', 'RECONCILIATION_PENDING', 'REVERSED', 'REFUNDED', 'RECEIPT_GENERATED'],
   FAILED: ['CANCELLED'],
@@ -118,7 +130,15 @@ export const COMMISSION_TRANSITIONS: Record<CommissionState, readonly Commission
   // usual eligibility test again. Releasing straight to ELIGIBLE would declare
   // it payable without checking that its transaction ever settled.
   ON_HOLD: ['PENDING', 'ELIGIBLE', 'REVERSED', 'CANCELLED'],
-  APPROVED: ['PAID', 'ON_HOLD', 'REVERSED'],
+  // ELIGIBLE is the destination when a requested payout is refused, and only
+  // then. It is not the same move the ON_HOLD note above warns against: to
+  // reach APPROVED this commission was ELIGIBLE moments earlier, so the
+  // settlement and hold tests have already been passed and nothing new is
+  // being declared payable. Without it a refused payout stranded the money —
+  // requestPayout only ever selects ELIGIBLE, so an APPROVED commission
+  // belonging to a payout that will never happen could never be requested
+  // again, and the agent was told they had no commission.
+  APPROVED: ['PAID', 'ON_HOLD', 'REVERSED', 'ELIGIBLE'],
   PAID: ['REVERSED'],
   REVERSED: [],
   CANCELLED: [],

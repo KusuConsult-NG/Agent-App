@@ -36,6 +36,7 @@ import {
   post,
   resetDatabase,
   revenueItemByCode,
+  settleTransaction,
   startTestServer,
   stopTestServer,
 } from './helpers';
@@ -46,6 +47,7 @@ import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
 
 let officerToken = '';
+let secondOfficerToken = '';
 let agentId = '';
 let agent: { token: string; device: string };
 let collected = 0;
@@ -68,6 +70,8 @@ beforeEach(async () => {
     fullName: 'Fraud Officer',
   });
   officerToken = (await loginAs('+2348030000092')).accessToken;
+  await createGovernmentUser({ role: 'admin', phone: '+2348030000093', fullName: 'Second Fraud Officer' });
+  secondOfficerToken = (await loginAs('+2348030000093')).accessToken;
 
   const demo = await seedDemoAgent();
   agentId = demo!.agentId;
@@ -81,7 +85,7 @@ beforeEach(async () => {
  * way. Building the commission by hand would test a row rather than the path
  * that produces it.
  */
-async function collect(): Promise<string> {
+async function collect(): Promise<{ commissionId: string; transactionId: string }> {
   const suffix = String(++collected);
   const auth = { token: agent.token, deviceId: agent.device };
   const taxpayer = await post(
@@ -124,7 +128,7 @@ async function collect(): Promise<string> {
     [assessment.body.transactionId],
   );
   assert.ok(commission, 'a collection should accrue a commission');
-  return commission!.id;
+  return { commissionId: commission!.id, transactionId: assessment.body.transactionId as string };
 }
 
 /**
@@ -134,13 +138,19 @@ async function collect(): Promise<string> {
  * legitimately needs a settled transaction and an elapsed hold period, and
  * this test is about what a fraud decision does to money, not about how money
  * becomes eligible.
+ *
+ * Half of that setup is no longer forcible. Migration 053 holds the rule that
+ * a payable commission stands on settled revenue, so the transaction is
+ * settled through the route the State actually settles through; only the hold
+ * period, which is a clock and not a fact about money, is still skipped.
  */
 async function commissionWith(status: string): Promise<string> {
-  const id = await collect();
+  const { commissionId, transactionId } = await collect();
   if (status !== 'PENDING') {
-    await pool.query('UPDATE commissions SET status = $2 WHERE id = $1', [id, status]);
+    await settleTransaction(transactionId);
+    await pool.query('UPDATE commissions SET status = $2 WHERE id = $1', [commissionId, status]);
   }
-  return id;
+  return commissionId;
 }
 
 async function flagFor(agentIdValue: string) {
@@ -153,11 +163,17 @@ async function flagFor(agentIdValue: string) {
   return row!.id;
 }
 
+/**
+ * Dismissing a confirmation takes a second officer, because releasing the
+ * money a confirmation froze is not a decision one person makes alone. That
+ * rule is exercised where it lives; here the second officer is fixture, so
+ * these tests stay about the money and not about who signed for it.
+ */
 const review = (flagId: string, decision: string) =>
   post(
     `/government/fraud/flags/${flagId}/review`,
     { decision, note: 'Investigated the flagged pattern and reached a decision.' },
-    { token: officerToken },
+    { token: decision === 'DISMISSED' ? secondOfficerToken : officerToken },
   );
 
 const statuses = async () =>

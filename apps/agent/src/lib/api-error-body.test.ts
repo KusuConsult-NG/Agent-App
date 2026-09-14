@@ -69,7 +69,23 @@ describe('a rejection keeps the body PSIRS sent', () => {
     );
 
     const error = caught as ApiRequestError;
-    expect(error.error.message).toMatch(/request failed \(500\)/);
+    /*
+     * The status survives, and the sentence does not.
+     *
+     * This used to read `The request failed (500). Try again, or contact
+     * support.` — a sentence, in English, in an application that offers
+     * Hausa, reached by every response the client cannot parse. It is now
+     * `UNKNOWN`, which `TRANSLATED_ERRORS` maps to `errRequestFailed`, so
+     * `ErrorAlert` renders the dictionary and ignores this line entirely.
+     *
+     * What is asserted is what still has to be true: the status reaches the
+     * error, because that is the only thing here support can act on, and the
+     * code is the one the dictionary is keyed on.
+     */
+    expect(error.error.code).toBe('UNKNOWN');
+    expect(error.error.message).toMatch(/500/);
+    // Lower case, this application's mark for a line nobody reads.
+    expect(error.error.message).toMatch(/^[a-z]/);
     expect(error.body).toBeNull();
   });
 

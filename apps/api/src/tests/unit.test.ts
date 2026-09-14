@@ -13,6 +13,10 @@ import {
   deriveAccessStage,
   deriveApplicationState,
   activationBlockers,
+  AGENT_BLOCKERS,
+  BLOCKER_TEXT,
+  blockerSentence,
+  getTranslation,
   formatNaira,
   IllegalTransitionError,
   koboToNaira,
@@ -80,6 +84,8 @@ describe('rate engine', () => {
     id: 'rate-1',
     revenue_item_id: 'item-1',
     version: 1,
+    // Statewide: these fixtures exercise the arithmetic, not rate resolution.
+    lga_id: null,
     rate_type: 'FIXED',
     fixed_amount_kobo: null,
     rate_basis_points: null,
@@ -186,8 +192,11 @@ describe('transaction state machine', () => {
       'PAYMENT_PENDING',
       'PAYMENT_SUCCESSFUL',
       'PAYMENT_VERIFIED',
-      'RECEIPT_GENERATED',
+      // Reconciliation before the receipt, not after it. The gateway
+      // confirming means the gateway holds the money; the receipt says the
+      // State received it, and only a reconciled settlement makes that true.
       'RECONCILIATION_PENDING',
+      'RECEIPT_GENERATED',
       'SETTLED',
     ] as const;
 
@@ -196,7 +205,7 @@ describe('transaction state machine', () => {
     }
   });
 
-  it('refuses to reach a receipt without verification', () => {
+  it('refuses to reach a receipt without the money having arrived', () => {
     // The single most important rule in the platform, expressed as a graph.
     assert.throws(
       () => assertTransactionTransition('PAYMENT_PENDING', 'RECEIPT_GENERATED'),
@@ -210,7 +219,19 @@ describe('transaction state machine', () => {
       () => assertTransactionTransition('FAILED', 'RECEIPT_GENERATED'),
       IllegalTransitionError,
     );
-    assert.ok(canTransactionTransition('PAYMENT_VERIFIED', 'RECEIPT_GENERATED'));
+
+    /*
+     * And not from PAYMENT_VERIFIED either, which is the rule tightening.
+     * The gateway confirming a payment means the gateway holds the money; a
+     * receipt says the Plateau State Government received it. Only a reconciled
+     * settlement makes the second true, so RECONCILIATION_PENDING is now the
+     * only door into RECEIPT_GENERATED.
+     */
+    assert.throws(
+      () => assertTransactionTransition('PAYMENT_VERIFIED', 'RECEIPT_GENERATED'),
+      IllegalTransitionError,
+    );
+    assert.ok(canTransactionTransition('RECONCILIATION_PENDING', 'RECEIPT_GENERATED'));
   });
 
   it('makes reversal and cancellation terminal', () => {
@@ -339,14 +360,34 @@ describe('agent lifecycle derivation', () => {
 
   it('lists every outstanding requirement before activation', () => {
     const blockers = activationBlockers(axes().flags);
-    assert.equal(blockers.length, 7);
-    assert.ok(blockers.some((b) => b.includes('KYC')));
-    assert.ok(blockers.some((b) => b.includes('referee')));
-    assert.ok(blockers.some((b) => b.includes('training')));
-    assert.ok(blockers.some((b) => b.includes('bank account')));
-    assert.ok(blockers.some((b) => b.includes('agreement')));
-    assert.ok(blockers.some((b) => b.includes('device')));
-    assert.ok(blockers.some((b) => b.includes('Government review')));
+    assert.deepEqual(
+      [...blockers].sort(),
+      [...AGENT_BLOCKERS].sort(),
+      'nothing is cleared, so every gate should be named',
+    );
+  });
+
+  /*
+   * A gate nobody can read is a gate that stops somebody without telling them.
+   *
+   * The blockers used to be English sentences and the applicant's screen
+   * printed them; they are codes now precisely so they can be said in Hausa.
+   * That only holds while every code has a string in both languages, and the
+   * failure if one does not is `undefined` on the screen of an applicant
+   * wondering why they cannot start work.
+   */
+  it('has both languages for every gate an applicant can be held at', () => {
+    for (const code of AGENT_BLOCKERS) {
+      const key = BLOCKER_TEXT[code];
+      assert.ok(key, `${code} has no dictionary key`);
+      for (const lang of ['en', 'ha'] as const) {
+        const text = getTranslation(lang)[key];
+        assert.equal(typeof text, 'string', `${code} has no ${lang} string`);
+        assert.ok(text.trim().length > 0, `${code} is empty in ${lang}`);
+      }
+    }
+    // And the English kept for the audit record is not the applicant's copy.
+    assert.equal(blockerSentence('KYC'), 'KYC clearance is not complete');
   });
 
   it('grants progressive access in the Addendum §26 stages', () => {

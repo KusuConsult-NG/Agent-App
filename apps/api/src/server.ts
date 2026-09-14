@@ -10,58 +10,28 @@
 import { createApp } from './app';
 import { config, envFileLoaded } from './config';
 import { describeDatabase } from './env';
-import { closePool, pool, withJobLock, withTransaction } from './db/pool';
+import { closePool, pool, withTransaction } from './db/pool';
 import { runMigrations } from './db/migrate';
+import * as rbacStore from './services/rbac-store';
 import { promoteEligibleCommissions } from './services/commission';
 import { dispatchQueued } from './services/notifications';
 import { runFraudSweep } from './services/fraud';
+import { raiseSystemAlerts } from './services/officer-inbox';
+import { raiseIntegrationAlerts } from './services/integration-health';
 import { retryOutstandingTins } from './services/taxpayers';
 import { retryAuthorityNotifications } from './services/vehicles';
 import { retryOutstandingRefunds, runScheduledReconciliation } from './services/reconciliation';
 import { sendDueReminders } from './services/reminders';
+import { expireLapsedInvoices } from './services/revenue';
+import { rebuildVehicleConnections } from './services/connections';
+import { BACKGROUND_JOBS, runJob, type JobName } from './services/jobs';
+import { expireSettledKeys } from './middleware/idempotency';
+import { expireOldEvents } from './services/usage';
+import { sweepExpiredBuckets } from './middleware/rate-limit-store';
 import { log } from './lib/logger';
 import { metrics } from './lib/metrics';
 import { reportError } from './services/error-reporting';
 
-/**
- * How often each background job runs.
- *
- * The last two exist because the integration adapters can now say a service
- * could not be reached. That honesty is only worth having if something acts on
- * it later — otherwise "we will ask again" is a promise nothing keeps, and a
- * taxpayer registered during a TIN outage waits for a number forever.
- *
- * Both are also exposed as endpoints for an officer to trigger on demand; the
- * schedule is what makes them happen without anyone remembering.
- */
-const WORKER_INTERVALS = {
-  commissionPromotion: 5 * 60_000,
-  notificationDispatch: 30_000,
-  fraudSweep: 15 * 60_000,
-  /** Chase TINs the PSIRS TIN service has not issued yet. */
-  tinCatchUp: 30 * 60_000,
-  /** Re-send renewals the vehicle authority never acknowledged. */
-  authorityCatchUp: 30 * 60_000,
-  /** Ask the gateway again for refunds a taxpayer is still owed. */
-  refundRetry: 10 * 60_000,
-  /**
-   * Three-way reconciliation (PRD §46).
-   *
-   * Four times a day over a trailing window, rather than nightly, because a
-   * settlement reference can land at any hour and the sooner an exception is
-   * visible the cheaper it is to chase. The sweep skips itself if the previous
-   * one is still running.
-   */
-  reconciliationSweep: 6 * 60 * 60_000,
-  /**
-   * Tax due-date reminder sweep.
-   *
-   * Runs every 6 hours — the same cadence as reconciliation — so reminders
-   * land within hours of entering a window, not the next day. Each invoice
-   * window is flagged after the first send, so re-running never duplicates.
-   */
-  reminderSweep: 6 * 60 * 60_000,
-};
 
 /**
  * The identity these jobs act as.
@@ -84,14 +54,22 @@ const SYSTEM_ACTOR = { actorId: null as string | null, actorRole: 'system' };
  * If another instance holds the lock, this tick is skipped quietly.
  */
 function schedule(
-  name: string,
-  intervalMs: number,
+  name: JobName,
   task: () => Promise<string | null | void>,
 ): NodeJS.Timeout {
+  /*
+   * The interval comes from the registry rather than from a second table here.
+   * The health board decides whether a job is overdue by comparing its last
+   * start against its declared interval, so a schedule that could disagree with
+   * that declaration would make the board quietly wrong about the one thing it
+   * is for — and the disagreement would show up as a job reported healthy while
+   * it is late, which is the failure that looks like nothing.
+   */
+  const { intervalMs } = BACKGROUND_JOBS[name];
   const run = async () => {
     const startedAt = process.hrtime.bigint();
     try {
-      const outcome = await withJobLock(name, task);
+      const outcome = await runJob(name, task);
       if (!outcome.ran) {
         log.debug('job skipped; another instance holds it', { component: 'worker', job: name });
         return;
@@ -147,6 +125,15 @@ async function main() {
     log.info('skipping migrations on boot; the deploy pipeline owns them', { component: 'boot' });
   }
 
+  /*
+   * Read the role-to-permission map before taking any traffic.
+   *
+   * So the first request of the day is not the one that pays for the query, and
+   * so a database that cannot answer it is discovered on boot rather than on
+   * somebody's first sign-in.
+   */
+  await rbacStore.warm();
+
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info('listening', {
@@ -159,29 +146,48 @@ async function main() {
   });
 
   const timers = [
-    schedule('commission-promotion', WORKER_INTERVALS.commissionPromotion, async () => {
+    schedule('commission-promotion', async () => {
       const promoted = await promoteEligibleCommissions();
       return promoted > 0 ? `promoted ${promoted} commission(s) to eligible` : null;
     }),
 
-    schedule('notification-dispatch', WORKER_INTERVALS.notificationDispatch, async () => {
+    schedule('notification-dispatch', async () => {
       const sent = await dispatchQueued(pool);
       return sent > 0 ? `delivered ${sent} notification(s)` : null;
     }),
 
-    schedule('fraud-sweep', WORKER_INTERVALS.fraudSweep, async () => {
-      await withTransaction((client) => runFraudSweep(client));
-      return null;
+    /*
+     * The one sweep that could never say anything.
+     *
+     * Every other job here answers with a line when it did something — "3
+     * invoice(s) passed their deadline", "12 matched, 0 exception(s)" — and
+     * that line is logged and stored as the run's detail. This one returned
+     * `null` unconditionally, so the sweep that raises fraud flags was the
+     * single job whose record of a run is indistinguishable from a run that
+     * found nothing. `runFraudSweep` has always returned the count.
+     */
+    schedule('fraud-sweep', async () => {
+      const { flagsRaised } = await withTransaction((client) => runFraudSweep(client));
+      return flagsRaised > 0 ? `${flagsRaised} fraud flag(s) raised` : null;
     }),
 
-    schedule('tin-catch-up', WORKER_INTERVALS.tinCatchUp, async () => {
+    schedule('system-alerts', async () => {
+      const { raised } = await withTransaction(async (client) => {
+        const jobs = await raiseSystemAlerts(client);
+        const integrations = await raiseIntegrationAlerts(client);
+        return { raised: jobs.raised + integrations.raised };
+      });
+      return raised > 0 ? `${raised} alert(s) raised` : null;
+    }),
+
+    schedule('tin-catch-up', async () => {
       const result = await retryOutstandingTins({ ...SYSTEM_ACTOR, limit: 100 });
       return result.attempted > 0
         ? `${result.assigned} TIN(s) assigned, ${result.stillOutstanding} still outstanding`
         : null;
     }),
 
-    schedule('authority-catch-up', WORKER_INTERVALS.authorityCatchUp, async () => {
+    schedule('authority-catch-up', async () => {
       const result = await retryAuthorityNotifications({ ...SYSTEM_ACTOR, limit: 100 });
       return result.attempted > 0
         ? `${result.accepted} renewal(s) acknowledged, ${result.stillFailing} still outstanding`
@@ -189,16 +195,24 @@ async function main() {
     }),
 
     // A taxpayer owed money must not wait on somebody pressing a button.
-    schedule('refund-retry', WORKER_INTERVALS.refundRetry, async () => {
+    schedule('refund-retry', async () => {
       const result = await retryOutstandingRefunds({ ...SYSTEM_ACTOR, limit: 50 });
       return result.attempted > 0
         ? `${result.completed} refund(s) returned, ${result.stillOutstanding} still owed`
         : null;
     }),
 
+    // A deadline nothing acts on is a date on a piece of paper. The payment
+    // path already refuses a lapsed invoice; this is what makes the record say
+    // the same thing.
+    schedule('invoice-expiry', async () => {
+      const result = await expireLapsedInvoices({ ...SYSTEM_ACTOR, limit: 500 });
+      return result.expired > 0 ? `${result.expired} invoice(s) passed their deadline` : null;
+    }),
+
     // The control that proves government actually received the money. It ran
     // only when somebody remembered to press a button, which is not a control.
-    schedule('reconciliation-sweep', WORKER_INTERVALS.reconciliationSweep, async () => {
+    schedule('reconciliation-sweep', async () => {
       const result = await runScheduledReconciliation({ ...SYSTEM_ACTOR });
       if (result.skipped) return null;
 
@@ -222,14 +236,58 @@ async function main() {
       );
     }),
 
+    /*
+     * The asset graph, rebuilt from the register the State already keeps.
+     *
+     * Nothing here reaches outside the platform: every edge is derived from a
+     * vehicle row PSIRS holds. The job exists because a lead list that only
+     * refreshes when an administrator remembers is a lead list that goes stale
+     * without anybody noticing it has.
+     */
+    schedule('connection-graph', async () => {
+      const result = await rebuildVehicleConnections(pool);
+      if (result.asserted === 0 && result.ambiguous === 0) return null;
+      return (
+        `${result.asserted} connection(s) asserted ` +
+        `(${result.fromRegistry} from the register, ${result.fromPhone} by shared phone), ` +
+        `${result.ambiguous} vehicle(s) matched more than one taxpayer and were left alone`
+      );
+    }),
+
     // Remind taxpayers before their invoices expire (6-week, 4-week, 2-week).
     // The sweep is idempotent: each window is flagged on the invoice after the
     // first send, so running it more than once never duplicates a reminder.
-    schedule('reminder-sweep', WORKER_INTERVALS.reminderSweep, async () => {
+    schedule('reminder-sweep', async () => {
       const result = await sendDueReminders(pool);
       return result.sent > 0 || result.skipped > 0
         ? `${result.sent} reminder(s) sent, ${result.skipped} skipped`
         : null;
+    }),
+
+    // Housekeeping on the two tables that grew without bound. Neither moves
+    // money; both are how a database runs out of room, which does.
+    schedule('idempotency-sweep', async () => {
+      const result = await expireSettledKeys();
+      if (result.interrupted > 0) {
+        // A key still IN_PROGRESS an hour later is a money-path request that
+        // was interrupted and never came back. It is not deleted — the same
+        // key must not be allowed to re-execute — but it is not silent either.
+        log.warn(`${result.interrupted} idempotency key(s) left by interrupted requests`, {
+          component: 'worker',
+          job: 'idempotency-sweep',
+        });
+      }
+      return result.deleted > 0 ? `${result.deleted} settled key(s) deleted` : null;
+    }),
+
+    schedule('usage-retention', async () => {
+      const result = await expireOldEvents(pool);
+      return result.deleted > 0 ? `${result.deleted} telemetry row(s) deleted` : null;
+    }),
+
+    schedule('rate-limit-sweep', async () => {
+      const deleted = await sweepExpiredBuckets();
+      return deleted > 0 ? `${deleted} expired rate limit bucket(s) deleted` : null;
     }),
   ];
 

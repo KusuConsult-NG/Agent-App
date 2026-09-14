@@ -15,33 +15,38 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ApiRequestError, api, type ApiError } from '../lib/api';
+import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Empty, Field, KeyValue, Loading } from '../ui';
+import { useI18n } from '../lib/i18n';
+import type { TranslationDictionary } from '@psirs/shared';
+import { enumLabel, formatDateTimeIn } from '@psirs/shared';
 
 /** The categories the API accepts, in the words an agent would use. */
-const CATEGORIES: { value: string; label: string; hint?: string }[] = [
-  { value: 'PAYMENT_ISSUE', label: 'A payment has not gone through' },
-  { value: 'RECEIPT_ISSUE', label: 'A receipt is wrong or missing' },
-  { value: 'INCORRECT_ASSESSMENT', label: 'The amount charged looks wrong' },
-  { value: 'TIN_ISSUE', label: 'A taxpayer has no TIN yet' },
-  { value: 'VEHICLE_ISSUE', label: 'A vehicle renewal problem' },
-  { value: 'TECHNICAL_ISSUE', label: 'The app is not working' },
-  { value: 'TAXPAYER_COMPLAINT', label: 'A taxpayer has a complaint' },
+const CATEGORIES: {
+  value: string;
+  label: keyof TranslationDictionary;
+  hint?: keyof TranslationDictionary;
+}[] = [
+  { value: 'PAYMENT_ISSUE', label: 'supCatPayment' },
+  { value: 'RECEIPT_ISSUE', label: 'supCatReceipt' },
+  { value: 'INCORRECT_ASSESSMENT', label: 'supCatAssessment' },
+  { value: 'TIN_ISSUE', label: 'supCatTin' },
+  { value: 'VEHICLE_ISSUE', label: 'supCatVehicle' },
+  { value: 'TECHNICAL_ISSUE', label: 'supCatTechnical' },
+  { value: 'TAXPAYER_COMPLAINT', label: 'supCatComplaint' },
   {
     value: 'UNAUTHORISED_CHARGE',
-    label: 'Someone was charged money they should not have been',
-    hint: 'Use this if a taxpayer was asked for money outside an official assessment.',
+    label: 'supCatUnauthorised',
+    hint: 'supCatUnauthorisedHint',
   },
   {
     value: 'AGENT_MISCONDUCT',
-    label: 'Report the conduct of an agent',
-    hint: 'This goes to PSIRS oversight, not to the agent concerned.',
+    label: 'supCatMisconduct',
+    hint: 'supCatMisconductHint',
   },
 ];
 
-const categoryLabel = (value: string) =>
-  CATEGORIES.find((entry) => entry.value === value)?.label ??
-  value.replace(/_/g, ' ').toLowerCase();
+const categoryLabel = (value: string, t: TranslationDictionary) => enumLabel(value, t);
 
 interface TicketSummary {
   id: string;
@@ -57,40 +62,45 @@ interface TicketSummary {
 }
 
 export function SupportScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [tickets, setTickets] = useState<TicketSummary[] | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
+  /*
+   * "You have not reported anything yet." is what an empty list says, and
+   * `setTickets([])` said it from a failed request — to an agent checking
+   * whether the problem they reported is being dealt with.
+   */
+  const [loadError, setLoadError] = useState<ApiError | null>(null);
 
   useEffect(() => {
     api
       .get<TicketSummary[]>('/support/tickets')
       .then(setTickets)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
-        setTickets([]);
+        setLoadError(asApiError(caught));
       });
   }, []);
 
   return (
     <>
       <div className="card">
-        <h2 className="card__title">Get help</h2>
+        <h2 className="card__title">{t.supGetHelp}</h2>
         <p className="card__hint">
-          Report a problem to PSIRS. You will get a reply here, and a message when there is
-          something to read.
+          {t.supGetHelpHint}
         </p>
-        <a className="button" href="#/support/new">
-          Report a problem
-        </a>
+        <a className="button" href="#/support/new">{t.supReportProblem}</a>
       </div>
 
       <ErrorAlert error={error} />
 
       <div className="card">
-        <h2 className="card__title">My reports</h2>
-        {!tickets ? (
+        <h2 className="card__title">{t.supMyReports}</h2>
+        {loadError ? (
+          <ErrorAlert error={loadError} />
+        ) : !tickets ? (
           <Loading />
         ) : tickets.length === 0 ? (
-          <Empty>You have not reported anything yet.</Empty>
+          <Empty>{t.supNothingReported}</Empty>
         ) : (
           <ul className="list">
             {tickets.map((ticket) => (
@@ -103,8 +113,31 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
                   <div className="list__body">
                     <p className="list__title">{ticket.subject}</p>
                     <p className="list__meta">
-                      {ticket.ticket_number} · {categoryLabel(ticket.category)}
-                      {ticket.message_count > 0 && ` · ${ticket.message_count} reply(s)`}
+                      {ticket.ticket_number} · {categoryLabel(ticket.category, t)}
+                      {ticket.message_count > 0 &&
+                        ` · ${t.supRepliesCount.replace('{{n}}', String(ticket.message_count))}`}
+                      {/*
+                        * When anything last happened on it.
+                        *
+                        * The reply count above includes the agent's OWN
+                        * messages, so "2 replies" may be two things they wrote
+                        * and nothing back. It cannot answer the only question
+                        * somebody has about their own complaint — has this
+                        * moved — and `last_message_at`, which was declared
+                        * here and drawn by nothing, is what does.
+                        *
+                        * Worded as the last message rather than the last
+                        * reply, because the field says when the newest message
+                        * was posted and not who posted it. Claiming PSIRS had
+                        * answered would be reading more into it than it holds.
+                        */}
+                      {' · '}
+                      {ticket.last_message_at
+                        ? t.supLastMessage.replace(
+                            '{{when}}',
+                            formatDateTimeIn(ticket.last_message_at, t),
+                          )
+                        : t.supNoMessagesYet}
                     </p>
                   </div>
                   <Badge status={ticket.status} />
@@ -119,6 +152,7 @@ export function SupportScreen({ navigate }: { navigate: (path: string) => void }
 }
 
 export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [form, setForm] = useState({
     category: '',
     subject: '',
@@ -148,7 +182,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       });
       navigate(`/support/${created.id}`);
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -156,32 +190,32 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
 
   return (
     <form className="card" onSubmit={submit}>
-      <h2 className="card__title">Report a problem</h2>
+      <h2 className="card__title">{t.supReportProblem}</h2>
 
       <ErrorAlert error={error} />
 
-      <Field label="What is the problem?" required>
+      <Field label={t.supWhatProblem} required>
         <select
           value={form.category}
           onChange={(event) => set('category', event.target.value)}
           required
         >
-          <option value="">Choose one</option>
+          <option value="">{t.supChooseOne}</option>
           {CATEGORIES.map((entry) => (
             <option key={entry.value} value={entry.value}>
-              {entry.label}
+              {t[entry.label]}
             </option>
           ))}
         </select>
       </Field>
 
       {chosen?.hint && (
-        <Alert kind="info" title="Before you send this">
-          <p style={{ margin: 0 }}>{chosen.hint}</p>
+        <Alert kind="info" title={t.supBeforeYouSend}>
+          <p style={{ margin: 0 }}>{t[chosen.hint]}</p>
         </Alert>
       )}
 
-      <Field label="Short summary" required>
+      <Field label={t.supShortSummary} required>
         <input
           value={form.subject}
           minLength={5}
@@ -191,7 +225,7 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
         />
       </Field>
 
-      <Field label="What happened?" hint="Include anything PSIRS would need to look it up." required>
+      <Field label={t.supWhatHappened} hint={t.supWhatHappenedHint} required>
         <textarea
           value={form.description}
           rows={5}
@@ -203,8 +237,8 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
       </Field>
 
       <Field
-        label="Transaction reference"
-        hint="If this is about one payment, the reference lets PSIRS find it without asking you."
+        label={t.supTransactionRef}
+        hint={t.supTransactionHint}
       >
         <input
           value={form.transactionReference}
@@ -213,17 +247,17 @@ export function RaiseTicketScreen({ navigate }: { navigate: (path: string) => vo
         />
       </Field>
 
-      <Field label="How urgent is it?">
+      <Field label={t.supHowUrgent}>
         <select value={form.priority} onChange={(event) => set('priority', event.target.value)}>
-          <option value="LOW">Not urgent</option>
-          <option value="NORMAL">Normal</option>
-          <option value="HIGH">Urgent — a taxpayer is waiting</option>
-          <option value="URGENT">Very urgent — money may be at risk</option>
+          <option value="LOW">{t.supNotUrgent}</option>
+          <option value="NORMAL">{t.supNormal}</option>
+          <option value="HIGH">{t.supUrgent}</option>
+          <option value="URGENT">{t.supVeryUrgent}</option>
         </select>
       </Field>
 
       <button type="submit" disabled={busy || !form.category}>
-        {busy ? 'Sending…' : 'Send to PSIRS'}
+        {busy ? t.supSending : t.supSendToPsirs}
       </button>
     </form>
   );
@@ -252,6 +286,7 @@ interface TicketDetail {
 }
 
 export function TicketScreen({ ticketId }: { ticketId: string }) {
+  const { t } = useI18n();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [reply, setReply] = useState('');
@@ -263,7 +298,9 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       .get<TicketDetail>(`/support/tickets/${ticketId}`)
       .then(setTicket)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // A failure that is not a refusal with a body set nothing at all, so
+        // the screen said nothing and went on loading. See `Revenue.tsx`.
+        setError(asApiError(caught));
       });
   }, [ticketId]);
 
@@ -280,10 +317,10 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         { body: reply },
       );
       setReply('');
-      if (result.reopened) setNotice('This report has been opened again for PSIRS to look at.');
+      if (result.reopened) setNotice(t.supReopenedNotice);
       load();
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -306,22 +343,27 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
         <h2 className="card__title">{ticket.subject}</h2>
         <KeyValue
           items={[
-            ['Reference', ticket.ticket_number],
-            ['Status', <Badge status={ticket.status} key="s" />],
-            ['About', categoryLabel(ticket.category)],
+            [t.errReference, ticket.ticket_number],
+            [t.appStatus, <Badge status={ticket.status} key="s" />],
+            [t.supAbout, categoryLabel(ticket.category, t)],
             ...(ticket.transaction_reference
-              ? ([['Transaction', ticket.transaction_reference]] as [string, React.ReactNode][])
+              ? ([[t.supTransactionLabel, ticket.transaction_reference]] as [
+                  string,
+                  React.ReactNode,
+                ][])
               : []),
-            ['Reported', new Date(ticket.created_at).toLocaleString('en-NG')],
+            [t.supReported, formatDateTimeIn(ticket.created_at, t)],
           ]}
         />
       </div>
 
       <div className="card">
-        <h2 className="card__title">Conversation</h2>
+        <h2 className="card__title">{t.supConversation}</h2>
         <ol className="thread">
           <li className="thread__item thread__item--mine">
-            <p className="thread__meta">You · {new Date(ticket.created_at).toLocaleString('en-NG')}</p>
+            <p className="thread__meta">
+              {t.supYouAt.replace('{{when}}', formatDateTimeIn(ticket.created_at, t))}
+            </p>
             <p className="thread__body">{ticket.description}</p>
           </li>
           {ticket.messages.map((message) => (
@@ -330,8 +372,8 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
               className={`thread__item${message.mine ? ' thread__item--mine' : ''}`}
             >
               <p className="thread__meta">
-                {message.mine ? 'You' : `${message.author_name} · PSIRS`} ·{' '}
-                {new Date(message.created_at).toLocaleString('en-NG')}
+                {message.mine ? t.agSupYou : `${message.author_name} · PSIRS`} ·{' '}
+                {formatDateTimeIn(message.created_at, t)}
               </p>
               <p className="thread__body">{message.body}</p>
             </li>
@@ -340,7 +382,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       </div>
 
       {notice && (
-        <Alert kind="success" title="Reopened">
+        <Alert kind="success" title={t.supReopened}>
           <p style={{ margin: 0 }}>{notice}</p>
         </Alert>
       )}
@@ -348,15 +390,15 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
       <ErrorAlert error={error} />
 
       {closed ? (
-        <Alert kind="info" title="This report is closed">
+        <Alert kind="info" title={t.supReportClosed}>
           <p style={{ margin: 0 }}>
-            If the problem has come back, <a href="#/support/new">report it again</a> so it keeps its
-            own history.
+            {t.supProblemCameBack} <a href="#/support/new">{t.supReportItAgain}</a>{' '}
+            {t.supKeepsHistory}
           </p>
         </Alert>
       ) : (
         <form className="card" onSubmit={send}>
-          <Field label="Add to this report">
+          <Field label={t.supAddToReport}>
             <textarea
               value={reply}
               rows={4}
@@ -367,7 +409,7 @@ export function TicketScreen({ ticketId }: { ticketId: string }) {
             />
           </Field>
           <button type="submit" disabled={busy || reply.trim().length < 2}>
-            {busy ? 'Sending…' : 'Send'}
+            {busy ? t.supSending : t.supSendWord}
           </button>
         </form>
       )}

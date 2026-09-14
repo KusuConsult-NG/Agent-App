@@ -1,0 +1,322 @@
+# Running the whole platform on a laptop, and proving it works
+
+This is the walkthrough that produced `docs/uat-screenshots/`. Anybody can run
+it: it needs PostgreSQL, Node 22 and about ten minutes, and it leaves a
+photograph of every screen behind so the result can be read by somebody who was
+not there when it ran.
+
+It is deliberately not a list of things to click. Two scripts do the ceremony
+and one Playwright suite does the walking, because a test that needs setting up
+by hand gets skipped rather than fixed.
+
+---
+
+## What you need
+
+| | |
+|---|---|
+| PostgreSQL 16 | reachable at `localhost:5432` as `postgres`/`postgres` |
+| Node | 22 or later |
+| Chromium | already present at `/opt/pw-browsers/` in this environment; otherwise `npx playwright install chromium` |
+
+```bash
+npm install
+```
+
+---
+
+## 1. Bring the stack up
+
+```bash
+scripts/uat/stack.sh up
+```
+
+That one command:
+
+1. drops and recreates the `psirs_uat` database — **it owns that database**, so
+   nothing you are working on is touched, and the demonstration accounts, which
+   share one published password, cannot land anywhere real;
+2. applies all 80 migrations and seeds the reference data: 17 LGAs, 187 wards,
+   9 revenue categories, 42 revenue items, 12 training modules, 73 notification
+   templates;
+3. seeds five demonstration officers and one field agent — the agent walks the
+   **real clearance pipeline** (KYC, referee, training, bank, device, government
+   approval), because inserting an active agent directly is refused by the
+   `agent_activation_requires_clearance` constraint and rightly so;
+4. starts the API on `:4000`, the officer portal on `:5174` and the agent PWA on
+   `:5173`;
+5. runs `scripts/uat/seed-uat.mjs`, which creates the demonstration dataset **by
+   calling the same HTTP endpoints the two applications call**.
+
+That last point is the one that matters. A seed that writes rows directly can
+produce states the platform itself cannot reach — a payment marked verified with
+no gateway confirmation, an agent active without clearance — and a screenshot of
+such a state is a picture of the seed, not of the software. Everything below was
+created through the front door, so if any step stops working the seed fails
+loudly instead of manufacturing a demonstration that could never happen in
+production.
+
+Logs are in `/tmp/psirs-uat/`. `scripts/uat/stack.sh down` stops everything.
+
+### What the seed creates
+
+```
+  01. signed in as the field agent
+  02. signed in as admin, revenue officer and finance officer
+  03. the UAT handset is registered and approved
+  04. reference data: 17 LGAs, 42 revenue items
+  05. registered 17 taxpayers (14 received a TIN immediately)
+  06.   one of them, Talatu Bawa, is registered in Jos South rather than Jos North
+        skipped Talatu Bawa: 400 INVALID_REQUEST "Hotel, Restaurant or Event
+        Centre Consumption Tax" does not apply to individual taxpayers.
+  07. 11 collections confirmed and acknowledged, 5 left unconfirmed (receipts follow the settlement)
+  08. 4 vehicles captured, 3 renewals paid (particulars issued at settlement)
+  09. imported the gateway's statement for the period: 20 line(s)
+  10. recorded a settlement of 61,100 naira covering 13 collections — this is what
+      issues the receipts and particulars. 1 confirmed collection still awaits its
+      bank credit
+  11. reconciliation: 13 matched, 0 exception(s), 0 unchecked
+  12. raised a support ticket from the field
+  13. a second applicant is part way through clearance, with a referee still to answer
+  14. registered a cooperative whose leader has not yet confirmed its members
+  15. adopted a reading of the nano exemption, so an estimate can say who is outside it
+  16. classified 4 Local Governments A to D, fixed to 2029
+  17. published 36 rows of assumed turnover — 1% of which is the charge
+  18. gave the traders association a part in enumeration, so its leader may confirm a count
+  19. recorded 5 enumerations, three of them through the association
+  20. one count confirmed by the leader, one contradicted
+  21. raised 3 estimates, 1 of them recording an exemption
+  22. one estimate is under objection, so nothing chases the debt while it stands
+  23. an employer filed a July schedule for four staff, and the platform priced it
+  24. rebuilt the connection graph from the vehicle register
+  25. signed in as the auditor
+  26. a State target for the month and one apportioned to Jos North; the other 16 LGAs have none
+  27. opened a case with finance about the collection still awaiting its credit (CASE-2026-000001)
+  28. a sample drawn: 5 transactions, 3 examined, 2 still to look at
+  29. generated two audit reports and signed one of them under step-up
+```
+
+Step 06 is not a fault. The seed walks each taxpayer through the catalogue in
+turn, and tolerates a refusal where an item does not apply to that taxpayer's
+type — logging it by name rather than swallowing it. Which taxpayer meets the
+consumption tax is a function of the rotation rather than a scripted
+demonstration, so the name in that line will move; what it shows is the
+catalogue's taxpayer-type rule refusing an assessment that should not exist.
+
+Seventeen taxpayers, assessed across a daily market levy, an annual shop rate,
+a development levy and a consumption tax charged as a percentage of a declared
+base — and, from step 14 onward, the informal-sector programme: a cooperative,
+a published schedule of assumed turnovers, enumerations taken through an
+association, and an estimate somebody has objected to.
+
+Four deliberate states, so the officer screens show a real day rather than a
+tidy one:
+
+- **Five payments left unconfirmed.** The gateway has not said yes, so the app
+  says so and nobody has a document.
+- **One confirmed collection left out of the settlement.** The gateway has
+  confirmed it and the bank credit is not in yet, so the taxpayer holds an
+  acknowledgement and there is no receipt. It appears under *money in transit*
+  rather than as an exception, because nothing has gone wrong.
+- **One estimate under objection.** Enforcement is suspended while it stands:
+  the trader is off the arrears worklist, gets no reminder, is not counted as
+  in arrears against an incentive programme, and the citizen portal says their
+  assessment is under objection rather than that they owe.
+- **Everything else settled.** Thirteen collections, their receipts, and the
+  three vehicle particulars the renewals paid for.
+
+---
+
+## 2. Sign in
+
+| Who | Phone | Password | Where |
+|---|---|---|---|
+| Field agent | `+2347010000001` | `FieldAgent2026` | http://localhost:5173 |
+| Admin Officer | `+2348000000001` | `Password123` | http://localhost:5174 |
+| Revenue Officer | `+2348000000002` | `Password123` | http://localhost:5174 |
+| Finance Officer | `+2348000000003` | `Password123` | http://localhost:5174 |
+| Agent Supervisor | `+2348000000004` | `Password123` | http://localhost:5174 |
+| State Auditor | `+2348000000005` | `Password123` | http://localhost:5174 |
+
+**Expect to be refused the first time you try to collect.** The agent app mints
+a device identifier per browser, so a fresh browser is a handset PSIRS has never
+seen, and an unapproved handset may look a taxpayer up and see what a levy costs
+but may not take money. Clearing it is step 4 below and is part of the
+walkthrough rather than something to work around.
+
+---
+
+## 3. Run the walkthrough
+
+```bash
+npx playwright test
+```
+
+Fifty-five tests across five files, about ten minutes, 223 screenshots into
+`docs/uat-screenshots/`. The command used to name `uat.spec.ts` alone, which is
+29 of those tests; the walkthrough now runs the whole sweep, because the other
+four files photograph the directory too -- the informal-sector screens, a
+citizen reading their own statement, and an agent enumerating with no signal --
+and running only the first left a third of the pictures stale without saying so.
+A console error fails the test it appears in: in a government application a
+React error boundary swallowing an exception looks exactly like an empty table,
+and an officer cannot tell "no fraud flags this week" from "the fraud screen
+crashed".
+
+---
+
+## 4. What it walks, and what each part proves
+
+### The agent, on a phone-sized screen
+
+| Screenshot | What it shows |
+|---|---|
+| `agent-01-home` | The money bar: collected today, transactions, commission, taxpayers registered, and a standing warning about payments awaiting confirmation |
+| `agent-02-taxpayers`, `agent-03-taxpayer-search` | Finding the people this agent onboarded, by name, phone or TIN |
+| `agent-04-collect` | The collection flow |
+| `agent-05-commission` | The agent's own commission record |
+| `agent-06-vehicles` | Vehicle particulars |
+| `agent-07-receipts` … `agent-11-profile` | Receipts, the day's collections, support, groups, profile |
+
+### A collection, driven end to end
+
+This is the sequence worth reading in order.
+
+| Screenshot | What it shows |
+|---|---|
+| `journey-01a-priced-before-approval` | An unapproved handset may still look a taxpayer up and be told what a levy costs — neither takes anything from anybody |
+| `journey-01b-refused-unregistered-device` | …and is refused the moment money would be committed: *"This device is not registered to your agent account."* |
+| `journey-02-device-registered-pending` | The agent registers the handset from the app |
+| `journey-03` … `journey-05` | An officer finds the agent in the portal and approves the handset |
+| `journey-07-priced-by-government` | ₦3,000, from the catalogue, with the calculation shown — *the agent never types an amount* |
+| `journey-08-payment-initiated` | **"Payment not yet confirmed. This payment has NOT been marked as received. Do not ask the taxpayer to pay again."** Invoice and transaction references are issued; no receipt exists |
+| `journey-09-acknowledged` | The gateway confirms. **"Payment confirmed — receipt to follow … this is an acknowledgement and NOT a receipt."** Acknowledgement PSIRS-ACK/2026/000025, status RECONCILIATION PENDING |
+| `journey-09b-finance-money-in-transit` | The finance officer's side of the same moment: **awaiting settlement ₦8,000.00, 2 transactions**, listed as money in transit and *not* as an exception, with an empty exception queue beside it |
+| `journey-09c-receipted-after-settlement` | After the bank credit is recorded: **Payment Successful · ₦3,000.00 · Receipt PSIRS/2026/000011**, status SETTLED, and a Download receipt button |
+
+Those four are PRD §95 on screen, in both halves.
+
+`journey-08` is the first half: money has been asked for and nothing has
+confirmed it, so the app refuses to say collected.
+
+`journey-09` through `journey-09c` are the second, and the one this platform
+takes further than most. The gateway confirming means the *gateway* holds the
+money; a receipt says the Plateau State Government received it. Between those
+two facts the taxpayer holds an acknowledgement that says exactly which is
+true — and the receipt appears only in `journey-09c`, after a finance officer
+has recorded the bank credit. Nothing an agent or an app can press produces it.
+
+| Screenshot | What it shows |
+|---|---|
+| `journey-13`, `journey-14`, `journey-15` | Finding a vehicle by registration number and putting a renewal through — priced by formula from the vehicle's class, not by a number anybody typed |
+| `journey-10` … `journey-12` | Registering a taxpayer through the wizard, including the consent and declaration boxes, neither of which is ticked in advance |
+| `journey-20-name-search-stays-in-area`, `journey-21-identifier-reaches-her` | A name typed into the search does not reach a trader in the next Local Government Area; the number she reads out does. This replaced a plain search-by-name step, which is why there is no `journey-06` |
+
+### The officer portal, role by role
+
+The suite reads the sidebar and opens **everything that role is offered**, rather
+than a hardcoded list. That means it tracks the permission model — a role that
+gains or loses a screen is covered without anyone remembering to edit the test —
+and it proves the menu never offers a screen the API refuses.
+
+| Role | Screens | Prefix |
+|---|---|---|
+| Admin Officer | 33 | `portal-admin-*` |
+| Revenue Officer | 31 | `portal-revenue-*` |
+| Finance Officer | 26 | `portal-finance-*` |
+| State Auditor | 30 | `portal-auditor-*` |
+| Agent Supervisor | 22 | `portal-supervisor-*` |
+
+142 officer screens across five roles — 147 files including each role's home —
+no console errors, nothing refused. Alongside eleven agent-app screens, eighteen
+journey steps, five public pages, two levy screens and the one photograph of a
+browser PSIRS has never seen, plus fourteen Hausa screens and the twenty-five
+from the other spec files — the informal sector, a citizen reading their own
+statement, an agent enumerating with no signal — this run produced 223
+screenshots.
+
+Because a screen's file is numbered by its place in the menu, adding a screen
+renames every file after it and leaves the old one behind. This directory had
+collected 223 such orphans across earlier menus, three generations of the audit
+log among them; it now holds exactly what one green sweep produces, and a file
+here that a sweep does not rewrite is one to delete rather than to trust.
+
+Worth opening specifically:
+
+* `portal-finance-01-home` — owed to the councils, commission liability,
+  settlement variance, exceptions
+* `portal-finance-*-reconciliation` — three-way reconciliation, the exception
+  queue, money in transit, and the settlement recorded against it. This is the
+  screen that issues receipts: recording a bank credit here is what turns a
+  confirmed collection into a receipted one
+* `portal-auditor-*-audit-log` — the hash-chained trail and its verification
+* `portal-admin-*-agents-clearance` — the six clearance axes per agent
+* `portal-admin-*-field-application` — the version gate and the fleet it governs
+
+### Without an account
+
+`public-01-verify-unknown` and `public-02-citizen`: a citizen checking a receipt
+or their own status, with no sign-in.
+
+---
+
+## 5. What this run found
+
+Two things, both fixed in the same change as this document.
+
+**The reconciliation exception queue listed the same job several times.**
+`TXN-2026-000027` appeared twice, then `000029` twice, then `000025` twice — six
+rows for three transactions, each with its own Resolve button. Reconciliation
+records one row per transaction *per run*, which is correct as history, but the
+queue read every unresolved row from every run. With a sweep every six hours over
+a trailing forty-eight hours, an unsettled transaction appeared up to eight
+times and resolving one left the rest. The queue now takes the newest finding per
+transaction and shows it only while it is unresolved; the history is untouched.
+Held by `apps/api/src/tests/a-worklist-that-multiplied.test.ts`.
+
+**A guard that could not have been wrong, removed.** The same query filtered on
+`reconciled_at IS NULL` beside a status filter that already excluded resolved
+records — the two can never disagree, because resolving writes both in one
+statement. Mutation-testing confirmed it could not change any result, so it went,
+and the invariant it depended on is now held by a test rather than by a reading
+of the code.
+
+**Money in transit was listed as an exception.** A collection the gateway has
+confirmed is money the *gateway* holds; it reaches the government account in a
+batch a day or two later, and that third leg is the whole point of a three-way
+reconciliation. Listing it under "Exception queue" alongside amount mismatches
+made ordinary business look like a fault — and hid the case that is one, a
+collection confirmed days ago and never handed over, which looked identical to
+one taken an hour before. There are now two panels: **Awaiting settlement from
+the gateway**, with how long each has been waiting and nothing for anybody to
+do, and the exception queue, which a pending settlement joins only once it is
+past the 72-hour window and the money should have arrived.
+
+Everything else the walkthrough touched behaved correctly, including three
+refusals that look like failures and are not: an unapproved handset refused at
+the point of collection, seven revenue items refused for having no approved rate
+in force, and the auth rate limiter refusing a burst of sign-ins.
+
+---
+
+## 6. Repeating it
+
+```bash
+scripts/uat/stack.sh up          # recreate everything and reseed
+scripts/uat/stack.sh reseed      # more data on the stack already running
+scripts/uat/stack.sh down        # stop
+npx playwright test tests/browser/uat.spec.ts --headed   # watch it
+npx playwright test tests/browser/uat.spec.ts --grep "Finance Officer"
+```
+
+The screenshots are regenerated on every run, so a change that breaks a screen
+shows up as a failed test and a photograph of the failure.
+
+`reseed` is not `up` repeated. `up` drops the database first, so every step
+above answers 201. `reseed` adds to a stack that is already seeded, and the
+steps that publish once-only records — the presumptive schedule, the
+settlement — answer 409 instead: *"published 0 rows of assumed turnover"* and
+*"settlement refused: PAYMENT_ALREADY_SETTLED ... Recording it again would
+count the same money twice."* Both are the platform refusing to duplicate
+something, which is the behaviour wanted; neither is breakage. An observer who
+wants the numbers above should run `up`.

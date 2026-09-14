@@ -10,18 +10,21 @@
  * submitting, and the queued draft syncs later (PRD §30).
  */
 
-import { useEffect, useState, type FormEvent } from 'react';
-import { birthDateMessage, birthDateProblem } from '@psirs/shared';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  ApiRequestError,
-  api,
-  isConnectivityFailure,
-  newIdempotencyKey,
-  type ApiError,
-} from '../lib/api';
+  DUPLICATE_REASON_TEXT,
+  birthDateMessage,
+  birthDateProblem,
+  localName,
+  type DuplicateReason,
+  type TranslationDictionary,
+} from '@psirs/shared';
+import { ApiRequestError, api, asApiError, isConnectivityFailure, newIdempotencyKey, type ApiError } from '../lib/api';
 import type { ConnectionState } from '../lib/device';
 import { saveDraft, submitOrQueue } from '../lib/drafts';
+import { startFlow, track } from '../lib/usage';
 import { useI18n } from '../lib/i18n';
+import { useReferenceList } from '../lib/reference';
 import { Alert, Badge, ErrorAlert, Field, KeyValue, Loading, Money, Spinner } from '../ui';
 
 interface TaxpayerSummary {
@@ -36,19 +39,32 @@ interface TaxpayerSummary {
   status: string;
 }
 
-function displayName(taxpayer: {
-  business_name?: string | null;
-  first_name?: string | null;
-  last_name?: string | null;
-}): string {
+/**
+ * `t` is passed in because this sits outside the component and a hook cannot
+ * reach it here.
+ *
+ * The fallback used to be reached with `??`, which only catches null and
+ * undefined — and `.trim()` returns an empty string, never null. So a taxpayer
+ * with no business name and no first or last name rendered as a blank row
+ * rather than as "Unnamed taxpayer". `||` is the operator this always wanted.
+ */
+function displayName(
+  taxpayer: {
+    business_name?: string | null;
+    first_name?: string | null;
+    last_name?: string | null;
+  },
+  t: TranslationDictionary,
+): string {
   return (
-    taxpayer.business_name ??
-    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ??
-    'Unnamed taxpayer'
+    taxpayer.business_name ||
+    `${taxpayer.first_name ?? ''} ${taxpayer.last_name ?? ''}`.trim() ||
+    t.tpUnnamedTaxpayer
   );
 }
 
 export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void }) {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<TaxpayerSummary[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,7 +80,13 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
         await api.get<TaxpayerSummary[]>(`/taxpayers/search?q=${encodeURIComponent(query.trim())}`),
       );
     } catch (caught) {
-      if (caught instanceof ApiRequestError) setError(caught.error);
+      /*
+       * Without the second branch an agent pressed Search and nothing
+       * happened: no results, no error, no explanation. A failure that is not
+       * a refusal with a body — a dropped signal in a market, which is the
+       * ordinary case here — set nothing at all.
+       */
+      setError(asApiError(caught));
     } finally {
       setBusy(false);
     }
@@ -73,21 +95,19 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
   return (
     <>
       <form className="card" onSubmit={search}>
-        <h2 className="card__title">Find a taxpayer</h2>
-        <p className="card__hint">
-          Search by name, business name, phone number, TIN, receipt number or vehicle registration.
-        </p>
-        <Field label="Search">
+        <h2 className="card__title">{t.tpFindTaxpayer}</h2>
+        <p className="card__hint">{t.tpSearchHint}</p>
+        <Field label={t.search}>
           <input
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Name, phone or TIN"
+            placeholder={t.tpSearchPlaceholder}
           />
         </Field>
         <button type="submit" disabled={busy || query.trim().length < 2}>
           {busy ? <Spinner /> : null}
-          Search
+          {t.search}
         </button>
       </form>
 
@@ -98,6 +118,8 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
           {results.length === 0 ? (
             <p className="empty">
               No taxpayer matches that search. You can register them as a new taxpayer.
+              {' '}
+              {t.searchAnotherArea}
             </p>
           ) : (
             <ul className="list">
@@ -109,9 +131,9 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
                     onClick={() => navigate(`/taxpayers/${taxpayer.id}`)}
                   >
                     <div className="list__body">
-                      <p className="list__title">{displayName(taxpayer)}</p>
+                      <p className="list__title">{displayName(taxpayer, t)}</p>
                       <p className="list__meta">
-                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : 'No TIN yet'} · {taxpayer.phone} ·{' '}
+                        {taxpayer.tin ? `TIN ${taxpayer.tin}` : t.tpNoTinYet} · {taxpayer.phone} ·{' '}
                         {taxpayer.lga_name}
                       </p>
                     </div>
@@ -125,7 +147,7 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
       )}
 
       <button type="button" className="secondary" onClick={() => navigate('/taxpayers/new')}>
-        Register a new taxpayer
+        {t.tpRegisterNew}
       </button>
     </>
   );
@@ -134,6 +156,19 @@ export function TaxpayersScreen({ navigate }: { navigate: (path: string) => void
 // ---------------------------------------------------------------------------
 // Registration wizard
 // ---------------------------------------------------------------------------
+
+interface Ward {
+  id: string;
+  code: string;
+  name: string;
+}
+
+interface Sector {
+  code: string;
+  label: string;
+  hausa: string;
+  suggestedItems: { id: string; code: string; name: string; name_ha: string | null; frequency: string }[];
+}
 
 interface Lga {
   id: string;
@@ -146,10 +181,23 @@ interface DuplicateMatch {
   tin: string | null;
   phone: string;
   score: number;
-  reasons: string[];
+  /** Codes, not prose — see `DUPLICATE_REASON_TEXT` in the shared package. */
+  reasons: DuplicateReason[];
 }
 
-const STEPS = ['TIN', 'Details', 'Identification', 'Address', 'Activity', 'Review'] as const;
+/*
+ * Step names as dictionary keys, for the same reason the clearance stages are:
+ * this array is module-level, and the progress line is the one thing on the
+ * screen that tells an agent how much of the form is left.
+ */
+const STEPS = [
+  'tpStepTin',
+  'tpStepDetails',
+  'tpStepIdentification',
+  'tpStepAddress',
+  'tpStepActivity',
+  'tpStepReview',
+] as const satisfies readonly (keyof TranslationDictionary)[];
 
 export function RegisterTaxpayerScreen({
   navigate,
@@ -158,23 +206,56 @@ export function RegisterTaxpayerScreen({
   navigate: (path: string) => void;
   connection: ConnectionState;
 }) {
-  const { t } = useI18n();
+  const { lang, t } = useI18n();
   const [step, setStep] = useState(0);
-  const [lgas, setLgas] = useState<Lga[]>([]);
-  const [wards, setWards] = useState<{ id: string; code: string; name: string }[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | null>(null);
+  /*
+   * Three states, because an empty list hid the only way forward.
+   *
+   * The panel below renders on `duplicates.length > 0`, and the "None of
+   * these" button — the override that actually registers the taxpayer — sits
+   * inside it. So when this follow-up fetch failed, `setDuplicates([])` took
+   * the panel away and the override with it: the agent was told PSIRS thinks
+   * this is a duplicate, shown nothing it matched, and left with no button to
+   * press. A citizen is standing in front of them and the registration is
+   * simply dead.
+   *
+   * The mirror image of the report screens that answered a failed read with a
+   * confident zero. Same cause — `[]` meaning two different things — and here
+   * it makes a false dead end rather than a false all-clear.
+   */
+  const [duplicates, setDuplicates] = useState<DuplicateMatch[] | 'unreadable' | null>(null);
   const [result, setResult] = useState<{ taxpayerId: string; tin: string | null } | null>(null);
   const [savedOffline, setSavedOffline] = useState(false);
 
-  // Sector taxonomy fetched once on mount.
-  const [sectors, setSectors] = useState<{
-    code: string;
-    label: string;
-    hausa: string;
-    suggestedItems: { id: string; code: string; name: string; frequency: string }[];
-  }[]>([]);
+  /*
+   * Follow this attempt.
+   *
+   * Registration is the step everything else depends on and the one nothing
+   * could see failing: an abandoned registration creates no taxpayer, so a
+   * form agents cannot get through looks exactly like a form nobody opens.
+   * The flow is settled once — completed, queued offline, or abandoned when
+   * the screen goes away — and carries no identity, only which step it
+   * reached.
+   */
+  const flow = useRef<ReturnType<typeof startFlow> | null>(null);
+  if (flow.current === null) flow.current = startFlow('taxpayer.registration', 'step-0');
+
+  useEffect(() => {
+    flow.current?.step(`step-${step}`);
+  }, [step]);
+
+  useEffect(
+    () => () => {
+      // Unmounting without having settled is somebody walking away from the
+      // form. `startFlow` ignores a second settlement, so a completed
+      // registration is not double-counted here.
+      flow.current?.abandon();
+    },
+    [],
+  );
+
   // Obligation IDs the agent has confirmed for this registration.
   const [selectedObligations, setSelectedObligations] = useState<string[]>([]);
 
@@ -201,19 +282,29 @@ export function RegisterTaxpayerScreen({
     businessActivity: '',
     consentGiven: false,
     declarationAccepted: false,
+    /*
+     * The language this taxpayer reads.
+     *
+     * Defaulted to whatever the agent has the app set to, because an agent
+     * working a Hausa-speaking market is overwhelmingly registering Hausa
+     * speakers and the correct answer should not need a tap each time. It is
+     * still a question the agent can change, because it is about the taxpayer
+     * and not about them.
+     */
+    preferredLanguage: 'en' as 'en' | 'ha',
   });
 
-  useEffect(() => {
-    fetch('/api/v1/reference/lgas')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setLgas)
-      .catch(() => setLgas([]));
-
-    fetch('/api/v1/taxpayers/sectors')
-      .then((response) => (response.ok ? response.json() : []))
-      .then(setSectors)
-      .catch(() => setSectors([]));
-  }, []);
+  /*
+   * Both of these used to be bare `fetch` calls whose failure branch and whose
+   * empty-answer branch ended in the same place: an empty array. See
+   * `lib/reference.ts` — the LGA is a REQUIRED field on step three, so an
+   * empty list stopped the registration dead while the sentence under the
+   * button said "Choose the Local Government Area."
+   */
+  const lgaList = useReferenceList<Lga>('/reference/lgas');
+  const sectorList = useReferenceList<Sector>('/taxpayers/sectors');
+  const lgas = lgaList.items;
+  const sectors = sectorList.items;
 
   /*
    * Wards for the chosen LGA.
@@ -226,24 +317,10 @@ export function RegisterTaxpayerScreen({
    * purpose is finding where revenue is and is not being collected, that is a
    * false answer rather than a missing one.
    */
-  useEffect(() => {
-    if (!form.lgaId) {
-      setWards([]);
-      return;
-    }
-    let cancelled = false;
-    fetch(`/api/v1/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}`)
-      .then((response) => (response.ok ? response.json() : []))
-      .then((list) => {
-        if (!cancelled) setWards(list);
-      })
-      .catch(() => {
-        if (!cancelled) setWards([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.lgaId]);
+  const wardList = useReferenceList<Ward>(
+    form.lgaId ? `/reference/wards?lgaId=${encodeURIComponent(form.lgaId)}` : null,
+  );
+  const wards = wardList.items;
 
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -272,6 +349,7 @@ export function RegisterTaxpayerScreen({
       existingTin: form.hasTin && form.existingTin ? form.existingTin : undefined,
       consentGiven: form.consentGiven,
       declarationAccepted: form.declarationAccepted,
+      preferredLanguage: form.preferredLanguage,
       acknowledgeDuplicates,
     };
   }
@@ -280,8 +358,18 @@ export function RegisterTaxpayerScreen({
     setBusy(true);
     setError(null);
     try {
-      // One idempotency key per attempt, reused if this ends up queued: syncing
-      // a draft that in fact reached the server cannot register them twice.
+      /*
+       * One idempotency key per attempt, which covers a retry of *this*
+       * request and nothing further. It does not travel into the queue: a
+       * draft is a separate operation, posted later to a different endpoint,
+       * and the key would not match there.
+       *
+       * What stops the awkward case — the request reached PSIRS, the reply did
+       * not, and the capture was queued — is the duplicate check at sync time,
+       * which the server runs against the register as it stands and which a
+       * queued capture cannot wave aside. The record the first attempt created
+       * is precisely the match it finds.
+       */
       const idempotencyKey = newIdempotencyKey('taxpayer');
       const body = payload(acknowledgeDuplicates);
 
@@ -294,8 +382,13 @@ export function RegisterTaxpayerScreen({
       );
 
       if (outcome.sent) {
+        flow.current?.complete(`step-${step}`);
         setResult(outcome.result);
       } else {
+        // Queued, not lost — and a distinct outcome from finishing online,
+        // because the agent's experience of the two is not the same.
+        flow.current?.complete('queued-offline');
+        track('draft.queued', { step: 'taxpayer.registration' });
         // No signal. The capture stays on the phone rather than being lost, and
         // the agent is told plainly what has and has not happened.
         setSavedOffline(true);
@@ -303,6 +396,12 @@ export function RegisterTaxpayerScreen({
     } catch (caught) {
       if (caught instanceof ApiRequestError) {
         setError(caught.error);
+        // Not settled: a refusal is something the agent can correct and try
+        // again, so the attempt is still running.
+        track('taxpayer.registration', {
+          flowId: flow.current?.flowId,
+          step: `refused-${caught.error.code}`,
+        });
         if (caught.error.code === 'POSSIBLE_DUPLICATE_TAXPAYER') {
           // Fetch the actual matches so the agent can look at them rather than
           // guessing what the warning refers to (PRD §11).
@@ -321,9 +420,30 @@ export function RegisterTaxpayerScreen({
             );
             setDuplicates(check.possibleDuplicates);
           } catch {
-            setDuplicates([]);
+            setDuplicates('unreadable');
           }
         }
+      } else {
+        /*
+         * The branch that was missing, on the screen that creates a person's
+         * record.
+         *
+         * This screen handles being OFFLINE with care — the capture stays on
+         * the phone and says so. What it did not handle is a request that
+         * starts and then fails, which is the one-bar-of-signal case rather
+         * than the no-signal one. The agent got no error, no "saved on
+         * device", and no outcome recorded: the button stopped spinning and
+         * the form sat there exactly as before.
+         *
+         * They cannot tell whether a taxpayer was created, so they submit
+         * again — and duplicate detection is the thing this very screen
+         * exists to get right.
+         */
+        setError(asApiError(caught));
+        track('taxpayer.registration', {
+          flowId: flow.current?.flowId,
+          step: 'failed-unreadable',
+        });
       }
     } finally {
       setBusy(false);
@@ -332,21 +452,20 @@ export function RegisterTaxpayerScreen({
 
   async function saveForLater() {
     await saveDraft('TAXPAYER_REGISTRATION', payload());
+    flow.current?.complete('saved-for-later');
+    track('draft.queued', { step: 'taxpayer.registration' });
     setSavedOffline(true);
   }
 
   if (savedOffline) {
     return (
       <div className="card">
-        <h2 className="card__title">Saved on this device</h2>
-        <Alert kind="warning" title="Not yet sent to PSIRS">
-          <p style={{ margin: 0 }}>
-            This registration is stored on your phone and will be sent automatically when you are
-            back online. No TIN has been issued yet, and no payment can be taken until it is sent.
-          </p>
+        <h2 className="card__title">{t.tpSavedOnDevice}</h2>
+        <Alert kind="warning" title={t.tpNotYetSent}>
+          <p style={{ margin: 0 }}>{t.tpSavedOfflineBody}</p>
         </Alert>
         <button type="button" onClick={() => navigate('/')}>
-          Back to home
+          {t.tpBackToHome}
         </button>
       </div>
     );
@@ -355,31 +474,26 @@ export function RegisterTaxpayerScreen({
   if (result) {
     return (
       <div className="card">
-        <h2 className="card__title">Taxpayer registered</h2>
+        <h2 className="card__title">{t.tpTaxpayerRegistered}</h2>
         {result.tin ? (
           <Alert kind="success" title={`TIN ${result.tin}`}>
-            <p style={{ margin: 0 }}>
-              Give this number to the taxpayer. They will need it for every government payment.
-            </p>
+            <p style={{ margin: 0 }}>{t.tpGiveTinToTaxpayer}</p>
           </Alert>
         ) : (
-          <Alert kind="info" title="TIN request submitted">
-            <p style={{ margin: 0 }}>
-              The TIN service has not returned a number yet. It will appear on the taxpayer's
-              profile once assigned.
-            </p>
+          <Alert kind="info" title={t.tpTinRequested}>
+            <p style={{ margin: 0 }}>{t.tpTinPending}</p>
           </Alert>
         )}
         <div className="button-row">
           <button type="button" onClick={() => navigate(`/collect?taxpayerId=${result.taxpayerId}`)}>
-            Collect revenue
+            {t.tpCollectRevenue}
           </button>
           <button
             type="button"
             className="secondary"
             onClick={() => navigate(`/taxpayers/${result.taxpayerId}`)}
           >
-            View profile
+            {t.tpViewProfile}
           </button>
         </div>
       </div>
@@ -401,7 +515,7 @@ export function RegisterTaxpayerScreen({
     }
     if (step === 1) {
       if (form.taxpayerType === 'BUSINESS') {
-        if (form.businessName.trim().length < 2) return 'Enter the name of the business.';
+        if (form.businessName.trim().length < 2) return t.tpNeedBusinessName;
       } else {
         if (form.firstName.trim().length < 2) return t.needFirstName;
         if (form.lastName.trim().length < 2) return t.needLastName;
@@ -424,7 +538,13 @@ export function RegisterTaxpayerScreen({
     }
     if (step === 3) {
       if (form.address.trim().length < 5) return t.needAddress;
-      if (form.lgaId === '') return t.needLga;
+      /*
+       * Naming the real obstacle. "Choose the Local Government Area" is the
+       * right sentence when there is a list and the agent has not picked from
+       * it, and exactly the wrong one when the list could not be read: it
+       * blames the agent for the one thing they cannot do.
+       */
+      if (form.lgaId === '') return lgaList.failed ? t.tpListCouldNotLoad : t.needLga;
       return null;
     }
     if (step === 5) {
@@ -441,7 +561,10 @@ export function RegisterTaxpayerScreen({
     <>
       <div className="card">
         <p className="card__hint" style={{ margin: 0 }}>
-          Step {step + 1} of {STEPS.length}: <strong>{STEPS[step]}</strong>
+          {t.tpStepOf
+            .replace('{{n}}', String(step + 1))
+            .replace('{{total}}', String(STEPS.length))}
+          : <strong>{t[STEPS[step]]}</strong>
         </p>
         <div
           style={{
@@ -465,31 +588,62 @@ export function RegisterTaxpayerScreen({
 
       <ErrorAlert error={error} />
 
-      {duplicates && duplicates.length > 0 && (
+      {duplicates !== null && (Array.isArray(duplicates) ? duplicates.length > 0 : true) && (
         <div className="card">
-          <h2 className="card__title">Possible existing taxpayer</h2>
-          <p className="card__hint">
-            Check whether any of these is the same person before creating a new record.
-          </p>
-          <ul className="list">
-            {duplicates.map((match) => (
-              <li key={match.taxpayerId}>
-                <button
-                  type="button"
-                  className="list__item"
-                  onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
-                >
-                  <div className="list__body">
-                    <p className="list__title">{match.displayName}</p>
-                    <p className="list__meta">
-                      {match.tin ? `TIN ${match.tin} · ` : ''}
-                      {match.reasons.join('; ')}
-                    </p>
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <h2 className="card__title">{t.tpPossibleExisting}</h2>
+
+          {duplicates === 'unreadable' ? (
+            /*
+             * The warning stands even though the list did not arrive.
+             *
+             * The server has already refused this registration as a possible
+             * duplicate; only the follow-up that says *which* records matched
+             * failed. So the agent still needs the panel — to be told the
+             * comparison is not available to them, and to keep the override
+             * the server itself is willing to accept. Registering blind is a
+             * poor outcome; being unable to register at all, with no
+             * explanation, is a worse one, and the override is recorded for
+             * review either way.
+             */
+            <>
+              <Alert kind="warning" title={t.tpDupCouldNotList}>
+                <p style={{ margin: 0 }}>{t.tpDupCouldNotListBody}</p>
+              </Alert>
+              <button
+                type="button"
+                className="secondary"
+                style={{ marginTop: 12 }}
+                disabled={busy}
+                onClick={() => void submit()}
+              >
+                {t.tpDupTryAgain}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="card__hint">{t.tpCheckSamePerson}</p>
+              <ul className="list">
+                {duplicates.map((match) => (
+                  <li key={match.taxpayerId}>
+                    <button
+                      type="button"
+                      className="list__item"
+                      onClick={() => navigate(`/taxpayers/${match.taxpayerId}`)}
+                    >
+                      <div className="list__body">
+                        <p className="list__title">{match.displayName}</p>
+                        <p className="list__meta">
+                          {match.tin ? `TIN ${match.tin} · ` : ''}
+                          {match.reasons.map((code) => t[DUPLICATE_REASON_TEXT[code]]).join('; ')}
+                        </p>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
           <button
             type="button"
             className="secondary"
@@ -497,7 +651,7 @@ export function RegisterTaxpayerScreen({
             disabled={busy}
             onClick={() => void submit(true)}
           >
-            None of these — register as a new taxpayer
+            {t.tpNoneOfThese}
           </button>
         </div>
       )}
@@ -505,7 +659,7 @@ export function RegisterTaxpayerScreen({
       <div className="card">
         {step === 0 && (
           <>
-            <h2 className="card__title">Does the taxpayer already have a TIN?</h2>
+            <h2 className="card__title">{t.tpHasTin}</h2>
             <div className="button-row">
               <button
                 type="button"
@@ -513,7 +667,7 @@ export function RegisterTaxpayerScreen({
                 aria-pressed={form.hasTin}
                 onClick={() => set('hasTin', true)}
               >
-                Yes
+                {t.tpYes}
               </button>
               <button
                 type="button"
@@ -521,11 +675,11 @@ export function RegisterTaxpayerScreen({
                 aria-pressed={!form.hasTin}
                 onClick={() => set('hasTin', false)}
               >
-                No
+                {t.tpNo}
               </button>
             </div>
             {form.hasTin && (
-              <Field label="Existing TIN" hint="We will confirm it with the PSIRS TIN service" required>
+              <Field label={t.tpExistingTin} hint={t.tpExistingTinHint} required>
                 <input
                   inputMode="numeric"
                   value={form.existingTin}
@@ -538,47 +692,47 @@ export function RegisterTaxpayerScreen({
 
         {step === 1 && (
           <>
-            <h2 className="card__title">Basic information</h2>
-            <Field label="Registering as" required>
+            <h2 className="card__title">{t.tpBasicInfo}</h2>
+            <Field label={t.tpRegisteringAs} required>
               <select
                 value={form.taxpayerType}
                 onChange={(event) => set('taxpayerType', event.target.value as 'INDIVIDUAL' | 'BUSINESS')}
               >
-                <option value="INDIVIDUAL">An individual</option>
-                <option value="BUSINESS">A business</option>
+                <option value="INDIVIDUAL">{t.tpAnIndividual}</option>
+                <option value="BUSINESS">{t.tpABusiness}</option>
               </select>
             </Field>
 
             {form.taxpayerType === 'BUSINESS' ? (
               <>
-                <Field label="Business name" required>
+                <Field label={t.tpBusinessName} required>
                   <input value={form.businessName} onChange={(event) => set('businessName', event.target.value)} />
                 </Field>
-                <Field label="Type of business">
+                <Field label={t.tpTypeOfBusiness}>
                   <input value={form.businessType} onChange={(event) => set('businessType', event.target.value)} />
                 </Field>
               </>
             ) : (
               <>
-                <Field label="First name" required>
+                <Field label={t.tpFirstName} required>
                   <input value={form.firstName} onChange={(event) => set('firstName', event.target.value)} />
                 </Field>
-                <Field label="Middle name">
+                <Field label={t.tpMiddleName}>
                   <input value={form.middleName} onChange={(event) => set('middleName', event.target.value)} />
                 </Field>
-                <Field label="Last name" required>
+                <Field label={t.tpLastName} required>
                   <input value={form.lastName} onChange={(event) => set('lastName', event.target.value)} />
                 </Field>
-                <Field label="Date of birth">
+                <Field label={t.tpDateOfBirth}>
                   <input type="date" value={form.dateOfBirth} onChange={(event) => set('dateOfBirth', event.target.value)} />
                 </Field>
               </>
             )}
 
-            <Field label="Phone number" required>
+            <Field label={t.tpPhoneNumber} required>
               <input type="tel" inputMode="tel" value={form.phone} onChange={(event) => set('phone', event.target.value)} />
             </Field>
-            <Field label="Email address">
+            <Field label={t.tpEmailAddress}>
               <input type="email" inputMode="email" value={form.email} onChange={(event) => set('email', event.target.value)} />
             </Field>
           </>
@@ -586,21 +740,18 @@ export function RegisterTaxpayerScreen({
 
         {step === 2 && (
           <>
-            <h2 className="card__title">Identification</h2>
-            <p className="card__hint">
-              Optional, but it helps prevent duplicate records. The number is stored securely and
-              never shown in full.
-            </p>
-            <Field label="Identification type">
+            <h2 className="card__title">{t.tpStepIdentification}</h2>
+            <p className="card__hint">{t.tpIdentificationHint}</p>
+            <Field label={t.appIdentificationType}>
               <select value={form.identityType} onChange={(event) => set('identityType', event.target.value)}>
-                <option value="NIN">National Identification Number</option>
-                <option value="BVN">Bank Verification Number</option>
-                <option value="PASSPORT">International passport</option>
-                <option value="DRIVERS_LICENCE">Driver's licence</option>
-                <option value="VOTERS_CARD">Voter's card</option>
+                <option value="NIN">{t.idNin}</option>
+                <option value="BVN">{t.idBvn}</option>
+                <option value="PASSPORT">{t.idPassport}</option>
+                <option value="DRIVERS_LICENCE">{t.idLicence}</option>
+                <option value="VOTERS_CARD">{t.idVoters}</option>
               </select>
             </Field>
-            <Field label="Identification number">
+            <Field label={t.appIdentificationNumber}>
               <input
                 inputMode="numeric"
                 value={form.identityNumber}
@@ -612,11 +763,11 @@ export function RegisterTaxpayerScreen({
 
         {step === 3 && (
           <>
-            <h2 className="card__title">Address</h2>
-            <Field label="Address" required>
+            <h2 className="card__title">{t.tpStepAddress}</h2>
+            <Field label={t.tpStepAddress} required>
               <input value={form.address} onChange={(event) => set('address', event.target.value)} />
             </Field>
-            <Field label="Local Government Area" required>
+            <Field label={t.tpLga} required>
               <select
                 value={form.lgaId}
                 onChange={(event) => {
@@ -627,7 +778,9 @@ export function RegisterTaxpayerScreen({
                   setForm((previous) => ({ ...previous, lgaId: event.target.value, wardId: '' }));
                 }}
               >
-                <option value="">Select LGA</option>
+                <option value="">
+                  {lgaList.failed ? t.tpListCouldNotLoad : t.tpSelectLga}
+                </option>
                 {lgas.map((lga) => (
                   <option key={lga.id} value={lga.id}>
                     {lga.name}
@@ -635,17 +788,25 @@ export function RegisterTaxpayerScreen({
                 ))}
               </select>
             </Field>
-            <Field
-              label="Ward"
-              hint="Where revenue is reported from. Without it this collection cannot be counted below LGA level."
-            >
+            {lgaList.failed && (
+              <button type="button" className="secondary" onClick={lgaList.reload}>
+                {t.actionTryAgain}
+              </button>
+            )}
+            <Field label={t.tpWard} hint={t.tpWardHint}>
               <select
                 value={form.wardId}
                 disabled={!form.lgaId || wards.length === 0}
                 onChange={(event) => set('wardId', event.target.value)}
               >
                 <option value="">
-                  {!form.lgaId ? 'Choose an LGA first' : wards.length === 0 ? 'No wards listed' : 'Select ward'}
+                  {!form.lgaId
+                    ? t.tpChooseLgaFirst
+                    : wardList.failed
+                      ? t.tpListCouldNotLoad
+                      : wards.length === 0
+                        ? t.tpNoWardsListed
+                        : t.tpSelectWard}
                 </option>
                 {wards.map((ward) => (
                   <option key={ward.id} value={ward.id}>
@@ -654,7 +815,7 @@ export function RegisterTaxpayerScreen({
                 ))}
               </select>
             </Field>
-            <Field label="Community">
+            <Field label={t.tpCommunity}>
               <input value={form.community} onChange={(event) => set('community', event.target.value)} />
             </Field>
           </>
@@ -664,8 +825,8 @@ export function RegisterTaxpayerScreen({
           const selectedSector = sectors.find((s) => s.code === form.economicSector);
           return (
             <>
-              <h2 className="card__title">Business or activity</h2>
-              <Field label="Economic sector">
+              <h2 className="card__title">{t.tpBusinessOrActivity}</h2>
+              <Field label={t.tpEconomicSector}>
                 <select
                   value={form.economicSector}
                   onChange={(event) => {
@@ -679,7 +840,7 @@ export function RegisterTaxpayerScreen({
                     }
                   }}
                 >
-                  <option value="">— Select sector —</option>
+                  <option value="">{t.tpSelectSector}</option>
                   {sectors.map((sector) => (
                     <option key={sector.code} value={sector.code}>
                       {sector.label} ({sector.hausa})
@@ -691,10 +852,10 @@ export function RegisterTaxpayerScreen({
               {selectedSector && selectedSector.suggestedItems.length > 0 && (
                 <div style={{ marginTop: 12 }}>
                   <p style={{ fontSize: '0.82rem', fontWeight: 600, margin: '0 0 8px', color: 'var(--ink)' }}>
-                    Suggested tax obligations for {selectedSector.label}
+                    {t.tpSuggestedObligations.replace('{{sector}}', selectedSector.label)}
                   </p>
                   <p style={{ fontSize: '0.78rem', color: 'var(--muted)', margin: '0 0 10px' }}>
-                    Confirm which taxes apply to this taxpayer. You can add more later.
+                    {t.tpConfirmWhichTaxes}
                   </p>
                   {selectedSector.suggestedItems.map((item) => (
                     <label
@@ -714,7 +875,7 @@ export function RegisterTaxpayerScreen({
                         }}
                       />
                       <span>
-                        <strong>{item.name}</strong>{' '}
+                        <strong>{localName(lang, item.name, item.name_ha)}</strong>{' '}
                         <span style={{ color: 'var(--muted)', fontSize: '0.78rem' }}>
                           {item.frequency.toLowerCase().replace('_', '-')}
                         </span>
@@ -725,11 +886,11 @@ export function RegisterTaxpayerScreen({
               )}
 
               <div style={{ marginTop: 16 }}>
-                <Field label="Occupation (optional)">
+                <Field label={t.tpOccupation}>
                   <input value={form.occupation} onChange={(event) => set('occupation', event.target.value)} />
                 </Field>
               </div>
-              <Field label="Business activity (optional)">
+              <Field label={t.tpBusinessActivity}>
                 <input
                   value={form.businessActivity}
                   onChange={(event) => set('businessActivity', event.target.value)}
@@ -741,23 +902,47 @@ export function RegisterTaxpayerScreen({
 
         {step === 5 && (
           <>
-            <h2 className="card__title">Review and confirm</h2>
+            <h2 className="card__title">{t.tpReviewConfirm}</h2>
             <KeyValue
               items={[
-                ['Type', form.taxpayerType === 'BUSINESS' ? 'Business' : 'Individual'],
+                [t.tpType, form.taxpayerType === 'BUSINESS' ? t.tpBusiness : t.tpIndividual],
                 [
-                  'Name',
+                  t.tpName,
                   form.taxpayerType === 'BUSINESS'
                     ? form.businessName
                     : `${form.firstName} ${form.lastName}`,
                 ],
-                ['Phone', form.phone],
-                ['LGA', lgas.find((lga) => lga.id === form.lgaId)?.name ?? '—'],
-                ['Ward', wards.find((ward) => ward.id === form.wardId)?.name ?? '—'],
-                ['Address', form.address],
-                ['TIN', form.hasTin ? form.existingTin : 'Will be requested'],
+                [t.tpPhone, form.phone],
+                [t.tpLgaShort, lgas.find((lga) => lga.id === form.lgaId)?.name ?? '—'],
+                [t.tpWard, wards.find((ward) => ward.id === form.wardId)?.name ?? '—'],
+                [t.tpStepAddress, form.address],
+                ['TIN', form.hasTin ? form.existingTin : t.tpWillBeRequested],
               ]}
             />
+
+            {/*
+              * Which language PSIRS writes to this person in.
+              *
+              * On the review step, beside the consent, because it is a question
+              * for the taxpayer rather than a detail of the form — and this is
+              * the moment the agent is confirming things with them out loud.
+              * They hold no account here, so every message the platform ever
+              * sends them is chosen by this one answer.
+              */}
+            <div className="field">
+              <label htmlFor="preferred-language">{t.languageForMessages}</label>
+              <select
+                id="preferred-language"
+                value={form.preferredLanguage}
+                onChange={(event) =>
+                  set('preferredLanguage', event.target.value as 'en' | 'ha')
+                }
+              >
+                <option value="en">{t.pubEnglish}</option>
+                <option value="ha">{t.pubHausa}</option>
+              </select>
+              <p className="hint">{t.languageForMessagesHint}</p>
+            </div>
 
             <label className="checkbox">
               <input
@@ -765,10 +950,7 @@ export function RegisterTaxpayerScreen({
                 checked={form.consentGiven}
                 onChange={(event) => set('consentGiven', event.target.checked)}
               />
-              <span>
-                The taxpayer consents to their information being used by PSIRS for revenue
-                administration.
-              </span>
+              <span>{t.tpConsent}</span>
             </label>
             <label className="checkbox">
               <input
@@ -776,7 +958,7 @@ export function RegisterTaxpayerScreen({
                 checked={form.declarationAccepted}
                 onChange={(event) => set('declarationAccepted', event.target.checked)}
               />
-              <span>The taxpayer declares that the information given is true and correct.</span>
+              <span>{t.tpDeclaration}</span>
             </label>
           </>
         )}
@@ -790,31 +972,28 @@ export function RegisterTaxpayerScreen({
         <div className="button-row">
           {step > 0 && (
             <button type="button" className="secondary" onClick={() => setStep(step - 1)}>
-              Back
+              {t.tpBack}
             </button>
           )}
           {step < STEPS.length - 1 ? (
             <button type="button" disabled={!canContinue} onClick={() => setStep(step + 1)}>
-              Continue
+              {t.tpContinue}
             </button>
           ) : (
             <button type="button" disabled={busy || !canContinue} onClick={() => void submit(false)}>
               {busy ? <Spinner /> : null}
-              {busy ? 'Registering…' : 'Register taxpayer'}
+              {busy ? t.tpRegistering : t.tpRegisterTaxpayer}
             </button>
           )}
         </div>
 
         {connection === 'OFFLINE' && step === STEPS.length - 1 && (
           <>
-            <Alert kind="warning" title="You are offline">
-              <p style={{ margin: 0 }}>
-                Save this registration on the device. It will be sent to PSIRS automatically when
-                you are back online, and a TIN will be requested then.
-              </p>
+            <Alert kind="warning" title={t.tpYouAreOffline}>
+              <p style={{ margin: 0 }}>{t.tpSaveOfflineBody}</p>
             </Alert>
             <button type="button" className="secondary" disabled={!canContinue} onClick={saveForLater}>
-              Save on this device
+              {t.tpSaveOnDevice}
             </button>
           </>
         )}
@@ -838,6 +1017,7 @@ interface Profile {
     amount_kobo: string;
     status: string;
     revenue_item: string;
+    revenue_item_ha: string | null;
   }[];
   receipts: { id: string; receipt_number: string; amount_kobo: string; status: string }[];
   vehicles: { id: string; registration_number: string; current_expiry_date: string | null }[];
@@ -850,6 +1030,7 @@ export function TaxpayerScreen({
   taxpayerId: string;
   navigate: (path: string) => void;
 }) {
+  const { lang, t } = useI18n();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
@@ -859,7 +1040,9 @@ export function TaxpayerScreen({
       .get<Profile>(`/taxpayers/${taxpayerId}`)
       .then(setProfile)
       .catch((caught) => {
-        if (caught instanceof ApiRequestError) setError(caught.error);
+        // Same as the search above, and worse here: `if (!profile) return
+        // null` below meant a failure without a body drew an empty page.
+        setError(asApiError(caught));
       })
       .finally(() => setLoading(false));
   }, [taxpayerId]);
@@ -873,24 +1056,37 @@ export function TaxpayerScreen({
   return (
     <>
       <div className="card">
-        <h2 className="card__title">{displayName(taxpayer as never)}</h2>
+        <h2 className="card__title">{displayName(taxpayer as never, t)}</h2>
         <KeyValue
           items={[
-            ['TIN', taxpayer.tin ?? 'Not yet assigned'],
-            ['Phone', taxpayer.phone],
-            ['LGA', taxpayer.lga_name],
-            ['Address', taxpayer.address],
+            ['TIN', taxpayer.tin ?? t.tpNotYetAssigned],
+            [t.tpPhone, taxpayer.phone],
+            [t.tpLgaShort, taxpayer.lga_name],
+            [t.tpStepAddress, taxpayer.address],
           ]}
         />
         <button type="button" onClick={() => navigate(`/collect?taxpayerId=${taxpayerId}`)}>
-          Collect revenue
+          {t.tpCollectRevenue}
+        </button>
+        {/*
+          * Secondary, because collecting is what an agent is usually here to
+          * do. Enumeration is the other errand at the same stall: writing
+          * down what a business looks like so somebody who keeps no accounts
+          * can still be assessed on something other than a guess.
+          */}
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => navigate(`/taxpayers/${taxpayerId}/enumerate`)}
+        >
+          {t.tpEnumerate}
         </button>
       </div>
 
-      <p className="section-title">Transactions you facilitated</p>
+      <p className="section-title">{t.tpTransactionsYouFacilitated}</p>
       <div className="card card--flush">
         {profile.transactions.length === 0 ? (
-          <p className="empty">You have not processed any transaction for this taxpayer.</p>
+          <p className="empty">{t.tpNoTransactions}</p>
         ) : (
           <ul className="list">
             {profile.transactions.map((transaction) => (
@@ -901,7 +1097,7 @@ export function TaxpayerScreen({
                   onClick={() => navigate(`/transactions/${transaction.transaction_reference}`)}
                 >
                   <div className="list__body">
-                    <p className="list__title">{transaction.revenue_item}</p>
+                    <p className="list__title">{localName(lang, transaction.revenue_item, transaction.revenue_item_ha)}</p>
                     <p className="list__meta">{transaction.transaction_reference}</p>
                   </div>
                   <span className="list__amount">
@@ -915,14 +1111,14 @@ export function TaxpayerScreen({
       </div>
 
       {profile.note && (
-        <Alert kind="info" title="What you can see here">
+        <Alert kind="info" title={t.tpWhatYouCanSee}>
           <p style={{ margin: 0 }}>{profile.note}</p>
         </Alert>
       )}
 
       {profile.vehicles.length > 0 && (
         <>
-          <p className="section-title">Vehicles</p>
+          <p className="section-title">{t.tpVehicles}</p>
           <div className="card card--flush">
             <ul className="list">
               {profile.vehicles.map((vehicle) => (
@@ -931,8 +1127,8 @@ export function TaxpayerScreen({
                     <p className="list__title">{vehicle.registration_number}</p>
                     <p className="list__meta">
                       {vehicle.current_expiry_date
-                        ? `Expires ${vehicle.current_expiry_date.slice(0, 10)}`
-                        : 'No renewal on record'}
+                        ? t.tpExpires.replace('{{date}}', vehicle.current_expiry_date.slice(0, 10))
+                        : t.tpNoRenewal}
                     </p>
                   </div>
                 </li>

@@ -1,30 +1,30 @@
 /**
  * Transport and request-level security (PRD §54, Addendum §22).
  *
- * Rate limiting is in-process here for clarity; in production the store is
- * Redis so limits hold across instances. That is a deployment concern, not a
- * behavioural one — the policy and the error contract stay identical.
+ * Where the rate limiter keeps its counts is chosen by `RATE_LIMIT_STORE` and
+ * lives in `./rate-limit-store`; production refuses to boot on the per-process
+ * one. The policy and the error contract are identical either way — only the
+ * storage moves, so a limit means the same thing to a caller whichever store
+ * is behind it.
  */
 
 import type { NextFunction, Request, Response } from 'express';
 import { config } from '../config';
 import { tooManyRequests, badRequest } from '../lib/errors';
 import { subjectFromBearer } from '../lib/access-token';
+import {
+  MemoryBucketStore,
+  PostgresBucketStore,
+  type RateLimitStore,
+} from './rate-limit-store';
 
-interface Bucket {
-  count: number;
-  resetAt: number;
-}
+const store: RateLimitStore =
+  config.security.rateLimitStore === 'postgres'
+    ? new PostgresBucketStore()
+    : new MemoryBucketStore();
 
-const buckets = new Map<string, Bucket>();
-
-// Bounded sweep so the map cannot grow without limit under a spray of IPs.
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, bucket] of buckets) {
-    if (bucket.resetAt <= now) buckets.delete(key);
-  }
-}, 60_000).unref();
+/** Test seam: which store is actually in use, and how to clear it. */
+export const __rateLimitStore = store;
 
 /**
  * How a limit decides who is being metered.
@@ -59,6 +59,10 @@ export function rateLimit(
     // prevent. Anything unverifiable — forged, malformed, expired, issued
     // elsewhere — yields null and falls back to the address, so a caller
     // cannot mint themselves a fresh budget by inventing a subject.
+    //
+    // The shared store keeps that property: a caller already over the limit is
+    // refused from memory for the rest of their window, so a flood costs one
+    // round trip rather than one per request.
     const identity =
       options.keyBy === 'ip'
         ? (req.clientIp ?? 'unknown')
@@ -67,25 +71,25 @@ export function rateLimit(
            req.clientIp ??
            'unknown');
     const key = `${options.keyPrefix ?? req.baseUrl}:${identity}`;
-    const now = Date.now();
 
-    let bucket = buckets.get(key);
-    if (!bucket || bucket.resetAt <= now) {
-      bucket = { count: 0, resetAt: now + windowMs };
-      buckets.set(key, bucket);
-    }
+    store.hit(key, windowMs, max).then(
+      (bucket) => {
+        res.setHeader('x-ratelimit-limit', max);
+        res.setHeader('x-ratelimit-remaining', Math.max(0, max - bucket.count));
 
-    bucket.count += 1;
-    res.setHeader('x-ratelimit-limit', max);
-    res.setHeader('x-ratelimit-remaining', Math.max(0, max - bucket.count));
+        if (bucket.count > max) {
+          const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - Date.now()) / 1000));
+          res.setHeader('retry-after', retryAfter);
+          return next(tooManyRequests(retryAfter));
+        }
 
-    if (bucket.count > max) {
-      const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
-      res.setHeader('retry-after', retryAfter);
-      return next(tooManyRequests(retryAfter));
-    }
-
-    next();
+        next();
+      },
+      // `hit` handles its own failures and resolves; this is the belt to that
+      // brace. Either way the request proceeds rather than failing on a
+      // bookkeeping error.
+      () => next(),
+    );
   };
 }
 

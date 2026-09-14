@@ -32,6 +32,12 @@ const PNG = Buffer.from(
     '3de0000000c4944415408d763f8cfc0000003010100b5d3a4b70000000049454e44ae426082',
   'hex',
 );
+/** A real PDF header, for the documents a scanner produces rather than a camera. */
+const PDF = Buffer.concat([
+  Buffer.from('%PDF-1.4\n', 'ascii'),
+  Buffer.alloc(256, 0x20),
+  Buffer.from('\n%%EOF\n', 'ascii'),
+]);
 const JPEG = Buffer.concat([
   Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]),
   Buffer.alloc(512, 0x7a),
@@ -273,5 +279,77 @@ describe('A rejection is the start of a loop, not a verdict into the void', () =
       log.some((entry) => entry.access_type === 'REVIEW'),
       'a decision is an access event too — the log answers "who handled this document"',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('Every kind of document PSIRS asks an applicant for', () => {
+  /**
+   * One of the six types was ever uploaded. The other five are asked for by
+   * name — a selfie for the liveness check, proof of address, a passport
+   * photograph for the identity card, a second identification, and whatever
+   * else a reviewer asks for — and each goes through the same signature check
+   * and the same supersede rule. A type nobody had stored once is a type
+   * nobody knows the storing of, and the applicant would be the one to find
+   * out.
+   *
+   * `captureSource` is walked here too. CAMERA is what the field application
+   * sends; FILE is what a desktop browser sends when somebody uploads a scan
+   * they already had, and it is the difference between a photograph taken now
+   * and a file of unknown age — which is exactly what a reviewer looking at a
+   * proof of address needs to know.
+   */
+  const KINDS = [
+    { type: 'SELFIE', bytes: JPEG, contentType: 'image/jpeg', source: 'CAMERA' },
+    { type: 'PASSPORT_PHOTOGRAPH', bytes: JPEG, contentType: 'image/jpeg', source: 'CAMERA' },
+    { type: 'PROOF_OF_ADDRESS', bytes: PDF, contentType: 'application/pdf', source: 'FILE' },
+    { type: 'ADDITIONAL_IDENTIFICATION', bytes: PNG, contentType: 'image/png', source: 'FILE' },
+    { type: 'SUPPORTING_DOCUMENT', bytes: PDF, contentType: 'application/pdf', source: 'FILE' },
+  ] as const;
+
+  it('stores each one under its own type, alongside the others', async () => {
+    for (const kind of KINDS) {
+      const stored = await upload(kind.bytes, kind.contentType, {
+        type: kind.type,
+        source: kind.source,
+      });
+      assert.equal(stored.status, 201, `${kind.type} was refused: ${JSON.stringify(stored.body)}`);
+
+      const row = await queryOne<{ document_type: string; capture_source: string }>(
+        pool,
+        'SELECT document_type, capture_source FROM kyc_documents WHERE id = $1',
+        [stored.body.documentId],
+      );
+      assert.equal(row?.document_type, kind.type);
+      assert.equal(row?.capture_source, kind.source);
+    }
+
+    // Different types stand side by side. Only a second document of the SAME
+    // type supersedes, which is the rule a reviewer relies on when they open
+    // an application and expect to find all of what was asked for.
+    const mine = await get('/agents/me/kyc/documents', { token: agentToken });
+    assert.equal(mine.status, 200, JSON.stringify(mine.body));
+    const live = (mine.body.documents as { document_type: string }[]).map((d) => d.document_type);
+    for (const kind of KINDS) {
+      assert.ok(live.includes(kind.type), `${kind.type} is not in the applicant's own list`);
+    }
+  });
+
+  it('supersedes only the document of the same type', async () => {
+    const first = await upload(JPEG, 'image/jpeg', { type: 'SELFIE' });
+    const address = await upload(PDF, 'application/pdf', { type: 'PROOF_OF_ADDRESS', source: 'FILE' });
+    const second = await upload(PNG, 'image/png', { type: 'SELFIE' });
+    assert.equal(second.status, 201, JSON.stringify(second.body));
+
+    const rows = await query<{ id: string; superseded_at: Date | null }>(
+      pool,
+      'SELECT id, superseded_at FROM kyc_documents WHERE agent_id = $1',
+      [agentId],
+    );
+    const byId = new Map(rows.map((row) => [row.id, row.superseded_at]));
+    assert.notEqual(byId.get(first.body.documentId), null, 'the earlier selfie is superseded');
+    assert.equal(byId.get(second.body.documentId), null, 'the later selfie stands');
+    assert.equal(byId.get(address.body.documentId), null, 'the proof of address is untouched by it');
   });
 });

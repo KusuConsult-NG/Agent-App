@@ -35,6 +35,7 @@ import {
   firstLgaId,
   loginAs,
   post,
+  settleTransaction,
   resetDatabase,
   revenueItemByCode,
   startTestServer,
@@ -139,6 +140,9 @@ async function collectRealRevenue(): Promise<{ receiptNumber: string; verificati
     { token: session.accessToken, deviceId: AGENT_DEVICE },
   );
   assert.equal(simulated.status, 200, JSON.stringify(simulated.body));
+  // A receipt exists once the money has reached a government account, so the
+  // fixture settles the collection before asking for one to back up.
+  await settleTransaction(assessment.body.transactionId);
 
   const source = new Pool({ connectionString: SOURCE_URL });
   try {
@@ -236,7 +240,7 @@ describe(
             SELECT 'POST-RESTORE-FORGERY', t.id, p.id, t.taxpayer_id, 999999, 'FORGEDAFTER'
               FROM transactions t JOIN payments p ON p.transaction_id = t.id LIMIT 1
           `),
-          /does not match verified payment amount/,
+          /does not match (verified )?payment amount/,
           'a restored database that accepts a forged receipt is not a recovered platform',
         );
       } finally {

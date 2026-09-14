@@ -20,6 +20,7 @@ import {
   resetDatabase,
   startTestServer,
   stopTestServer,
+  settleTransaction,
 } from './helpers';
 import { pool, queryOne } from '../db/pool';
 import { seedReferenceData } from '../db/seed';
@@ -289,12 +290,15 @@ describe('4. 3-Person Maker-Checker Reversal & Voided Receipt Invalidation', () 
 
     const confirmRes = await post(`/payments/${paymentId}/confirm`, {}, { token: agentToken, deviceId: agentDeviceId });
     assert.equal(confirmRes.status, 200, JSON.stringify(confirmRes.body));
-    const receiptId = confirmRes.body.receiptId;
+    // Confirmation gives the taxpayer an acknowledgement; the receipt this
+    // reversal will void comes with the settlement.
+    assert.ok(confirmRes.body.acknowledgementNumber, 'the taxpayer holds something verifiable at once');
+    await settleTransaction(transactionId);
 
     const receiptRow = await queryOne<{ verification_code: string }>(
       pool,
-      'SELECT verification_code FROM receipts WHERE id = $1',
-      [receiptId],
+      'SELECT verification_code FROM receipts WHERE transaction_id = $1',
+      [transactionId],
     );
     assert.ok(receiptRow?.verification_code);
 

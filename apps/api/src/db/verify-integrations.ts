@@ -70,7 +70,10 @@ function wants(flag: string): boolean {
  */
 function record(check: Check): void {
   results.push(check);
-  const symbol = check.understood ? 'ok  ' : 'FAIL';
+  // A mock answers confidently and is never evidence of anything. Printing
+  // `ok` next to it is how a log kept for 180 days comes to say the
+  // integrations were checked when no provider was ever contacted.
+  const symbol = check.configured === 'mock' ? 'MOCK' : check.understood ? 'ok  ' : 'FAIL';
   console.log(`  ${symbol}  ${check.name.padEnd(22)} ${check.outcome}`);
   if (check.detail) console.log(`        ${check.detail}`);
 }
@@ -283,7 +286,8 @@ async function main(): Promise<void> {
   else console.log('  skip  SMS provider           (--sms, never included in --all)');
 
   console.log('');
-  const failed = results.filter((r) => !r.understood);
+  const mocked = results.filter((r) => r.configured === 'mock');
+  const failed = results.filter((r) => r.configured !== 'mock' && !r.understood);
   const checked = results.length;
 
   if (checked === 0) {
@@ -293,14 +297,33 @@ async function main(): Promise<void> {
     return;
   }
 
+  // A run whose subject was a mock proves nothing, so it must not end in the
+  // sentence that invites it to be filed as proof. This is not pedantry about
+  // wording: this output is the artefact the daily job keeps for 180 days as
+  // the evidence closing B-4, and an auditor reading it four months later has
+  // only these lines to go on.
+  if (mocked.length > 0) {
+    console.log(`  ${mocked.length} of ${checked} check(s) were answered by a development mock:`);
+    for (const check of mocked) {
+      console.log(`    - ${check.name} (${check.configured})`);
+    }
+    console.log('');
+    console.log('  A mock answers whatever it was written to answer. These checks are not');
+    console.log('  evidence about any real provider and this run cannot be recorded as');
+    console.log('  verification. Point the adapters at the provider sandboxes and run again.');
+    process.exitCode = 1;
+    if (failed.length === 0) return;
+    console.log('');
+  }
+
   if (failed.length === 0) {
     console.log(`  ${checked} check(s) ran and every answer was understood by the platform.`);
     console.log('  Record this output against the go-live checklist.');
     return;
   }
 
-  console.log(`  ${failed.length} of ${checked} check(s) produced an answer the platform could not`);
-  console.log('  act on. These are not ready for production:');
+  console.log(`  ${failed.length} of ${checked} check(s) reached a real provider and produced an`);
+  console.log('  answer the platform could not act on. These are not ready for production:');
   for (const check of failed) {
     console.log(`    - ${check.name}: ${check.outcome}`);
   }

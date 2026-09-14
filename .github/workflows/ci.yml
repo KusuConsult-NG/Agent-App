@@ -96,6 +96,41 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Check the Hausa review sheet is not behind the dictionary
+        # docs/HAUSA-REVIEW.md is what a native speaker reads before any of
+        # this reaches an agent, and its tables are generated. A sheet listing
+        # some of the strings is worse than no sheet, because it looks complete
+        # to the person reviewing it. This was in `npm run verify` and CI runs
+        # the steps individually, so nothing was running it.
+        run: npm run check:hausa-review
+
+      - name: Check the role action matrix still describes the platform
+        # The step above says of the Hausa sheet: "This was in `npm run verify`
+        # and CI runs the steps individually, so nothing was running it." Its
+        # sibling had the same gap and nobody looked. `verify` names six checks
+        # and this workflow ran five.
+        #
+        # It was failing when it was added here. docs/ROLE-ACTION-MATRIX.md is
+        # generated from the permissions the routes actually name, and moving
+        # `POST /usage/expire` off `report:read:all` left the committed table
+        # describing a platform that no longer existed — in the document a
+        # government reads to answer who may do what. The script says it
+        # better than this comment can: "A matrix PSIRS has signed off which no
+        # longer describes the platform is worse than no matrix, because
+        # somebody is relying on it."
+        #
+        # `a-check-that-nothing-runs.test.ts` now holds every script named in
+        # `verify` to appearing here, so the next one added to that list cannot
+        # go unrun.
+        run: npm run check:action-matrix
+
+      - name: Check no query filters on a value nothing writes
+        # A predicate naming an enum value the platform never writes matches
+        # nothing, and the column it computes reads as a business fact rather
+        # than a bug. It has happened twice to money figures; the script's
+        # header names both. Static, so it runs before the database exists.
+        run: npm run check:dead-predicates
+
       - name: Apply migrations
         run: npm run migrate
 
@@ -182,6 +217,67 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------
+  concurrency-tests:
+    name: Money path under contention
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # Separate from the main suite, and not for speed — these are fourteen
+    # seconds of a four-minute run. They are separate because of what they
+    # are: assertions about what happens when several confirmations of one
+    # payment arrive together, which is the class of test most likely to be
+    # disturbed by a loaded runner. Isolated, a wobble here cannot be mistaken
+    # for a unit-test regression, and a unit-test regression cannot hide
+    # behind one.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: psirs_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/psirs_test
+      JWT_SECRET: ci-jwt-secret-value-that-is-long-enough-32
+      IDENTITY_HASH_SECRET: ci-identity-hash-secret-long-enough-32
+      PAYMENT_WEBHOOK_SECRET: ci-payment-webhook-secret-long-enough-32
+      STORAGE_PATH: /tmp/psirs-ci-storage
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: npm run build --workspace @psirs/shared
+
+      - name: Apply migrations
+        run: npm run migrate
+
+      - name: Seed reference data
+        run: npm run seed -- --demo
+
+      - name: Confirmations racing each other
+        run: npm run test:concurrency
+
+  # ---------------------------------------------------------------------
   images:
     name: Build every image
     runs-on: ubuntu-latest
@@ -213,10 +309,10 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build ${{ matrix.name }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}

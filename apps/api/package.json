@@ -10,30 +10,34 @@
     "dev": "tsx watch src/server.ts",
     "migrate": "tsx src/db/migrate.ts",
     "seed": "tsx src/db/seed.ts",
-    "test": "tsx --test --test-concurrency=1 src/tests/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
+    "test:concurrency": "tsx --test --test-concurrency=1 src/tests/concurrency/*.test.ts",
     "pretest": "npm run build --workspace @psirs/shared",
     "verify:integrations": "tsx src/db/verify-integrations.ts",
-    "load-test": "tsx src/db/load-test.ts"
+    "load-test": "tsx src/db/load-test.ts",
+    "test:serial": "tsx --test --test-concurrency=1 src/tests/*.test.ts"
   },
   "dependencies": {
     "@psirs/shared": "*",
     "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.2",
-    "pdfkit": "^0.19.1",
+    "pdfkit": "^0.20.2",
     "pg": "^8.13.1",
     "qrcode": "^1.5.4",
-    "zod": "^4.4.3"
+    "web-push": "^3.6.7",
+    "zod": "^4.6.2"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/node": "^26.2.0",
-    "@types/pdfkit": "^0.13.5",
+    "@types/node": "^26.5.1",
+    "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.11.10",
     "@types/qrcode": "^1.5.5",
-    "tsx": "^4.19.2",
+    "@types/web-push": "^3.6.4",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2"
   }
 }

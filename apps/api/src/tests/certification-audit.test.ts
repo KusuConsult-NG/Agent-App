@@ -28,6 +28,7 @@ import {
   createGovernmentUser,
   firstLgaId,
   revenueItemByCode,
+  settleTransaction,
 } from './helpers';
 import { seedReferenceData } from '../db/seed';
 import { seedDemoAgent } from '../db/seed-agent';
@@ -193,11 +194,110 @@ describe('AUDIT 1 — "No verified payment = no receipt" survives a direct datab
     assert.equal(count!.n, '0');
   });
 
+  /*
+   * The rule the platform holds today, which this suite did not carry evidence
+   * for.
+   *
+   * The case above is the rule as it stood before migration 040: a PENDING
+   * payment cannot be receipted. Migration 040 raised the bar — a receipt now
+   * asserts the money reached a government account, not merely that the
+   * gateway confirmed it — and migration 052 closed the gap that let a
+   * settlement which settled nothing satisfy it. Neither had a case here, so
+   * the strongest claim in this report was certified against the weaker rule
+   * it replaced. Found by the revision-10 money-path review, which read this
+   * file rather than the platform.
+   *
+   * Three states are attacked, because "unsettled" is not one condition:
+   * verified with no settlement at all, verified against a settlement that is
+   * still PENDING, and verified against one the bank paid short and an officer
+   * marked DISPUTED. The third is the one nobody has to forge — a short
+   * payment produces it in the ordinary course of business, and every payment
+   * in that batch carries a settlement_id like any other.
+   */
+  it('refuses a receipt for a VERIFIED payment the State has not been paid for', async () => {
+    const agent = await seedActiveAgent();
+    const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
+    const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
+    await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+
+    const payment = await queryOne<{ id: string; status: string; amount_kobo: string; settlement_id: string | null }>(
+      pool,
+      'SELECT id, status, amount_kobo, settlement_id FROM payments WHERE transaction_id = $1',
+      [transactionId],
+    );
+    assert.equal(payment!.status, 'VERIFIED', 'the gateway confirmed it');
+    assert.equal(payment!.settlement_id, null, 'and nothing has settled it');
+
+    const forge = (receiptNumber: string) =>
+      pool.query(
+        `INSERT INTO receipts
+           (receipt_number, transaction_id, payment_id, taxpayer_id, amount_kobo, verification_code)
+         SELECT $4, t.id, $2, t.taxpayer_id, $3, 'UNSETTLED' || substr($4, 6)
+           FROM transactions t WHERE t.id = $1`,
+        [transactionId, payment!.id, payment!.amount_kobo, receiptNumber],
+      );
+
+    // 1. Verified, with no settlement at all.
+    await assert.rejects(
+      forge('FAKE-0002'),
+      /has not been settled into a government account/,
+      'gateway confirmation alone must not earn a receipt',
+    );
+
+    // 2. Verified, pointed at a settlement that has received nothing. The link
+    //    exists; what it points at does not say the money arrived. Migration
+    //    052 names the state it found, which is a different refusal from the
+    //    unlinked case above and worth asserting separately.
+    const pending = await queryOne<{ id: string }>(
+      pool,
+      `INSERT INTO settlements
+         (settlement_reference, gateway, settlement_date, expected_amount_kobo, received_amount_kobo, status)
+       VALUES ('AUDIT-UNSETTLED-1', 'mock', now(), $1, 0, 'PENDING') RETURNING id`,
+      [payment!.amount_kobo],
+    );
+    await pool.query('UPDATE payments SET settlement_id = $2 WHERE id = $1', [payment!.id, pending!.id]);
+    await assert.rejects(
+      forge('FAKE-0003'),
+      /settlement AUDIT-UNSETTLED-1 is PENDING, not RECONCILED/,
+      'a settlement that received nothing must not earn a receipt either',
+    );
+
+    // 3. Verified, pointed at a batch the bank paid short. recordSettlement
+    //    links every payment in a disputed batch on purpose, so an officer can
+    //    see which collections the short credit was meant to cover.
+    await pool.query(`UPDATE settlements SET status = 'DISPUTED', received_amount_kobo = 1 WHERE id = $1`, [
+      pending!.id,
+    ]);
+    await assert.rejects(
+      forge('FAKE-0004'),
+      /settlement AUDIT-UNSETTLED-1 is DISPUTED, not RECONCILED/,
+      'a disputed batch settles none of its collections, and the database must say so too',
+    );
+
+    const count = await queryOne<{ n: string }>(pool, 'SELECT count(*)::text AS n FROM receipts');
+    assert.equal(count!.n, '0', 'no receipt exists for money the State has not received');
+
+    // And a receipt does appear the moment a reconciled settlement covers it,
+    // so what is being proved is the rule and not a broken INSERT. The forged
+    // link is removed first: recordSettlement refuses to bank a payment twice,
+    // and the fixture above left this one pointing at a batch that never was.
+    await pool.query('UPDATE payments SET settlement_id = NULL WHERE id = $1', [payment!.id]);
+    await settleTransaction(transactionId);
+    const settled = await queryOne<{ n: string }>(
+      pool,
+      `SELECT count(*)::text AS n FROM receipts WHERE transaction_id = $1`,
+      [transactionId],
+    );
+    assert.equal(settled!.n, '1', 'settlement issues the receipt through the ordinary path');
+  });
+
   it('refuses a receipt whose amount does not match the verified payment', async () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const payment = await queryOne<{ id: string; status: string }>(
       pool,
@@ -291,6 +391,8 @@ describe('AUDIT 2 — an agent cannot make money appear', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     await assert.rejects(
       pool.query('DELETE FROM receipts WHERE transaction_id = $1', [transactionId]),
@@ -339,6 +441,10 @@ describe('AUDIT 3 — webhook replay cannot duplicate money', () => {
     for (const r of results) {
       assert.equal(r.status, 200, JSON.stringify(r.body));
     }
+
+    // Ten deliveries, then one settlement: the receipt is issued once, by the
+    // settlement, and neither the deliveries nor the settlement may double it.
+    await settleTransaction(transactionId);
 
     const counts = await queryOne<{
       receipts: string;
@@ -521,19 +627,28 @@ describe('AUDIT 5 — commission arithmetic, checked independently', () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
 
-    // PIT-CGT is 10% of a declared base and applies to individuals, so a
-    // chosen base produces exactly the government amounts the brief names:
-    // base x 10% = 1,000 / 10,000 / 100,000 / 1,000,000 naira.
+    /*
+     * Produce Sales Tax is 2% of a declared base, so a chosen base produces
+     * exactly the government amounts the brief names: base x 2% = 1,000 /
+     * 10,000 / 100,000 / 1,000,000 naira. Its ₦500 floor does not bind at any
+     * of them.
+     *
+     * This used PIT-CGT, which is now unpriced: the Capital Gains Tax Act was
+     * repealed into the Nigeria Tax Act, 2025 and the platform refuses to
+     * assess an item whose rate no law in force sets. The property under test
+     * is commission arithmetic and does not care which item raises the
+     * invoice, only that the government amount is predictable.
+     */
     const cases = [
-      { naira: 1_000n, baseKobo: 1_000_000 },
-      { naira: 10_000n, baseKobo: 10_000_000 },
-      { naira: 100_000n, baseKobo: 100_000_000 },
-      { naira: 1_000_000n, baseKobo: 1_000_000_000 },
+      { naira: 1_000n, baseKobo: 5_000_000 },
+      { naira: 10_000n, baseKobo: 50_000_000 },
+      { naira: 100_000n, baseKobo: 500_000_000 },
+      { naira: 1_000_000n, baseKobo: 5_000_000_000 },
     ];
 
     for (const [index, testCase] of cases.entries()) {
       const raised = await raiseInvoice(session.accessToken, AGENT_DEVICE, {
-        itemCode: 'PIT-CGT',
+        itemCode: 'PRODUCE-SALES-TAX',
         inputs: { baseAmountKobo: testCase.baseKobo },
         name: `Commission Subject${index}`,
         phone: `+23490112000${index}0`,
@@ -631,6 +746,8 @@ describe('AUDIT 6 — historical transactions survive a rate change', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const before = await queryOne<{ amount_kobo: string; receipt_amount: string }>(
       pool,
@@ -754,6 +871,8 @@ describe('AUDIT 8 — public receipt verification discloses only what it should'
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const receipt = await queryOne<{ verification_code: string; receipt_number: string }>(
       pool,
@@ -926,7 +1045,7 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
   it('rejects a negative or absurd assessable amount', async () => {
     const agent = await seedActiveAgent();
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
-    const revenueItemId = await revenueItemByCode('PIT-CGT');
+    const revenueItemId = await revenueItemByCode('PRODUCE-SALES-TAX');
 
     const { response: taxpayer } = await registerTaxpayer(
       session.accessToken,
@@ -936,7 +1055,18 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
     );
     assert.equal(taxpayer.status, 201, JSON.stringify(taxpayer.body));
 
-    for (const baseAmountKobo of [0, -1, -1_000_000, 'not-a-number']) {
+    /*
+     * Absurd on any item, whatever its rate: a negative assessable amount is
+     * not a small one, and a word is not a number.
+     *
+     * The negative cases used to pass only by accident. On an item with a
+     * statutory floor, a percentage of a negative base rounds to zero, the
+     * floor is applied because zero is below it, and the assessment is raised
+     * — so `2.00% of ₦-0.01` produced a ₦500 charge and nothing objected.
+     * Whether nonsense was refused depended on whether the item had a
+     * minimum. `rate-engine.ts` now refuses it outright.
+     */
+    for (const baseAmountKobo of [-1, -1_000_000, 'not-a-number']) {
       const assessment = await post(
         '/revenue/assessments',
         { taxpayerId: taxpayer.body.taxpayerId, revenueItemId, inputs: { baseAmountKobo } },
@@ -945,6 +1075,28 @@ describe('AUDIT 10 — SQL injection and input handling', () => {
       assert.ok(
         assessment.status >= 400,
         `base ${baseAmountKobo} must be rejected, got ${assessment.status}: ${JSON.stringify(assessment.body)}`,
+      );
+    }
+
+    /*
+     * Zero is the interesting one, and its right answer depends on the item.
+     * Produce Sales Tax carries a ₦500 statutory floor, so a declared zero
+     * base is charged the floor rather than refused — a minimum means "at
+     * least this much", and that is a policy the law sets rather than a bug.
+     * On an item with no floor the same input must be refused outright.
+     *
+     * What must hold either way, and is the property worth having, is that
+     * nothing ever stores an assessment for nothing.
+     */
+    const zeroBase = await post(
+      '/revenue/assessments',
+      { taxpayerId: taxpayer.body.taxpayerId, revenueItemId, inputs: { baseAmountKobo: 0 } },
+      { token: session.accessToken, deviceId: AGENT_DEVICE },
+    );
+    if (zeroBase.status < 400) {
+      assert.ok(
+        BigInt(zeroBase.body.amountKobo) > 0n,
+        `a zero base may charge the statutory minimum but never nothing: ${JSON.stringify(zeroBase.body)}`,
       );
     }
 
@@ -967,6 +1119,8 @@ describe('AUDIT 11 — audit trail completeness for money movement', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const actions = await query<{ action: string }>(
       pool,
@@ -997,11 +1151,18 @@ describe('AUDIT 11 — audit trail completeness for money movement', () => {
     // Transaction state history must be complete and append-only.
     const events = await query<{ to_status: string }>(
       pool,
-      'SELECT to_status FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at',
+      'SELECT to_status FROM transaction_events WHERE transaction_id = $1 ORDER BY created_at, sequence',
       [transactionId],
     );
     const statuses = events.map((e) => e.to_status);
-    for (const expected of ['PAYMENT_PENDING', 'PAYMENT_SUCCESSFUL', 'PAYMENT_VERIFIED', 'RECEIPT_GENERATED']) {
+    for (const expected of [
+      'PAYMENT_PENDING',
+      'PAYMENT_SUCCESSFUL',
+      'PAYMENT_VERIFIED',
+      'RECONCILIATION_PENDING',
+      'RECEIPT_GENERATED',
+      'SETTLED',
+    ]) {
       assert.ok(statuses.includes(expected), `state history must include ${expected}`);
     }
   });
@@ -1136,6 +1297,9 @@ const PRODUCTION_ENV: Record<string, string> = {
   ERROR_REPORTING: 'webhook',
   ERROR_REPORTING_URL: 'https://alerts.psirs.pl.gov.ng/hook',
   METRICS_TOKEN: 'a-scrape-token',
+  // Per-process counts mean the advertised cap is multiplied by the replica
+  // count, and the recommended topology is two or more.
+  RATE_LIMIT_STORE: 'postgres',
 };
 
 /**
@@ -1289,6 +1453,9 @@ describe('AUDIT 13 — concurrency', () => {
       ),
     );
 
+    // Eight racing confirmations, then the settlement that earns the receipt.
+    await settleTransaction(transactionId);
+
     const counts = await queryOne<{ receipts: string; commissions: string }>(
       pool,
       `SELECT (SELECT count(*)::text FROM receipts WHERE transaction_id = $1) AS receipts,
@@ -1311,6 +1478,8 @@ describe('AUDIT 14 — document access control', () => {
     const session = await loginAs(agent.phone, agent.password, AGENT_DEVICE);
     const { transactionId } = await raiseInvoice(session.accessToken, AGENT_DEVICE);
     await payAndVerify(session.accessToken, AGENT_DEVICE, transactionId);
+    // The State is actually paid, which is what earns the receipt.
+    await settleTransaction(transactionId);
 
     const document = await queryOne<{ id: string }>(
       pool,
