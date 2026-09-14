@@ -140,6 +140,17 @@ function looksLikeCode(text: string): boolean {
     text.endsWith('(') ||
     // `something.method(` — a call. No sentence contains one.
     /[A-Za-z_]\w*\.[A-Za-z_]\w*\(/.test(text) ||
+    /*
+     * `name()` — a call taking no arguments.
+     *
+     * The dotted rule above only sees a METHOD call. A comparison against a
+     * bare function — `form.dateOfBirth > todayIsoLocal()` — puts
+     * `todayIsoLocal())` between the `>` and the block's `{`, and nothing here
+     * recognised it, so the guard reported a function name as untranslated
+     * English. No sentence contains an empty pair of parentheses closed
+     * immediately after a word.
+     */
+    /[A-Za-z_]\w*\(\)/.test(text) ||
     /\b(?:const|let|var)\s|\buseState\(|\buseRef\(|\bRecord<|\bPromise<|\bapi\.[a-z]/.test(text)
   );
 }

@@ -18,6 +18,7 @@ import { AppError, badRequest, conflict, notFound } from '../lib/errors';
 import { tinService } from '../integrations';
 import { recordAudit } from './audit';
 import { scopeParams, type ReportScope } from './report-scope';
+import { likeContains } from '../lib/like';
 import { queueNotification } from './notifications';
 
 export interface TaxpayerInput {
@@ -878,7 +879,7 @@ export async function searchTaxpayers(
     }
   }
   if (params.q) {
-    const term = `%${params.q.trim().toLowerCase()}%`;
+    const term = likeContains(params.q.trim().toLowerCase());
     values.push(term);
     conditions.push(
       `(lower(coalesce(t.first_name,'') || ' ' || coalesce(t.last_name,'')) LIKE $${values.length}` +

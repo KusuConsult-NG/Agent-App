@@ -23,6 +23,8 @@ import { syncTaxpayerComplianceAndIncentives } from '../services/incentives';
 import { requestOtp, verifyOtp } from '../services/auth';
 import { paymentHistory } from '../services/payment-history';
 import { logVerificationAttempt } from '../services/receipts';
+import { todayInPlateau } from '../lib/calendar-day';
+import { likeContains } from '../lib/like';
 
 export const citizenRouter = Router();
 
@@ -89,7 +91,7 @@ citizenRouter.get(
               lower(first_name || ' ' || coalesce(last_name,'')) LIKE lower($1)
               OR lower(coalesce(business_name,'')) LIKE lower($1)
             )`,
-        [`%${name}%`],
+        [likeContains(name)],
       );
       const count = Number.parseInt(result?.cnt ?? '0', 10);
       await recordLookup(req.clientIp, name, count > 0 ? 'VALID' : 'NOT_FOUND');
@@ -439,7 +441,14 @@ citizenRouter.post(
         code: data.code,
       });
 
-      const to = data.to ?? new Date().toISOString().slice(0, 10);
+      /*
+       * "Today" is the citizen's today, not the process's.
+       *
+       * `new Date().toISOString().slice(0, 10)` is the UTC day, so for the
+       * first hour of a Plateau day this window ended yesterday and a payment
+       * made at 00:15 was missing from the payer's own history until 01:00.
+       */
+      const to = data.to ?? todayInPlateau();
       const from =
         data.from ??
         (() => {

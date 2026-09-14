@@ -17,6 +17,7 @@ import type { Db } from '../db/pool';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { generateVerificationCode } from '../lib/crypto';
+import { escapeLike } from '../lib/like';
 import {
   nextAssessmentNumber,
   nextInvoiceNumber,
@@ -103,7 +104,7 @@ export async function listItems(
       options.categoryId ?? null,
       options.taxpayerType ?? null,
       options.lgaId ?? null,
-      options.search ?? null,
+      options.search ? escapeLike(options.search) : null,
       options.includeWithdrawn ?? false,
       options.authorityId ?? null,
     ],

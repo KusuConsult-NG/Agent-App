@@ -45,6 +45,7 @@
 import type { Db } from '../db/pool';
 import { query, queryOne } from '../db/pool';
 import { forbidden, notFound } from '../lib/errors';
+import { likeContains } from '../lib/like';
 import {
   type ReportScope,
   scopeParams,
@@ -152,7 +153,7 @@ export async function globalSearch(
   const limit = Math.min(params.limit ?? 5, 25);
   if (term.length < 2) return { term, hits: [] };
 
-  const like = `%${term.replace(/[%_]/g, (match) => `\\${match}`)}%`;
+  const like = likeContains(term);
   const digits = term.replace(/\D/g, '');
   const kinds = candidateKinds(term);
   const { statewide, territoryIds, lgaIds } = scopeParams(scope);

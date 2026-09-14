@@ -1,7 +1,7 @@
 /** Revenue catalogue and social incentive programmes (PRD §9, §41). */
 
 import { useCallback, useEffect, useState } from 'react';
-import { enumLabel, formatNaira, localName, nairaToKobo } from '@psirs/shared';
+import { enumLabel, formatNaira, localName, nairaToKobo, todayIsoLocal } from '@psirs/shared';
 import { ApiRequestError, api, asApiError, can, stepUp, type ApiError, type User } from '../lib/api';
 import { Alert, Badge, ErrorAlert, Loading, Money, ReasonRule, Table, formatDate } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
@@ -885,7 +885,7 @@ function RateChangeForm({
             id="effective"
             type="date"
             value={effectiveFrom}
-            min={new Date().toISOString().slice(0, 10)}
+            min={todayIsoLocal()}
             onChange={(event) => setEffectiveFrom(event.target.value)}
           />
         </div>

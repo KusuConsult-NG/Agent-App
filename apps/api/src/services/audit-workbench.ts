@@ -33,6 +33,7 @@ import type { Permission } from '@psirs/shared';
 import { pool, query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
+import { currentYearInPlateau } from '../lib/calendar-day';
 import { canonicalJson, recordAudit } from './audit';
 import {
   resolveReportScope,
@@ -817,7 +818,7 @@ export async function getReport(
 
 async function nextNumber(client: PoolClient, sequence: string, prefix: string): Promise<string> {
   const row = await queryOne<{ value: string }>(client, `SELECT nextval('${sequence}') AS value`);
-  const year = new Date().getUTCFullYear();
+  const year = currentYearInPlateau();
   return `${prefix}/${year}/${String(row!.value).padStart(5, '0')}`;
 }
 

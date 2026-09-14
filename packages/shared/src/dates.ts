@@ -100,3 +100,32 @@ export function formatLongDateIn(
   const month = t[LONG_MONTH_KEYS[date.getMonth()]!];
   return `${day}, ${date.getDate()} ${month} ${date.getFullYear()}`;
 }
+
+/**
+ * Today as `YYYY-MM-DD`, on the clock of whoever is looking at the screen.
+ *
+ * `new Date().toISOString().slice(0, 10)` is the UTC day, and Nigeria is UTC+1
+ * all year round. So for the first hour of every Plateau day that expression
+ * answered "today" with yesterday's date — an officer recording a settlement at
+ * 00:15 got a form prefilled with the day before, and a date range defaulting
+ * to "up to today" ended before the collections already taken that morning.
+ *
+ * The parts are read off the local getters instead of going through UTC, so
+ * the answer is the date on the wall behind the person reading it.
+ *
+ * Deliberately the DEVICE's clock rather than a named zone. This is a default
+ * a person is shown and can change, so it should match the clock they can see;
+ * the server never trusts it, which is the division `targets.ts` already draws
+ * — "a client computing 'this month' from its own clock is a client that can be
+ * wrong about it", so the server resolves the periods that decide anything.
+ */
+export function todayIsoLocal(now: Date = new Date()): string {
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/** The local calendar day `days` before today, same rules as `todayIsoLocal`. */
+export function daysAgoIsoLocal(days: number, now: Date = new Date()): string {
+  const then = new Date(now);
+  then.setDate(then.getDate() - days);
+  return todayIsoLocal(then);
+}

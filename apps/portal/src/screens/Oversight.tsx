@@ -6,7 +6,7 @@ import { Alert, Badge, BeforeAfter, ErrorAlert, ExportButtons, Loading, Money, R
 import { withJustification } from '../lib/justify';
 import { usePortalI18n } from '../lib/i18n';
 import { useFilters } from '../lib/filters';
-import { CHAIN_TEXT, enumLabel, localName } from '@psirs/shared';
+import { CHAIN_TEXT, enumLabel, localName, todayIsoLocal } from '@psirs/shared';
 import type { ChainVerdict, TranslationDictionary } from '@psirs/shared';
 
 /**
@@ -930,7 +930,7 @@ export function AuditScreen() {
             </div>
             <ExportButtons
               path={`/government/audit?${auditQuery(500).toString()}`}
-              filename={`plateau-audit-${new Date().toISOString().slice(0, 10)}`}
+              filename={`plateau-audit-${todayIsoLocal()}`}
             />
           </div>
         </div>

@@ -5,6 +5,7 @@ import { ApiRequestError, api, login, type ApiError, type Session } from '../lib
 import { Alert, ErrorAlert, Field, PasswordField, Spinner } from '../ui';
 import { useI18n } from '../lib/i18n';
 import { useReferenceList } from '../lib/reference';
+import { todayIsoLocal } from '@psirs/shared';
 
 export function LoginScreen({
   onSignedIn,
@@ -220,7 +221,7 @@ export function ApplyScreen({
             value={form.dateOfBirth}
             onChange={update('dateOfBirth')}
             min="1900-01-01"
-            max={new Date().toISOString().slice(0, 10)}
+            max={todayIsoLocal()}
           />
         </Field>
         <PasswordField

@@ -2322,6 +2322,309 @@ made to release the endpoint. That fix covered one of the two things a handset
 keeps across a handover. The draft store was the other, and a fix to one
 persistence layer did not reach the second.
 
+## A receipt numbered under the year that had just ended
+
+Nigeria keeps West Africa Time all year: UTC+1, no daylight saving. Every
+container in this repository runs UTC. So between midnight and 01:00 on any
+Plateau day, the platform's clock and the State's clock name different days —
+and for that hour on 1 January, different years.
+
+Thirteen government reference numbers took their year from
+`new Date().getUTCFullYear()`. Observed with the clock frozen at 00:30 on 1
+January 2027, Plateau time, against the real database:
+
+```
+receipt number minted:   PSIRS/2026/002548
+date printed beside it:  1 January 2027
+```
+
+One receipt, two financial years. The number is not decoration: it is what the
+receipt is filed under, what a taxpayer quotes in an objection, and what is read
+back down a telephone to a support officer.
+
+`getUTC*` ignores `TZ`, so deploying the containers as `Africa/Lagos` would not
+have corrected a single one of these sites. The zone has to be named. That is
+the conclusion `reminders.ts` had already reached for the date a taxpayer is
+*told* — "the date they are given has to be theirs" — and `calendar-day.ts` had
+already reached for the last day a certificate names. Neither reached the date
+the State *writes down*.
+
+### What carried it
+
+`lib/references.ts` mints receipts, invoices, assessments, transactions,
+payments, refunds, settlements, payouts, documents, cases, groups, tickets,
+applications and referee codes — every one with the same `currentYear()`. Four
+other sites asked the same question in the same way:
+
+| site | what it stamps | consequence in that hour |
+|---|---|---|
+| `lib/references.ts` | 13 reference-number families | the year on a government number |
+| `services/audit-workbench.ts` | `PSIRS-AR/…`, `PSIRS-SMP/…` | the year on a signed audit report |
+| `services/enumeration.ts` | an assessment's `periodLabel` | the tax year a trader is assessed for |
+| `services/targets.ts` | the default target window, and `resolvePeriod` | the period an officer is shown, or sets |
+| `routes/citizen.ts` | the end of a payment-history window | a payment made at 00:15 missing from the payer's own history until 01:00 |
+
+`services/documents.ts` stamped the same year into the stored object's path.
+That one is cosmetic — the key is internal, nothing reads the year back out of
+it — and was changed for consistency, not because anything was wrong for a
+user.
+
+### What was checked and found clean
+
+Three things that looked like part of this and are not, recorded so the next
+reader does not re-open them:
+
+- **The sequences are never reset.** Nothing in the migrations or the scripts
+  issues `ALTER SEQUENCE … RESTART` or `setval`, so numbers stay globally unique
+  whatever year is printed on them. The defect is the label, never a collision —
+  which is why it had gone unnoticed.
+- **Nothing parses the year back out of a reference.** `investigation.ts` and
+  `routes/taxpayers.ts` match the *shape* of a reference to decide what kind of
+  thing it is; neither reads the year as data. So no query silently misses the
+  first hour's records.
+- **`periods.ts monthLabel` is the same shape and not the same bug.** It reads
+  `getUTCFullYear()` off a period start that arrived as a validated `YYYY-MM-DD`
+  and was parsed at UTC midnight — reading a date back, not asking what day it
+  is now. The two are distinguished by which direction the question runs.
+
+One latent hazard was found and left alone: `audit-workbench.ts` interpolates a
+sequence name straight into SQL (`nextval('${sequence}')`). Both call sites pass
+string literals, so nothing user-supplied reaches it and there is no live
+defect. It is written down here rather than fixed because changing it is a
+decision about that file's shape, not about this one.
+
+### The clients ask the same question, and get it wrong differently
+
+Seven more sites live in the two browser applications, and they fail for a
+related but distinct reason: `new Date()` there is the *device's* clock, which
+in Jos is already the right clock — and then `.toISOString()` throws that away
+and converts to UTC. So the correction is not "name the zone" but "stop
+converting".
+
+| site | what it decides | in that hour |
+|---|---|---|
+| `portal/Finance.tsx` | the settlement date a form is prefilled with | a settlement recorded at 00:15 is dated the day before |
+| `portal/Finance.tsx` | the end of the default collections range | this morning's collections are outside the window |
+| `portal/TaxpayerRecords.tsx` | "date of birth is in the future" | ×2 — the validation and the picker's `max` |
+| `portal/Configuration.tsx` | the earliest date a schedule may start | permissive by a day |
+| `agent/Auth.tsx` | the applicant date-of-birth picker's `max` | permissive by a day |
+| `portal/Transactions.tsx`, `portal/Oversight.tsx` | export filenames | cosmetic |
+
+`todayIsoLocal` and `daysAgoIsoLocal` in `@psirs/shared` read the local parts
+instead. Deliberately the device's clock rather than a named zone: these are
+defaults a person is shown and can change, so they should match the clock on the
+wall behind them, and the server never trusts them — which is the division
+`targets.ts` already draws when it says a client computing "this month" from its
+own clock is a client that can be wrong about it.
+
+### The fix, and the guard
+
+`lib/calendar-day.ts` — already the file that holds this platform's reasoning
+about whose clock a date is on — gains `plateauParts`, `currentYearInPlateau`
+and `todayInPlateau`. The parts come back as numbers rather than a `Date`, for
+the reason that file already gives: a calendar date is not an instant, and
+handing back a `Date` invites the re-interpretation the whole file exists to
+warn about.
+
+The substitution is one line repeated across fourteen files in three
+applications, which is exactly the kind of fix the fifteenth file does not get.
+So the change also adds a guard: nothing under the API, the shared package or
+either client may ask `new Date()` what year, month or day it is, or take
+`toISOString().slice(0, 10)` of it, unless the file is written down in an
+`ALLOWED` map with the reason. One entry stands today —
+`routes/vehicles.ts`, an upper bound on year of manufacture that is evaluated
+once at module load and already carries a `+1` of slack, so the hour is absorbed
+and nothing is stamped with the value.
+
+The guard skips lines that are wholly comment. A guard that counts a pattern
+quoted in its own explanation is a guard that fires on itself, and that lesson
+is already on the record here: the reachability guard once counted a path
+mentioned in a comment as a caller.
+
+### Two things the guard caught in its own author
+
+Recorded because they are the substance of why the guard exists, not incidental.
+
+**The first pattern could not see half of what it was guarding.** It was written
+`(?:getUTC)?(?:FullYear|Month|Date|Day)\(\)`, which matches
+`.getUTCFullYear()` and silently misses `.getFullYear()` — the plain local
+getter. The one site then sitting in `ALLOWED` used exactly that form, so the
+exception was excusing something the guard was never going to find, and a sweep
+run through it would have reported the tree clean while `new Date().getMonth()`
+sat anywhere it liked. Caught by testing the regex against both forms before
+trusting it. The pattern is now `get(?:UTC)?(…)`.
+
+**An exception that excuses nothing reads exactly like an exception that
+works.** A second `ALLOWED` entry was written for `packages/shared/src/dates.ts`
+— unnecessary, because the replacement's getters run on a parameter rather than
+on `new Date()`, so the pattern never matched there at all. It was caught by a
+third case added after the first flaw: every written-down exception must be
+load-bearing, and the test removes each in turn and requires the guard to notice.
+That case exists so the first flaw cannot recur silently.
+
+### One false positive, fixed where it belonged
+
+The portal's English-literal guard reported `todayIsoLocal())` as untranslated
+English: `form.dateOfBirth > todayIsoLocal()` puts that run between the `>` and
+the block's `{`, and `looksLikeCode` recognised a *method* call
+(`something.method(`) but not a bare one. The first fix was to contort the call
+site into a `localeCompare`, which is the wrong move — it bends readable code
+around a lint. Reverted, and the rule was added to `looksLikeCode` instead: no
+sentence contains an empty pair of parentheses closed immediately after a word.
+Mutation-checked like the rest.
+
+### Verification
+
+Eight cases in `the-first-hour-of-a-plateau-year.test.ts`, including the
+end-to-end mint against the real database under a frozen clock, and — the case
+that keeps the fix honest — an assertion that 31 minutes earlier the *old* year
+is still the answer, so the skew has been removed rather than moved.
+
+Mutation-checked, all six predictions correct:
+
+| mutation | predicted | actual |
+|---|---|---|
+| revert `references.ts` to `getUTCFullYear()` | 2 failures | 2 |
+| revert `resolvePeriod` to the UTC anchor parts | 1 failure | 1 |
+| make `todayInPlateau` return the UTC day | 1 failure | 1 |
+| empty the guard's `ALLOWED` | 1 failure | 1 |
+| revert one client site (`Finance.tsx`) | 1 failure | 1 |
+| drop the new `looksLikeCode` rule | 1 failure (portal) | 1 |
+
+The second is 1 rather than 2 deliberately: the guard matches `new Date()` asked
+directly, not a getter on a variable that already holds an instant, so it cannot
+see that mutation. The behavioural case is what carries it, and the prediction
+said so before the mutation was run.
+
+API suite **2220/2220** (was 2212), agent **350/350**, portal **662/662**,
+`npm run typecheck` clean.
+
+## A search box that was read as a pattern
+
+`GET /citizen-status?name=` is the public door. It deliberately answers a name
+search with a COUNT and the sentence *"use your TIN or phone number to see your
+specific record"*, and the whole surface is rate limited to ten requests a
+minute per address, because the register of who pays tax in Plateau State is
+not a list a stranger may page through.
+
+The count came from `... LIKE $1`, with the pattern built as `` `%${name}%` ``.
+`%` and `_` are LIKE wildcards, so the term was never a term. Observed against
+the database on a register of five people:
+
+```
+a stranger searching name=Am:           1
+a stranger searching name=%%:           5    <- the whole active register
+a stranger searching name=_____ ____:   4    <- a length probe
+```
+
+The second is the register's size — the one number the route exists not to
+give. The third is different in kind: `_` counts characters, so a caller can
+ask how many people have a forename of exactly five letters and narrow from
+there. That is a positional oracle a substring search cannot offer at all.
+Neither needs an account, a TIN, or anything but a browser.
+
+The minimum length is no defence. `name` requires two characters, and `%%` is
+two characters.
+
+### The escaper that did not escape its own escape character
+
+`investigation.ts` — the officers' search — was the one site that had thought
+about this, and escaped `%` and `_`:
+
+```ts
+const like = `%${term.replace(/[%_]/g, (match) => `\\${match}`)}%`;
+```
+
+The backslash is missing from that character class, and backslash is what
+Postgres uses as the LIKE escape character. So a term containing one re-opened
+the wildcard it was meant to close: `a\%b` became the pattern `%a\\%b%`, where
+`\\` is a literal backslash and the `%` after it is live again. Confirmed
+directly:
+
+```
+'xxa\ZZZbxx' LIKE '%a\\%b%'   ->  true
+```
+
+A search for the literal text `a\%b` matched `a`, a backslash, anything, `b`.
+This is **not** an enumeration hole: the surface is authenticated, and the
+pattern still requires a backslash in the data, so it cannot be widened to
+match everything. It is simply an escaper that did not escape its own escape
+character, and it is recorded here because a partial escaper is more dangerous
+than none — it reads, to the next person, as a solved problem.
+
+### The other three, and why they were not the defect
+
+`taxpayers.ts` (the officer search), `revenue.ts` (the catalogue) and
+`vehicles.ts` (registration numbers) all build a LIKE pattern from a caller's
+term without escaping. None of them is a disclosure: each is authenticated and
+territory-scoped, and in every one the term is an *optional narrowing* of a
+list the caller may already read in full. A `%` there means "no filter", which
+is what omitting the parameter already does. They were changed anyway, because
+a search box should match what somebody typed — an officer looking for
+`A_Z Motors` should not also get `AXZ Motors` — and because one helper means
+the next search box is right without anybody remembering.
+
+### The fix, and the guard
+
+`lib/like.ts` holds `escapeLike` and `likeContains`. Five sites use them, in
+the two shapes the codebase already had: three wrap the term in JavaScript, two
+concatenate it in SQL and so escape the term before binding it.
+
+The guard is about the file rather than the expression: a file whose SQL uses
+LIKE must import the escaper. It cannot tell whether a particular pattern is
+built from a caller's term or from a constant, which is why an exception is a
+written-down reason and not a silent exclusion.
+
+It found a sixth file the manual sweep had missed — `db/load-test.ts`, the load
+harness. That one is a genuine exception and is recorded as one: it serves no
+request, every pattern in it is built by the harness from its own fixture names
+and loop counter, and the trailing wildcard is the point, because the thing
+being measured is what a prefix scan costs.
+
+### Verification
+
+Eight cases in `a-search-box-is-not-a-pattern.test.ts`, written against the
+HTTP door rather than the query, because the query is not what a stranger has.
+The escaping is asked of Postgres rather than asserted about it — the escape
+character is a property of LIKE, not of this function.
+
+Mutation-checked, all four predictions correct:
+
+| mutation | predicted | actual |
+|---|---|---|
+| revert the public lookup to the raw pattern | 3 failures | 3 |
+| drop the backslash from `escapeLike` | 1 failure | 1 |
+| revert the officer search | 1 failure | 1 |
+| empty the guard's `ALLOWED` | 1 failure | 1 |
+
+API suite **2228/2228** (was 2220), `npm run typecheck` clean.
+
+Two process errors are recorded here because both produced results that looked
+like findings and were not.
+
+**A mutation that did not apply.** One mutation was first attempted with `sed`,
+whose pattern did not match, so the file was unchanged and the suite passed — a
+green run that meant nothing. It was re-applied with a script that asserts the
+edit landed, and confirmed. A mutation that does not apply looks exactly like a
+mutation the tests survive, which is the failure mode the whole technique exists
+to avoid.
+
+**Two suites at once.** The first full run was started with
+`npm run typecheck | tail -3 && node scripts/run-tests.mjs`. The pipe makes the
+exit status `tail`'s, which is always zero, so the `&&` proceeded even though
+typecheck had failed. Reading the typecheck error, and not the process list, the
+conclusion drawn was that the suite had never started — and a second full run
+was launched while the first was still going. The harness gives each shard its
+own database, but not each RUN, so eight shard processes shared four databases.
+The result was forty-odd failures spread across areas the change never touches:
+`deadlock detected`, foreign keys violated on `users`, subtests cancelled
+mid-flight. Both runs were void. Re-run alone, the suite is green.
+
+The lesson is the one this document keeps recording in other forms: a red result
+is evidence about the whole system under test, including the harness and the
+person running it, and the first question is what produced it rather than which
+line of the diff to blame.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

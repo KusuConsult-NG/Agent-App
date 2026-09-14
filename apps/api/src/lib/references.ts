@@ -14,6 +14,7 @@
 
 import type { Db } from '../db/pool';
 import { queryOne } from '../db/pool';
+import { currentYearInPlateau } from './calendar-day';
 
 async function nextValue(db: Db, sequence: string): Promise<number> {
   const row = await queryOne<{ value: string }>(db, `SELECT nextval($1) AS value`, [sequence]);
@@ -29,9 +30,15 @@ function pad(value: number, width = 6): string {
  * The year component uses the server clock, never a client-supplied date:
  * a field device with a wrong clock must not be able to mint next year's
  * receipt numbers.
+ *
+ * Plateau's clock, not the process's. This was `getUTCFullYear()`, which in a
+ * UTC+1 state numbers the first hour of 1 January under the year that has just
+ * ended: a receipt printed "1 January 2027, 00:30" and numbered
+ * PSIRS/2026/000123, the number disagreeing with the date beside it about
+ * which financial year the money came in.
  */
 function currentYear(): number {
-  return new Date().getUTCFullYear();
+  return currentYearInPlateau();
 }
 
 export async function nextReceiptNumber(db: Db): Promise<string> {
