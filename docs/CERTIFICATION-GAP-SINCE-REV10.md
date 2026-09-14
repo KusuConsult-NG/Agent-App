@@ -2625,6 +2625,83 @@ is evidence about the whole system under test, including the harness and the
 person running it, and the first question is what produced it rather than which
 line of the diff to blame.
 
+## A font chosen for the currency, carrying the names by luck
+
+Every receipt, invoice and certificate the platform issues prints a taxpayer's
+name, and a name is free text an agent typed in Plateau State. Written Hausa
+uses four hooked consonants — **ɓ ɗ ƙ ƴ** and their capitals — and they are
+ordinary in names here: Ɗanjuma, Ƙasimu, Ɓala. They sit in Latin Extended-B and
+IPA Extensions, which plenty of otherwise respectable Latin faces omit.
+
+The same bytes are a name to the database and a glyph lookup to the PDF.
+
+**Nothing is broken.** Liberation Sans, which the platform bundles, carries all
+eight in both the regular and the bold face. Checked by parsing the font, not
+by reading the licence:
+
+```
+LiberationSans-Regular.ttf   all 8 hooked letters present
+LiberationSans-Bold.ttf      all 8 hooked letters present
+```
+
+**A font that lacked them would not say so.** The same name rendered through
+PDFKit with a base-14 face produces a valid PDF of 1,313 bytes rather than an
+error. Nothing throws; the document is simply missing the letters.
+
+### What was actually missing
+
+The reason recorded beside the font choice is the naira sign, and only that:
+WinAnsi has no ₦, so amounts printed as a broken character, and the fix was to
+bundle a real TTF. `document-fonts.test.ts` was written to stop that
+regression, and it is a good test — it parses the cmap rather than trusting the
+font, checks the build carries the file, and checks a generated receipt really
+embeds it.
+
+It pinned exactly one codepoint: `const NAIRA = 0x20a6`.
+
+So the property the documents actually depend on — that the bundled face can
+spell the names of the people the State collects from — was held by nothing. A
+future swap to another metrically-compatible face, justified by "it still has
+₦", passes every check in that file and quietly stops being able to write half
+the names in the state. That is precisely the failure the file was written for,
+in its own words: a document that renders, and is wrong.
+
+### What changed
+
+No behaviour. The test's single codepoint became a `MUST_RENDER` list — the
+naira sign plus all eight hooked letters, each with the reason it is there —
+and the failure message names the character and what it is for. The receipt in
+the render case is now issued to `Ɗanjuma Ƙasimu Ɓala`, so the path is
+exercised with the characters in question rather than with ASCII.
+
+Deliberately not an alphabet. ASCII needs no test: a face that cannot draw `A`
+fails visibly on the first document. The characters worth pinning are the ones
+whose absence is silent.
+
+### Verification
+
+Mutation-checked, and one prediction was wrong:
+
+| mutation | predicted | actual |
+|---|---|---|
+| add a codepoint the bundled font genuinely lacks (U+4E00) | 1 failure | 1 |
+| make the renderer fall back to a base-14 face | 1 failure | **0** |
+| the same, applied to the font constants instead | 1 failure | 1 |
+
+The second was an inert mutation, not a surviving test. `registerFonts` sets
+the document's *initial* font, and every render helper immediately calls
+`doc.font(...)` itself — so changing the initial one changes nothing that
+reaches the page. Re-applied to `BODY_FONT` and `BOLD_FONT`, which every call
+site uses, it failed as predicted.
+
+That is the second inert mutation in this document's record, after the `sed`
+pattern that did not match. Both looked exactly like a test surviving a
+mutation, which is the one thing the technique must not be allowed to look
+like. The lesson both times was the same: confirm the mutation changed what you
+think it changed before reading anything into the result.
+
+Font test 3/3.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say
