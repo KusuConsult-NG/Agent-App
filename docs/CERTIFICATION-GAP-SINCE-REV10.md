@@ -2176,6 +2176,87 @@ Mutation-checked: with the float arithmetic restored, the new case fails and
 was real, the endpoint was exercised, and the values chosen were the ones that
 could never fail.
 
+## Two different audit records could share one fingerprint
+
+The audit chain is the platform's tamper-evidence control, and the traceability
+material tells a government that editing a recorded row is detectable by replay
+"even by someone with database access". That claim rested on every covered
+field having exactly one digest. For two of them it did not.
+
+Until hash version 3, every field went through one encoder that coerced
+anything matching `/^-?\d*\.?\d+$/` to a JavaScript number. It was written for
+`latitude` and `longitude` — the only two `NUMERIC` columns, which postgres
+returns as the string `"9.896500"` for a value written as `9.8965` — but it was
+applied to the five `TEXT` columns as well. Those come back byte-for-byte as
+they went in, so they never needed normalising, and normalising them threw away
+real differences. Observed, by digest comparison rather than by reading:
+
+| recorded | rewritten as | same digest |
+|---|---|---|
+| `request_id` `"0007"` | `"7"` | yes |
+| `request_id` `"12.00"` | `"0012"` | yes |
+| `request_id` `"9007199254740993"` | `"9007199254740992"` | yes |
+| `reason` `"1500"` | `"1500.00"` | yes |
+| `reason` `"0042"` | `"42"` | yes |
+| `request_id` `"a7"` | `"a007"` | no (control) |
+| `ip_address` `"10.0.0.1"` | `"10.0.0.2"` | no (control) |
+
+`request_id` is the sharp end. `middleware/context.ts` takes it from the
+caller's `X-Request-Id` header, so the value that later needs to collide is
+chosen by whoever made the request. Somebody with database access could then
+rewrite that field, or a numeric `reason`, and `verifyAuditChain` would report
+the log intact.
+
+### The sibling defect, which is latent rather than live
+
+The same encoder did not finish the job it was written for. `recordAudit`
+hashed the number it was handed while the column stored that number rounded to
+`NUMERIC(9,6)`, so an entry carrying a coordinate at a handset's precision
+would fail its own verification the first time anybody checked it.
+
+This is stated as latent deliberately. There are 138 `recordAudit` call sites
+and not one passes a coordinate, so no row on disk carries one. It becomes live
+the moment somebody wires up the `geoSchema` that already exists in
+`middleware/validate.ts`, which is why it is fixed now rather than noted.
+
+### What changed
+
+Hash version 3. Text is hashed as exactly the characters stored. Coordinates
+are quantised to the column's scale once, in `recordAudit`, before both the
+digest and the `INSERT`, so the stored value and the hashed value agree by
+construction rather than by both sides happening to round the same way.
+
+Versions 1 and 2 are untouched and `verifyAuditChain` still dispatches on the
+row's own `hash_version`, so every entry already written still verifies. That
+is pinned by frozen-vector tests carrying two digests captured from the code as
+it stood before version 3 existed: if those move, every historical row stops
+verifying and the chain would report tampering across the whole log.
+
+The two versions diverge only where version 2 lost a difference. A prose
+`reason` hashes identically under both; a `reason` of `"0007"` does not.
+
+### Why the existing tests could not see it
+
+`audit-chain-covers-the-row.test.ts` already tampers with `request_id`, and
+asserts the chain catches it. It rewrites `"req-original-0001"` to
+`"req-rewritten-9999"` — two values that sit outside the broken class. The
+assertion held while the property did not.
+
+### What the mutation check found, including where it was wrong
+
+Restoring the coercion for text fields fails 6 of the 13 new cases, as
+predicted. Removing the coordinate quantisation failed **none**, which was not
+predicted as a problem but was one: it meant the quantisation was uncovered.
+
+The reason it looked redundant is that the test coordinate's seventh decimal
+was 4, not a tie. node-postgres sends a number as its decimal text, so postgres
+parses `"9.0010005"` as an exact decimal, sees a tie and rounds half away from
+zero to `9.001001`, while JavaScript reaches for the nearest double first and
+`toFixed(6)` gives `9.001000`. Measured against this database: **of 400
+coordinates whose seventh decimal is 5, 198 round differently in postgres than
+in JavaScript.** A tie case is now covered, and removing the quantisation fails
+exactly that one.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say
