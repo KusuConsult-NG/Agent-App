@@ -24,6 +24,7 @@ import { requestOtp, verifyOtp } from '../services/auth';
 import { paymentHistory } from '../services/payment-history';
 import { logVerificationAttempt } from '../services/receipts';
 import { todayInPlateau } from '../lib/calendar-day';
+import { likeContains } from '../lib/like';
 
 export const citizenRouter = Router();
 
@@ -90,7 +91,7 @@ citizenRouter.get(
               lower(first_name || ' ' || coalesce(last_name,'')) LIKE lower($1)
               OR lower(coalesce(business_name,'')) LIKE lower($1)
             )`,
-        [`%${name}%`],
+        [likeContains(name)],
       );
       const count = Number.parseInt(result?.cnt ?? '0', 10);
       await recordLookup(req.clientIp, name, count > 0 ? 'VALID' : 'NOT_FOUND');

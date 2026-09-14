@@ -2499,6 +2499,110 @@ said so before the mutation was run.
 API suite **2220/2220** (was 2212), agent **350/350**, portal **662/662**,
 `npm run typecheck` clean.
 
+## A search box that was read as a pattern
+
+`GET /citizen-status?name=` is the public door. It deliberately answers a name
+search with a COUNT and the sentence *"use your TIN or phone number to see your
+specific record"*, and the whole surface is rate limited to ten requests a
+minute per address, because the register of who pays tax in Plateau State is
+not a list a stranger may page through.
+
+The count came from `... LIKE $1`, with the pattern built as `` `%${name}%` ``.
+`%` and `_` are LIKE wildcards, so the term was never a term. Observed against
+the database on a register of five people:
+
+```
+a stranger searching name=Am:           1
+a stranger searching name=%%:           5    <- the whole active register
+a stranger searching name=_____ ____:   4    <- a length probe
+```
+
+The second is the register's size — the one number the route exists not to
+give. The third is different in kind: `_` counts characters, so a caller can
+ask how many people have a forename of exactly five letters and narrow from
+there. That is a positional oracle a substring search cannot offer at all.
+Neither needs an account, a TIN, or anything but a browser.
+
+The minimum length is no defence. `name` requires two characters, and `%%` is
+two characters.
+
+### The escaper that did not escape its own escape character
+
+`investigation.ts` — the officers' search — was the one site that had thought
+about this, and escaped `%` and `_`:
+
+```ts
+const like = `%${term.replace(/[%_]/g, (match) => `\\${match}`)}%`;
+```
+
+The backslash is missing from that character class, and backslash is what
+Postgres uses as the LIKE escape character. So a term containing one re-opened
+the wildcard it was meant to close: `a\%b` became the pattern `%a\\%b%`, where
+`\\` is a literal backslash and the `%` after it is live again. Confirmed
+directly:
+
+```
+'xxa\ZZZbxx' LIKE '%a\\%b%'   ->  true
+```
+
+A search for the literal text `a\%b` matched `a`, a backslash, anything, `b`.
+This is **not** an enumeration hole: the surface is authenticated, and the
+pattern still requires a backslash in the data, so it cannot be widened to
+match everything. It is simply an escaper that did not escape its own escape
+character, and it is recorded here because a partial escaper is more dangerous
+than none — it reads, to the next person, as a solved problem.
+
+### The other three, and why they were not the defect
+
+`taxpayers.ts` (the officer search), `revenue.ts` (the catalogue) and
+`vehicles.ts` (registration numbers) all build a LIKE pattern from a caller's
+term without escaping. None of them is a disclosure: each is authenticated and
+territory-scoped, and in every one the term is an *optional narrowing* of a
+list the caller may already read in full. A `%` there means "no filter", which
+is what omitting the parameter already does. They were changed anyway, because
+a search box should match what somebody typed — an officer looking for
+`A_Z Motors` should not also get `AXZ Motors` — and because one helper means
+the next search box is right without anybody remembering.
+
+### The fix, and the guard
+
+`lib/like.ts` holds `escapeLike` and `likeContains`. Five sites use them, in
+the two shapes the codebase already had: three wrap the term in JavaScript, two
+concatenate it in SQL and so escape the term before binding it.
+
+The guard is about the file rather than the expression: a file whose SQL uses
+LIKE must import the escaper. It cannot tell whether a particular pattern is
+built from a caller's term or from a constant, which is why an exception is a
+written-down reason and not a silent exclusion.
+
+It found a sixth file the manual sweep had missed — `db/load-test.ts`, the load
+harness. That one is a genuine exception and is recorded as one: it serves no
+request, every pattern in it is built by the harness from its own fixture names
+and loop counter, and the trailing wildcard is the point, because the thing
+being measured is what a prefix scan costs.
+
+### Verification
+
+Eight cases in `a-search-box-is-not-a-pattern.test.ts`, written against the
+HTTP door rather than the query, because the query is not what a stranger has.
+The escaping is asked of Postgres rather than asserted about it — the escape
+character is a property of LIKE, not of this function.
+
+Mutation-checked, all four predictions correct:
+
+| mutation | predicted | actual |
+|---|---|---|
+| revert the public lookup to the raw pattern | 3 failures | 3 |
+| drop the backslash from `escapeLike` | 1 failure | 1 |
+| revert the officer search | 1 failure | 1 |
+| empty the guard's `ALLOWED` | 1 failure | 1 |
+
+One mutation was run twice. The first attempt used `sed`, whose pattern did not
+match, so the file was unchanged and the suite passed — a green run that meant
+nothing. It was re-applied and confirmed. A mutation that does not apply looks
+exactly like a mutation the tests survive, which is the failure mode the whole
+technique exists to avoid.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say

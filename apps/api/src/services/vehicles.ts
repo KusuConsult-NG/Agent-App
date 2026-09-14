@@ -24,6 +24,7 @@ import { registerDocument, renderVehicleDocumentPdf } from './documents';
 import { createAssessment } from './revenue';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
+import { escapeLike } from '../lib/like';
 
 export interface VehicleLookup {
   /**
@@ -753,7 +754,7 @@ export async function listVehicles(db: Db, params: { taxpayerId?: string; q?: st
       WHERE ($1::uuid IS NULL OR v.taxpayer_id = $1)
         AND ($2::text IS NULL OR v.registration_number ILIKE '%' || upper($2) || '%')
       ORDER BY v.created_at DESC LIMIT $3`,
-    [params.taxpayerId ?? null, params.q ?? null, params.limit ?? 50],
+    [params.taxpayerId ?? null, params.q ? escapeLike(params.q) : null, params.limit ?? 50],
   );
 }
 
