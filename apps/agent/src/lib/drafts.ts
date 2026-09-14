@@ -9,7 +9,15 @@
  * payment, because Addendum §23 is unambiguous — "Offline mode must never
  * authorize government revenue payment" — and the surest way to honour that is
  * to give the offline path no way to express one.
+ *
+ * A draft also belongs to whoever captured it. Agents share handsets, and a
+ * queue that outlived the session handed the next agent the last one's work:
+ * their captures were visible on this phone and went up under the new agent's
+ * name, because sync attributes a draft to the session that sends it and not
+ * to the person who made it.
  */
+
+import { getUser } from './api';
 
 /**
  * What may be captured without a connection.
@@ -70,6 +78,16 @@ function assertNotFinancial(payload: Record<string, unknown>): void {
 
 export interface Draft {
   clientReference: string;
+  /**
+   * Who captured this, so a shared handset cannot hand it to the next agent.
+   *
+   * Optional because a draft written before this field existed has no owner
+   * recorded. Those are treated as the current user's rather than stranded:
+   * "never lose a capture" is the older promise and the stronger one, and a
+   * queue nobody can see is a lost capture. New drafts are always stamped, so
+   * the untagged set only shrinks.
+   */
+  ownerId?: string;
   draftType: DraftType;
   payload: Record<string, unknown>;
   capturedAt: string;
@@ -134,14 +152,38 @@ export async function saveDraft(
     payload,
     capturedAt: new Date().toISOString(),
     status: 'PENDING_SYNC',
+    ownerId: getUser()?.id,
   };
   await withStore('readwrite', (store) => store.put(draft));
   return draft;
 }
 
+/**
+ * Whose draft this is, from the point of view of whoever is signed in now.
+ *
+ * An unstamped draft predates the field and is shown, per the note on
+ * `Draft.ownerId`. Everything else is shown to its owner alone.
+ */
+function mine(draft: Draft, userId: string | undefined): boolean {
+  return draft.ownerId === undefined || draft.ownerId === userId;
+}
+
+/**
+ * The drafts on this handset that belong to the agent using it.
+ *
+ * Filtered here rather than at each call site because this one function feeds
+ * all three readers — the pending badge, the drafts screen and the sync — and
+ * a fourth reader added later gets the scoping without having to know about it.
+ *
+ * Another agent's drafts are left in the store, not deleted: they are that
+ * agent's unsynced work and are waiting for them to sign in again.
+ */
 export async function listDrafts(): Promise<Draft[]> {
   const drafts = await withStore<Draft[]>('readonly', (store) => store.getAll() as IDBRequest<Draft[]>);
-  return drafts.sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
+  const userId = getUser()?.id;
+  return drafts
+    .filter((draft) => mine(draft, userId))
+    .sort((a, b) => b.capturedAt.localeCompare(a.capturedAt));
 }
 
 export async function pendingDrafts(): Promise<Draft[]> {

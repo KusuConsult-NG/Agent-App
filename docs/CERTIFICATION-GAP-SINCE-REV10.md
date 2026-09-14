@@ -2257,6 +2257,71 @@ coordinates whose seventh decimal is 5, 198 round differently in postgres than
 in JavaScript.** A tie case is now covered, and removing the quantisation fails
 exactly that one.
 
+## A queue that outlived the agent who filled it
+
+Agents share handsets. The application is built on that premise — it has device
+registration, clearance, and a session that refuses a blocked device precisely
+because a phone passes between people — and signing out already gives the push
+subscription back for the same reason.
+
+The offline draft queue was the other half of that handover and was not given
+back. Drafts live in IndexedDB, which outlives a session. `logout()` clears the
+session and releases the push endpoint and never touches the store; nothing
+anywhere in the application clears it, the only deletion being the removal of a
+draft that has synced. And a draft carried no record of who captured it.
+
+So the next agent to sign in on that phone held the last one's queue. Observed,
+by running it rather than by reading it:
+
+```
+A queued:              1
+B sees after handover: 1
+payload B can sync:    {"businessName":"A's observation","lgaId":"lga-1"}
+```
+
+### Where that ends up
+
+Sync attributes a draft to the session that sends it. `POST /taxpayers/drafts/sync`
+takes `req.agent?.agentId ?? req.auth!.agentId` and hands that to
+`recordObservation`; there was nothing in the draft to say otherwise. The route
+asks `requireActiveAgent()` without options, and `requireDevice` defaults off,
+so the handset is not checked either.
+
+A BUSINESS_OBSERVATION becomes the office's record of what a stall looks like
+and the basis of a presumptive assessment. The State therefore held that agent B
+observed premises B never visited — the provenance an objection turns on, and
+the same provenance the offline-dating fix was about. The next agent also read
+the trader's details as captured by the last one.
+
+**No money can ride this.** The queue refuses financial payloads outright
+(`FINANCIAL_KEYS`, Addendum §23) and has no payment draft type, so what leaked
+is provenance and personal data, not a payment. An early reading of this as a
+money path was wrong and is recorded as wrong here.
+
+### What changed, and what was deliberately not done
+
+A draft is stamped with the id of whoever captured it, and `listDrafts` returns
+only the current user's. That one function feeds all three readers — the pending
+badge, the drafts screen and the sync — so a fourth reader added later is scoped
+without having to know about it.
+
+Clearing the queue on sign-out would have been simpler and would have been
+wrong. It destroys work an agent captured and has not yet been able to send, and
+"never lose a capture" is the older promise and the stronger one. Another
+agent's drafts are hidden, not deleted: they are waiting for that agent to sign
+in again, which the tests pin.
+
+Drafts written before this field existed carry no owner and are shown to
+whoever is signed in, rather than being stranded — a queue nobody can see is a
+lost capture. New drafts are always stamped, so that untagged set only shrinks.
+
+### The same shape as the push subscription
+
+This is the defect that was fixed for `push_subscriptions` when sign-out was
+made to release the endpoint. That fix covered one of the two things a handset
+keeps across a handover. The draft store was the other, and a fix to one
+persistence layer did not reach the second.
+
 ## What this document deliberately does not do
 
 It assigns no defect numbers, changes no matrix verdict, and does not say
