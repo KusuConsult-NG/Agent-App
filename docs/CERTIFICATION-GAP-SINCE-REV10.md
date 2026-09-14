@@ -2496,10 +2496,8 @@ directly, not a getter on a variable that already holds an instant, so it cannot
 see that mutation. The behavioural case is what carries it, and the prediction
 said so before the mutation was run.
 
-Agent **350/350**, portal **662/662**, `npm run typecheck` clean. The API suite
-figure is added in the commit that follows this one, once the full run on the
-final tree has actually reported it — the number is not written down here ahead
-of being observed.
+API suite **2220/2220** (was 2212), agent **350/350**, portal **662/662**,
+`npm run typecheck` clean.
 
 ## What this document deliberately does not do
 
