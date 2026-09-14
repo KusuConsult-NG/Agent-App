@@ -2597,11 +2597,33 @@ Mutation-checked, all four predictions correct:
 | revert the officer search | 1 failure | 1 |
 | empty the guard's `ALLOWED` | 1 failure | 1 |
 
-One mutation was run twice. The first attempt used `sed`, whose pattern did not
-match, so the file was unchanged and the suite passed — a green run that meant
-nothing. It was re-applied and confirmed. A mutation that does not apply looks
-exactly like a mutation the tests survive, which is the failure mode the whole
-technique exists to avoid.
+API suite **2228/2228** (was 2220), `npm run typecheck` clean.
+
+Two process errors are recorded here because both produced results that looked
+like findings and were not.
+
+**A mutation that did not apply.** One mutation was first attempted with `sed`,
+whose pattern did not match, so the file was unchanged and the suite passed — a
+green run that meant nothing. It was re-applied with a script that asserts the
+edit landed, and confirmed. A mutation that does not apply looks exactly like a
+mutation the tests survive, which is the failure mode the whole technique exists
+to avoid.
+
+**Two suites at once.** The first full run was started with
+`npm run typecheck | tail -3 && node scripts/run-tests.mjs`. The pipe makes the
+exit status `tail`'s, which is always zero, so the `&&` proceeded even though
+typecheck had failed. Reading the typecheck error, and not the process list, the
+conclusion drawn was that the suite had never started — and a second full run
+was launched while the first was still going. The harness gives each shard its
+own database, but not each RUN, so eight shard processes shared four databases.
+The result was forty-odd failures spread across areas the change never touches:
+`deadlock detected`, foreign keys violated on `users`, subtests cancelled
+mid-flight. Both runs were void. Re-run alone, the suite is green.
+
+The lesson is the one this document keeps recording in other forms: a red result
+is evidence about the whole system under test, including the harness and the
+person running it, and the first question is what produced it rather than which
+line of the diff to blame.
 
 ## What this document deliberately does not do
 
