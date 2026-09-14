@@ -16,6 +16,22 @@
  * These tests check the property rather than the appearance: the bundled font
  * really does carry the glyph (its cmap table is parsed, not trusted), the
  * build really does carry the font, and a generated PDF really does embed it.
+ *
+ * THE CURRENCY IS NOT THE ONLY THING A DOCUMENT HAS TO SPELL.
+ *
+ * Every receipt, invoice and certificate carries a taxpayer's name, and a name
+ * is free text an agent typed in Plateau State. Written Hausa uses four hooked
+ * consonants — ɓ ɗ ƙ ƴ and their capitals — and they are ordinary in names
+ * here: Ɗanjuma, Ƙasimu, Ɓala. They sit in Latin Extended-B and IPA
+ * Extensions, which plenty of otherwise respectable Latin faces omit.
+ *
+ * Liberation Sans carries all eight, so nothing is broken today. What was
+ * missing is any statement that it must. The reason recorded beside the font
+ * choice is the naira sign alone, and this file pinned the naira sign alone —
+ * so a future swap to another metrically-compatible face, justified by "it
+ * still has ₦", would pass every check here and quietly stop being able to
+ * write half the names in the state. The failure would look exactly like the
+ * one this file was written for: a document that renders, and is wrong.
  */
 
 process.env.NODE_ENV = 'test';
@@ -31,7 +47,24 @@ import { renderReceiptPdf } from '../services/documents';
 
 const API_ROOT = join(__dirname, '..', '..');
 const FONT_DIR = join(API_ROOT, 'assets', 'fonts');
-const NAIRA = 0x20a6;
+/**
+ * Every character a document must be able to draw, and why.
+ *
+ * Not an alphabet — the characters whose absence would be silent and would
+ * matter. ASCII needs no test; a face that cannot draw `A` fails visibly on
+ * the first document.
+ */
+const MUST_RENDER: [string, number, string][] = [
+  ['₦', 0x20a6, 'every amount on every document'],
+  ['Ɓ', 0x0181, 'Hausa, capitalised — Ɓala'],
+  ['ɓ', 0x0253, 'Hausa'],
+  ['Ɗ', 0x018a, 'Hausa, capitalised — Ɗanjuma'],
+  ['ɗ', 0x0257, 'Hausa'],
+  ['Ƙ', 0x0198, 'Hausa, capitalised — Ƙasimu'],
+  ['ƙ', 0x0199, 'Hausa'],
+  ['Ƴ', 0x01b3, 'Hausa, capitalised'],
+  ['ƴ', 0x01b4, 'Hausa'],
+];
 
 /**
  * Does this TrueType file contain a glyph for `codepoint`?
@@ -91,13 +124,22 @@ describe('Documents can print the currency they are denominated in', () => {
     );
   });
 
-  it('bundles fonts that actually have a naira glyph', () => {
-    for (const name of readdirSync(FONT_DIR).filter((file) => file.endsWith('.ttf'))) {
-      assert.ok(
-        hasGlyph(join(FONT_DIR, name), NAIRA),
-        `${name} has no glyph for ₦ (U+20A6) — every amount would print as a broken character`,
-      );
+  it('bundles fonts that can draw every character a document must carry', () => {
+    const missing: string[] = [];
+    for (const file of readdirSync(FONT_DIR).filter((name) => name.endsWith('.ttf'))) {
+      for (const [character, codepoint, why] of MUST_RENDER) {
+        if (!hasGlyph(join(FONT_DIR, file), codepoint)) {
+          const hex = codepoint.toString(16).toUpperCase().padStart(4, '0');
+          missing.push(`${file}: no glyph for ${character} (U+${hex}) — ${why}`);
+        }
+      }
     }
+    assert.deepEqual(
+      missing,
+      [],
+      'a bundled face cannot draw a character every document needs. It would not ' +
+        `fail — it would print a broken character:\n  ${missing.join('\n  ')}`,
+    );
   });
 
   it('embeds the bundled font in a generated receipt, and prints the sign', async () => {
@@ -106,7 +148,7 @@ describe('Documents can print the currency they are denominated in', () => {
     const pdf = await renderReceiptPdf({
       receiptNumber: 'PSIRS/2026/000001',
       verificationCode: 'T7C72-QTUDN',
-      taxpayerName: 'Ngozi Dashe',
+      taxpayerName: 'Ɗanjuma Ƙasimu Ɓala',
       tin: null,
       revenueItem: 'Shops and Kiosks Rates',
       revenueCategory: 'Local Government Rates and Fees',
