@@ -101,29 +101,63 @@ export function computeHash(entry: {
    * 9.8965. Hashing either form directly would make every entry carrying a
    * coordinate fail its own verification.
    */
-  const canonical =
-    version === 1
-      ? JSON.stringify(base)
-      : JSON.stringify([
-          ...base,
-          canonicalField(entry.actorRole),
-          canonicalField(entry.reason),
-          canonicalField(entry.ipAddress),
-          canonicalField(entry.deviceId),
-          canonicalField(entry.latitude),
-          canonicalField(entry.longitude),
-          canonicalField(entry.requestId),
-        ]);
+  let canonical: string;
+  if (version === 1) {
+    canonical = JSON.stringify(base);
+  } else if (version === 2) {
+    canonical = JSON.stringify([
+      ...base,
+      canonicalField(entry.actorRole),
+      canonicalField(entry.reason),
+      canonicalField(entry.ipAddress),
+      canonicalField(entry.deviceId),
+      canonicalField(entry.latitude),
+      canonicalField(entry.longitude),
+      canonicalField(entry.requestId),
+    ]);
+  } else {
+    canonical = JSON.stringify([
+      ...base,
+      canonicalText(entry.actorRole),
+      canonicalText(entry.reason),
+      canonicalText(entry.ipAddress),
+      canonicalText(entry.deviceId),
+      canonicalCoordinate(entry.latitude),
+      canonicalCoordinate(entry.longitude),
+      canonicalText(entry.requestId),
+    ]);
+  }
 
   return createHash('sha256').update(canonical).digest('hex');
 }
 
-export type HashVersion = 1 | 2;
+export type HashVersion = 1 | 2 | 3;
 
 /** The digest new entries are written with. */
-export const CURRENT_HASH_VERSION: HashVersion = 2;
+export const CURRENT_HASH_VERSION: HashVersion = 3;
 
-/** One field, in a form both the writer and a later reader agree on. */
+/**
+ * The scale of audit_logs.latitude and audit_logs.longitude: NUMERIC(9,6).
+ *
+ * Hard-coded on purpose. If the column's scale ever changes, the digest of
+ * every entry carrying a coordinate changes with it, so that is a new hash
+ * version and not a constant somebody may quietly retune.
+ */
+const COORDINATE_SCALE = 6;
+
+/**
+ * Version 2's field encoding. Retained unchanged so entries already written
+ * still verify; never use it for a new digest.
+ *
+ * It coerces anything that looks like a number to a number, which was meant
+ * for the two NUMERIC columns but was applied to the five TEXT ones as well.
+ * Text columns come back from postgres as exactly the characters written, so
+ * they never needed it — and the coercion loses the difference between "007"
+ * and "7", between "1500" and "1500.00", and between two identifiers longer
+ * than a double can hold. Two different recorded values then share a digest,
+ * which is precisely what a tamper-evident chain must not allow. Version 3
+ * below hashes text as text.
+ */
 function canonicalField(value: unknown): string | number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === 'number') return value;
@@ -133,6 +167,45 @@ function canonicalField(value: unknown): string | number | null {
   return text.trim() !== '' && Number.isFinite(asNumber) && /^-?\d*\.?\d+$/.test(text.trim())
     ? asNumber
     : text;
+}
+
+/**
+ * A TEXT column, hashed as exactly the characters stored.
+ *
+ * postgres hands a TEXT or UUID column back byte-for-byte as it was written,
+ * so there is nothing to normalise and nothing that may be normalised: any
+ * two distinct values must produce two distinct digests.
+ */
+function canonicalText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
+/**
+ * A coordinate, hashed as the fixed-scale decimal the column actually holds.
+ *
+ * The writer is handed a JS number straight off a handset's GPS, which may
+ * carry more decimals than NUMERIC(9,6) can store. Hashing that number and
+ * then storing a rounded one would make the entry fail its own verification
+ * for ever after. recordAudit therefore quantises once and both stores and
+ * hashes the same value; this function is what a later reader applies to the
+ * string postgres returns, so the two agree by construction rather than by
+ * the two sides happening to round a tie the same way.
+ */
+function canonicalCoordinate(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const asNumber = typeof value === 'number' ? value : Number(String(value).trim());
+  // A coordinate that is not a number is a bug upstream, not something to
+  // silently hash as null: keep it visible in the digest as the text it was.
+  if (!Number.isFinite(asNumber)) return String(value);
+  return asNumber.toFixed(COORDINATE_SCALE);
+}
+
+/** The value to store in a NUMERIC(9,6) column, so postgres rounds nothing. */
+function quantizeCoordinate(value: number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  if (!Number.isFinite(value)) return null;
+  return value.toFixed(COORDINATE_SCALE);
 }
 
 /**
@@ -160,6 +233,16 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
   const createdAt = new Date().toISOString();
   const prevHash = previous?.hash ?? null;
 
+  /*
+   * Round the coordinates to the column's own scale once, here, and use the
+   * same value for the digest and for the INSERT. A handset's GPS reading
+   * carries more decimals than NUMERIC(9,6) keeps, so hashing what the caller
+   * passed and storing what postgres rounded it to would leave the entry
+   * failing its own verification the moment anybody checked it.
+   */
+  const latitude = quantizeCoordinate(entry.latitude);
+  const longitude = quantizeCoordinate(entry.longitude);
+
   const hash = computeHash({
     sequenceNo,
     actorId: entry.actorId ?? null,
@@ -175,8 +258,8 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
     reason: entry.reason ?? null,
     ipAddress: entry.ipAddress ?? null,
     deviceId: entry.deviceId ?? null,
-    latitude: entry.latitude ?? null,
-    longitude: entry.longitude ?? null,
+    latitude,
+    longitude,
     requestId: entry.requestId ?? null,
   });
 
@@ -201,8 +284,8 @@ export async function recordAudit(client: PoolClient, entry: AuditEntry): Promis
       entry.result ?? 'SUCCESS',
       entry.ipAddress ?? null,
       entry.deviceId ?? null,
-      entry.latitude ?? null,
-      entry.longitude ?? null,
+      latitude,
+      longitude,
       entry.requestId ?? null,
       prevHash,
       hash,
@@ -358,7 +441,7 @@ export async function verifyAuditChain(
         longitude: row.longitude,
         requestId: row.request_id,
       },
-      row.hash_version === 2 ? 2 : 1,
+      row.hash_version === 3 ? 3 : row.hash_version === 2 ? 2 : 1,
     );
 
     if (recomputed !== row.hash) {
