@@ -20,6 +20,7 @@ import {
   generateOtp,
   generateToken,
   hashPassword,
+  safeEqual,
   sha256,
   verifyPassword,
 } from '../lib/crypto';
@@ -789,7 +790,17 @@ export async function verifyOtp(params: {
       return { kind: 'EXHAUSTED' };
     }
 
-    if (sha256(params.code) !== otp.code_hash) {
+    /*
+     * Constant time, though the leak here is worth almost nothing.
+     *
+     * Both sides are hex digests, so a timing difference exposes bytes of the
+     * stored hash rather than of the code, and `max_attempts` below bounds
+     * guessing regardless. It is written this way because `safeEqual` names
+     * OTPs in its own comment as one of the three things it is for, and a
+     * helper that names a use it is not put to is the shape this repository
+     * keeps finding: the comment claiming more than the code does.
+     */
+    if (!safeEqual(sha256(params.code), otp.code_hash)) {
       const remaining = otp.max_attempts - otp.attempts - 1;
       await client.query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1', [otp.id]);
       return { kind: 'WRONG', remaining };
