@@ -2700,7 +2700,8 @@ mutation, which is the one thing the technique must not be allowed to look
 like. The lesson both times was the same: confirm the mutation changed what you
 think it changed before reading anything into the result.
 
-Font test 3/3.
+Font test 3/3, API suite **2228/2228** (unchanged — this adds no cases, it
+widens what an existing one asserts), `npm run typecheck` clean.
 
 ## What this document deliberately does not do
 
