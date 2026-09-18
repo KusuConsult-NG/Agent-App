@@ -68,18 +68,37 @@ export async function nominateReferee(params: {
   const { input } = params;
 
   return withTransaction(async (client) => {
-    const applicant = await queryOne<{ phone: string; email: string | null; full_name: string }>(
+    const applicant = await queryOne<{
+      phone: string;
+      alternate_phone: string | null;
+      email: string | null;
+      full_name: string;
+    }>(
       client,
-      `SELECT u.phone, u.email, u.full_name FROM agents a JOIN users u ON u.id = a.user_id
+      `SELECT u.phone, a.alternate_phone, u.email, u.full_name
+         FROM agents a JOIN users u ON u.id = a.user_id
         WHERE a.id = $1`,
       [params.agentId],
     );
     if (!applicant) throw notFound('That agent');
 
-    // §9: "The system should not allow an agent to use themselves as their own
-    // referee."
+    /*
+     * §9: "The system should not allow an agent to use themselves as their own
+     * referee."
+     *
+     * An applicant gives two numbers on the application form — `users.phone`
+     * and the `alternate_phone` on their own agent record — and both are their
+     * own. Checking only the first left the second as a way through: nominate
+     * a referee on the alternate number, and the invitation goes to a handset
+     * the applicant is holding, so they answer their own reference. Both
+     * columns are written by the same form through `phoneSchema`, so they are
+     * in the same +234 form and compare directly.
+     */
+    const applicantPhones = [applicant.phone, applicant.alternate_phone].filter(
+      (value): value is string => Boolean(value),
+    );
     if (
-      input.phone === applicant.phone ||
+      applicantPhones.includes(input.phone) ||
       (input.email && applicant.email && input.email.toLowerCase() === applicant.email.toLowerCase())
     ) {
       throw badRequest(
