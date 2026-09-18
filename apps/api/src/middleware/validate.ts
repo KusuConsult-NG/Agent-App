@@ -10,6 +10,7 @@ import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { z, ZodError, type ZodTypeAny } from 'zod';
 import { birthDateMessage, birthDateProblem } from '@psirs/shared';
 import { validationFailed } from '../lib/errors';
+import { NIGERIAN_PHONE, normaliseNigerianPhone, stripPhonePunctuation } from '../lib/phone';
 
 /**
  * A request whose route parameters are single strings.
@@ -103,17 +104,14 @@ export function asyncHandler(
 /** Nigerian mobile numbers, normalised to +234XXXXXXXXXX. */
 export const phoneSchema = z
   .string()
-  .trim()
-  .transform((value) => value.replace(/[\s-()]/g, ''))
+  .transform(stripPhonePunctuation)
   .refine(
-    (value) => /^(?:\+?234|0)[789]\d{9}$/.test(value),
+    (value) => NIGERIAN_PHONE.test(value),
     'Enter a valid Nigerian phone number, for example 08012345678',
   )
-  .transform((value) => {
-    if (value.startsWith('+234')) return value;
-    if (value.startsWith('234')) return `+${value}`;
-    return `+234${value.slice(1)}`;
-  });
+  // Non-null by the refine above; `lib/phone.ts` owns the shape so that what
+  // is written and what is looked up cannot drift apart.
+  .transform((value) => normaliseNigerianPhone(value)!);
 
 export const emailSchema = z.string().trim().toLowerCase().email('Enter a valid email address');
 

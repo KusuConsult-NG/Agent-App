@@ -25,6 +25,7 @@ import { createAssessment } from './revenue';
 import { queueNotification } from './notifications';
 import { log } from '../lib/logger';
 import { escapeLike } from '../lib/like';
+import { canonicalPhoneOrRaw } from '../lib/phone';
 
 export interface VehicleLookup {
   /**
@@ -188,7 +189,7 @@ export async function upsertVehicle(params: {
         [
           existing.id,
           params.input.taxpayerId ?? null,
-          params.input.ownerPhone ?? null,
+          canonicalPhoneOrRaw(params.input.ownerPhone),
           record?.authorityReference ?? null,
           found,
           record?.currentExpiryDate ?? null,
@@ -226,7 +227,7 @@ export async function upsertVehicle(params: {
         record?.vehicleClass ?? params.input.vehicleClass ?? null,
         record?.colour ?? params.input.colour ?? null,
         record?.ownerName ?? params.input.ownerName,
-        params.input.ownerPhone ?? record?.ownerPhone ?? null,
+        canonicalPhoneOrRaw(params.input.ownerPhone ?? record?.ownerPhone),
         source,
         record?.authorityReference ?? null,
         found ? new Date() : null,

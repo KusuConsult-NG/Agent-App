@@ -24,6 +24,7 @@ import { requestOtp, verifyOtp } from '../services/auth';
 import { paymentHistory } from '../services/payment-history';
 import { logVerificationAttempt } from '../services/receipts';
 import { todayInPlateau } from '../lib/calendar-day';
+import { phoneLookupForms } from '../lib/phone';
 import { likeContains } from '../lib/like';
 
 export const citizenRouter = Router();
@@ -145,10 +146,10 @@ citizenRouter.get(
       taxpayer = await queryOne(
         pool,
         `SELECT id, tin, tin_status, phone, status, status_reason FROM taxpayers
-          WHERE phone = $1 AND status <> 'MERGED'
+          WHERE phone = ANY($1::text[]) AND status <> 'MERGED'
           ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC
           LIMIT 1`,
-        [phone.trim()],
+        [phoneLookupForms(phone)],
       );
     }
 
@@ -357,9 +358,9 @@ async function taxpayerFor(tin?: string, phone?: string) {
   if (phone) {
     return queryOne<{ id: string; phone: string }>(
       pool,
-      `SELECT id, phone FROM taxpayers WHERE phone = $1 AND status <> 'MERGED'
+      `SELECT id, phone FROM taxpayers WHERE phone = ANY($1::text[]) AND status <> 'MERGED'
         ORDER BY CASE WHEN status = 'ACTIVE' THEN 0 ELSE 1 END, created_at DESC LIMIT 1`,
-      [phone.trim()],
+      [phoneLookupForms(phone)],
     );
   }
   return null;

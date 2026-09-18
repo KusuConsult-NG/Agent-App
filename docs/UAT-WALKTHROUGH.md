@@ -36,7 +36,7 @@ That one command:
 1. drops and recreates the `psirs_uat` database — **it owns that database**, so
    nothing you are working on is touched, and the demonstration accounts, which
    share one published password, cannot land anywhere real;
-2. applies all 80 migrations and seeds the reference data: 17 LGAs, 187 wards,
+2. applies all 81 migrations and seeds the reference data: 17 LGAs, 187 wards,
    9 revenue categories, 42 revenue items, 12 training modules, 73 notification
    templates;
 3. seeds five demonstration officers and one field agent — the agent walks the

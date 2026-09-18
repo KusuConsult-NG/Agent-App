@@ -22,7 +22,7 @@ verification run — describes the platform as it stood at that commit.
 | API test files | 139 | 190 |
 | Tables | 77 *(report's figure)* | 103 |
 | Triggers | 233 *(report's figure)* | 156 *(see below)* |
-| CHECK constraints | 194 *(report's figure)* | 301 *(see below)* |
+| CHECK constraints | 194 *(report's figure)* | 302 *(see below)* |
 | API tests passing | 1,523 *(report's figure)* | 2,171 |
 | Officer portal tests | 140 *(report's figure)* | 656 |
 | Agent PWA tests | 134 *(report's figure)* | 345 |
@@ -51,14 +51,14 @@ question. Triggers are `pg_trigger` rows that are not internal
 **and not test instrumentation** (156); a trigger declared
 `BEFORE INSERT OR UPDATE` is one trigger here and two rows in
 `information_schema.triggers`. CHECK constraints are `pg_constraint` rows of
-type `c` **on a relation in `public`** (301).
+type `c` **on a relation in `public`** (302).
 
 THIS ROW WAS WRONG UNTIL NOW, AND THE WAY IT WAS WRONG IS THE POINT. It read
 332, measured against `psirs_test`. The suite's enum-coverage harness
 (`apps/api/src/tests/enum-observation.ts`) attaches `observe_enum_ins` and
 `observe_enum_upd` to every table it watches — 176 triggers across 88 tables —
 so more than half of that 332 was instrumentation that exists in no deployed
-database. A database built fresh from the 80 migrations carries 156. The
+database. A database built fresh from the 81 migrations carries 156. The
 paragraph above this one is a careful note about *how* to count triggers, and
 it was attached to a count taken from the wrong database; getting the method
 right does not help if the subject is wrong.
@@ -87,9 +87,10 @@ a change of rule rather than the correction of an error: 301 was consistent
 with the method printed beside it, and a reader who re-derives it should know
 why it moved.
 
-It is 301 now. Two have been added since: migration 079's
-`notifications_secret_cleared_when_terminal` and migration 080's
-`notifications_provider_named_when_delivered`. A row the gateway has finished
+It is 302 now. Three have been added since: migration 079's
+`notifications_secret_cleared_when_terminal`, migration 080's
+`notifications_provider_named_when_delivered`, and migration 081's
+`vehicles_owner_phone_canonical`. A row the gateway has finished
 with must not still be holding the credential it was carrying; the constraint
 is what makes that a property of the schema rather than of the four `UPDATE`
 statements in `dispatchQueued` that clear it.
@@ -248,7 +249,7 @@ mechanism that has since changed.
    slash.
 
 3. **"233 triggers across 77 tables, 194 CHECK constraints."** Now 156, 103
-   and 301 — but see the counting note above before comparing the trigger
+   and 302 — but see the counting note above before comparing the trigger
    figures: 233 was taken while the same test instrumentation existed, and 156
    deliberately excludes it.
 4. **"enum coverage 462 of 537 declared states with none unaccounted."** Now
@@ -570,7 +571,7 @@ IF NOT EXISTS` throughout, so the second application did nothing. Had any of
 them been a bare `CREATE TABLE` or an `ALTER TABLE ... ADD COLUMN`, the second
 run would have failed — loudly, which is better, or in the middle of a
 deployment, which is worse. `psirs_uat` and `psirs_test` still agree at 103
-tables and 301 CHECK constraints.
+tables and 302 CHECK constraints.
 
 What it costs while it is silent is the ability to rebuild a database from the
 repository and get the one that is deployed. A row nobody can produce is a
@@ -738,7 +739,7 @@ was not an assertion: `enum-observation.ts`'s `enumColumns()` hit
 that had been restarted cold minutes earlier with four shards warming it at
 once. The re-run was 2,170 of 2,170. It is worth writing down because the
 harness runs that catalogue query — `pg_get_constraintdef` across every CHECK
-constraint in `public`, now 301 of them — once per test file, roughly 190 times
+constraint in `public`, now 302 of them — once per test file, roughly 190 times
 a run, against a fifteen-second timeout. Nothing is wrong with it today and it
 is the kind of setup cost that gets slower as the schema grows.
 
@@ -2711,3 +2712,90 @@ whose matrix silently omits half the system would make the document look
 current while leaving it less honest than its own `fa8f454` anchor makes it
 today. That anchor is the reason the report can still be trusted for what it
 covers, and it should stay until a revision covers the rest.
+
+## One number written three ways (migration 081)
+
+A Nigerian mobile number has three ordinary spellings and they are the same
+number: `08012345678`, `2348012345678`, `+2348012345678`. `phoneSchema`
+settles every number written through a form on the last of those, so
+`taxpayers.phone` is canonical. Two kinds of place then compared that stored
+value against a raw one.
+
+**Three doors that look a person up.** The public status page
+(`citizen.ts:149`), the citizen OTP door (`taxpayerFor`, `citizen.ts:361`) and
+the officer search (`services/taxpayers.ts:809`) each compared the string as
+typed. Observed against the database, on a taxpayer stored the way
+registration stores them:
+
+    stored as:                           +2348012345678
+    citizen types +2348012345678 -> hits 1
+    citizen types 08012345678   -> hits 0
+    citizen types 2348012345678 -> hits 0
+
+The middle line is the one that matters. `08012345678` is the form the portal's
+own placeholder tells a citizen to use (`pubCitizenExamplePhone`), and for most
+people it is the only form they know their own number in. It found nothing, and
+they were told PSIRS had no record of them — on the public page, and on the
+door that sends the one-time code, which is their only route to their full
+record. That door answers "if a record matches, a code has been sent" either
+way, so the miss is invisible to the person it happened to.
+
+**The connection graph.** `rebuildVehicleConnections` joins `taxpayers.phone`
+to `vehicles.owner_phone` with `=`. `owner_phone` never went through
+`phoneSchema` — the route schema is a bare `z.string().max(20)`, and the value
+is whatever the vehicle authority returned or whatever an agent typed. Four
+vehicles owned by one taxpayer stored as `+2348031234567`:
+
+    owner_phone      edge asserted
+    +2348031234567   yes
+    2348031234567    no
+    08031234567      no
+    0803 123 4567    no
+
+`{fromPhone: 1, ambiguous: 0}`. The three misses are silent in both directions:
+no edge, and nothing in the `ambiguous` count, which exists precisely so that a
+number that never surfaces is a problem somebody knows they have.
+`liabilitiesFor` and `coverageLeads` read those edges, so a vehicle whose owner
+PSIRS already holds on the register is an asset the State cannot see when it
+assesses or pursues that person.
+
+**Why nothing caught it.** Every vehicle fixture in the suite — six of them
+across two files — wrote `ownerPhone: '+234…'`. The tests spelled the number
+the way the code needed rather than the way a registry does, so the only
+spelling ever exercised was the one that worked.
+
+**Two fixes, because there are two problems.** A question asked at a door is
+*widened* to every spelling (`phoneLookupForms`), because normalising only the
+question leaves the reverse case — a row imported or seeded before
+`phoneSchema` covered that path, stored as `0803…`, unreachable by somebody
+typing `+234803…`. The column has no format constraint, so both directions are
+real, and a number the platform cannot parse still matches itself, so nothing
+findable becomes unfindable. A column that is *joined against* is instead
+*narrowed on write* (`canonicalPhoneOrRaw`, a backfill in migration 081, and
+`vehicles_owner_phone_canonical`), so the join stays an equality between two
+columns that mean the same thing. The CHECK refuses only what it can decide —
+a value that parses as Nigerian but is not in the expected form — and leaves a
+foreign number alone, because refusing a vehicle capture over the owner's
+dialling code is the worse outcome.
+
+`promoteExactIdentifier` was already right: the single "Name, phone or TIN" box
+runs what it is given through `phoneSchema` before searching, and its comment
+says why. The explicit `phone=` parameter beside it did not, which is the
+narrow gap this closes.
+
+Three other `phone` columns were checked and left alone:
+`government.ts:3507` (an office's contact number), `groups.ts:133`
+(`leader_phone`, displayed) and `government.ts:469` (`employee_phone`, on a
+PAYE schedule) are written and read but never matched against anything.
+
+Mutations: reverting the three lookup sites failed 4 tests as predicted (the
+three "every spelling" cases and the legacy-row case, controls untouched);
+reverting the vehicle write failed 2; dropping the CHECK failed 1. In the
+middle of that sequence `git checkout --` was used to undo a mutation on a file
+whose fix was still uncommitted, which restored the *unfixed* code rather than
+the fixed one — the arithmetic still separated the two mutations cleanly
+(6 = 4 + 2), but the habit is worth naming: on uncommitted work, undo a
+mutation by inverting it, not by asking git for the committed state.
+
+CHECK constraints: 301 → 302. Migrations: 80 → 81, which the walkthrough guard
+from the earlier entry caught on the first full-suite run.
