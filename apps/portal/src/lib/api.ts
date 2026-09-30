@@ -1,10 +1,22 @@
 /**
  * Portal API client.
  *
- * As in the agent app, the access token stays in memory and the refresh token
- * in sessionStorage, so closing the browser ends an officer's session rather
- * than leaving a durable credential on a shared government workstation
- * (PRD §62, §54).
+ * As in the agent app, the access token stays in memory. The refresh token
+ * goes to sessionStorage BY DEFAULT, so closing the browser ends an officer's
+ * session rather than leaving a durable credential on a shared government
+ * workstation (PRD §62, §54).
+ *
+ * An officer may opt out of that on the sign-in screen, and only by ticking a
+ * box that is never ticked for them. The default is the safe one because the
+ * shared desk is the common case here; the exception exists because an
+ * officer working from their own machine should not have to sign in every
+ * time the browser closes, and forcing that produces written-down passwords
+ * rather than security.
+ *
+ * What the choice does NOT change is what the server enforces: the session's
+ * absolute expiry, refresh-token rotation and reuse detection, and central
+ * revocation all apply either way. It decides only how long this computer
+ * holds the credential.
  */
 
 import { getTranslation, type StepUpAction } from '@psirs/shared';
@@ -93,21 +105,45 @@ let currentUser: User | null = null;
 const REFRESH_KEY = 'psirs.portal.refresh';
 const USER_KEY = 'psirs.portal.user';
 
-export function setSession(session: { accessToken: string; refreshToken: string; user: User } | null) {
+/**
+ * Read a session value from whichever store it landed in.
+ *
+ * Every reader goes through this, so an officer who ticked the box is not
+ * signed out the moment the page re-reads its own session.
+ */
+function readStored(key: string): string | null {
+  return sessionStorage.getItem(key) ?? localStorage.getItem(key);
+}
+
+/** Empty both, so a choice never leaves the previous one's token behind. */
+function clearStoredSession(): void {
+  for (const target of [sessionStorage, localStorage]) {
+    target.removeItem(REFRESH_KEY);
+    target.removeItem(USER_KEY);
+  }
+}
+
+export function setSession(
+  session: { accessToken: string; refreshToken: string; user: User } | null,
+  // Defaults to false: the shared government workstation is the case this
+  // has to be safe for, and an officer opts out deliberately or not at all.
+  remember = false,
+) {
   accessToken = session?.accessToken ?? null;
   currentUser = session?.user ?? null;
   if (session) {
-    sessionStorage.setItem(REFRESH_KEY, session.refreshToken);
-    sessionStorage.setItem(USER_KEY, JSON.stringify(session.user));
+    clearStoredSession();
+    const target = remember ? localStorage : sessionStorage;
+    target.setItem(REFRESH_KEY, session.refreshToken);
+    target.setItem(USER_KEY, JSON.stringify(session.user));
   } else {
-    sessionStorage.removeItem(REFRESH_KEY);
-    sessionStorage.removeItem(USER_KEY);
+    clearStoredSession();
   }
 }
 
 export function getUser(): User | null {
   if (currentUser) return currentUser;
-  const stored = sessionStorage.getItem(USER_KEY);
+  const stored = readStored(USER_KEY);
   if (stored) {
     try {
       currentUser = JSON.parse(stored) as User;
@@ -119,7 +155,7 @@ export function getUser(): User | null {
 }
 
 export function hasStoredSession(): boolean {
-  return sessionStorage.getItem(REFRESH_KEY) !== null;
+  return readStored(REFRESH_KEY) !== null;
 }
 
 /**
@@ -143,7 +179,7 @@ export async function fetchFile(path: string): Promise<Blob> {
   let response = await send();
 
   if (response.status === 401) {
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    const refreshToken = readStored(REFRESH_KEY);
     if (refreshToken) {
       try {
         const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(
@@ -287,7 +323,7 @@ async function request<T>(
 
     if (!expired || options.authenticated === false) throw error;
 
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    const refreshToken = readStored(REFRESH_KEY);
     if (!refreshToken) throw error;
 
     try {
@@ -343,17 +379,22 @@ export const api = {
     request<T>(path, { method: 'POST', body, authenticated: false }),
 };
 
-export async function login(phone: string, password: string) {
+export async function login(
+  phone: string,
+  password: string,
+  /** Whether this computer keeps the session after the browser closes. */
+  remember = false,
+) {
   const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(
     '/auth/login',
     { method: 'POST', body: { phone, password }, authenticated: false },
   );
-  setSession(session);
+  setSession(session, remember);
   return session;
 }
 
 export async function restoreSession(): Promise<User | null> {
-  const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+  const refreshToken = readStored(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
     const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(
@@ -466,7 +507,7 @@ export async function uploadFile(path: string, file: File): Promise<unknown> {
   let response = await send();
 
   if (response.status === 401) {
-    const refreshToken = sessionStorage.getItem(REFRESH_KEY);
+    const refreshToken = readStored(REFRESH_KEY);
     if (refreshToken) {
       try {
         const session = await raw<{ accessToken: string; refreshToken: string; user: User }>(

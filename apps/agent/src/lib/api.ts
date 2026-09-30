@@ -189,18 +189,75 @@ const EXPIRY_KEY = 'psirs.session.expires';
 /** Mirrors SESSION_ABSOLUTE_TTL_SECONDS; the server holds the real bound. */
 const ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export function setSession(session: Session | null): void {
-  accessToken = session?.accessToken ?? null;
-  currentUser = session?.user ?? null;
+/**
+ * Where this session is kept, which is the agent's choice.
+ *
+ * The reasoning above is why the default is `localStorage`, and it has not
+ * changed: a field agent whose phone restarts with no signal must be able to
+ * keep collecting. But a phone is not always one person's. An agent using a
+ * borrowed handset, or one kept in a market office overnight, needs the
+ * session to end when the app does, and previously had no way to say so
+ * short of remembering to sign out.
+ *
+ * `sessionStorage` is the whole of the difference: same short-lived access
+ * token in memory, same server-side controls — device binding, the absolute
+ * session bound, central revocation — and a refresh token that does not
+ * survive the app closing. Neither choice weakens what the server enforces;
+ * it decides only how long the device itself holds the credential.
+ */
+function store(remember: boolean): Storage {
+  return remember ? localStorage : sessionStorage;
+}
 
+/**
+ * Read a session value without caring which store it landed in.
+ *
+ * Every reader below goes through this. Changing only `setSession` would
+ * have left nine call sites looking in `localStorage` alone, so an agent who
+ * chose not to be remembered would have been signed out the instant the page
+ * re-read its own session — the feature working exactly backwards.
+ */
+function readStored(key: string): string | null {
+  return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+}
+
+export function setSession(session: Session | null, remember = true): void {
   if (session) {
-    localStorage.setItem(REFRESH_KEY, session.refreshToken);
-    localStorage.setItem(USER_KEY, JSON.stringify(session.user));
-    // Preserved across rotation: refreshing must not extend the bound, exactly
-    // as on the server.
-    if (!localStorage.getItem(EXPIRY_KEY)) {
-      localStorage.setItem(EXPIRY_KEY, String(Date.now() + ABSOLUTE_TTL_MS));
-    }
+    /*
+     * Read the existing bound BEFORE clearing, and carry it over.
+     *
+     * Every refresh comes back through here, and clearing first — which the
+     * two-store choice needs, so a changed answer cannot leave the previous
+     * refresh token behind — would otherwise wipe `EXPIRY_KEY` and mint a new
+     * one each time. That is precisely the thing the original comment forbids:
+     * refreshing must not extend the absolute bound. A session could then be
+     * held open indefinitely by refreshing, and the client-side check that
+     * lets a phone found months later refuse to restore would never fire.
+     *
+     * The server holds the real bound and would still refuse. This keeps the
+     * client's copy honest rather than leaving it to be caught there.
+     */
+    const existingExpiry = readStored(EXPIRY_KEY);
+    clearStoredSession();
+
+    /*
+     * In memory AFTER the clear, not before.
+     *
+     * `clearStoredSession` nulls `accessToken` and `currentUser` as well as
+     * emptying the stores — it is "remove every trace", and that is right.
+     * Assigning them first, as this function used to when it had nothing to
+     * clear, meant the clear wiped the token it had just been handed: every
+     * refresh returned a valid access token and then threw it away, so the
+     * retry went out unauthenticated and the agent was signed out mid-session.
+     * The refresh tests caught it.
+     */
+    accessToken = session.accessToken;
+    currentUser = session.user;
+
+    const target = store(remember);
+    target.setItem(REFRESH_KEY, session.refreshToken);
+    target.setItem(USER_KEY, JSON.stringify(session.user));
+    target.setItem(EXPIRY_KEY, existingExpiry ?? String(Date.now() + ABSOLUTE_TTL_MS));
   } else {
     clearStoredSession();
   }
@@ -215,23 +272,24 @@ export function setSession(session: Session | null): void {
 export function clearStoredSession(): void {
   accessToken = null;
   currentUser = null;
-  localStorage.removeItem(REFRESH_KEY);
-  localStorage.removeItem(USER_KEY);
-  localStorage.removeItem(EXPIRY_KEY);
-  // Anything left by an earlier build that used sessionStorage.
-  sessionStorage.removeItem(REFRESH_KEY);
-  sessionStorage.removeItem(USER_KEY);
+  // Both stores: a sign-out, or a sign-in that chooses differently from the
+  // last one, must not leave a refresh token behind in the other.
+  for (const target of [localStorage, sessionStorage]) {
+    target.removeItem(REFRESH_KEY);
+    target.removeItem(USER_KEY);
+    target.removeItem(EXPIRY_KEY);
+  }
 }
 
 /** Has the stored session outlived the bound the server will also enforce? */
 export function storedSessionExpired(): boolean {
-  const expiry = Number(localStorage.getItem(EXPIRY_KEY));
+  const expiry = Number(readStored(EXPIRY_KEY));
   return Number.isFinite(expiry) && expiry > 0 && expiry < Date.now();
 }
 
 export function getUser(): Session['user'] | null {
   if (currentUser) return currentUser;
-  const stored = localStorage.getItem(USER_KEY);
+  const stored = readStored(USER_KEY);
   if (stored) {
     try {
       currentUser = JSON.parse(stored) as Session['user'];
@@ -247,7 +305,7 @@ export function hasStoredSession(): boolean {
     clearStoredSession();
     return false;
   }
-  return localStorage.getItem(REFRESH_KEY) !== null;
+  return readStored(REFRESH_KEY) !== null;
 }
 
 export interface RequestOptions {
@@ -282,7 +340,7 @@ async function uploadRequest<T>(path: string, file: Blob, filename?: string): Pr
     });
 
   let response = await send();
-  if (response.status === 401 && localStorage.getItem(REFRESH_KEY)) {
+  if (response.status === 401 && readStored(REFRESH_KEY)) {
     // One refresh, then one retry — the same contract `request` offers.
     await restoreSession();
     response = await send();
@@ -373,7 +431,7 @@ function refreshOnce(): Promise<void> {
   if (refreshInFlight) return refreshInFlight;
 
   refreshInFlight = (async () => {
-    const refreshToken = localStorage.getItem(REFRESH_KEY);
+    const refreshToken = readStored(REFRESH_KEY);
     if (!refreshToken) throw NO_REFRESH_TOKEN;
 
     const refreshed = await rawRequest<Session>('/auth/refresh', {
@@ -491,13 +549,18 @@ export const api = {
   },
 };
 
-export async function login(phone: string, password: string): Promise<Session> {
+export async function login(
+  phone: string,
+  password: string,
+  /** Whether this handset keeps the session when the app is closed. */
+  remember = true,
+): Promise<Session> {
   const session = await rawRequest<Session>('/auth/login', {
     method: 'POST',
     body: { phone, password },
     authenticated: false,
   });
-  setSession(session);
+  setSession(session, remember);
   return session;
 }
 
@@ -518,7 +581,7 @@ export async function restoreSession(): Promise<Session | null> {
     return null;
   }
 
-  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  const refreshToken = readStored(REFRESH_KEY);
   if (!refreshToken) return null;
   try {
     // Through the same single-flight gate as every other refresh. Restoring the
@@ -532,7 +595,7 @@ export async function restoreSession(): Promise<Session | null> {
     // than returning the spent one.
     return {
       accessToken: accessToken ?? '',
-      refreshToken: localStorage.getItem(REFRESH_KEY) ?? '',
+      refreshToken: readStored(REFRESH_KEY) ?? '',
       user,
     };
   } catch (error) {
