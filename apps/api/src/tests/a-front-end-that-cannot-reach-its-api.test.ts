@@ -32,7 +32,7 @@
  * fails here.
  */
 
-import test from 'node:test';
+import test, { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -208,4 +208,71 @@ test('the SPA fallback is still there, underneath the proxy', () => {
       `${name}: ${image} lost its SPA fallback, so reloading a deep route 404s`,
     );
   }
+});
+
+// ===========================================================================
+
+describe('what the build context carries, and what it must not', () => {
+  /*
+   * The root `.dockerignore` serves every image that has no
+   * `<dockerfile>.dockerignore` of its own, and it has to be right in two
+   * directions at once.
+   *
+   * It used to exclude `apps/agent` and `apps/portal` — correct for the API
+   * image, which never copies them, and fatal for the two front-end images,
+   * whose entire source lives there. `Dockerfile.agent.dockerignore` and
+   * `Dockerfile.portal.dockerignore` override it for those builds, but
+   * `<dockerfile>.dockerignore` is a BuildKit convention and a builder that
+   * does not implement it falls back to the root file and fails on
+   * `COPY apps/agent ./apps/agent` with "not found". GitHub Actions honours
+   * it; Railway's Metal builder is a different implementation. Correctness
+   * should not rest on whether they agree, so the exclusions are gone and no
+   * image's contents changed — nothing here does a bare `COPY .`.
+   *
+   * The other direction is why the file exists at all, in its own words: "A
+   * build context that includes .env or .git is how a secret ends up in a
+   * published layer." Nothing tested that, and this file was edited without
+   * it. Both halves are pinned here.
+   */
+  const rules = () =>
+    readFileSync(join(ROOT, '.dockerignore'), 'utf8')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line !== '' && !line.startsWith('#'));
+
+  for (const source of ['apps/agent', 'apps/portal', 'apps/api', 'packages/shared']) {
+    it(`does not exclude ${source}, which an image copies`, () => {
+      assert.ok(
+        !rules().includes(source),
+        `the root .dockerignore excludes ${source}. A builder that ignores ` +
+          'the per-Dockerfile convention will fail that image\'s COPY with ' +
+          '"not found" — which is how this broke before',
+      );
+    });
+  }
+
+  for (const secret of ['.git', '.env', '.env.*', 'node_modules']) {
+    it(`still keeps ${secret} out of every context`, () => {
+      assert.ok(
+        rules().includes(secret),
+        `the root .dockerignore no longer excludes ${secret}. Its first line ` +
+          'says why that matters: a context carrying .env or .git is how a ' +
+          'secret ends up in a published layer',
+      );
+    });
+  }
+
+  it('never does a bare COPY . , which is what makes the above safe', () => {
+    // Every image taking only the paths it names is the reason un-excluding
+    // the front-ends costs context size and nothing in any shipped image.
+    for (const image of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.agent', 'Dockerfile.portal']) {
+      const source = directivesOnly(readFileSync(join(ROOT, image), 'utf8'));
+      assert.doesNotMatch(
+        source,
+        /^COPY \.\s/m,
+        `${image} copies the whole context, so what the .dockerignore lets ` +
+          'through now decides what ships in that image',
+      );
+    }
+  });
 });
