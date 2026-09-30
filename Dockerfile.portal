@@ -104,7 +104,16 @@ server {
     # and /docker-entrypoint.d/05-require-api-origin.sh refuses to start
     # rather than serve it again.
     # --------------------------------------------------------------------
-    location /api/ {
+    # `^~`, so a regex location can never take this away.
+    #
+    # nginx tries regex locations before a prefix match unless the prefix
+    # carries `^~`. This image has no regex location today, so nothing is
+    # wrong here — but `Dockerfile.agent` does, and there a plain
+    # `location /api/` lost any API path ending in an image extension to the
+    # icon block and answered it from disk. Measured: 404 text/html for
+    # `/api/v1/documents/abc.png`, 200 application/json with `^~`. Written
+    # here so the next regex block added to this file cannot reintroduce it.
+    location ^~ /api/ {
         # A KYC document is a photograph of an ID card and the API accepts
         # up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults to 1 MB
         # and refused a 2 MB upload with its own 413 before the API saw it

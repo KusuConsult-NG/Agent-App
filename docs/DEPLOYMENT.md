@@ -215,6 +215,10 @@ the repository itself:
 | `agent-pwa` | `Dockerfile.agent` | the agent PWA, via nginx | 80 |
 | `portal` | `Dockerfile.portal` | the officer and verification portal, via nginx | 80 |
 
+Or **two**, with both front ends on one hostname — see *One URL for both
+apps* below. That is the arrangement to prefer for a demo or a pilot, because
+it is one address to publish rather than two.
+
 **Each service's Dockerfile path has to be set explicitly, and a new service
 will not work until it is.** Railway looks for a file named exactly
 `Dockerfile`; finding none it falls back to Railpack, which tries to infer a
@@ -407,11 +411,147 @@ by leaving out `docs/` — several hundred UAT screenshots that no image copies.
 Without it the upload can time out, and the retry reports the snapshot error
 above. It has no effect on a deploy triggered from GitHub, which clones.
 
+## One URL for both apps
+
+`Dockerfile.web` builds both front ends and serves them from one origin:
+
+| Path | Serves |
+|---|---|
+| `/` | the agent PWA |
+| `/portal/` | the officer portal, and with it `/verify`, `/referee`, `/group-attestation` and `/citizen` |
+| `/api/` | proxied to the API service, exactly as the single-app images do |
+
+**"Verify" is not a separate application.** It is a route the portal resolves
+before authentication, along with the referee, group-attestation and citizen
+screens — see the public routes at the top of `apps/portal/src/App.tsx`. All
+four ship inside the portal bundle. There is no fourth thing to deploy.
+
+### Switching to it
+
+One service instead of two:
+
+1. On the `agent-pwa` service, set **Settings → Build → Dockerfile Path** to
+   `Dockerfile.web`.
+2. Leave `API_ORIGIN` as it is. The image refuses to start without it, for the
+   same reason the single-app images do.
+3. **Set `VERIFICATION_BASE_URL` on the API service to the new portal path.**
+   This is the step with consequences, and the next section is about it.
+4. Delete the `portal` service, or leave it running on its own hostname. Both
+   work; nothing in the combined image depends on it being gone.
+
+`Dockerfile.agent` and `Dockerfile.portal` are unchanged and still build. This
+is opted into, not migrated to.
+
+### `VERIFICATION_BASE_URL`, which is the one that bites
+
+```
+VERIFICATION_BASE_URL=https://<your-host>/portal
+```
+
+Everything the platform ever hands to someone outside government is derived
+from this one setting, through `apps/api/src/lib/public-urls.ts`: the QR code
+and printed code on every receipt and certificate, a referee's invitation, a
+cooperative chairman's attestation link, and the SMS telling a taxpayer what
+they owe. Leave it pointing at the bare host and all four land on the agent
+app's sign-in form — which renders perfectly, so nothing looks like an error.
+A citizen scanning the QR on their receipt is simply shown a staff login.
+
+Receipts already printed carry the old URL on them and cannot be corrected, so
+this is worth getting right before anything is issued.
+
+`portalOrigin()` strips a trailing slash and a trailing `/verify`, so
+`.../portal`, `.../portal/` and `.../portal/verify` all resolve the same way.
+`PUBLIC_PORTAL_URL`, if it is set at all, needs the same subpath.
+
+### Why the portal is built differently in this image
+
+Vite writes absolute asset URLs into `index.html`. Built normally the portal's
+names `/assets/index-<hash>.js` and `/icon.svg`; served under `/portal/` every
+one of those is a 404 at the root, answered by the agent's SPA fallback with
+the agent's shell — 200, `text/html` — so the page is blank and the console
+says only that a module had the wrong MIME type. The image therefore builds it
+with `--base=/portal/`, on the command line rather than in `vite.config.ts`, so
+the same source still builds for `/` in `Dockerfile.portal` and in
+`npm run dev`.
+
+Two things that cost nothing, and are worth knowing why:
+
+- The portal is a **hash router** by deliberate choice
+  (`apps/portal/src/router.tsx`: "so a static host serves every route from one
+  file with no rewrite rules to get wrong"). The part after `#` never reaches
+  nginx, so `/portal/#/verify/ABC` is one request for `/portal/` and there are
+  no per-route rewrite rules to write.
+- The two apps' **storage keys do not collide**, which matters now that they
+  share an origin. The agent owns `psirs.refresh`, `psirs.user`,
+  `psirs.session.expires` and `psirs.device.id`; the portal namespaces its own
+  as `psirs.portal.*` and `psirs.filters.*`. Signing into one does not disturb
+  the other.
+
+### The agent's service worker, which does not leave the portal alone by itself
+
+The worker registers with scope `/` because the agent is the root app, so
+every portal request passes through it, and every branch of it was written for
+an origin with one application on it:
+
+- the navigation branch caches whatever HTML came back under the literal key
+  `/index.html`, so one officer opening the portal on a handset that also
+  carries the agent app replaces the agent's offline shell with a government
+  sign-in page — which the agent then opens, next time it loses signal, with
+  no way out;
+- the static branch falls back to that same key on any miss, so a portal asset
+  fetched with no connection comes back 200 as HTML and the portal dies
+  parsing it.
+
+`sw.js` excludes `/portal/` for both reasons, and `VERSION` is bumped so a
+handset carrying the old worker installs the new one and `activate` clears the
+caches it no longer owns. `apps/agent/src/tests/an-application-that-could-not-update.test.ts`
+runs the real file against a mocked worker global and holds it to this.
+
+### One thing this does not solve
+
+The agent's manifest declares `"scope": "/"`, and there is no exclusion in the
+manifest format. Where the agent PWA is installed and the browser is
+configured to capture links for it, a `/portal/` link can open inside the
+agent's standalone window — chromeless, no address bar. Officers work in a
+desktop browser and will not normally have the PWA installed, so the overlap
+is narrow, but it is real and there is no fix short of moving the agent off
+the root, which would orphan every handset that already installed it from `/`.
+
+### Verified
+
+Measured against real nginx with both apps' real build output in place, rather
+than inferred from nginx's matching rules:
+
+| Request | Answer |
+|---|---|
+| `/`, `/nonexistent-route` | the agent shell |
+| `/portal/`, `/portal/nonexistent-route` | the portal shell |
+| `/portal` | 301 to `/portal/` |
+| `/portals-of-jos` | the agent shell — the prefix is precise |
+| `/api/v1/health` | `200 application/json`, from the API |
+| `/api/v1/documents/abc.png` | `200 application/json` — see below |
+
+Both apps then booted in Chromium from that one origin with zero failed
+requests and zero console errors, and the public verify screen rendered at
+`/portal/#/verify/<code>`. Chromium reported no manifest errors and every
+install criterion met, so the agent app is still installable from the shared
+origin.
+
+That `.png` row is a fault found while measuring this, and fixed in all three
+images. `location /api/` was written without `^~`. nginx tries regex locations
+before a prefix match unless the prefix carries `^~`, so any API path ending
+in an image extension matched the icon block instead and was looked up on
+disk: `GET /api/v1/documents/abc.png` returned `404 text/html`. No such route
+exists today, which is why nothing had broken — it was a trap, not a fault,
+and the first signed document URL or QR endpoint carrying an extension would
+have fallen into it with the cause three locations away from the symptom.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
+- [ ] If both front ends share one origin (`Dockerfile.web`), `VERIFICATION_BASE_URL` carries the `/portal` subpath — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted

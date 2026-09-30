@@ -83,6 +83,19 @@ server {
         expires 0;
     }
 
+    # The manifest's own media type.
+    #
+    # `.webmanifest` is absent from nginx's bundled mime.types, so it was
+    # served as application/octet-stream from `default_type` — with
+    # `X-Content-Type-Options: nosniff` set above, which tells the browser to
+    # take that at face value. Chromium accepts it anyway: asked through the
+    # DevTools protocol it reported no manifest errors and every install
+    # criterion met, so this is NOT what kept an install banner away. Set
+    # because the spec says so and another browser need not be as forgiving.
+    types {
+        application/manifest+json  webmanifest;
+    }
+
     # Manifest and static icons
     location ~* \.(?:manifest|webmanifest|svg|png|ico)$ {
         expires 7d;
@@ -115,7 +128,23 @@ server {
     # and /docker-entrypoint.d/05-require-api-origin.sh refuses to start
     # rather than serve it again.
     # --------------------------------------------------------------------
-    location /api/ {
+    # --------------------------------------------------------------------
+    # `^~`, so the regex location below cannot take this away.
+    #
+    # nginx tries regex locations before a prefix match UNLESS the prefix
+    # carries `^~`. With a plain `location /api/`, any API path ending in an
+    # image extension matched `~* \.(?:manifest|webmanifest|svg|png|ico)$`
+    # instead and was looked up on disk. Measured against real nginx:
+    #
+    #     GET /api/v1/documents/abc.png   404 text/html   (plain /api/)
+    #     GET /api/v1/documents/abc.png   200 application/json  (^~ /api/)
+    #
+    # No such route exists today, which is why nothing has broken. It is a
+    # trap rather than a fault: the first signed document URL, QR endpoint or
+    # logo route that carries an extension would 404 as HTML, and the cause
+    # would be three locations away from the symptom.
+    # --------------------------------------------------------------------
+    location ^~ /api/ {
         # A KYC document is a photograph of an ID card and the API accepts
         # up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults to 1 MB
         # and refused a 2 MB upload with its own 413 before the API saw it

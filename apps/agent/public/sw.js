@@ -17,7 +17,15 @@
  */
 
 /*
- * Bumped to v2 with the navigation change below.
+ * Bumped to v3 with the /portal/ exclusion below.
+ *
+ * The bump is not cosmetic here. A handset that visited /portal/ while an
+ * older worker was installed has the portal's index.html sitting in its shell
+ * cache under the key '/index.html' — the agent's offline shell, replaced by
+ * a government sign-in page. New cache names mean `activate` deletes the old
+ * ones, so that poisoning does not outlive the fix.
+ *
+ * Was bumped to v2 with the navigation change below.
  *
  * A browser installs a new service worker only when the BYTES of this file
  * differ from the one it holds. Nothing in the build touches this constant,
@@ -25,7 +33,7 @@
  * installed a new one — which is also why `activate`, and the cache clearing
  * it does, had not run since the first install.
  */
-const VERSION = 'psirs-agent-v2';
+const VERSION = 'psirs-agent-v3';
 const SHELL_CACHE = `${VERSION}-shell`;
 const REFERENCE_CACHE = `${VERSION}-reference`;
 
@@ -85,6 +93,28 @@ self.addEventListener('fetch', (event) => {
   // state; replaying one from a cache could duplicate a government obligation.
   if (request.method !== 'GET') return;
   if (url.origin !== self.location.origin && !url.href.startsWith('http://localhost:4000')) return;
+
+  /*
+   * The officer portal shares this origin, under /portal/, and this worker
+   * must not touch it.
+   *
+   * Every branch below is written for a single-app origin. The navigation
+   * branch caches whatever HTML comes back under the literal key
+   * '/index.html', so one officer opening /portal/ would replace the agent's
+   * offline shell with the portal's — and the agent, next time it lost
+   * signal, would open a government sign-in page it cannot use and cannot
+   * get out of. The static-asset branch is worse in the quiet way: it falls
+   * back to '/index.html' on any miss, so a portal asset requested offline
+   * is answered with the agent's shell, 200, as text/html, and the portal
+   * dies at the first script it tries to parse.
+   *
+   * There is no scope narrower than '/' available — the agent is the root
+   * app — so the exclusion is stated here instead. Returning without calling
+   * respondWith leaves the request to the network, which is exactly right:
+   * the portal has no offline story and does not want one, because nothing
+   * it does is safe to serve stale.
+   */
+  if (url.pathname === '/portal' || url.pathname.startsWith('/portal/')) return;
 
   if (url.pathname.startsWith('/api/')) {
     if (isCacheableApi(url) && !isNeverCache(url)) {

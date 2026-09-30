@@ -53,13 +53,37 @@ function workspaceRoot(): string {
 
 const ROOT = workspaceRoot();
 
-/** The images that serve a browser client, and the client each one serves. */
+/**
+ * The images that serve a browser client, and the client each one serves.
+ *
+ * `Dockerfile.web` serves both from one origin — the agent at `/`, the portal
+ * at `/portal/` — so it is listed against the agent's client and the portal's
+ * relative base is checked through `Dockerfile.portal`'s row. Listing it here
+ * is what subjects it to every check below: the proxy present, the URI passed
+ * through unrewritten, a body limit above the API's own, the SPA fallback
+ * intact, a startup guard on API_ORIGIN, the envsubst filter, and a listen
+ * port taken from the platform.
+ */
 const FRONT_ENDS = [
   { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent' },
   { image: 'Dockerfile.portal', client: 'apps/portal/src/lib/api.ts', name: 'portal' },
+  { image: 'Dockerfile.web', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
 ] as const;
 
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
+
+/**
+ * A literal, for interpolating into a RegExp.
+ *
+ * `PSIRS_APP=${name}` was built by interpolation, which held while every name
+ * was plain letters. `agent+portal` read as "agen", one-or-more "t", then
+ * "portal" — so the check failed against a Dockerfile declaring precisely
+ * what it asked for, and would just as easily have passed against one that
+ * did not.
+ */
+function escapeForRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /**
  * The file with its comments taken out.
@@ -124,9 +148,10 @@ for (const { image, client, name } of FRONT_ENDS) {
 
     assert.match(
       source,
-      /location \/api\/ \{/,
-      `${image} has no "location /api/" block, so /api/v1/... falls through ` +
-        'to the SPA fallback and every API call is answered with index.html',
+      /location \^~ \/api\/ \{/,
+      `${image} has no "location ^~ /api/" block, so /api/v1/... falls ` +
+        'through to the SPA fallback and every API call is answered with ' +
+        'index.html',
     );
 
     const proxyPass = /proxy_pass\s+http:\/\/([^;\s]+);/.exec(source);
@@ -202,7 +227,7 @@ for (const { image, client, name } of FRONT_ENDS) {
     // signal is restored deliberately rather than left to the rename.
     assert.match(
       source,
-      new RegExp(`ENV PSIRS_APP=${name}\\b`),
+      new RegExp(`ENV PSIRS_APP=${escapeForRegExp(name)}\\b`),
       `${image} does not declare PSIRS_APP=${name}, so nothing in its ` +
         'startup log says which front-end is running',
     );
@@ -366,7 +391,13 @@ describe('what the build context carries, and what it must not', () => {
   it('never does a bare COPY . , which is what makes the above safe', () => {
     // Every image taking only the paths it names is the reason un-excluding
     // the front-ends costs context size and nothing in any shipped image.
-    for (const image of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.agent', 'Dockerfile.portal']) {
+    for (const image of [
+      'Dockerfile',
+      'Dockerfile.api',
+      'Dockerfile.agent',
+      'Dockerfile.portal',
+      'Dockerfile.web',
+    ]) {
       const source = directivesOnly(readFileSync(join(ROOT, image), 'utf8'));
       assert.doesNotMatch(
         source,
