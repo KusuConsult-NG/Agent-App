@@ -52,28 +52,66 @@ class ApiError extends Error {
   }
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * How long to wait out a 429, and how many times.
+ *
+ * A demonstration register large enough to search is also large enough to
+ * meet the rate limiter: seeding sixty-five taxpayers and their assessments
+ * pushes more requests from one address in a minute than any real agent does,
+ * and the platform correctly refuses. The limiter is a control on an endpoint
+ * that moves money, so the seed waits rather than the deployment relaxing it
+ * — a seed that only runs against a weakened limiter proves less than one
+ * that runs against the real one.
+ */
+const RATE_LIMIT_RETRIES = 6;
+
 async function call(method, path, { body, token, deviceId, idempotencyKey, allow } = {}) {
   const headers = { 'content-type': 'application/json', 'x-app-version': APP_VERSION };
   if (token) headers.authorization = `Bearer ${token}`;
   if (deviceId) headers['x-device-id'] = deviceId;
   if (idempotencyKey) headers['idempotency-key'] = idempotencyKey;
 
-  const response = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await response.text();
-  let parsed;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    parsed = text;
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetch(`${BASE}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    let parsed;
+    try {
+      parsed = text ? JSON.parse(text) : null;
+    } catch {
+      parsed = text;
+    }
+
+    /*
+     * Wait exactly as long as the platform asked, plus a second.
+     *
+     * `retry-after` is in seconds and is what the limiter itself computed
+     * from the window it is enforcing; guessing a backoff here would either
+     * wait too long or come back early and burn another attempt. A 429 the
+     * caller explicitly allowed is left alone — a test of the limiter is a
+     * legitimate thing for this script to do.
+     */
+    if (response.status === 429 && !(allow ?? []).includes(429)) {
+      if (attempt >= RATE_LIMIT_RETRIES) {
+        throw new ApiError(method, path, response.status, parsed);
+      }
+      const after = Number.parseInt(response.headers.get('retry-after') ?? '', 10);
+      const waitMs = (Number.isFinite(after) && after > 0 ? after : 30) * 1000 + 1000;
+      console.log(`      rate limited on ${method} ${path}; waiting ${Math.round(waitMs / 1000)}s`);
+      await sleep(waitMs);
+      continue;
+    }
+
+    if (!response.ok && !(allow ?? []).includes(response.status)) {
+      throw new ApiError(method, path, response.status, parsed);
+    }
+    return { status: response.status, body: parsed };
   }
-  if (!response.ok && !(allow ?? []).includes(response.status)) {
-    throw new ApiError(method, path, response.status, parsed);
-  }
-  return { status: response.status, body: parsed };
 }
 
 const get = (path, options) => call('GET', path, options);
@@ -103,6 +141,27 @@ const key = (label) => `uat-${label}-${++keySeq}`;
 
 // ---------------------------------------------------------------------------
 
+/*
+ * A register wide enough that a demonstration can be searched, not just
+ * walked.
+ *
+ * Eight names in one LGA is enough to show that registration works and not
+ * enough to show anything else: a presenter who searches a surname, an LGA or
+ * a plate in front of an audience mostly hits an empty list, which reads as a
+ * broken product rather than an empty database. These are spread across every
+ * LGA the seed finds, so "find me somebody in Langtang North" has an answer.
+ *
+ * Surnames repeat deliberately — Pam, Gyang, Dung, Choji and Bulus are common
+ * across the Plateau — so a surname search returns several people and the
+ * officer has to pick, which is the real screen rather than the lucky one.
+ * A few names carry the hooked letters Hausa uses (Ɗ, Ƙ, Ɓ), because a
+ * receipt that cannot spell a taxpayer's name is a defect this platform has
+ * already had once.
+ *
+ * Nothing here is fabricated into the database: every row is registered
+ * through POST /taxpayers like any other, so a search finds it because the
+ * platform genuinely holds it.
+ */
 const NAMES = [
   ['Amina', 'Bulus', 'INDIVIDUAL'],
   ['Danjuma', 'Pam', 'INDIVIDUAL'],
@@ -112,6 +171,38 @@ const NAMES = [
   ['Sunday', 'Danladi', 'INDIVIDUAL'],
   ['Hauwa', 'Mafeng', 'INDIVIDUAL'],
   ['Yakubu', 'Nyam', 'INDIVIDUAL'],
+  ['Ɗanjuma', 'Ƙasimu', 'INDIVIDUAL'],
+  ['Ɓala', 'Dakup', 'INDIVIDUAL'],
+  ['Talatu', 'Pam', 'INDIVIDUAL'],
+  ['Joshua', 'Gyang', 'INDIVIDUAL'],
+  ['Naomi', 'Dung', 'INDIVIDUAL'],
+  ['Istifanus', 'Bulus', 'INDIVIDUAL'],
+  ['Saratu', 'Choji', 'INDIVIDUAL'],
+  ['Emmanuel', 'Dalyop', 'INDIVIDUAL'],
+  ['Comfort', 'Yilzang', 'INDIVIDUAL'],
+  ['Bitrus', 'Davou', 'INDIVIDUAL'],
+  ['Asabe', 'Wuyep', 'INDIVIDUAL'],
+  ['Gideon', 'Longshak', 'INDIVIDUAL'],
+  ['Deborah', 'Bot', 'INDIVIDUAL'],
+  ['Markus', 'Tanko', 'INDIVIDUAL'],
+  ['Lydia', 'Ngyang', 'INDIVIDUAL'],
+  ['Peter', 'Damar', 'INDIVIDUAL'],
+  ['Esther', 'Shelleng', 'INDIVIDUAL'],
+  ['Audu', 'Maigari', 'INDIVIDUAL'],
+  ['Grace', 'Lohnan', 'INDIVIDUAL'],
+  ['Solomon', 'Jugu', 'INDIVIDUAL'],
+  ['Hanatu', 'Gwom', 'INDIVIDUAL'],
+  ['Zakka', 'Miner', 'INDIVIDUAL'],
+  ['Ruth', 'Pwajok', 'INDIVIDUAL'],
+  ['Simon', 'Tongjur', 'INDIVIDUAL'],
+  ['Blessing', 'Chundung', 'INDIVIDUAL'],
+  ['Joseph', 'Kangyang', 'INDIVIDUAL'],
+  ['Mary', 'Rwang', 'INDIVIDUAL'],
+  ['Ibrahim', 'Sale', 'INDIVIDUAL'],
+  ['Patience', 'Datong', 'INDIVIDUAL'],
+  ['Victor', 'Mallo', 'INDIVIDUAL'],
+  ['Hadiza', 'Usman', 'INDIVIDUAL'],
+  ['Nanle', 'Vongjen', 'INDIVIDUAL'],
 ];
 
 /*
@@ -125,13 +216,29 @@ const NAMES = [
  */
 const BUSINESSES = [
   { name: 'Jos Main Market Provisions', sector: 'RETAIL_TRADE' },
-  { name: 'Rukuba Road Motor Spares', sector: 'RETAIL_TRADE' },
+  { name: 'Rukuba Road Motor Spares', sector: 'MOTOR_VEHICLE' },
   { name: 'Bukuru Cold Room Enterprises', sector: 'MANUFACTURING' },
   { name: 'Plateau Agro Supplies', sector: 'AGRICULTURE' },
   { name: 'Terminus Grand Hotel', sector: 'HOTEL_HOSPITALITY' },
   { name: 'Zawan Block Industries', sector: 'CONSTRUCTION' },
   { name: 'Plateau Star Transport', sector: 'TRANSPORT_PASSENGER' },
   { name: 'Rayfield Medical Centre', sector: 'HEALTHCARE' },
+  { name: 'Ahmadu Bello Way Pharmacy', sector: 'HEALTHCARE' },
+  { name: 'Barkin Ladi Tin Traders', sector: 'MINING' },
+  { name: 'Vom Dairy Cooperative', sector: 'AGRICULTURE' },
+  { name: 'Riyom Stone Crushers', sector: 'MINING' },
+  { name: 'Pankshin Modern Bakery', sector: 'FOOD_BEVERAGE' },
+  { name: 'Langtang Filling Station', sector: 'TRANSPORT_HAULAGE' },
+  { name: 'Shendam Guest Inn', sector: 'HOTEL_HOSPITALITY' },
+  { name: 'Wase Grains Depot', sector: 'WHOLESALE_TRADE' },
+  { name: 'Mangu Poultry Farms', sector: 'LIVESTOCK' },
+  { name: 'Jos Tudun Wada Barbing Salon', sector: 'ARTISAN_CRAFT' },
+  { name: 'Plateau Digital Printers', sector: 'ICT_TELECOMS' },
+  { name: 'Bukuru Timber Yard', sector: 'CONSTRUCTION' },
+  { name: 'Anglo Jos Event Centre', sector: 'ENTERTAINMENT_ARTS' },
+  { name: 'Kuru Technical Repairs', sector: 'MOTOR_VEHICLE' },
+  { name: 'Gindiri Bookshop', sector: 'EDUCATION' },
+  { name: 'Plateau Water Works Supplies', sector: 'MANUFACTURING' },
 ];
 
 async function main() {
@@ -195,41 +302,59 @@ async function main() {
 
   const agentAuth = { token: agentToken, deviceId: AGENT_DEVICE };
   const taxpayers = [];
+  /** Plates the seed mints, kept at this scope for the crib sheet. */
+  const capturedPlates = [];
 
   // --- taxpayers the agent onboards ---------------------------------------
+  /*
+   * Spread across every LGA, not banked in Jos.
+   *
+   * A demonstration gets asked "what about Wase?" and a register that only
+   * holds Jos has to answer with an empty list. Round-robin rather than
+   * random, so the same LGA holds the same people on every seed and a script
+   * written against this one still finds them.
+   *
+   * The first few stay in Jos North deliberately: the seeded agent's own
+   * territory is there, and the agent-facing walkthrough collects from
+   * somebody inside it.
+   */
+  const lgaFor = (index) => (index < 4 ? jos : lgas[index % lgas.length]);
+
   for (const [index, [firstName, lastName]] of NAMES.entries()) {
+    const lga = lgaFor(index);
     const { body } = await post(
       '/taxpayers',
       {
         taxpayerType: 'INDIVIDUAL',
         firstName,
         lastName,
-        phone: `+23480310000${String(index + 10).padStart(2, '0')}`,
-        address: `${index + 3} Ahmadu Bello Way, Jos`,
-        lgaId: jos.id,
+        phone: `+2348031${String(100000 + index).padStart(6, '0')}`,
+        address: `${index + 3} Ahmadu Bello Way, ${lga.name}`,
+        lgaId: lga.id,
         consentGiven: true,
         declarationAccepted: true,
       },
       { ...agentAuth, idempotencyKey: key('tp') },
     );
-    taxpayers.push({ ...body, name: `${firstName} ${lastName}` });
+    taxpayers.push({ ...body, name: `${firstName} ${lastName}`, lga: lga.name });
   }
   for (const [index, business] of BUSINESSES.entries()) {
+    const lga = lgaFor(index);
     const { body } = await post(
       '/taxpayers',
       {
         taxpayerType: 'BUSINESS',
         businessName: business.name,
-        phone: `+23480320000${String(index + 10).padStart(2, '0')}`,
-        address: `${index + 11} Beach Road, Jos`,
-        lgaId: jos.id,
+        phone: `+2348032${String(200000 + index).padStart(6, '0')}`,
+        address: `${index + 11} Beach Road, ${lga.name}`,
+        lgaId: lga.id,
         economicSector: business.sector,
         consentGiven: true,
         declarationAccepted: true,
       },
       { ...agentAuth, idempotencyKey: key('tp') },
     );
-    taxpayers.push({ ...body, name: business.name });
+    taxpayers.push({ ...body, name: business.name, lga: lga.name });
   }
   /*
    * One trader from the next Local Government Area along.
@@ -258,7 +383,7 @@ async function main() {
     },
     { ...agentAuth, idempotencyKey: key('tp') },
   );
-  taxpayers.push({ ...visitor, name: 'Talatu Bawa' });
+  taxpayers.push({ ...visitor, name: 'Talatu Bawa', lga: nextLga.name });
 
   const withTin = taxpayers.filter((taxpayer) => taxpayer.tin).length;
   log(`registered ${taxpayers.length} taxpayers (${withTin} received a TIN immediately)`);
@@ -348,11 +473,13 @@ async function main() {
   const vehicles = [];
   const renewalReferences = [];
   for (const [index, taxpayer] of taxpayers.slice(0, 4).entries()) {
+    const plate = `PL${String(index + 1).padStart(3, '0')}JOS`;
+    capturedPlates.push(plate);
     const vehicle = await post(
       '/vehicles',
       {
         taxpayerId: taxpayer.taxpayerId,
-        registrationNumber: `PL${String(index + 1).padStart(3, '0')}JOS`,
+        registrationNumber: plate,
         vehicleType: index % 2 === 0 ? 'PRIVATE_CAR' : 'COMMERCIAL_BUS',
         vehicleClass: index % 2 === 0 ? 'SALOON' : 'MINIBUS',
         make: index % 2 === 0 ? 'Toyota' : 'Mercedes',
@@ -1210,6 +1337,47 @@ async function main() {
     if (links.groupAttestation) console.log(`  group leader   ${links.groupAttestation}`);
     console.log(`  (also written to ${LINKS_FILE})`);
   }
+
+  /*
+   * What is actually searchable, so a presenter is never guessing.
+   *
+   * A demonstration goes wrong when somebody types a plausible name that
+   * happens not to be in the register and the screen answers "no taxpayer
+   * matches" — correctly, and in front of an audience. These are values the
+   * seed has just created, so each one has an answer.
+   */
+  console.log('\nSearchable in this dataset — every one of these has a record:');
+  const seededLgas = new Set(taxpayers.map((t) => t.lga).filter(Boolean));
+  console.log(`  taxpayers        ${taxpayers.length} across ${seededLgas.size} LGAs`);
+  const surnames = [...new Set(NAMES.map(([, last]) => last))];
+  const repeated = surnames.filter((n) => NAMES.filter(([, l]) => l === n).length > 1);
+  console.log(`  by surname       ${repeated.slice(0, 5).join(', ')}  (each returns several people)`);
+  console.log(`  by full name     ${taxpayers[0]?.name}`);
+  console.log(`  by business      ${BUSINESSES[0].name}, ${BUSINESSES[4].name}`);
+  if (taxpayers[0]?.tin) console.log(`  by TIN           ${taxpayers[0].tin}`);
+  console.log('  by phone         +2348031100000 .. and in any spelling of it');
+  console.log('                   (08031100000 and 2348031100000 find the same person)');
+  /*
+   * The plates the seed sent, not what the response echoed.
+   *
+   * POST /vehicles answers with an id rather than the registration, so
+   * reading it back off the response printed nothing at all — and a crib
+   * sheet that silently drops a line is worse than one that never had it,
+   * because the presenter does not know to look elsewhere.
+   */
+  if (capturedPlates.length > 0) {
+    console.log(`  by plate         ${capturedPlates.join(', ')}`);
+  }
+  if (receipt?.receipt_number) {
+    console.log(`  by receipt       ${receipt.receipt_number}`);
+  }
+  console.log('  by LGA           any of the seeded LGAs, from the officer portal');
+  console.log('');
+  console.log('  A search for something NOT in the register still answers "no match",');
+  console.log('  which is correct: this is a government register, and inventing a');
+  console.log('  result for a citizen who is not on it would be the worst defect');
+  console.log('  the platform could have. The screens say so in a sentence and offer');
+  console.log('  to register the person, rather than showing a blank panel.');
 
   console.log('\nOpen the agent app at:');
   console.log(`  http://localhost:5173/?device=${AGENT_DEVICE}`);
