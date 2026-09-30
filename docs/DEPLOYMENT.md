@@ -318,6 +318,27 @@ extracted from the Dockerfiles and the image's own envsubst step:
 | without the proxy block | `200 text/html`, body is the shell | `200 text/html` | — |
 | as shipped | `200 application/json` | `200 text/html` | not 413 |
 
+### The port is the platform's to choose
+
+Both nginx images take their listen port from **`PORT`**, defaulting to 80.
+
+`listen 80` was hardcoded, which works only where the platform is told to
+route to 80. Railway's convention is to inject `PORT` and expect the process
+to honour it, and an image listening elsewhere is reached by nothing: the
+deployment succeeds, the service is marked healthy, and the edge answers
+**"Application failed to respond"** to every request. That failure looks like
+a broken application and is a disagreement about a number.
+
+The default lives in `/docker-entrypoint.d/10-default-port.envsh`, and the
+extension matters: the nginx entrypoint **sources** files ending `.envsh` and
+**executes** files ending `.sh` in a subshell, so an `export` from a `.sh`
+would not survive to `20-envsubst-on-templates.sh`, which is what needs to
+see it. `NGINX_ENVSUBST_FILTER` admits both `API_ORIGIN` and `PORT`.
+
+Verified against real nginx using the image's own envsubst semantics: with
+`PORT=8085` the config binds 8085, serves the SPA, still proxies `/api/v1`,
+and leaves nothing on 80; with `PORT` unset it binds 80.
+
 ### One thing still to confirm on the deployed chain
 
 `TRUST_PROXY` makes the API `app.set('trust proxy', 1)` — one trusted hop.

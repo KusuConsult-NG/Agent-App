@@ -157,13 +157,22 @@ for (const { image, client, name } of FRONT_ENDS) {
         'never be substituted',
     );
 
-    // Without the filter, envsubst also eats $uri, $host and
-    // $proxy_add_x_forwarded_for — every nginx variable is $name-shaped.
+    // Without a filter, envsubst also eats $uri, $host and
+    // $proxy_add_x_forwarded_for — every nginx variable is $name-shaped. The
+    // filter names what may be substituted; it has to include API_ORIGIN and
+    // must not be absent. (PORT joined it later, so this checks containment
+    // rather than the bare name it used to be.)
+    const originFilter = /ENV NGINX_ENVSUBST_FILTER=(\S+)/.exec(source);
+    assert.ok(
+      originFilter,
+      `${image} sets no NGINX_ENVSUBST_FILTER, so envsubst would substitute ` +
+        "nginx's own variables away to empty strings",
+    );
     assert.match(
-      source,
-      /ENV NGINX_ENVSUBST_FILTER=API_ORIGIN/,
-      `${image} does not limit envsubst to API_ORIGIN, so nginx's own ` +
-        'variables would be substituted away to empty strings',
+      originFilter![1],
+      /API_ORIGIN/,
+      `${image}'s envsubst filter does not admit API_ORIGIN, so the config ` +
+        'would ship with a literal ${API_ORIGIN}',
     );
 
     assert.match(
@@ -173,6 +182,43 @@ for (const { image, client, name } of FRONT_ENDS) {
         '"proxy_pass http://;" and nginx dies with "no host in upstream" ' +
         'against a line number; a default would be a wrong host serving a ' +
         'shell where nothing works',
+    );
+  });
+
+  test(`${name}: listens on the port the platform routes to`, () => {
+    const source = directivesOnly(read(image));
+
+    // `listen 80` works only where the platform is told to route to 80.
+    // Railway injects PORT and routes to that; an image listening elsewhere
+    // is reached by nothing and the edge answers "Application failed to
+    // respond" — a deployment that succeeded and a service nobody can talk
+    // to. Verified against real nginx: with PORT=8085 it binds 8085 and
+    // leaves 80 empty.
+    assert.match(
+      source,
+      /listen \$\{PORT\};/,
+      `${image} hardcodes its listen port instead of taking \${PORT}`,
+    );
+
+    // envsubst has to be allowed to substitute it, or the config ships with
+    // a literal ${PORT} and nginx refuses to start.
+    const filter = /ENV NGINX_ENVSUBST_FILTER=(\S+)/.exec(source);
+    assert.ok(filter, `${image} sets no NGINX_ENVSUBST_FILTER`);
+    assert.match(
+      filter![1],
+      /PORT/,
+      `${image} does not let envsubst substitute PORT, so the template ` +
+        'would keep a literal ${PORT} and nginx would fail to parse it',
+    );
+
+    // And a default, or an unset PORT yields `listen ;`. It must be a
+    // `.envsh`: the nginx entrypoint SOURCES .envsh and EXECUTES .sh in a
+    // subshell, so an export from a .sh would not reach the envsubst step.
+    assert.match(
+      source,
+      /docker-entrypoint\.d\/[0-9]+-default-port\.envsh/,
+      `${image} has no .envsh supplying a PORT default, so an unset PORT ` +
+        'substitutes to nothing and nginx dies on "listen ;"',
     );
   });
 

@@ -32,7 +32,7 @@ RUN rm -rf /etc/nginx/conf.d/default.conf
 # Copy custom Nginx SPA configuration
 COPY <<'EOF' /etc/nginx/templates/agent.conf.template
 server {
-    listen 80;
+    listen ${PORT};
     server_name localhost;
     root /usr/share/nginx/html;
     index index.html;
@@ -131,7 +131,27 @@ EOF
 # `$proxy_add_x_forwarded_for` — every nginx variable in this file is
 # `$name`-shaped and envsubst cannot tell them apart from its own.
 # ---------------------------------------------------------------------------
-ENV NGINX_ENVSUBST_FILTER=API_ORIGIN
+ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
+
+# ---------------------------------------------------------------------------
+# The port the platform routes to, not the one this image happens to prefer.
+#
+# `listen 80` was hardcoded, which works only where the platform is told to
+# route to 80. Railway's convention is to inject PORT and expect the process
+# to honour it; an image listening elsewhere is reached by nothing, and the
+# edge answers "Application failed to respond" — a deployment that succeeded
+# and a service that cannot be talked to.
+#
+# `.envsh`, not `.sh`: the nginx entrypoint SOURCES files ending .envsh and
+# EXECUTES files ending .sh in a subshell, so an export from a .sh would not
+# survive to 20-envsubst-on-templates.sh, which is the whole point of this.
+# ---------------------------------------------------------------------------
+COPY <<'SH' /docker-entrypoint.d/10-default-port.envsh
+# shellcheck shell=sh
+export PORT="${PORT:-80}"
+SH
+RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
+
 
 # Refuse to start rather than serve a front-end that cannot reach its API.
 # An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
@@ -159,6 +179,6 @@ COPY --from=builder /app/apps/agent/dist /usr/share/nginx/html
 EXPOSE 80
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+  CMD wget --no-verbose --tries=1 --spider "http://localhost:${PORT:-80}/" || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
