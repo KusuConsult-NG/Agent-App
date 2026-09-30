@@ -30,7 +30,7 @@ FROM nginx:1.27-alpine AS runner
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
 # Copy custom Nginx SPA configuration
-COPY <<'EOF' /etc/nginx/conf.d/agent.conf
+COPY <<'EOF' /etc/nginx/templates/agent.conf.template
 server {
     listen 80;
     server_name localhost;
@@ -61,6 +61,55 @@ server {
         add_header Cache-Control "public";
     }
 
+    # --------------------------------------------------------------------
+    # The API shares this origin.
+    #
+    # `src/lib/api.ts` calls a relative `/api/v1`, and `vite.config.ts`
+    # says why beside the dev proxy that makes it work locally: the PWA and
+    # the API share an origin in production, so the refresh cookie, the CSP
+    # and the absence of any preflight all rest on it. Deployed as its own
+    # service, this image is what has to make that true.
+    #
+    # Without this block `/api/v1/...` fell through to the SPA fallback at
+    # the bottom and was answered with index.html — 200, `text/html` — so
+    # every call died at `response.json()` and nothing in the app worked,
+    # sign-in included. Measured, not inferred: real nginx with this block
+    # absent answers `GET /api/v1/ping` `200 text/html` and the body is the
+    # shell; with it present, `200 application/json`.
+    #
+    # No trailing slash on proxy_pass, because the API mounts its own
+    # routes at `/api/v1` (`app.use('/api/v1', api)`). The URI passes
+    # through unchanged rather than being rewritten.
+    #
+    # API_ORIGIN is host:port on the platform's private network, and is
+    # substituted into this file at container start. There is no default:
+    # a front-end that silently cannot reach its API is the failure above,
+    # and /docker-entrypoint.d/05-require-api-origin.sh refuses to start
+    # rather than serve it again.
+    # --------------------------------------------------------------------
+    location /api/ {
+        # A KYC document is a photograph of an ID card and the API accepts
+        # up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults to 1 MB
+        # and refused a 2 MB upload with its own 413 before the API saw it
+        # — measured. Set above the API's own limit, so that an oversized
+        # document is refused by the API, in the sentence it wrote for the
+        # agent holding the phone, rather than by a proxy error page.
+        client_max_body_size 12m;
+
+        proxy_pass http://${API_ORIGIN};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # A statement or a receipt is rendered on demand and the default
+        # 60s is close for a long one.
+        proxy_read_timeout 120s;
+    }
+
     # Hashed JS and CSS assets - long-lived cache
     location /assets/ {
         expires 1y;
@@ -73,6 +122,36 @@ server {
     }
 }
 EOF
+
+# ---------------------------------------------------------------------------
+# API_ORIGIN is substituted into the template above at container start.
+#
+# NGINX_ENVSUBST_FILTER limits envsubst to that one name. Without it the
+# substitution would also eat `$uri`, `$host`, `$remote_addr` and
+# `$proxy_add_x_forwarded_for` — every nginx variable in this file is
+# `$name`-shaped and envsubst cannot tell them apart from its own.
+# ---------------------------------------------------------------------------
+ENV NGINX_ENVSUBST_FILTER=API_ORIGIN
+
+# Refuse to start rather than serve a front-end that cannot reach its API.
+# An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
+# rejects with a parse error naming a line rather than the cause; and any
+# default here would be a wrong host serving a shell where nothing works,
+# which is the failure this whole block exists to end. Runs before
+# 20-envsubst-on-templates.sh.
+COPY <<'SH' /docker-entrypoint.d/05-require-api-origin.sh
+#!/bin/sh
+set -e
+if [ -z "${API_ORIGIN:-}" ]; then
+  echo "FATAL: API_ORIGIN is not set." >&2
+  echo "  This image serves /api/ by proxying to the API service, because the" >&2
+  echo "  client calls a relative /api/v1 and needs to share an origin with it." >&2
+  echo "  Set API_ORIGIN to the API's host:port on the private network," >&2
+  echo "  for example: API_ORIGIN=agent-app.railway.internal:4000" >&2
+  exit 1
+fi
+SH
+RUN chmod +x /docker-entrypoint.d/05-require-api-origin.sh
 
 # Copy static build artefacts
 COPY --from=builder /app/apps/agent/dist /usr/share/nginx/html

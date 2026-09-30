@@ -268,19 +268,78 @@ variable either client consults is `VITE_VERIFICATION_BASE_URL`
 receipt, not the host the app calls. Setting `VITE_API_URL` on a service is
 inert.
 
-Two ways to close it, and they are not equivalent:
+### How it is closed: both nginx images proxy `/api`
 
-- **Proxy `/api` in nginx** to the API service over the platform's private
-  network. Keeps the same origin, so cookies, CSP and CORS keep behaving the
-  way every test exercises them, and no client code changes. This is what the
-  code is built for.
-- **Make the base URL configurable** and call the API's public host
-  cross-origin. Then `CORS_ALLOWED_ORIGINS` has to name both front-end
-  origins, the refresh cookie becomes cross-site and needs `SameSite=None`
-  with everything that follows from it, and the API's CSP needs widening. A
-  larger change, and it lands on the auth path.
+Each front-end image now serves `/api/` by proxying to the API, so the origin
+the client assumes is the origin it gets. Nothing in either client changed, and
+neither did CORS, the CSP or the cookie — which is the point of fixing it on
+this side rather than the other.
 
-Until one of them is done, a green build is not a working deployment.
+Set **`API_ORIGIN`** on each front-end service to the API's `host:port` on the
+private network:
+
+```
+API_ORIGIN=agent-app.railway.internal:4000
+```
+
+It is read at **container start**, not at build time, so changing it needs a
+restart rather than a rebuild — the opposite of `VITE_VERIFICATION_BASE_URL`,
+which Vite bakes into the bundle. The config ships as
+`/etc/nginx/templates/<app>.conf.template` and the nginx image's own
+`20-envsubst-on-templates.sh` substitutes it. `NGINX_ENVSUBST_FILTER=API_ORIGIN`
+limits that substitution to the one name, because every nginx variable in the
+file — `$uri`, `$host`, `$proxy_add_x_forwarded_for` — is `$name`-shaped and
+envsubst cannot otherwise tell them apart from its own.
+
+**There is no default, and the container refuses to start without it.**
+`/docker-entrypoint.d/05-require-api-origin.sh` exits 1 with a sentence saying
+what to set. Left to nginx, an empty value becomes `proxy_pass http://;` and
+the error is `no host in upstream ""` against a line number; any default value
+would be a wrong host serving a shell where nothing works, which is the failure
+this section exists to end.
+
+Two details in the proxy that are load-bearing:
+
+- **No trailing slash on `proxy_pass`.** The API mounts its own routes at
+  `/api/v1` (`app.use('/api/v1', api)`), so the URI has to pass through
+  unchanged rather than be rewritten.
+- **`client_max_body_size 12m`.** A KYC document is a photograph of an ID card
+  and the API accepts up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults
+  to 1 MB and refuses a 2 MB upload with its own 413 before the API sees it —
+  measured, and it would have been a new bug introduced by adding the proxy.
+  The limit sits above the API's own so that an oversized document is refused
+  by the API, in the sentence it wrote for the agent holding the phone.
+
+Verified against real nginx rather than reasoned about, using the template text
+extracted from the Dockerfiles and the image's own envsubst step:
+
+| | `GET /api/v1/ping` | SPA deep route | 2 MB POST |
+|---|---|---|---|
+| without the proxy block | `200 text/html`, body is the shell | `200 text/html` | — |
+| as shipped | `200 application/json` | `200 text/html` | not 413 |
+
+### One thing still to confirm on the deployed chain
+
+`TRUST_PROXY` makes the API `app.set('trust proxy', 1)` — one trusted hop.
+Routing API calls through the front-end nginx adds a hop, so `req.clientIp`
+may now resolve to the proxy rather than the citizen. That matters more than it
+sounds: it is the key for every `keyBy: 'ip'` rate limit, including the two
+deliberate enumeration thresholds on the public citizen lookup, and it is what
+the audit log records as the address a lookup came from.
+
+This cannot be checked from a laptop, because it depends on how many hops the
+platform's own edge adds. Check it in one request after deploying — hit the
+public citizen lookup, then read the row it writes:
+
+```sql
+SELECT lookup_type, result, ip_address, created_at
+  FROM verification_attempts
+ ORDER BY created_at DESC
+ LIMIT 1;
+```
+
+If `ip_address` is an internal address rather than the caller's, the hop count
+is wrong and `TRUST_PROXY` needs to match the real chain.
 
 `.railwayignore` keeps the CLI upload to about 10 MB of the 43 MB tracked tree,
 by leaving out `docs/` — several hundred UAT screenshots that no image copies.
