@@ -318,6 +318,46 @@ extracted from the Dockerfiles and the image's own envsubst step:
 | without the proxy block | `200 text/html`, body is the shell | `200 text/html` | — |
 | as shipped | `200 application/json` | `200 text/html` | not 413 |
 
+### The config is rendered as `default.conf`, and that is the point
+
+Each image writes `/etc/nginx/templates/default.conf.template`, so the
+image's own `20-envsubst-on-templates.sh` renders it to
+`/etc/nginx/conf.d/default.conf` — **overwriting** the stock file nginx ships.
+
+It used to render as `<app>.conf` beside that stock file, with a build-time
+`rm -rf /etc/nginx/conf.d/default.conf` expected to have removed it. On the
+deployed container it had not been: the image's own
+`10-listen-on-ipv6-by-default.sh` found and edited that path at startup, which
+it only does when the file exists. Why the `rm` did not take is unexplained;
+rendering as `default.conf` makes it irrelevant, because envsubst overwrites
+whatever is at that path.
+
+What it cost while there were two files is worth stating plainly, because it
+was silent. Both server blocks listened on the same port with
+`server_name localhost`, so nginx logged
+
+```
+conflicting server name "localhost" on 0.0.0.0:80, ignored
+```
+
+kept the first — the stock one, which has no `/api/` proxy — and answered
+every API call with a static file lookup:
+
+```
+open() "/usr/share/nginx/html/api/v1/health" failed (2: No such file or directory)
+"HEAD /api/v1/health HTTP/1.1" 404
+```
+
+So the proxy the image exists to provide was not in effect, while the
+container started cleanly, the deployment reported success, and the SPA shell
+loaded. Reproduced against real nginx byte for byte, before the rename and
+after: two blocks give `404 text/html`, one gives `200 application/json`.
+
+`server_name _` rather than `localhost` for the same reason — the Host header
+is the platform's public hostname, so `localhost` matched nothing and worked
+only by being the sole block — and `listen ${PORT} default_server` says so
+explicitly rather than leaving it to file ordering.
+
 ### The port is the platform's to choose
 
 Both nginx images take their listen port from **`PORT`**, defaulting to 80.

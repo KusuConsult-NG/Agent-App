@@ -148,13 +148,21 @@ for (const { image, client, name } of FRONT_ENDS) {
     const source = directivesOnly(read(image));
 
     // envsubst only runs on the template directory, so a config written
-    // straight to conf.d would ship with a literal ${API_ORIGIN}.
+    // straight to conf.d would ship with a literal ${API_ORIGIN}. And the
+    // name has to be `default.conf.template`, so what it renders REPLACES
+    // the stock /etc/nginx/conf.d/default.conf rather than sitting beside
+    // it: rendered as `<app>.conf`, both blocks listened on the same port
+    // with the same server_name, nginx logged `conflicting server name
+    // "localhost" ... ignored`, kept the stock one, and answered every API
+    // call with a static file lookup — `open() ".../api/v1/health" failed`,
+    // 404. The proxy this image exists to provide was not in effect, and the
+    // build-time `rm` of that file had not prevented it.
     assert.match(
       source,
-      /\/etc\/nginx\/templates\/[a-z]+\.conf\.template/,
-      `${image} writes its nginx config somewhere the image's ` +
-        '20-envsubst-on-templates.sh will not see it, so ${API_ORIGIN} would ' +
-        'never be substituted',
+      /\/etc\/nginx\/templates\/default\.conf\.template/,
+      `${image} does not render its config as default.conf, so the stock ` +
+        'nginx config can survive beside it and win the server_name ' +
+        'conflict — which silently disables the /api/ proxy',
     );
 
     // Without a filter, envsubst also eats $uri, $host and
@@ -185,6 +193,32 @@ for (const { image, client, name } of FRONT_ENDS) {
     );
   });
 
+  test(`${name}: owns the server block, whatever Host the platform sends`, () => {
+    const source = directivesOnly(read(image));
+
+    // The Host is the platform's public hostname, never localhost, so
+    // `server_name localhost` matched nothing and worked only by being the
+    // sole block. Verified: with a second block present it lost the conflict.
+    assert.doesNotMatch(
+      source,
+      /server_name\s+localhost\s*;/,
+      `${image} names its server block "localhost", which no request to the ` +
+        'deployed service carries, and which collides with the stock config',
+    );
+    assert.match(
+      source,
+      /server_name\s+_\s*;/,
+      `${image} should use the catch-all server_name, since the Host is ` +
+        'whatever hostname the platform publishes',
+    );
+    assert.match(
+      source,
+      /listen \$\{PORT\} default_server;/,
+      `${image} does not mark its block default_server, so which block ` +
+        'serves an unmatched Host is left to file ordering',
+    );
+  });
+
   test(`${name}: listens on the port the platform routes to`, () => {
     const source = directivesOnly(read(image));
 
@@ -196,7 +230,7 @@ for (const { image, client, name } of FRONT_ENDS) {
     // leaves 80 empty.
     assert.match(
       source,
-      /listen \$\{PORT\};/,
+      /listen \$\{PORT\}[^;]*;/,
       `${image} hardcodes its listen port instead of taking \${PORT}`,
     );
 

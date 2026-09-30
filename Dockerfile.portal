@@ -26,14 +26,42 @@ RUN npm run build --workspace @psirs/portal
 # Stage 2: Nginx Static Server
 FROM nginx:1.27-alpine AS runner
 
-# Remove default configuration
+# ---------------------------------------------------------------------------
+# THIS CONFIG IS RENDERED AS `default.conf`, WHICH IS THE POINT.
+#
+# It used to render as `<app>.conf` beside the stock `default.conf`, with this
+# `rm` expected to have removed that. On the deployed container it had not
+# been — the image's own `10-listen-on-ipv6-by-default.sh` found and edited
+# `/etc/nginx/conf.d/default.conf` at startup, which it only does when the
+# file is there. Why the `rm` did not take is still unexplained; naming the
+# template `default.conf.template` makes it not matter, because envsubst
+# writes `default.conf` and overwrites whatever is at that path.
+#
+# What it cost while it was two files: both server blocks listened on the same
+# port with `server_name localhost`, so nginx logged
+#
+#     conflicting server name "localhost" on 0.0.0.0:80, ignored
+#
+# and kept the first — the stock one, which has no `/api/` proxy. Every API
+# call was answered by a static file lookup:
+#
+#     open() "/usr/share/nginx/html/api/v1/health" failed (2: No such file
+#     or directory) ... "HEAD /api/v1/health HTTP/1.1" 404
+#
+# So the proxy this image exists to provide was never in effect. Reproduced
+# against real nginx, byte for byte, before the rename and after.
+#
+# `server_name _` rather than `localhost` for the same reason: the Host header
+# is the platform's public hostname, so `localhost` matched nothing and only
+# worked by being the sole block. `default_server` makes that explicit.
+# ---------------------------------------------------------------------------
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
 # Copy custom Nginx SPA configuration
-COPY <<'EOF' /etc/nginx/templates/portal.conf.template
+COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
-    listen ${PORT};
-    server_name localhost;
+    listen ${PORT} default_server;
+    server_name _;
     root /usr/share/nginx/html;
     index index.html;
 
