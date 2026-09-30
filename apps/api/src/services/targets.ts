@@ -42,7 +42,7 @@ import type { Db } from '../db/pool';
 import { query, queryOne, withTransaction } from '../db/pool';
 import { badRequest, conflict, notFound } from '../lib/errors';
 import { REVENUE_STATES_SQL } from '../lib/revenue-states';
-import { currentYearInPlateau, plateauParts } from '../lib/calendar-day';
+import { currentYearInPlateau, plateauParts, todayInPlateau } from '../lib/calendar-day';
 import { recordAudit } from './audit';
 import {
   scopeParams,
@@ -452,11 +452,24 @@ export async function forecast(
   const day = 86_400_000;
   const daysInPeriod =
     Math.round((params.periodEnd.getTime() - params.periodStart.getTime()) / day) + 1;
+  /*
+   * `floor`, not `round`.
+   *
+   * `round` turned a part-day into a whole one, so this count reached
+   * `daysInPeriod` at midday on the second-to-last day and tipped the branch
+   * below into reporting the period finished a day and a half early. It also
+   * made the day *before* a period began read as one day elapsed, because
+   * `Math.round(-0.5)` is `-0` — so a September forecast requested on 31
+   * August was not "not started", it was one day in.
+   *
+   * An hour of the afternoon is not a day. Being partway through day N means
+   * N days have begun, which is what the `+ 1` says.
+   */
   const daysElapsed = Math.max(
     0,
     Math.min(
       daysInPeriod,
-      Math.round((Date.now() - params.periodStart.getTime()) / day) + 1,
+      Math.floor((Date.now() - params.periodStart.getTime()) / day) + 1,
     ),
   );
 
@@ -473,11 +486,27 @@ export async function forecast(
    * elapsed days equal to the period says exactly that, and saves every caller
    * a special case.
    */
-  if (daysElapsed >= daysInPeriod || daysElapsed <= 0) {
+  /*
+   * WHETHER THE PERIOD IS OVER IS A QUESTION ABOUT THE CALENDAR.
+   *
+   * It used to be inferred from the day count reaching `daysInPeriod`, which
+   * is true from the first minute of the last day — and day 30 of 30 is *in*
+   * the period. The whole of a month's final day, on which its late payers
+   * settle, was reported as a closed month with the confidence reserved for a
+   * figure that can no longer move.
+   *
+   * Asked in Plateau, not in UTC and not in whatever the server is set to: the
+   * hour between 23:00Z and midnight is already tomorrow in Jos, where the
+   * taxpayers and the officers are, and it is their month that is ending.
+   */
+  const periodComplete = todayInPlateau() > iso(params.periodEnd);
+  const notStarted = daysElapsed <= 0;
+
+  if (periodComplete || notStarted) {
     return withTarget(db, params, {
       is_forecast: true,
-      basis: daysElapsed <= 0 ? 'INSUFFICIENT_HISTORY' : 'RUN_RATE',
-      confidence: daysElapsed >= daysInPeriod ? 'HIGH' : 'LOW',
+      basis: notStarted ? 'INSUFFICIENT_HISTORY' : 'RUN_RATE',
+      confidence: notStarted ? 'LOW' : 'HIGH',
       period_start: iso(params.periodStart),
       period_end: iso(params.periodEnd),
       days_elapsed: daysElapsed,
@@ -488,8 +517,7 @@ export async function forecast(
       comparable_periods: 0,
       target_kobo: null,
       projected_achievement_bp: null,
-      explanation_key:
-        daysElapsed <= 0 ? 'forecastNotStarted' : 'forecastPeriodComplete',
+      explanation_key: notStarted ? 'forecastNotStarted' : 'forecastPeriodComplete',
     });
   }
 
