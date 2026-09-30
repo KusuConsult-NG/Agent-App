@@ -5,8 +5,19 @@ How this platform is built, shipped, migrated and rolled back.
 ## The artefact
 
 One image, built by the root `Dockerfile`, containing the API and nothing else.
-The agent PWA and the government portal are static builds served from a CDN or
-any static host; they are excluded from the image by `.dockerignore`.
+The agent PWA and the government portal are static builds; they are excluded
+from that image by `.dockerignore`, and each has its own image that serves its
+`dist` from nginx — `Dockerfile.agent` and `Dockerfile.portal`. Any static host
+or CDN will serve them equally well, and the nginx images exist so that a
+platform which deploys containers has something to deploy. See **Railway**
+below for the shape currently in use.
+
+There is a fourth Dockerfile, `Dockerfile.api`, which builds the API too and is
+**not** what is deployed. It is a different image from the root one — alpine
+rather than bookworm-slim, a different `WORKDIR`, its own `ENV PORT` and
+`STORAGE_PATH`, and no `backup.sh`/`restore.sh` — so the two are not
+interchangeable, whatever the file names suggest. If you are pointing a service
+at an API Dockerfile, the answer is `Dockerfile`.
 
 The image is multi-stage: the shipped layer carries no compiler, no test suite
 and no dev dependencies. It runs as the `node` user, never root, and writes
@@ -192,6 +203,89 @@ Recommended shape:
                      │
         object storage (documents, backups, versioned)
 ```
+
+## Railway
+
+Three services off one repository, which is the part that is not obvious from
+the repository itself:
+
+| Service | Dockerfile | Serves | Port |
+|---|---|---|---|
+| `agent-app` | `Dockerfile` | the API | as the image sets it |
+| `agent-pwa` | `Dockerfile.agent` | the agent PWA, via nginx | 80 |
+| `portal` | `Dockerfile.portal` | the officer and verification portal, via nginx | 80 |
+
+**Each service's Dockerfile path has to be set explicitly, and a new service
+will not work until it is.** Railway looks for a file named exactly
+`Dockerfile`; finding none it falls back to Railpack, which tries to infer a
+build from the root `package.json`, and on a workspace root with no build of
+its own that fails at prepare:
+
+```
+using build driver railpack-v0.40.1
+railpack prepare exited with an error
+```
+
+That error names the builder and not the cause, so it reads like a broken
+monorepo. It means only that the service is still on the default builder. Per
+service: **Settings → Build → Build Method `Dockerfile`**, then **Dockerfile
+Path** set to the file from the table above. The API service works without this
+step for one reason — its Dockerfile is the one already called `Dockerfile`.
+
+A service also needs a repository connected before it can deploy at all
+(**Settings → Source**); one created as an empty placeholder has no code to
+snapshot, and says so as `Failed to create code snapshot`, which is the same
+sentence Railway uses for a half-finished upload. The two causes are worth
+telling apart: no source, or a failed `railway up` being retried. For the
+second, deploy from the repository rather than re-running the failed upload.
+
+### The front-ends assume they share an origin with the API
+
+Both clients hardcode their API base and it is a **relative** path:
+
+```ts
+const API_BASE = '/api/v1';    // apps/agent/src/lib/api.ts, apps/portal/src/lib/api.ts
+```
+
+That is deliberate, and `apps/agent/vite.config.ts` says why beside the dev
+proxy that makes it work locally: *"The PWA and API share an origin in
+production; the dev proxy keeps cookies, CSP and CORS behaviour the same in
+development."* The refresh-token cookie, the CSP and the absence of any CORS
+preflight all rest on it.
+
+**Deploying the three as separate services breaks that assumption, and neither
+nginx config restores it.** `Dockerfile.agent` and `Dockerfile.portal` define
+`location /assets/`, `location /` and (in the agent) `location = /sw.js` — and
+no `location /api/` with a `proxy_pass`. A request for `/api/v1/auth/login`
+therefore falls through to `try_files $uri $uri/ /index.html` and is answered
+with `index.html`: HTTP 200, `Content-Type: text/html`. Every call fails at
+`response.json()`, so both front-ends load their shell and nothing in them
+works, sign-in included.
+
+`VITE_API_URL` does not help, because nothing reads it. The only build-time
+variable either client consults is `VITE_VERIFICATION_BASE_URL`
+(`apps/agent/src/lib/verification-url.ts`), which is the host printed on a
+receipt, not the host the app calls. Setting `VITE_API_URL` on a service is
+inert.
+
+Two ways to close it, and they are not equivalent:
+
+- **Proxy `/api` in nginx** to the API service over the platform's private
+  network. Keeps the same origin, so cookies, CSP and CORS keep behaving the
+  way every test exercises them, and no client code changes. This is what the
+  code is built for.
+- **Make the base URL configurable** and call the API's public host
+  cross-origin. Then `CORS_ALLOWED_ORIGINS` has to name both front-end
+  origins, the refresh cookie becomes cross-site and needs `SameSite=None`
+  with everything that follows from it, and the API's CSP needs widening. A
+  larger change, and it lands on the auth path.
+
+Until one of them is done, a green build is not a working deployment.
+
+`.railwayignore` keeps the CLI upload to about 10 MB of the 43 MB tracked tree,
+by leaving out `docs/` — several hundred UAT screenshots that no image copies.
+Without it the upload can time out, and the retry reports the snapshot error
+above. It has no effect on a deploy triggered from GitHub, which clones.
 
 ## Going live
 

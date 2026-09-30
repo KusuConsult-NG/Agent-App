@@ -1,0 +1,44 @@
+# What Railway does not need in the upload.
+#
+# `railway up` uploads a snapshot of the working tree before anything is
+# built. The tracked tree is 43 MB and 33 MB of that is `docs/` — mostly
+# `docs/uat-screenshots`, several hundred PNGs of the officer portal and the
+# agent PWA. A CLI upload of that timed out, and a retry on the half-finished
+# state answered "Failed to create code snapshot", which reads like a repo
+# problem and is not one.
+#
+# Nothing excluded here is copied by any image. Every Dockerfile in this
+# repository copies exactly `package.json`, `package-lock.json`,
+# `packages/shared` and its own `apps/<name>` — none of them reads `docs/`,
+# `.github/`, a backup or the local storage directory. Checked by listing the
+# COPY sources of all four before writing this file.
+#
+# WHAT MUST NOT BE ADDED HERE. `apps/api/assets/fonts/*.ttf` and
+# `apps/api/src/db/migrations/*.sql` look like data rather than code and are
+# neither: the API build runs `scripts/copy-assets.mjs`, which puts both into
+# `dist` and aborts the build if they are missing. An image that cannot spell
+# ₦ or cannot migrate is the failure this note exists to prevent.
+#
+# This file is gitignore-shaped and only affects the CLI upload. A deploy
+# triggered from GitHub clones the repository instead and ignores it.
+
+# Screenshots and the certification paperwork — 33 MB, read by people, never
+# by a build.
+docs/
+
+# CI definitions run on GitHub, not in the image.
+.github/
+
+# Never in a snapshot: installed, built, or local to one machine.
+node_modules/
+**/node_modules/
+**/dist/
+.git/
+
+# Local runtime state. `storage/` is the object-storage driver's own directory
+# and the image creates it at startup; a copy from a laptop is not wanted.
+backups/
+storage/
+.env
+.env.*
+!.env.example
