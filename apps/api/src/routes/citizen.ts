@@ -25,6 +25,7 @@ import { paymentHistory } from '../services/payment-history';
 import { logVerificationAttempt } from '../services/receipts';
 import { todayInPlateau } from '../lib/calendar-day';
 import { phoneLookupForms } from '../lib/phone';
+import { bestEffort } from '../lib/best-effort';
 import { likeContains } from '../lib/like';
 
 export const citizenRouter = Router();
@@ -51,13 +52,19 @@ async function recordLookup(
   value: string,
   result: 'VALID' | 'NOT_FOUND',
 ): Promise<void> {
-  await logVerificationAttempt(pool, {
+  const write = logVerificationAttempt(pool, {
     lookupType: 'TAXPAYER',
     lookupValue: value,
     result,
     ipAddress: ipAddress ?? null,
     hashValue: true,
-  }).catch(() => undefined);
+  });
+
+  // Evidence, not a control: see the note above. Logged rather than silent,
+  // so a public register that stops recording who searched it says so.
+  await bestEffort('verification_attempt.record', write, {
+    detail: { lookupType: 'TAXPAYER', result },
+  });
 }
 
 // Strict rate limit — 10 per minute per IP — to prevent TIN/phone enumeration.

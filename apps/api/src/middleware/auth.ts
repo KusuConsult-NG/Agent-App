@@ -29,6 +29,7 @@ import * as rbacStore from '../services/rbac-store';
 import { pool, queryOne, withTransaction } from '../db/pool';
 import { recordAudit } from '../services/audit';
 import { forbidden, notCleared, unauthorised, AppError } from '../lib/errors';
+import { bestEffort } from '../lib/best-effort';
 import {
   issueAccessToken,
   verifyAccessToken,
@@ -115,9 +116,11 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
       deviceId: payload.deviceId,
     };
 
-    void pool
-      .query('UPDATE sessions SET last_used_at = now() WHERE id = $1', [payload.sid])
-      .catch(() => undefined);
+    void bestEffort(
+      'session.touch',
+      pool.query('UPDATE sessions SET last_used_at = now() WHERE id = $1', [payload.sid]),
+      { detail: { requestId: req.requestId } },
+    );
 
     next();
   } catch (error) {
@@ -193,7 +196,7 @@ export function requirePermission(...permissions: Permission[]) {
        * to record it must still never turn a 403 into a 500.
        */
       const { userId, role } = req.auth;
-      await withTransaction((client) =>
+      const record = withTransaction((client) =>
         recordAudit(client, {
           actorId: userId,
           actorRole: role,
@@ -205,7 +208,11 @@ export function requirePermission(...permissions: Permission[]) {
           ipAddress: req.clientIp ?? null,
           requestId: req.requestId ?? null,
         }),
-      ).catch(() => undefined);
+      );
+      // A refusal that was never recorded is a refusal nobody can review.
+      await bestEffort('audit.access_denied', record, {
+        detail: { requestId: req.requestId, permissions: permissions.join(',') },
+      });
 
       return next(
         forbidden(
@@ -466,9 +473,11 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
         }
 
         deviceId = device.id;
-        void pool
-          .query('UPDATE agent_devices SET last_seen_at = now() WHERE id = $1', [device.id])
-          .catch(() => undefined);
+        void bestEffort(
+          'device.touch',
+          pool.query('UPDATE agent_devices SET last_seen_at = now() WHERE id = $1', [device.id]),
+          { detail: { deviceId: device.id } },
+        );
       }
 
       const blockers = activationBlockers(flags);
