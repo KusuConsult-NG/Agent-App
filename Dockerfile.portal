@@ -169,6 +169,16 @@ SH
 RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
 
 
+# Which front-end this image is.
+#
+# Both images now render `default.conf.template`, so the envsubst line in the
+# startup log no longer says which one is running — it used to say
+# `portal.conf.template`. That mattered: a log showing `portal.conf.template`
+# while serving the agent service's hostname is how it came to light that a
+# service might be pointed at the wrong image. Restored deliberately, since
+# the rename took it away.
+ENV PSIRS_APP=portal
+
 # Refuse to start rather than serve a front-end that cannot reach its API.
 # An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
 # rejects with a parse error naming a line rather than the cause; and any
@@ -178,6 +188,7 @@ RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
 COPY <<'SH' /docker-entrypoint.d/05-require-api-origin.sh
 #!/bin/sh
 set -e
+echo "05-require-api-origin.sh: this is the ${PSIRS_APP:-unknown} front-end image"
 if [ -z "${API_ORIGIN:-}" ]; then
   echo "FATAL: API_ORIGIN is not set." >&2
   echo "  This image serves /api/ by proxying to the API service, because the" >&2
@@ -186,6 +197,7 @@ if [ -z "${API_ORIGIN:-}" ]; then
   echo "  for example: API_ORIGIN=agent-app.railway.internal:4000" >&2
   exit 1
 fi
+echo "05-require-api-origin.sh: proxying /api to ${API_ORIGIN}"
 SH
 RUN chmod +x /docker-entrypoint.d/05-require-api-origin.sh
 

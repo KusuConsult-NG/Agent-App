@@ -193,6 +193,27 @@ for (const { image, client, name } of FRONT_ENDS) {
     );
   });
 
+  test(`${name}: says which front-end it is in its startup log`, () => {
+    const source = directivesOnly(read(image));
+    // Both images render `default.conf.template` now, so the envsubst line no
+    // longer names the app — it used to say `<app>.conf.template`. A log
+    // showing the portal template while serving the agent service's hostname
+    // is how a service pointed at the wrong image came to light, so the
+    // signal is restored deliberately rather than left to the rename.
+    assert.match(
+      source,
+      new RegExp(`ENV PSIRS_APP=${name}\\b`),
+      `${image} does not declare PSIRS_APP=${name}, so nothing in its ` +
+        'startup log says which front-end is running',
+    );
+    assert.match(
+      source,
+      /echo "05-require-api-origin\.sh: this is the \$\{PSIRS_APP:-unknown\}/,
+      `${image} declares PSIRS_APP but never prints it, which is the same ` +
+        'as not having it',
+    );
+  });
+
   test(`${name}: owns the server block, whatever Host the platform sends`, () => {
     const source = directivesOnly(read(image));
 
