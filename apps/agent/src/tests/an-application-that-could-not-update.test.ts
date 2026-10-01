@@ -48,6 +48,14 @@ interface Harness {
   setOffline: (offline: boolean) => void;
   putInCache: (cacheName: string, key: string, body: string) => void;
   version: string;
+  /** The windows `clients.matchAll` will report, in the order given. */
+  setWindows: (urls: string[]) => void;
+  /** Tap a notification carrying this `data`, and wait for what it does. */
+  notificationClick: (data: Record<string, unknown>) => Promise<void>;
+  /** The URL of every client the worker focused, in order. */
+  focused: string[];
+  /** Every URL the worker asked the browser to open, in order. */
+  opened: string[];
 }
 
 /**
@@ -97,11 +105,35 @@ function loadServiceWorker(): Harness {
     delete: async (name: string) => stores.delete(name),
   };
 
+  /*
+   * Windows on this origin, which on a shared host is not only the agent's.
+   * `matchAll` reports them in the order given, because the order is the
+   * whole of what went wrong: Chrome returns most-recently-focused first, so
+   * an officer who had just used the portal put the portal at the front.
+   */
+  let windows: string[] = [];
+  const focused: string[] = [];
+  const opened: string[] = [];
+
   const self = {
     location: { origin: 'https://psirs.example' },
     addEventListener: (type: string, fn: Listener) => listeners.set(type, fn),
     skipWaiting: () => undefined,
-    clients: { claim: () => undefined, matchAll: async () => [] },
+    clients: {
+      claim: () => undefined,
+      matchAll: async () =>
+        windows.map((url) => ({
+          url,
+          focus: async () => {
+            focused.push(url);
+            return undefined;
+          },
+        })),
+      openWindow: async (url: string) => {
+        opened.push(url);
+        return undefined;
+      },
+    },
     registration: { showNotification: async () => undefined },
   };
 
@@ -134,6 +166,23 @@ function loadServiceWorker(): Harness {
     setOffline: (value: boolean) => { offline = value; },
     putInCache: (cacheName, key, body) => cacheFor(cacheName).set(key, new Response(body)),
     version: /const VERSION = '([^']+)'/.exec(source)?.[1] ?? '',
+    setWindows: (urls) => {
+      windows = urls;
+    },
+    notificationClick: async (data) => {
+      const handler = listeners.get('notificationclick');
+      if (!handler) throw new Error('sw.js registered no notificationclick handler');
+      let held: Promise<unknown> | undefined;
+      let closed = false;
+      handler({
+        notification: { data, close: () => { closed = true; } },
+        waitUntil: (p: Promise<unknown>) => { held = p; },
+      });
+      if (!closed) throw new Error('sw.js no longer closes the notification it was given');
+      await held;
+    },
+    focused,
+    opened,
   };
 }
 
@@ -453,5 +502,62 @@ describe('the officer portal sharing this origin', () => {
     const response = await sw.fetchEvent(navigation('https://psirs.example/portals-of-jos'));
 
     expect(response).toBeDefined();
+  });
+});
+
+describe('tapping a notification on an origin with two applications on it', () => {
+  const AGENT_HOME = 'https://psirs.example/#/';
+  const AGENT_COLLECT = 'https://psirs.example/#/collect';
+  const PORTAL = 'https://psirs.example/portal/#/dashboard';
+
+  it('does not hand an agent the officer portal', async () => {
+    /*
+     * The portal first in the list is the realistic case rather than a
+     * contrived one: `matchAll` reports most-recently-focused first, and an
+     * officer who has just used the portal is exactly who has a portal
+     * window at the front of it.
+     */
+    sw.setWindows([PORTAL, AGENT_HOME]);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual([AGENT_HOME]);
+    expect(sw.opened).toEqual([]);
+  });
+
+  it('prefers a window already on the screen the notification names', async () => {
+    sw.setWindows([AGENT_HOME, AGENT_COLLECT]);
+
+    await sw.notificationClick({ url: '/#/collect' });
+
+    expect(sw.focused).toEqual([AGENT_COLLECT]);
+  });
+
+  it('opens the agent rather than focusing the portal', async () => {
+    sw.setWindows([PORTAL]);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual([]);
+    expect(sw.opened).toEqual(['https://psirs.example/']);
+  });
+
+  it('declines a notification that names the portal', async () => {
+    // Nothing sends one today. If anything ever does, a notification raised
+    // by the agent's worker is still the agent's.
+    sw.setWindows([]);
+
+    await sw.notificationClick({ url: '/portal/#/dashboard' });
+
+    expect(sw.opened).toEqual(['https://psirs.example/']);
+  });
+
+  it('still focuses the one agent window when no screen is named', async () => {
+    sw.setWindows(['https://psirs.example/#/receipts']);
+
+    await sw.notificationClick({});
+
+    expect(sw.focused).toEqual(['https://psirs.example/#/receipts']);
+    expect(sw.opened).toEqual([]);
   });
 });

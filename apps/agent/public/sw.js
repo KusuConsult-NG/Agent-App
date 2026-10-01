@@ -308,17 +308,59 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = event.notification.data?.url || '/';
+
+  /*
+   * Where tapping a notification takes an agent, and why it used to be
+   * wherever they happened to have been last.
+   *
+   * The match was `client.url.includes(urlToOpen)`, a substring test, and
+   * `urlToOpen` falls back to '/' because nothing sets one: the only sender
+   * is services/messaging/push.ts, which calls `sendPushNotification` with a
+   * title and a body and no `data`. So the fallback is not an edge case, it
+   * is every notification this platform sends — and every URL on this origin
+   * contains '/'. The test therefore matched the first window `matchAll`
+   * returned, which Chrome orders most-recently-focused first.
+   *
+   * On a shared origin that window can be the officer portal, so an agent
+   * tapping their own notification was handed a government sign-in screen.
+   * Before both applications shared a host there was no such window to
+   * focus: one URL for both is what made it reachable, and
+   * `includeUncontrolled: true` widens it to windows this worker has never
+   * controlled.
+   *
+   * A window already on the notification's own screen is preferred, then any
+   * window of the agent's, then a new one. Focusing an agent window that is
+   * on some other screen does not navigate it. That was true before and is
+   * left alone deliberately: calling `navigate()` on a window somebody is
+   * part-way through a collection on is a larger decision than this fix.
+   */
+  const origin = self.location.origin;
+
+  /** The candidate as one of the agent's own URLs, or null if it is not one. */
+  const withinTheAgent = (candidate) => {
+    try {
+      const url = new URL(candidate, origin);
+      return url.origin === origin && !isPortalPath(url.pathname) ? url : null;
+    } catch {
+      return null;
+    }
+  };
+
+  // A notification raised by this worker is the agent's, so a `data.url`
+  // naming the portal is declined rather than followed.
+  const target = withinTheAgent(event.notification.data?.url || '/') ?? new URL('/', origin);
+
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      for (const client of windowClients) {
-        if (client.url.includes(urlToOpen) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (self.clients.openWindow) {
-        return self.clients.openWindow(urlToOpen);
-      }
+      const mine = windowClients.filter((client) => withinTheAgent(client.url));
+      const onTheSameScreen = mine.find((client) => {
+        const url = withinTheAgent(client.url);
+        return url !== null && url.pathname === target.pathname && url.hash === target.hash;
+      });
+      const chosen = onTheSameScreen ?? mine[0];
+      if (chosen && 'focus' in chosen) return chosen.focus();
+      if (self.clients.openWindow) return self.clients.openWindow(target.href);
+      return undefined;
     }),
   );
 });
