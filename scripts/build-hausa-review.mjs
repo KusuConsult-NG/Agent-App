@@ -285,6 +285,72 @@ if (wrong.length > 0) {
   process.exit(1);
 }
 
+/*
+ * And the same counts in the document the sheet tells the reviewer to read
+ * first.
+ *
+ * `HAUSA-REVIEW-QUESTIONS.md` opens by saying how many strings the sheet
+ * carries, and states the size of its biggest question — how many strings
+ * address the reader as `ka` — in a headline, a table and a chain of
+ * corrections. All of it is hand-written, none of it was checked, and every
+ * figure in it was several hundred strings out of date: the index said 3,031
+ * where the dictionary held 3,425, and 332 `ka` strings where there were 433.
+ *
+ * It is the worse of the two documents to have wrong. The sheet's own header
+ * sends the reviewer here first — "If you are the Hausa reviewer, read this
+ * instead" — so the understated figure is the one they see before anything
+ * else, and the decision it understates is the one the sheet says blocks all
+ * the others.
+ *
+ * The `ka` count is recomputed rather than trusted, by the same definition the
+ * document sets out: the pronoun at a word boundary and case-insensitively,
+ * because Hausa imperatives open sentences constantly; the possessive and
+ * clitic forms beside it; and `kai` excluded, because every use of it in this
+ * dictionary is something else.
+ */
+/*
+ * Without the `g` flag, deliberately. `RegExp.prototype.test` on a global
+ * pattern advances `lastIndex` and resumes from there on the next call, so
+ * testing three thousand strings against a shared global regex skips most of
+ * them: the first version of this counted 385 where the dictionary holds 433,
+ * and the only reason that was caught is that it disagreed with a figure
+ * measured another way.
+ */
+const KA_FORMS = [/\bka\b/i, /\w+nka\b/i, /\w+rka\b/i, /\b(?:dinka|maka|naka|kanka)\b/i];
+const kaStrings = Object.values(ha).filter((value) =>
+  KA_FORMS.some((form) => form.test(value)),
+).length;
+
+const QUESTIONS = join(ROOT, 'docs', 'HAUSA-REVIEW-QUESTIONS.md');
+const questions = readFileSync(QUESTIONS, 'utf8');
+const questionsWrong = [
+  ...[...questions.matchAll(/\b(\d,\d{3}) (?:dictionary strings|keys|strings)\b/g)].map((m) => [
+    m[1],
+    total,
+    'the dictionary',
+  ]),
+  ...[...questions.matchAll(/\*\*(\d{3}) strings address the reader as/g)].map((m) => [
+    m[1],
+    String(kaStrings),
+    'the `ka` count',
+  ]),
+  ...[...questions.matchAll(/\| \*\*Total\*\* \| \*\*(\d{3})\*\* of/g)].map((m) => [
+    m[1],
+    String(kaStrings),
+    'the `ka` count',
+  ]),
+].filter(([said, actual]) => said !== actual);
+
+if (questionsWrong.length > 0) {
+  const [said, actual, what] = questionsWrong[0];
+  console.error(
+    `docs/HAUSA-REVIEW-QUESTIONS.md says ${said} where ${what} holds ${actual}.\n` +
+      'That is the page the sheet sends the reviewer to first, so its figure is the\n' +
+      'one they see before anything else.',
+  );
+  process.exit(1);
+}
+
 if (check) {
   if (rebuilt !== sheet) {
     console.error(

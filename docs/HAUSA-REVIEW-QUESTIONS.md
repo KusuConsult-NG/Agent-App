@@ -1,6 +1,6 @@
 # Hausa review: everything still waiting on a decision
 
-`HAUSA-REVIEW.md` carries all 3,031 dictionary strings, and most of its length
+`HAUSA-REVIEW.md` carries all 3,425 dictionary strings, and most of its length
 is those tables. The open questions are scattered through seven sections of the
 prose above those tables, and somebody reading it for the first time has no way
 to tell which paragraphs want an answer from them and which are explaining what
@@ -18,7 +18,7 @@ new strings and none of review.
 
 ## 1. Not a translation question — PSIRS decides
 
-**332 strings address the reader as `ka`: masculine singular.** A woman
+**433 strings address the reader as `ka`: masculine singular.** A woman
 collecting revenue in Bokkos is addressed as a man by the application she uses
 all day.
 
@@ -31,23 +31,30 @@ about field staff. Counting says otherwise:
 
 | Who reads it | Strings |
 |---|---|
-| The agent app | 179 |
-| The officer portal | 111 |
-| Citizens, referees and group leaders | 42 |
-| **Total** | **332** of 3,031 |
+| The agent app | 243 |
+| The officer portal | 147 |
+| Citizens, referees and group leaders | 43 |
+| **Total** | **433** of 3,425 |
 
 So a female revenue officer in Jos is addressed as a man by her own portal, and
 so is a woman looking up her own tax status with no account at all. `ku`, the
 polite plural, is the only one of the three options that is both
 gender-neutral and unremarkable to address a stranger with — which may matter
-more for the 42 than for the 179.
+more for the 43 than for the 243.
 
-The forms are `ka` (337 occurrences), the possessive `-nka` (56), `-rka` (44),
-`dinka` (6), `maka` (6), `naka` (5) and `kanka` (2); many strings carry more
-than one. Nothing currently uses `ku`.
+The forms are `ka` (467 occurrences), the possessive `-nka` (82), `-rka` (56),
+`dinka` (8), `maka` (11), `naka` (6) and `kanka` (2); many strings carry more
+than one.
+
+**One string already uses `ku`, and it is the one a citizen holds.** This page
+said nothing did. `rcpThanks` — "Mun gode da sauke nauyin ku", on the printed
+receipt, discussed in § 3.2 below — was written in the polite plural after that
+sentence was, by somebody reaching for the form this question is about. It is
+one string against 433, so it settles nothing; it is worth knowing that the
+first person to need a form for a stranger picked `ku` without being asked.
 
 **Two earlier figures in this document were wrong, and the second was worse.**
-It said 216. That over-counted by treating `kai` as the pronoun — all 49 of its
+It said 216. That over-counted by treating `kai` as the pronoun — all 70 of its
 uses here are something else (`Kimanta kai`, self-assessment; `kai tsaye`,
 directly; `ya kai`, reached; `hadin kai`, cooperation) — and under-counted by
 missing `dinka`, `kanka` and `maka`. Correcting those gave 222, which was still
@@ -59,6 +66,16 @@ it moved to 320 when deleting the dead camera-scanner path took `camAlign`
 strings below were written in the same convention as everything around them, to
 328 with the eleven strings the `lib/` lint pass brought in, to 330 with
 the receipt template, and to 332 with the printer's own messages.
+
+**That chain stops here, and not because it was finished.** Every figure on
+this page was hand-written and none was checked, so they stayed at 332 and
+3,031 while the dictionary went past three and a half thousand — understating
+the biggest decision on the page by a hundred strings, on the page the sheet
+sends the reviewer to before anything else. `scripts/build-hausa-review.mjs`
+now recomputes both and refuses the build when this document disagrees with it,
+the way it already refused a stale count in the sheet itself. The count above
+is 433 because that is what the script measured, not because somebody added
+one hundred and one strings in a single change.
 
 ### What it would cost to change
 
@@ -394,7 +411,7 @@ roll. If any correction you make runs long, that test will say so rather than
 the receipt.
 
 **And `scanHelp` was not the only dead string in this table.** Checking it
-raised the obvious next question, so it was measured: **33 of the 3,031 keys
+raised the obvious next question, so it was measured: **43 of the 3,425 keys
 are never named anywhere outside the dictionary**, and four of them are in the
 table above — `statusOffline`, `offlineMessage`, `statusFailed`, and
 `civicDutyThanks`, the one the `Mungode` typo was in. Three of the four
