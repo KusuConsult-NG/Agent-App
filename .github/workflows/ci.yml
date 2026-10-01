@@ -304,6 +304,12 @@ jobs:
             name: agent
           - dockerfile: Dockerfile.portal
             name: portal
+          # Both front ends on one origin. Listed for the reason the comment
+          # above gives: an image CI does not build is an image nobody finds
+          # out about until a deploy. This one builds two apps rather than
+          # one, so it has twice as many ways to stop building.
+          - dockerfile: Dockerfile.web
+            name: web
 
     steps:
       - name: Check out
