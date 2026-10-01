@@ -200,6 +200,60 @@ describe('the dashboard’s own numbers, when they could not be read', () => {
     expect(screen.queryByText(en.ofcDbPlatformKpis)).toBeNull();
   });
 
+  /*
+   * And the third case, which is neither: a role that may not read them.
+   *
+   * `GET /government/kpis` requires `report:read:all`. A supervisor holds
+   * `report:read:territory`, and App.tsx sends a supervisor to THIS screen
+   * on purpose — "theirs is already narrowed to their own territories, which
+   * is exactly the screen their job wants". So the one role deliberately
+   * landed here was the one role whose request was refused, and the warning
+   * above — written for a panel that genuinely failed — became a permanent
+   * fixture of their home page, telling them something was wrong every time
+   * they signed in. Found by signing in as all five government roles through
+   * one origin and reading the console: 403 on /government/kpis, supervisor
+   * only.
+   *
+   * Absence by design is what the rest of this portal does with a permission
+   * a role does not hold; `availableGroups` filters the navigation the same
+   * way. The warning is kept for the case it was written for, which the test
+   * above still covers.
+   */
+  it('is simply not part of a supervisor’s dashboard, with no warning', async () => {
+    signInAs('supervisor');
+    const get = serve('refused');
+
+    render(<DashboardScreen navigate={vi.fn()} />);
+
+    /*
+     * WAIT FOR THE DASHBOARD BEFORE ASSERTING ANYTHING IS ABSENT.
+     *
+     * The first draft of this test did not, and so proved nothing. It went
+     * straight from `render` to `waitFor(() => expect(...).toBeNull())`,
+     * which succeeds on its first attempt — the dashboard's own fetch had
+     * not resolved, the screen was still a spinner, `PlatformKpis` had never
+     * mounted, and every "is absent" assertion passed on an empty page. The
+     * mutation check is what exposed it: removing the permission gate
+     * altogether left all six tests green.
+     *
+     * A positive assertion is what actually waits. This heading is part of
+     * the loaded dashboard, so reaching it means the screen is up and
+     * `PlatformKpis` has had its turn.
+     */
+    await waitFor(() => expect(screen.getByText(en.ofcDbRevenueByMda)).toBeTruthy());
+    await waitFor(() => expect(get).toHaveBeenCalled());
+
+    // Now the absences mean something.
+    expect(screen.queryByText(en.ofcDbKpisUnreadable)).toBeNull();
+    expect(screen.queryByText(en.ofcDbPlatformKpis)).toBeNull();
+
+    // And it never asked. A refused request puts a 403 in every supervisor's
+    // console and spends a round trip on a connection PRD §55 calls slow.
+    expect(
+      get.mock.calls.filter(([path]) => String(path).startsWith('/government/kpis')),
+    ).toHaveLength(0);
+  });
+
   it('renders the panel when the numbers arrived', async () => {
     signInAs('admin');
     serve({

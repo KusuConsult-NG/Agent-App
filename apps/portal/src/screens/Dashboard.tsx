@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { enumLabel, formatNaira, localName } from '@psirs/shared';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
+import { getUser } from '../lib/api';
+import { can } from '../lib/permissions';
 import { Alert, BarList, Empty, ErrorAlert, Growth, KeyValue, Loading, Money, Sparkline, Stat, Table } from '../ui';
 import { usePortalI18n } from '../lib/i18n';
 
@@ -672,12 +674,36 @@ function PlatformKpis() {
   const { t } = usePortalI18n();
   const [kpis, setKpis] = useState<Record<string, string> | 'unreadable' | null>(null);
 
+  /*
+   * A supervisor may not read these, and that is not a failure.
+   *
+   * `GET /government/kpis` requires `report:read:all`. A supervisor holds
+   * `report:read:territory` and lands HERE — App.tsx routes them to this
+   * screen deliberately, because "theirs is already narrowed to their own
+   * territories, which is exactly the screen their job wants". So the one
+   * role sent to this dashboard on purpose was the one role that could not
+   * read its own KPI panel, and got the warning below every time they opened
+   * the platform: a permanent alert telling them something had gone wrong
+   * when nothing had.
+   *
+   * The warning stays for a request that is genuinely refused or broken
+   * while the officer DOES hold the permission — the note below it argues
+   * that case well and it still holds. This is the other case: a panel the
+   * role was never entitled to, which is absence by design, and the thing
+   * the rest of this portal already does with it is not render it.
+   * `availableGroups` filters the navigation the same way.
+   */
+  const mayRead = can(getUser(), 'report:read:all');
+
   useEffect(() => {
+    if (!mayRead) return;
     api
       .get<Record<string, string>>('/government/kpis')
       .then(setKpis)
       .catch(() => setKpis('unreadable'));
-  }, []);
+  }, [mayRead]);
+
+  if (!mayRead) return null;
 
   /*
    * A panel that failed says so, rather than not being there.
