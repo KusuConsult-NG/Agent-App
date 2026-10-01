@@ -23,6 +23,10 @@ types.setTypeParser(types.builtins.NUMERIC, (value) => value);
 export const pool = new Pool({
   connectionString: config.database.url,
   max: config.database.poolSize,
+  // Waiting for ever for a connection is how an exhausted pool becomes a
+  // sign-in that spins until a proxy answers 504, with nothing in this
+  // service's log to say why. See the note in config.ts.
+  connectionTimeoutMillis: config.database.connectionTimeoutMs,
   statement_timeout: config.database.statementTimeoutMs,
   // A backstop, not a licence: several services still call an external
   // provider with a transaction open, and this is what stops one that never

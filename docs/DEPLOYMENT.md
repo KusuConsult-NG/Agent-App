@@ -689,12 +689,55 @@ Three things worth knowing about it:
 can be replaced without anybody looking is a revocation that meant nothing,
 and the money is somebody's tax.
 
+## Sign-in times out, and the proxy gets the blame
+
+Symptom: the apps load, sign-in spins, and the front end's log shows
+
+```
+upstream timed out (110: Operation timed out) while reading response header
+from upstream, request: "POST /api/v1/auth/login" ... 504
+```
+
+The proxy reached the API — the upstream address is right there in the line.
+The API never answered. Its own log shows the cause, but only from the
+background jobs:
+
+```
+(EMAXCONNSESSION) max clients reached in session mode
+                 - max clients are limited to pool_size: 15
+```
+
+**The API has run out of database connections.** `DB_POOL_SIZE` defaults to 10
+*per instance*, this service runs fifteen scheduled jobs that each take one,
+and a hosted pooler in **session mode** allows a small fixed number of clients
+— 15 on the tier this was found on. Two instances exhaust it.
+
+Why it is hard to see: `pg` used to wait for ever for a connection, so web
+requests did not fail, they stopped. Nothing was logged, because nothing had
+gone wrong yet. Only the jobs, which have their own timeout, said anything —
+and the visible artefact was a 504 from the proxy, two services away from the
+cause. `DB_CONNECTION_TIMEOUT_MS` now bounds that wait at 10s, so the same
+exhaustion answers in seconds and names the database.
+
+### The fix, best first
+
+| Change | Why |
+|---|---|
+| Point `DATABASE_URL` at port **6543** instead of 5432 | Supabase's **transaction-mode** pooler hands a server connection back between statements, so it serves far more clients. This is the right setting for anything running more than one instance. |
+| `DB_POOL_SIZE=5` | Fits two instances inside a 15-client pooler. |
+| Run a single instance | Fewest moving parts, fine for a demonstration. |
+
+The API warns at boot when its `DATABASE_URL` is a session-mode pooler, naming
+the pool size and the remedy — because without it the only clue is in another
+service's log.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
 - [ ] `DEMO_RELAX_DEVICE_BINDING` is **not** set — see *Running a demonstration*; it is device binding off, and a revoked handset that can be replaced unseen is a revocation that meant nothing
+- [ ] `DATABASE_URL` is a transaction-mode pooler (port 6543), or `DB_POOL_SIZE` × the instance count fits the pooler's client limit — see *Sign-in times out*
 - [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins

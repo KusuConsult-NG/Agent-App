@@ -165,6 +165,32 @@ export const config = {
     statementTimeoutMs: int('DB_STATEMENT_TIMEOUT_MS', 15_000),
 
     /**
+     * How long a request may wait for a connection before giving up.
+     *
+     * `pg` waits for ever by default, and for ever is the worst answer
+     * available. When the pool is exhausted — several instances against a
+     * hosted pooler with a client limit of its own, plus the scheduled jobs —
+     * a request simply stops. Nothing is logged, because nothing has failed
+     * yet. What a person sees is a sign-in that spins until the proxy gives up
+     * and answers 504, and the only clue is in the proxy's log rather than the
+     * platform's:
+     *
+     *     upstream timed out (110: Operation timed out) while reading
+     *     response header from upstream, request: "POST /api/v1/auth/login"
+     *
+     * Observed on a deployment where two instances of this API, each with a
+     * pool of 10, met a pooler limited to 15 clients in session mode. The API
+     * logged the exhaustion only from its background jobs; the web requests
+     * were still waiting.
+     *
+     * Bounded, the same situation answers in seconds with a sentence that
+     * names the database, which is the difference between a diagnosable
+     * outage and a silent one. It is long enough that a healthy pool under
+     * load never reaches it.
+     */
+    connectionTimeoutMs: int('DB_CONNECTION_TIMEOUT_MS', 10_000),
+
+    /**
      * How long a transaction may sit open with nothing running.
      *
      * `statement_timeout` bounds a slow query. It does nothing about a

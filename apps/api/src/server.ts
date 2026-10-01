@@ -144,6 +144,42 @@ async function main() {
    * container, beside the port and the payment gateway, where anybody
    * looking at why a deployment behaves oddly will meet it.
    */
+  /*
+   * A hosted pooler in session mode, met by more clients than it allows.
+   *
+   * Supabase's pooler on port 5432 is SESSION mode: every client holds a
+   * server connection for its whole life, and the limit is small — 15 on the
+   * tier this was found on. Two instances of this API, each with a pool of
+   * 10, plus fifteen scheduled jobs, exhaust it. The failure is the worst
+   * shape available: web requests wait rather than fail, so the only thing
+   * logged is a background job giving up, while a sign-in spins until the
+   * proxy answers 504.
+   *
+   * Port 6543 is TRANSACTION mode, which hands a server connection back
+   * between statements and so serves far more clients. That is the right
+   * setting for anything running more than one instance.
+   *
+   * A warning rather than a refusal: the deployment may genuinely have a
+   * pooler sized for it, and this cannot know. But it must not be silent,
+   * because the symptom points at the proxy and the cause is here.
+   */
+  const url = config.database.url;
+  if (/pooler\.supabase\.com:5432/.test(url)) {
+    log.warn('database is a session-mode pooler, which has a small client limit', {
+      component: 'boot',
+      poolSize: config.database.poolSize,
+      effect:
+        'each instance holds up to poolSize server connections for its whole life, ' +
+        'so two instances plus the scheduled jobs can exhaust a 15-client pooler',
+      symptom:
+        'requests wait for a connection instead of failing, so sign-in spins until the ' +
+        'proxy answers 504 and only the background jobs log anything',
+      remedy:
+        'point DATABASE_URL at port 6543 for transaction mode, or lower DB_POOL_SIZE, ' +
+        'or run a single instance',
+    });
+  }
+
   if (config.security.deviceBindingRelaxed) {
     log.warn('device binding is RELAXED on this deployment', {
       component: 'boot',
