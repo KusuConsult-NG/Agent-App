@@ -134,7 +134,17 @@ self.addEventListener('fetch', (event) => {
   // Only GET is ever served from a cache. A POST is an instruction to change
   // state; replaying one from a cache could duplicate a government obligation.
   if (request.method !== 'GET') return;
-  if (url.origin !== self.location.origin && !url.href.startsWith('http://localhost:4000')) return;
+  /*
+   * Anything not on this origin is somebody else's to answer.
+   *
+   * This used to carry `&& !url.href.startsWith('http://localhost:4000')`, an
+   * exception for requests that are never made: both clients call a relative
+   * `API_BASE = '/api/v1'`, and in development each vite config proxies /api
+   * to that port so the browser still talks only to the vite origin. The same
+   * address was in both `index.html` policies as a `connect-src` entry, and
+   * had the same standing there.
+   */
+  if (url.origin !== self.location.origin) return;
 
   /*
    * The officer portal shares this origin, under /portal/, and this worker
