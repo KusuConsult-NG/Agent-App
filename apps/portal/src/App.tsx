@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import { getUser, hasStoredSession, logout, restoreSession, type User } from './lib/api';
-import { availableGroups, isReadOnly, landingPath } from './lib/permissions';
+import { availableGroups, isReadOnly, landingPath, menuOffers } from './lib/permissions';
 import { matchRoute, useRoute } from './router';
 import { LoginScreen } from './screens/Login';
 import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
@@ -97,9 +97,25 @@ export function App() {
    * taken from the same filter rather than assumed to be the dashboard.
    */
   useEffect(() => {
-    if (!user || route !== '/') return;
-    const first = landingPath(user);
-    if (first && first !== '/') navigate(first);
+    if (!user) return;
+    if (route === '/') {
+      const first = landingPath(user);
+      if (first && first !== '/') navigate(first);
+      return;
+    }
+    /*
+     * A stale address for a screen this role may not open.
+     *
+     * Signing in does not clear the hash, so an address left by whoever used
+     * the machine last survives into the new session. For most routes that is
+     * a feature — an officer follows a link to a case and lands on it. For
+     * `/field-work` it meant an administrator being told they were a field
+     * agent. Only the routes a menu offers are checked, so detail routes keep
+     * working.
+     */
+    if (route === '/field-work' && !menuOffers(user, '/field-work')) {
+      navigate(landingPath(user) ?? '/');
+    }
   }, [user, route, navigate]);
 
   // Public routes, resolved before authentication.
@@ -306,7 +322,24 @@ function Routes({
   if (matchRoute(route, '/organisation')) return <OrganisationScreen user={user} />;
   if (matchRoute(route, '/periods')) return <PeriodsScreen user={user} />;
   if (matchRoute(route, '/workbench')) return <WorkbenchScreen user={user} />;
-  if (matchRoute(route, '/field-work')) return <FieldWorkScreen />;
+  if (matchRoute(route, '/field-work')) {
+    /*
+     * Only for somebody whose menu offers it, which is only the field agent.
+     *
+     * This screen states who the reader is. Reachable by its path alone, it
+     * told a super administrator "You are signed in as a field agent" while
+     * the administration menu sat beside it saying otherwise — the address bar
+     * still read `#/field-work` from an earlier session on the same machine,
+     * and signing in again did not clear it because the landing redirect only
+     * fires on `/`.
+     *
+     * The effect above sends them to their own landing page; rendering their
+     * home here means they never see a frame of somebody else's screen while
+     * that happens.
+     */
+    if (!menuOffers(user, '/field-work')) return <RoleHomeScreen user={user} navigate={navigate} />;
+    return <FieldWorkScreen />;
+  }
   if (matchRoute(route, '/my-access')) return <MyAccessScreen user={user} />;
   if (matchRoute(route, '/inbox')) return <InboxScreen navigate={navigate} />;
   if (matchRoute(route, '/roles')) return <RolesScreen user={user} />;

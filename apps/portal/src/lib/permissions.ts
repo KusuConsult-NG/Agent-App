@@ -752,6 +752,28 @@ export function navFor(role: string | undefined): readonly NavGroup[] {
 /** Kept for anything that wants the flat catalogue rather than an arrangement. */
 export const NAV: readonly NavGroup[] = NAV_FALLBACK;
 
+/**
+ * Whether this officer's own menu offers a screen.
+ *
+ * `/field-work` is the screen that tells the reader who they are — "You are
+ * signed in as a field agent" — and it was reachable by anybody who arrived at
+ * its path. A super administrator signed in while the address bar still read
+ * `#/field-work` from an earlier session, and the portal told them they were a
+ * field agent, with the administration menu sitting beside it saying otherwise.
+ *
+ * A screen that asserts something about the person reading it has to check,
+ * and the menu is already the authority on what a role may open — the landing
+ * redirect above says so in as many words. This is that same filter, asked
+ * about one path.
+ *
+ * Detail routes like `/agents/:id` are deliberately NOT covered: they are not
+ * menu items, they are where a menu item leads, and a blanket rule would take
+ * every one of them away.
+ */
+export function menuOffers(user: Principal | null, path: string): boolean {
+  return availableItems(user).some((item) => item.path === path);
+}
+
 export function availableItems(user: Principal | null): NavItem[] {
   if (!user) return [];
   return navFor(user?.role).flatMap((group) => group.items).filter(
