@@ -1318,7 +1318,7 @@ governmentRouter.get(
   '/reconciliation/exceptions',
   requirePermission('payment:reconcile', 'audit:read'),
   validateQuery(
-    z.object({ status: z.string().optional(), limit: z.coerce.number().int().max(500).default(100) }),
+    z.object({ status: z.string().optional(), limit: z.coerce.number().int().min(1).max(500).default(100) }),
     async (_req, res, data) => {
       res.json(await reconciliation.exceptionQueue(pool, data));
     },
@@ -2108,7 +2108,7 @@ governmentRouter.get(
     z.object({
       status: z.string().optional(),
       severity: z.string().optional(),
-      limit: z.coerce.number().int().max(500).default(100),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
     }),
     async (_req, res, data) => {
       res.json(
@@ -2249,7 +2249,7 @@ governmentRouter.get(
       action: z.string().optional(),
       from: z.string().datetime().optional(),
       to: z.string().datetime().optional(),
-      limit: z.coerce.number().int().max(500).default(100),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
       format: z.enum(['json', 'csv', 'xlsx', 'pdf']).default('json'),
     }),
     async (req, res, data) => {
