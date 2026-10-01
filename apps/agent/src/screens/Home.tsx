@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ApiRequestError, api, asApiError, type ApiError } from '../lib/api';
-import { Alert, ErrorAlert, Icons, Loading, Money } from '../ui';
+import { Alert, ErrorAlert, Icons, Loading, Money, errorText } from '../ui';
 import { useI18n } from '../lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 import { enumLabel, localName } from '@psirs/shared';
@@ -84,7 +84,23 @@ export function HomeScreen({ navigate }: { navigate: (path: string) => void }) {
               : t.homeApplicationProcessing
           }
         >
-          <p style={{ margin: 0 }}>{error.message}</p>
+          {/*
+            * Through `errorText`, which is what it was lifted out of
+            * `ErrorAlert` for: a screen that draws a refusal in its own frame
+            * still gets the translation.
+            *
+            * This is the agent's first screen, and an agent who is not yet
+            * cleared lands on it — so the heading was in Hausa and the
+            * sentence under it in English, with `errAgentNotCleared` sitting
+            * in the dictionary, in the safety tier, unused. The same walk past
+            * this map that the sync banner made.
+            *
+            * AGENT_SUSPENDED has no translation and keeps the server's words,
+            * which is the policy above the map rather than an omission here: a
+            * guessed Hausa sentence for a message nobody has seen is worse
+            * than the English, because the reader cannot tell the two apart.
+            */}
+          <p style={{ margin: 0 }}>{errorText(error, t)}</p>
         </Alert>
         <button type="button" onClick={() => navigate('/application')}>
           {t.homeViewApplication}
