@@ -46,12 +46,63 @@ export interface Actor {
  * with the whole building, and an officer on a phone changes theirs every few
  * minutes -- so an address-based handle would merge every colleague into one
  * device and split one officer's morning into six.
+ *
+ * AND DELIBERATELY NOT THE USER AGENT, WHICH IS WHAT IT USED TO BE
+ *
+ * This hashed `${clientDeviceId}|${userAgent}`, and the officer portal never
+ * sent a client identifier -- only the agent app did, and agents do not get
+ * officer device rows at all (see `auth.ts`, which passes null for them). So
+ * for every officer the first half was empty and the handle was a function of
+ * the user agent and nothing else. Two consequences, and the second is the
+ * one that matters:
+ *
+ *   - Two machines running the same browser build were one device. An
+ *     officer's desktop and laptop appeared as a single row, and blocking
+ *     either blocked both.
+ *   - A browser update changed the user agent, which changed the handle, so
+ *     the next sign-in matched no row and inserted a fresh ACTIVE one. The
+ *     remedy `auth.ts` offers for "a laptop in somebody else's hands"
+ *     therefore expired at the next Chrome update, every few weeks, silently.
+ *
+ * `blockDevice` was never the weak part: it revokes the sessions and
+ * migration 063's trigger refuses any future session on that row at the
+ * database. Both are correct about the row they name. The row simply stopped
+ * being the one the laptop came back as.
+ *
+ * So when the client sends an identifier, that is the whole handle and the
+ * user agent is excluded -- otherwise a browser update would move the
+ * fingerprint again and nothing would be fixed. The user agent is still
+ * stored on the row and still produces the label a person reads.
+ *
+ * WHAT THIS DOES NOT CLAIM. The identifier lives in the browser's own
+ * storage, so whoever holds the machine can clear it and come back as a new
+ * device. Blocking is not tamper-proof against someone with the laptop and
+ * must not be relied on as though it were; the durable controls are ending
+ * the sessions and disabling the account. What this fixes is the routine
+ * silent failure and the two-machines-one-row conflation.
+ *
+ * The comment on `officer_devices.fingerprint` in migration 063 still
+ * describes the old intent. It cannot be corrected: `migrate.ts` records a
+ * checksum of every applied file and refuses to start when one changes, so
+ * editing an applied migration would stop every existing deployment booting.
  */
 export function fingerprintOf(userAgent: string | null, clientDeviceId: string | null): string {
-  return createHash('sha256')
-    .update(`${clientDeviceId ?? ''}|${userAgent ?? ''}`)
-    .digest('hex')
-    .slice(0, 32);
+  const material = clientDeviceId ? `device:${clientDeviceId}` : `|${userAgent ?? ''}`;
+  return createHash('sha256').update(material).digest('hex').slice(0, 32);
+}
+
+/**
+ * The handle an officer's row carries if it was created before the portal sent
+ * an identifier.
+ *
+ * Kept so `deviceForSignIn` can find such a row and carry it forward instead
+ * of leaving it behind. Leaving it behind is not a cosmetic loss: a BLOCKED
+ * row left behind is a block that stopped applying, which would have made
+ * this change unblock every blocked device in the estate on the day it
+ * deployed.
+ */
+export function legacyFingerprintOf(userAgent: string | null): string {
+  return createHash('sha256').update(`|${userAgent ?? ''}`).digest('hex').slice(0, 32);
 }
 
 /**
@@ -94,11 +145,56 @@ export async function deviceForSignIn(
 ): Promise<string> {
   const fingerprint = fingerprintOf(params.userAgent, params.clientDeviceId);
 
-  const existing = await queryOne<{ id: string; status: string }>(
-    client,
-    'SELECT id, status FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
-    [params.userId, fingerprint],
-  );
+  const find = (handle: string) =>
+    queryOne<{ id: string; status: string }>(
+      client,
+      'SELECT id, status FROM officer_devices WHERE user_id = $1 AND fingerprint = $2',
+      [params.userId, handle],
+    );
+
+  let existing = await find(fingerprint);
+
+  /*
+   * The row this machine used to be, before it sent an identifier.
+   *
+   * Only worth looking for when an identifier arrived and the new handle
+   * matched nothing: that is exactly the first sign-in after this change
+   * reached the browser. Adopting the row rather than inserting beside it
+   * keeps the device's history, its label and -- the point -- its status. A
+   * BLOCKED row found here refuses below, which is what stops this change
+   * from unblocking every blocked device on the day it ships.
+   *
+   * Two machines that shared one legacy row split apart over time: the first
+   * to sign in adopts it, the second finds neither handle and gets its own.
+   * That is the conflation unwinding, in the only direction it can.
+   *
+   * Two things keep a BLOCKED row's handle intact, and they are redundant:
+   * the `status` test below, and the fact that `auth.ts` calls this inside
+   * `withTransaction`, so the refusal thrown further down rolls the UPDATE
+   * back anyway.
+   *
+   * Measured, because the obvious guess was wrong twice. Removing the status
+   * test alone changes no observable behaviour and kills no test — the
+   * rollback covers it. Removing the transaction alone also kills no test —
+   * the status test covers it. Removing BOTH fails two: a second machine that
+   * shared the blocked row stops matching it and walks past the block, and a
+   * refused attempt leaves the row carrying a different handle.
+   *
+   * So neither is "the" protection and neither is ornamental. Both stay, and
+   * the pair is what the tests pin.
+   */
+  if (!existing && params.clientDeviceId) {
+    const legacy = await find(legacyFingerprintOf(params.userAgent));
+    if (legacy) {
+      if (legacy.status !== 'BLOCKED') {
+        await client.query('UPDATE officer_devices SET fingerprint = $2 WHERE id = $1', [
+          legacy.id,
+          fingerprint,
+        ]);
+      }
+      existing = legacy;
+    }
+  }
 
   if (existing) {
     if (existing.status === 'BLOCKED') {
