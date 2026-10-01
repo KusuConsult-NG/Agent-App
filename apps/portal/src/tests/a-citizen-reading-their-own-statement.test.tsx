@@ -270,3 +270,74 @@ describe('the same statement, read in Hausa', () => {
     expect(screen.queryByText(/Your tax records are up to date/)).toBeTruthy();
   });
 });
+
+describe('a statement whose list stops before its total does', () => {
+  /*
+   * The totals are computed over the whole period and the list of lines is
+   * capped at two hundred, so a trader paying a daily market levy — one of
+   * four DAILY items in the catalogue — asks for the past year and is shown a
+   * total covering 365 payments above a list of 200 of them. The footer on
+   * this very screen then tells them to take any disagreement between the
+   * list and their receipts to a PSIRS office.
+   *
+   * So the notice is not a nicety. Without it the screen manufactures the
+   * dispute it then tells the citizen to go and have.
+   */
+  function statementReturning(statement: unknown) {
+    vi.spyOn(api, 'publicPost').mockImplementation(async (path: string, body?: unknown) => {
+      posted.push({ path, body });
+      return (path.endsWith('/request') ? { sent: true } : statement) as never;
+    });
+  }
+
+  async function openStatement() {
+    await lookUp('By TIN', '841446134');
+    fireEvent.click(screen.getByRole('button', { name: /Send me a code/i }));
+    await waitFor(() => expect(screen.getByLabelText(/Code from the SMS/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Code from the SMS/i), { target: { value: '123456' } });
+    fireEvent.click(screen.getByRole('button', { name: /Show my payments/i }));
+    await waitFor(() => expect(screen.getByText(/Each payment/i)).toBeTruthy());
+  }
+
+  it('says the lines are not all of them, and names how many it has', async () => {
+    statementReturning({ ...STATEMENT, truncated: true });
+    await openStatement();
+
+    expect(screen.getByText(/only your 2 most recent payments are listed/i)).toBeTruthy();
+    // The reason the lines will not reconcile, said in the same breath as the
+    // fact that they will not.
+    expect(screen.getByText(/will not add up to the total/i)).toBeTruthy();
+    // And what to do about it, which on this screen costs another code.
+    expect(screen.getByText(/shorter period/i)).toBeTruthy();
+  });
+
+  it('says nothing of the kind when the list is the whole of it', async () => {
+    // The guard on the check above: a notice printed on every statement would
+    // satisfy it, and would teach every citizen to distrust a complete list.
+    statementReturning({ ...STATEMENT, truncated: false });
+    await openStatement();
+
+    expect(screen.queryByText(/most recent payments are listed/i)).toBeNull();
+    expect(screen.queryByText(/will not add up to the total/i)).toBeNull();
+  });
+
+  it('says it in Hausa to a Hausa reader', async () => {
+    setPublicLanguage('ha');
+    statementReturning({ ...STATEMENT, truncated: true });
+
+    render(<CitizenPortalScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /Ta TIN/i }));
+    fireEvent.change(screen.getByLabelText(/TIN/i), { target: { value: '841446134' } });
+    fireEvent.click(screen.getByRole('button', { name: /Duba matsayi/i }));
+    await waitFor(() => expect(screen.queryByText(/Bayanan harajinka sun cika/)).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /Aiko min da lamba/i }));
+    await waitFor(() => expect(screen.queryByLabelText(/Lambar da ke cikin sakon/i)).toBeTruthy());
+    fireEvent.change(screen.getByLabelText(/Lambar da ke cikin sakon/i), {
+      target: { value: '123456' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Nuna min biyayyata/i }));
+
+    await waitFor(() => expect(screen.getByText(/ba za su hada su kai jimillar ba/i)).toBeTruthy());
+    expect(screen.queryByText(/will not add up to the total/i)).toBeNull();
+  });
+});

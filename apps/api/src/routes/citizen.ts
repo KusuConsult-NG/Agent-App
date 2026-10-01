@@ -470,6 +470,17 @@ citizenRouter.post(
       res.json({
         from: history.from,
         to: history.to,
+        /*
+         * Whether this is all of them.
+         *
+         * The summary covers the whole window and the list is capped, and the
+         * screen prints the total above the lines and then invites the reader
+         * to check the lines against their receipts. A daily market levy
+         * crosses the cap inside seven months against a one-year default
+         * window, so for the people who pay most often the lines stopped
+         * adding up to the total and nothing said why.
+         */
+        truncated: history.truncated,
         summary: history.summary,
         /*
          * Without the receipt numbers.

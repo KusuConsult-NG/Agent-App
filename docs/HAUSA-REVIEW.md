@@ -6,7 +6,7 @@
 > [`HAUSA-REVIEW-QUESTIONS.md`](HAUSA-REVIEW-QUESTIONS.md) instead.** It is the
 > eighteen decisions still waiting on somebody, gathered out of the prose
 > below and ordered by what it costs to leave each one open. This sheet is long
-> because it carries all 3,414 strings; that one is two pages and links back
+> because it carries all 3,416 strings; that one is two pages and links back
 > here for the reasoning.
 
 ---
@@ -38,7 +38,7 @@ Please read them as instructions, not as prose.
 
 ## What has changed since this sheet was first written
 
-It listed 78 strings. It now lists **3,414 dictionary strings and 30 message
+It listed 78 strings. It now lists **3,416 dictionary strings and 30 message
 templates**, because the app it describes went from six translated screens to
 all of them, because the officer portal behind it was translated too, and
 because the SMS, email and push messages PSIRS sends are now sent in the
@@ -49,7 +49,7 @@ Two things follow, and both matter to how you spend your time.
 **The tables are generated now.** `node scripts/build-hausa-review.mjs` rebuilds
 them from `packages/shared/src/i18n.ts` and from the migration that inserts the
 templates, and `npm run verify` runs it with `--check`. A sheet that lists 78 of
-3,414 strings is worse than no sheet, because it looks complete; this one cannot
+3,416 strings is worse than no sheet, because it looks complete; this one cannot
 fall behind without CI saying so.
 
 **Read table B by screen, and start with the agent's.** The officer-portal
@@ -76,14 +76,14 @@ A consistency pass runs in the test suite
 judgement about the Hausa — it is bookkeeping, and it is listed here only so
 you do not spend your attention repeating it:
 
-- All 3,414 keys exist in both languages; nothing is missing and nothing is spare.
+- All 3,416 keys exist in both languages; nothing is missing and nothing is spare.
 - No Hausa string is a copy of its English (one exception, `navProfile`, is
   named below and is waiting on you).
 - **Every English string containing a negative has a Hausa negation** —
   `ba`, `kada`, `babu`, `bai` or `banda`. This is a crude proxy and it cannot
   tell you whether the negative is attached to the right verb. It only
   guarantees that none of them vanished entirely. Question 2 is still yours.
-- The glossary below is applied consistently across all 3,414 strings: where the
+- The glossary below is applied consistently across all 3,416 strings: where the
   English says *taxpayer*, the Hausa says *mai biyan haraji*, and so on for
   receipt, confirm, device, account, commission and cash.
 - No hooked letters; no `kuɗi`; apostrophes written one way throughout. That
@@ -481,7 +481,7 @@ quietly leave it.
 
 ### B · The rest of the dictionary, by screen
 
-3335 strings, grouped by where an agent meets them. Lower stakes
+3337 strings, grouped by where an agent meets them. Lower stakes
 than table A — these are labels, headings and status words rather than
 instructions — but they are what an agent reads all day.
 
@@ -2077,6 +2077,7 @@ instructions — but they are what an agent reads all day.
 | `ofcPhForWhat` | What it went to | Abin da aka biya | ☐ | |
 | `ofcPhLevy` | Tax or levy | Haraji ko kudin shiga | ☐ | |
 | `ofcPhEachPayment` | Each payment | Kowane biya | ☐ | |
+| `ofcPhPartial` | The totals above cover the whole period, but this list stopped at {{n}} payments: it holds only the most recent {{n}} and the earliest part of the period is not on it. Narrow the dates before telling the taxpayer what their lines add up to. | Jimillar da ke sama ta kunshi dukan lokacin, amma wannan jerin ya tsaya a biyayya {{n}}: na baya-bayan nan {{n}} kadai ke ciki kuma farkon lokacin ba ya ciki. Ka rage kwanakin kafin ka gaya wa mai biyan haraji jimlar layukansa. | ☐ | |
 | `ofcPhWhen` | When | Yaushe | ☐ | |
 | `ofcPhPeriod` | Period | Lokaci | ☐ | |
 | `ofcPhAmount` | Amount | Adadi | ☐ | |
@@ -3405,6 +3406,7 @@ instructions — but they are what an agent reads all day.
 | `pubStmtReturnedRow` | returned to you | an mayar maka | ☐ | |
 | `pubStmtForWhat` | What it went to | Abin da aka biya | ☐ | |
 | `pubStmtEach` | Each payment | Kowane biya | ☐ | |
+| `pubStmtPartial` | The totals above cover the whole period, but only your {{n}} most recent payments are listed below. The earliest part of the period is not on the list, so these lines will not add up to the total. Ask for a shorter period to see the rest. | Jimillar da ke sama ta kunshi dukan lokacin, amma biyayyarka {{n}} na baya-bayan nan kadai ke cikin jerin a kasa. Farkon lokacin ba ya cikin jerin, don haka wadannan layukan ba za su hada su kai jimillar ba. Ka nemi gajeren lokaci don ka ga sauran. | ☐ | |
 | `pubStmtNothing` | Nothing was paid in this period. | Ba a biya komai a wannan lokacin ba. | ☐ | |
 | `pubStmtFooter` | Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record. | Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne. | ☐ | |
 | `pubCitizenFooter` | For questions about your account, visit any PSIRS office or contact an authorised revenue agent. | Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini. | ☐ | |

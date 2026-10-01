@@ -1153,6 +1153,7 @@ export interface TranslationDictionary {
   ofcPhForWhat: string;
   ofcPhLevy: string;
   ofcPhEachPayment: string;
+  ofcPhPartial: string;
   ofcPhWhen: string;
   ofcPhPeriod: string;
   ofcPhAmount: string;
@@ -3680,6 +3681,7 @@ export interface TranslationDictionary {
   pubStmtReturnedRow: string;
   pubStmtForWhat: string;
   pubStmtEach: string;
+  pubStmtPartial: string;
   pubStmtNothing: string;
   pubStmtFooter: string;
   pubCitizenFooter: string;
@@ -4851,6 +4853,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPhForWhat: "What it went to",
     ofcPhLevy: "Tax or levy",
     ofcPhEachPayment: "Each payment",
+    ofcPhPartial: "The totals above cover the whole period, but this list stopped at {{n}} payments: it holds only the most recent {{n}} and the earliest part of the period is not on it. Narrow the dates before telling the taxpayer what their lines add up to.",
     ofcPhWhen: "When",
     ofcPhPeriod: "Period",
     ofcPhAmount: "Amount",
@@ -7170,6 +7173,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubStmtReturnedRow: "returned to you",
     pubStmtForWhat: "What it went to",
     pubStmtEach: "Each payment",
+    pubStmtPartial: "The totals above cover the whole period, but only your {{n}} most recent payments are listed below. The earliest part of the period is not on the list, so these lines will not add up to the total. Ask for a shorter period to see the rest.",
     pubStmtNothing: "Nothing was paid in this period.",
     pubStmtFooter: "Keep your receipts. If this list and your receipts disagree, take them to a PSIRS office — the receipt is the proof, this is the record.",
     pubCitizenFooter: 'For questions about your account, visit any PSIRS office or contact an authorised revenue agent.',
@@ -8337,6 +8341,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcPhForWhat: "Abin da aka biya",
     ofcPhLevy: "Haraji ko kudin shiga",
     ofcPhEachPayment: "Kowane biya",
+    ofcPhPartial: "Jimillar da ke sama ta kunshi dukan lokacin, amma wannan jerin ya tsaya a biyayya {{n}}: na baya-bayan nan {{n}} kadai ke ciki kuma farkon lokacin ba ya ciki. Ka rage kwanakin kafin ka gaya wa mai biyan haraji jimlar layukansa.",
     ofcPhWhen: "Yaushe",
     ofcPhPeriod: "Lokaci",
     ofcPhAmount: "Adadi",
@@ -10657,6 +10662,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     pubStmtReturnedRow: "an mayar maka",
     pubStmtForWhat: "Abin da aka biya",
     pubStmtEach: "Kowane biya",
+    pubStmtPartial: "Jimillar da ke sama ta kunshi dukan lokacin, amma biyayyarka {{n}} na baya-bayan nan kadai ke cikin jerin a kasa. Farkon lokacin ba ya cikin jerin, don haka wadannan layukan ba za su hada su kai jimillar ba. Ka nemi gajeren lokaci don ka ga sauran.",
     pubStmtNothing: "Ba a biya komai a wannan lokacin ba.",
     pubStmtFooter: "Ka ajiye rasitunka. Idan wannan jerin da rasitunka ba su dace ba, ka kai su ofishin PSIRS — rasit shi ne hujja, wannan kuwa rikodi ne.",
     pubCitizenFooter: 'Don tambaya game da asusunka, ka ziyarci kowane ofishin PSIRS ko ka tuntubi wakilin karbar haraji da izini.',
