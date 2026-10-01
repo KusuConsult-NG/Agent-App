@@ -302,18 +302,62 @@ out.push(
 out.push('');
 out.push(
   '**A dash in the last column means no route guard and no service check ' +
-    'names this permission.** That is not the same as it doing nothing — an ' +
-    'agent reading their own records is scoped by which agent is asking ' +
-    'rather than by a permission — but it is the column to read first, ' +
-    'because authority that looks real and confers nothing is the thing this ' +
-    'table exists to expose. Generating it found one: ' +
-    '`payment:reverse:request` was granted to two roles and checked nowhere, ' +
-    'so any officer who could request an agent activation could request a ' +
-    'payment reversal. It is enforced now.',
+    'names this permission**, and every dash states why beside it. That is ' +
+    'the column to read first, because authority that looks real and confers ' +
+    'nothing is the thing this table exists to expose. Generating it found ' +
+    'one: `payment:reverse:request` was granted to two roles and checked ' +
+    'nowhere, so any officer who could request an agent activation could ' +
+    'request a payment reversal. It is enforced now.',
+);
+out.push('');
+out.push(
+  'The reasons are not interchangeable, which is why they are written out ' +
+    'per row rather than once here. `agent:read:own` and its siblings are ' +
+    'scoped by which agent is asking, so nothing consults them and nothing ' +
+    'should. `invoice:create` is a different thing wearing the same dash: ' +
+    'the act it names is real — creating an assessment writes its invoice in ' +
+    'the same transaction — and it is enforced, by `assessment:create` on ' +
+    'the same role. **So revoking `invoice:create` here to stop an agent ' +
+    'raising invoices would achieve nothing.** A dash nobody has explained ' +
+    'now fails the generator rather than printing.',
 );
 out.push('');
 out.push('| Permission | Verb | Held by | Endpoints |');
 out.push('| --- | --- | --- | --- |');
+
+/**
+ * Every permission that no route guard and no service check names, and why.
+ *
+ * A dash in the endpoint column is the thing this table exists to expose, and
+ * the paragraph under it already says so. What the paragraph could not say is
+ * WHICH dash is which, and the two kinds are not alike:
+ *
+ *   - `agent:read:own` and its siblings are scoped by which agent is asking.
+ *     The permission names a shape of access that the query enforces by
+ *     actor, so nothing consults it and nothing should.
+ *   - `invoice:create` is not that. It is a create permission on a money
+ *     record, and the act it names does happen: `createAssessmentIn` inserts
+ *     an assessment and its invoice in one transaction. That path is guarded
+ *     by `assessment:create`, which the same role holds. So the authority is
+ *     real, it is enforced, and this is not the lever that controls it —
+ *     revoking this one from the roles screen to stop agents raising invoices
+ *     would achieve nothing at all.
+ *
+ * Sharing one disclaimer let the second kind read as the first. Each entry
+ * now carries its own reason, printed beside the dash, and `--check` refuses
+ * a dash nobody has explained — the same shape as the acknowledgement list in
+ * `apps/api/scripts/check-dead-predicates.mjs`.
+ *
+ * Adding an entry here is a claim that nothing should consult the permission.
+ * It is not a way to quieten the check: `payment:reverse:request` was once a
+ * dash, and the answer was to enforce it rather than to explain it.
+ */
+const ACKNOWLEDGED_DASHES = new Map([
+  ['agent:read:own', 'scoped by which agent is asking'],
+  ['report:read:own', 'scoped by which agent is asking'],
+  ['support:read:own', 'scoped by who raised the ticket'],
+  ['invoice:create', 'the act is guarded by `assessment:create`'],
+]);
 
 for (const permission of catalogue) {
   const holders = roleNames.filter((role) => roles[role].includes(permission));
@@ -328,10 +372,12 @@ for (const permission of catalogue) {
     .map((path) => (path.startsWith('decided in') ? path : `\`${path}\``))
     .join('<br>');
   const more = paths.length > 4 ? `<br>…and ${paths.length - 4} more` : '';
+  const reason = ACKNOWLEDGED_DASHES.get(permission);
+  const cell = paths.length > 0 ? shown + more : `— ${reason ? `(${reason})` : ''}`.trim();
   out.push(
     `| \`${permission}\` | ${verbFor(permission)} | ` +
       `${holders.length === 0 ? '**nobody**' : holders.join(', ')} | ` +
-      `${paths.length === 0 ? '—' : shown + more} |`,
+      `${cell} |`,
   );
 }
 out.push('');
@@ -367,6 +413,44 @@ const rebuilt =
   out.join('\n').trimEnd() +
   '\n\n' +
   sheet.slice(sheet.indexOf(end));
+
+/*
+ * A dash nobody explained, and an explanation for something now enforced.
+ *
+ * Checked before the drift comparison, because regenerating the document
+ * would make an unexplained dash look like ordinary drift and the remedy
+ * printed would be "run the generator" — which would commit the gap rather
+ * than report it.
+ */
+const unexplained = catalogue.filter(
+  (permission) => (endpoints.get(permission) ?? []).length === 0 && !ACKNOWLEDGED_DASHES.has(permission),
+);
+const staleAcknowledgements = [...ACKNOWLEDGED_DASHES.keys()].filter(
+  (permission) => (endpoints.get(permission) ?? []).length > 0,
+);
+
+if (unexplained.length > 0) {
+  console.error(
+    'These permissions are named by no route guard and no service check, and ' +
+      'nothing in the generator explains why:\n' +
+      unexplained.map((permission) => `  ${permission}`).join('\n') +
+      '\n\nAuthority that looks real and confers nothing is what this table ' +
+      'exists to expose. Either enforce it where it belongs, or add it to ' +
+      'ACKNOWLEDGED_DASHES with the reason nothing should consult it.',
+  );
+  process.exit(1);
+}
+
+if (staleAcknowledgements.length > 0) {
+  console.error(
+    'These permissions are acknowledged as conferring nothing, and now have ' +
+      'endpoints:\n' +
+      staleAcknowledgements.map((permission) => `  ${permission}`).join('\n') +
+      '\n\nRemove them from ACKNOWLEDGED_DASHES: an explanation left behind ' +
+      'after the thing it explained changed is how a matrix starts lying.',
+  );
+  process.exit(1);
+}
 
 if (check) {
   if (rebuilt !== sheet) {

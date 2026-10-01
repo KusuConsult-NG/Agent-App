@@ -67,7 +67,9 @@ Counted from the shipped map. A role holding no permission of a verb is shown as
 
 One row per permission in the catalogue. A permission no role holds is still listed: an authority nobody has is a decision, and one worth seeing.
 
-**A dash in the last column means no route guard and no service check names this permission.** That is not the same as it doing nothing — an agent reading their own records is scoped by which agent is asking rather than by a permission — but it is the column to read first, because authority that looks real and confers nothing is the thing this table exists to expose. Generating it found one: `payment:reverse:request` was granted to two roles and checked nowhere, so any officer who could request an agent activation could request a payment reversal. It is enforced now.
+**A dash in the last column means no route guard and no service check names this permission**, and every dash states why beside it. That is the column to read first, because authority that looks real and confers nothing is the thing this table exists to expose. Generating it found one: `payment:reverse:request` was granted to two roles and checked nowhere, so any officer who could request an agent activation could request a payment reversal. It is enforced now.
+
+The reasons are not interchangeable, which is why they are written out per row rather than once here. `agent:read:own` and its siblings are scoped by which agent is asking, so nothing consults them and nothing should. `invoice:create` is a different thing wearing the same dash: the act it names is real — creating an assessment writes its invoice in the same transaction — and it is enforced, by `assessment:create` on the same role. **So revoking `invoice:create` here to stop an agent raising invoices would achieve nothing.** A dash nobody has explained now fails the generator rather than printing.
 
 | Permission | Verb | Held by | Endpoints |
 | --- | --- | --- | --- |
@@ -92,7 +94,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `assessment:read:own` | View | agent | `GET /revenue/assessments/:id` |
 | `assessment:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/assessments/:id` |
 | `paye:file` | Other | revenue_officer, admin | `POST /government/paye/returns`<br>`POST /government/paye/returns/:id/cancel`<br>`POST /government/enumeration/observations`<br>`POST /government/enumeration/observations/:id/assess`<br>…and 1 more |
-| `invoice:create` | Create | agent | — |
+| `invoice:create` | Create | agent | — (the act is guarded by `assessment:create`) |
 | `invoice:read:own` | View | agent | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `invoice:read:all` | View | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /revenue/invoices/:id`<br>`POST /revenue/invoices/:id/document`<br>`GET /revenue/taxpayers/:id/obligations` |
 | `payment:initiate` | Create | agent | `POST /payments/initiate`<br>`POST /payments/:paymentId/confirm` |
@@ -109,7 +111,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `vehicle:renew` | Create | agent | `POST /vehicles`<br>`POST /vehicles/:id/renew`<br>`POST /vehicles/renewals/:renewalId/document` |
 | `vehicle:authority_sync` | Other | revenue_officer, finance_officer, admin | `GET /vehicles/renewals/authority-outstanding`<br>`POST /vehicles/renewals/authority-retry` |
 | `vehicle:manage` | Edit | revenue_officer, admin | `POST /vehicles/:vehicleId/status` |
-| `agent:read:own` | View | agent | — |
+| `agent:read:own` | View | agent | — (scoped by which agent is asking) |
 | `agent:read:assigned` | View | supervisor | `GET /agents`<br>`GET /agents/:id`<br>`GET /government/reference/territories` |
 | `agent:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/:id/kyc/documents`<br>`GET /agents/kyc/documents/:id/file`<br>`GET /agents/bank-changes`<br>`GET /agents`<br>…and 4 more |
 | `agent:manage` | Edit | admin | `POST /agents/:agentId/bank/change`<br>`POST /agents/bank-changes/:approvalId/verify`<br>`POST /agents/:id/review`<br>`POST /agents/:id/activate`<br>…and 5 more |
@@ -122,7 +124,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `commission:manage` | Edit | finance_officer, admin | `POST /government/commissions/promote`<br>`POST /government/commissions/payouts/:id/complete`<br>`POST /government/commissions/payouts/:id/fail` |
 | `commission:payout:request` | Other | agent | `POST /agents/me/commission/payout` |
 | `commission:payout:approve` | Approve | finance_officer | `POST /government/commissions/payouts/:id/approve` |
-| `report:read:own` | View | agent | — |
+| `report:read:own` | View | agent | — (scoped by which agent is asking) |
 | `report:read:territory` | View | supervisor | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 15 more |
 | `report:read:all` | View | revenue_officer, finance_officer, auditor, admin | `GET /agents/performance`<br>`GET /government/dashboard`<br>`GET /government/arrears`<br>`GET /government/intelligence/leads`<br>…and 21 more |
 | `report:financial` | View | finance_officer, auditor | `GET /government/reconciliation/awaiting-settlement`<br>`GET /government/settlements`<br>decided in `services/cases.ts`<br>decided in `services/investigation.ts` |
@@ -134,7 +136,7 @@ One row per permission in the catalogue. A permission no role holds is still lis
 | `audit:report` | Configure | auditor | `POST /government/audit/reports`<br>`GET /government/audit/reports`<br>`GET /government/audit/reports/:id`<br>`GET /government/audit/reports/:id/export`<br>…and 1 more |
 | `audit:sign` | Approve | auditor | `POST /government/audit/reports/:id/sign` |
 | `data:export` | Export | supervisor, revenue_officer, finance_officer, auditor, admin | `GET /government/audit/reports/:id/export` |
-| `support:read:own` | View | agent | — |
+| `support:read:own` | View | agent | — (scoped by who raised the ticket) |
 | `support:read:all` | View | supervisor, revenue_officer, auditor, admin | decided in `services/support.ts` |
 | `support:manage` | Edit | supervisor, revenue_officer, admin | `POST /government/reminders/send-due`<br>`POST /support/tickets/:id/update`<br>decided in `services/support.ts` |
 | `incentive:read:all` | View | revenue_officer, auditor, admin | `GET /government/programmes`<br>`POST /government/programmes/:id/evaluate`<br>`GET /government/programmes/:id/beneficiaries`<br>`GET /taxpayers/:id/incentives` |
