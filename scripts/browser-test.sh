@@ -24,13 +24,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 export DATABASE_URL="postgres://${DB_USER}:${PGPASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
-# `citizen-statement.spec.ts` reads a queued SMS straight from the database —
-# there is no endpoint that hands a one-time code back and there must not be.
-# It looks for UAT_DATABASE_URL and falls back to psirs_uat, the stack script's
-# database, which this harness does not create: two tests failed with
-# `database "psirs_uat" does not exist`. The harness knows where its own
-# database is, so it says so rather than leaving the spec to guess.
-export UAT_DATABASE_URL="${DATABASE_URL}"
+# `citizen-statement.spec.ts` has to read a one-time code the way a citizen
+# does, off the handset — there is no endpoint that hands one back and there
+# must not be. The development message provider logs what it delivered, so the
+# API's own stdout is that handset, and the spec is told where it is rather
+# than left guessing at the UAT stack's path.
+export UAT_API_LOG="${UAT_API_LOG:-/tmp/psirs-browser-api.log}"
 export NODE_ENV=development
 export JWT_SECRET="browser-test-jwt-secret-value-long-enough-32"
 export IDENTITY_HASH_SECRET="browser-test-identity-secret-long-enough-32"
@@ -94,7 +93,9 @@ npm run migrate --workspace @psirs/api >/dev/null
 npm run seed --workspace @psirs/api -- --demo --demo-agent >/dev/null
 
 echo "[browser-test] starting API"
-setsid npx tsx apps/api/src/server.ts >/tmp/psirs-browser-api.log 2>&1 &
+# Truncating, not appending: a code logged by the previous run is expired, and
+# a spec that found it would fail on a stale credential.
+setsid npx tsx apps/api/src/server.ts >"${UAT_API_LOG}" 2>&1 &
 pids+=($!)
 wait_for "http://localhost:4000/health" "API"
 
