@@ -323,6 +323,68 @@ for (const { image, client, name } of FRONT_ENDS) {
   });
 }
 
+test('no front-end config declares an nginx `types` block', () => {
+  /*
+   * A `types { ... }` block in a server or location does NOT extend the map
+   * inherited from the http-level `include /etc/nginx/mime.types`. It
+   * REPLACES it.
+   *
+   * This was added to two of these images to give `.webmanifest` its proper
+   * media type, which nginx's bundled map genuinely lacks. The effect was
+   * that the only extension nginx recognised in the whole server was
+   * `.webmanifest`, and every other file fell through to
+   * `default_type application/octet-stream` — index.html, the JS bundle, the
+   * SVG crest. Measured against real nginx:
+   *
+   *     /                 200 application/octet-stream
+   *     /assets/index.js  200 application/octet-stream
+   *     /icon.svg         200 application/octet-stream
+   *
+   * These images set `X-Content-Type-Options: nosniff`, so a browser takes
+   * that at face value: Chromium answered a navigation with "Download is
+   * starting" rather than rendering anything. Both applications were dead,
+   * and nginx -t called the configuration valid, the container started, and
+   * the platform health check — which asks only for a 200 — was satisfied.
+   * That combination is why this needs a test rather than care.
+   *
+   * The media type belongs on one exact-match location as a `default_type`,
+   * which applies only where the extension yields nothing and so cannot
+   * reach another file. `gzip_types` is a different directive and is fine.
+   */
+  for (const { image, name } of FRONT_ENDS) {
+    const offending = directivesOnly(read(image))
+      .split('\n')
+      .filter((line) => /^\s*types\s*\{/.test(line));
+
+    assert.deepEqual(
+      offending,
+      [],
+      `${name}: ${image} declares an nginx \`types\` block. That replaces the ` +
+        'inherited mime.types map rather than extending it, so every ' +
+        'extension it does not list is served as application/octet-stream — ' +
+        'and with nosniff set, the browser downloads the page instead of ' +
+        'rendering it. Use `default_type` in an exact-match location for the ' +
+        'one type nginx lacks.',
+    );
+  }
+});
+
+test('the manifest still gets a media type from somewhere', () => {
+  // The guard above must not be satisfied by deleting the intent. The image
+  // that serves a PWA manifest still has to name its type, just not with a
+  // `types` block.
+  for (const { image, name } of FRONT_ENDS) {
+    const source = directivesOnly(read(image));
+    if (!source.includes('webmanifest')) continue;
+    assert.match(
+      source,
+      /default_type\s+application\/manifest\+json;/,
+      `${name}: ${image} mentions webmanifest but sets no ` +
+        'application/manifest+json media type for it',
+    );
+  }
+});
+
 test('the SPA fallback is still there, underneath the proxy', () => {
   // The proxy must not have been added by replacing it: a deep client route
   // reloaded in the browser has to keep returning index.html.

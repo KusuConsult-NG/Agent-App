@@ -83,17 +83,40 @@ server {
         expires 0;
     }
 
-    # The manifest's own media type.
+    # ------------------------------------------------------------------
+    # The manifest's own media type, set for THIS ONE PATH.
     #
-    # `.webmanifest` is absent from nginx's bundled mime.types, so it was
-    # served as application/octet-stream from `default_type` — with
-    # `X-Content-Type-Options: nosniff` set above, which tells the browser to
-    # take that at face value. Chromium accepts it anyway: asked through the
-    # DevTools protocol it reported no manifest errors and every install
-    # criterion met, so this is NOT what kept an install banner away. Set
-    # because the spec says so and another browser need not be as forgiving.
-    types {
-        application/manifest+json  webmanifest;
+    # `.webmanifest` is absent from nginx's bundled mime.types, so it is
+    # served as application/octet-stream from `default_type`. Chromium
+    # accepts that anyway — asked through the DevTools protocol it reported
+    # no manifest errors and every install criterion met — so this is
+    # hygiene, not a fix for anything observed.
+    #
+    # IT MUST NOT BE WRITTEN AS AN nginx `types` BLOCK HERE. Such a block
+    # does not extend the map inherited from the http-level
+    # `include /etc/nginx/mime.types`; it REPLACES it. Written that way, the
+    # only extension nginx recognised in this whole server was
+    # `.webmanifest`, and every other file — index.html, the JS bundle, the
+    # SVG crest — came back as application/octet-stream. With the `nosniff`
+    # header above, a browser takes that literally and DOWNLOADS the page
+    # instead of rendering it. Measured against real nginx:
+    #
+    #     /                 200 application/octet-stream
+    #     /assets/index.js  200 application/octet-stream
+    #     /icon.svg         200 application/octet-stream
+    #
+    # and Chromium answered a navigation to it with "Download is starting".
+    # Both applications were completely dead, for the sake of a media type
+    # that nothing had complained about.
+    #
+    # `default_type` in an exact-match location applies only where the type
+    # cannot be derived from the extension, which for `.webmanifest` is
+    # always, and reaches nothing else.
+    # ------------------------------------------------------------------
+    location = /manifest.webmanifest {
+        default_type application/manifest+json;
+        expires 7d;
+        add_header Cache-Control "public";
     }
 
     # Manifest and static icons
