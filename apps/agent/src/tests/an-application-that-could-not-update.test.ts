@@ -56,6 +56,10 @@ interface Harness {
   focused: string[];
   /** Every URL the worker asked the browser to open, in order. */
   opened: string[];
+  /** Fire a background-sync event with this tag, and wait for what it does. */
+  backgroundSync: (tag: string) => Promise<void>;
+  /** Every message the worker posted to a client, in order. */
+  posted: unknown[];
 }
 
 /**
@@ -114,6 +118,7 @@ function loadServiceWorker(): Harness {
   let windows: string[] = [];
   const focused: string[] = [];
   const opened: string[] = [];
+  const posted: unknown[] = [];
 
   const self = {
     location: { origin: 'https://psirs.example' },
@@ -128,6 +133,7 @@ function loadServiceWorker(): Harness {
             focused.push(url);
             return undefined;
           },
+          postMessage: (message: unknown) => void posted.push(message),
         })),
       openWindow: async (url: string) => {
         opened.push(url);
@@ -183,6 +189,14 @@ function loadServiceWorker(): Harness {
     },
     focused,
     opened,
+    posted,
+    backgroundSync: async (tag) => {
+      const handler = listeners.get('sync');
+      if (!handler) throw new Error('sw.js registered no sync handler');
+      let held: Promise<unknown> | undefined;
+      handler({ tag, waitUntil: (p: Promise<unknown>) => { held = p; } });
+      await held;
+    },
   };
 }
 
@@ -559,5 +573,43 @@ describe('tapping a notification on an origin with two applications on it', () =
 
     expect(sw.focused).toEqual(['https://psirs.example/#/receipts']);
     expect(sw.opened).toEqual([]);
+  });
+});
+
+describe('the browser reporting that the signal is back', () => {
+  /*
+   * The worker's half of a chain whose other half had no receiver at all.
+   * `App.tsx` now listens for this message; until it did, the worker posted
+   * into nothing and a queue waited for an agent to reopen the app.
+   *
+   * Pinned here as well as in the page's own test because that one dispatches
+   * the message directly: a mutation breaking this `postMessage` was invisible
+   * to it, which is how this gap was found.
+   */
+  it('tells every open window to send its queue', async () => {
+    sw.setWindows(['https://psirs.example/#/', 'https://psirs.example/#/collect']);
+
+    await sw.backgroundSync('psirs-sync-drafts');
+
+    expect(sw.posted).toEqual([{ type: 'SYNC_DRAFTS' }, { type: 'SYNC_DRAFTS' }]);
+  });
+
+  it('says nothing for a tag it did not register', async () => {
+    sw.setWindows(['https://psirs.example/#/']);
+
+    await sw.backgroundSync('some-other-tag');
+
+    expect(sw.posted).toEqual([]);
+  });
+
+  it('does not fail when no window is open to tell', async () => {
+    // A handset with the app fully closed. The event completes having done
+    // nothing, which is the honest limit of this design: the worker cannot
+    // send the drafts itself, because the access token lives in the page.
+    sw.setWindows([]);
+
+    await sw.backgroundSync('psirs-sync-drafts');
+
+    expect(sw.posted).toEqual([]);
   });
 });
