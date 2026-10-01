@@ -1134,12 +1134,20 @@ governmentRouter.get(
           data.revenueItemId ?? null,
           data.from ?? null,
           data.to ?? null,
-          data.limit,
+          /*
+           * One row more than was asked for, and it is never returned. It
+           * answers "was anything dropped" exactly, where a second count
+           * would have to repeat all six filters above to be right.
+           */
+          data.limit + 1,
         ],
       );
 
+      const truncatedAt = rows.length > data.limit ? data.limit : null;
+
       await deliver(req, res, {
-        rows,
+        rows: truncatedAt === null ? rows : rows.slice(0, data.limit),
+        truncatedAt,
         format: data.format,
         subject: 'Transactions',
         filename: 'transactions',
@@ -2273,12 +2281,18 @@ governmentRouter.get(
           data.action ?? null,
           data.from ?? null,
           data.to ?? null,
-          data.limit,
+          // As above. This is the export where it matters most: every row
+          // carries its chain hash, so a file of the most recent five hundred
+          // entries reads as the period's record and verifies as one.
+          data.limit + 1,
         ],
       );
 
+      const truncatedAt = rows.length > data.limit ? data.limit : null;
+
       await deliver(req, res, {
-        rows,
+        rows: truncatedAt === null ? rows : rows.slice(0, data.limit),
+        truncatedAt,
         format: data.format,
         subject: 'Audit log',
         filename: 'audit-log',
@@ -2806,10 +2820,36 @@ async function deliver(
     subject: string;
     filename: string;
     parameters: Record<string, unknown>;
+    /**
+     * The cap the query hit, or null when these rows are all of them.
+     *
+     * A file is the one copy of this data that outlives the session: it is
+     * saved, emailed, filed and quoted months later, and nothing about a CSV
+     * of two hundred transactions says whether two hundred happened or two
+     * hundred were handed over. The signed workbench report has carried this
+     * since coverage was recorded. The two raw exports had the cap and not
+     * the disclosure.
+     */
+    truncatedAt?: number | null;
   },
 ): Promise<void> {
-  const { rows, format, subject, filename, parameters } = options;
+  const { rows, format, subject, parameters } = options;
+  const truncatedAt = options.truncatedAt ?? null;
+  /*
+   * In the filename, following the signed report rather than inventing a
+   * second convention for the same fact. A spreadsheet has nowhere to put a
+   * banner — a note row shifts every column under it and breaks the thing
+   * somebody opens the format to do — and a filename survives being saved,
+   * emailed and filed in a way a cell would not.
+   */
+  const filename = truncatedAt ? `${options.filename}-PARTIAL` : options.filename;
   if (format === 'json') {
+    /*
+     * The screen, which is not a file. It is handed a bare array, and putting
+     * the flag in it would change the shape the two screens read. They still
+     * draw a capped list without saying so; that is a separate gap on a
+     * separate surface and is not closed here.
+     */
     res.json(rows);
     return;
   }
@@ -2840,7 +2880,19 @@ async function deliver(
         actorRole: req.auth!.role,
         subject,
         format,
-        parameters,
+        /*
+         * Including whether this was all of it.
+         *
+         * `rows.length` below is how much data left, which is the right
+         * number for the log and is a different question: two hundred out of
+         * fifty thousand and two hundred out of two hundred are the same
+         * count. An entry that cannot tell them apart cannot answer the one
+         * thing an export log exists to answer.
+         */
+        parameters:
+          truncatedAt === null
+            ? { ...parameters, complete: true }
+            : { ...parameters, complete: false, rowCap: truncatedAt },
       },
       rows.length,
     ),
@@ -2868,6 +2920,7 @@ async function deliver(
     rows,
     parameters,
     generatedBy: `${req.auth!.role} ${req.auth!.userId}`,
+    truncatedAt,
   });
   res.setHeader('content-type', 'application/pdf');
   res.setHeader('content-disposition', `attachment; filename="${filename}.pdf"`);

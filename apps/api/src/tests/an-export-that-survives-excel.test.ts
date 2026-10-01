@@ -25,7 +25,7 @@
 import './env';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { crc32, inflateRawSync } from 'node:zlib';
+import { crc32, inflateRawSync, inflateSync } from 'node:zlib';
 import {
   createGovernmentUser,
   get,
@@ -518,5 +518,176 @@ describe('a signed report, as a file somebody can file', () => {
     );
     assert.ok(view, 'looking is recorded too');
     assert.equal(view!.entity_id, report.reportNumber);
+  });
+});
+
+// ===========================================================================
+/**
+ * Whether the file somebody files is all of it.
+ *
+ * Both raw exports cap their rows and ordered newest-first: transactions at
+ * the limit the screen sends (200), the audit log at the one its export button
+ * sends (500). Neither said so — not in the file, not in its name, and not in
+ * the audit entry recording that a copy had been taken. So an officer asking
+ * for a year of transactions received a CSV of the most recent two hundred and
+ * filed it as the year, and an auditor asking for a period of the audit log
+ * received the most recent five hundred entries, each carrying its chain hash,
+ * which reads as the period's record and verifies as one.
+ *
+ * The platform already knew how to say this. The signed workbench report
+ * computes coverage from its frozen payload, prints a PARTIAL banner on the
+ * PDF and appends `-PARTIAL` to the spreadsheet's filename — and reasons, in
+ * its own comment, that a note row inside a spreadsheet shifts every column
+ * under it and breaks what the format is for. These tests hold the two raw
+ * exports to the convention their own codebase had already settled on.
+ *
+ * `rowCount` in the audit entry cannot carry this: two hundred out of fifty
+ * thousand and two hundred out of two hundred are the same count. That is why
+ * completeness is recorded beside it rather than inferred from it.
+ */
+describe('a file that says whether it is all of it', () => {
+  /** The latest export entry, which is what an auditor would read. */
+  async function lastExport() {
+    const row = await queryOne<{ new_value: { rowCount: number; parameters: Record<string, unknown> } }>(
+      pool,
+      `SELECT new_value FROM audit_logs WHERE action = 'report.export'
+        ORDER BY sequence_no DESC LIMIT 1`,
+    );
+    assert.ok(row, 'taking a copy is recorded');
+    return row!.new_value;
+  }
+
+  it('names a capped transactions export PARTIAL', async () => {
+    await seedOneCollection('2');
+
+    const csv = await getBinary('/government/transactions?limit=1&format=csv', auth('auditor'));
+    assert.equal(csv.status, 200);
+    assert.match(
+      csv.headers.get('content-disposition') ?? '',
+      /filename="transactions-PARTIAL\.csv"/,
+      'the one place a spreadsheet can carry the warning without breaking its columns',
+    );
+
+    // One data row under one header row: the extra row fetched to detect this
+    // is not in the file.
+    const lines = csv.body.toString('utf8').trim().split(/\r?\n/);
+    assert.equal(lines.length, 2, `expected a header and one row, got ${lines.length}`);
+  });
+
+  it('does not name a complete export PARTIAL', async () => {
+    // The guard. A suffix on every file would satisfy the check above and
+    // would teach an officer to ignore it.
+    await seedOneCollection('2');
+
+    const csv = await getBinary('/government/transactions?limit=50&format=csv', auth('auditor'));
+    assert.equal(csv.status, 200);
+    assert.match(csv.headers.get('content-disposition') ?? '', /filename="transactions\.csv"/);
+    assert.doesNotMatch(csv.headers.get('content-disposition') ?? '', /PARTIAL/);
+  });
+
+  it('draws the line at the cap rather than beside it', async () => {
+    await seedOneCollection('2');
+
+    // Two transactions, two rows asked for. Nothing was dropped, so nothing
+    // is claimed — the off-by-one that a `rows.length === limit` test would
+    // read as truncation.
+    const exact = await getBinary('/government/transactions?limit=2&format=csv', auth('auditor'));
+    assert.equal(exact.status, 200);
+    assert.doesNotMatch(exact.headers.get('content-disposition') ?? '', /PARTIAL/);
+
+    const short = await getBinary('/government/transactions?limit=1&format=csv', auth('auditor'));
+    assert.match(short.headers.get('content-disposition') ?? '', /PARTIAL/);
+  });
+
+  it('records in the export log that the copy was partial, and what it was capped at', async () => {
+    await seedOneCollection('2');
+    await getBinary('/government/transactions?limit=1&format=csv', auth('auditor'));
+
+    const entry = await lastExport();
+    assert.equal(entry.rowCount, 1, 'how much data left, which is the count the log is for');
+    assert.equal(
+      entry.parameters.complete,
+      false,
+      'and whether that was all of it, which the count cannot say',
+    );
+    assert.equal(entry.parameters.rowCap, 1);
+  });
+
+  it('records that a complete copy was complete', async () => {
+    await seedOneCollection('2');
+    await getBinary('/government/transactions?limit=50&format=csv', auth('auditor'));
+
+    const entry = await lastExport();
+    assert.equal(entry.parameters.complete, true);
+    assert.equal(entry.parameters.rowCap, undefined, 'there was no cap to name');
+  });
+
+  it('names a capped audit-log export PARTIAL, which is the one that reads as a record', async () => {
+    /*
+     * Every row of this export carries `a.hash`, and the platform offers an
+     * endpoint to replay that chain. A file holding the most recent entries
+     * of a period, with no mark, is the strongest false claim either export
+     * could make: it looks like the period and it verifies.
+     */
+    const csv = await getBinary('/government/audit?limit=1&format=csv', auth('auditor'));
+    assert.equal(csv.status, 200);
+    assert.match(csv.headers.get('content-disposition') ?? '', /filename="audit-log-PARTIAL\.csv"/);
+
+    const lines = csv.body.toString('utf8').trim().split(/\r?\n/);
+    assert.ok(lines.length >= 2, 'a header and at least the one row asked for');
+  });
+
+  /**
+   * The words on the page, read out of the page.
+   *
+   * A PDF is the one format here where the warning can be a banner rather than
+   * a filename, and "it rendered" is not evidence that it says anything. The
+   * content streams are deflated and PDFKit writes text as a kerned array of
+   * hex strings — `[<54> 120 <72> 10 <616e73...>] TJ` — so this inflates every
+   * stream and concatenates the hex runs. Kerning is dropped with the numbers
+   * between them, which is exactly what makes the result searchable.
+   */
+  function pdfText(pdf: Buffer): string {
+    let raw = '';
+    let at = 0;
+    while ((at = pdf.indexOf('stream', at)) !== -1) {
+      const start = at + 6 + (pdf[at + 6] === 0x0d ? 2 : 1);
+      const end = pdf.indexOf('endstream', start);
+      if (end === -1) break;
+      try {
+        raw += inflateSync(pdf.subarray(start, end)).toString('latin1');
+      } catch {
+        // Not every stream is text; a font program is not meant to inflate
+        // into words and is skipped rather than failing the read.
+      }
+      at = end + 1;
+    }
+    return [...raw.matchAll(/<([0-9a-fA-F]+)>/g)]
+      .map((match) => Buffer.from(match[1]!, 'hex').toString('latin1'))
+      .join('');
+  }
+
+  it('prints the warning on a capped PDF, above the period it qualifies', async () => {
+    await seedOneCollection('2');
+
+    const pdf = await getBinary('/government/transactions?limit=1&format=pdf', auth('auditor'));
+    assert.equal(pdf.status, 200);
+    assert.equal(pdf.body.subarray(0, 5).toString('ascii'), '%PDF-');
+    assert.match(pdf.headers.get('content-disposition') ?? '', /transactions-PARTIAL\.pdf/);
+
+    const text = pdfText(pdf.body);
+    assert.match(text, /PARTIAL REPORT/, 'the banner is in the file, not only in its name');
+    assert.match(text, /only the most recent 1\b/, 'and it names the cap it stopped at');
+  });
+
+  it('prints no such warning on a complete PDF', async () => {
+    // The guard, and the reason the extraction above had to be real: a banner
+    // on every file would pass the check above with nothing to show for it.
+    await seedOneCollection('2');
+
+    const pdf = await getBinary('/government/transactions?limit=50&format=pdf', auth('auditor'));
+    assert.equal(pdf.status, 200);
+    assert.doesNotMatch(pdfText(pdf.body), /PARTIAL REPORT/);
+    assert.doesNotMatch(pdf.headers.get('content-disposition') ?? '', /PARTIAL/);
   });
 });
