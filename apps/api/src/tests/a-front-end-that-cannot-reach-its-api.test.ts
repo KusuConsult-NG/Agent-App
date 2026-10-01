@@ -56,11 +56,17 @@ const ROOT = workspaceRoot();
 /**
  * The images that serve a browser client, and the client each one serves.
  *
- * `Dockerfile.agent` serves BOTH from one origin — the agent at `/`, the
- * portal at `/portal/` — which its own header explains at length, so it is
- * listed against the agent's client and the portal's relative base is checked
- * through `Dockerfile.portal`'s row. `Dockerfile.portal` still builds the
- * portal alone, at `/`, for a deployment that wants it on its own hostname.
+ * BOTH images now serve the same thing — the agent at `/`, the portal at
+ * `/portal/` — and `Dockerfile.portal` is derived from `Dockerfile.agent` so
+ * the two cannot drift. They differ in one value: `PSIRS_APP` names the FILE
+ * the image was built from, and the container prints it at startup.
+ *
+ * That is not decoration. This deployment ran for a day with its service
+ * pointed at `Dockerfile.portal` while everyone believed it was on
+ * `Dockerfile.agent`, so the portal was served at `/` and the agent app was
+ * nowhere on the hostname. The setting was corrected twice without effect.
+ * Naming the file in the log is what makes that visible in one line; making
+ * both images correct is what makes it harmless.
  *
  * Being listed here is what subjects an image to every check below: the proxy
  * present, the URI passed through unrewritten, a body limit above the API's
@@ -68,8 +74,8 @@ const ROOT = workspaceRoot();
  * filter, and a listen port taken from the platform.
  */
 const FRONT_ENDS = [
-  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
-  { image: 'Dockerfile.portal', client: 'apps/portal/src/lib/api.ts', name: 'portal' },
+  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'from-Dockerfile.agent' },
+  { image: 'Dockerfile.portal', client: 'apps/portal/src/lib/api.ts', name: 'from-Dockerfile.portal' },
 ] as const;
 
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
@@ -262,11 +268,20 @@ for (const { image, client, name } of FRONT_ENDS) {
       `${image} does not declare PSIRS_APP=${name}, so nothing in its ` +
         'startup log says which front-end is running',
     );
+    /*
+     * Declared is not enough — it has to reach the log. The exact sentence is
+     * not pinned, because the wording improved once already: it used to say
+     * "this is the <app> front-end image" and now names the Dockerfile the
+     * image was built from, which is the fact that was actually missing when
+     * a service turned out to be pointed at the other file.
+     */
     assert.match(
       source,
-      /echo "05-require-api-origin\.sh: this is the \$\{PSIRS_APP:-unknown\}/,
-      `${image} declares PSIRS_APP but never prints it, which is the same ` +
-        'as not having it',
+      /echo "05-require-api-origin\.sh: [^"]*\$\{PSIRS_APP[^"]*"/,
+      `${image} declares PSIRS_APP but never echoes it from ` +
+        '05-require-api-origin.sh, which is the same as not having it — the ' +
+        'startup log is the only place that says which Dockerfile built the ' +
+        'running container',
     );
   });
 

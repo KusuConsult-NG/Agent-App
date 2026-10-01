@@ -348,7 +348,7 @@ RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
 # while serving the agent service's hostname is how a service pointed at the
 # wrong image came to light. `agent+portal` distinguishes this file from
 # `Dockerfile.portal`, which is the portal alone.
-ENV PSIRS_APP=agent+portal
+ENV PSIRS_APP=from-Dockerfile.agent
 
 # Refuse to start rather than serve a front end that cannot reach its API.
 # An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
@@ -358,7 +358,7 @@ ENV PSIRS_APP=agent+portal
 COPY <<'SH' /docker-entrypoint.d/05-require-api-origin.sh
 #!/bin/sh
 set -e
-echo "05-require-api-origin.sh: this is the ${PSIRS_APP:-unknown} front-end image"
+echo "05-require-api-origin.sh: this image was built ${PSIRS_APP:-from an unknown Dockerfile}"
 echo "05-require-api-origin.sh: agent at /, officer portal and public verification at /portal/"
 if [ -z "${API_ORIGIN:-}" ]; then
   echo "FATAL: API_ORIGIN is not set." >&2
