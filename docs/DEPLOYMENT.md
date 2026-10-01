@@ -490,18 +490,45 @@ Verified against real nginx using the image's own envsubst semantics: with
 `PORT=8085` the config binds 8085, serves the SPA, still proxies `/api/v1`,
 and leaves nothing on 80; with `PORT` unset it binds 80.
 
-### One thing still to confirm on the deployed chain
+### The address a request appears to come from
 
-`TRUST_PROXY` makes the API `app.set('trust proxy', 1)` — one trusted hop.
-Routing API calls through the front-end nginx adds a hop, so `req.clientIp`
-may now resolve to the proxy rather than the citizen. That matters more than it
-sounds: it is the key for every `keyBy: 'ip'` rate limit, including the two
-deliberate enumeration thresholds on the public citizen lookup, and it is what
-the audit log records as the address a lookup came from.
+`TRUST_PROXY` is the number of proxies in front of the API whose
+`X-Forwarded-For` entries Express may believe. It is **off by default**, and
+the front-end image serving `/api/` by proxy makes that the wrong default for
+this deployment.
 
-This cannot be checked from a laptop, because it depends on how many hops the
-platform's own edge adds. Check it in one request after deploying — hit the
-public citizen lookup, then read the row it writes:
+Measured against the config rendered out of `Dockerfile.agent`, with that
+nginx as the only hop in front of a stub that reports what it received:
+
+| what the caller sent | socket address the API sees | `X-Forwarded-For` |
+|---|---|---|
+| nothing | the proxy | the caller |
+| `X-Forwarded-For: 102.89.33.7` | the proxy | `102.89.33.7, <the proxy's client>` |
+
+So our nginx contributes exactly one hop and appends the address it saw. The
+caller's address is in the header and nowhere else, and with `TRUST_PROXY`
+unset Express takes the socket address, so the caller's address is present in
+every request and ignored.
+
+**What that costs, in the order an operator notices it.** Every `keyBy: 'ip'`
+rate limit becomes one bucket for all callers at once. The sharpest are on the
+public citizen lookup — `citizen-status` at ten requests a minute and
+`citizen-statement-request` at five — so on one origin the lookup starts
+refusing ordinary citizens almost immediately, and a demonstration with
+several people in the room hits it in the first minute. Less visibly, the
+audit log and `verification_attempts` record the proxy's address on every row,
+which is the column somebody reads when asking where a lookup came from.
+
+The API warns once per process, on the first request that arrives carrying
+`X-Forwarded-For` while `TRUST_PROXY` is unset, naming both costs. A boot
+check cannot do this: whether anything forwards an address depends on what is
+in front of the API, which it learns only when a request arrives.
+
+**Set it to one if nginx faces the internet.** What cannot be settled from
+here is whether the platform's own edge adds a hop of its own in front of
+nginx, because that is a property of the deployment rather than of this
+repository. Check it in one request after deploying — hit the public citizen
+lookup, then read the row it writes:
 
 ```sql
 SELECT lookup_type, result, ip_address, created_at
@@ -511,7 +538,7 @@ SELECT lookup_type, result, ip_address, created_at
 ```
 
 If `ip_address` is an internal address rather than the caller's, the hop count
-is wrong and `TRUST_PROXY` needs to match the real chain.
+is short by however many hops the edge adds.
 
 `.railwayignore` keeps the CLI upload to about 10 MB of the 43 MB tracked tree,
 by leaving out `docs/` — several hundred UAT screenshots that no image copies.
@@ -802,6 +829,7 @@ service's log.
 - [ ] `DATABASE_URL` is a transaction-mode pooler (port 6543), or `DB_POOL_SIZE` × the instance count fits the pooler's client limit — see *Sign-in times out*
 - [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every certificate QR code points at the agent app's sign-in form, and a printed certificate cannot be recalled
 - [ ] `VITE_VERIFICATION_BASE_URL` set on the front-end service, with the same `/portal` subpath — a **different** variable, read at build time, and the only one that puts a QR code on a thermal paper receipt. Unset, receipts print with the code and no link; it needs a redeploy, not a restart
+- [ ] `TRUST_PROXY` set to the number of proxies in front of the API — unset, every `keyBy: 'ip'` rate limit shares one bucket for all callers (the public citizen lookup is ten a minute) and the audit log records the proxy's address instead of the caller's. See *The address a request appears to come from*
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted
