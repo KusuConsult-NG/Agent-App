@@ -122,7 +122,20 @@ server {
         # agent holding the phone, rather than by a proxy error page.
         client_max_body_size 12m;
 
-        proxy_pass http://${API_ORIGIN};
+        # Resolved per request, not once at startup. A literal hostname is
+        # resolved when nginx loads this file and then held for the life of
+        # the process, so when the API service is redeployed onto a new
+        # private address this front end goes on dialling the container that
+        # has gone — every call fails at the network and sign-in reports "The
+        # request failed", with no deploy of its own to blame. The same note
+        # in Dockerfile.agent explains it at length.
+        #
+        # `$request_uri` is required with a variable upstream: nginx stops
+        # appending the URI itself, and without it every call arrives at the
+        # API as `/`.
+        resolver ${NGINX_RESOLVER} valid=10s ipv6=on;
+        set $api_origin ${API_ORIGIN};
+        proxy_pass http://$api_origin$request_uri;
         proxy_http_version 1.1;
         proxy_set_header Connection "";
 
@@ -156,7 +169,7 @@ EOF
 # `$proxy_add_x_forwarded_for` — every nginx variable in this file is
 # `$name`-shaped and envsubst cannot tell them apart from its own.
 # ---------------------------------------------------------------------------
-ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
+ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT|NGINX_RESOLVER)
 
 # ---------------------------------------------------------------------------
 # The port the platform routes to, not the one this image happens to prefer.
@@ -171,6 +184,47 @@ ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
 # EXECUTES files ending .sh in a subshell, so an export from a .sh would not
 # survive to 20-envsubst-on-templates.sh, which is the whole point of this.
 # ---------------------------------------------------------------------------
+# The DNS server this container actually has, for the resolver the /api/
+# proxy needs. Read from /etc/resolv.conf rather than hardcoded, because
+# Docker's embedded DNS is 127.0.0.11 and a platform's own is something else.
+COPY <<'SH' /docker-entrypoint.d/15-nginx-resolver.envsh
+# shellcheck shell=sh
+#
+# The DNS servers this container actually has, in a form nginx will accept.
+#
+# AN IPv6 NAMESERVER MUST BE BRACKETED. A private container network is often
+# IPv6, and `resolver fd12:3456:789a::1` is not a syntax error nginx tolerates:
+#
+#     [emerg] invalid port in resolver "fd12:3456:789a::1"
+#
+# nginx then refuses to load the file and the container never starts, which the
+# platform reports as "Deployment failed" with nothing naming DNS. Measured —
+# this is what took the front end down once already. `[fd12:3456:789a::1]`
+# parses. An IPv4 address must NOT be bracketed, so each one is tested for a
+# colon rather than all of them wrapped.
+NGINX_RESOLVER=""
+while read -r _key _value _rest; do
+  [ "${_key}" = "nameserver" ] || continue
+  case "${_value}" in
+    *:*) NGINX_RESOLVER="${NGINX_RESOLVER}[${_value}] " ;;
+    *)   NGINX_RESOLVER="${NGINX_RESOLVER}${_value} " ;;
+  esac
+done < /etc/resolv.conf
+
+# An empty value is `resolver ;`, which is also fatal at load. Docker's
+# embedded DNS is the best guess available; if it is wrong the failure is a
+# request-time timeout, which leaves the service up and says so in the log —
+# strictly better than a container that will not start.
+if [ -z "${NGINX_RESOLVER}" ]; then
+  NGINX_RESOLVER="127.0.0.11"
+  echo "15-nginx-resolver.envsh: /etc/resolv.conf named no nameserver; falling back to ${NGINX_RESOLVER}" >&2
+fi
+
+export NGINX_RESOLVER
+echo "15-nginx-resolver.envsh: resolving the API through ${NGINX_RESOLVER}"
+SH
+RUN chmod +x /docker-entrypoint.d/15-nginx-resolver.envsh
+
 COPY <<'SH' /docker-entrypoint.d/10-default-port.envsh
 # shellcheck shell=sh
 export PORT="${PORT:-80}"

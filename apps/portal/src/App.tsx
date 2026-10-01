@@ -56,7 +56,7 @@ import { InboxScreen } from './screens/Inbox';
 import { PlatformScreen } from './screens/Platform';
 import { RolesScreen } from './screens/Roles';
 import { GlobalSearch } from './screens/Search';
-import { LanguageToggle } from './ui';
+import { LanguageToggle, crestUrl } from './ui';
 import { usePortalI18n } from './lib/i18n';
 import type { TranslationDictionary } from '@psirs/shared';
 import { enumLabel, formatLongDateIn } from '@psirs/shared';
@@ -148,7 +148,7 @@ export function App() {
     <div className="shell">
       <aside className="sidebar">
         <div className="sidebar__brand">
-          <img src="/icon.svg" alt="" width={32} height={32} />
+          <img src={crestUrl()} alt="" width={32} height={32} />
           <div>
             <strong>{t.ofcPortalName}</strong>
             <span>{t.ofcStateGovernment}</span>

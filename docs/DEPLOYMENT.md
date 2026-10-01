@@ -212,12 +212,13 @@ the repository itself:
 | Service | Dockerfile | Serves | Port |
 |---|---|---|---|
 | `agent-app` | `Dockerfile` | the API | as the image sets it |
-| `agent-pwa` | `Dockerfile.agent` | the agent PWA, via nginx | 80 |
+| `agent-pwa` | `Dockerfile.agent` | the agent PWA at `/` **and the officer portal at `/portal/`**, via nginx | 80 |
 | `portal` | `Dockerfile.portal` | the officer and verification portal, via nginx | 80 |
 
-Or **two**, with both front ends on one hostname — see *One URL for both
-apps* below. That is the arrangement to prefer for a demo or a pilot, because
-it is one address to publish rather than two.
+Or **two**: `Dockerfile.agent` serves both front ends on one hostname — the
+agent at `/` and the portal at `/portal/` — so the `portal` service is
+optional. See *One URL for both apps* below. That is the arrangement to prefer
+for a demo or a pilot, because it is one address to publish rather than two.
 
 **Each service's Dockerfile path has to be set explicitly, and a new service
 will not work until it is.** Railway looks for a file named exactly
@@ -278,6 +279,22 @@ Each front-end image now serves `/api/` by proxying to the API, so the origin
 the client assumes is the origin it gets. Nothing in either client changed, and
 neither did CORS, the CSP or the cookie — which is the point of fixing it on
 this side rather than the other.
+
+### If the front end stops reaching the API after an API redeploy
+
+Symptom: the apps load, but every call fails at the network and sign-in says
+"The request failed. Try again, or contact support." `/api/v1/reference/lgas`
+in a browser does not load either. Nothing was deployed to the front end.
+
+Cause: nginx used to resolve `API_ORIGIN` **once**, when it loaded its config,
+and hold that address for the life of the process. On a private network the
+API's address changes every time the API is redeployed, so the front end went
+on dialling a container that no longer existed.
+
+Both front-end images now put the upstream in a variable with a `resolver`, so
+the name is resolved per request and an API redeploy is picked up within
+seconds. If you are running an older image, restarting the front-end service
+is the workaround — it re-resolves on start.
 
 Set **`API_ORIGIN`** on each front-end service to the API's `host:port` on the
 private network:
@@ -413,7 +430,7 @@ above. It has no effect on a deploy triggered from GitHub, which clones.
 
 ## One URL for both apps
 
-`Dockerfile.web` builds both front ends and serves them from one origin:
+`Dockerfile.agent` builds both front ends and serves them from one origin:
 
 | Path | Serves |
 |---|---|
@@ -430,17 +447,28 @@ four ship inside the portal bundle. There is no fourth thing to deploy.
 
 One service instead of two:
 
-1. On the `agent-pwa` service, set **Settings → Build → Dockerfile Path** to
-   `Dockerfile.web`.
-2. Leave `API_ORIGIN` as it is. The image refuses to start without it, for the
-   same reason the single-app images do.
-3. **Set `VERIFICATION_BASE_URL` on the API service to the new portal path.**
-   This is the step with consequences, and the next section is about it.
-4. Delete the `portal` service, or leave it running on its own hostname. Both
-   work; nothing in the combined image depends on it being gone.
+**There is nothing to change on the `agent-pwa` service.** It already points
+at `Dockerfile.agent`, and that is the combined image — so the portal arrives
+at `/portal/` on the existing hostname on the next deploy.
 
-`Dockerfile.agent` and `Dockerfile.portal` are unchanged and still build. This
-is opted into, not migrated to.
+This config first lived in a separate `Dockerfile.web`, which is the honest
+name for it. It was moved here because a service's **Dockerfile Path** is a
+setting in the Railway dashboard, and a new filename means finding and editing
+that field on the right service; a path that is already configured and already
+working cannot be mistyped. The cost is that `Dockerfile.agent` no longer means
+"the agent alone", which its own header states at the top.
+
+So the switch is one step, and it is on the API service rather than the
+front-end one:
+
+1. **Set `VERIFICATION_BASE_URL` on the API service to the portal's new
+   path.** This is the step with consequences, and the next section is about
+   it. Nothing else is required.
+2. `API_ORIGIN` on `agent-pwa` stays exactly as it is. The image still refuses
+   to start without it.
+3. Delete the `portal` service, or leave it running on its own hostname. Both
+   work; nothing in the combined image depends on it being gone.
+   `Dockerfile.portal` is unchanged and still builds the portal alone at `/`.
 
 ### `VERIFICATION_BASE_URL`, which is the one that bites
 
@@ -546,12 +574,66 @@ exists today, which is why nothing had broken — it was a trap, not a fault,
 and the first signed document URL or QR endpoint carrying an extension would
 have fallen into it with the cause three locations away from the symptom.
 
+## Running a demonstration
+
+### Device binding
+
+An agent's first handset is auto-approved; every one after that waits for an
+officer, because revoking a stolen phone would be worth nothing if the thief
+could register another. The seeded demonstration agent already has a handset —
+the seed registered one to build its data through the real API — so anybody
+opening the agent app in their own browser is that agent's **second** handset
+and cannot collect. A demonstration then needs two people and a portal login
+before anything can be shown.
+
+Two ways out, in order of preference:
+
+**Approve the one handset.** Sign in to `/portal/` as an administrator, open
+**Agents → the demonstration agent → Devices**, and approve the pending entry.
+Twenty seconds, once per browser or phone, and device binding stays intact.
+
+**Or relax it for that deployment:**
+
+```
+DEMO_RELAX_DEVICE_BINDING=true
+```
+
+Set on the API service. An agent may then collect from a handset nobody
+approved, on any browser or phone, with no officer involved.
+
+What it does **not** turn off: a **REVOKED** or **SUSPENDED** handset is still
+refused. That is deliberate — it is the half of device binding worth
+demonstrating, and the half whose absence would be indistinguishable from the
+platform not having the feature. An officer can still cut a handset off during
+a demonstration and have it take effect immediately.
+
+Three things worth knowing about it:
+
+- It works **in production mode**, unlike `DEVICE_AUTO_APPROVE`, which is
+  forced off when `NODE_ENV=production` and refuses to boot if set. That is
+  the whole reason this flag exists: a demonstration deployment is a real
+  deployment built from the production image, so the older flag is inert in
+  exactly the place a demonstration runs.
+- It is **narrower than the alternative.** Taking `NODE_ENV` off production on
+  that service would have worked too, and would also have turned off the
+  published-secret refusal, the cookie hardening and the replica warning.
+  Weakening four controls to get one is a bad trade.
+- Every boot **says so**, at warn level, beside the port and the payment
+  gateway: `device binding is RELAXED on this deployment`. It is not in the
+  readiness check's refusals, because a flag that refuses to boot is a flag
+  nobody can use — so the log is what stops a deployment running this quietly.
+
+**Never set it on a deployment collecting real money.** A revoked handset that
+can be replaced without anybody looking is a revocation that meant nothing,
+and the money is somebody's tax.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
-- [ ] If both front ends share one origin (`Dockerfile.web`), `VERIFICATION_BASE_URL` carries the `/portal` subpath — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
+- [ ] `DEMO_RELAX_DEVICE_BINDING` is **not** set — see *Running a demonstration*; it is device binding off, and a revoked handset that can be replaced unseen is a revocation that meant nothing
+- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted

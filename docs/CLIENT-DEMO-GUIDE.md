@@ -39,8 +39,8 @@ Then open four browser tabs and leave them signed out:
 ### Demonstrating from a deployed host instead
 
 Those two ports are the local development servers. A deployment built from
-`Dockerfile.web` serves everything from **one** origin, which is one address to
-read out rather than two:
+`Dockerfile.agent` serves everything from **one** origin — that image builds
+both front ends — which is one address to read out rather than two:
 
 | Tab | Address | Who |
 |---|---|---|

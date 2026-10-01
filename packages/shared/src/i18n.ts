@@ -2528,6 +2528,7 @@ export interface TranslationDictionary {
   ofcLoginWrongPlace: string;
   ofcLoginSignInWorked: string;
   ofcLoginUseAgentApp: string;
+  ofcLoginOpenAgentApp: string;
   shellSyncFailed: string;
   grpNameHint: string;
   grpCommunityHint: string;
@@ -6168,6 +6169,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginWrongPlace: "Your account belongs to the agent app",
     ofcLoginSignInWorked: "Your sign-in worked — you are simply in the wrong place.",
     ofcLoginUseAgentApp: "Field agents collect revenue in the PSIRS agent app, which works offline and holds your taxpayers, assessments and commission. This portal is for revenue, finance and oversight officers.",
+    ofcLoginOpenAgentApp: "Open the agent app",
     shellSyncFailed: "Your saved records could not be sent to PSIRS. They are still on this phone.",
     grpNameHint: "As the group itself gives it",
     grpCommunityHint: "Where the group meets. Optional.",
@@ -9645,6 +9647,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginWrongPlace: "Asusunka na manhajar wakilai ne",
     ofcLoginSignInWorked: "Shigarka ta yi aiki — kawai ba wurin da ya dace ba ne.",
     ofcLoginUseAgentApp: "Wakilan filin aiki suna karbar haraji a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba kuma tana rike da masu biyan harajinka, kimarka da kwamishan dinka. Wannan shafin na jami’an haraji, kudi da sa ido ne.",
+    ofcLoginOpenAgentApp: "Bude manhajar wakilai",
     shellSyncFailed: "Ba a iya tura rikodin da ka adana zuwa PSIRS ba. Suna nan a wannan wayar.",
     grpNameHint: "Kamar yadda kungiyar da kanta ta bayar",
     grpCommunityHint: "Inda kungiyar ke haduwa. Ba dole ba.",

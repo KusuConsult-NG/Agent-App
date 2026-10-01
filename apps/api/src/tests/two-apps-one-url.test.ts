@@ -4,7 +4,7 @@
  * Everything the platform ever hands to someone outside government points at
  * the portal: the QR code on a receipt, a referee's invitation, a cooperative
  * chairman's attestation link, the SMS telling a taxpayer what they owe. The
- * agents' app lives somewhere else entirely. `Dockerfile.web` serves both from
+ * agents' app lives somewhere else entirely. `Dockerfile.agent` serves both from
  * one origin so there is one address to publish, secure and explain —
  *
  *     /          the agent PWA
@@ -103,7 +103,17 @@ function directivesOnly(source: string): string {
     .join('\n');
 }
 
-const IMAGE = 'Dockerfile.web';
+/*
+ * The combined image is `Dockerfile.agent`, not a separate file.
+ *
+ * This config began life as `Dockerfile.web`, which is the honest name. A
+ * Railway service's Dockerfile Path is a setting on the service, and the
+ * deployed one already points at `Dockerfile.agent` — so the combined config
+ * lives behind the path that is already configured, and the portal arrives on
+ * the existing hostname with no dashboard change. That file's own header says
+ * the same thing at more length.
+ */
+const IMAGE = 'Dockerfile.agent';
 
 describe('the portal served from a subpath of the agent', () => {
   test('is built for the subpath rather than for the root', () => {

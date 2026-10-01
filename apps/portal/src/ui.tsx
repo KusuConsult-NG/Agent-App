@@ -691,3 +691,62 @@ export function BeforeAfter({
     </ul>
   );
 }
+
+/**
+ * The crest, resolved against the base this build was made for.
+ *
+ * Nine screens wrote `src="/icon.svg"`. Vite rewrites absolute URLs it finds
+ * in `index.html` and in imported assets; a string literal in JSX is neither,
+ * so `--base=/portal/` leaves these pointing at the ROOT of the origin. In the
+ * combined image that is the AGENT's copy of the crest — byte-identical today,
+ * which is the only reason nothing looked wrong, and a coupling nobody would
+ * think to check the day either crest changes.
+ *
+ * `import.meta.env.BASE_URL` is what Vite substitutes for the base at build
+ * time, and it always ends in a slash: `/` for the standalone portal and for
+ * `npm run dev`, `/portal/` for the combined image.
+ *
+ * A function rather than a constant for the same reason as `agentAppUrl`, and
+ * the mutation check is what insisted on it: as a const evaluated at import
+ * under the runner's base of `/`, it equalled the very literal it replaced —
+ * `'/' + 'icon.svg'` is `'/icon.svg'` — so the test for it passed against the
+ * bug. Read at call time, a stubbed base reaches it and the two differ.
+ */
+/*
+ * The filename is a named constant rather than static text inside the
+ * template literal, and that is not cosmetic.
+ *
+ * `nothing-new-in-english.test.tsx` scans template literals for English that
+ * should have gone through the dictionary, and `${BASE_URL}icon.svg` tripped
+ * it: the literal opens with its value, so the rule does not exempt it, and
+ * `icon.svg` is not recognised as a URL fragment because `isUrlFragment`
+ * requires a slash.
+ *
+ * Loosening that classifier to accept a bare `name.ext` was the tempting fix
+ * and is the wrong one: it would then wave through a download filename like
+ * `Receipt.pdf`, which a citizen reads and which does belong in the
+ * dictionary. Taking the filename out of the literal costs nothing and leaves
+ * the guard exactly as strict as it was.
+ */
+const CREST_FILE = 'icon.svg';
+
+export function crestUrl(): string {
+  return import.meta.env.BASE_URL + CREST_FILE;
+}
+
+/**
+ * Whether the agent app is reachable from here.
+ *
+ * A function rather than a constant so a test can vary the base. A
+ * module-level const is evaluated once at import and would pin whichever base
+ * the runner uses, leaving the branch that matters unexercised.
+ *
+ * Only when this portal is mounted under a subpath, which happens in exactly
+ * one arrangement: the combined image, where the agent PWA is served at the
+ * root of the same origin. Deployed on its own hostname the portal has no idea
+ * where the agent app is, and must not guess — an officer sent to a dead link
+ * is worse off than one simply told which application they want.
+ */
+export function agentAppUrl(): string | null {
+  return import.meta.env.BASE_URL === '/' ? null : '/';
+}

@@ -56,18 +56,20 @@ const ROOT = workspaceRoot();
 /**
  * The images that serve a browser client, and the client each one serves.
  *
- * `Dockerfile.web` serves both from one origin — the agent at `/`, the portal
- * at `/portal/` — so it is listed against the agent's client and the portal's
- * relative base is checked through `Dockerfile.portal`'s row. Listing it here
- * is what subjects it to every check below: the proxy present, the URI passed
- * through unrewritten, a body limit above the API's own, the SPA fallback
- * intact, a startup guard on API_ORIGIN, the envsubst filter, and a listen
- * port taken from the platform.
+ * `Dockerfile.agent` serves BOTH from one origin — the agent at `/`, the
+ * portal at `/portal/` — which its own header explains at length, so it is
+ * listed against the agent's client and the portal's relative base is checked
+ * through `Dockerfile.portal`'s row. `Dockerfile.portal` still builds the
+ * portal alone, at `/`, for a deployment that wants it on its own hostname.
+ *
+ * Being listed here is what subjects an image to every check below: the proxy
+ * present, the URI passed through unrewritten, a body limit above the API's
+ * own, the SPA fallback intact, a startup guard on API_ORIGIN, the envsubst
+ * filter, and a listen port taken from the platform.
  */
 const FRONT_ENDS = [
-  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent' },
+  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
   { image: 'Dockerfile.portal', client: 'apps/portal/src/lib/api.ts', name: 'portal' },
-  { image: 'Dockerfile.web', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
 ] as const;
 
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
@@ -157,16 +159,45 @@ for (const { image, client, name } of FRONT_ENDS) {
     const proxyPass = /proxy_pass\s+http:\/\/([^;\s]+);/.exec(source);
     assert.ok(proxyPass, `${image} has a /api/ location with no proxy_pass`);
 
-    // No trailing slash and no path: the API mounts its own routes at
-    // /api/v1 (`app.use('/api/v1', api)`), so the URI has to pass through
-    // unchanged. A trailing slash makes nginx rewrite it and every route 404s.
-    assert.equal(
-      proxyPass![1],
-      '${API_ORIGIN}',
-      `${image} proxies to ${JSON.stringify(proxyPass![1])}. It must be a ` +
-        'bare ${API_ORIGIN} with no trailing slash or path: the API serves ' +
-        'the /api/v1 prefix itself, and anything else rewrites the URI',
+    /*
+     * A VARIABLE UPSTREAM, AND THE `$request_uri` IT OBLIGES.
+     *
+     * With a literal hostname, nginx resolves the upstream once when it loads
+     * the config and holds that address for the life of the process. Where the
+     * API is a separate service on a private network its address changes on
+     * every redeploy, so the front end goes on dialling a container that has
+     * gone: every /api/v1 call fails at the network and sign-in reports "The
+     * request failed", with no deploy of its own to blame.
+     *
+     * A variable defers resolution to each request. The cost is that nginx
+     * then stops appending the request URI by itself — so without
+     * `$request_uri` every call arrives at the API as `/`, the API answers 404
+     * for everything, and the cause looks nothing like the symptom. Measured
+     * against a stand-in upstream that echoes what it received:
+     *
+     *     /api/v1/reference/lgas?limit=1&search=pam
+     *       -> /api/v1/reference/lgas?limit=1&search=pam
+     *
+     * `$request_uri` carries the query string as well as the path, so a
+     * filtered list keeps its filters.
+     */
+    assert.match(
+      proxyPass![1]!,
+      /^\$[a-z_]+\$request_uri$/,
+      `${image} proxies to "${proxyPass![1]}". It must be a VARIABLE followed ` +
+        'by $request_uri — a literal hostname is resolved once at startup and ' +
+        'then stale for the life of the process, and a variable without ' +
+        '$request_uri sends every call to "/"',
     );
+
+    assert.match(
+      source,
+      /resolver\s+\S+/,
+      `${image} uses a variable upstream but declares no resolver, so nginx ` +
+        'has no DNS server to ask and every /api/ request fails with "no ' +
+        'resolver defined to resolve"',
+    );
+
   });
 
   test(`${name}: the API origin is substituted, and is not optional`, () => {
@@ -450,16 +481,45 @@ describe('what the build context carries, and what it must not', () => {
     });
   }
 
+  it('relies on no per-Dockerfile .dockerignore, which Railway may not read', () => {
+    /*
+     * `<dockerfile>.dockerignore` is a BuildKit convention, not a Docker
+     * guarantee. The note at the top of this block already says why that
+     * matters — GitHub Actions honours it, Railway's Metal builder is a
+     * different implementation, and "correctness should not rest on whether
+     * they agree" — which is why the root file stopped excluding the
+     * front-ends.
+     *
+     * `Dockerfile.agent.dockerignore` survived that change and excluded
+     * `apps/portal`. Harmless while this image built only the agent; fatal
+     * the moment it also built the portal, and fatal only on a builder that
+     * reads the file — so it would have worked in CI and failed on the
+     * platform, which is the worst available outcome. Both per-image files
+     * are gone and the root `.dockerignore` serves every build, as the
+     * assertions above require it to.
+     */
+    const stray = [
+      'Dockerfile.dockerignore',
+      'Dockerfile.api.dockerignore',
+      'Dockerfile.agent.dockerignore',
+      'Dockerfile.portal.dockerignore',
+    ].filter((name) => existsSync(join(ROOT, name)));
+
+    assert.deepEqual(
+      stray,
+      [],
+      `${stray.join(', ')} exists. A per-Dockerfile .dockerignore is read by ` +
+        'BuildKit and may be ignored by the platform builder, so the build ' +
+        'context differs between CI and deployment — the build passes here ' +
+        'and fails there, or worse, the other way round. Put every rule in ' +
+        'the root .dockerignore, which every builder reads.',
+    );
+  });
+
   it('never does a bare COPY . , which is what makes the above safe', () => {
     // Every image taking only the paths it names is the reason un-excluding
     // the front-ends costs context size and nothing in any shipped image.
-    for (const image of [
-      'Dockerfile',
-      'Dockerfile.api',
-      'Dockerfile.agent',
-      'Dockerfile.portal',
-      'Dockerfile.web',
-    ]) {
+    for (const image of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.agent', 'Dockerfile.portal']) {
       const source = directivesOnly(readFileSync(join(ROOT, image), 'utf8'));
       assert.doesNotMatch(
         source,

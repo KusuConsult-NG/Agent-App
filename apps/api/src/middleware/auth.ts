@@ -400,8 +400,20 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
       // flag, and an agent told only "you are not cleared" cannot tell that
       // registering a replacement handset is the fix.
       let deviceId: string | null = null;
+      /*
+       * A demonstration deployment may be told to stop requiring an approved
+       * handset. See `config.security.deviceBindingRelaxed` for why it exists
+       * and what it refuses to turn off: REVOKED and SUSPENDED still stop
+       * collection below, so an officer cutting a handset off still works.
+       *
+       * Only registration and approval are relaxed — the two gates that need
+       * a second person present, which is what makes a one-person
+       * demonstration impossible.
+       */
+      const bindingRelaxed = config.security.deviceBindingRelaxed;
+
       if (options.requireDevice !== false) {
-        if (!req.deviceIdentifier) {
+        if (!req.deviceIdentifier && !bindingRelaxed) {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_NOT_IDENTIFIED',
@@ -410,14 +422,16 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        const device = await queryOne<{ id: string; status: string }>(
-          pool,
-          `SELECT id, status FROM agent_devices
-            WHERE agent_id = $1 AND device_identifier = $2`,
-          [agent.id, req.deviceIdentifier],
-        );
+        const device = req.deviceIdentifier
+          ? await queryOne<{ id: string; status: string }>(
+              pool,
+              `SELECT id, status FROM agent_devices
+                WHERE agent_id = $1 AND device_identifier = $2`,
+              [agent.id, req.deviceIdentifier],
+            )
+          : null;
 
-        if (!device) {
+        if (!device && !bindingRelaxed) {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_NOT_REGISTERED',
@@ -440,7 +454,7 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
          * them a phone and an officer an approval for a handset that was
          * always coming back.
          */
-        if (device.status === 'REVOKED') {
+        if (device?.status === 'REVOKED') {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_REVOKED',
@@ -453,7 +467,7 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        if (device.status === 'SUSPENDED') {
+        if (device?.status === 'SUSPENDED') {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_SUSPENDED',
@@ -464,7 +478,7 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        if (device.status === 'PENDING') {
+        if (device?.status === 'PENDING' && !bindingRelaxed) {
           throw new AppError({
             statusCode: 403,
             code: 'DEVICE_PENDING_APPROVAL',
@@ -472,12 +486,14 @@ export function requireActiveAgent(options: { requireDevice?: boolean } = {}) {
           });
         }
 
-        deviceId = device.id;
-        void bestEffort(
-          'device.touch',
-          pool.query('UPDATE agent_devices SET last_seen_at = now() WHERE id = $1', [device.id]),
-          { detail: { deviceId: device.id } },
-        );
+        if (device) {
+          deviceId = device.id;
+          void bestEffort(
+            'device.touch',
+            pool.query('UPDATE agent_devices SET last_seen_at = now() WHERE id = $1', [device.id]),
+            { detail: { deviceId: device.id } },
+          );
+        }
       }
 
       const blockers = activationBlockers(flags);
