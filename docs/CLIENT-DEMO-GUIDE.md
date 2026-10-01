@@ -36,6 +36,42 @@ Then open four browser tabs and leave them signed out:
 | 3 | `http://localhost:5174/#/verify` | Public verification — the citizen's view |
 | 4 | `http://localhost:5174/#/citizen` | Citizen self-service |
 
+### Demonstrating from a deployed host instead
+
+Those two ports are the local development servers. A deployment built from
+`Dockerfile.web` serves everything from **one** origin, which is one address to
+read out rather than two:
+
+| Tab | Address | Who |
+|---|---|---|
+| 1 | `https://<host>/?device=uat-agent-device-000001` | The agent's phone app |
+| 2 | `https://<host>/portal/` | The officer portal |
+| 3 | `https://<host>/portal/#/verify` | Public verification |
+| 4 | `https://<host>/portal/#/citizen` | Citizen self-service |
+
+**There is no separate admin or finance application.** `/portal/` is the
+government portal, it has one sign-in form, and what an officer sees is
+filtered by their own permissions — `availableGroups` in
+`apps/portal/src/lib/permissions.ts` does the filtering, so the navigation is
+derived from the role rather than maintained per role. Signing in as each of
+the five officers below through one origin gives:
+
+| Role | Sections only that role sees |
+|---|---|
+| Admin officer | Officer access · Roles & permissions · Departments & offices · Field application |
+| Finance officer | Reconciliation · Financial periods · Commissions |
+| State auditor | Audit workbench, plus Reconciliation, Financial periods and Outside services |
+| Revenue officer | Taxpayer corrections · Distribution rounds · Groups & cooperatives |
+| Agent supervisor | Lands on the dashboard rather than the role home, narrowed to their own territories |
+
+Measured: 34 sections for the admin, 31 for the revenue officer and the
+auditor, 26 for the finance officer, 22 for the supervisor — all at the same
+address.
+
+See *One URL for both apps* in `docs/DEPLOYMENT.md` for the switch, and in
+particular for `VERIFICATION_BASE_URL`, which has to carry the `/portal`
+subpath or every receipt QR code points at the agent app's sign-in form.
+
 Sign-in details, all on the demonstration database only:
 
 | Role | Phone | Password |
