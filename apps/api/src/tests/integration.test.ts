@@ -41,6 +41,7 @@ const ctx = {
   officerToken: '',
   auditorToken: '',
   agentPhone: '+2347011000001',
+  agentAlternatePhone: '+2347011000002',
   agentToken: '',
   agentId: '',
   deviceId: 'test-device-0000000000001',
@@ -91,6 +92,7 @@ describe('Agent clearance pipeline (Addendum §2, §14, §26, §50)', () => {
       password: 'FieldAgent2026',
       dateOfBirth: '1992-04-11',
       gender: 'MALE',
+      alternatePhone: ctx.agentAlternatePhone,
       address: '14 Rwang Pam Street, Jos',
       lgaId: ctx.lgaId,
       occupation: 'Trader',
@@ -173,6 +175,28 @@ describe('Agent clearance pipeline (Addendum §2, §14, §26, §50)', () => {
     );
 
     assert.equal(response.status, 400);
+    assert.match(response.body.error.message, /cannot nominate yourself/i);
+  });
+
+  it('rejects an applicant who nominates themselves on their alternate number', async () => {
+    /*
+     * §9 again, on the other number the same form collected. The alternate
+     * phone is a handset the applicant is holding, so a referee invitation
+     * sent there is one they answer themselves — the refusal has to name both
+     * numbers or it only makes self-nomination take one more field.
+     */
+    const response = await post(
+      '/agents/me/referees',
+      {
+        fullName: 'Danladi Musa',
+        phone: ctx.agentAlternatePhone,
+        category: 'COMMUNITY_LEADER',
+        relationship: 'Self',
+      },
+      { token: ctx.agentToken },
+    );
+
+    assert.equal(response.status, 400, JSON.stringify(response.body));
     assert.match(response.body.error.message, /cannot nominate yourself/i);
   });
 
