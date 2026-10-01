@@ -45,9 +45,11 @@ import {
   employersNotFiling,
   filePayeSchedule,
   monthlyPayeFor,
+  payePeriodHasEnded,
   payeHistory,
   premisesNotPayingConsumptionTax,
 } from '../services/paye';
+import { todayInPlateau } from '../lib/calendar-day';
 import { resolveRate } from '../services/revenue';
 import { computeAmount } from '../services/rate-engine';
 
@@ -742,5 +744,121 @@ describe('who may file', () => {
     });
     assert.equal(response.status, 200, JSON.stringify(response.body));
     assert.equal(response.body.length, 1);
+  });
+});
+
+// ===========================================================================
+/**
+ * When a month has ended, asked where the employer is.
+ *
+ * The refusal says "that month has not ended yet", and the check behind it
+ * compared the present instant against midnight UTC on the period's last day.
+ * Those are not the same claim: midnight UTC on the 30th is 01:00 Plateau on
+ * the 30th, so September became fileable twenty-three hours before September
+ * ended.
+ *
+ * What made that cost something is the duplicate guard. A second filing for
+ * the same employer and month is refused outright — deliberately, because two
+ * would double what the employer appears to owe — so a return filed on the
+ * last day is a locked return that cannot carry anybody paid on that day. The
+ * employer is recorded as having filed, drops off `employersNotFiling`, and
+ * can only correct it by cancelling and replacing, which is a worse position
+ * than not having filed at all.
+ *
+ * The existing test for this rule asks for a month a year away, which both the
+ * old check and the new one refuse. The boundary is the part that was wrong,
+ * so the boundary is what these pin — at the instant, against a fixed clock,
+ * rather than against whatever day the suite happens to run on.
+ */
+describe('whether the month has ended, in Plateau rather than in UTC', () => {
+  /** Plateau is UTC+1 all year, so a Plateau day begins at 23:00 UTC. */
+  const at = (iso: string) => new Date(iso);
+
+  it('does not call September over at one in the morning on the thirtieth', async () => {
+    // The exact instant the old check first allowed, and the whole of the day
+    // that follows it.
+    assert.equal(payePeriodHasEnded(2026, 9, at('2026-09-30T00:00:00Z')), false);
+    assert.equal(payePeriodHasEnded(2026, 9, at('2026-09-30T12:00:00Z')), false);
+    assert.equal(
+      payePeriodHasEnded(2026, 9, at('2026-09-30T22:59:59Z')),
+      false,
+      'one second before midnight in Plateau, the month is still running',
+    );
+  });
+
+  it('calls it over at midnight in Plateau, and not an hour later', async () => {
+    assert.equal(
+      payePeriodHasEnded(2026, 9, at('2026-09-30T23:00:00Z')),
+      true,
+      'midnight on the first of October where the employer is',
+    );
+  });
+
+  it('counts the last day of February as February knows it', async () => {
+    // 2024 is a leap year and 2026 is not, so a check written against a fixed
+    // 28th or a fixed 30th gets one of these wrong.
+    assert.equal(payePeriodHasEnded(2024, 2, at('2024-02-28T23:00:00Z')), false);
+    assert.equal(payePeriodHasEnded(2024, 2, at('2024-02-29T22:59:59Z')), false);
+    assert.equal(payePeriodHasEnded(2024, 2, at('2024-02-29T23:00:00Z')), true);
+
+    assert.equal(payePeriodHasEnded(2026, 2, at('2026-02-28T22:59:59Z')), false);
+    assert.equal(payePeriodHasEnded(2026, 2, at('2026-02-28T23:00:00Z')), true);
+  });
+
+  it('rolls a December return over into the new year', async () => {
+    assert.equal(payePeriodHasEnded(2026, 12, at('2026-12-31T22:59:59Z')), false);
+    assert.equal(
+      payePeriodHasEnded(2026, 12, at('2026-12-31T23:00:00Z')),
+      true,
+      'the first hour of a Plateau year is already the new year',
+    );
+  });
+
+  it('still refuses a month that has not begun, and allows one long finished', async () => {
+    // The guard either side: a check that refused everything would satisfy the
+    // boundary tests above and take PAYE filing away altogether.
+    assert.equal(payePeriodHasEnded(2027, 6, at('2026-09-30T23:00:00Z')), false);
+    assert.equal(payePeriodHasEnded(2025, 1, at('2026-09-30T23:00:00Z')), true);
+
+    /*
+     * And the middle, which the boundary cases alone do not hold.
+     *
+     * A version that took the period's FIRST day instead of its last makes
+     * every month over from its second day onwards. The end-to-end test below
+     * catches that, but only on days when the month in progress is past its
+     * second — so on the first or second of a month it would pass, and the
+     * mutation measuring this found exactly that gap.
+     */
+    assert.equal(
+      payePeriodHasEnded(2026, 9, at('2026-09-02T12:00:00Z')),
+      false,
+      'a month is not over on its second day',
+    );
+  });
+
+  it('refuses the month in progress through the filing itself', async () => {
+    /*
+     * The end-to-end link, and the month taken from the Plateau calendar
+     * rather than from `getUTCMonth`. In the last hour of a Plateau month the
+     * two disagree, and a test that asked UTC which month it was would ask for
+     * a month that had in fact just ended and be told so.
+     *
+     * Whatever day the suite runs on, the month it is in cannot have ended —
+     * including on the last day of it, which is the day the old check let
+     * through.
+     */
+    const school = await employer('Mid Month School');
+    const [year, month] = todayInPlateau().split('-').map(Number);
+    await assert.rejects(
+      filePayeSchedule({
+        employerTaxpayerId: school,
+        periodYear: year!,
+        periodMonth: month!,
+        lines: payroll(1),
+        actorId: officerId,
+        actorRole: 'admin',
+      }),
+      /has not ended/i,
+    );
   });
 });
