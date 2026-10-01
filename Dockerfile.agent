@@ -1,63 +1,97 @@
 # ==============================================================================
-# PSIRS Agent PWA — Production Multi-Stage Dockerfile
+# PSIRS front end — the agent PWA and the officer portal, one origin
+# ==============================================================================
+#
+# THE NAME OF THIS FILE NO LONGER DESCRIBES ALL OF WHAT IT SERVES.
+#
+# It builds and serves both front ends:
+#
+#     /          the agent PWA
+#     /portal/   the officer portal, and with it /verify, /referee,
+#                /group-attestation and /citizen
+#     /api/      proxied to the API service
+#
+# That is deliberate, and the reason is operational rather than technical.
+# This config first lived in a `Dockerfile.web`, which is the honest name for
+# it — but a Railway service's Dockerfile Path is a setting on the service,
+# and the one already deployed points here. Putting the combined config behind
+# the path that is already configured means the portal arrives on the existing
+# hostname with no console change, and nothing to get wrong in a dashboard
+# field at the moment it matters. The cost is this paragraph.
+#
+# `Dockerfile.portal` is unchanged and still builds the portal on its own at
+# `/`, for a deployment that wants it on a separate hostname.
+#
+# WHY EVERYTHING IS ON ONE ORIGIN
+#
+# Both clients call a relative `/api/v1`, so the refresh cookie, the CSP
+# `connect-src 'self'` and the absence of any preflight all rest on the API
+# sharing their origin. And everything the platform hands to someone outside
+# government — the QR code on a receipt, a referee's invitation, a
+# cooperative chairman's attestation link, the SMS telling a taxpayer what
+# they owe — points at the portal. One address to publish, secure and explain
+# rather than two.
+#
+# WHAT "VERIFY" IS
+#
+# Not a separate app. The portal resolves /verify, /referee,
+# /group-attestation and /citizen before authentication — see the public
+# routes at the top of apps/portal/src/App.tsx — so they ship inside the
+# portal bundle. There is no third thing to deploy.
 # ==============================================================================
 
-# Stage 1: Build
+# Stage 1: build both front ends
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# The root of the workspace carries no tsconfig.json — every workspace holds
-# its own and none of them extend upwards. Copying one here aborted the build
-# on its first instruction, which is why this image had never been built.
 COPY package.json package-lock.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/shared/tsconfig.json packages/shared/tsconfig.esm.json ./packages/shared/
 COPY apps/agent/package.json apps/agent/tsconfig.json ./apps/agent/
+COPY apps/portal/package.json apps/portal/tsconfig.json ./apps/portal/
 
 RUN npm ci --ignore-scripts
 
 COPY packages/shared ./packages/shared
 COPY apps/agent ./apps/agent
+COPY apps/portal ./apps/portal
 
 RUN npm run build --workspace @psirs/shared
 RUN npm run build --workspace @psirs/agent
 
-# Stage 2: Nginx Static Server
+# ---------------------------------------------------------------------------
+# The portal is built for the subpath it will be served from.
+#
+# Vite writes absolute URLs into index.html — `/assets/index-<hash>.js`,
+# `/icon.svg` — and served under /portal/ every one of them is a 404 at the
+# root, answered by the agent's SPA fallback with the agent's index.html. The
+# page loads, blank, with a console full of MIME-type errors and nothing that
+# names the cause.
+#
+# `--base=/portal/` on the command line rather than `base` in
+# vite.config.ts, so the same source still builds for `/` in
+# Dockerfile.portal and in `npm run dev`. Verified: the emitted index.html
+# names /portal/assets/... and /portal/icon.svg.
+#
+# This rewrites build-time asset URLs only. `API_BASE = '/api/v1'` in
+# apps/portal/src/lib/api.ts is a runtime string and is untouched, which is
+# right — the API is at /api/v1, not /portal/api/v1.
+# ---------------------------------------------------------------------------
+# Verified that npm forwards the flag to the end of the script — the build is
+# `tsc -b && vite build`, so `--` args land on `vite build` and not on `tsc`.
+RUN npm run build --workspace @psirs/portal -- --base=/portal/
+
+# Stage 2: nginx
 FROM nginx:1.27-alpine AS runner
 
-# ---------------------------------------------------------------------------
-# THIS CONFIG IS RENDERED AS `default.conf`, WHICH IS THE POINT.
-#
-# It used to render as `<app>.conf` beside the stock `default.conf`, with this
-# `rm` expected to have removed that. On the deployed container it had not
-# been — the image's own `10-listen-on-ipv6-by-default.sh` found and edited
-# `/etc/nginx/conf.d/default.conf` at startup, which it only does when the
-# file is there. Why the `rm` did not take is still unexplained; naming the
-# template `default.conf.template` makes it not matter, because envsubst
-# writes `default.conf` and overwrites whatever is at that path.
-#
-# What it cost while it was two files: both server blocks listened on the same
-# port with `server_name localhost`, so nginx logged
-#
-#     conflicting server name "localhost" on 0.0.0.0:80, ignored
-#
-# and kept the first — the stock one, which has no `/api/` proxy. Every API
-# call was answered by a static file lookup:
-#
-#     open() "/usr/share/nginx/html/api/v1/health" failed (2: No such file
-#     or directory) ... "HEAD /api/v1/health HTTP/1.1" 404
-#
-# So the proxy this image exists to provide was never in effect. Reproduced
-# against real nginx, byte for byte, before the rename and after.
-#
-# `server_name _` rather than `localhost` for the same reason: the Host header
-# is the platform's public hostname, so `localhost` matched nothing and only
-# worked by being the sole block. `default_server` makes that explicit.
-# ---------------------------------------------------------------------------
+# Rendered as `default.conf`, overwriting the stock file at that path. See the
+# long note in Dockerfile.agent for what happened when this was named
+# `<app>.conf` and left the stock config in place: two server blocks on one
+# port, nginx logging `conflicting server name`, and the `/api/` proxy this
+# image exists to provide never in effect.
 RUN rm -rf /etc/nginx/conf.d/default.conf
 
-# Copy custom Nginx SPA configuration
 COPY <<'EOF' /etc/nginx/templates/default.conf.template
 server {
     listen ${PORT} default_server;
@@ -65,22 +99,94 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
-    # Security headers
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(self), camera=(self), microphone=()" always;
 
-    # Gzip Compression
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
     gzip_types text/plain text/css text/xml application/json application/javascript application/xml+rss application/atom+xml image/svg+xml;
 
-    # PWA Service Worker - never cache
+    # The agent's service worker, never cached. It is also the file that
+    # decides what an agent may be shown offline, so a stale copy is a
+    # correctness problem and not just a slow update.
     location = /sw.js {
         add_header Cache-Control "no-cache, no-store, must-revalidate";
         expires 0;
+    }
+
+    # --------------------------------------------------------------------
+    # The API shares this origin.
+    #
+    # Both clients call a relative `/api/v1`, so the refresh cookie, the
+    # CSP `connect-src 'self'` and the absence of any preflight all rest on
+    # it. `^~` so this beats the static-file regex below rather than
+    # racing it.
+    #
+    # No trailing slash on proxy_pass: the API mounts its routes at
+    # `/api/v1` already, so the URI passes through unchanged.
+    # --------------------------------------------------------------------
+    location ^~ /api/ {
+        # A KYC document is a photograph of an ID card and the API accepts
+        # up to 8 MB (`MAX_DOCUMENT_BYTES`). nginx defaults to 1 MB and
+        # refuses the upload with its own 413 before the API sees it —
+        # measured at 2 MB. Set above the API's limit so an oversized
+        # document is refused by the API, in the sentence it wrote for the
+        # person holding the phone, not by a proxy error page.
+        client_max_body_size 12m;
+
+        proxy_pass http://${API_ORIGIN};
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 120s;
+    }
+
+    # --------------------------------------------------------------------
+    # The portal's hashed assets. `^~` again, and before /portal/ so the
+    # immutable caching applies rather than being inherited from the SPA
+    # block below.
+    # --------------------------------------------------------------------
+    location ^~ /portal/assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # --------------------------------------------------------------------
+    # The officer portal, and with it /verify, /referee,
+    # /group-attestation and /citizen.
+    #
+    # It is a hash router by deliberate choice (apps/portal/src/router.tsx:
+    # "so a static host serves every route from one file with no rewrite
+    # rules to get wrong"), which is what makes a subpath mount this
+    # cheap: the part after `#` never reaches nginx, so
+    # `/portal/#/verify/ABC` is one request for `/portal/` and there are
+    # no per-route rules to write.
+    #
+    # The fallback names /portal/index.html rather than /index.html. With
+    # the root fallback an unknown path under /portal/ would be answered
+    # with the AGENT's shell — 200, correct content type, entirely the
+    # wrong application.
+    #
+    # A request for bare `/portal` is not matched by this prefix. It falls
+    # to `location /`, whose `try_files $uri/` finds the directory and
+    # redirects to `/portal/`. Verified against real nginx: 301.
+    # --------------------------------------------------------------------
+    location /portal/ {
+        try_files $uri $uri/ /portal/index.html;
+    }
+
+    # The agent's hashed assets.
+    location ^~ /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
     }
 
     # ------------------------------------------------------------------
@@ -119,144 +225,67 @@ server {
         add_header Cache-Control "public";
     }
 
-    # Manifest and static icons
+    # Icons and manifests for either app. A regex location, so it is tried
+    # before the prefix blocks that lack `^~` — which is why /portal/ sits
+    # above without it: a real file under /portal/ served straight from
+    # disk is the right answer, and a missing one should 404 rather than
+    # fall back to an HTML shell.
     location ~* \.(?:manifest|webmanifest|svg|png|ico)$ {
         expires 7d;
         add_header Cache-Control "public";
     }
 
-    # --------------------------------------------------------------------
-    # The API shares this origin.
-    #
-    # `src/lib/api.ts` calls a relative `/api/v1`, and `vite.config.ts`
-    # says why beside the dev proxy that makes it work locally: the PWA and
-    # the API share an origin in production, so the refresh cookie, the CSP
-    # and the absence of any preflight all rest on it. Deployed as its own
-    # service, this image is what has to make that true.
-    #
-    # Without this block `/api/v1/...` fell through to the SPA fallback at
-    # the bottom and was answered with index.html — 200, `text/html` — so
-    # every call died at `response.json()` and nothing in the app worked,
-    # sign-in included. Measured, not inferred: real nginx with this block
-    # absent answers `GET /api/v1/ping` `200 text/html` and the body is the
-    # shell; with it present, `200 application/json`.
-    #
-    # No trailing slash on proxy_pass, because the API mounts its own
-    # routes at `/api/v1` (`app.use('/api/v1', api)`). The URI passes
-    # through unchanged rather than being rewritten.
-    #
-    # API_ORIGIN is host:port on the platform's private network, and is
-    # substituted into this file at container start. There is no default:
-    # a front-end that silently cannot reach its API is the failure above,
-    # and /docker-entrypoint.d/05-require-api-origin.sh refuses to start
-    # rather than serve it again.
-    # --------------------------------------------------------------------
-    # --------------------------------------------------------------------
-    # `^~`, so the regex location below cannot take this away.
-    #
-    # nginx tries regex locations before a prefix match UNLESS the prefix
-    # carries `^~`. With a plain `location /api/`, any API path ending in an
-    # image extension matched `~* \.(?:manifest|webmanifest|svg|png|ico)$`
-    # instead and was looked up on disk. Measured against real nginx:
-    #
-    #     GET /api/v1/documents/abc.png   404 text/html   (plain /api/)
-    #     GET /api/v1/documents/abc.png   200 application/json  (^~ /api/)
-    #
-    # No such route exists today, which is why nothing has broken. It is a
-    # trap rather than a fault: the first signed document URL, QR endpoint or
-    # logo route that carries an extension would 404 as HTML, and the cause
-    # would be three locations away from the symptom.
-    # --------------------------------------------------------------------
-    location ^~ /api/ {
-        # A KYC document is a photograph of an ID card and the API accepts
-        # up to 8 MB of one (`MAX_DOCUMENT_BYTES`). nginx defaults to 1 MB
-        # and refused a 2 MB upload with its own 413 before the API saw it
-        # — measured. Set above the API's own limit, so that an oversized
-        # document is refused by the API, in the sentence it wrote for the
-        # agent holding the phone, rather than by a proxy error page.
-        client_max_body_size 12m;
-
-        proxy_pass http://${API_ORIGIN};
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # A statement or a receipt is rendered on demand and the default
-        # 60s is close for a long one.
-        proxy_read_timeout 120s;
-    }
-
-    # Hashed JS and CSS assets - long-lived cache
-    location /assets/ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-
-    # SPA routing fallback
+    # The agent, and its SPA fallback.
     location / {
         try_files $uri $uri/ /index.html;
     }
 }
 EOF
 
-# ---------------------------------------------------------------------------
-# API_ORIGIN is substituted into the template above at container start.
-#
-# NGINX_ENVSUBST_FILTER limits envsubst to that one name. Without it the
-# substitution would also eat `$uri`, `$host`, `$remote_addr` and
-# `$proxy_add_x_forwarded_for` — every nginx variable in this file is
-# `$name`-shaped and envsubst cannot tell them apart from its own.
-# ---------------------------------------------------------------------------
+# envsubst is limited to these two names. Without the filter it would also
+# eat `$uri`, `$host`, `$remote_addr` and `$proxy_add_x_forwarded_for` —
+# every nginx variable here is `$name`-shaped and envsubst cannot tell them
+# from its own.
 ENV NGINX_ENVSUBST_FILTER=(API_ORIGIN|PORT)
 
-# ---------------------------------------------------------------------------
-# The port the platform routes to, not the one this image happens to prefer.
+# The port the platform routes to, not the one this image prefers. Railway
+# injects PORT and expects the process to honour it; an image listening
+# elsewhere is reached by nothing and the edge answers "Application failed to
+# respond" — a deployment that succeeded and a service nobody can talk to.
 #
-# `listen 80` was hardcoded, which works only where the platform is told to
-# route to 80. Railway's convention is to inject PORT and expect the process
-# to honour it; an image listening elsewhere is reached by nothing, and the
-# edge answers "Application failed to respond" — a deployment that succeeded
-# and a service that cannot be talked to.
-#
-# `.envsh`, not `.sh`: the nginx entrypoint SOURCES files ending .envsh and
-# EXECUTES files ending .sh in a subshell, so an export from a .sh would not
-# survive to 20-envsubst-on-templates.sh, which is the whole point of this.
-# ---------------------------------------------------------------------------
+# `.envsh`, not `.sh`: the nginx entrypoint SOURCES .envsh and EXECUTES .sh
+# in a subshell, so an export from a .sh would not survive to
+# 20-envsubst-on-templates.sh, which is the entire point.
 COPY <<'SH' /docker-entrypoint.d/10-default-port.envsh
 # shellcheck shell=sh
 export PORT="${PORT:-80}"
 SH
 RUN chmod +x /docker-entrypoint.d/10-default-port.envsh
 
-
-# Which front-end this image is.
+# Which front-end image this is.
 #
-# Both images now render `default.conf.template`, so the envsubst line in the
-# startup log no longer says which one is running — it used to say
-# `agent.conf.template`. That mattered: a log showing `portal.conf.template`
-# while serving the agent service's hostname is how it came to light that a
-# service might be pointed at the wrong image. Restored deliberately, since
-# the rename took it away.
-ENV PSIRS_APP=agent
+# Both front-end images render `default.conf.template`, so the envsubst line
+# in the startup log no longer names one — it used to say
+# `agent.conf.template`. That mattered: a log showing the portal's template
+# while serving the agent service's hostname is how a service pointed at the
+# wrong image came to light. `agent+portal` distinguishes this file from
+# `Dockerfile.portal`, which is the portal alone.
+ENV PSIRS_APP=agent+portal
 
-# Refuse to start rather than serve a front-end that cannot reach its API.
+# Refuse to start rather than serve a front end that cannot reach its API.
 # An empty API_ORIGIN substitutes to `proxy_pass http://;`, which nginx
-# rejects with a parse error naming a line rather than the cause; and any
-# default here would be a wrong host serving a shell where nothing works,
-# which is the failure this whole block exists to end. Runs before
-# 20-envsubst-on-templates.sh.
+# rejects with a parse error naming a line rather than a cause; and any
+# default would be a wrong host serving a shell where nothing works. Runs
+# before 20-envsubst-on-templates.sh.
 COPY <<'SH' /docker-entrypoint.d/05-require-api-origin.sh
 #!/bin/sh
 set -e
 echo "05-require-api-origin.sh: this is the ${PSIRS_APP:-unknown} front-end image"
+echo "05-require-api-origin.sh: agent at /, officer portal and public verification at /portal/"
 if [ -z "${API_ORIGIN:-}" ]; then
   echo "FATAL: API_ORIGIN is not set." >&2
-  echo "  This image serves /api/ by proxying to the API service, because the" >&2
-  echo "  client calls a relative /api/v1 and needs to share an origin with it." >&2
+  echo "  This image serves /api/ by proxying to the API service, because both" >&2
+  echo "  clients call a relative /api/v1 and need to share an origin with it." >&2
   echo "  Set API_ORIGIN to the API's host:port on the private network," >&2
   echo "  for example: API_ORIGIN=agent-app.railway.internal:4000" >&2
   exit 1
@@ -265,8 +294,10 @@ echo "05-require-api-origin.sh: proxying /api to ${API_ORIGIN}"
 SH
 RUN chmod +x /docker-entrypoint.d/05-require-api-origin.sh
 
-# Copy static build artefacts
+# Agent at the root, portal beneath it. Order matters only in that the portal
+# copy must not be overwritten by the agent's; they occupy disjoint paths.
 COPY --from=builder /app/apps/agent/dist /usr/share/nginx/html
+COPY --from=builder /app/apps/portal/dist /usr/share/nginx/html/portal
 
 EXPOSE 80
 

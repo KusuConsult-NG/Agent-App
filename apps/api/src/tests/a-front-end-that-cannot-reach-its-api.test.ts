@@ -56,18 +56,20 @@ const ROOT = workspaceRoot();
 /**
  * The images that serve a browser client, and the client each one serves.
  *
- * `Dockerfile.web` serves both from one origin — the agent at `/`, the portal
- * at `/portal/` — so it is listed against the agent's client and the portal's
- * relative base is checked through `Dockerfile.portal`'s row. Listing it here
- * is what subjects it to every check below: the proxy present, the URI passed
- * through unrewritten, a body limit above the API's own, the SPA fallback
- * intact, a startup guard on API_ORIGIN, the envsubst filter, and a listen
- * port taken from the platform.
+ * `Dockerfile.agent` serves BOTH from one origin — the agent at `/`, the
+ * portal at `/portal/` — which its own header explains at length, so it is
+ * listed against the agent's client and the portal's relative base is checked
+ * through `Dockerfile.portal`'s row. `Dockerfile.portal` still builds the
+ * portal alone, at `/`, for a deployment that wants it on its own hostname.
+ *
+ * Being listed here is what subjects an image to every check below: the proxy
+ * present, the URI passed through unrewritten, a body limit above the API's
+ * own, the SPA fallback intact, a startup guard on API_ORIGIN, the envsubst
+ * filter, and a listen port taken from the platform.
  */
 const FRONT_ENDS = [
-  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent' },
+  { image: 'Dockerfile.agent', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
   { image: 'Dockerfile.portal', client: 'apps/portal/src/lib/api.ts', name: 'portal' },
-  { image: 'Dockerfile.web', client: 'apps/agent/src/lib/api.ts', name: 'agent+portal' },
 ] as const;
 
 const read = (relative: string) => readFileSync(join(ROOT, relative), 'utf8');
@@ -450,16 +452,45 @@ describe('what the build context carries, and what it must not', () => {
     });
   }
 
+  it('relies on no per-Dockerfile .dockerignore, which Railway may not read', () => {
+    /*
+     * `<dockerfile>.dockerignore` is a BuildKit convention, not a Docker
+     * guarantee. The note at the top of this block already says why that
+     * matters — GitHub Actions honours it, Railway's Metal builder is a
+     * different implementation, and "correctness should not rest on whether
+     * they agree" — which is why the root file stopped excluding the
+     * front-ends.
+     *
+     * `Dockerfile.agent.dockerignore` survived that change and excluded
+     * `apps/portal`. Harmless while this image built only the agent; fatal
+     * the moment it also built the portal, and fatal only on a builder that
+     * reads the file — so it would have worked in CI and failed on the
+     * platform, which is the worst available outcome. Both per-image files
+     * are gone and the root `.dockerignore` serves every build, as the
+     * assertions above require it to.
+     */
+    const stray = [
+      'Dockerfile.dockerignore',
+      'Dockerfile.api.dockerignore',
+      'Dockerfile.agent.dockerignore',
+      'Dockerfile.portal.dockerignore',
+    ].filter((name) => existsSync(join(ROOT, name)));
+
+    assert.deepEqual(
+      stray,
+      [],
+      `${stray.join(', ')} exists. A per-Dockerfile .dockerignore is read by ` +
+        'BuildKit and may be ignored by the platform builder, so the build ' +
+        'context differs between CI and deployment — the build passes here ' +
+        'and fails there, or worse, the other way round. Put every rule in ' +
+        'the root .dockerignore, which every builder reads.',
+    );
+  });
+
   it('never does a bare COPY . , which is what makes the above safe', () => {
     // Every image taking only the paths it names is the reason un-excluding
     // the front-ends costs context size and nothing in any shipped image.
-    for (const image of [
-      'Dockerfile',
-      'Dockerfile.api',
-      'Dockerfile.agent',
-      'Dockerfile.portal',
-      'Dockerfile.web',
-    ]) {
+    for (const image of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.agent', 'Dockerfile.portal']) {
       const source = directivesOnly(readFileSync(join(ROOT, image), 'utf8'));
       assert.doesNotMatch(
         source,

@@ -212,12 +212,13 @@ the repository itself:
 | Service | Dockerfile | Serves | Port |
 |---|---|---|---|
 | `agent-app` | `Dockerfile` | the API | as the image sets it |
-| `agent-pwa` | `Dockerfile.agent` | the agent PWA, via nginx | 80 |
+| `agent-pwa` | `Dockerfile.agent` | the agent PWA at `/` **and the officer portal at `/portal/`**, via nginx | 80 |
 | `portal` | `Dockerfile.portal` | the officer and verification portal, via nginx | 80 |
 
-Or **two**, with both front ends on one hostname — see *One URL for both
-apps* below. That is the arrangement to prefer for a demo or a pilot, because
-it is one address to publish rather than two.
+Or **two**: `Dockerfile.agent` serves both front ends on one hostname — the
+agent at `/` and the portal at `/portal/` — so the `portal` service is
+optional. See *One URL for both apps* below. That is the arrangement to prefer
+for a demo or a pilot, because it is one address to publish rather than two.
 
 **Each service's Dockerfile path has to be set explicitly, and a new service
 will not work until it is.** Railway looks for a file named exactly
@@ -413,7 +414,7 @@ above. It has no effect on a deploy triggered from GitHub, which clones.
 
 ## One URL for both apps
 
-`Dockerfile.web` builds both front ends and serves them from one origin:
+`Dockerfile.agent` builds both front ends and serves them from one origin:
 
 | Path | Serves |
 |---|---|
@@ -430,17 +431,28 @@ four ship inside the portal bundle. There is no fourth thing to deploy.
 
 One service instead of two:
 
-1. On the `agent-pwa` service, set **Settings → Build → Dockerfile Path** to
-   `Dockerfile.web`.
-2. Leave `API_ORIGIN` as it is. The image refuses to start without it, for the
-   same reason the single-app images do.
-3. **Set `VERIFICATION_BASE_URL` on the API service to the new portal path.**
-   This is the step with consequences, and the next section is about it.
-4. Delete the `portal` service, or leave it running on its own hostname. Both
-   work; nothing in the combined image depends on it being gone.
+**There is nothing to change on the `agent-pwa` service.** It already points
+at `Dockerfile.agent`, and that is the combined image — so the portal arrives
+at `/portal/` on the existing hostname on the next deploy.
 
-`Dockerfile.agent` and `Dockerfile.portal` are unchanged and still build. This
-is opted into, not migrated to.
+This config first lived in a separate `Dockerfile.web`, which is the honest
+name for it. It was moved here because a service's **Dockerfile Path** is a
+setting in the Railway dashboard, and a new filename means finding and editing
+that field on the right service; a path that is already configured and already
+working cannot be mistyped. The cost is that `Dockerfile.agent` no longer means
+"the agent alone", which its own header states at the top.
+
+So the switch is one step, and it is on the API service rather than the
+front-end one:
+
+1. **Set `VERIFICATION_BASE_URL` on the API service to the portal's new
+   path.** This is the step with consequences, and the next section is about
+   it. Nothing else is required.
+2. `API_ORIGIN` on `agent-pwa` stays exactly as it is. The image still refuses
+   to start without it.
+3. Delete the `portal` service, or leave it running on its own hostname. Both
+   work; nothing in the combined image depends on it being gone.
+   `Dockerfile.portal` is unchanged and still builds the portal alone at `/`.
 
 ### `VERIFICATION_BASE_URL`, which is the one that bites
 
@@ -551,7 +563,7 @@ have fallen into it with the cause three locations away from the symptom.
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
-- [ ] If both front ends share one origin (`Dockerfile.web`), `VERIFICATION_BASE_URL` carries the `/portal` subpath — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
+- [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
 - [ ] Webhook URL registered with Remita, and its source addresses allowlisted
