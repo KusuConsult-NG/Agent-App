@@ -97,6 +97,16 @@ function apiErrorCodes() {
         for (const match of source.matchAll(/(?:conflict|refused)\(\s*'([A-Z_][A-Z_0-9]*)'/g)) {
           codes.add(match[1]);
         }
+        // `paymentRefused({ code: 'X', … })` and anything else shaped like it:
+        // a helper that takes the code as a named field rather than a first
+        // positional argument. The count fell by five the moment the payment
+        // refusals moved into one, and the guard caught it, which is the
+        // argument for counting rather than writing the figure down.
+        for (const match of source.matchAll(
+          /[a-z][A-Za-z]*(?:Refused|Error|Conflict)\(\{\s*(?:\/\/[^\n]*\n\s*)*code:\s*'([A-Z_][A-Z_0-9]*)'/g,
+        )) {
+          codes.add(match[1]);
+        }
         for (const match of source.matchAll(/code:\s*'([A-Z_][A-Z_0-9]*)'/g)) {
           // An `AppError` literal, not a catalogue row that happens to have a
           // `code` column.

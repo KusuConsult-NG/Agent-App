@@ -35,9 +35,9 @@ import { config } from '../config';
 import { gateway } from '../integrations/gateway';
 import {
   AppError,
-  conflict,
   notFound,
   paymentFailed,
+  paymentRefused,
   paymentUnconfirmed,
 } from '../lib/errors';
 import { nextPaymentReference } from '../lib/references';
@@ -102,28 +102,42 @@ export async function initiatePayment(
 
     if (!transaction) throw notFound('That transaction');
 
+    /*
+     * Each of these says what happened to the money, because the agent's
+     * screen only prints that sentence when the refusal names a state — and it
+     * is the one sentence always rendered in the agent's language. See
+     * `paymentRefused` for what was missing and why it mattered most here.
+     */
     if (transaction.invoice_status === 'PAID') {
-      throw conflict(
-        'INVOICE_ALREADY_PAID',
-        'This invoice has already been paid. Do not collect payment again.',
-        'Open the receipt from the transaction history.',
-      );
+      throw paymentRefused({
+        code: 'INVOICE_ALREADY_PAID',
+        message: 'This invoice has already been paid. Do not collect payment again.',
+        // The bill is settled. An agent who reads this as a failure collects a
+        // second time, which is the whole reason this sentence exists.
+        moneyStatus: 'RECEIVED',
+        nextStep: 'Open the receipt from the transaction history.',
+      });
     }
     if (transaction.invoice_status === 'CANCELLED' || transaction.invoice_status === 'EXPIRED') {
-      throw conflict(
-        'INVOICE_NOT_PAYABLE',
-        `This invoice is ${transaction.invoice_status.toLowerCase()} and can no longer be paid. ` +
+      throw paymentRefused({
+        code: 'INVOICE_NOT_PAYABLE',
+        message:
+          `This invoice is ${transaction.invoice_status.toLowerCase()} and can no longer be paid. ` +
           'Raise a new assessment.',
-      );
+        // Nothing was started, so nothing was taken — which is what the agent
+        // has to be able to tell the person in front of them.
+        moneyStatus: 'NOT_DEBITED',
+      });
     }
     if (
       transaction.invoice_expires_at &&
       transaction.invoice_expires_at.getTime() < Date.now()
     ) {
-      throw conflict(
-        'INVOICE_EXPIRED',
-        'This invoice has expired. Raise a new assessment for the taxpayer.',
-      );
+      throw paymentRefused({
+        code: 'INVOICE_EXPIRED',
+        message: 'This invoice has expired. Raise a new assessment for the taxpayer.',
+        moneyStatus: 'NOT_DEBITED',
+      });
     }
 
     // A payment already in flight is returned rather than duplicated: the
@@ -146,10 +160,12 @@ export async function initiatePayment(
 
     if (inFlight) {
       if (inFlight.status === 'VERIFIED') {
-        throw conflict(
-          'PAYMENT_ALREADY_VERIFIED',
-          'This transaction has already been paid and verified. Do not collect payment again.',
-        );
+        throw paymentRefused({
+          code: 'PAYMENT_ALREADY_VERIFIED',
+          message:
+            'This transaction has already been paid and verified. Do not collect payment again.',
+          moneyStatus: 'RECEIVED',
+        });
       }
       return {
         paymentId: inFlight.id,
@@ -162,10 +178,12 @@ export async function initiatePayment(
     }
 
     if (!['INVOICE_GENERATED', 'PAYMENT_INITIATED'].includes(transaction.status)) {
-      throw conflict(
-        'TRANSACTION_NOT_PAYABLE',
-        `This transaction is in state ${transaction.status} and cannot accept a payment now.`,
-      );
+      throw paymentRefused({
+        code: 'TRANSACTION_NOT_PAYABLE',
+        message:
+          `This transaction is in state ${transaction.status} and cannot accept a payment now.`,
+        moneyStatus: 'NOT_DEBITED',
+      });
     }
 
     const amount = parseKobo(transaction.total_amount_kobo);

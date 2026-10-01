@@ -178,6 +178,36 @@ export function paymentPendingReconciliation(reference: string): AppError {
   });
 }
 
+/**
+ * A refusal on the payment path, with the money state it implies.
+ *
+ * Every refusal in this file states a `moneyStatus`, and the agent's
+ * `ErrorAlert` turns it into one of three sentences that are always in the
+ * agent's language — "no money has been taken", "the payment has NOT been
+ * confirmed", "the money has been received". Its own comment calls that "the
+ * sentence that decides whether a citizen is asked to pay twice".
+ *
+ * Five refusals on that path were raised through `conflict()`, which has no
+ * money parameter, so they arrived as NOT_APPLICABLE and the sentence was
+ * omitted. Two of them say "Do not collect payment again" in their English
+ * message, and those two were the ones with no money line under it — the only
+ * money-path refusals where the one sentence guaranteed to be readable was the
+ * one left out.
+ *
+ * So the money state is named at the point of refusal rather than defaulted.
+ * RECEIVED where the bill is already settled; NOT_DEBITED where the payment
+ * was never started, which is also the reassurance the agent needs in order to
+ * tell the citizen nothing was taken.
+ */
+export function paymentRefused(params: {
+  code: string;
+  message: string;
+  moneyStatus: 'RECEIVED' | 'NOT_DEBITED';
+  nextStep?: string;
+}): AppError {
+  return new AppError({ statusCode: 409, ...params });
+}
+
 export function paymentFailed(reference: string, reason: string): AppError {
   return new AppError({
     statusCode: 402,
