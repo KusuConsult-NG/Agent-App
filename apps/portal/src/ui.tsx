@@ -712,8 +712,26 @@ export function BeforeAfter({
  * `'/' + 'icon.svg'` is `'/icon.svg'` — so the test for it passed against the
  * bug. Read at call time, a stubbed base reaches it and the two differ.
  */
+/*
+ * The filename is a named constant rather than static text inside the
+ * template literal, and that is not cosmetic.
+ *
+ * `nothing-new-in-english.test.tsx` scans template literals for English that
+ * should have gone through the dictionary, and `${BASE_URL}icon.svg` tripped
+ * it: the literal opens with its value, so the rule does not exempt it, and
+ * `icon.svg` is not recognised as a URL fragment because `isUrlFragment`
+ * requires a slash.
+ *
+ * Loosening that classifier to accept a bare `name.ext` was the tempting fix
+ * and is the wrong one: it would then wave through a download filename like
+ * `Receipt.pdf`, which a citizen reads and which does belong in the
+ * dictionary. Taking the filename out of the literal costs nothing and leaves
+ * the guard exactly as strict as it was.
+ */
+const CREST_FILE = 'icon.svg';
+
 export function crestUrl(): string {
-  return `${import.meta.env.BASE_URL}icon.svg`;
+  return import.meta.env.BASE_URL + CREST_FILE;
 }
 
 /**

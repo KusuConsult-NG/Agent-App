@@ -134,6 +134,26 @@ async function main() {
    */
   await rbacStore.warm();
 
+  /*
+   * A deployment running with device binding relaxed says so, every boot.
+   *
+   * It is not in `assertProductionReadiness`, because that refuses to start
+   * and a flag nobody can boot with is a flag that does not answer the
+   * request it exists for. A warning on every start is the other way of
+   * making it impossible to run this quietly: it is in the log of every
+   * container, beside the port and the payment gateway, where anybody
+   * looking at why a deployment behaves oddly will meet it.
+   */
+  if (config.security.deviceBindingRelaxed) {
+    log.warn('device binding is RELAXED on this deployment', {
+      component: 'boot',
+      flag: 'DEMO_RELAX_DEVICE_BINDING',
+      effect: 'an agent may collect from a handset no officer approved',
+      stillEnforced: 'a REVOKED or SUSPENDED handset is still refused',
+      intendedFor: 'demonstrations only — never a deployment collecting real money',
+    });
+  }
+
   const app = createApp();
   const server = app.listen(config.port, () => {
     log.info('listening', {

@@ -560,7 +560,44 @@ export const config = {
      * strict behaviour the one you had to opt into, which is the wrong way round
      * for a control. The demonstration stack sets it explicitly instead.
      */
-    deviceAutoApprove: isProduction ? false : bool('DEVICE_AUTO_APPROVE', false),
+    deviceAutoApprove:
+      bool('DEMO_RELAX_DEVICE_BINDING', false) ||
+      (isProduction ? false : bool('DEVICE_AUTO_APPROVE', false)),
+
+    /**
+     * Device binding relaxed for a demonstration, in production too.
+     *
+     * `DEVICE_AUTO_APPROVE` above is forced off in production and the boot
+     * check refuses to start if it is set, which is right for that flag: it
+     * is a convenience that happens to remove a control. But a demonstration
+     * deployment is a real deployment, built from the production image with
+     * `NODE_ENV=production`, so that flag is inert exactly where a demo
+     * actually runs — and the alternative offered was to take `NODE_ENV` off
+     * production on that service, which would also turn off the
+     * published-secret refusal, the cookie hardening and the replica
+     * warnings. Weakening four things to get one is a bad trade.
+     *
+     * So this names the one thing. Set it and an agent may collect from a
+     * handset nobody approved: the per-request registration and approval
+     * gates in `middleware/auth.ts` stop refusing, and a newly registered
+     * handset is approved on sight.
+     *
+     * WHAT IT DOES NOT TURN OFF. A REVOKED or SUSPENDED handset is still
+     * refused. That is deliberate — it is the half of device binding worth
+     * demonstrating, and the half whose absence would be indistinguishable
+     * from the platform not having the feature. An officer can still cut a
+     * handset off during a demonstration and have it take effect.
+     *
+     * It is not in the boot check's `problems`, because a flag that refuses
+     * to boot is a flag nobody can use and the request this answers was for
+     * a demonstration that works. It is logged at every start instead, loudly
+     * and by name, so a deployment running with it cannot do so quietly.
+     *
+     * NEVER SET THIS ON A DEPLOYMENT COLLECTING REAL MONEY. A revoked handset
+     * that can be replaced without anybody looking is a revocation that meant
+     * nothing, and the money is somebody's tax.
+     */
+    deviceBindingRelaxed: bool('DEMO_RELAX_DEVICE_BINDING', false),
     corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:5173,http://localhost:5174')
       .split(',')
       .map((o) => o.trim())

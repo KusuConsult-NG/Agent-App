@@ -558,11 +558,65 @@ exists today, which is why nothing had broken — it was a trap, not a fault,
 and the first signed document URL or QR endpoint carrying an extension would
 have fallen into it with the cause three locations away from the symptom.
 
+## Running a demonstration
+
+### Device binding
+
+An agent's first handset is auto-approved; every one after that waits for an
+officer, because revoking a stolen phone would be worth nothing if the thief
+could register another. The seeded demonstration agent already has a handset —
+the seed registered one to build its data through the real API — so anybody
+opening the agent app in their own browser is that agent's **second** handset
+and cannot collect. A demonstration then needs two people and a portal login
+before anything can be shown.
+
+Two ways out, in order of preference:
+
+**Approve the one handset.** Sign in to `/portal/` as an administrator, open
+**Agents → the demonstration agent → Devices**, and approve the pending entry.
+Twenty seconds, once per browser or phone, and device binding stays intact.
+
+**Or relax it for that deployment:**
+
+```
+DEMO_RELAX_DEVICE_BINDING=true
+```
+
+Set on the API service. An agent may then collect from a handset nobody
+approved, on any browser or phone, with no officer involved.
+
+What it does **not** turn off: a **REVOKED** or **SUSPENDED** handset is still
+refused. That is deliberate — it is the half of device binding worth
+demonstrating, and the half whose absence would be indistinguishable from the
+platform not having the feature. An officer can still cut a handset off during
+a demonstration and have it take effect immediately.
+
+Three things worth knowing about it:
+
+- It works **in production mode**, unlike `DEVICE_AUTO_APPROVE`, which is
+  forced off when `NODE_ENV=production` and refuses to boot if set. That is
+  the whole reason this flag exists: a demonstration deployment is a real
+  deployment built from the production image, so the older flag is inert in
+  exactly the place a demonstration runs.
+- It is **narrower than the alternative.** Taking `NODE_ENV` off production on
+  that service would have worked too, and would also have turned off the
+  published-secret refusal, the cookie hardening and the replica warning.
+  Weakening four controls to get one is a bad trade.
+- Every boot **says so**, at warn level, beside the port and the payment
+  gateway: `device binding is RELAXED on this deployment`. It is not in the
+  readiness check's refusals, because a flag that refuses to boot is a flag
+  nobody can use — so the log is what stops a deployment running this quietly.
+
+**Never set it on a deployment collecting real money.** A revoked handset that
+can be replaced without anybody looking is a revocation that meant nothing,
+and the money is somebody's tax.
+
 ## Going live
 
 - [ ] Secrets provisioned in the secret manager, none of them a development value
 - [ ] Every integration pointed at a real provider **and its mapping confirmed against that provider's sandbox** — see `docs/INTEGRATION-VERIFICATION.md`
 - [ ] `VERIFICATION_BASE_URL` set to the real portal, over HTTPS — this is printed onto every receipt and cannot be corrected afterwards
+- [ ] `DEMO_RELAX_DEVICE_BINDING` is **not** set — see *Running a demonstration*; it is device binding off, and a revoked handset that can be replaced unseen is a revocation that meant nothing
 - [ ] `VERIFICATION_BASE_URL` carries the `/portal` subpath, since `Dockerfile.agent` serves both front ends on one origin — see *One URL for both apps*. Without it every receipt QR code points at the agent app's sign-in form, and a printed receipt cannot be recalled
 - [ ] DNS and TLS certificates for the API, the portal and the agent PWA
 - [ ] `CORS_ORIGINS` set to the real portal and PWA origins
