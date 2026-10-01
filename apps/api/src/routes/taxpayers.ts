@@ -849,6 +849,41 @@ draftRouter.post(
         let storedId: string | null = null;
 
         /*
+         * What to say about a draft this agent has already settled.
+         *
+         * Outside the `try` below, because three places need it and one of
+         * them is the catch: a draft found settled before any work starts, a
+         * draft another request settled while this one was deciding, and a
+         * draft another request settled while this one was failing. All three
+         * are the same answer, and it must not differ between them.
+         */
+        const reportSettled = (row: {
+          status: string;
+          result_entity_type: string | null;
+          result_entity_id: string | null;
+          rejection_reason: string | null;
+        }) => {
+          if (row.status === 'REJECTED') {
+            results.push({
+              clientReference: draft.clientReference,
+              status: 'REJECTED',
+              message:
+                row.rejection_reason ??
+                'This draft was refused earlier and has not been stored as a record.',
+            });
+            return;
+          }
+          results.push({
+            clientReference: draft.clientReference,
+            status: 'DUPLICATE',
+            entityType: row.result_entity_type ?? undefined,
+            entityId: row.result_entity_id ?? undefined,
+            message: 'This draft was already synchronised. It has not been duplicated.',
+          });
+        };
+
+
+        /*
          * The code travels; the English is the record.
          *
          * `rejection_reason` is read back long afterwards by support and by
@@ -930,29 +965,45 @@ draftRouter.post(
             [agentId, draft.clientReference],
           );
 
+
           if (existing && existing.status !== 'PENDING_SYNC') {
-            if (existing.status === 'REJECTED') {
-              results.push({
-                clientReference: draft.clientReference,
-                status: 'REJECTED',
-                message:
-                  existing.rejection_reason ??
-                  'This draft was refused earlier and has not been stored as a record.',
-              });
-            } else {
-              results.push({
-                clientReference: draft.clientReference,
-                status: 'DUPLICATE',
-                entityType: existing.result_entity_type ?? undefined,
-                entityId: existing.result_entity_id ?? undefined,
-                message: 'This draft was already synchronised. It has not been duplicated.',
-              });
-            }
+            reportSettled(existing);
             continue;
           }
 
-          storedId = (
-            existing
+          /*
+           * Storing the capture, and the one case where another request has
+           * already stored it.
+           *
+           * The SELECT above and this INSERT straddle
+           * `UNIQUE (agent_id, client_reference)`, so two syncs of one draft
+           * arriving together both miss the lookup and both insert. One wins.
+           * The loser's 23505 is not an `AppError`, so it used to fall to the
+           * `else` in the catch at the end of this loop and come back as
+           * DRAFT_NOT_PROCESSED — and `syncDrafts` keeps a REJECTED draft on
+           * the phone with that message against it. So an agent was shown a
+           * refusal for a capture the other request had just turned into a
+           * taxpayer, and the obvious thing to do about a refused registration
+           * is to key it in again by hand. `Taxpayers.tsx` mints a fresh
+           * idempotency key per attempt, so nothing would have deduplicated
+           * that against the draft already synced.
+           *
+           * `syncDrafts` has no in-flight guard and two things ask it to run
+           * -- the connectivity effect and, since the worker's message has a
+           * receiver, background sync -- so this is reachable without anybody
+           * doing anything unusual.
+           *
+           * DO NOTHING, then look at who won. If they finished, this draft is
+           * settled and is reported exactly as the branch above reports it. If
+           * they are still in flight, there is nothing true to say yet: their
+           * outcome is unknown and claiming DUPLICATE would let the phone drop
+           * a capture that may yet fail. So this draft is left out of
+           * `results` entirely, which `syncDrafts` treats as no instruction --
+           * the draft stays PENDING on the phone and goes again next time, by
+           * which point the winner has settled and the branch above answers
+           * it.
+           */
+          const stored = existing
             ? await queryOne<{ id: string }>(
                 pool,
                 // Resuming: the phone still holds this capture, so what it is
@@ -967,7 +1018,9 @@ draftRouter.post(
                 pool,
                 `INSERT INTO offline_drafts
                    (agent_id, device_id, client_reference, draft_type, payload, captured_at)
-                 VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+                 VALUES ($1,$2,$3,$4,$5,$6)
+                 ON CONFLICT (agent_id, client_reference) DO NOTHING
+                 RETURNING id`,
                 [
                   agentId,
                   req.agent?.deviceId ?? null,
@@ -976,8 +1029,25 @@ draftRouter.post(
                   JSON.stringify(draft.payload),
                   draft.capturedAt,
                 ],
-              )
-          )!.id;
+              );
+
+          if (!stored) {
+            const winner = await queryOne<{
+              status: string;
+              result_entity_type: string | null;
+              result_entity_id: string | null;
+              rejection_reason: string | null;
+            }>(
+              pool,
+              `SELECT status, result_entity_type, result_entity_id, rejection_reason
+                 FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
+              [agentId, draft.clientReference],
+            );
+            if (winner && winner.status !== 'PENDING_SYNC') reportSettled(winner);
+            continue;
+          }
+
+          storedId = stored.id;
 
           if (draft.draftType === 'TAXPAYER_REGISTRATION') {
             const parsed = taxpayerInputSchema.safeParse(draft.payload);
@@ -1129,6 +1199,47 @@ draftRouter.post(
            * it tells them nothing they can act on, and tells anyone reading
            * over their shoulder the names of our tables.
            */
+          /*
+           * Did another sync of this same draft settle it while this one was
+           * failing? If so, that is the answer, whatever this attempt hit.
+           *
+           * Two syncs of one draft do not both have to miss the lookup to
+           * collide. The likelier interleaving is that the first stores the
+           * row and the second then FINDS it as PENDING_SYNC and takes the
+           * resume branch — which exists for an interrupted sync being sent
+           * again and cannot tell that from a sibling working on it right
+           * now. Both go on to register, and the second is refused: by
+           * `taxpayers_tin_key` if it gets there first, because the TIN
+           * service returns the same number for the same person, or by the
+           * duplicate control with POSSIBLE_DUPLICATE_TAXPAYER if the
+           * sibling's taxpayer is already committed.
+           *
+           * Both refusals are correct about the taxpayer and wrong about the
+           * draft. The draft was synchronised; it was not a second person to
+           * review. `syncDrafts` keeps a REJECTED draft on the phone with the
+           * message against it, and the obvious thing to do about a refused
+           * registration is to key it in again — and `Taxpayers.tsx` mints a
+           * fresh idempotency key per attempt, so nothing would deduplicate
+           * that against the draft already synced. A false refusal is how
+           * this one would have produced a real duplicate.
+           */
+          const settled = await queryOne<{
+            status: string;
+            result_entity_type: string | null;
+            result_entity_id: string | null;
+            rejection_reason: string | null;
+          }>(
+            pool,
+            `SELECT status, result_entity_type, result_entity_id, rejection_reason
+               FROM offline_drafts WHERE agent_id = $1 AND client_reference = $2`,
+            [agentId, draft.clientReference],
+          );
+
+          if (settled && settled.status !== 'PENDING_SYNC') {
+            reportSettled(settled);
+            continue;
+          }
+
           if (error instanceof AppError) {
             /*
              * Its own code, not one of ours.
@@ -1141,6 +1252,66 @@ draftRouter.post(
              */
             await reject(error.code, error.message);
           } else {
+            /*
+             * A unique violation means one of two things, and they need
+             * opposite answers.
+             *
+             * A draft is briefly reachable here with a sibling mid-flight: it
+             * has inserted the taxpayer but not yet recorded the outcome on
+             * the draft row, so the check above does not see it settled. But
+             * `23505` equally means the number already belongs to a DIFFERENT
+             * taxpayer — the mock TIN service derives a TIN from the person's
+             * own details and the real register is authoritative — and that is
+             * permanent.
+             *
+             * Two earlier attempts at this got it wrong, and the mutation
+             * checks are what said so. Staying silent so the phone would retry
+             * could not be reached by any test; working out why exposed that
+             * it would retry a permanent conflict for ever and never tell the
+             * agent anything. Letting it fall through to DRAFT_NOT_PROCESSED
+             * made the eight-way race intermittently report a refusal for work
+             * that had just succeeded.
+             *
+             * So ask which it is. The duplicate control found nobody moments
+             * ago, so a taxpayer carrying this capture's phone number now is
+             * the sibling's work, and the honest answer is the one a settled
+             * draft gets: already synchronised, not duplicated, with the
+             * record's id. If there is no such taxpayer, the number belongs to
+             * somebody else and the agent has to be told.
+             *
+             * HOW WELL EITHER HALF IS COVERED, measured rather than claimed.
+             * Removing this branch fails the eight-way race about one run in
+             * five: the window is real and the signal is intermittent, which
+             * is the same thing the flakiness showed from the other side
+             * before the branch existed. The `23505` guard on it is not
+             * covered at all — the only test that reaches here with a
+             * permanent conflict produces that very code, so dropping the
+             * guard changes nothing it can see. It stays because any other
+             * failure that happened to coincide with a taxpayer on this phone
+             * would otherwise be reported as a duplicate, which it is not.
+             */
+            const phone =
+              typeof draft.payload.phone === 'string' ? draft.payload.phone.trim() : null;
+            const registeredMeanwhile =
+              (error as { code?: string } | null)?.code === '23505' && phone
+                ? await queryOne<{ id: string }>(
+                    pool,
+                    'SELECT id FROM taxpayers WHERE phone = $1 LIMIT 1',
+                    [phone],
+                  )
+                : null;
+
+            if (registeredMeanwhile) {
+              results.push({
+                clientReference: draft.clientReference,
+                status: 'DUPLICATE',
+                entityType: 'taxpayer',
+                entityId: registeredMeanwhile.id,
+                message: 'This draft was already synchronised. It has not been duplicated.',
+              });
+              continue;
+            }
+
             log.error('offline draft could not be processed', {
               component: 'drafts',
               draftId: storedId,
