@@ -21,6 +21,27 @@ COPY packages/shared ./packages/shared
 COPY apps/portal ./apps/portal
 
 RUN npm run build --workspace @psirs/shared
+
+# ---------------------------------------------------------------------------
+# Where the agent app is, for the deployments where this image is all there is.
+#
+# A field agent signing in here is no longer turned away — they land on "Your
+# field work", which tells them their collection tools are in the agent PWA
+# and links to it. The portal can work the address out for itself only in the
+# combined image, where it is mounted at /portal/ and the agent app is at the
+# root of the same origin. THIS image serves the portal alone on its own
+# hostname, so it cannot, and without this the screen can only name who to ask.
+#
+# Build time, not run time: Vite inlines `import.meta.env` into the bundle, so
+# a value set on the running container arrives too late to be read. Pass it
+# with `--build-arg VITE_AGENT_APP_URL=https://agent.example/`.
+#
+# Empty by default and empty is honest: `agentAppUrl()` treats a blank value
+# as absent and the screen says to ask a supervisor, which beats a dead link.
+# ---------------------------------------------------------------------------
+ARG VITE_AGENT_APP_URL=""
+ENV VITE_AGENT_APP_URL=${VITE_AGENT_APP_URL}
+
 RUN npm run build --workspace @psirs/portal
 
 # Stage 2: Nginx Static Server

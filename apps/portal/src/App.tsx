@@ -16,7 +16,7 @@
 
 import { useEffect, useState } from 'react';
 import { getUser, hasStoredSession, logout, restoreSession, type User } from './lib/api';
-import { availableGroups, belongsInPortal, isReadOnly, landingPath } from './lib/permissions';
+import { availableGroups, isReadOnly, landingPath } from './lib/permissions';
 import { matchRoute, useRoute } from './router';
 import { LoginScreen } from './screens/Login';
 import { DashboardScreen, IntelligenceScreen } from './screens/Dashboard';
@@ -52,6 +52,7 @@ import { OrganisationScreen } from './screens/Organisation';
 import { PeriodsScreen } from './screens/Periods';
 import { WorkbenchScreen } from './screens/Workbench';
 import { MyAccessScreen } from './screens/MyAccess';
+import { FieldWorkScreen } from './screens/FieldWork';
 import { InboxScreen } from './screens/Inbox';
 import { PlatformScreen } from './screens/Platform';
 import { RolesScreen } from './screens/Roles';
@@ -74,10 +75,11 @@ export function App() {
     }
     restoreSession()
       .then((restored) => {
-        // The same door check the login screen applies. A field agent who
-        // signed in before this existed still has a stored session, and
-        // restoring it would put them back in the one-item shell.
-        setUser(restored && belongsInPortal(restored.role) ? restored : null);
+        // No role check here any more. It used to drop a field agent's
+        // stored session on the floor to keep them out of a shell that held
+        // nothing for them; they now have a menu of their own, so restoring
+        // the session is simply restoring the session.
+        setUser(restored ?? null);
       })
       .finally(() => setRestoring(false));
   }, []);
@@ -304,6 +306,7 @@ function Routes({
   if (matchRoute(route, '/organisation')) return <OrganisationScreen user={user} />;
   if (matchRoute(route, '/periods')) return <PeriodsScreen user={user} />;
   if (matchRoute(route, '/workbench')) return <WorkbenchScreen user={user} />;
+  if (matchRoute(route, '/field-work')) return <FieldWorkScreen />;
   if (matchRoute(route, '/my-access')) return <MyAccessScreen user={user} />;
   if (matchRoute(route, '/inbox')) return <InboxScreen navigate={navigate} />;
   if (matchRoute(route, '/roles')) return <RolesScreen user={user} />;

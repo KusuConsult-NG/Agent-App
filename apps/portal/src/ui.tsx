@@ -735,18 +735,29 @@ export function crestUrl(): string {
 }
 
 /**
- * Whether the agent app is reachable from here.
+ * Where the agent app is, or null when this build has no way to know.
  *
- * A function rather than a constant so a test can vary the base. A
+ * A function rather than a constant so a test can vary the environment. A
  * module-level const is evaluated once at import and would pin whichever base
  * the runner uses, leaving the branch that matters unexercised.
  *
- * Only when this portal is mounted under a subpath, which happens in exactly
- * one arrangement: the combined image, where the agent PWA is served at the
- * root of the same origin. Deployed on its own hostname the portal has no idea
- * where the agent app is, and must not guess — an officer sent to a dead link
+ * Two ways to know, in order:
+ *
+ *   1. `VITE_AGENT_APP_URL`, set at build time. The standalone portal has its
+ *      own hostname and cannot infer anything, so inference alone left every
+ *      such deployment with a signpost and no direction on it — which is the
+ *      arrangement most of them run. Whoever builds the image knows the
+ *      address; this is where they say it.
+ *   2. The base path. In the combined image the portal is mounted at
+ *      `/portal/` and the agent PWA is served at the root of the same origin,
+ *      so `/` is right without anyone configuring it.
+ *
+ * Null when neither applies, and that still matters: under a base of `/` a
+ * link to `/` is a link back to this same page, and an agent sent in a circle
  * is worse off than one simply told which application they want.
  */
 export function agentAppUrl(): string | null {
+  const configured = import.meta.env.VITE_AGENT_APP_URL?.trim();
+  if (configured) return configured;
   return import.meta.env.BASE_URL === '/' ? null : '/';
 }

@@ -2529,6 +2529,14 @@ export interface TranslationDictionary {
   ofcLoginSignInWorked: string;
   ofcLoginUseAgentApp: string;
   ofcLoginOpenAgentApp: string;
+  ofcNavFieldWork: string;
+  ofcFieldWorkTitle: string;
+  ofcFieldWorkBody: string;
+  ofcFieldWorkToolsHeading: string;
+  ofcFieldWorkToolsBody: string;
+  ofcFieldWorkNoLink: string;
+  ofcFieldWorkHereHeading: string;
+  ofcFieldWorkHereBody: string;
   shellSyncFailed: string;
   grpNameHint: string;
   grpCommunityHint: string;
@@ -6170,6 +6178,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginSignInWorked: "Your sign-in worked — you are simply in the wrong place.",
     ofcLoginUseAgentApp: "Field agents collect revenue in the PSIRS agent app, which works offline and holds your taxpayers, assessments and commission. This portal is for revenue, finance and oversight officers.",
     ofcLoginOpenAgentApp: "Open the agent app",
+    ofcNavFieldWork: "Your field work",
+    ofcFieldWorkTitle: "You are signed in as a field agent",
+    ofcFieldWorkBody: "This portal is where the State administers revenue. You are welcome in it, and the few things here that belong to your work are listed below.",
+    ofcFieldWorkToolsHeading: "Your collection tools are in the agent app",
+    ofcFieldWorkToolsBody: "Enumeration, assessment, collection, your groups and your commission all live in the PSIRS agent app, which works offline. Nothing on this portal replaces it.",
+    ofcFieldWorkNoLink: "Ask your supervisor for the address of the agent app on this deployment.",
+    ofcFieldWorkHereHeading: "What this portal holds for you",
+    ofcFieldWorkHereBody: "The rate catalogue and the presumptive schedules — the figures you quote at a stall. They are read-only here, and they are the same ones the agent app uses.",
     shellSyncFailed: "Your saved records could not be sent to PSIRS. They are still on this phone.",
     grpNameHint: "As the group itself gives it",
     grpCommunityHint: "Where the group meets. Optional.",
@@ -9648,6 +9664,14 @@ export const translations: Record<Language, TranslationDictionary> = {
     ofcLoginSignInWorked: "Shigarka ta yi aiki — kawai ba wurin da ya dace ba ne.",
     ofcLoginUseAgentApp: "Wakilan filin aiki suna karbar haraji a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba kuma tana rike da masu biyan harajinka, kimarka da kwamishan dinka. Wannan shafin na jami’an haraji, kudi da sa ido ne.",
     ofcLoginOpenAgentApp: "Bude manhajar wakilai",
+    ofcNavFieldWork: "Aikinka na fili",
+    ofcFieldWorkTitle: "Ka shiga a matsayin wakilin fili",
+    ofcFieldWorkBody: "Wannan shafin shi ne inda Jiha ke tafiyar da harkar haraji. Kana da izinin shiga, kuma abubuwa kadan da suka shafi aikinka suna kasa.",
+    ofcFieldWorkToolsHeading: "Kayan aikin karbar harajinka suna a manhajar wakilai",
+    ofcFieldWorkToolsBody: "Rajista, kimantawa, karbar kudi, kungiyoyinka da kwamishan dinka duk suna a manhajar wakilai ta PSIRS, wadda ke aiki ba tare da layi ba. Babu abin da ke wannan shafin da zai maye gurbinta.",
+    ofcFieldWorkNoLink: "Ka tambayi shugabanka adireshin manhajar wakilai a wannan na’urar.",
+    ofcFieldWorkHereHeading: "Abin da wannan shafin ke da shi a gare ka",
+    ofcFieldWorkHereBody: "Jadawalin kudade da jadawalin kiyasi — adadin da kake fada a wurin kasuwanci. Anan karatu kawai ake yi, kuma su ne daidai wadanda manhajar wakilai ke amfani da su.",
     shellSyncFailed: "Ba a iya tura rikodin da ka adana zuwa PSIRS ba. Suna nan a wannan wayar.",
     grpNameHint: "Kamar yadda kungiyar da kanta ta bayar",
     grpCommunityHint: "Inda kungiyar ke haduwa. Ba dole ba.",

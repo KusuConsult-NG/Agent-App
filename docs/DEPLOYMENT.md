@@ -220,6 +220,28 @@ agent at `/` and the portal at `/portal/` — so the `portal` service is
 optional. See *One URL for both apps* below. That is the arrangement to prefer
 for a demo or a pilot, because it is one address to publish rather than two.
 
+### `VITE_AGENT_APP_URL` — only on the standalone `portal` service
+
+A field agent who signs into the officer portal is no longer turned away: they
+land on **Your field work**, which says their collection tools are in the
+agent PWA and links to it. The portal can only work that address out for
+itself in the combined image, where it is mounted at `/portal/` and the agent
+app is at the root of the same origin. On its own hostname it cannot, and
+without being told it can only say to ask a supervisor.
+
+So on the `portal` service, and nowhere else, pass the agent app's address as
+a **build argument**:
+
+```
+VITE_AGENT_APP_URL=https://agent-pwa-production.up.railway.app/
+```
+
+**Build time, not run time.** Vite inlines `import.meta.env` into the bundle,
+so a value set on the running container is read by nothing. On Railway this is
+a build argument on the service, not a service variable; `Dockerfile.portal`
+declares the matching `ARG`. Leaving it unset is safe — the screen names who
+to ask rather than offering a dead link.
+
 **Each service's Dockerfile path has to be set explicitly, and a new service
 will not work until it is.** Railway looks for a file named exactly
 `Dockerfile`; finding none it falls back to Railpack, which tries to infer a
